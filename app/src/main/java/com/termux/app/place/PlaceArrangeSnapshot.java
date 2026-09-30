@@ -28,15 +28,18 @@ public final class PlaceArrangeSnapshot {
     /** One orientation's arrangement, exactly as the store answers for it. */
     private static final class Entry {
         final PlaceOrientation orientation;
-        final PlaceLayout.Edge statusBarEdge;
-        /** The status bar put away, which its edge alone cannot say. */
-        final boolean statusHidden;
-        final PlaceLayout.RowPlacement appsRow;
-        final boolean azRowShown;
-        /** The index standing as its pull tab, which the shown/hidden switch alone cannot say. */
-        final boolean azMinimised;
-        final PlaceLayout.Edge azBarEdge;
-        final PlaceLayout.RowPlacement extraKeys;
+        /**
+         * Every element's slot — edge, order, hidden, under the keyboard — by
+         * {@link Element#ordinal()}, read and written whole through {@link PlaceLayoutStore#slot}
+         * and {@link PlaceLayoutStore#setSlot}.
+         *
+         * <p>It used to be spelled field by field, with the pinned apps and the extra keys read
+         * as the old three-way {@code RowPlacement}. That spelling has no top row, so a bar on the
+         * top edge was captured as the bottom: Undo and Discard put it back on the wrong edge, and
+         * the signature could not tell a move between the two apart. The slot is the whole truth
+         * about where an element stands, so it is what is kept.
+         */
+        final Slot[] slots;
         final PlaceLayout.KeyboardMode keyboardMode;
         final PlaceLayout.KeyboardForm keyboardForm;
         final int widgetColumns;
@@ -44,20 +47,12 @@ public final class PlaceArrangeSnapshot {
         final float dockHeightScale;
         final float keyboardHeightScale;
         final int keyboardChinDp;
-        /** Each element's position in its edge's stack, by {@link Element#ordinal()}. */
-        final int[] slotOrders;
-        /** Which bottom bands stand under the keyboard, by {@link Element#ordinal()}. */
-        final boolean[] slotsUnderKeyboard;
 
         Entry(@NonNull PlaceLayoutStore places, @NonNull PlaceOrientation orientation) {
             this.orientation = orientation;
-            statusBarEdge = places.statusBarEdge(orientation);
-            statusHidden = places.slot(orientation, Element.STATUS).hidden;
-            appsRow = places.appsRow(orientation);
-            azRowShown = places.azRowShown(orientation);
-            azMinimised = places.azMinimised(orientation);
-            azBarEdge = places.azBarEdge(orientation);
-            extraKeys = places.extraKeys(orientation);
+            slots = new Slot[Element.values().length];
+            for (Element element : Element.values())
+                slots[element.ordinal()] = places.slot(orientation, element);
             keyboardMode = places.keyboardMode(orientation);
             keyboardForm = places.keyboardForm(orientation);
             widgetColumns = places.widgetColumns(orientation);
@@ -65,23 +60,11 @@ public final class PlaceArrangeSnapshot {
             dockHeightScale = places.dockHeightScale(orientation);
             keyboardHeightScale = places.keyboardHeightScale(orientation);
             keyboardChinDp = places.keyboardChinDp(orientation);
-            slotOrders = new int[Element.values().length];
-            for (Element element : Element.values())
-                slotOrders[element.ordinal()] = places.slotOrder(orientation, element);
-            slotsUnderKeyboard = new boolean[Element.values().length];
-            for (Element element : Element.values())
-                slotsUnderKeyboard[element.ordinal()] =
-                    places.slotUnderKeyboard(orientation, element);
         }
 
         void restore(@NonNull PlaceLayoutStore places) {
-            places.setSlot(orientation, Element.STATUS,
-                new Slot(statusHidden, statusBarEdge, slotOrders[Element.STATUS.ordinal()]));
-            places.setAppsRow(orientation, appsRow);
-            places.setAzRowShown(orientation, azRowShown);
-            places.setAzMinimised(orientation, azMinimised);
-            places.setAzBarEdge(orientation, azBarEdge);
-            places.setExtraKeys(orientation, extraKeys);
+            for (Element element : Element.values())
+                places.setSlot(orientation, element, slots[element.ordinal()]);
             places.setKeyboardMode(orientation, keyboardMode);
             places.setKeyboardForm(orientation, keyboardForm);
             places.setWidgetColumns(orientation, widgetColumns);
@@ -89,30 +72,17 @@ public final class PlaceArrangeSnapshot {
             places.setDockHeightScale(orientation, dockHeightScale);
             places.setKeyboardHeightScale(orientation, keyboardHeightScale);
             places.setKeyboardChinDp(orientation, keyboardChinDp);
-            for (Element element : Element.values())
-                places.setSlotOrder(orientation, element, slotOrders[element.ordinal()]);
-            for (Element element : Element.values()) {
-                boolean under = slotsUnderKeyboard[element.ordinal()];
-                if (under || places.slotUnderKeyboard(orientation, element))
-                    places.setSlotUnderKeyboard(orientation, element, under);
-            }
         }
 
         void appendTo(@NonNull StringBuilder out) {
-            out.append(orientation.storageValue()).append(':')
-                .append(statusHidden ? "hidden@" : "").append(statusBarEdge).append(',')
-                .append(appsRow).append(',')
-                .append(azRowShown).append(azMinimised ? "(tab)" : "").append(',')
-                .append(azBarEdge).append(',')
-                .append(extraKeys).append(',')
-                .append(keyboardMode).append(',')
+            out.append(orientation.storageValue()).append(':');
+            for (Slot slot : slots) out.append(slot).append(',');
+            out.append(keyboardMode).append(',')
                 .append(keyboardForm).append(',')
                 .append(widgetColumns).append('x').append(widgetRows).append(',')
                 .append(dockHeightScale).append(',')
                 .append(keyboardHeightScale).append(',')
-                .append(keyboardChinDp).append(',');
-            for (int order : slotOrders) out.append(order).append(';');
-            for (boolean under : slotsUnderKeyboard) out.append(under ? 'u' : 'o');
+                .append(keyboardChinDp);
             out.append('|');
         }
     }

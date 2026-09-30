@@ -69,6 +69,35 @@
         <item name="iconTint">@color/editor_shell_segment_text</item>
     </style>
 
+    <!-- The Layout editor's keyboard-type chips (spec §3.5): stock Material 3 filter chips that
+         carry a glyph and no word — docked, floating, split — each saying its word to a screen
+         reader. The checked state is the chip's own container colour; the tick a filter chip
+         would add is left off, since the glyph is the whole label. -->
+    <style name="Widget.Termux.LayoutEditor.KeyboardFormChip" parent="Widget.Material3.Chip.Filter">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:checkable">true</item>
+        <item name="android:text">@null</item>
+        <item name="chipIconVisible">true</item>
+        <item name="chipIconSize">20dp</item>
+        <item name="checkedIconVisible">false</item>
+        <item name="iconStartPadding">4dp</item>
+        <item name="iconEndPadding">4dp</item>
+        <item name="textStartPadding">0dp</item>
+        <item name="textEndPadding">0dp</item>
+        <item name="chipMinTouchTargetSize">48dp</item>
+    </style>
+
+    <!-- A chip in the Layout editor's restore tray (spec §3.6): a stock Material 3 assist chip
+         with the eye-off glyph and the hidden element's name; a tap brings the element back. -->
+    <style name="Widget.Termux.LayoutEditor.TrayChip" parent="Widget.Material3.Chip.Assist">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="chipIcon">@drawable/ic_symbol_visibility_off</item>
+        <item name="chipIconVisible">true</item>
+        <item name="chipIconSize">18dp</item>
+    </style>
+
     <!-- A slider in either editor. The shipped row had no progress drawable at all: a hairline
          with no filled part and a large pale thumb, so the only thing that said where the value
          stood was the number printed beside it. -->

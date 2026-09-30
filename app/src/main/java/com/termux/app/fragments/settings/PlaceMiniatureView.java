@@ -31,13 +31,13 @@ import com.termux.R;
 import com.termux.app.Spring;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
-import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.font.NerdFontSpans;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -70,8 +70,47 @@ import java.util.Map;
  */
 public final class PlaceMiniatureView extends View {
 
-    /** One region of the miniature. */
-    public enum Block { STATUS_BAR, APPS_ROW, ALPHABETS_ROW, EXTRA_KEYS, CANVAS }
+    /**
+     * One region of the layout canvas. The keyboard is one too: it has no edge and no order, but
+     * it can be selected, resized by its two handles, and put away in the tray.
+     */
+    public enum Block { STATUS_BAR, APPS_ROW, ALPHABETS_ROW, EXTRA_KEYS, CANVAS, KEYBOARD }
+
+    /**
+     * A resize handle on the selected element (spec §3.5): the dock's inner edge for its height,
+     * the keyboard's top edge for its height and its bottom edge for the chin under the last key
+     * row, and on Home a corner handle for the widget grid's cells. Each is one grip drawn on the
+     * edge it moves, with the platform's 48dp target around it.
+     */
+    public enum Handle { DOCK_HEIGHT, KEYBOARD_HEIGHT, KEYBOARD_CHIN, WIDGET_GRID }
+
+    /**
+     * What an edit on the layout canvas asks for. Every value is already in the store's own units
+     * and clamped to the store's range, so the editor writes it straight through; it answers with
+     * {@link #setSizes} and {@link #setLayout}, which is what redraws the canvas at the new size.
+     */
+    public interface OnCanvasEditListener {
+        /** The selection moved to another element, or went ({@code null}). */
+        default void onSelectionChanged(@Nullable Block selected) {}
+
+        /** The dock's inner edge was dragged: its height, as a multiple of its unscaled height. */
+        default void onDockHeightDragged(float scale) {}
+
+        /** The keyboard's top edge was dragged: its height, as a multiple of its unscaled one. */
+        default void onKeyboardHeightDragged(float scale) {}
+
+        /** The keyboard's bottom edge was dragged: the air under its last key row, in dp. */
+        default void onKeyboardChinDragged(int dp) {}
+
+        /** Home's corner handle was dragged: the grid in whole cells. */
+        default void onWidgetGridDragged(int columns, int rows) {}
+
+        /** The finger came off a handle; the readout goes with it. */
+        default void onHandleReleased() {}
+
+        /** The keyboard was dropped in the tray: the same switch as Keyboard on/off. */
+        default void onKeyboardPutAway() {}
+    }
 
     /** What the canvas band draws, driven by which place is selected. */
     public enum CanvasKind { TERMINAL, HOME_GRID, DISPLAY }
@@ -193,14 +232,6 @@ public final class PlaceMiniatureView extends View {
     private static final float APPS_DESIGN_H = 48f;
     private static final float ALPHABETS_DESIGN_H = 36f;
     private static final float EXTRA_KEYS_DESIGN_H = 56f;
-    /**
-     * The minimised index's pull tab ({@code alphabets_tab}): 48 &times; 28 with the design's
-     * radius, laid over the pane at the leading end of its edge, {@value #TAB_EDGE_GAP_U} in from
-     * the pane's own edge, the way {@code miniature_portrait_terminal} has it.
-     */
-    private static final float TAB_LENGTH_U = 48f;
-    private static final float TAB_THICKNESS_U = 28f;
-    private static final float TAB_EDGE_GAP_U = 8f;
 
     // ---- The theme's roles, as the design maps them ---------------------------------------------
     /** Outlines and text lines: the on-surface-variant at the design's 45%. */
@@ -221,8 +252,13 @@ public final class PlaceMiniatureView extends View {
     /** The gaps of the hovered edge that the finger is not on; enough to read, not to compete. */
     private static final int GAP_LINE_ALPHA = 110;
 
-    /** The strip under the phone: the hidden bars live there, and a lifted bar can be put there. */
-    private static final float TRAY_HEIGHT_DP = 40f;
+    /**
+     * The strip under the phone: the hidden elements live there, and a lifted one can be put there.
+     * At rest the view draws nothing in it — the editor stands a row of real Material chips over
+     * it, one per hidden element, or one short line when nothing is hidden — and while an element
+     * is lifted and may be put away the view draws the drop zone over them.
+     */
+    private static final float TRAY_HEIGHT_DP = 48f;
     private static final float TRAY_GAP_DP = 12f;
     private static final float TRAY_RADIUS_DP = 12f;
     private static final float TRAY_STROKE_DP = 1.25f;
@@ -230,6 +266,27 @@ public final class PlaceMiniatureView extends View {
     private static final float TRAY_TEXT_SP = 11f;
     /** Half the platform's minimum target: what a grip is hit-tested with around its centre. */
     private static final float GRIP_TOUCH_HALF_DP = 24f;
+    /** The one outline a selected element wears: 2dp of the theme's primary. */
+    private static final float SELECTION_STROKE_DP = 2f;
+    /** A resize handle's pill: its length along the edge it moves and its thickness across it. */
+    private static final float HANDLE_LENGTH_DP = 24f;
+    private static final float HANDLE_THICKNESS_DP = 5f;
+    /** The readout a handle shows while it is dragged. */
+    private static final float READOUT_TEXT_SP = 12f;
+    private static final float READOUT_PAD_H_DP = 10f;
+    private static final float READOUT_HEIGHT_DP = 26f;
+    private static final float READOUT_GAP_DP = 10f;
+    /**
+     * How much of the keyboard's card the chin takes at the store's largest chin. The chin is
+     * drawn as a share of the card rather than at its real size, which on a phone-sized picture is
+     * a few pixels a finger could never drag; the readout says the real dp.
+     */
+    private static final float CHIN_MAX_FRACTION = 0.3f;
+    /**
+     * How far a finger has to move off the keyboard before it is lifted rather than tapped. The
+     * keyboard has no grip — its card is the thing held — so a lift is told from a tap by travel.
+     */
+    private static final float KEYBOARD_LIFT_SLOP_DP = 8f;
     private static final float GHOST_SCALE = 1.06f;
     /** The dock plank's press constants: a lift and a spring-back are the same kind of motion. */
     private static final float SPRING_STIFFNESS = 320f;
@@ -294,7 +351,6 @@ public final class PlaceMiniatureView extends View {
     private final List<MiniatureDragPolicy.Slot> mSlots = new ArrayList<>();
     @Nullable private MiniatureDragPolicy.Slot mHoverSlot;
     private final RectF mTrayRect = new RectF();
-    private final Map<Block, RectF> mTrayChipRects = new EnumMap<>(Block.class);
     private final Map<Block, RectF> mGripRects = new EnumMap<>(Block.class);
     /** The lifted copy's offset from where it started, sprung back to zero on a release. */
     private final Spring mGhostX = new Spring(0f, SPRING_STIFFNESS, SPRING_DAMPING);
@@ -303,6 +359,34 @@ public final class PlaceMiniatureView extends View {
     private boolean mSpringingBack;
     private long mLastFrameNanos;
     private final Runnable mMotionTick = this::advanceMotion;
+
+    // ---- Selection and handles -----------------------------------------------------------------
+    @Nullable private OnCanvasEditListener mEditListener;
+    /** The element a tap selected, which wears the outline and carries the handles; or none. */
+    @Nullable private Block mSelected;
+    /** Each handle the selection carries, as the pill drawn on its edge. */
+    private final Map<Handle, RectF> mHandleRects = new EnumMap<>(Handle.class);
+    /** The handle a finger holds, or null. */
+    @Nullable private Handle mDraggedHandle;
+    /** What the held handle stood at when the finger went down, which the drag is measured from. */
+    private float mHandleStartScale;
+    private int mHandleStartChin;
+    private float mHandleStartExtentPx;
+    private final RectF mHandleStartRect = new RectF();
+    private int mHandleLastColumns;
+    private int mHandleLastRows;
+    /** The readout the editor gave the held handle, drawn beside it; null when there is none. */
+    @Nullable private String mReadout;
+    /** A finger down on the keyboard's card that has not yet travelled far enough to lift it. */
+    private boolean mKeyboardPressed;
+    /**
+     * The three sizes the canvas draws with. They are not in {@link PlaceLayout} — the store keeps
+     * them apart so a dragging finger does not retire the cached arrangement — so the editor hands
+     * them over on their own ({@link #setSizes}).
+     */
+    private float mDockScale = TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
+    private float mKeyboardScale = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
+    private int mKeyboardChinDp = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING;
 
     @Nullable private final Typeface mNerdTypeface;
     @NonNull private final Drawable mIconStatus;
@@ -431,6 +515,74 @@ public final class PlaceMiniatureView extends View {
         mDropListener = listener;
     }
 
+    public void setOnCanvasEditListener(@Nullable OnCanvasEditListener listener) {
+        mEditListener = listener;
+    }
+
+    /**
+     * The dock's height, the keyboard's height and the keyboard's chin, in the store's units, for
+     * the orientation on the canvas. The dock's band and the keyboard's block are drawn in
+     * proportion to their scales, so a handle dragged is a band that grows under the finger.
+     */
+    public void setSizes(float dockHeightScale, float keyboardHeightScale, int keyboardChinDp) {
+        if (Float.compare(dockHeightScale, mDockScale) == 0
+            && Float.compare(keyboardHeightScale, mKeyboardScale) == 0
+            && keyboardChinDp == mKeyboardChinDp) return;
+        mDockScale = dockHeightScale;
+        mKeyboardScale = keyboardHeightScale;
+        mKeyboardChinDp = keyboardChinDp;
+        if (getWidth() > 0 && getHeight() > 0) layoutFrame(getWidth(), getHeight());
+        invalidate();
+    }
+
+    /** The element wearing the outline, or null. */
+    @Nullable
+    public Block selectedBlock() {
+        return mSelected;
+    }
+
+    /**
+     * Selects an element, or clears the selection for null. An element the canvas is not drawing
+     * — hidden, or the keyboard on a place that shows none — cannot be selected, and asking for it
+     * clears the selection instead. Reports the change.
+     */
+    public void setSelectedBlock(@Nullable Block block) {
+        Block next = block != null && isSelectable(block) ? block : null;
+        if (next == mSelected) return;
+        mSelected = next;
+        computeHandles();
+        invalidate();
+        if (mEditListener != null) mEditListener.onSelectionChanged(mSelected);
+    }
+
+    /** The readout beside the held handle, in real units; null takes it away. */
+    public void setHandleReadout(@Nullable String readout) {
+        if (TextUtils.equals(readout, mReadout)) return;
+        mReadout = readout;
+        invalidate();
+    }
+
+    /** The handle a finger holds, or null. */
+    @Nullable
+    @VisibleForTesting
+    public Handle draggedHandle() {
+        return mDraggedHandle;
+    }
+
+    /** The pill a handle is drawn as, in view pixels, or null while the selection has none. */
+    @Nullable
+    @VisibleForTesting
+    public RectF handleRect(@NonNull Handle handle) {
+        RectF rect = mHandleRects.get(handle);
+        return rect == null ? null : new RectF(rect);
+    }
+
+    /** The phone frame, in view pixels: what the editor lays its own chips beside. */
+    @NonNull
+    public RectF frameRect() {
+        return new RectF(mFrameRect);
+    }
+
     /** The grip a finger lifts this bar by, in view pixels, or null while the bar has none. */
     @Nullable
     @VisibleForTesting
@@ -439,19 +591,13 @@ public final class PlaceMiniatureView extends View {
         return rect == null ? null : new RectF(rect);
     }
 
-    /** The strip under the phone: the hidden bars' chips, and a lifted bar's way out. */
+    /**
+     * The strip under the phone, in view pixels: where the editor's chips for the hidden elements
+     * stand, and a lifted element's way out.
+     */
     @NonNull
-    @VisibleForTesting
     public RectF trayRect() {
         return new RectF(mTrayRect);
-    }
-
-    /** The chip a hidden bar is listed as in the tray, or null while the bar is on the phone. */
-    @Nullable
-    @VisibleForTesting
-    public RectF trayChipRect(@NonNull Block bar) {
-        RectF rect = mTrayChipRects.get(bar);
-        return rect == null ? null : new RectF(rect);
     }
 
     /** The bar the finger is holding, or null when nothing is lifted. */
@@ -507,8 +653,8 @@ public final class PlaceMiniatureView extends View {
 
     /** The rectangle a block is drawn in, in view pixels, or null while it is not on the picture. */
     @Nullable
-    @VisibleForTesting
     public RectF blockRect(@NonNull Block block) {
+        if (block == Block.KEYBOARD) return keyboardRect();
         RectF rect = mBlockRects.get(block);
         return rect == null ? null : new RectF(rect);
     }
@@ -519,7 +665,6 @@ public final class PlaceMiniatureView extends View {
      * display with a keyboard that floats.
      */
     @Nullable
-    @VisibleForTesting
     public RectF keyboardRect() {
         return mKeyboardRect.isEmpty() ? null : new RectF(mKeyboardRect);
     }
@@ -535,8 +680,17 @@ public final class PlaceMiniatureView extends View {
     /** Whether the arrangement leaves this block off the screen — the legend then marks it so. */
     @VisibleForTesting
     public boolean isBlockHidden(@NonNull Block block) {
+        if (block == Block.KEYBOARD) return mLayout != null && !mLayout.keyboardShown;
         Element element = elementOf(block);
         return mLayout != null && element != null && !EdgeStackPolicy.isShown(mLayout, element);
+    }
+
+    /** Whether a tap can select this block: it has to be on the canvas. */
+    private boolean isSelectable(@NonNull Block block) {
+        if (mLayout == null) return false;
+        if (block == Block.KEYBOARD) return !mKeyboardRect.isEmpty();
+        RectF rect = mBlockRects.get(block);
+        return rect != null && !rect.isEmpty();
     }
 
     public void setOnBlockTappedListener(@Nullable OnBlockTappedListener listener) {
@@ -601,6 +755,18 @@ public final class PlaceMiniatureView extends View {
      */
     public float reservedHeightPx() {
         return 2 * dp(4) + dp(TRAY_HEIGHT_DP) + dp(TRAY_GAP_DP);
+    }
+
+    /**
+     * The tray's height and the air under it, in pixels. The tray always stands on the view's
+     * bottom edge, so the editor can stand its chips over it with a bottom gravity and these two.
+     */
+    public float trayHeightPx() {
+        return dp(TRAY_HEIGHT_DP);
+    }
+
+    public float trayBottomInsetPx() {
+        return dp(4);
     }
 
     @Override
@@ -681,11 +847,11 @@ public final class PlaceMiniatureView extends View {
             mFrameRect.right - u(FRAME_INSET_SIDE_U),
             mFrameRect.bottom - u(landscape ? FRAME_INSET_TOP_U : FRAME_INSET_BOTTOM_U));
         if (mContentRect.width() < 0f || mContentRect.height() < 0f) mContentRect.set(mFrameRect);
-        float trayTop = mFrameRect.bottom + dp(TRAY_GAP_DP);
-        // The tray takes the view's width, not the phone's: a portrait phone is too narrow for
-        // "Drop here to hide" or for two chips to keep their names, and the tray reads as a shelf
-        // under the phone either way.
-        mTrayRect.set(pad, trayTop, viewWidth - pad, trayTop + dp(TRAY_HEIGHT_DP));
+        // The tray stands on the view's bottom edge and takes the view's width, not the phone's:
+        // a portrait phone is too narrow for "Drop here to hide" or for two chips to keep their
+        // names, and the editor stands its chips over this strip with a bottom gravity.
+        float trayBottom = viewHeight - pad;
+        mTrayRect.set(pad, trayBottom - dp(TRAY_HEIGHT_DP), viewWidth - pad, trayBottom);
 
         layoutLegend(legendLeft, legendWidth, Math.round(viewHeight - trayHeight), swatch);
         computeBlocks();
@@ -707,7 +873,6 @@ public final class PlaceMiniatureView extends View {
     private void computeBlocks() {
         mBlockRects.clear();
         mGripRects.clear();
-        mTrayChipRects.clear();
         mKeyboardRect.setEmpty();
         mRemaining = new RectF(mContentRect);
         if (mLayout == null) {
@@ -719,8 +884,7 @@ public final class PlaceMiniatureView extends View {
         // keyboard drawn they are simply the bottom stack's outer end, as on the screen.
         List<Element> underKeyboard = EdgeStackPolicy.underKeyboard(mLayout);
         for (Element element : underKeyboard) {
-            takeEdgeStrip(blockOf(element), Edge.BOTTOM,
-                MiniatureDragPolicy.bandFraction(element));
+            takeEdgeStrip(blockOf(element), Edge.BOTTOM, bandFraction(element));
         }
         // The keyboard has no edge and no order: when the place shows it, it is the block along
         // the bottom that everything else — the dock's rows included, lifted above it the way the
@@ -737,18 +901,33 @@ public final class PlaceMiniatureView extends View {
         for (Edge edge : CLAIM_ORDER) {
             for (Element element : EdgeStackPolicy.stack(mLayout, edge)) {
                 if (underKeyboard.contains(element)) continue;
-                takeEdgeStrip(blockOf(element), edge, MiniatureDragPolicy.bandFraction(element));
+                takeEdgeStrip(blockOf(element), edge, bandFraction(element));
             }
         }
         mBlockRects.put(Block.CANVAS, new RectF(mRemaining));
-        // The minimised index claims no band: its tab is laid over the canvas once the canvas is
-        // known, and it is a block like any other from here, so it carries a grip and lifts.
-        if (isAzTab()) mBlockRects.put(Block.ALPHABETS_ROW, tabBlock(mRemaining));
         computeContent();
         computeGrips();
-        computeTrayChips();
         computeSlots();
+        // A selection whose element has left the canvas — hidden, or the keyboard on a place that
+        // shows none — goes with it.
+        if (mSelected != null && !isSelectable(mSelected)) {
+            mSelected = null;
+            if (mEditListener != null) mEditListener.onSelectionChanged(null);
+        }
+        computeHandles();
         updateContentDescription();
+    }
+
+    /**
+     * A band's share of what the bands outside it left: the policy's, and for the pinned apps
+     * that share times the dock's height against its shipped height, so the dock's handle grows
+     * the band it is dragged on.
+     */
+    private float bandFraction(@NonNull Element element) {
+        float fraction = MiniatureDragPolicy.bandFraction(element);
+        if (element != Element.APPS) return fraction;
+        return Math.min(0.45f,
+            fraction * mDockScale / TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT);
     }
 
     /**
@@ -767,59 +946,20 @@ public final class PlaceMiniatureView extends View {
         }
     }
 
-    /** The keyboard's block: its share of the content's height, off the bottom, before any edge. */
+    /**
+     * The keyboard's block: its share of the content's height, off the bottom, before any edge —
+     * {@value #KEYBOARD_FRACTION} at the keyboard's shipped height, and in proportion to it
+     * otherwise, so the keyboard's handle grows the block it is dragged on.
+     */
     private void takeKeyboardStrip() {
-        float h = mRemaining.height() * KEYBOARD_FRACTION;
+        float share = KEYBOARD_FRACTION * mKeyboardScale
+            / TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
+        float h = mRemaining.height() * Math.min(0.5f, Math.max(0.05f, share));
         mKeyboardRect.set(mRemaining.left, mRemaining.bottom - h, mRemaining.right,
             mRemaining.bottom);
         mRemaining.bottom -= h;
     }
 
-    /** Whether the arrangement stands the A–Z index minimised, as its pull tab over the pane. */
-    @VisibleForTesting
-    public boolean isAzTab() {
-        return mLayout != null && PlaceChromePolicy.azTabShown(mLayout);
-    }
-
-    /**
-     * The tab's block on the canvas: the pill and the card padding around it, at the leading end
-     * of the index's edge and {@value #TAB_EDGE_GAP_U} in from the pane's own edge. Along a row
-     * the leading end is the left, the right in a right-to-left layout; down a column it is the
-     * top. A canvas too small for it shrinks it rather than letting it past the pane.
-     */
-    @NonNull
-    private RectF tabBlock(@NonNull RectF canvasRect) {
-        Edge edge = EdgeStackPolicy.edgeOf(mLayout, Element.AZ);
-        boolean column = edge.isOnSide();
-        float pad = u(CARD_PAD_U);
-        float length = Math.min(u(TAB_LENGTH_U) + 2f * pad,
-            column ? canvasRect.height() : canvasRect.width());
-        float thickness = Math.min(u(TAB_THICKNESS_U) + 2f * pad,
-            (column ? canvasRect.width() : canvasRect.height()) / 2f);
-        // The pane card is the canvas less the padding; the pill, the block less the same padding,
-        // stands the gap in from the card, so the block stands the gap in from the canvas.
-        float gap = u(TAB_EDGE_GAP_U);
-        RectF rect = new RectF();
-        switch (edge) {
-            case TOP:
-            case BOTTOM: {
-                float left = isRtl() ? canvasRect.right - length : canvasRect.left;
-                float top = edge == Edge.TOP ? canvasRect.top + gap
-                    : canvasRect.bottom - gap - thickness;
-                rect.set(left, top, left + length, top + thickness);
-                break;
-            }
-            case LEFT:
-            case RIGHT:
-            default: {
-                float left = edge == Edge.LEFT ? canvasRect.left + gap
-                    : canvasRect.right - gap - thickness;
-                rect.set(left, canvasRect.top, left + thickness, canvasRect.top + length);
-                break;
-            }
-        }
-        return rect;
-    }
 
     /** The model's name for one of the miniature's bands, or null for a band with no placement. */
     @Nullable
@@ -908,33 +1048,296 @@ public final class PlaceMiniatureView extends View {
     }
 
     /**
-     * A chip in the tray per bar the arrangement leaves off the phone, sharing the strip equally.
-     * The chips carry the same grip the bands do, so a bar comes back the way it went away.
+     * The elements the arrangement leaves off the phone, in the order the tray lists them: the
+     * bars, then the keyboard. The editor's chips over the tray are the same list.
      */
-    private void computeTrayChips() {
-        List<Block> hidden = hiddenBars();
-        if (hidden.isEmpty() || mTrayRect.isEmpty()) return;
-        float gap = dp(6);
-        float width = (mTrayRect.width() - gap * (hidden.size() - 1)) / hidden.size();
-        float inset = dp(4);
-        for (int i = 0; i < hidden.size(); i++) {
-            float left = mTrayRect.left + i * (width + gap);
-            RectF chip = new RectF(left, mTrayRect.top + inset, left + width,
-                mTrayRect.bottom - inset);
-            mTrayChipRects.put(hidden.get(i), chip);
-            mGripRects.put(hidden.get(i), gripFor(chip, false));
-        }
-    }
-
-    /** The bars the arrangement leaves off the phone, in the order the tray lists them. */
     @NonNull
-    private List<Block> hiddenBars() {
-        List<Block> hidden = new ArrayList<>(4);
+    @VisibleForTesting
+    List<Block> hiddenBlocks() {
+        List<Block> hidden = new ArrayList<>(5);
         if (mLayout == null) return hidden;
         for (Block bar : BARS) {
             if (isBlockHidden(bar)) hidden.add(bar);
         }
+        if (isBlockHidden(Block.KEYBOARD)) hidden.add(Block.KEYBOARD);
         return hidden;
+    }
+
+    // ---- Handles -------------------------------------------------------------------------------
+
+    /**
+     * The handles the selection carries: the dock's on the pinned apps band's inner edge, the
+     * keyboard's two on its top edge and on the bottom of its keys, and Home's on the corner of
+     * its first cell. Every other element is selected with its outline alone; it moves by its grip.
+     */
+    private void computeHandles() {
+        mHandleRects.clear();
+        if (mLayout == null || mSelected == null) return;
+        switch (mSelected) {
+            case APPS_ROW: {
+                RectF band = mBlockRects.get(Block.APPS_ROW);
+                if (band == null || band.isEmpty()) return;
+                mHandleRects.put(Handle.DOCK_HEIGHT, edgeHandle(band, innerEdgeOf(Block.APPS_ROW),
+                    band.centerX(), band.centerY()));
+                return;
+            }
+            case KEYBOARD: {
+                if (mKeyboardRect.isEmpty()) return;
+                cardOf(mKeyboardRect, mScratchRectA);
+                mHandleRects.put(Handle.KEYBOARD_HEIGHT, edgeHandle(mScratchRectA, Edge.TOP,
+                    mScratchRectA.centerX(), 0f));
+                // The chin's handle rides the bottom of the keys, a quarter in from the leading
+                // end, so its target and the height handle's are never the same spot.
+                float x = isRtl() ? mScratchRectA.right - mScratchRectA.width() / 4f
+                    : mScratchRectA.left + mScratchRectA.width() / 4f;
+                RectF chin = edgeHandle(mScratchRectA, Edge.BOTTOM, x, 0f);
+                chin.offset(0f, -chinPx(mScratchRectA));
+                mHandleRects.put(Handle.KEYBOARD_CHIN, chin);
+                return;
+            }
+            case CANVAS: {
+                if (canvasKind() != CanvasKind.HOME_GRID) return;
+                RectF area = gridArea();
+                if (area == null) return;
+                float cellW = gridCellWidth(area, mLayout.widgetColumns);
+                float cellH = gridCellHeight(area, mLayout.widgetRows);
+                float cx = area.left + cellW;
+                float cy = area.top + cellH;
+                float half = dp(HANDLE_LENGTH_DP) / 4f;
+                mHandleRects.put(Handle.WIDGET_GRID,
+                    new RectF(cx - half, cy - half, cx + half, cy + half));
+                return;
+            }
+            default:
+                return;
+        }
+    }
+
+    /** The edge of a band that faces the canvas: the one its handle stands on. */
+    @NonNull
+    private Edge innerEdgeOf(@NonNull Block block) {
+        switch (edgeOfBlock(block)) {
+            case TOP: return Edge.BOTTOM;
+            case LEFT: return Edge.RIGHT;
+            case RIGHT: return Edge.LEFT;
+            case BOTTOM:
+            default: return Edge.TOP;
+        }
+    }
+
+    /**
+     * A handle's pill on one edge of a rectangle: {@value #HANDLE_LENGTH_DP}dp along the edge and
+     * {@value #HANDLE_THICKNESS_DP}dp across it, centred on the edge line at {@code along} (an x
+     * for a top or bottom edge, a y for a side).
+     */
+    @NonNull
+    private RectF edgeHandle(@NonNull RectF rect, @NonNull Edge edge, float alongX, float alongY) {
+        float half = dp(HANDLE_LENGTH_DP) / 2f;
+        float thick = dp(HANDLE_THICKNESS_DP) / 2f;
+        switch (edge) {
+            case TOP:
+                return new RectF(alongX - half, rect.top - thick, alongX + half, rect.top + thick);
+            case BOTTOM:
+                return new RectF(alongX - half, rect.bottom - thick, alongX + half,
+                    rect.bottom + thick);
+            case LEFT:
+                return new RectF(rect.left - thick, alongY - half, rect.left + thick,
+                    alongY + half);
+            case RIGHT:
+            default:
+                return new RectF(rect.right - thick, alongY - half, rect.right + thick,
+                    alongY + half);
+        }
+    }
+
+    /** The chin under the keys, drawn as a share of the keyboard's card. */
+    private float chinPx(@NonNull RectF card) {
+        int max = Math.max(1, TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING);
+        return card.height() * CHIN_MAX_FRACTION * Math.max(0, mKeyboardChinDp) / max;
+    }
+
+    /** Home's widget area inside the canvas card, as {@link #drawHomeGrid} lays it; or null. */
+    @Nullable
+    private RectF gridArea() {
+        RectF rect = mBlockRects.get(Block.CANVAS);
+        if (rect == null || rect.isEmpty()) return null;
+        RectF pane = new RectF();
+        cardOf(rect, pane);
+        float pad = 10f * mUnit;
+        pane.inset(pad, pad);
+        return pane.width() > 0f && pane.height() > 0f ? pane : null;
+    }
+
+    private float gridCellWidth(@NonNull RectF area, int columns) {
+        int n = Math.max(1, columns);
+        return (area.width() - 6f * mUnit * (n - 1)) / n;
+    }
+
+    private float gridCellHeight(@NonNull RectF area, int rows) {
+        int n = Math.max(1, rows);
+        return (area.height() - 6f * mUnit * (n - 1)) / n;
+    }
+
+    /**
+     * The whole cells a corner handle at {@code (x, y)} asks for: as many as fit across the area
+     * at the width the handle gives the first cell, so dragging it out makes the cells bigger and
+     * fewer, and dragging it in makes them smaller and more. Snaps to whole cells and stays in the
+     * store's range.
+     */
+    @VisibleForTesting
+    static int cellsFor(float areaStart, float areaLength, float handleAt, float gapPx,
+                        int min, int max) {
+        float cell = Math.max(1f, handleAt - areaStart);
+        int count = Math.round((areaLength + gapPx) / (cell + gapPx));
+        return Math.max(min, Math.min(max, count));
+    }
+
+    /**
+     * The handle a finger is on, within the platform's 48dp target around it, or null. The
+     * nearest wins, so the keyboard's two handles on a short keyboard still resolve to one.
+     */
+    @Nullable
+    private Handle handleAt(float x, float y) {
+        Handle best = null;
+        float bestDistance = Float.MAX_VALUE;
+        float half = dp(GRIP_TOUCH_HALF_DP);
+        for (Map.Entry<Handle, RectF> entry : mHandleRects.entrySet()) {
+            RectF rect = entry.getValue();
+            float dx = rect.centerX() - x;
+            float dy = rect.centerY() - y;
+            if (Math.abs(dx) > half || Math.abs(dy) > half) continue;
+            float distance = dx * dx + dy * dy;
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                best = entry.getKey();
+            }
+        }
+        return best;
+    }
+
+    /** Takes hold of a handle with the finger already down on it. */
+    private boolean beginHandle(@NonNull Handle handle, float x, float y) {
+        if (mLayout == null) return false;
+        mDraggedHandle = handle;
+        mDownX = x;
+        mDownY = y;
+        switch (handle) {
+            case DOCK_HEIGHT: {
+                RectF band = mBlockRects.get(Block.APPS_ROW);
+                if (band == null) return abandonHandle();
+                mHandleStartScale = mDockScale;
+                mHandleStartExtentPx = edgeOfBlock(Block.APPS_ROW).isOnSide()
+                    ? band.width() : band.height();
+                break;
+            }
+            case KEYBOARD_HEIGHT:
+                if (mKeyboardRect.isEmpty()) return abandonHandle();
+                mHandleStartScale = mKeyboardScale;
+                mHandleStartExtentPx = mKeyboardRect.height();
+                break;
+            case KEYBOARD_CHIN:
+                if (mKeyboardRect.isEmpty()) return abandonHandle();
+                cardOf(mKeyboardRect, mHandleStartRect);
+                mHandleStartChin = mKeyboardChinDp;
+                mHandleStartExtentPx = mHandleStartRect.height() * CHIN_MAX_FRACTION;
+                break;
+            case WIDGET_GRID:
+            default: {
+                RectF area = gridArea();
+                RectF grip = mHandleRects.get(Handle.WIDGET_GRID);
+                if (area == null || grip == null) return abandonHandle();
+                mHandleStartRect.set(grip);
+                mHandleLastColumns = mLayout.widgetColumns;
+                mHandleLastRows = mLayout.widgetRows;
+                break;
+            }
+        }
+        ViewParent parent = getParent();
+        if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+        invalidate();
+        return true;
+    }
+
+    private boolean abandonHandle() {
+        mDraggedHandle = null;
+        return false;
+    }
+
+    /**
+     * The held handle followed to {@code (x, y)}: the new value worked out in the store's units
+     * and reported. The canvas grows under the finger when the editor answers with the value.
+     */
+    private void moveHandle(float x, float y) {
+        Handle handle = mDraggedHandle;
+        if (handle == null || mLayout == null || mEditListener == null) return;
+        float dx = x - mDownX;
+        float dy = y - mDownY;
+        switch (handle) {
+            case DOCK_HEIGHT: {
+                float grow;
+                switch (edgeOfBlock(Block.APPS_ROW)) {
+                    case TOP: grow = dy; break;
+                    case LEFT: grow = isRtl() ? -dx : dx; break;
+                    case RIGHT: grow = isRtl() ? dx : -dx; break;
+                    case BOTTOM:
+                    default: grow = -dy; break;
+                }
+                mEditListener.onDockHeightDragged(scaleFor(mHandleStartScale,
+                    mHandleStartExtentPx, grow, TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT,
+                    TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT));
+                return;
+            }
+            case KEYBOARD_HEIGHT:
+                mEditListener.onKeyboardHeightDragged(scaleFor(mHandleStartScale,
+                    mHandleStartExtentPx, -dy, TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
+                    TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE));
+                return;
+            case KEYBOARD_CHIN: {
+                int max = TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING;
+                float perDp = Math.max(0.01f, mHandleStartExtentPx / Math.max(1, max));
+                int chin = Math.round(mHandleStartChin + (-dy) / perDp);
+                mEditListener.onKeyboardChinDragged(Math.max(
+                    TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING, Math.min(max, chin)));
+                return;
+            }
+            case WIDGET_GRID:
+            default: {
+                RectF area = gridArea();
+                if (area == null) return;
+                float gap = 6f * mUnit;
+                int columns = cellsFor(area.left, area.width(), mHandleStartRect.centerX() + dx,
+                    gap, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+                    TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS);
+                int rows = cellsFor(area.top, area.height(), mHandleStartRect.centerY() + dy,
+                    gap, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
+                    TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS);
+                if (columns == mHandleLastColumns && rows == mHandleLastRows) return;
+                mHandleLastColumns = columns;
+                mHandleLastRows = rows;
+                mEditListener.onWidgetGridDragged(columns, rows);
+            }
+        }
+    }
+
+    /**
+     * A scale dragged: the extent the band had times what the finger added to it, over the extent
+     * it had, times the scale it had — so the band's edge stays under the finger — in range.
+     */
+    @VisibleForTesting
+    static float scaleFor(float startScale, float startExtentPx, float growPx, float min,
+                          float max) {
+        float extent = Math.max(1f, startExtentPx);
+        float scale = startScale * Math.max(0f, extent + growPx) / extent;
+        return Math.max(min, Math.min(max, scale));
+    }
+
+    private void releaseHandle() {
+        if (mDraggedHandle == null) return;
+        mDraggedHandle = null;
+        mReadout = null;
+        computeHandles();
+        invalidate();
+        if (mEditListener != null) mEditListener.onHandleReleased();
     }
 
     /**
@@ -950,6 +1353,15 @@ public final class PlaceMiniatureView extends View {
     private void computeSlots() {
         mSlots.clear();
         mHoverSlot = null;
+        if (mDraggedBar == Block.KEYBOARD) {
+            // The keyboard has no edge to stand on: the tray, which switches it off, is its one
+            // target, and a release anywhere else puts it back where it was.
+            if (mLayout != null && !mTrayRect.isEmpty()) {
+                mSlots.add(new MiniatureDragPolicy.Slot(null, -1, 0f, mTrayRect.left,
+                    mTrayRect.top, mTrayRect.right, mTrayRect.bottom));
+            }
+            return;
+        }
         MiniatureDragPolicy.Bar bar = mDraggedBar == null ? null : barOf(mDraggedBar);
         if (bar == null || mLayout == null) return;
         MiniatureDragPolicy.Targets targets =
@@ -1154,7 +1566,7 @@ public final class PlaceMiniatureView extends View {
         }
     }
 
-    /** The word for where a bar stands: its edge, or that it is hidden, or minimised there. */
+    /** The word for where a bar stands: its edge, or that it is hidden. */
     @NonNull
     private String barPosition(@NonNull Block bar) {
         if (mLayout == null || isBlockHidden(bar)) {
@@ -1164,14 +1576,9 @@ public final class PlaceMiniatureView extends View {
         boolean underKeyboard = element != null
             && EdgeStackPolicy.standsUnderKeyboard(mLayout, element)
             && EdgeStackPolicy.claimsBand(mLayout, element);
-        String edge = getContext().getString(underKeyboard
+        return getContext().getString(underKeyboard
             ? R.string.settings_layout_edge_under_keyboard
             : LayoutChooserModel.edgeLabel(edgeOfBlock(bar)));
-        if (bar == Block.ALPHABETS_ROW && isAzTab()) {
-            return getContext().getString(R.string.settings_layout_miniature_minimised_format,
-                edge);
-        }
-        return edge;
     }
 
     /** Decisions that do not need a {@link Canvas} to make, recomputed whenever the blocks move. */
@@ -1203,10 +1610,6 @@ public final class PlaceMiniatureView extends View {
         }
         if (isBlockHidden(block)) {
             return getContext().getString(R.string.settings_layout_miniature_hidden_format, label);
-        }
-        if (block == Block.ALPHABETS_ROW && isAzTab()) {
-            return getContext().getString(R.string.settings_layout_miniature_minimised_format,
-                label);
         }
         return label;
     }
@@ -1396,15 +1799,89 @@ public final class PlaceMiniatureView extends View {
         drawBandBlock(canvas, Block.ALPHABETS_ROW);
         drawBandBlock(canvas, Block.STATUS_BAR);
         drawSlots(canvas);
+        drawSelection(canvas);
         canvas.restoreToCount(saved);
 
         mFramePaint.setStrokeWidth(frameStrokePx());
         mFramePaint.setColor(dim());
         canvas.drawRoundRect(mFrameRect, radius, radius, mFramePaint);
 
+        drawHandles(canvas);
         drawTray(canvas);
         drawLegend(canvas);
         drawGhost(canvas);
+        drawReadout(canvas);
+    }
+
+    /**
+     * The one outline the selected element wears: {@value #SELECTION_STROKE_DP}dp of the theme's
+     * primary around its card. Nothing else glows. A lifted element wears the lift instead.
+     */
+    private void drawSelection(@NonNull Canvas canvas) {
+        if (mSelected == null || mSelected == mDraggedBar) return;
+        RectF block = mSelected == Block.KEYBOARD ? mKeyboardRect : mBlockRects.get(mSelected);
+        if (block == null || block.isEmpty()) return;
+        cardOf(block, mScratchRectA);
+        float radius = mSelected == Block.CANVAS ? u(PANE_RADIUS_U) : cardRadius(mScratchRectA);
+        mLinePaint.setColor(accent());
+        mLinePaint.setStrokeWidth(dp(SELECTION_STROKE_DP));
+        canvas.drawRoundRect(mScratchRectA, radius, radius, mLinePaint);
+    }
+
+    /** The selection's handles: a pill on each edge it moves, a dot on the grid's corner. */
+    private void drawHandles(@NonNull Canvas canvas) {
+        if (mHandleRects.isEmpty() || mDraggedBar != null) return;
+        int accent = accent();
+        for (Map.Entry<Handle, RectF> entry : mHandleRects.entrySet()) {
+            RectF rect = entry.getValue();
+            boolean held = entry.getKey() == mDraggedHandle;
+            if (entry.getKey() == Handle.WIDGET_GRID) {
+                float r = rect.width() / 2f * (held ? 1.3f : 1f);
+                mFillPaint.setColor(accent);
+                canvas.drawCircle(rect.centerX(), rect.centerY(), r, mFillPaint);
+                mLinePaint.setColor(surface());
+                mLinePaint.setStrokeWidth(dp(1.5f));
+                canvas.drawCircle(rect.centerX(), rect.centerY(), r, mLinePaint);
+                continue;
+            }
+            float r = Math.min(rect.width(), rect.height()) / 2f;
+            // A rim of the surface around the pill, so it reads on the band's own fill.
+            mScratchRectB.set(rect);
+            mScratchRectB.inset(-dp(1.5f), -dp(1.5f));
+            mFillPaint.setColor(surface());
+            canvas.drawRoundRect(mScratchRectB, r + dp(1.5f), r + dp(1.5f), mFillPaint);
+            mFillPaint.setColor(accent);
+            canvas.drawRoundRect(rect, r, r, mFillPaint);
+        }
+    }
+
+    /**
+     * The held handle's readout, in the real units the editor gave it: a small inverse pill beside
+     * the handle, kept inside the view. Gone the moment the finger lifts.
+     */
+    private void drawReadout(@NonNull Canvas canvas) {
+        if (mReadout == null || mDraggedHandle == null) return;
+        RectF handle = mHandleRects.get(mDraggedHandle);
+        if (handle == null) return;
+        mLegendPaint.setTextSize(READOUT_TEXT_SP * getResources().getDisplayMetrics().scaledDensity);
+        mLegendPaint.setTypeface(Typeface.DEFAULT_BOLD);
+        mLegendPaint.setLetterSpacing(0f);
+        float textWidth = mLegendPaint.measureText(mReadout);
+        float width = textWidth + 2f * dp(READOUT_PAD_H_DP);
+        float height = dp(READOUT_HEIGHT_DP);
+        float left = handle.centerX() - width / 2f;
+        left = Math.max(dp(2), Math.min(getWidth() - dp(2) - width, left));
+        float top = handle.top - dp(READOUT_GAP_DP) - height;
+        if (top < dp(2)) top = handle.bottom + dp(READOUT_GAP_DP);
+        mScratchRectB.set(left, top, left + width, top + height);
+        mFillPaint.setColor(surfaceInk());
+        canvas.drawRoundRect(mScratchRectB, height / 2f, height / 2f, mFillPaint);
+        mLegendPaint.setColor(surface());
+        float baseline = mScratchRectB.centerY()
+            - (mLegendPaint.ascent() + mLegendPaint.descent()) / 2f;
+        canvas.drawText(mReadout, mScratchRectB.centerX() - textWidth / 2f, baseline,
+            mLegendPaint);
+        mLegendPaint.setTypeface(Typeface.DEFAULT);
     }
 
     /** One design unit, in pixels, for this frame. */
@@ -1477,10 +1954,7 @@ public final class PlaceMiniatureView extends View {
             drawStatusColumnContent(canvas, card);
             return;
         }
-        if (block == Block.ALPHABETS_ROW && isAzTab()) {
-            drawAlphabetsTabContent(canvas, card, vertical);
-            return;
-        }
+
         int saved = beginBandOrientation(canvas, card, vertical, mScratchRectA);
         shrinkForGrip(mScratchRectA, vertical);
         switch (block) {
@@ -1619,30 +2093,6 @@ public final class PlaceMiniatureView extends View {
             float x = local.left + inset + slot * (i + 0.5f);
             canvas.drawText(ALPHABETS_SAMPLE[i], x, baseline, mTextPaint);
         }
-    }
-
-    /**
-     * The pull tab: the letter A at its leading end, upright on every edge, clear of the grip at
-     * its trailing end — the top of a column's.
-     */
-    private void drawAlphabetsTabContent(@NonNull Canvas canvas, @NonNull RectF card,
-                                         boolean vertical) {
-        float across = vertical ? card.width() : card.height();
-        float k = Math.max(0.01f, Math.min(mUnit, across / TAB_THICKNESS_U));
-        RectF room = mScratchRectA;
-        room.set(card);
-        if (vertical) {
-            room.top += Math.min(u(GRIP_CLEARANCE_U), card.height() / 2f);
-        } else {
-            shrinkForGrip(room, false);
-        }
-        mTextPaint.setColor(text());
-        mTextPaint.setTypeface(Typeface.DEFAULT_BOLD);
-        mTextPaint.setTextAlign(Paint.Align.CENTER);
-        mTextPaint.setTextSize(Math.min(10f * k, across * 0.5f));
-        float baseline = room.centerY() - (mTextPaint.ascent() + mTextPaint.descent()) / 2f;
-        canvas.drawText("A", room.centerX(), baseline, mTextPaint);
-        mTextPaint.setTypeface(Typeface.DEFAULT);
     }
 
     // ---- Extra keys ---------------------------------------------------------------------------
@@ -1851,6 +2301,16 @@ public final class PlaceMiniatureView extends View {
     private void drawKeyboardBlock(@NonNull Canvas canvas) {
         if (mKeyboardRect.isEmpty()) return;
         cardOf(mKeyboardRect, mScratchRectC);
+        if (mDraggedBar == Block.KEYBOARD) {
+            // In the air: the faint placeholder a lifted bar leaves, until the drop lands.
+            float radius = cardRadius(mScratchRectC);
+            mDashPaint.setPathEffect(mSlotDash);
+            mDashPaint.setStrokeWidth(dp(1f));
+            mDashPaint.setColor(dim());
+            mDashPaint.setAlpha(PLACEHOLDER_ALPHA);
+            canvas.drawRoundRect(mScratchRectC, radius, radius, mDashPaint);
+            return;
+        }
         PlaceLayout.KeyboardForm form = mLayout == null
             ? PlaceLayout.KeyboardForm.DOCKED : mLayout.keyboardForm;
         switch (form) {
@@ -1877,9 +2337,16 @@ public final class PlaceMiniatureView extends View {
                 break;
             }
             case DOCKED:
-            default:
-                drawKeyboardCard(canvas, mScratchRectC);
+            default: {
+                // The chin is air under the last key row inside the keyboard's own card: the keys
+                // are laid out over what is left above it.
+                float chin = chinPx(mScratchRectC);
+                mKeyboardWhole.set(mScratchRectC);
+                mKeyboardWhole.bottom -= chin;
+                mKeyboardPartA.set(mScratchRectC);
+                drawKeyboardCard(canvas, mKeyboardWhole, mKeyboardPartA);
                 break;
+            }
         }
     }
 
@@ -2204,36 +2671,31 @@ public final class PlaceMiniatureView extends View {
     TrayState trayState() {
         if (mLayout == null || mTrayRect.isEmpty()) return null;
         if (isTrayOffered()) return TrayState.OFFERING;
-        return mTrayChipRects.isEmpty() ? TrayState.EMPTY : TrayState.CHIPS;
+        return hiddenBlocks().isEmpty() ? TrayState.EMPTY : TrayState.CHIPS;
     }
 
     /**
-     * The strip under the phone: always there, so the place a bar goes when it is put away is
-     * visible before anything is dragged. At rest it is a dashed drop zone with one word in it;
-     * it fills with chips as bars are hidden, and while a bar is in the air and may be dropped on
-     * it its outline and its word turn to the accent, with a wash of it once the finger is over.
+     * The strip under the phone while an element is in the air and may be put away: a drop zone
+     * over the editor's chips, opaque so the chips under it do not read through, that says "Drop
+     * here to hide" and takes a wash of the accent once the finger is over it. At rest the view
+     * draws nothing here; the chips standing over the strip are the editor's own views.
      */
     private void drawTray(@NonNull Canvas canvas) {
-        TrayState state = trayState();
-        if (state == null) return;
+        if (trayState() != TrayState.OFFERING) return;
         float radius = dp(TRAY_RADIUS_DP);
-        boolean offering = state == TrayState.OFFERING;
-        boolean active = offering && mHoverSlot != null && mHoverSlot.isTray();
+        boolean active = mHoverSlot != null && mHoverSlot.isTray();
+        mFillPaint.setColor(surface());
+        canvas.drawRoundRect(mTrayRect, radius, radius, mFillPaint);
         if (active) {
             mFillPaint.setColor(accentWash());
             canvas.drawRoundRect(mTrayRect, radius, radius, mFillPaint);
         }
         mDashPaint.setPathEffect(mTrayDash);
-        mDashPaint.setColor(offering ? accent() : dim());
+        mDashPaint.setColor(accent());
         mDashPaint.setStrokeWidth(dp(TRAY_STROKE_DP));
         canvas.drawRoundRect(mTrayRect, radius, radius, mDashPaint);
-        if (state == TrayState.CHIPS) {
-            drawTrayChips(canvas);
-            return;
-        }
-        drawTrayLabel(canvas, getContext().getString(offering
-            ? R.string.settings_layout_drop_to_hide : R.string.settings_layout_tray_empty),
-            offering ? accent() : onVariant());
+        drawTrayLabel(canvas, getContext().getString(R.string.settings_layout_drop_to_hide),
+            accent());
     }
 
     /** The shelf's one word, centred in it, as real text. */
@@ -2251,39 +2713,6 @@ public final class PlaceMiniatureView extends View {
             mLegendPaint);
     }
 
-    /** One chip per hidden bar: a container pill with its name and the grip that brings it back. */
-    private void drawTrayChips(@NonNull Canvas canvas) {
-        if (mTrayChipRects.isEmpty()) return;
-        int onSurface = surfaceInk();
-        mLegendPaint.setTextSize(traySizePx());
-        mLegendPaint.setTypeface(Typeface.DEFAULT);
-        mLegendPaint.setLetterSpacing(0f);
-        float radius = dp(10);
-        mLinePaint.setStrokeWidth(u(CARD_STROKE_U));
-        for (Map.Entry<Block, RectF> entry : mTrayChipRects.entrySet()) {
-            Block bar = entry.getKey();
-            RectF chip = entry.getValue();
-            if (mDraggedBar == bar) continue; // it is the copy under the finger
-            mFillPaint.setColor(bandFill(bar));
-            canvas.drawRoundRect(chip, radius, radius, mFillPaint);
-            mLinePaint.setColor(dim());
-            canvas.drawRoundRect(chip, radius, radius, mLinePaint);
-
-            String name = barName(bar);
-            RectF grip = mGripRects.get(bar);
-            if (grip != null) drawGrip(canvas, grip, gripInk());
-            if (name == null) continue;
-            float textLeft = chip.left + dp(8);
-            float textRoom = Math.max(0f, (grip == null ? chip.right : grip.left)
-                - dp(6) - textLeft);
-            CharSequence shown = TextUtils.ellipsize(name, mLegendPaint, textRoom,
-                TextUtils.TruncateAt.END);
-            mLegendPaint.setColor(onSurface);
-            canvas.drawText(shown, 0, shown.length(), textLeft,
-                chip.centerY() - (mLegendPaint.ascent() + mLegendPaint.descent()) / 2f,
-                mLegendPaint);
-        }
-    }
 
     private float traySizePx() {
         float fontScale = getResources().getConfiguration().fontScale;
@@ -2304,6 +2733,21 @@ public final class PlaceMiniatureView extends View {
         float halfWidth = mLiftOrigin.width() / 2f * scale;
         float halfHeight = mLiftOrigin.height() / 2f * scale;
         mGhostRect.set(cx - halfWidth, cy - halfHeight, cx + halfWidth, cy + halfHeight);
+        if (mDraggedBar == Block.KEYBOARD) {
+            // The keyboard in the air: its card, raised, with the accent rim a lifted bar wears.
+            cardOf(mGhostRect, mKeyboardWhole);
+            float radius = cardRadius(mKeyboardWhole);
+            mScratchRectB.set(mKeyboardWhole);
+            mScratchRectB.offset(0f, u(LIFT_OFFSET_U));
+            mFillPaint.setColor(surface());
+            canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
+            mKeyboardPartA.set(mKeyboardWhole);
+            drawKeyboardCard(canvas, mKeyboardWhole, mKeyboardPartA);
+            mLinePaint.setColor(accent());
+            mLinePaint.setStrokeWidth(u(LIFTED_STROKE_U));
+            canvas.drawRoundRect(mKeyboardPartA, radius, radius, mLinePaint);
+            return;
+        }
         boolean vertical = mBlockRects.containsKey(mDraggedBar) && isBarVertical(mDraggedBar);
         drawBandCard(canvas, mDraggedBar, mGhostRect, vertical, true);
         gripInto(mGhostRect, vertical, mGhostGripRect);
@@ -2349,7 +2793,6 @@ public final class PlaceMiniatureView extends View {
         float cy = grip.centerY();
         out.set(cx - half, cy - half, cx + half, cy + half);
         RectF band = mBlockRects.get(bar);
-        if (band == null) band = mTrayChipRects.get(bar);
         if (band == null || band.isEmpty()) return;
         if (mBlockRects.containsKey(bar) && isBarVertical(bar)) {
             out.top = Math.max(out.top, band.top);
@@ -2365,9 +2808,8 @@ public final class PlaceMiniatureView extends View {
      * nowhere to go, so a lift never starts a gesture that cannot end anywhere.
      */
     private boolean beginDrag(@NonNull Block bar, float x, float y) {
-        if (mLayout == null || barOf(bar) == null) return false;
-        RectF origin = mBlockRects.get(bar);
-        if (origin == null) origin = mTrayChipRects.get(bar);
+        if (mLayout == null || (barOf(bar) == null && bar != Block.KEYBOARD)) return false;
+        RectF origin = bar == Block.KEYBOARD ? mKeyboardRect : mBlockRects.get(bar);
         if (origin == null || origin.isEmpty()) return false;
         mDraggedBar = bar;
         computeSlots();
@@ -2410,6 +2852,11 @@ public final class PlaceMiniatureView extends View {
             return;
         }
         endDrag();
+        if (bar == Block.KEYBOARD) {
+            // The keyboard's one target is the tray: dropped there, it is switched off.
+            if (slot.isTray() && mEditListener != null) mEditListener.onKeyboardPutAway();
+            return;
+        }
         if (mDropListener != null) {
             mDropListener.onBarDropped(bar, slot.edge, slot.isTray() ? -1 : slot.index,
                 slot.underKeyboard);
@@ -2513,38 +2960,78 @@ public final class PlaceMiniatureView extends View {
     }
 
     /**
-     * A touch-down on a grip lifts that bar at once and the gesture belongs to the drag from
-     * there. A touch-down anywhere else is the tap it has always been, decided on the way up, and
-     * the preference list keeps its own scroll.
+     * A touch-down on the selection's handle takes the handle; on a grip it lifts that bar at
+     * once; on the keyboard's card it waits to see whether the finger travels, which lifts the
+     * keyboard, or comes up, which is a tap. Anything else is a tap, decided on the way up, which
+     * selects what it landed on — or clears the selection off the phone. A touch-down on the tray
+     * at rest is not this view's: the editor's chips stand there, under it.
      */
     @Override
     public boolean onTouchEvent(@NonNull MotionEvent event) {
+        float x = event.getX();
+        float y = event.getY();
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
-                Block grip = gripAt(event.getX(), event.getY());
-                if (grip != null) beginDrag(grip, event.getX(), event.getY());
-                return true;
+                mKeyboardPressed = false;
+                mDownX = x;
+                mDownY = y;
+                Handle handle = handleAt(x, y);
+                if (handle != null && beginHandle(handle, x, y)) return true;
+                Block grip = gripAt(x, y);
+                if (grip != null) {
+                    beginDrag(grip, x, y);
+                    return true;
+                }
+                if (!mKeyboardRect.isEmpty() && mKeyboardRect.contains(x, y)) {
+                    mKeyboardPressed = true;
+                    return true;
+                }
+                // The chips over the tray are the editor's; the touch goes on to them.
+                return !mTrayRect.contains(x, y);
             }
             case MotionEvent.ACTION_MOVE:
+                if (mDraggedHandle != null) {
+                    ViewParent parent = getParent();
+                    if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+                    moveHandle(x, y);
+                    return true;
+                }
+                if (mKeyboardPressed && mDraggedBar == null
+                    && Math.hypot(x - mDownX, y - mDownY) > dp(KEYBOARD_LIFT_SLOP_DP)) {
+                    mKeyboardPressed = false;
+                    float downX = mDownX;
+                    float downY = mDownY;
+                    if (beginDrag(Block.KEYBOARD, downX, downY)) moveDrag(x, y);
+                    return true;
+                }
                 if (mDraggedBar != null && !mSpringingBack) {
                     // The editor's card is a sheet that scrolls and pulls; while a bar is in the
                     // air neither may take the finger, so the claim is restated on every move in
                     // case anything between here and the sheet let it go.
                     ViewParent parent = getParent();
                     if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
-                    moveDrag(event.getX(), event.getY());
+                    moveDrag(x, y);
                 }
                 return true;
             case MotionEvent.ACTION_UP:
+                if (mDraggedHandle != null) {
+                    moveHandle(x, y);
+                    releaseHandle();
+                    return true;
+                }
                 if (mDraggedBar != null) {
                     releaseDrag();
                     return true;
                 }
-                Block tapped = blockAt(event.getX(), event.getY());
+                mKeyboardPressed = false;
+                Block tapped = blockAt(x, y);
+                setSelectedBlock(tapped);
                 if (tapped != null && mListener != null) mListener.onBlockTapped(tapped);
                 performClick();
                 return true;
             case MotionEvent.ACTION_CANCEL:
+                mKeyboardPressed = false;
+                if (mDraggedHandle != null) releaseHandle();
                 if (mDraggedBar != null) springBack();
                 return true;
             default:
@@ -2559,16 +3046,12 @@ public final class PlaceMiniatureView extends View {
 
     @Nullable
     private Block blockAt(float x, float y) {
-        // A tray chip is the bar it names, so a hidden bar's chooser is a tap away as well as a
-        // drag: nothing on this picture is reachable only by dragging.
-        for (Map.Entry<Block, RectF> entry : mTrayChipRects.entrySet()) {
-            if (entry.getValue().contains(x, y)) return entry.getKey();
-        }
         // A legend row is the block it names — and a hidden block's only tap target.
         for (Block block : LEGEND_ORDER) {
             RectF rect = mLegendRects.get(block);
             if (rect != null && rect.contains(x, y)) return block;
         }
+        if (!mKeyboardRect.isEmpty() && mKeyboardRect.contains(x, y)) return Block.KEYBOARD;
         // Smaller, more specific blocks first, so a corner where two strips meet resolves to the
         // narrower one (the alphabets row rides a thin strip between two wider ones).
         Block[] order = {Block.ALPHABETS_ROW, Block.STATUS_BAR, Block.EXTRA_KEYS,

@@ -8692,9 +8692,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * a band of that row's plank and the glass under both of them is the plank's, so the capsule
      * this host carries everywhere else is put away.
      *
-     * <p>Minimised, the index has no band anywhere: the dock's row and this host both go, and the
-     * letters live in the pull tab's layer over the canvas ({@link AzPullTabLayer}), which is where
-     * the one scrub callback moves to.
+     * <p>The minimised pull tab is gone from the arrangement (2026-09-30), so the tab's layer is
+     * only ever put away here; the layer itself is left for a later cleanup.
      *
      * @return whether a host appeared or went, which the content's edge padding is derived from
      */
@@ -8702,7 +8701,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         FrameLayout host = findViewById(R.id.place_az_bar_host);
         if (host == null) return false;
         PlaceLayout layout = currentPlaceLayout();
-        boolean tabShown = mPreferences != null && PlaceChromePolicy.azTabShown(layout);
+        boolean tabShown = false;
         boolean lettersShown = mPreferences != null && PlaceChromePolicy.azRowShown(layout);
         PlaceLayout.Edge edge = lettersShown || tabShown ? azBarEdge() : PlaceLayout.Edge.BOTTOM;
         boolean wantHost = lettersShown && edge != PlaceLayout.Edge.BOTTOM;
@@ -10445,6 +10444,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             float density = getResources().getDisplayMetrics().density;
             return density <= 0f ? 0f
                 : getDockLayout().capsuleCornerRadiusPx(Integer.MAX_VALUE) / density;
+        }
+
+        // The pinned apps as laid out: the dock's row, or the rail or off-dock row where the
+        // place stands them. Their thickness is the short side either way, which is what the
+        // dock's height scale sizes.
+        @Override public int measuredDockHeightDp() {
+            int px = shownThicknessPx(R.id.apps_bar_row_host);
+            if (px <= 0) px = shownThicknessPx(R.id.place_apps_bar_host);
+            float density = getResources().getDisplayMetrics().density;
+            return px <= 0 || density <= 0f ? -1 : Math.round(px / density);
+        }
+
+        @Override public int measuredKeyboardHeightDp() {
+            View keys = findViewById(R.id.inapp_keyboard_view_host);
+            float density = getResources().getDisplayMetrics().density;
+            if (keys == null || !keys.isShown() || keys.getHeight() <= 0 || density <= 0f)
+                return -1;
+            return Math.round(keys.getHeight() / density);
+        }
+
+        private int shownThicknessPx(int viewId) {
+            View view = findViewById(viewId);
+            if (view == null || !view.isShown()) return -1;
+            return Math.min(view.getWidth(), view.getHeight());
         }
     }
 

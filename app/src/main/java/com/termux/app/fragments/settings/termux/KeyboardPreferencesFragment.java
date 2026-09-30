@@ -56,7 +56,6 @@ import juloo.keyboard2.KeyboardData;
 public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 
     private static final String KEY_EXTRA_KEYS = "in_app_keyboard_extra_keys";
-    static final String KEY_KEYBOARD_FORM = "in_app_keyboard_form";
     private static final String KEY_CREDITS_GITHUB = "keyboard_credits_github";
     private static final String KEY_CREDITS_PLAY = "keyboard_credits_play";
     private static final String KEY_DOCS_LAYOUTS = "keyboard_docs_layouts";
@@ -75,12 +74,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private static final String DOCS_KEYS_URL =
         "https://github.com/Julow/Unexpected-Keyboard/blob/master/doc/Possible-key-values.md";
 
-    /** The same three types the Layout page offers, under the same labels. */
-    private static final String[] KEYBOARD_FORM_VALUES = {"docked", "floating", "split"};
-    private static final int[] KEYBOARD_FORM_LABELS = {
-        R.string.settings_layout_keyboard_form_docked,
-        R.string.settings_layout_keyboard_form_floating,
-        R.string.settings_layout_keyboard_form_split};
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -102,9 +95,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             });
         }
 
-        SegmentedPillPreference keyboardForm = findPreference(KEY_KEYBOARD_FORM);
-        if (keyboardForm != null)
-            keyboardForm.setSegments(KEYBOARD_FORM_VALUES, KEYBOARD_FORM_LABELS);
 
         MultiSelectListPreference extraKeysPreference = findPreference(KEY_EXTRA_KEYS);
         if (extraKeysPreference != null)
@@ -468,9 +458,6 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
         if (mPreferences == null || key == null)
             return;
         switch (key) {
-            case "in_app_keyboard_bottom_padding":
-                putKeyboardChin(value);
-                break;
             // The shape sliders are percentages on screen and fractions in the store, and each is
             // remembered for the orientation the phone is being held in.
             case "in_app_keyboard_floating_width":
@@ -495,8 +482,6 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
         if (mPreferences == null || key == null)
             return defValue;
         switch (key) {
-            case "in_app_keyboard_bottom_padding":
-                return keyboardChin();
             case "in_app_keyboard_floating_width":
                 return Math.round(mPreferences.getInAppKeyboardFloatingWidthScale() * 100f);
             case "in_app_keyboard_floating_height":
@@ -521,9 +506,7 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "in_app_keyboard_theme":
                 mPreferences.setInAppKeyboardTheme(value);
                 break;
-            case KeyboardPreferencesFragment.KEY_KEYBOARD_FORM:
-                putKeyboardForm(value);
-                break;
+
             case "keyboard_voice_engine":
                 mPreferences.setInAppKeyboardVoiceEngine(value);
                 break;
@@ -560,41 +543,6 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
         }
     }
 
-    /**
-     * The air under the last key row, in the orientation the phone is in. Like the keyboard type
-     * below it, the allowance is a layout value per orientation, shared by every place; this row
-     * and the Layout editor's chin track write the same key.
-     */
-    private void putKeyboardChin(int dp) {
-        PlaceLayoutStore places = places();
-        if (places == null) return;
-        places.setKeyboardChinDp(orientation(), dp);
-    }
-
-    private int keyboardChin() {
-        PlaceLayoutStore places = places();
-        if (places == null) return 0;
-        return places.keyboardChinDp(orientation());
-    }
-
-    /** The keyboard type, in the orientation the phone is in, for every place alike. */
-    private void putKeyboardForm(@Nullable String value) {
-        PlaceLayoutStore places = places();
-        if (places == null) return;
-        KeyboardForm form = KeyboardForm.parse(value, KeyboardForm.DOCKED);
-        PlaceOrientation orientation = orientation();
-        if (places.keyboardForm(orientation) == form) return;
-        places.setKeyboardForm(orientation, form);
-        // The keyboard is arranged by the activity, so the change lands on the way back to it.
-        TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
-    }
-
-    @NonNull
-    private String keyboardForm() {
-        PlaceLayoutStore places = places();
-        if (places == null) return KeyboardForm.DOCKED.storageValue();
-        return places.keyboardForm(orientation()).storageValue();
-    }
 
     @Override
     @Nullable
@@ -607,8 +555,7 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isSoftKeyboardEnabled() ? "android" : "none";
             case "in_app_keyboard_theme":
                 return mPreferences.getInAppKeyboardTheme();
-            case KeyboardPreferencesFragment.KEY_KEYBOARD_FORM:
-                return keyboardForm();
+
             case "keyboard_voice_engine":
                 // Never picked: show what the voice key will use (on-device once a speech model is in).
                 if (!mPreferences.isInAppKeyboardVoiceEngineChosen()

@@ -711,9 +711,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (key == null)
             return;
         switch (key) {
-            case "in_app_keyboard_bottom_padding":
-                mKeyboardLook.putInt(key, value);
-                break;
             case "wallpaper_render_zoom":
                 mPreferences.setWallpaperRenderZoom(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -730,8 +727,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         if (key == null)
             return defValue;
         switch (key) {
-            case "in_app_keyboard_bottom_padding":
-                return mKeyboardLook.getInt(key, defValue);
             case "wallpaper_render_zoom":
                 return mPreferences.getWallpaperRenderZoom();
             default:

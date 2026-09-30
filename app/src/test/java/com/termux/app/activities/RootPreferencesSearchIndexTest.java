@@ -39,7 +39,8 @@ import org.robolectric.annotation.ConscryptMode;
 public class RootPreferencesSearchIndexTest {
 
     private static final String[] EXPECTED_LAUNCHER_ROW_ORDER = {
-        "appearance", "terminal", "status_bar", "notifications", "keyboard_input", "launcher_apps", "display", "on_device_ai"
+        "appearance", "layout_editor", "terminal", "status_bar", "notifications", "keyboard_input",
+        "launcher_apps", "display", "on_device_ai"
     };
 
     private SettingsActivity.RootPreferencesFragment launch() {

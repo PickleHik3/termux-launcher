@@ -138,14 +138,6 @@ public final class PlaceLayout {
         }
     }
 
-    /**
-     * How the alphabets index is kept: as a band of its own on its edge ({@link #ON}), as a small
-     * pull tab on that edge that brings the letters out over the content while it is dragged
-     * ({@link #MINIMISED}), or not at all ({@link #OFF}). The Layout editor's three-way choice.
-     */
-    public enum AzIndexMode {
-        ON, MINIMISED, OFF
-    }
 
     /** Every element's slot: the whole truth about what stands where on this place. */
     @NonNull private final Map<Element, Slot> mSlots;
@@ -162,13 +154,6 @@ public final class PlaceLayout {
      * it.
      */
     public final boolean keyboardShown;
-    /**
-     * Whether a shown alphabets index stands minimised: a pull tab on its edge, overlaying the
-     * content and claiming no band ({@link EdgeStackPolicy#claimsBand}), which slides the letters
-     * out over the content while a finger holds it. Meaningless while the index is put away — its
-     * slot says that — and kept regardless, so the index comes back in the form it went away in.
-     */
-    public final boolean azMinimised;
     public final int widgetColumns;
     public final int widgetRows;
 
@@ -192,17 +177,14 @@ public final class PlaceLayout {
         this(slots, keyboardMode, keyboardForm, true, widgetColumns, widgetRows);
     }
 
-    /** The arrangement as slots, with the alphabets index, when shown, standing as a band. */
+    /**
+     * The arrangement as slots: an edge and a position for each of the four elements. The
+     * alphabets index, when shown, always stands as a band of its own on its edge: the minimised
+     * pull tab it could once fold into is gone (2026-09-30), and on or off is where it is dropped.
+     */
     public PlaceLayout(@NonNull Map<Element, Slot> slots, @NonNull KeyboardMode keyboardMode,
                        @NonNull KeyboardForm keyboardForm, boolean keyboardShown,
                        int widgetColumns, int widgetRows) {
-        this(slots, keyboardMode, keyboardForm, keyboardShown, false, widgetColumns, widgetRows);
-    }
-
-    /** The arrangement as slots: an edge and a position for each of the four elements. */
-    public PlaceLayout(@NonNull Map<Element, Slot> slots, @NonNull KeyboardMode keyboardMode,
-                       @NonNull KeyboardForm keyboardForm, boolean keyboardShown,
-                       boolean azMinimised, int widgetColumns, int widgetRows) {
         EnumMap<Element, Slot> copy = new EnumMap<>(Element.class);
         for (Element element : Element.values()) {
             Slot slot = slots.get(element);
@@ -214,7 +196,6 @@ public final class PlaceLayout {
         this.keyboardMode = keyboardMode;
         this.keyboardForm = keyboardForm;
         this.keyboardShown = keyboardShown;
-        this.azMinimised = azMinimised;
         this.widgetColumns = widgetColumns;
         this.widgetRows = widgetRows;
     }
@@ -237,31 +218,16 @@ public final class PlaceLayout {
     public PlaceLayout withSlot(@NonNull Element element, @NonNull Slot slot) {
         EnumMap<Element, Slot> next = new EnumMap<>(mSlots);
         next.put(element, slot);
-        return new PlaceLayout(next, keyboardMode, keyboardForm, keyboardShown, azMinimised,
-            widgetColumns, widgetRows);
+        return new PlaceLayout(next, keyboardMode, keyboardForm, keyboardShown, widgetColumns,
+            widgetRows);
     }
 
     /** The same arrangement with the keyboard shown or hidden. */
     @NonNull
     public PlaceLayout withKeyboardShown(boolean shown) {
         if (shown == keyboardShown) return this;
-        return new PlaceLayout(mSlots, keyboardMode, keyboardForm, shown, azMinimised,
-            widgetColumns, widgetRows);
-    }
-
-    /** The same arrangement with the alphabets index standing as its pull tab, or as a band. */
-    @NonNull
-    public PlaceLayout withAzMinimised(boolean minimised) {
-        if (minimised == azMinimised) return this;
-        return new PlaceLayout(mSlots, keyboardMode, keyboardForm, keyboardShown, minimised,
-            widgetColumns, widgetRows);
-    }
-
-    /** The alphabets index's three-way form, read off its slot and {@link #azMinimised}. */
-    @NonNull
-    public AzIndexMode azIndexMode() {
-        if (slot(Element.AZ).hidden) return AzIndexMode.OFF;
-        return azMinimised ? AzIndexMode.MINIMISED : AzIndexMode.ON;
+        return new PlaceLayout(mSlots, keyboardMode, keyboardForm, shown, widgetColumns,
+            widgetRows);
     }
 
     @NonNull
@@ -299,7 +265,6 @@ public final class PlaceLayout {
             && keyboardMode == that.keyboardMode
             && keyboardForm == that.keyboardForm
             && keyboardShown == that.keyboardShown
-            && azMinimised == that.azMinimised
             && mSlots.equals(that.mSlots);
     }
 
@@ -309,7 +274,7 @@ public final class PlaceLayout {
         result = 31 * result + keyboardMode.hashCode();
         result = 31 * result + keyboardForm.hashCode();
         result = 31 * result + (keyboardShown ? 1 : 0);
-        result = 31 * result + (azMinimised ? 1 : 0);
+
         result = 31 * result + widgetColumns;
         result = 31 * result + widgetRows;
         return result;
@@ -320,7 +285,7 @@ public final class PlaceLayout {
     public String toString() {
         return "PlaceLayout{status=" + slot(Element.STATUS)
             + ", apps=" + slot(Element.APPS)
-            + ", az=" + slot(Element.AZ) + (azMinimised ? "(tab)" : "")
+            + ", az=" + slot(Element.AZ)
             + ", keys=" + slot(Element.EXTRA_KEYS)
             + ", keyboard=" + keyboardMode
             + ", form=" + keyboardForm

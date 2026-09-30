@@ -712,9 +712,7 @@ public class EdgeStackPolicyTest {
     }
 
     @Test
-    public void theMinimisedIndexIsOfferedNoGapUnderTheKeyboard() {
-        PlaceLayout tab = keysUnderKeyboard().withAzMinimised(true);
-        assertTrue(EdgeStackPolicy.underKeyboardTargets(tab, Element.AZ).isEmpty());
+    public void theIndexIsOfferedTheGapsUnderTheKeyboard() {
         assertFalse(EdgeStackPolicy.underKeyboardTargets(keysUnderKeyboard(), Element.AZ)
             .isEmpty());
     }
