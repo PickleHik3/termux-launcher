@@ -16,8 +16,8 @@ import static org.junit.Assert.assertTrue;
 
 public class TaiModelCatalogTest {
 
-    /** D1 of the model-centre design: only the two Gemma 4 chat models, the speech models and the
-     *  voice model are built in. Everything else still runs when imported or added by link. */
+    /** D1 of the model-centre design: only the two Gemma 4 chat models, the speech models, the
+     *  voice model and EmbeddingGemma are built in. Everything else still runs when imported or added by link. */
     @Test
     public void builtInCatalog_isGemmaPlusSpeechOnly() {
         Map<String, TaiModelCatalog.CatalogEntry> entries = TaiModelCatalog.entries();
@@ -29,19 +29,20 @@ public class TaiModelCatalogTest {
             if (TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) mnnCount++;
         }
 
-        assertEquals(8, entries.size());
-        assertEquals(8, new HashSet<>(entries.keySet()).size());
-        assertEquals(8, liteRtCount);
+        assertEquals(9, entries.size());
+        assertEquals(9, new HashSet<>(entries.keySet()).size());
+        assertEquals(9, liteRtCount);
         assertEquals(0, mnnCount);
         assertTrue(entries.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
         assertTrue(entries.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT));
         assertEquals(2, TaiModelCatalog.chatEntries().size());
         assertEquals(5, TaiModelCatalog.speechEntries().size());
         assertEquals(1, TaiModelCatalog.ttsEntries().size());
+        assertEquals(1, TaiModelCatalog.embeddingEntries().size());
         assertNull(TaiModelCatalog.get("qwen2.5-coder-1.5b-instruct-mnn"));
         assertNull(TaiModelCatalog.get("deepseek-r1-distill-qwen-1.5b-litert-lm"));
         assertNull(TaiModelCatalog.get(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M));
-        assertNull(TaiModelCatalog.get("embeddinggemma-300m"));
+        assertNotNull(TaiModelCatalog.get("embeddinggemma-300m"));
         assertNull(TaiModelCatalog.get("qwen3-embedding-0.6b-mnn"));
     }
 
@@ -221,7 +222,49 @@ public class TaiModelCatalogTest {
         for (TaiModelCatalog.CatalogEntry entry : speech.values()) {
             assertTrue(entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
         }
-        assertEquals(TaiModelCatalog.entries().size() - speech.size() - TaiModelCatalog.ttsEntries().size(), chat.size());
+        assertEquals(TaiModelCatalog.entries().size() - speech.size() - TaiModelCatalog.ttsEntries().size()
+            - TaiModelCatalog.embeddingEntries().size(), chat.size());
+    }
+
+    @Test
+    public void embeddingGemma_isAGatedEmbeddingsOnlyEntryWithTheWindowsAndTokenizerPinned() {
+        TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID);
+        assertNotNull(entry);
+        assertEquals("embeddinggemma-300m", entry.modelId);
+        assertEquals("litert-community/embeddinggemma-300m", entry.repositoryId);
+        assertEquals("29888fcee3216acadc7e844906e5fe0d79a61875", entry.revision);
+        assertEquals("embeddinggemma-300M_seq1024_mixed-precision.tflite", entry.artifactPath);
+        assertEquals("Gemma", entry.license);
+        assertTrue(entry.gated);
+        assertFalse(entry.recommended);
+        assertTrue(entry.downloadAvailable);
+        assertEquals(183_329_528L, entry.sizeBytes);
+        assertEquals(64, entry.sha256.length());
+        assertEquals(TaiImportProfiles.FAMILY_EMBEDDINGGEMMA, entry.architecture);
+        assertEquals(java.util.Collections.singleton(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS), entry.endpointCapabilities);
+        assertTrue(entry.downloadUrl.contains("/resolve/29888fcee3216acadc7e844906e5fe0d79a61875/"));
+
+        java.util.List<String> names = new java.util.ArrayList<>();
+        for (TaiModelCatalog.CatalogEntry.Sidecar sidecar : entry.sidecars) {
+            names.add(sidecar.localName);
+            assertNotNull(sidecar.localName, sidecar.sha256);
+            assertTrue(sidecar.localName, sidecar.sha256.matches("[0-9a-f]{64}"));
+            assertTrue(sidecar.url.startsWith(
+                "https://huggingface.co/litert-community/embeddinggemma-300m/resolve/29888fcee3216acadc7e844906e5fe0d79a61875/"));
+        }
+        assertEquals(java.util.Arrays.asList(
+            "embeddinggemma-300M_seq512_mixed-precision.tflite",
+            "embeddinggemma-300M_seq256_mixed-precision.tflite",
+            "sentencepiece.model"), names);
+    }
+
+    @Test
+    public void embeddingGemma_isListedAsAnEmbedderAndNeverAsAChatModel() {
+        assertTrue(TaiModelCatalog.embeddingEntries().containsKey(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID));
+        assertFalse(TaiModelCatalog.chatEntries().containsKey(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID));
+        assertFalse(TaiModelCatalog.speechEntries().containsKey(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID));
+        assertFalse(TaiModelCatalog.ttsEntries().containsKey(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID));
+        assertFalse(TaiModelCatalog.embeddingEntries().containsKey(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
     }
 
     @Test

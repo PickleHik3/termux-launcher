@@ -592,10 +592,16 @@ public final class TaiModelDownloader {
             clearResumeMarker(partial);
             long installedBytes = output.length();
             if (requiresLiteRtEmbeddingTokenizer(output, capabilities)) {
-                installedBytes += downloadLiteRtEmbeddingSidecars(run, url, output, authToken,
-                    output.length(), expectedSizeBytes);
+                // Files the catalog declares as sidecars are fetched below with a pinned hash, so
+                // the best-effort steps here leave them alone rather than fetching them unchecked.
+                Set<String> declared = new HashSet<>();
+                for (TaiModelCatalog.CatalogEntry.Sidecar sidecar : sidecars) declared.add(sidecar.localName);
+                if (!declared.contains(LITERT_EMBEDDING_TOKENIZER)) {
+                    installedBytes += downloadLiteRtEmbeddingSidecars(run, url, output, authToken,
+                        output.length(), expectedSizeBytes);
+                }
                 installedBytes += downloadLiteRtEmbeddingWindowSiblings(run, url, output, authToken,
-                    installedBytes, expectedSizeBytes);
+                    installedBytes, expectedSizeBytes, declared);
             }
             if (!sidecars.isEmpty()) {
                 installedBytes += downloadCatalogSidecars(run, output, sidecars, authToken,
@@ -1105,13 +1111,14 @@ public final class TaiModelDownloader {
      */
     private long downloadLiteRtEmbeddingWindowSiblings(@NonNull Run run, @NonNull String url, @NonNull File output,
                                                        @Nullable String authToken, long currentBytes,
-                                                       long expectedSizeBytes) throws Interrupted {
+                                                       long expectedSizeBytes,
+                                                       @NonNull Set<String> declaredSidecars) throws Interrupted {
         File modelDir = output.getParentFile();
         if (modelDir == null) return 0L;
         long addedBytes = 0L;
         for (int candidateWindow : LITERT_EMBEDDING_SIBLING_WINDOWS) {
             String siblingName = siblingWindowFileName(output.getName(), candidateWindow);
-            if (siblingName == null) continue;
+            if (siblingName == null || declaredSidecars.contains(siblingName)) continue;
             try {
                 addedBytes += downloadOneLiteRtEmbeddingWindowSibling(run, url, modelDir, siblingName, authToken,
                     currentBytes + addedBytes, expectedSizeBytes);

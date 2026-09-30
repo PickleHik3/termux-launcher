@@ -1423,6 +1423,11 @@
         <string name="tai_centre_empty_installed_summary">Pick a model under Chat or Speech, or paste a link above.</string>
         <string name="tai_centre_empty_chat">Every chat model in the catalogue is installed or on its way. Paste a link above to add any other.</string>
         <string name="tai_centre_empty_speech">Every speech model in the catalogue is installed or on its way.</string>
+        <string name="tai_centre_embeddings_header">Embeddings</string>
+        <string name="tai_centre_embeddings_sub">Search and memory for apps on the phone</string>
+        <string name="tai_centre_kind_embeddings">embeddings</string>
+        <string name="tai_centre_empty_embeddings">The embedding model is installed or on its way.</string>
+        <string name="tai_centre_gated_note">Needs a Hugging Face token: accept the model terms, then save a token in TAI settings.</string>
         <string name="tai_centre_voice_output_header">Voice output</string>
         <string name="tai_centre_voice_output_sub">Hear text read aloud on the phone</string>
         <string name="tai_centre_kind_voice">voice</string>

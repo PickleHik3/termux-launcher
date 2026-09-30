@@ -349,7 +349,10 @@ public class TaiModelCentreFragment extends Fragment
         items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SEGMENTS, "segments", "segments|" + segment,
             new TaiModelCentreAdapter.Segments(segment, labels), false));
         switch (SEGMENTS[segment]) {
-            case SEGMENT_CHAT: addCatalogue(context, items, TaiModelCatalog.chatEntries().values(), false, busy); break;
+            case SEGMENT_CHAT:
+                addCatalogue(context, items, TaiModelCatalog.chatEntries().values(), false, busy);
+                addEmbeddings(context, items, busy);
+                break;
             case SEGMENT_SPEECH:
                 addCatalogue(context, items, TaiModelCatalog.speechEntries().values(), true, busy);
                 addVoiceOutput(context, items, busy);
@@ -402,6 +405,7 @@ public class TaiModelCentreFragment extends Fragment
                     : centreName(item.modelId, item.displayName, item.record.optString("path", ""), speech);
                 long size = item.totalBytes > 0L ? item.totalBytes : catalogueSize(item.modelId);
                 String subtitle = voice ? voiceKindLine(context, size)
+                    : TaiModelCatalog.embeddingEntries().containsKey(item.modelId) ? embeddingKindLine(context, size)
                     : kindLine(context, speech, size, !TaiModelCatalog.entries().containsKey(item.modelId));
                 String signature = title + '|' + subtitle + '|' + state.phase + '|' + state.pill + '|' + state.metaStart
                     + '|' + state.metaEnd + '|' + state.bar + '|' + state.progress + '|' + state.actions;
@@ -442,6 +446,7 @@ public class TaiModelCentreFragment extends Fragment
             String name = spec == null ? modelId : centreName(modelId, spec.displayName, spec.localPath, speech);
             String action;
             if (speech) action = modelId.equals(voiceId) ? "" : getString(R.string.tai_centre_use_voice);
+            else if (spec != null && isEmbedder(spec)) action = ""; // served on demand, never a chat default
             else action = modelId.equals(defaultId) ? "" : getString(R.string.tai_centre_use_default);
             String text = getString(R.string.tai_centre_installed_banner, name);
             items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_BANNER, modelId, text + '|' + action,
@@ -461,9 +466,11 @@ public class TaiModelCentreFragment extends Fragment
         for (TaiModelSpec spec : chat) {
             TaiModelCentreAdapter.ModelRow row = new TaiModelCentreAdapter.ModelRow(spec.id, false, spec, TaiModelCatalog.get(spec.id));
             row.title = spec.displayName;
-            row.subtitle = kindLine(context, false, spec.sizeBytes, !TaiModelCatalog.entries().containsKey(spec.id));
-            row.pillPrimary = spec.id.equals(loadedId) ? getString(R.string.tai_centre_pill_in_use) : "";
-            row.pillSecondary = spec.id.equals(defaultId) ? getString(R.string.tai_centre_pill_default) : "";
+            boolean embedder = isEmbedder(spec);
+            row.subtitle = embedder ? embeddingKindLine(context, spec.sizeBytes)
+                : kindLine(context, false, spec.sizeBytes, !TaiModelCatalog.entries().containsKey(spec.id));
+            row.pillPrimary = embedder ? "" : spec.id.equals(loadedId) ? getString(R.string.tai_centre_pill_in_use) : "";
+            row.pillSecondary = !embedder && spec.id.equals(defaultId) ? getString(R.string.tai_centre_pill_default) : "";
             row.pillBackend = backendPill(spec.backend);
             Double speed = benchmarkSpeeds.get(spec.id);
             row.pillSpeed = speed == null ? "" : getString(R.string.tai_bench_tps, TaiBenchLeaderboard.formatTpsValue(speed));
@@ -544,6 +551,60 @@ public class TaiModelCentreFragment extends Fragment
 
     private static void addModelRow(@NonNull List<TaiModelCentreAdapter.Item> items, @NonNull TaiModelCentreAdapter.ModelRow row) {
         items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_MODEL, row.modelId, row.signature(), row, false));
+    }
+
+    /**
+     * The Chat segment's "Embeddings" section: the embedding catalogue (EmbeddingGemma) under its
+     * own heading below the chat models, or a line saying it is installed. Apps on the phone (dawn)
+     * reach an installed embedder through /v1/embeddings; it is never a chat model.
+     */
+    private void addEmbeddings(@NonNull Context context, @NonNull List<TaiModelCentreAdapter.Item> items,
+                               @NonNull Set<String> busy) {
+        String header = getString(R.string.tai_centre_embeddings_header);
+        items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SECTION, "embeddings", "embeddings|" + header,
+            new TaiModelCentreAdapter.Section(header, "", getString(R.string.tai_centre_embeddings_sub)), false));
+        int added = 0;
+        for (TaiModelCatalog.CatalogEntry entry : TaiModelCatalog.embeddingEntries().values()) {
+            if (installedAll.containsKey(entry.modelId) || busy.contains(entry.modelId)) continue;
+            TaiModelCentreAdapter.ModelRow row = new TaiModelCentreAdapter.ModelRow(entry.modelId, false, null, entry);
+            row.title = entry.displayName;
+            String size = entry.sizeEstimate == null || entry.sizeEstimate.isEmpty()
+                ? TaiModelCentreRows.formatBytes(entry.sizeBytes) : entry.sizeEstimate;
+            StringBuilder subtitle = new StringBuilder(getString(R.string.tai_centre_kind_embeddings))
+                .append(" · ").append(size);
+            if (entry.ramTier != null && !entry.ramTier.isEmpty()) subtitle.append(" · ").append(entry.ramTier);
+            row.subtitle = subtitle.toString();
+            row.pillBackend = backendPill(entry.backend);
+            row.installable = entry.downloadAvailable;
+            row.installing = installing.contains(entry.modelId);
+            String error = errors.get(entry.modelId);
+            if (error != null) {
+                row.note = error;
+                row.noteIsError = true;
+            } else if (entry.gated && new TaiSettings(context).getHuggingFaceToken().trim().isEmpty()) {
+                row.note = getString(R.string.tai_centre_gated_note);
+            }
+            addModelRow(items, row);
+            added++;
+        }
+        if (added == 0) {
+            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_EMPTY, "empty-embeddings", "empty-embeddings",
+                new TaiModelCentreAdapter.Empty("", getString(R.string.tai_centre_empty_embeddings)), false));
+        }
+    }
+
+    /** An installed embedding-only model: served on demand, so no load, default or tuning. */
+    private static boolean isEmbedder(@NonNull TaiModelSpec spec) {
+        return spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
+            && !spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT);
+    }
+
+    /** "embeddings · 175 MB". */
+    @NonNull
+    private static String embeddingKindLine(@NonNull Context context, long sizeBytes) {
+        StringBuilder line = new StringBuilder(context.getString(R.string.tai_centre_kind_embeddings));
+        if (sizeBytes > 0L) line.append(" · ").append(TaiModelCentreRows.formatBytes(sizeBytes));
+        return line.toString();
     }
 
     /**
@@ -893,6 +954,13 @@ public class TaiModelCentreFragment extends Fragment
                     case 2: TaiSpeechActions.showWindowDialog(context, spec, other, this::rebuild); break;
                     default: confirmDeleteSpeech(context, spec); break;
                 }
+                return true;
+            });
+        } else if (isEmbedder(spec)) {
+            // Served on demand by /v1/embeddings: nothing to load, make default, tune or bench.
+            items.add(Menu.NONE, 4, Menu.NONE, R.string.termux_ai_model_delete_action);
+            menu.setOnMenuItemClickListener(item -> {
+                confirmDeleteChat(context, spec);
                 return true;
             });
         } else {
