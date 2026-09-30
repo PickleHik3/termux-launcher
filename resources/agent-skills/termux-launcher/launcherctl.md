@@ -89,7 +89,7 @@ launcherctl pane read "$id" --lines 40
 ## Agent status
 
 Tells the window chips and sessions browser what you're doing: **Working**, **Needs you**, or
-**Idle**. See `docs/agent-status.md` for the full picture (screen-rule fallback, hook wiring).
+**Idle**. See `docs/en/Agent_Status.md` for the full picture (screen-rule fallback, hook wiring).
 
 ```sh
 launcherctl agent working|blocked|idle|clear [--agent NAME] [--pane ID]

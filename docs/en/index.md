@@ -45,6 +45,7 @@ access; skip it if command-line tools do not need your shared files.
 - [Terminal fonts](Terminal_Fonts.md)
 - [Kitty protocols and terminal compatibility](Terminal_Kitty_Protocols.md)
 - [Programs and agents inside the terminal](Programs_Inside_The_Terminal.md) — the delta from stock Termux for scripts and AI agents running in a pane
+- [Agent status](Agent_Status.md) — what an AI agent in a pane is doing, shown on the window chips
 - [Install showcase tools](Building_Terminal_Showcase_Tools.md)
 - [Tlstore, the tool store](Tlstore.md)
 

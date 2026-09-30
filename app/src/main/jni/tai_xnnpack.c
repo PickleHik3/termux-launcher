@@ -2,8 +2,8 @@
 //
 // litert 1.4.2's NativeInterpreterWrapper builds an XNNPACK delegate for the Interpreter, but
 // that delegate never gets worker threads: simpleperf on pong showed Whisper inference 99.56%
-// on one thread, and the app's per-step timings equalled benchmark_model --num_threads=1 (see
-// project-docs/plans/whisper-voice-input.md). setUseXNNPACK(false) proved the interpreter's own
+// on one thread, and the app's per-step timings equalled benchmark_model --num_threads=1.
+// setUseXNNPACK(false) proved the interpreter's own
 // thread pool is fine (7 threads spawn); it is specifically XNNPACK's pthreadpool that is lost.
 //
 // The fix builds our own XNNPACK delegate instead of leaning on the Java API's. The C symbols

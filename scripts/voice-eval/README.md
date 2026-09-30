@@ -53,7 +53,7 @@ for f in encoder_model.onnx decoder_model_merged.onnx; do
 done
 ```
 
-Already in place from the replay rig (see `project-docs/plans/voice-input-handoff-2026-09-25.md`):
+Already in place from the replay rig:
 
 - `~/.cache/termux-launcher/parakeet/parakeet_tdt_0.6b_v3_5s_i8_stateful.tflite` + `tokenizer.json`
 - `~/.cache/termux-launcher/whisper/whisper-acft-small-en/acft_whisper_small.en_10s_drq.tflite` + `tokenizer.json`
@@ -146,7 +146,7 @@ Full definitions are in the docstrings of `vad_compare.py` and `stt_compare.py`.
 - **hallucinations**: non-empty text from noise-only or spurious segments; "stock" = known phrases
   such as "Thank you.", "[Music]", "ok".
 - **RTF**: STT seconds per second of audio sent, on this PC. Not the phone's number: pong's
-  figures are in `project-docs/parakeet-stt-research.md`.
+  figures are in `project-docs/reference/voice-ai/parakeet-stt-research.md`.
 
 The verdict compares Silero against energy pooled over every noise level, as "Silero reduces X by
 Y%", and calls a change tangible only at ≥ 10 % relative *and* a stated absolute minimum.

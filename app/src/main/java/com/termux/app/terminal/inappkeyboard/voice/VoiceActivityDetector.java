@@ -9,7 +9,7 @@ import java.util.Arrays;
 /**
  * Streaming VAD over 30 ms frames of 16 kHz mono PCM16. Whether a frame is speech comes from
  * Silero VAD v5 when a {@link SileroVoiceDecider} is given (the voice key's normal case, see
- * {@code project-docs/plans/voice-vad-eval-2026-09-27.md}), and from frame energy otherwise; the
+ * {@code project-docs/reference/voice-ai/voice-vad-eval-2026-09-27.md}), and from frame energy otherwise; the
  * energy decision is also where a session lands if the model fails to load or fails mid-stream.
  * Everything else below — pre-roll, pause close, minimum voiced time, window cut, silence timeout —
  * is the same for both, and the energy level and noise floor are always measured, because the

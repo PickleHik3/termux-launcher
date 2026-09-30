@@ -6,7 +6,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 /**
- * The battery/thermal/cool-down rules of {@code project-docs/benchmark/SPEC.md}'s Safety table,
+ * The battery/thermal/cool-down rules of {@code project-docs/active/benchmark/SPEC.md}'s Safety table,
  * as table-driven cases against the pure functions in {@link TaiBenchGuardRules}.
  */
 public class TaiBenchGuardRulesTest {

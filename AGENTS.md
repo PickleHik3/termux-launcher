@@ -64,33 +64,14 @@ correct on one edition and a bug on the other two.
 
 ## A small glossary
 
-Use this language; it is what the code and the developer use.
+The full glossary is [`docs/GLOSSARY.md`](docs/GLOSSARY.md); use its language, it is what the code
+and the developer use. The three words you need before you open it:
 
 - **you** — the agent reading this file and changing the launcher.
 - **the developer / the user** — the maintainer you are talking to, who also uses the launcher as
   their daily driver and is often testing your change on their own phone while you work.
-- **edition** — one shipped applicationId: `com.termux` (main), `com.termux.launcher.nix` (Nix),
-  `io.vaj.tl` (VAJ, the demo edition).
-- **the device** — the maintainer's own phone, the real device of record; yours is whatever
-  physical phone you test on.
-- **the lane** — the privileged lane: runs allowlisted tlstore tools as the shell uid through
-  Shizuku. See "The privileged lane" below.
-- **surface** — one themable chrome region: Dock, Keyboard, Status, Canvas. Modelled as
-  `SurfaceSlot` × `SurfaceProperty` (blur, opacity, grain, corner radius, side gap).
-- **Base** — the shared surface values every slot inherits until a property is *detached*.
-- **Docked / Floating** — the two dock styles (formerly Default / Rounded; labels changed, stored
-  values did not). Docked is flush and square at rest; Floating is a card already rounded at rest.
-- **Appearance editor** — the overlay that edits a place's surfaces: glass, opacity, blur, grain,
-  corners, side gap, palette (`app/surfaces/SurfaceEditorController`, class name kept for now).
-  Entered from the corner tab or the long-press menu; exits straight back to the live place.
-- **Layout editor** — the overlay that edits where a place's elements sit and how big they are, on
-  the miniature, one orientation at a time with a toggle to the other
-  (`app/layouteditor/LayoutEditorController`). Entered from the corner tab or the long-press menu.
-- **corner tab** — the small control strip revealed by pressing a pane or page corner; carries the
-  Appearance and Layout buttons on every place, alongside the place's own actions.
-- **pane** — one terminal view in a split; **chrome** — everything the launcher draws around it.
-- **the seams / Host interfaces** — `TerminalHost`, `SurfaceEditorController.Host`,
-  `ChromeRenderer` and friends: the deep modules extracted out of `TermuxActivity`.
+- **the device / pong** — that phone, the real device of record; yours is whatever physical phone
+  you test on.
 
 ## The five ways to hurt yourself
 
@@ -166,9 +147,11 @@ everywhere else. Before calling a change done, walk this list and say which entr
 - `termux-am-library/`, `inapp-keyboard/` — vendored: the am library, and a trimmed snapshot of
   Unexpected-Keyboard kept in package `juloo.keyboard2` for upstream diffability. **Local deviations
   from upstream go in `inapp-keyboard/UPSTREAM.md`, always.**
-- `docs/` — contributor and workflow docs. `project-docs/` — durable plans, design docs, release
-  notes, verification baselines. `ci/`, `site/`, `fastlane/`, `art/` — packaging,
-  build support and store metadata.
+- `docs/` — user guides (`docs/en/`), ADRs (`docs/adr/`), agent docs (`docs/agents/`) and the
+  glossary (`docs/GLOSSARY.md`). `project-docs/` — developer specs: `active/` (work in flight),
+  `reference/` (research, comparisons, delivered records), `verification/` (runnable probes),
+  `backlog.md`, and the release notes; `project-docs/README.md` is the index. `ci/`, `fastlane/`,
+  `art/` — packaging, build support and store metadata.
 - Never commit generated `build/` or `.gradle/` content.
 
 ## The privileged lane
@@ -176,7 +159,7 @@ everywhere else. Before calling a change done, walk this list and say which entr
 `app/src/main/java/com/termux/privileged/lane/` lets a terminal program run as the shell uid (2000).
 `PrivilegedLaneService` is a Shizuku UserService running as shell; `PrivilegedLaneServer` listens
 on the abstract socket `@<packageName>.priv` and accepts only the app's own uid; the client is
-`tl-priv` in the tlstore repo (`recipes/cross/tl-priv/tl-priv.c`).
+`tl-priv` in the tlstore repo (PickleHik3/tlstore, `recipes/cross/tl-priv/tl-priv.c`).
 
 - **The wire protocol `tlpriv1` (`LaneRequest`) is a contract with `tl-priv`.** Change both sides in
   step, or neither.
@@ -419,8 +402,8 @@ Editions are a section, not a file. The notes for a version are one document:
 - A PR body explains the problem in a sentence or two, then the fix. List what you ran and what you
   tested it on. Link the issue. UI changes need before/after images; motion needs a short video.
   Call out native-library, signing, bootstrap or compatibility impact explicitly.
-- **Durable** plans, designs and decisions go in `project-docs/plans/` and `project-docs/` so the
-  next agent finds current facts. **Ephemeral** agent scratch — working notes, todo checklists,
+- **Durable** plans, designs and decisions go in `project-docs/active/` while the work is open and
+  `project-docs/reference/` once it is delivered, so the next agent finds current facts. **Ephemeral** agent scratch — working notes, todo checklists,
   research dumps — stays out of the worktree. `work-logs/` runtime logs and `.lavish/` review
   documents are gitignored on purpose.
 - The merged commit is the implementation record. Do not leave a second checklist behind in the
@@ -461,4 +444,5 @@ pointing at that checkout's `dist/` folder; this skips the lock check entirely a
 
 ### Domain docs
 
-Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context: `docs/GLOSSARY.md` (`CONTEXT.md` at the repo root points to it) and `docs/adr/`.
+See `docs/agents/domain.md`.

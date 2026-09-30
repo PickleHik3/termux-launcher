@@ -21,7 +21,7 @@ import androidx.annotation.Nullable;
  * <p>Stationary noise (fan, pink room tone, keyboard clicks) never read as speech at any level
  * in the evaluation; background talk (a TV, colleagues) does, more the louder it is shown to
  * Silero. That is the one trade-off no single default serves, hence two settings. The numbers
- * and the runs behind them are in {@code project-docs/plans/voice-vad-eval-2026-09-27.md}
+ * and the runs behind them are in {@code project-docs/reference/voice-ai/voice-vad-eval-2026-09-27.md}
  * ("Round 3: quiet speech"), probed with {@code scripts/voice-eval/sensitivity_probe.py}.
  */
 public enum VoiceMicSensitivity {

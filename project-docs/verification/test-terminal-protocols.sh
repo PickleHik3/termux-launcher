@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Prints every rendition and protocol added by project-docs/plans/kitty-protocol-features.md,
+# Prints every rendition and protocol added by project-docs/reference/terminal/kitty-protocol-features.md,
 # so they can be eyeballed in one screen. Run it *inside* the terminal under test.
 #
 # Read-only: it writes escape sequences to its own tty and touches nothing else. The keyboard
@@ -115,4 +115,4 @@ fi
 
 section 'Done'
 printf '  Every section above is a rendering or protocol claim in\n'
-printf '  project-docs/plans/kitty-protocol-features.md.\n'
+printf '  project-docs/reference/terminal/kitty-protocol-features.md.\n'

@@ -3,7 +3,7 @@
 
 Renders a theme-template input file against a fixture palette, so
 check.sh can validate the shipped templates without building the app.
-Implements exactly the placeholder grammar in project-docs/theme-templates/SPEC.md:
+Implements exactly the placeholder grammar of ThemeTemplateRenderer.java:
 
   {{ colors.<token>.<mode>.<format> }}   (spaces optional)
   {{ mode }}

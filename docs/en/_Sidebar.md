@@ -15,6 +15,7 @@
 - [Terminal fonts](Terminal_Fonts.md)
 - [Kitty protocols](Terminal_Kitty_Protocols.md)
 - [Programs inside the terminal](Programs_Inside_The_Terminal.md)
+- [Agent status](Agent_Status.md)
 - [Nix: beginner's guide](Nix_Getting_Started.md)
 - [Nix package management](Nix_Package_Management.md)
 - [Nix fork differences](Nix_Fork_Differences.md)

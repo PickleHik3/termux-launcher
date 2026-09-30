@@ -30,7 +30,7 @@ import java.util.regex.Pattern;
  * that is caught by {@link #accept}'s refusal and answer guard.
  *
  * <p>Levels and prompts come from the 2026-09-27 benchmark on pong
- * ({@code project-docs/plans/voice-cleanup-benchmark-2026-09-27.md}): Light is its "light" prompt,
+ * ({@code project-docs/reference/voice-ai/voice-cleanup-benchmark-2026-09-27.md}): Light is its "light" prompt,
  * Polished its "careful" one. The "a whole shell command stays a command" rule made E2B strip
  * capitals and full stops off short prose, so it is only sent for text that starts with a command
  * name ({@link #startsWithCommand}).

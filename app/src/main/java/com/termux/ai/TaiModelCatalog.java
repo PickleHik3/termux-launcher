@@ -251,7 +251,7 @@ public final class TaiModelCatalog {
         // ParakeetSttRuntime. The tokenizer.json sidecar comes from NVIDIA's own repo (the
         // conversion repo ships none). Sizes and hashes from the Hugging Face API (LFS sha256 for
         // the graph; the tokenizer is a plain git blob, hashed after download). See
-        // project-docs/parakeet-stt-research.md.
+        // project-docs/reference/voice-ai/parakeet-stt-research.md.
         entries.put(PARAKEET_TDT_V3_ID, parakeetAvailable(
             PARAKEET_TDT_V3_ID, "Parakeet TDT 0.6B v3", "Speech-to-text (25 European languages)",
             "litert-community/parakeet-tdt-0.6b-v3", "50dae0cb8c7b39dda477966eff7150cd7fe206ae",

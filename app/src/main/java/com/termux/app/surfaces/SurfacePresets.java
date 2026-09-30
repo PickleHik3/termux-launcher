@@ -79,11 +79,12 @@ public final class SurfacePresets {
                     TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS);
                 look.put(TERMUX_APP.KEY_TERMINAL_PANE_GAP, TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
             }),
-        // Mist: Obsidian-Music's glass and motion (Apache-2.0; project-docs/mist-preset/). Blur 25
+        // Mist: Obsidian-Music's glass and motion (Apache-2.0; see
+        // project-docs/reference/launcher/mist-preset-obsidian-values.md). Blur 25
         // and opacity 60 are Obsidian's own numbers. Grain 8 is not its 0.08 noise carried over:
         // Haze lays a soft noise tile at 0.08 alpha, ours is full-contrast random alpha at up to
         // 60/255 of the percentage, so a literal match (about 68) would read as sand. 8 is the
-        // same faint tooth. See SPEC.md.
+        // same faint tooth.
         preset("frost", R.string.termux_surface_preset_frost,
             SegmentedPillPreference.VALUE_ROUNDED, TERMUX_APP.SURFACE_MATERIAL_FROST, 50, 28, 14,
             look -> {

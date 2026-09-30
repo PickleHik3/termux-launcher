@@ -1434,7 +1434,7 @@
         <string name="tai_centre_cancel_message">The %1$s downloaded so far is deleted. Pause keeps it instead.</string>
         <string name="tai_centre_cancel_confirm">Cancel download</string>
         <string name="tai_centre_cancel_keep">Keep</string>
-        <!-- On-device AI › Benchmark: Home, Choose, Check, Run, Cool-down and Result (project-docs/benchmark/SPEC.md). -->
+        <!-- On-device AI › Benchmark: Home, Choose, Check, Run, Cool-down and Result (project-docs/active/benchmark/SPEC.md). -->
         <string name="tai_bench_title">Benchmark</string>
         <string name="tai_bench_pref_summary">Which models this phone runs well</string>
         <string name="tai_bench_pref_summary_run">Best %1$s tok/s · last run %2$s</string>

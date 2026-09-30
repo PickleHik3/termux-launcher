@@ -10,7 +10,7 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
  * How glass surfaces move, as values: a press, an arrival and a departure, and the scrim behind a
  * modal one. Two profiles exist. {@link #CLASSIC} is what the app has always done, so a phone on
  * the default look moves exactly as before; {@link #MIST} is Obsidian-Music's motion (Apache-2.0,
- * decompiled from 2.5.1; see project-docs/mist-preset/OBSIDIAN-VALUES.md).
+ * decompiled from 2.5.1; see project-docs/reference/launcher/mist-preset-obsidian-values.md).
  *
  * <p>Pure values and arithmetic, no {@code Context}. {@link GlassMotionPlayer} is the one place
  * that turns them into animators.</p>

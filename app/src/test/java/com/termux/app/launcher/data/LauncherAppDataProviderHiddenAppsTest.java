@@ -37,7 +37,7 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * D8 (project-docs/distro-apps/SPEC.md): a hidden app leaves the drawer's own listings but stays
+ * A hidden app leaves the drawer's own listings but stays
  * resolvable by exact reference, so a pin, a folder member or an "open <package>" command does
  * not silently break just because the app it names was hidden.
  */

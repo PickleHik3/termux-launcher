@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * The battery and thermal safety rules of {@code project-docs/benchmark/SPEC.md}'s Safety table,
+ * The battery and thermal safety rules of {@code project-docs/active/benchmark/SPEC.md}'s Safety table,
  * as pure functions of a {@link Snapshot}: no Android type, no clock, no I/O, so the table of
  * cases in {@code TaiBenchGuardRulesTest} exercises the rules directly. {@link
  * TaiBenchConditionsGuard} is the only caller; it holds the state (the baseline snapshot, the
