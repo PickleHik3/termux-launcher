@@ -91,8 +91,8 @@
             app:key="customize_keyboard_surface"
             app:icon="@drawable/ic_symbol_palette"
             app:persistent="false"
-            app:title="@string/settings_customize_keyboard_title"
-            app:summary="@string/settings_customize_keyboard_summary" />
+            app:title="@string/settings_look_appearance_editor_title"
+            app:summary="@string/settings_look_appearance_editor_summary" />
         <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="in_app_keyboard_theme"
             app:title="@string/termux_in_app_keyboard_theme_title" />
