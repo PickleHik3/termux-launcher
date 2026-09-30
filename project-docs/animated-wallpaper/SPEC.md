@@ -1,7 +1,8 @@
 # In-app animated wallpapers: spec (draft)
 
 Written 2026-09-29. Status: draft; open questions 1–4 settled 2026-09-30 (§13), the rest open.
-Nothing is built.
+Nothing is built. Target: the next release (decided 2026-09-30); tracked in
+`project-docs/plans/backlog.md`.
 Related: ADR 0002 (the pre-blurred wide frame; real-time blur "stays an experiment for a future
 live wallpaper"), ADR 0004 (every glass surface samples the shared frame), ADR 0005 (Fancier Glass
 refracts it), `project-docs/fancier-glass/SPEC.md` §1, §3, §5.

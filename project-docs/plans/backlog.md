@@ -36,6 +36,12 @@ There is no unblocked implementation slice left from the feasibility study. The 
 below are gated on measurements, concrete client demand, security/UX design, or an explicit product
 decision.
 
+## Planned for the next release
+
+| Item | Size | State |
+|---|---|---|
+| In-app animated wallpapers over a live shared frame | L | Moved to the next release on 2026-09-30, and nothing is built. The spec is `../animated-wallpaper/SPEC.md`. Open questions 1–4 were settled on 2026-09-30: API 34+ with `HardwareBufferRenderer` only, the wallpapers play whether Fancier Glass is on or off, a fixed 30 fps that drops to 15 under pressure, and the wallpaper plays whenever it is visible. Questions 5–11 are still open. The first step is phase 0, a throwaway prototype (spec §10) that measures the render cost and the full-window redraw on pong. That measurement decides whether the rest gets built. |
+
 ## Deferred on purpose
 
 Not "forgotten" — each has a stated reason to wait.
