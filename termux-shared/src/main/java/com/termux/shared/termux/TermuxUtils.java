@@ -491,8 +491,9 @@ public class TermuxUtils {
         markdownString.append("\n").append(MarkdownUtils.getLinkMarkdownString(TermuxConstants.TERMUX_SUPPORT_EMAIL_URL, TermuxConstants.TERMUX_SUPPORT_EMAIL_MAILTO_URL)).append("  ");
         markdownString.append("\n\n### Reddit\n");
         markdownString.append("\n").append(MarkdownUtils.getLinkMarkdownString(TermuxConstants.TERMUX_REDDIT_SUBREDDIT, TermuxConstants.TERMUX_REDDIT_SUBREDDIT_URL)).append("  ");
-        markdownString.append("\n\n### GitHub Issues for Termux apps\n");
-        markdownString.append("\n").append(MarkdownUtils.getLinkMarkdownString(TermuxConstants.TERMUX_APP_NAME, TermuxConstants.TERMUX_GITHUB_ISSUES_REPO_URL)).append("  ");
+        markdownString.append("\n\n### GitHub Issues for Termux Launcher\n");
+        markdownString.append("\n").append(MarkdownUtils.getLinkMarkdownString(TermuxConstants.TERMUX_LAUNCHER_APP_DISPLAY_NAME, TermuxConstants.TERMUX_LAUNCHER_GITHUB_ISSUES_REPO_URL)).append("  ");
+        markdownString.append("\n\n### GitHub Issues for Termux plugin apps\n");
         markdownString.append("\n").append(MarkdownUtils.getLinkMarkdownString(TermuxConstants.TERMUX_API_APP_NAME, TermuxConstants.TERMUX_API_GITHUB_ISSUES_REPO_URL)).append("  ");
         markdownString.append("\n").append(MarkdownUtils.getLinkMarkdownString(TermuxConstants.TERMUX_BOOT_APP_NAME, TermuxConstants.TERMUX_BOOT_GITHUB_ISSUES_REPO_URL)).append("  ");
         markdownString.append("\n").append(MarkdownUtils.getLinkMarkdownString(TermuxConstants.TERMUX_FLOAT_APP_NAME, TermuxConstants.TERMUX_FLOAT_GITHUB_ISSUES_REPO_URL)).append("  ");
@@ -516,9 +517,9 @@ public class TermuxUtils {
         if (context == null)
             return "null";
         StringBuilder markdownString = new StringBuilder();
-        markdownString.append("## Termux:Monet");
-        markdownString.append("\n\n").append(MarkdownUtils.getLinkMarkdownString("Termux-Monet", "https://github.com/Termux-Monet/termux-monet")).append(" - by Termux Community  ");
-        markdownString.append("\n\n").append(context.getString(R.string.msg_about_termux_monet));
+        markdownString.append("## Termux Launcher");
+        markdownString.append("\n\n").append(MarkdownUtils.getLinkMarkdownString("Termux Launcher", TermuxConstants.TERMUX_LAUNCHER_GITHUB_REPO_URL)).append("  ");
+        markdownString.append("\n\n").append(context.getString(R.string.msg_about_termux_launcher));
         markdownString.append("\n\n## Important Links");
         markdownString.append("\n\n### GitHub\n");
         markdownString.append("\n").append(MarkdownUtils.getLinkMarkdownString(TermuxConstants.TERMUX_APP_NAME, TermuxConstants.TERMUX_GITHUB_REPO_URL)).append("  ");

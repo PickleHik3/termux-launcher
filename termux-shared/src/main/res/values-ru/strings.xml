@@ -80,7 +80,7 @@
     <string name="log_level_title">Уровень журнала</string>
     <string name="log_level_off">Выключенный</string>
     <string name="log_level_normal">Нормальный</string>
-    <string name="msg_about_termux_monet">Вы используете неофициальный, модифицированный форк Termux, с реализацией, сделанной сообществом, и отмененными/не запланированными функциями. Имейте в виду, что это приложение нестабильно и не поддерживается Termux.</string>
+    <string name="msg_about_termux_launcher">Вы используете неофициальный, модифицированный форк Termux, с реализацией, сделанной сообществом, и отмененными/не запланированными функциями. Имейте в виду, что это приложение нестабильно и не поддерживается Termux.</string>
     <string name="a11y_special_key_off">отключить</string>
     <string name="a11y_special_key_latched_on">включено, заблокировано</string>
     <string name="a11y_special_key_on">на</string>

@@ -377,6 +377,21 @@ public final class TermuxConstants {
     public static final String TERMUX_GITHUB_ISSUES_REPO_URL = TERMUX_GITHUB_REPO_URL + "/issues";
 
     /**
+     * Termux Launcher (this app) display name, for report text only. Not for paths or package logic.
+     */
+    public static final String TERMUX_LAUNCHER_APP_DISPLAY_NAME = "Termux Launcher";
+
+    /**
+     * Termux Launcher GitHub repo url. Reports point here, not at {@link #TERMUX_GITHUB_REPO_URL} (upstream).
+     */
+    public static final String TERMUX_LAUNCHER_GITHUB_REPO_URL = "https://github.com/PickleHik3/termux-launcher";
+
+    /**
+     * Termux Launcher GitHub issues url, where issues from this app's reports are posted.
+     */
+    public static final String TERMUX_LAUNCHER_GITHUB_ISSUES_REPO_URL = TERMUX_LAUNCHER_GITHUB_REPO_URL + "/issues";
+
+    /**
      * Termux F-Droid package url
      */
     // Default: "https://f-droid.org/en/packages/com.termux"

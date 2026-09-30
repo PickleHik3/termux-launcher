@@ -42,6 +42,20 @@ final class TaiBenchLeaderboard {
         }
     }
 
+    /**
+     * The {@code X.Y.Z} core of an app version: drops {@code +dev.<sha>} build metadata and any
+     * legacy {@code -nix} / {@code -vaj} / {@code -a} suffix, so nightlies of one release group together.
+     */
+    @NonNull
+    static String versionCore(@NonNull String version) {
+        int cut = version.length();
+        int plus = version.indexOf('+');
+        if (plus >= 0) cut = plus;
+        int dash = version.indexOf('-');
+        if (dash >= 0 && dash < cut) cut = dash;
+        return version.substring(0, cut);
+    }
+
     /** One leaderboard entry as Home shows it. */
     static final class Row {
         /** The place in the one list (verdict, then decode speed, then first token); {@code 0} for a broken entry. */
@@ -99,7 +113,7 @@ final class TaiBenchLeaderboard {
             warmStart = conditions != null && conditions.optBoolean("warmStart", false);
             int batteryStart = conditions == null || conditions.isNull("batteryStart") ? -1 : conditions.optInt("batteryStart", -1);
             lowBattery = batteryStart >= 0 && batteryStart < TaiBenchGuardRules.START_BATTERY_MIN_PERCENT && !charging;
-            olderVersion = (!appVersion.isEmpty() && !appVersion.equals(versions.appVersion))
+            olderVersion = (!appVersion.isEmpty() && !versionCore(appVersion).equals(versionCore(versions.appVersion)))
                 || (!runtimeVersion.isEmpty() && !runtimeVersion.equals(versions.runtimeVersionFor(backend)));
             this.installed = installed;
         }

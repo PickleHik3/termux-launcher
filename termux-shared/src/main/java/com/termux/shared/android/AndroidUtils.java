@@ -70,6 +70,7 @@ public class AndroidUtils {
         AndroidUtils.appendPropertyToMarkdown(markdownString, "APP_NAME", PackageUtils.getAppNameForPackage(context, applicationInfo));
         AndroidUtils.appendPropertyToMarkdown(markdownString, "PACKAGE_NAME", PackageUtils.getPackageNameForPackage(applicationInfo));
         AndroidUtils.appendPropertyToMarkdown(markdownString, "VERSION_NAME", PackageUtils.getVersionNameForPackage(packageInfo));
+        AndroidUtils.appendPropertyToMarkdown(markdownString, "EDITION", getEditionForPackageName(packageName));
         AndroidUtils.appendPropertyToMarkdown(markdownString, "VERSION_CODE", PackageUtils.getVersionCodeForPackage(packageInfo));
         AndroidUtils.appendPropertyToMarkdown(markdownString, "UID", PackageUtils.getUidForPackage(applicationInfo));
         AndroidUtils.appendPropertyToMarkdown(markdownString, "TARGET_SDK", PackageUtils.getTargetSDKForPackage(applicationInfo));
@@ -83,6 +84,19 @@ public class AndroidUtils {
         String seInfoUser = PackageUtils.getApplicationInfoSeInfoUserForPackage(applicationInfo);
         AndroidUtils.appendPropertyToMarkdown(markdownString, "SE_INFO", PackageUtils.getApplicationInfoSeInfoForPackage(applicationInfo) + (DataUtils.isNullOrEmpty(seInfoUser) ? "" : seInfoUser));
         return markdownString.toString();
+    }
+
+    /**
+     * The edition a package name belongs to: Termux ({@code com.termux}), Nix
+     * ({@code com.termux.launcher.nix}) or VAJ ({@code io.vaj.tl}); anything else is the package name.
+     */
+    public static String getEditionForPackageName(@NonNull final String packageName) {
+        switch (packageName) {
+            case "com.termux": return "Termux";
+            case "com.termux.launcher.nix": return "Nix";
+            case "io.vaj.tl": return "VAJ";
+            default: return packageName;
+        }
     }
 
     public static String getDeviceInfoMarkdownString(@NonNull final Context context) {

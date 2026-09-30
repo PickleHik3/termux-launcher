@@ -10,6 +10,10 @@ state of an edition, read it as of that release, not as of today.
 Each version's **Editions** list carries only what was exclusive to the Nix (`com.termux.launcher.nix`)
 or VAJ (`io.vaj.tl`) build; everything above it applies to all three.
 
+**Versioning.** From v1.0.0 every edition ships the same plain `X.Y.Z`; the edition is in the tag
+(`vX.Y.Z`, `nix-vX.Y.Z`, `vaj-vX.Y.Z`) and the APK name, and hotfixes bump the patch number. Older
+entries keep the tags they shipped under (`-nix`, `-vaj`, `+hotfixN`, `-a`).
+
 ---
 
 ## v0.2.39
