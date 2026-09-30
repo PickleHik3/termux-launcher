@@ -1172,12 +1172,12 @@ public final class TermuxPreferenceConstants {
 
         /**
          * Fancier Glass: every glass surface bends the wallpaper at its rim and catches a light
-         * along its edge, on top of the frost it already wears. Off by default. Needs Android 13
+         * along its edge, on top of the frost it already wears. On by default wherever it can run (every Look sets its depth). Needs Android 13
          * and a wallpaper set from inside the launcher; anywhere else the switch is offered
          * disabled, or not at all, and the glass is the default look.
          */
         public static final String KEY_FANCIER_GLASS = "fancier_glass";
-        public static final boolean DEFAULT_VALUE_FANCIER_GLASS = false;
+        public static final boolean DEFAULT_VALUE_FANCIER_GLASS = true;
 
         /**
          * How far the wallpaper is bent under a glass rim, in dp of displacement. The three
@@ -1199,7 +1199,7 @@ public final class TermuxPreferenceConstants {
 
         /** How bright the hairline along the rim is, as a percentage of the brightest it can be. */
         public static final String KEY_FANCIER_GLASS_EDGE_LIGHT = "fancier_glass_edge_light";
-        public static final int DEFAULT_VALUE_FANCIER_GLASS_EDGE_LIGHT = 32;
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_EDGE_LIGHT = 18;
         public static final int MIN_FANCIER_GLASS_EDGE_LIGHT = 0;
         public static final int MAX_FANCIER_GLASS_EDGE_LIGHT = 100;
 

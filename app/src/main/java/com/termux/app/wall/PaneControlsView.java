@@ -21,6 +21,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
+import androidx.customview.widget.ExploreByTouchHelper;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
@@ -112,26 +115,36 @@ public final class PaneControlsView extends View {
         final boolean isGlyph;
         @Nullable final Mark mark;
         final int tint;
+        /** What the button is called to accessibility services; a glyph has no words of its own. */
+        @Nullable final CharSequence description;
 
         private Action(int id, @NonNull String text, boolean isGlyph, @Nullable Mark mark,
-                       int tint) {
+                       int tint, @Nullable CharSequence description) {
             this.id = id;
             this.text = text;
             this.isGlyph = isGlyph;
             this.mark = mark;
             this.tint = tint;
+            this.description = description;
         }
 
         /** A Nerd Font glyph in a square button. */
         @NonNull
         public static Action glyph(int id, @NonNull String glyph) {
-            return new Action(id, glyph, true, null, TINT_PRIMARY);
+            return glyph(id, glyph, null);
+        }
+
+        /** A Nerd Font glyph in a square button, named for TalkBack by {@code description}. */
+        @NonNull
+        public static Action glyph(int id, @NonNull String glyph,
+                                   @Nullable CharSequence description) {
+            return new Action(id, glyph, true, null, TINT_PRIMARY, description);
         }
 
         /** A short read-out — the grid's size, or the help question mark — as wide as its text. */
         @NonNull
         public static Action label(int id, @NonNull String text) {
-            return new Action(id, text, false, null, TINT_PRIMARY);
+            return new Action(id, text, false, null, TINT_PRIMARY, text);
         }
 
         /** A hand-drawn mark, in a square button the size a glyph's would be. */
@@ -143,7 +156,7 @@ public final class PaneControlsView extends View {
         /** As above, in one of the tab's other colours. */
         @NonNull
         public static Action drawn(int id, @NonNull Mark mark, int tint) {
-            return new Action(id, "", false, mark, tint);
+            return new Action(id, "", false, mark, tint, null);
         }
     }
 
@@ -247,6 +260,82 @@ public final class PaneControlsView extends View {
         setClickable(false);
         setFocusable(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        ViewCompat.setAccessibilityDelegate(this, mAccessibility);
+    }
+
+    /**
+     * The tab's buttons as virtual views, while the tab is out: the view draws them itself, so
+     * without this TalkBack finds nothing to name or press. Down, the view stays out of the tree
+     * so the overlay it lives on never takes accessibility focus over the page.
+     */
+    private final ExploreByTouchHelper mAccessibility = new ExploreByTouchHelper(this) {
+        private final RectF mBoundsF = new RectF();
+
+        /**
+         * What a screen reader says for a button: its description, else its label for a labelled
+         * button, else nothing. A bare glyph is a private-use character with no word behind it,
+         * so it is not offered as a virtual view at all: ExploreByTouchHelper throws on a node
+         * with neither text nor description, and a silent node would be no use anyway.
+         */
+        @Nullable
+        private CharSequence spoken(@Nullable Action action) {
+            if (action == null) return null;
+            if (action.description != null) return action.description;
+            if (!action.isGlyph && action.mark == null && !action.text.isEmpty()) return action.text;
+            return null;
+        }
+
+        @Override
+        protected int getVirtualViewAt(float x, float y) {
+            int id = actionAt(x, y);
+            if (id == ACTION_NONE) return ExploreByTouchHelper.INVALID_ID;
+            int index = indexOf(id);
+            return index < 0 || spoken(mActions.get(index)) == null
+                ? ExploreByTouchHelper.INVALID_ID : id;
+        }
+
+        @Override
+        protected void getVisibleVirtualViews(List<Integer> virtualViewIds) {
+            if (!isControlsShown()) return;
+            for (Action action : mActions) {
+                if (spoken(action) != null) virtualViewIds.add(action.id);
+            }
+        }
+
+        @Override
+        protected void onPopulateNodeForVirtualView(int virtualViewId,
+                                                    @NonNull AccessibilityNodeInfoCompat node) {
+            int index = indexOf(virtualViewId);
+            Action action = index < 0 ? null : mActions.get(index);
+            CharSequence spoken = spoken(action);
+            // Never null: the helper requires text or a description on every node it hands out.
+            node.setContentDescription(spoken != null ? spoken
+                : getResources().getString(android.R.string.untitled));
+            node.setClassName(android.widget.Button.class.getName());
+            node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+            Rect bounds = new Rect(0, 0, 1, 1);
+            if (actionBounds(virtualViewId, mBoundsF)) mBoundsF.roundOut(bounds);
+            node.setBoundsInParent(bounds);
+        }
+
+        @Override
+        protected boolean onPerformActionForVirtualView(int virtualViewId, int action,
+                                                        @Nullable android.os.Bundle arguments) {
+            return action == AccessibilityNodeInfoCompat.ACTION_CLICK && activate(virtualViewId);
+        }
+    };
+
+    @Override
+    protected boolean dispatchHoverEvent(android.view.MotionEvent event) {
+        return mAccessibility.dispatchHoverEvent(event) || super.dispatchHoverEvent(event);
+    }
+
+    /** In the accessibility tree only while the tab is out and has buttons to name. */
+    private void syncAccessibility() {
+        int wanted = mShown && !mRetracting && !mActions.isEmpty()
+            ? IMPORTANT_FOR_ACCESSIBILITY_YES : IMPORTANT_FOR_ACCESSIBILITY_NO;
+        if (getImportantForAccessibility() != wanted) setImportantForAccessibility(wanted);
+        mAccessibility.invalidateRoot();
     }
 
     public void setListener(@Nullable Listener listener) {
@@ -442,6 +531,7 @@ public final class PaneControlsView extends View {
         for (int i = mAlerted.size() - 1; i >= 0; i--) {
             if (indexOf(mAlerted.get(i)) < 0) mAlerted.remove(i);
         }
+        syncAccessibility();
         invalidate();
     }
 
@@ -486,6 +576,7 @@ public final class PaneControlsView extends View {
         animateTo(1f, false);
         mShown = true;
         mRetracting = false;
+        syncAccessibility();
     }
 
     /**
@@ -499,6 +590,7 @@ public final class PaneControlsView extends View {
         mProgress = 1f;
         mShown = true;
         mRetracting = false;
+        syncAccessibility();
         invalidate();
     }
 
@@ -506,6 +598,7 @@ public final class PaneControlsView extends View {
         if (!mShown || mRetracting) return;
         animateTo(0f, true);
         mRetracting = true;
+        syncAccessibility();
     }
 
     /**
@@ -518,6 +611,7 @@ public final class PaneControlsView extends View {
         mShown = false;
         mRetracting = false;
         mCorner = CornerZones.NONE;
+        syncAccessibility();
         invalidate();
     }
 

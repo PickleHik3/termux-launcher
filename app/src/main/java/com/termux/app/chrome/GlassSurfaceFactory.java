@@ -291,6 +291,39 @@ public final class GlassSurfaceFactory {
     }
 
     /**
+     * The veil {@code band}'s glass is drawn with, for a surface that lays its own tint rather than
+     * going through {@link #surface}: {@link Color#TRANSPARENT} for no band, or none needed.
+     */
+    int bandVeil(@Nullable GlassBackdropCache.Band band) {
+        return band != null && mInk != null ? mInk.bandVeil(band) : Color.TRANSPARENT;
+    }
+
+    /**
+     * {@code band}'s veil alone, as a layer for a view that stands over glass another surface
+     * draws: the docked keyboard over the unified dock glass is the case. The unified glass spans
+     * the dock rows and the keyboard, so its own veil would darken rows no key label stands on;
+     * the keyboard host instead wears this as its background — sized to the host's own bounds,
+     * over the glass behind it and under its keys, the order a pane's slab draws its veil in.
+     *
+     * <p>The glass under it is described here as it is ({@code barAlpha}, the slice, the foot) so
+     * the band is measured against the material that is really there. Null when the band needs no
+     * veil, or nothing measures it.</p>
+     */
+    @Nullable
+    public Drawable veilOnlyLayer(@NonNull GlassBackdropCache.Band band, float barAlpha,
+                                  float sliceStart, float sliceEnd, boolean withFoot) {
+        if (mInk == null) return null;
+        float clamped = barAlpha < 0f ? 0f : (barAlpha > 1f ? 1f : barAlpha);
+        mInk.noteBandGlass(band, clamped, withFoot, sliceStart, sliceEnd);
+        int veil = mInk.bandVeil(band);
+        if (Color.alpha(veil) <= 0) return null;
+        GradientDrawable layer = new GradientDrawable();
+        layer.setColor(veil);
+        layer.setDither(true);
+        return layer;
+    }
+
+    /**
      * The one containing stroke every glass surface draws: barely there, or it reads as a drawn
      * border over the glass rather than the edge of the material. Also the dock capsule's
      * background, whose outline it supplies.

@@ -72,6 +72,19 @@ public final class GlassBackdropCache {
         AZ_STRIP,
         /** The dock plank and anything riding on it. */
         DOCK,
+        /**
+         * A terminal pane's glass slab, one rect per pane. Its ink is the terminal palette's own
+         * foreground and is never re-toned, so the pane answers with a veil alone; a split window
+         * is several rects of this one band, memoised per rect by {@code ChromeInk} rather than
+         * here, because this cache keeps one rect per band.
+         */
+        TERMINAL_PANE,
+        /**
+         * The in-app keyboard's host. Its ink is the key labels', measured on the key cap over the
+         * veiled host; the labels and the caps are the keyboard theme's, so only the host's veil
+         * moves.
+         */
+        KEYBOARD,
     }
 
     /** Reads the pixels behind a band. Implemented by the chrome renderer, faked in tests. */
@@ -80,6 +93,11 @@ public final class GlassBackdropCache {
          * The average opaque colour of the wallpaper under {@code screenRect}, or
          * {@link #UNREADABLE} when nothing can be read right now — no wallpaper frame, a live
          * wallpaper the app cannot capture, a blur still decoding. Never throws.
+         *
+         * <p>The rect is in the root container's own untransformed space: screen coordinates as
+         * they are while the root is not scaled, which is the space the wallpaper frame is
+         * captured in. {@code ChromeInk} maps a band into it, so a root the editor has scaled
+         * down is still sampled over the wallpaper it really shows.</p>
          */
         @ColorInt int sampleWallpaper(@NonNull Rect screenRect);
     }
@@ -181,6 +199,19 @@ public final class GlassBackdropCache {
     public boolean hasSample(@NonNull Band band) {
         Entry entry = mEntries.get(band);
         return entry != null && entry.sampled;
+    }
+
+    /**
+     * One read through the sampler, remembered nowhere: the opaque wallpaper colour under
+     * {@code rect}, or {@link #UNREADABLE} when there is no sampler, the rect is empty or nothing
+     * can be read yet. For a caller that memoises per rect itself — a band with several rects,
+     * which the one-rect-per-band entries here would make take turns re-sampling.
+     */
+    @ColorInt
+    public int sampleUncached(@NonNull Rect rect) {
+        if (mSampler == null || rect.isEmpty()) return UNREADABLE;
+        int read = mSampler.sampleWallpaper(rect);
+        return Color.alpha(read) == 0 ? UNREADABLE : OnGlass.opaque(read);
     }
 
     /**

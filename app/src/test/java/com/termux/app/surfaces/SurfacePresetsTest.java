@@ -24,9 +24,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Pins the preset round-trip the first card ("Classic", id {@code stock}) is named after: applied
- * to any state, it is the shipped look — the shipped Base numbers, the dock's one denser detached
- * opacity, and nothing else detached — and the selection ring's match test agrees. Plus the fifth
+ * Pins the preset round-trip: a Look applied to any state is its recipe, detaches nothing, never
+ * touches Style, and the selection ring's match test agrees. Plus the fifth
  * card, which is the user's own saved look rather than one this build ships.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -44,35 +43,48 @@ public class SurfacePresetsTest {
         preferences = new TermuxAppSharedPreferences(context, store, null);
     }
 
+    private static SurfacePresets.Preset preset(String id) {
+        for (SurfacePresets.Preset preset : SurfacePresets.presets())
+            if (preset.id.equals(id)) return preset;
+        throw new AssertionError(id);
+    }
+
     @Test
-    public void applyingStockIsTheShippedLook() {
-        // Start somewhere else entirely, detached rows included.
+    public void theLooksAreOrderedClearMistTintSolid() {
+        java.util.List<String> ids = new java.util.ArrayList<>();
+        for (SurfacePresets.Preset preset : SurfacePresets.presets())
+            ids.add(preset.id);
+        assertEquals(java.util.Arrays.asList("minimal", "frost", "stock", "solid"), ids);
+    }
+
+    @Test
+    public void applyingTintWritesItsRecipeDetachesNothingAndLeavesStyleAlone() {
         preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 25);
         preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN, 77);
+        preferences.setAppLauncherDockStyle(TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED);
 
-        SurfacePresets.Preset stock = SurfacePresets.presets().get(0);
-        assertEquals("stock", stock.id);
-        SurfacePresets.apply(preferences, stock);
+        SurfacePresets.Preset tint = preset("stock");
+        SurfacePresets.apply(preferences, tint);
 
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR,
-            preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY,
-            preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN,
-            preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS,
-            preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
-        assertEquals(TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP,
-            preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP));
+        assertEquals(6, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(46, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        assertEquals(14, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(22, preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
+        assertEquals(22, preferences.getTerminalCornerRadius());
+        assertEquals(4, preferences.getTerminalPaneGap());
+        // A Look never detaches a surface and never touches Style.
+        for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows())
+            assertTrue(row.slot + "/" + row.property,
+                preferences.isSurfaceInheriting(row.slot, row.property));
+        assertEquals(TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED,
+            preferences.getAppLauncherDockStyle());
 
-        // The one shipped asymmetry: the dock's denser opacity, and nothing else detached.
-        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
-        assertEquals(TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY,
-            preferences.getSurfaceOverrideValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
-        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.GRAIN));
+        assertTrue(SurfacePresets.matches(preferences, tint));
+        assertFalse(SurfacePresets.matches(preferences, preset("frost")));
 
-        assertTrue(SurfacePresets.matches(preferences, stock));
-        assertFalse(SurfacePresets.matches(preferences, SurfacePresets.presets().get(1)));
+        // The match ignores Style.
+        preferences.setAppLauncherDockStyle(TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DEFAULT);
+        assertTrue(SurfacePresets.matches(preferences, tint));
     }
 
     /**
@@ -91,7 +103,7 @@ public class SurfacePresetsTest {
         assertTrue(SurfacePresets.matches(preferences, custom));
 
         // Wander off, then come back through the card.
-        SurfacePresets.apply(preferences, SurfacePresets.presets().get(0));
+        SurfacePresets.apply(preferences, preset("stock"));
         assertFalse(SurfacePresets.matches(preferences, custom));
         assertEquals(21, SurfacePresets.custom(preferences).values
             .get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
@@ -120,6 +132,55 @@ public class SurfacePresetsTest {
         assertNotNull(look);
         assertTrue(look.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY) instanceof Integer);
         assertTrue(look.get(TERMUX_APP.KEY_SURFACE_MATERIAL) instanceof String);
+        assertFalse(look.containsKey(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE));
+    }
+
+    @Test
+    public void applyingCustomNeverChangesTheStyle() {
+        String stored = "{\"format_version\":2,\"app_launcher_dock_style\":\"rounded\","
+            + "\"surface_base_blur\":21}";
+        preferences.setSurfaceCustomPreset(stored);
+        preferences.setAppLauncherDockStyle("default");
+        SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
+        assertEquals(21, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals("default", preferences.getAppLauncherDockStyle());
+        assertTrue(SurfacePresets.matches(preferences, SurfacePresets.custom(preferences)));
+    }
+
+    /**
+     * Custom's row 2 sets values no Look names — the key caps, the wallpaper's dim and Soft — and
+     * the Custom stop has to bring them back with the rest.
+     */
+    @Test
+    public void customCarriesWhatRowTwoSets() {
+        preferences.setInAppKeyboardKeyOpacity(40);
+        preferences.setInAppKeyboardKeyCornerRadiusDp(9f);
+        preferences.setWallpaperBackdropDim(35);
+        SoftWallpaper.set(preferences, true);
+        SurfacePresets.saveCustom(preferences);
+
+        preferences.setInAppKeyboardKeyOpacity(90);
+        preferences.setInAppKeyboardKeyCornerRadiusDp(15f);
+        preferences.setWallpaperBackdropDim(0);
+        SoftWallpaper.set(preferences, false);
+        assertFalse(SurfacePresets.matches(preferences, SurfacePresets.custom(preferences)));
+
+        SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
+        assertEquals(40, preferences.getInAppKeyboardKeyOpacity());
+        assertEquals(9f, preferences.getInAppKeyboardKeyCornerRadiusDp(), 0.001f);
+        assertEquals(35, preferences.getWallpaperBackdropDim());
+        assertTrue(SoftWallpaper.isOn(preferences));
+        assertTrue(SurfacePresets.matches(preferences, SurfacePresets.custom(preferences)));
+    }
+
+    /** A Look leaves the Custom-only values where they are; it names none of them. */
+    @Test
+    public void aLookNamesNoneOfTheCustomOnlyValues() {
+        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
+            assertFalse(preset.values.containsKey(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY));
+            assertFalse(preset.values.containsKey(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM));
+            assertFalse(preset.values.containsKey(SoftWallpaper.KEY_WALLPAPER_SOFT));
+        }
     }
 
     @Test
@@ -127,7 +188,6 @@ public class SurfacePresetsTest {
         // The device-mock cards read these five directly; a preset omitting one would silently
         // fall back to a hardcoded number and the card would lie about the look it applies.
         String[] rendered = {
-            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE,
             TERMUX_APP.KEY_SURFACE_BASE_OPACITY,
             TERMUX_APP.KEY_SURFACE_BASE_GRAIN,
             TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS,

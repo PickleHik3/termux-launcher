@@ -43,7 +43,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * showed on — the terminal's for everything the terminal draws — and then drops every place's own
  * copy. The same step folds the place-scoped look overrides into the shared look, since those were
  * kept in this file's key scheme too. Version 7 folds the per-place minimal flags into the one
- * launcher-wide flag.
+ * launcher-wide flag. Version 8 drops the alphabets index's minimised flag: the pull tab is gone,
+ * and an index that was minimised reads as shown.
  *
  * <p>No Android views here, on purpose: this is a resolver over {@link SharedPreferences} and it is
  * tested as one.
@@ -51,7 +52,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the current ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 7;
+    @VisibleForTesting static final int MIGRATION_VERSION = 8;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
@@ -66,12 +67,11 @@ public final class PlaceLayoutStore {
     private static final String KEY_AZ_ROW = "az_row";
     private static final String KEY_AZ_BAR = Element.AZ.storageKey();
     /**
-     * Whether a shown alphabets index stands as its pull tab, beside {@code az_row}: the
-     * three-way On / Minimised / Off is the two of them together, so an install that has only
-     * ever stored {@code az_row} reads exactly as it did — true is On, false is Off — and nothing
-     * has to be migrated for it.
+     * Whether a shown alphabets index stood as its pull tab, beside {@code az_row}. The tab was
+     * removed on 2026-09-30; version 8 of the migration deletes the key, and {@code az_row} alone
+     * says on or off, so an index that was minimised comes back as the band it folded from.
      */
-    private static final String KEY_AZ_MINIMISED = "az_minimised";
+    private static final String LEGACY_KEY_AZ_MINIMISED = "az_minimised";
     private static final String KEY_EXTRA_KEYS = Element.EXTRA_KEYS.storageKey();
 
     /**
@@ -88,6 +88,18 @@ public final class PlaceLayoutStore {
      * where every band has always stood, so nothing is written for an install that predates it.
      */
     private static final String UNDER_KEYBOARD_SUFFIX = "_under_keyboard";
+
+    /**
+     * The edge a put-away bar comes back to, beside its placement:
+     * {@code layout.<orientation>.<placement key>_restore_edge}. The status bar, the pinned apps and
+     * the extra keys store {@code hidden} in their placement key, which leaves no room for the edge
+     * they went away from, so the Layout editor's tray could only ever bring them back to where
+     * each one started (spec §3.6). Written when a bar is put away and read only while it is;
+     * absent is the bar's own default edge — the top for the status bar, the bottom for the rows.
+     * The alphabets index needs none: its edge has always had a key of its own ({@code az_bar})
+     * beside the on/off switch.
+     */
+    private static final String RESTORE_EDGE_SUFFIX = "_restore_edge";
 
     /** A row placement that is not an edge at all. */
     private static final String VALUE_HIDDEN = "hidden";
@@ -137,7 +149,7 @@ public final class PlaceLayoutStore {
     private static final String LEGACY_KEY_X11_HIDE_STATUS_BAR = "x11_hide_status_bar";
 
     private static final String[] ARRANGEMENT_KEYS = {
-        KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_AZ_MINIMISED, KEY_EXTRA_KEYS,
+        KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_EXTRA_KEYS,
         KEY_KEYBOARD_MODE,
         KEY_KEYBOARD_FORM, KEY_WIDGET_COLUMNS, KEY_WIDGET_ROWS,
         KEY_DOCK_HEIGHT, KEY_KEYBOARD_HEIGHT, KEY_KEYBOARD_CHIN,
@@ -146,7 +158,9 @@ public final class PlaceLayoutStore {
         orderKeyName(Element.STATUS), orderKeyName(Element.APPS), orderKeyName(Element.AZ),
         orderKeyName(Element.EXTRA_KEYS),
         underKeyboardKeyName(Element.APPS), underKeyboardKeyName(Element.AZ),
-        underKeyboardKeyName(Element.EXTRA_KEYS)
+        underKeyboardKeyName(Element.EXTRA_KEYS),
+        restoreEdgeKeyName(Element.STATUS), restoreEdgeKeyName(Element.APPS),
+        restoreEdgeKeyName(Element.EXTRA_KEYS)
     };
 
     /**
@@ -162,6 +176,13 @@ public final class PlaceLayoutStore {
     @NonNull
     static String orderKeyName(@NonNull Element element) {
         return element.storageKey() + ORDER_SUFFIX;
+    }
+
+    /** The unscoped key a put-away bar's edge is remembered under. */
+    @VisibleForTesting
+    @NonNull
+    static String restoreEdgeKeyName(@NonNull Element element) {
+        return element.storageKey() + RESTORE_EDGE_SUFFIX;
     }
 
     /** The unscoped key saying whether one element stands under the keyboard. */
@@ -268,7 +289,6 @@ public final class PlaceLayoutStore {
             keyboardMode(orientation),
             keyboardForm(orientation),
             isKeyboardShown(),
-            azMinimised(orientation),
             widgetColumns(orientation),
             widgetRows(orientation));
     }
@@ -313,7 +333,7 @@ public final class PlaceLayoutStore {
             case STATUS:
                 // Spelled the way the rows have always been: an edge, or "hidden".
                 return new Slot(VALUE_HIDDEN.equals(readString(orientation, KEY_STATUS_BAR)),
-                    statusBarEdge(orientation), order);
+                    elementEdge(orientation, element), order);
             case AZ:
                 return new Slot(!azRowShown(orientation), azBarEdge(orientation), order, under);
             case APPS:
@@ -328,6 +348,10 @@ public final class PlaceLayoutStore {
     /** Moves one element: its edge, whether it is put away, and where it sits in the stack. */
     public void setSlot(@NonNull PlaceOrientation orientation, @NonNull Element element,
                         @NonNull Slot slot) {
+        // A bar put away keeps the edge it came from, so the tray brings it back there. The
+        // index's edge has a key of its own.
+        if (slot.hidden && element != Element.AZ)
+            writeString(orientation, restoreEdgeKeyName(element), slot.edge.storageValue());
         switch (element) {
             case STATUS:
                 writeString(orientation, KEY_STATUS_BAR, rowValue(slot));
@@ -390,25 +414,23 @@ public final class PlaceLayoutStore {
     }
 
     /**
-     * The edge an element's own placement key names, without reading its order. A row that is put
-     * away names none: the key holds nothing but {@code hidden}, so the edge it would come back to
-     * was never stored and the bottom — where both rows have always started — stands for it.
+     * The edge an element's own placement key names, without reading its order. A bar that is put
+     * away names none there — the key holds nothing but {@code hidden} — so it answers with the
+     * edge remembered when it went away ({@link #restoreEdgeKeyName}), and failing that the
+     * bar's own default edge: the top for the status bar, the bottom for the rows.
      */
     @NonNull
     private Edge elementEdge(@NonNull PlaceOrientation orientation, @NonNull Element element) {
-        switch (element) {
-            case STATUS: return statusBarEdge(orientation);
-            case AZ: return azBarEdge(orientation);
-            case APPS:
-            case EXTRA_KEYS:
-            default: {
-                String key = element == Element.APPS ? KEY_APPS_ROW : KEY_EXTRA_KEYS;
-                Edge fallback = element == Element.APPS && orientation == PlaceOrientation.LANDSCAPE
-                    ? Edge.LEFT : Edge.BOTTOM;
-                String raw = readString(orientation, key);
-                return VALUE_HIDDEN.equals(raw) ? Edge.BOTTOM : Edge.parse(raw, fallback);
-            }
-        }
+        if (element == Element.AZ) return azBarEdge(orientation);
+        String key = element == Element.STATUS ? KEY_STATUS_BAR
+            : element == Element.APPS ? KEY_APPS_ROW : KEY_EXTRA_KEYS;
+        Edge fallback = element == Element.STATUS ? Edge.TOP
+            : element == Element.APPS && orientation == PlaceOrientation.LANDSCAPE
+                ? Edge.LEFT : Edge.BOTTOM;
+        String raw = readString(orientation, key);
+        if (!VALUE_HIDDEN.equals(raw)) return Edge.parse(raw, fallback);
+        Edge hiddenFallback = element == Element.STATUS ? Edge.TOP : Edge.BOTTOM;
+        return Edge.parse(readString(orientation, restoreEdgeKeyName(element)), hiddenFallback);
     }
 
     /** A slot as the pinned apps and the extra keys have always spelled it. */
@@ -450,8 +472,8 @@ public final class PlaceLayoutStore {
      * A slot as the three-way row placement the pinned apps and the extra keys were stored as. A
      * column down the side of a portrait screen used to be refused here; it is allowed in both
      * orientations now and the Layout editor warns about a narrow canvas instead. The old spelling
-     * has no top row, so a slot on the top edge reads as the bottom until the views that draw
-     * them learn the edge.
+     * has no top row, so a slot on the top edge reads as the bottom: anything that has to put a
+     * bar back where it was — the editor's snapshot above all — reads {@link #slot} instead.
      */
     @NonNull
     private static RowPlacement placementOf(@NonNull Slot slot) {
@@ -479,49 +501,6 @@ public final class PlaceLayoutStore {
         writeBoolean(variantKey(orientation, KEY_AZ_ROW), shown);
     }
 
-    /**
-     * Whether the alphabets index, while it is shown, stands minimised as a pull tab on its edge
-     * rather than as a band of its own. False until the user asks: every install that predates
-     * the tab keeps the band it had.
-     */
-    public boolean azMinimised(@NonNull PlaceOrientation orientation) {
-        return mStore != null
-            && mStore.getBoolean(variantKey(orientation, KEY_AZ_MINIMISED), false);
-    }
-
-    public void setAzMinimised(@NonNull PlaceOrientation orientation, boolean minimised) {
-        writeBoolean(variantKey(orientation, KEY_AZ_MINIMISED), minimised);
-    }
-
-    /** The Layout editor's three-way choice for the index: a band, the pull tab, or put away. */
-    @NonNull
-    public PlaceLayout.AzIndexMode azIndexMode(@NonNull PlaceOrientation orientation) {
-        if (!azRowShown(orientation)) return PlaceLayout.AzIndexMode.OFF;
-        return azMinimised(orientation)
-            ? PlaceLayout.AzIndexMode.MINIMISED : PlaceLayout.AzIndexMode.ON;
-    }
-
-    /**
-     * Writes the three-way choice. Off leaves the minimised flag where it was, the way putting a
-     * bar away keeps the edge it comes back to, so a tab dragged back out of the Hidden tray
-     * returns as a tab.
-     */
-    public void setAzIndexMode(@NonNull PlaceOrientation orientation,
-                               @NonNull PlaceLayout.AzIndexMode mode) {
-        switch (mode) {
-            case OFF:
-                setAzRowShown(orientation, false);
-                return;
-            case MINIMISED:
-                setAzMinimised(orientation, true);
-                setAzRowShown(orientation, true);
-                return;
-            case ON:
-            default:
-                setAzMinimised(orientation, false);
-                setAzRowShown(orientation, true);
-        }
-    }
 
     /**
      * Where the alphabets bar stands while it rides on its own — with the apps row under it, it
@@ -925,6 +904,7 @@ public final class PlaceLayoutStore {
         SharedPreferences.Editor editor = mStore.edit();
         if (fromVersion < 6) migrateToSharedLayout(editor);
         if (fromVersion < 7) migrateToOneMinimalMode(editor);
+        if (fromVersion < 8) migrateAwayFromAzTab(editor);
         editor.putInt(KEY_MIGRATED, MIGRATION_VERSION);
         editor.apply();
         mRevision.incrementAndGet();
@@ -944,6 +924,19 @@ public final class PlaceLayoutStore {
         if (minimal != null) editor.putBoolean(minimalKey(), minimal);
         for (PaneWallPage place : PaneWallPage.values())
             editor.remove(memoryKey(place, KEY_MINIMAL));
+    }
+
+    /**
+     * Version 8: the alphabets index's minimised pull tab is gone. Its flag is deleted from both
+     * layouts in both orientations and nothing else is written: {@code az_row} is still true for
+     * an index that was minimised, so it reads as shown, standing as a band on the edge the tab
+     * was on — the form it folded from.
+     */
+    private void migrateAwayFromAzTab(@NonNull SharedPreferences.Editor editor) {
+        for (LayoutVariant variant : LayoutVariant.values()) {
+            for (PlaceOrientation orientation : PlaceOrientation.values())
+                editor.remove(layoutKey(variant, orientation, LEGACY_KEY_AZ_MINIMISED));
+        }
     }
 
     /** Versions 1 to 5, exactly as they ran when the arrangement was still kept per place. */

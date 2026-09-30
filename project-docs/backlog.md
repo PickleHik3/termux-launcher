@@ -32,7 +32,11 @@ Sizes follow the study: **S** 2–5 days, **M** 1–3 weeks, **L** 4–8 weeks, 
 
 ## Ready to start
 
-There is no unblocked implementation slice left from the feasibility study. The remaining projects
+| Item | Size | State |
+|---|---|---|
+| Appearance and Layout editor | L | Spec approved 2026-09-30: `active/appearance-layout-editor/SPEC.md`. Items 1 and 2 of its §7 (Layout mode with handles and no rows; layout canvas from the element pack) are unblocked. Items 3–5 (bands for terminal and keyboard, the editor shell, the Looks) follow in order. |
+
+There is no other unblocked implementation slice left from the feasibility study. The remaining projects
 below are gated on measurements, concrete client demand, security/UX design, or an explicit product
 decision.
 

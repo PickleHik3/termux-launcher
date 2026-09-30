@@ -47,7 +47,6 @@
     <string name="settings_layout_row_hidden">Hidden</string>
     <string name="settings_layout_row_shown">Shown</string>
     <string name="settings_layout_az_on">On</string>
-    <string name="settings_layout_az_minimised">Minimised</string>
     <string name="settings_layout_az_off">Off</string>
     <string name="settings_layout_keyboard_title">Keyboard</string>
     <string name="settings_layout_keyboard_switch_title">Keyboard on/off</string>
@@ -72,11 +71,10 @@
     <string name="settings_layout_miniature_display">Display</string>
     <string name="settings_layout_miniature_display_overlay">Display, keyboard floats</string>
     <string name="settings_layout_miniature_hidden_format">%1$s, hidden</string>
-    <string name="settings_layout_miniature_minimised_format">%1$s, minimised</string>
     <string name="az_pull_tab_description">A–Z index. Slide along it to find and open apps.</string>
     <string name="settings_layout_drop_to_hide">Drop here to hide</string>
     <string name="settings_destination_appearance">Look</string>
-    <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons, keyboard look, and sessions opacity</string>
+    <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons and keyboard look</string>
     <string name="settings_destination_terminal">Terminal</string>
     <string name="settings_destination_terminal_summary">Split panes, full screen, and Recents</string>
     <string name="settings_destination_status_bar">Status bar</string>
@@ -1769,10 +1767,10 @@
                      "Glass", "Frost" and "Solid" are what the Material control is called, and a
                      preset named after one of them read as a shortcut to that control rather than
                      as a complete look. -->
-                <string name="termux_surface_preset_stock">Classic</string>
+                <string name="termux_surface_preset_stock">Tint</string>
                 <string name="termux_surface_preset_frost">Mist</string>
-                <string name="termux_surface_preset_solid">Slate</string>
-                <string name="termux_surface_preset_minimal">Bare</string>
+                <string name="termux_surface_preset_solid">Solid</string>
+                <string name="termux_surface_preset_minimal">Clear</string>
                 <string name="termux_surface_preset_custom">Custom</string>
                 <string name="termux_surface_preset_applied">%1$s applied</string>
                 <string name="termux_surface_preset_saved">Look saved as Custom</string>
@@ -1879,9 +1877,29 @@
                 <string name="termux_layout_editor_narrow_notice">With bars down the side there is not much room left.</string>
                 <string name="termux_layout_editor_side_status_notice">A status bar on the side stays compact.</string>
                 <string name="termux_layout_editor_other_orientation_notice">This is the layout for the other orientation; it appears when you turn the phone.</string>
-                <!-- The dock's and the keyboard's height rows. The heading above each one says
-                     which is which, so the label column only has to say what it sets. -->
-                <string name="termux_layout_editor_height">Height</string>
+                <!-- The line over the header's title: which editor this is. The title under it
+                     says which layout, so the two never say the same word twice. -->
+                <string name="termux_layout_editor_eyebrow">Layout editor</string>
+                <!-- The corner tab's Layout glyph, read aloud, and the Settings row that is the
+                     same door. -->
+                <string name="corner_tab_layout_description">Layout editor</string>
+                <string name="settings_destination_layout_editor">Layout</string>
+                <string name="settings_destination_layout_editor_summary">Move, hide and size the bars, the dock and the keyboard</string>
+                <!-- The restore tray with nothing in it: one short line, not a box. -->
+                <string name="layout_editor_tray_empty">Drag a bar here to hide it</string>
+                <!-- A tray chip read aloud: what a tap on it does. -->
+                <string name="layout_editor_tray_chip_description">Show %1$s</string>
+                <string name="layout_editor_keyboard">Keyboard</string>
+                <string name="layout_editor_keyboard_forms">Keyboard type</string>
+                <!-- What a resize handle shows while it is dragged, in the store's real units. The
+                     dp forms are the live launcher measured after the write; the × forms are for
+                     the orientation the phone is not in, where there is nothing live to measure. -->
+                <string name="layout_editor_readout_dock_dp">Dock %1$d dp</string>
+                <string name="layout_editor_readout_dock_scale">Dock ×%1$s</string>
+                <string name="layout_editor_readout_keyboard_dp">Keyboard %1$d dp</string>
+                <string name="layout_editor_readout_keyboard_scale">Keyboard ×%1$s</string>
+                <string name="layout_editor_readout_chin">Bottom padding %1$d dp</string>
+                <string name="layout_editor_readout_grid">%1$d × %2$d cells</string>
                 <!-- The sheet's handle, read aloud: it is pulled or tapped to grow the card. -->
                 <string name="termux_layout_editor_sheet_handle">Expand or collapse the editor</string>
                 <string name="termux_dock_tuning_value_dp">%1$d dp</string>

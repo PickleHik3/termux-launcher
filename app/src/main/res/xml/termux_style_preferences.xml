@@ -68,18 +68,6 @@
             app:defaultValue="false" />
     </PreferenceCategory>
 
-    <!-- Hidden below Android 13 and disabled without a wallpaper set from inside the launcher;
-         TermuxStylePreferencesFragment decides both. -->
-    <PreferenceCategory
-        app:key="fancier_glass_header"
-        app:title="@string/settings_fancier_glass_header">
-        <SwitchPreferenceCompat
-            app:key="fancier_glass"
-            app:title="@string/settings_fancier_glass_title"
-            app:summary="@string/settings_fancier_glass_summary"
-            app:defaultValue="false" />
-    </PreferenceCategory>
-
     <PreferenceCategory app:title="@string/settings_icon_appearance_header">
         <SwitchPreferenceCompat
             app:key="app_launcher_bw_icons"
@@ -103,8 +91,8 @@
             app:key="customize_keyboard_surface"
             app:icon="@drawable/ic_symbol_palette"
             app:persistent="false"
-            app:title="@string/settings_customize_keyboard_title"
-            app:summary="@string/settings_customize_keyboard_summary" />
+            app:title="@string/settings_look_appearance_editor_title"
+            app:summary="@string/settings_look_appearance_editor_summary" />
         <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="in_app_keyboard_theme"
             app:title="@string/termux_in_app_keyboard_theme_title" />
@@ -117,13 +105,8 @@
         <Preference
             app:key="in_app_keyboard_font"
             app:title="@string/settings_typeface_title" />
-        <SeekBarPreference
-            app:key="in_app_keyboard_bottom_padding"
-            app:title="@string/settings_keyboard_bottom_padding_title"
-            app:summary="@string/settings_keyboard_bottom_padding_summary"
-            app:showSeekBarValue="true"
-            android:max="48"
-            android:defaultValue="0" />
+        <!-- Bottom padding left for the Layout editor (spec §6): the keyboard's bottom handle on
+             the layout canvas writes the same chin, per orientation. -->
     </PreferenceCategory>
 
 </PreferenceScreen>

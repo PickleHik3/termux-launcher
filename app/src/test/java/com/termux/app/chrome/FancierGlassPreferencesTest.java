@@ -39,12 +39,14 @@ public class FancierGlassPreferencesTest {
     }
 
     @Test
-    public void theSwitchIsOffUntilTheUserTurnsItOn() {
-        assertFalse(preferences.isFancierGlassEnabled());
-        preferences.setFancierGlassEnabled(true);
+    public void theSwitchIsOnWhereverTheDeviceSupportsIt() {
+        // Spec appearance-layout-editor §4: Fancier Glass is on by default; the device gate (API
+        // 33, an in-app wallpaper) and Lazy mode decide whether it draws, not a switch.
         assertTrue(preferences.isFancierGlassEnabled());
         preferences.setFancierGlassEnabled(false);
         assertFalse(preferences.isFancierGlassEnabled());
+        preferences.setFancierGlassEnabled(true);
+        assertTrue(preferences.isFancierGlassEnabled());
     }
 
     @Test
@@ -52,7 +54,7 @@ public class FancierGlassPreferencesTest {
         // GlassRefraction.Look.DEFAULT is built from these same three numbers; see its test.
         assertEquals(9, preferences.getFancierGlassBendDp());
         assertEquals(20, preferences.getFancierGlassEdgeWidthDp());
-        assertEquals(32, preferences.getFancierGlassEdgeLightPercent());
+        assertEquals(18, preferences.getFancierGlassEdgeLightPercent());
         assertEquals(TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_BEND, preferences.getFancierGlassBendDp());
         assertEquals(TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_WIDTH,
             preferences.getFancierGlassEdgeWidthDp());

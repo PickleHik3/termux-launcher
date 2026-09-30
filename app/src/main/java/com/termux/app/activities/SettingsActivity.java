@@ -549,9 +549,43 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             // A build made without the X server has no display to set up.
             Preference display = findPreference("display");
             if (display != null && !com.termux.BuildConfig.X11_SERVER) display.setVisible(false);
+            configureLayoutEditorRow(context);
             SettingsLayoutUtils.applyRootLayout(this);
             configureUseAsRow(context);
+            configureAppearanceEditorRow(context);
             configureSearch();
+        }
+
+        /**
+         * The Layout row opens no page: it brings the launcher forward with the Layout editor over
+         * the place on screen, the same door the corner tab's Layout glyph is.
+         */
+        private void configureLayoutEditorRow(@NonNull Context context) {
+            Preference row = findPreference("layout_editor");
+            if (row == null) return;
+            row.setOnPreferenceClickListener(preference -> {
+                Intent intent = new Intent(context, com.termux.app.TermuxActivity.class);
+                intent.putExtra(com.termux.app.TermuxActivity.EXTRA_LAYOUT_EDITOR, true);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                startActivity(intent);
+                return true;
+            });
+        }
+
+        /**
+         * The "Appearance" row: the Appearance editor over the live launcher, through the same
+         * intent every other door sends (SPEC §3.1). It navigates away rather than to a page.
+         */
+        private void configureAppearanceEditorRow(@NonNull Context context) {
+            Preference row = findPreference("appearance_editor");
+            if (row == null) return;
+            row.setOnPreferenceClickListener(preference -> {
+                Intent intent = new Intent(context, com.termux.app.TermuxActivity.class);
+                intent.putExtra(com.termux.app.TermuxActivity.EXTRA_SURFACE_EDITOR, true);
+                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                startActivity(intent);
+                return true;
+            });
         }
 
         @Override

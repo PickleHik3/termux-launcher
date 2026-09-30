@@ -112,7 +112,6 @@ import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.PlaceSizePreferences;
 import com.termux.app.surfaces.SurfaceEditorController;
-import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.az.AzBarFrame;
 import com.termux.app.launcher.az.AzBarHostGeometry;
@@ -846,8 +845,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new SurfaceEditorController(new SurfaceEditorHost());
 
     /**
-     * The Layout editor overlay, the surface editor's sibling: where a place's elements sit rather
-     * than how its surfaces look. Only one of the two is ever open.
+     * Layout mode of the one editor: where a place's elements sit rather than how its surfaces
+     * look. {@link #mSurfaceEditor} hosts it, lending it the frame's canvas and the bottom area's
+     * tray; its session opens and closes with that editor.
      */
     private final com.termux.app.layouteditor.LayoutEditorController mLayoutEditor =
         new com.termux.app.layouteditor.LayoutEditorController(new LayoutEditorHost());
@@ -3266,6 +3266,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : Color.TRANSPARENT;
             }
 
+            @Override public int paneGlassVeil(@NonNull Rect rootRect) {
+                // The terminal pane band (appearance-layout-editor SPEC §2): the scheme's default
+                // foreground and its dim, veiled toward the terminal's own background.
+                if (mChrome == null) return Color.TRANSPARENT;
+                int foreground = com.termux.terminal.TerminalColors.COLOR_SCHEME
+                    .mDefaultColors[com.termux.terminal.TextStyle.COLOR_INDEX_FOREGROUND];
+                return mChrome.ink().terminalPane(rootRect, paneGlassTintColor(),
+                    com.termux.app.chrome.OnGlass.opaque(resolveTerminalSurfaceColor()),
+                    com.termux.app.chrome.OnGlass.opaque(foreground),
+                    com.termux.app.terminal.PaneGlass.dimTerminalInk(foreground)).veil;
+            }
+
             @Override public boolean paneGlassRimWanted() {
                 return mChrome.glass().look().gradientRim;
             }
@@ -3382,6 +3394,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private com.termux.app.chrome.GlassRefraction.Look currentFancierGlassLook() {
         if (mPreferences == null) return null;
+        // Lazy mode turns the refraction look off with the other effects.
+        if (isLazyModeEnabled()) return null;
         if (!com.termux.app.chrome.FancierGlassPolicy.active(Build.VERSION.SDK_INT,
                 mPreferences.isFancierGlassEnabled(), shouldUseManagedWallpaperBlurSource())) {
             return null;
@@ -3609,6 +3623,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The self-drawn backdrop covers that background, so it carries the same dim over its own
         // frame — set here, with the root's, so the two can never read differently.
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.setDimColor(color);
+        // Soft wallpaper's blur half rides on the same view (SPEC §3.4); its dim is in color.
+        com.termux.app.surfaces.SoftWallpaper.apply(mWallpaperBackdropView, mPreferences);
     }
 
     private void applyTerminalStatusBarSurfaceColor(boolean showSurface, int terminalSurfaceColor) {
@@ -5861,7 +5877,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // band above it. Both sample the one shared frame at the host's own position, so the
             // wallpaper under the keys is the same picture on either side of the handoff.
             if (isUnifiedAccessoryBackdropReady(state)) {
-                surfaceHost.setBackground(null);
+                // No glass of its own, but the keyboard band's veil: over the unified glass,
+                // under the keys, on the host's bounds only, so the dock rows are never veiled.
+                surfaceHost.setBackground(buildInAppKeyboardVeilOnly(state, surfaceHost));
                 clearInAppKeyboardBackdrop();
             } else {
                 surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
@@ -5994,7 +6012,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .withSeams(com.termux.app.chrome.ChromeEdgeRule.seams(capsule, keyboardOuter,
                 capsule ? 0 : keyboardJoined))
             .withTintColor(schemeBackground == null ? null : withAlphaComponent(schemeBackground,
-                Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)));
+                Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)))
+            .withBand(noteInAppKeyboardBand(surfaceHost));
         com.termux.app.chrome.SharedFrameDrawable backdrop = null;
         if (ChromePolicy.dockBlurEnabled(blurRadiusDp)) {
             Bitmap frame = obtainInAppKeyboardBackdropFrame(state, surfaceHost);
@@ -6011,6 +6030,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // subsequently shorter keyboard. Decoration must follow content geometry, never define it.
         return new LayoutNeutralDrawable(com.termux.app.chrome.GlassStack.build(mChrome.glass(),
             spec, getResources().getDisplayMetrics().density, backdrop));
+    }
+
+    /**
+     * The docked keyboard's host while the unified dock glass is its material: the keyboard band's
+     * veil alone, measured on the keyboard's slice of that glass, or null when none is needed.
+     */
+    @Nullable
+    private Drawable buildInAppKeyboardVeilOnly(@NonNull ChromeSpec state, @NonNull View surfaceHost) {
+        com.termux.app.chrome.GlassBackdropCache.Band band = noteInAppKeyboardBand(surfaceHost);
+        if (band == null) return null;
+        Drawable veil = mChrome.glass().veilOnlyLayer(band, inAppKeyboardGlassAlpha(state), 0f,
+            defaultDockGlassFootFraction(), false);
+        return veil == null ? null : new LayoutNeutralDrawable(veil);
+    }
+
+    /**
+     * Asks the keyboard band (appearance-layout-editor SPEC §2) what the host's glass has to become
+     * for a letter key's label to read on its cap, and names the band for the surface to draw
+     * that veil. Measured at the host's laid-out rect, which ignores the stack's travel and the
+     * editor's scale alike; null, and no veil, before the host is laid out or the keyboard view
+     * exists. The veil lands on the next build when this one changes it.
+     */
+    @Nullable
+    private com.termux.app.chrome.GlassBackdropCache.Band noteInAppKeyboardBand(
+            @NonNull View surfaceHost) {
+        int[] inks = mInAppKeyboard != null ? mInAppKeyboard.letterKeyLegibilityInks() : null;
+        if (inks == null || surfaceHost.getWidth() <= 0 || surfaceHost.getHeight() <= 0)
+            return null;
+        int[] origin = new int[2];
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(surfaceHost, origin, new int[2]);
+        Rect host = new Rect(origin[0], origin[1],
+            origin[0] + surfaceHost.getWidth(), origin[1] + surfaceHost.getHeight());
+        mChrome.ink().onFixedInk(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD, host,
+            inks[0], inks[0], inks[1], com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+        return com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD;
     }
 
     /**
@@ -7959,8 +8013,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mCommandPalette.refreshAppearance();
         mChrome.onConfigurationChanged();
         if (mLiveWallpaperHost != null) mLiveWallpaperHost.onConfigurationChanged();
-        // The Layout editor's miniature shows the place behind it, so it turns with the phone.
-        mLayoutEditor.onPlaceOrientationChanged();
+        // Layout mode's canvas defaults to the orientation the phone is in, so it turns with it.
+        mSurfaceEditor.onPlaceOrientationChanged();
         scheduleOrientationGeometryPass();
     }
 
@@ -8640,9 +8694,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * a band of that row's plank and the glass under both of them is the plank's, so the capsule
      * this host carries everywhere else is put away.
      *
-     * <p>Minimised, the index has no band anywhere: the dock's row and this host both go, and the
-     * letters live in the pull tab's layer over the canvas ({@link AzPullTabLayer}), which is where
-     * the one scrub callback moves to.
+     * <p>The minimised pull tab is gone from the arrangement (2026-09-30), so the tab's layer is
+     * only ever put away here; the layer itself is left for a later cleanup.
      *
      * @return whether a host appeared or went, which the content's edge padding is derived from
      */
@@ -8650,7 +8703,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         FrameLayout host = findViewById(R.id.place_az_bar_host);
         if (host == null) return false;
         PlaceLayout layout = currentPlaceLayout();
-        boolean tabShown = mPreferences != null && PlaceChromePolicy.azTabShown(layout);
+        boolean tabShown = false;
         boolean lettersShown = mPreferences != null && PlaceChromePolicy.azRowShown(layout);
         PlaceLayout.Edge edge = lettersShown || tabShown ? azBarEdge() : PlaceLayout.Edge.BOTTOM;
         boolean wantHost = lettersShown && edge != PlaceLayout.Edge.BOTTOM;
@@ -10295,9 +10348,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         String initialSection = intent.getStringExtra(EXTRA_SURFACE_EDITOR_SECTION);
         intent.removeExtra(EXTRA_SURFACE_EDITOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR_SECTION);
-        // Only one editor holds the screen at a time; the Layout editor is already up.
-        if (mLayoutEditor.isActive())
-            return;
         mSurfaceEditor.enter(initialSection);
     }
 
@@ -10330,15 +10380,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         openLayoutEditor(place);
     }
 
-    /** Opens the Layout editor on one place, or on the place the user is looking at for null. */
+    /**
+     * Opens the editor in Layout mode on one place, or on the place the user is looking at for
+     * null (SPEC §3.1: the Layout glyph and sheet item open the same screen in Layout mode).
+     */
     void openLayoutEditor(@Nullable com.termux.app.wall.PaneWallPage place) {
         // The wall has to be built before the editor can be held on a place, and a cold start
         // delivers the intent while the root view is still being laid out.
         View root = findViewById(R.id.activity_termux_root_view);
-        com.termux.app.wall.PaneWallPage target = place;
-        if (root != null) root.post(() -> mLayoutEditor.enter(
-            target == null ? currentWallPlace() : target));
-        else mLayoutEditor.enter(target == null ? currentWallPlace() : target);
+        if (root != null) root.post(() -> mSurfaceEditor.enterLayout(place));
+        else mSurfaceEditor.enterLayout(place);
     }
 
     /** The activity's half of the Layout editor's seam: its views, the places, the chrome pass. */
@@ -10346,10 +10397,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             implements com.termux.app.layouteditor.LayoutEditorController.Host {
         @NonNull @Override public Context context() {
             return TermuxActivity.this;
-        }
-
-        @Nullable @Override public <T extends View> T findView(int viewId) {
-            return findViewById(viewId);
         }
 
         @Nullable @Override public PlaceLayoutStore places() {
@@ -10383,16 +10430,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return getTermuxThemeColor(attr, fallbackRes);
         }
 
-        @Override public boolean isSurfaceEditorActive() {
-            return mSurfaceEditor.isActive();
-        }
-
         // The dock's own corner, resolved as the dock draws it — the configured Corners value or
         // the follow-the-style radius — unclamped, for the miniature to scale onto its cards.
         @Override public float dockCornerRadiusDp() {
             float density = getResources().getDisplayMetrics().density;
             return density <= 0f ? 0f
                 : getDockLayout().capsuleCornerRadiusPx(Integer.MAX_VALUE) / density;
+        }
+
+        // The pinned apps as laid out: the dock's row, or the rail or off-dock row where the
+        // place stands them. Their thickness is the short side either way, which is what the
+        // dock's height scale sizes.
+        @Override public int measuredDockHeightDp() {
+            int px = shownThicknessPx(R.id.apps_bar_row_host);
+            if (px <= 0) px = shownThicknessPx(R.id.place_apps_bar_host);
+            float density = getResources().getDisplayMetrics().density;
+            return px <= 0 || density <= 0f ? -1 : Math.round(px / density);
+        }
+
+        @Override public int measuredKeyboardHeightDp() {
+            View keys = findViewById(R.id.inapp_keyboard_view_host);
+            float density = getResources().getDisplayMetrics().density;
+            if (keys == null || !keys.isShown() || keys.getHeight() <= 0 || density <= 0f)
+                return -1;
+            return Math.round(keys.getHeight() / density);
+        }
+
+        private int shownThicknessPx(int viewId) {
+            View view = findViewById(viewId);
+            if (view == null || !view.isShown()) return -1;
+            return Math.min(view.getWidth(), view.getHeight());
         }
     }
 
@@ -10418,12 +10485,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mInAppKeyboard;
         }
 
-        @Nullable @Override public View attachedInAppKeyboardView() {
-            return mAttachedInAppKeyboardView;
-        }
-
         @Override public boolean isInAppKeyboardShown() {
             return TermuxActivity.this.isInAppKeyboardShown();
+        }
+
+        @Override public boolean showInAppKeyboardForEditor() {
+            // The editor's frame offers the keyboard as a tap target, so it is raised for the
+            // session; one switched off stays off, as it does for every other door.
+            if (mInAppKeyboard == null || !mInAppKeyboard.isEnabled()
+                || mInAppKeyboard.isTurnedOff())
+                return false;
+            mInAppKeyboard.show(
+                com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
+            return mInAppKeyboard.isVisible();
+        }
+
+        @Override public void hideInAppKeyboardForEditor() {
+            if (mInAppKeyboard != null)
+                mInAppKeyboard.hide(
+                    com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.TOOL);
         }
 
         @Override public boolean isFloatingDock() {
@@ -10462,6 +10542,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.refreshTerminalWindowBar();
         }
 
+        @Override public void refreshTerminalPalette() {
+            if (mTermuxTerminalSessionActivityClient != null)
+                mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
+        }
+
         @Override public void applyGeometryPreview(boolean commit) {
             updateAppLauncherBarHeight();
             // Without commit the dock/keyboard visuals still track the drag live; only the
@@ -10481,13 +10566,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         }
 
-        @Override @Nullable public int[] terminalFrameRectInWindow() {
+        @Override @Nullable public int[] terminalFrameRectInRoot() {
             View host = findViewById(R.id.terminal_surface_host);
-            if (host == null || host.getVisibility() != View.VISIBLE
+            View root = findViewById(R.id.terminal_root_container);
+            if (host == null || root == null || host.getVisibility() != View.VISIBLE
                 || host.getWidth() <= 0 || host.getHeight() <= 0)
                 return null;
+            // In the root container's own unscaled space: the editor scales that container, and a
+            // window location would fold the scale into a rect laid out without it.
             int[] location = new int[2];
-            host.getLocationInWindow(location);
+            if (!com.termux.app.surfaces.SurfaceEditorController.offsetInRoot(host, root, location))
+                return null;
             // The same two numbers the border overlay and the pane host are laid out with, so the
             // editor's outline cannot disagree with the frame about where the frame is.
             int horizontal = terminalFrameInsetPx(false);
@@ -10510,41 +10599,89 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
         }
 
-        @Override public void openKeyboardColors() {
-            startActivity(SettingsActivity.createFragmentIntent(TermuxActivity.this,
-                KeyboardColorSchemeFragment.class, R.string.settings_keyboard_colors_title));
+        @Nullable @Override
+        public com.termux.app.layouteditor.LayoutEditorController layoutEditor() {
+            return mLayoutEditor;
         }
 
-        @Override @Nullable public ExtraKeysView liveExtraKeysView() {
-            return getExtraKeysView();
+        // Passthrough mode leaves the wallpaper to the system, outside the editor's scaled frame;
+        // for the editor's lifetime the frame paints it itself. Off the main thread.
+        @Nullable @Override public Drawable readEditorWallpaper() {
+            boolean passthrough = shouldUseWallpaperPassthroughMode();
+            Logger.logDebug(LOG_TAG, "Editor wallpaper: passthrough=" + passthrough);
+            if (!passthrough) return null;
+            Context context = TermuxActivity.this;
+            java.io.File exact =
+                com.termux.app.chrome.WallpaperPictureReader.managedWallpaperExactFile(context);
+            boolean managedOnScreen = com.termux.app.chrome.WallpaperPictureReader
+                .managedPictureOnScreen(context, mPreferences);
+            Logger.logDebug(LOG_TAG, "Editor wallpaper: managedOnScreen=" + managedOnScreen
+                + " exact=" + exact.isFile());
+            if (managedOnScreen) {
+                Drawable managed = decodeEditorWallpaper(exact);
+                if (managed != null) return managed;
+            }
+            try {
+                WallpaperManager manager = WallpaperManager.getInstance(context);
+                // A live wallpaper has no still to stand in for it; the system's stays.
+                if (manager.getWallpaperInfo() == null) {
+                    Drawable system = manager.getDrawable();
+                    Logger.logDebug(LOG_TAG, "Editor wallpaper: system drawable="
+                        + (system != null));
+                    if (system != null) return system;
+                }
+            } catch (Exception e) {
+                // No permission to read it, or no wallpaper service: try the launcher's own copy.
+                Logger.logDebug(LOG_TAG, "Editor wallpaper: system read failed: " + e);
+            }
+            Drawable fallback = exact.isFile() ? decodeEditorWallpaper(exact) : null;
+            Logger.logDebug(LOG_TAG, "Editor wallpaper: exact fallback=" + (fallback != null));
+            return fallback;
         }
 
-        @Override public void commitExtraKeyColors(
-                @NonNull java.util.Map<Integer,
-                    com.termux.shared.termux.extrakeys.ExtraKeyColorRole> colorsByKeyIndex) {
-            writeExtraKeyColors(colorsByKeyIndex);
+        @Nullable
+        private Drawable decodeEditorWallpaper(@NonNull java.io.File file) {
+            if (!file.isFile()) return null;
+            try {
+                BitmapFactory.Options bounds = new BitmapFactory.Options();
+                bounds.inJustDecodeBounds = true;
+                BitmapFactory.decodeFile(file.getAbsolutePath(), bounds);
+                android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+                int longSide = Math.max(metrics.widthPixels, metrics.heightPixels);
+                int sample = 1;
+                while (Math.max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= longSide)
+                    sample *= 2;
+                BitmapFactory.Options options = new BitmapFactory.Options();
+                options.inSampleSize = sample;
+                Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+                return bitmap == null ? null
+                    : new android.graphics.drawable.BitmapDrawable(getResources(), bitmap);
+            } catch (Exception | OutOfMemoryError e) {
+                return null;
+            }
         }
 
-        @Override @NonNull public Drawable presetGlassSurface(float barAlpha, int grainPercent,
-                                                              float cornerRadiusPx,
-                                                              boolean withRim,
-                                                              @NonNull com.termux.app.chrome.GlassLook look) {
-            return mChrome.glass().withLook(look).surface(barAlpha, 0f, 1f, true, grainPercent,
-                cornerRadiusPx, withRim);
+        @Override public int editorWallpaperDimColor() {
+            return wallGroundColor();
         }
 
-        @Override @NonNull public com.termux.app.chrome.WallpaperPicture wallpaperPicture() {
-            return TermuxActivity.this.wallpaperPicture();
-        }
+        @Nullable private Drawable mEditorSavedWindowBackground;
+        private boolean mEditorWindowOpaque;
 
-        @Override public void openWallpaperPicker() {
-            TermuxActivity.this.openWallpaperPicker();
-        }
-
-        @Override public boolean fancierGlassActive() {
-            // Live, not the apply's snapshot: the card is built when the editor opens, and the
-            // wallpaper may have been picked since the last pass.
-            return currentFancierGlassLook() != null;
+        @Override public void setEditorWindowOpaque(boolean opaque) {
+            android.view.Window window = getWindow();
+            if (window == null || opaque == mEditorWindowOpaque) return;
+            if (opaque) {
+                mEditorSavedWindowBackground = window.getDecorView().getBackground();
+                window.setBackgroundDrawable(new ColorDrawable(getTermuxThemeColor(
+                    com.google.android.material.R.attr.colorSurface,
+                    R.color.termux_surface_base)));
+            } else {
+                window.setBackgroundDrawable(mEditorSavedWindowBackground != null
+                    ? mEditorSavedWindowBackground : new ColorDrawable(Color.TRANSPARENT));
+                mEditorSavedWindowBackground = null;
+            }
+            mEditorWindowOpaque = opaque;
         }
     }
 
@@ -14143,19 +14280,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
-                if (!mLayoutEditor.isActive()) return false;
-                mLayoutEditor.requestClose();
-                return true;
-            }
-            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                // Back to the home screen means leaving the editor — through its own
-                // unsaved-changes rule, never by discarding. A stop leaves it standing.
-                if (reason == com.termux.app.chrome.OverlayRegistry.CloseReason.HOME)
-                    mLayoutEditor.requestExit();
-            }
-        });
-        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
-            @Override public boolean onBack() {
                 if (!mSurfaceEditor.isActive()) return false;
                 mSurfaceEditor.requestClose();
                 return true;
@@ -15636,26 +15760,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (lens != null) lens.setPlaceAccents(byPlace);
     }
 
-    /**
-     * Writes the colours the Appearance editor picked into the stored key row and rebuilds the row
-     * from it, so what is on screen and what is in the file are the same thing. The editor always
-     * picks from the first key page — the row and the column are both built from it.
-     */
-    private void writeExtraKeyColors(@NonNull java.util.Map<Integer,
-            com.termux.shared.termux.extrakeys.ExtraKeyColorRole> colorsByKeyIndex) {
-        if (colorsByKeyIndex.isEmpty()) return;
-        String propertyKey = TermuxTerminalExtraKeys.PAGE_PROPERTY_KEYS[0];
-        java.util.Properties properties =
-            com.termux.app.settings.TermuxPropertiesFile.load(this);
-        String value = properties.getProperty(propertyKey);
-        if (value == null) value = TermuxTerminalExtraKeys.PAGE_DEFAULT_VALUES[0];
-        com.termux.app.terminal.io.ExtraKeysLayoutModel model =
-            com.termux.app.terminal.io.ExtraKeysLayoutModel.parse(value);
-        if (!model.applyColorsByIndex(colorsByKeyIndex)) return;
-        com.termux.app.settings.TermuxPropertiesFile.write(propertyKey, model.serialize());
-        reloadExtraKeysFromProperties();
-    }
-
     public ViewPager getTerminalToolbarViewPager() {
         return (ViewPager) findViewById(R.id.terminal_toolbar_view_pager);
     }
@@ -16425,7 +16529,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void openSurfaceEditor() {
         // The look is every place's, so the editor opens over whatever place is on screen and
         // what it moves lands everywhere.
-        if (mLayoutEditor.isActive()) return;
         mSurfaceEditor.enter();
     }
 

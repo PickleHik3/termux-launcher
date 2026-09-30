@@ -50,6 +50,15 @@ public final class ChromeRenderer {
 
         @Nullable TermuxAppSharedPreferences preferences();
 
+        /**
+         * The user's one legibility control, which multiplies every band's contrast target. Read
+         * from the preferences' "Terminal contrast" choice; default while there are none.
+         */
+        @NonNull
+        default LegibilityLevel legibilityLevel() {
+            return LegibilityLevel.of(preferences());
+        }
+
         float dpToPx(float dp);
 
         // ---- theme values the glass material is mixed from

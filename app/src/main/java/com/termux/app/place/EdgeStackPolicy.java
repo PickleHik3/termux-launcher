@@ -262,13 +262,13 @@ public final class EdgeStackPolicy {
     }
 
     /**
-     * Whether an element takes a band on its edge: shown, and not the alphabets index standing
-     * minimised. The minimised index is a pull tab laid over the content ({@link
-     * PlaceLayout#azMinimised}) — on screen, but claiming nothing — so it is in no stack, costs
-     * the content no inset and puts nothing on the dock.
+     * Whether an element takes a band on its edge, which is whether it is shown: every element on
+     * screen stands in its edge's stack. The alphabets index's minimised pull tab, the one form
+     * that was on screen without claiming a band, is gone, so the two questions have one answer;
+     * the name stays because callers ask about the band, not about visibility.
      */
     public static boolean claimsBand(@NonNull PlaceLayout layout, @NonNull Element element) {
-        return isShown(layout, element) && !(element == Element.AZ && layout.azMinimised);
+        return isShown(layout, element);
     }
 
     /**
@@ -468,13 +468,12 @@ public final class EdgeStackPolicy {
     /**
      * The gaps under the keyboard one element may be dropped in: one outside the outermost band
      * standing there, one between each pair and one against the keyboard, or the one gap a bare
-     * side has. None for an element that may not stand there, and none for the index minimised
-     * to its tab, which claims no band anywhere.
+     * side has. None for an element that may not stand there.
      */
     @NonNull
     public static List<Drop> underKeyboardTargets(@NonNull PlaceLayout layout,
                                                   @NonNull Element element) {
-        if (!element.underKeyboardAllowed() || (element == Element.AZ && layout.azMinimised))
+        if (!element.underKeyboardAllowed())
             return Collections.emptyList();
         List<Element> on = underKeyboard(layout);
         int slots = on.contains(element) ? on.size() - 1 : on.size();

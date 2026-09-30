@@ -38,6 +38,11 @@ import com.termux.app.chrome.wallpaper.LiveWallpaperFrames;
  * {@link GlassRefraction} as uniforms and the frame is drawn through its program instead — bent
  * under the slab's rim and lit along it — in the one pass the plain draw took. The tint and the
  * grain stay where they are: they are the slab's own surface, not the picture behind it.
+ *
+ * <p>A terminal pane is also a legibility band ({@link #setVeilSource}): over the tint it draws the
+ * veil that keeps the palette's foreground readable on whatever wallpaper is under it, under the
+ * grain and the rim, in addition to the user's own terminal opacity — the order
+ * {@code GlassSurfaceFactory} gives a chrome band's veil.
  */
 public final class PaneGlassBackdropView extends View {
 
@@ -107,6 +112,18 @@ public final class PaneGlassBackdropView extends View {
     /** The program the frame draws through while {@link #mLook} is set and the phone runs one. */
     @Nullable private GlassRefraction.Program mProgram;
     @Nullable private GlassRefraction.Program mPreviousProgram;
+    /** Answers this slab's veil; null for a slab nobody measures. See {@link #setVeilSource}. */
+    @Nullable private PaneSurfaceStyle mVeilSource;
+    /**
+     * The terminal pane's veil: the terminal's own background at the smallest alpha that lets the
+     * palette's worst foreground clear its target here. Drawn over the tint, under the grain and
+     * the rim — where it was measured, and in addition to the user's opacity.
+     */
+    private int mVeilColor = android.graphics.Color.TRANSPARENT;
+    /** The laid-out rect {@link #mVeilColor} was asked for. */
+    private final Rect mVeilRect = new Rect();
+    private final int[] mVeilLocation = new int[2];
+    private final int[] mVeilRootLocation = new int[2];
 
     public PaneGlassBackdropView(@NonNull Context context) {
         this(context, null);
@@ -212,6 +229,53 @@ public final class PaneGlassBackdropView extends View {
         mRimRadiusPx = radiusPx;
         mRim = radiusPx < 0f ? null : style.paneGlassRim(radiusPx);
         invalidate();
+    }
+
+    /**
+     * Who says how much veil this slab needs, or null for a slab nobody measures (a wall page's).
+     * Set by {@link PaneGlass#apply(PaneSurfaceStyle, View, PaneGlassBackdropView, float, boolean)}
+     * for a terminal pane, whose ink is the palette's and has to read on this glass whatever the
+     * wallpaper does; asked again at once, so a dress after a wallpaper, palette or legibility
+     * change lands its new veil in the same pass.
+     */
+    public void setVeilSource(@Nullable PaneSurfaceStyle source) {
+        mVeilSource = source;
+        if (refreshVeil()) invalidate();
+    }
+
+    /** The veil this slab is drawn with right now, for tests and the departure card. */
+    public int veilColor() {
+        return mVeilColor;
+    }
+
+    /**
+     * Re-asks the veil for where this slab is laid out now. The rect is the laid-out one, which
+     * ignores every transform — the root's editor scale among them — and the wall page's slide
+     * too: a page sliding keeps the veil it had until it settles, rather than re-sampling the
+     * wallpaper on every frame of the slide.
+     *
+     * @return true when the veil changed
+     */
+    private boolean refreshVeil() {
+        int veil = android.graphics.Color.TRANSPARENT;
+        if (mVeilSource != null && getWidth() > 0 && getHeight() > 0) {
+            GlassAnchor.layoutOriginOnScreen(this, mVeilLocation, mVeilRootLocation);
+            mVeilRect.set(mVeilLocation[0], mVeilLocation[1],
+                mVeilLocation[0] + getWidth(), mVeilLocation[1] + getHeight());
+            veil = mVeilSource.paneGlassVeil(mVeilRect);
+        } else {
+            mVeilRect.setEmpty();
+        }
+        if (veil == mVeilColor) return false;
+        mVeilColor = veil;
+        return true;
+    }
+
+    /** True when this slab has moved or resized since its veil was asked for. */
+    private boolean veilRectMoved() {
+        GlassAnchor.layoutOriginOnScreen(this, mVeilLocation, mVeilRootLocation);
+        return mVeilRect.left != mVeilLocation[0] || mVeilRect.top != mVeilLocation[1]
+            || mVeilRect.width() != getWidth() || mVeilRect.height() != getHeight();
     }
 
     /** Recompute the frame matrix on the next draw; call after this pane has moved. */
@@ -474,6 +538,14 @@ public final class PaneGlassBackdropView extends View {
         } else {
             if (android.graphics.Color.alpha(mTintColor) > 0) {
                 mTintPaint.setColor(mTintColor);
+                canvas.drawRect(0f, 0f, width, height, mTintPaint);
+            }
+            // A pane that moved or resized (a split, a divider drag, the keyboard) re-asks for its
+            // veil here: none of those re-dress it, and the veil is memoised per rect, so a pane
+            // that did not move costs one walk up the tree.
+            if (mVeilSource != null && veilRectMoved()) refreshVeil();
+            if (android.graphics.Color.alpha(mVeilColor) > 0) {
+                mTintPaint.setColor(mVeilColor);
                 canvas.drawRect(0f, 0f, width, height, mTintPaint);
             }
             if (mGrain != null) {

@@ -25,12 +25,14 @@ public class GlassRefractionTest {
 
     @Test
     public void theDefaultLookIsTheDocksOwnRefraction() {
-        // These three were literals in the activity's shader setup: 20 dp band, 9 dp pull, 0.16
-        // of light. The default mode has to keep drawing exactly them.
+        // The band and the pull were literals in the activity's shader setup: 20 dp band, 9 dp
+        // pull. The rim light is the "medium" depth every Look declares (18% of MAX_RIM, spec
+        // appearance-layout-editor §4), since the 1dp drawable rim carries the edge and the
+        // shader only adds a whisper on top.
         GlassRefraction.Look look = GlassRefraction.Look.DEFAULT;
         assertEquals(20f * DENSITY, look.bandPx(DENSITY), 1e-4f);
         assertEquals(9f * DENSITY, look.strengthPx(DENSITY), 1e-4f);
-        assertEquals(0.16f, look.rim(), 1e-4f);
+        assertEquals(0.18f * GlassRefraction.Look.MAX_RIM, look.rim(), 1e-4f);
     }
 
     @Test
@@ -54,12 +56,12 @@ public class GlassRefractionTest {
 
     @Test
     public void aLookIsAValue() {
-        GlassRefraction.Look one = new GlassRefraction.Look(9, 20, 32);
+        GlassRefraction.Look one = new GlassRefraction.Look(9, 20, 18);
         assertEquals(one, GlassRefraction.Look.DEFAULT);
         assertEquals(one.hashCode(), GlassRefraction.Look.DEFAULT.hashCode());
-        assertNotEquals(one, new GlassRefraction.Look(10, 20, 32));
-        assertNotEquals(one, new GlassRefraction.Look(9, 21, 32));
-        assertNotEquals(one, new GlassRefraction.Look(9, 20, 33));
+        assertNotEquals(one, new GlassRefraction.Look(10, 20, 18));
+        assertNotEquals(one, new GlassRefraction.Look(9, 21, 18));
+        assertNotEquals(one, new GlassRefraction.Look(9, 20, 19));
     }
 
     @Test

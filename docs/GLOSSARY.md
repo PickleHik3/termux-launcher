@@ -14,8 +14,8 @@ Related: [`CONTEXT.md`](../CONTEXT.md) (a pointer to this file), [`docs/adr/`](a
 
 **A–Z index**:
 The row or column of letters along an edge that jumps the app list to the apps beginning with a
-letter: scrub across it and the matches show. One of the Layout editor's elements, with three forms
-(on, off, and the minimised pull tab). See Minimised A–Z index and `docs/en/Launcher_Usage.md`.
+letter: scrub across it and the matches show. One of the Layout editor's elements: on an edge, or
+put away in the tray. See `docs/en/Launcher_Usage.md`.
 _Avoid_: alphabet bar (the Layout editor's file names still say `alphabets`), fast scroller
 
 **Base**:
@@ -207,9 +207,9 @@ _Avoid_: corner menu, pane menu, controls view
 
 **Element**:
 One piece of the arrangement the Layout editor shows or hides: the status bar, the pinned apps,
-the A–Z index, the extra keys — each on an edge, in an order, or put away in the Hidden tray, the
+the A–Z index, the extra keys — each on an edge, in an order, or put away in the tray, the
 status bar included now that paging is the border drag — and the keyboard,
-which has no edge and no order, only on or off. Along the bottom the dock's rows (not the status
+which has no edge and no order, only on or off (in the tray or out). Along the bottom the dock's rows (not the status
 bar) may stand **under the keyboard** instead of over it; with the keyboard down they are simply
 the bottom's outermost bands. The keyboard's on/off is the one switch the
 palette's **Keyboard on/off** flips (`keyboard_turned_off`), shared by both orientations and every
@@ -217,29 +217,28 @@ place; the last write wins, whichever door it came through.
 _Avoid_: bar (for the keyboard), widget, slot (the store's word for where an element stands)
 
 **Layout editor**:
-The editor for where the elements sit and how big they are: bars, dock, keyboard, widget
-grid, hidden or shown, plus dock height, keyboard height and keyboard chin. The layout is shared,
-so a change lands on every place; the miniature shows the place it was opened on. It shows one
-orientation with a toggle to the other. Entered from the corner tab or
-the long-press menu; Settings has no door to it.
+The editor for where the elements sit and how big they are: bars, dock, keyboard, widget grid,
+hidden or shown. It has no rows of controls (spec `project-docs/active/appearance-layout-editor`
+§3.5): a bar moves by its grip, anything is put away by dropping it in the **restore tray** and
+brought back by its chip there, and a tap selects an element and shows its **handle** — the dock's
+height, the keyboard's height and chin, Home's grid cells — with a readout in real units while it
+is held. The selected keyboard shows its type chips (docked, floating, split). The layout is
+shared, so a change lands on every place; the layout canvas shows the place it was opened on, one
+orientation at a time with a glyph toggle to the other. Entered from the corner tab's Layout glyph,
+the long-press menu, or the Layout row in Settings.
 _Avoid_: arrange mode, surface editor, place editor
 
-**Miniature**:
-The scaled model of a place's layout that the user drags elements around on. The same miniature
-is the Layout editor's canvas everywhere; there is no second one.
-_Avoid_: preview, thumbnail, overview
+**Layout canvas**:
+The scaled model of a place's layout that the user drags elements around on, in the Layout
+editor; there is no second one. Code still calls it the miniature (`LayoutCanvasView`) until
+it is redrawn from the layout element pack.
+_Avoid_: miniature (in new prose), preview, thumbnail, overview
 
-**Minimised A–Z index**:
-The A–Z index's third form beside On and Off, chosen per orientation in the Layout editor: a
-small glass **pull tab**, a half-pill flush against the physical screen's edge outside the pane's
-border — on the index's own side for a column, on the row's leading side for a top or bottom row
-— at the index's leading end past the corner square, claiming no band. Solid where the dock has no
-glass. A finger on the tab is the index's from its first touch — the border drag and the corner
-tab never see it — and sliding brings the letters out along their edge over the content and
-scrubs them in the same gesture, with the matches on the floating strip as for any index that
-stands without the pinned apps row. Release launches what it picked, if anything, and the letters
-tuck back away. Minimal mode puts the tab away with everything else.
-_Avoid_: collapsed index, hidden index (hidden is Off), drawer handle
+**Restore tray**:
+The strip under the layout canvas: one chip, with a struck-through eye, per hidden element, which
+brings the element back to the edge it was put away from; one short line when nothing is hidden;
+"Drop here to hide" while something is lifted.
+_Avoid_: Hidden box, shelf
 
 ### Tlstore
 

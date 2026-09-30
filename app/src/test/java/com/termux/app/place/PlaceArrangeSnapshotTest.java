@@ -102,6 +102,49 @@ public class PlaceArrangeSnapshotTest {
         assertFalse(prefs.getBoolean(TERMUX_APP.KEY_KEYBOARD_TURNED_OFF, false));
     }
 
+    /**
+     * A bar on the top edge is put back on the top edge. The snapshot used to read the pinned apps
+     * and the extra keys through the old three-way row placement, which has no top row, so Undo
+     * and Discard folded a top bar to the bottom and a move between the two was not unsaved.
+     */
+    @Test
+    public void aTopEdgeBarComesBackToTheTopAndATopBottomMoveIsSomethingToLose() {
+        places.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.TOP, Element.APPS));
+        places.setSlot(PORTRAIT, Element.EXTRA_KEYS, Slot.on(Edge.TOP, Element.EXTRA_KEYS));
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+        String entrySignature = entry.signature();
+
+        places.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS));
+        assertNotEquals("top to bottom is a move", entrySignature,
+            PlaceArrangeSnapshot.capture(places).signature());
+        places.setSlot(PORTRAIT, Element.EXTRA_KEYS, Slot.on(Edge.BOTTOM, Element.EXTRA_KEYS));
+
+        entry.restore(places);
+        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+        assertEquals(Edge.TOP, places.slot(PORTRAIT, Element.APPS).edge);
+        assertEquals(Edge.TOP, places.slot(PORTRAIT, Element.EXTRA_KEYS).edge);
+        assertEquals(Edge.TOP, places.resolve(PORTRAIT).slot(Element.APPS).edge);
+    }
+
+    /** A bar put away remembers the edge it left, so the tray can bring it back there. */
+    @Test
+    public void aHiddenBarRemembersItsEdge() {
+        places.setSlot(PORTRAIT, Element.EXTRA_KEYS, Slot.on(Edge.TOP, Element.EXTRA_KEYS));
+        places.setSlot(PORTRAIT, Element.EXTRA_KEYS,
+            places.slot(PORTRAIT, Element.EXTRA_KEYS).withHidden(true));
+        Slot away = places.slot(PORTRAIT, Element.EXTRA_KEYS);
+        assertTrue(away.hidden);
+        assertEquals(Edge.TOP, away.edge);
+
+        places.setSlot(PORTRAIT, Element.STATUS,
+            Slot.on(Edge.LEFT, Element.STATUS).withHidden(true));
+        assertEquals(Edge.LEFT, places.slot(PORTRAIT, Element.STATUS).edge);
+
+        // A bar that never went away with an edge remembered answers with its own default.
+        places.setAppsRow(PORTRAIT, RowPlacement.HIDDEN);
+        assertEquals(Edge.BOTTOM, places.slot(PORTRAIT, Element.APPS).edge);
+    }
+
     @Test
     public void aHiddenStatusBarIsSomethingToLoseAndComesBack() {
         PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);

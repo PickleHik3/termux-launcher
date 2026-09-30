@@ -172,7 +172,8 @@ public class TermuxApplication extends Application {
         Context context = getApplicationContext();
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
         if (preferences == null || !preferences.isTerminalDynamicColorsEnabled()) return;
-        TerminalContrastLevel level = preferences.getTerminalContrastLevel();
+        TerminalContrastLevel level =
+            com.termux.app.chrome.LegibilityLevel.terminalContrast(preferences);
         Configuration effectiveConfig = withPinnedNightMode(newConfig);
         ThemeTemplates.exportPaletteAndRunPassAsync(context, () -> {
             Context configuredContext = context.createConfigurationContext(effectiveConfig);

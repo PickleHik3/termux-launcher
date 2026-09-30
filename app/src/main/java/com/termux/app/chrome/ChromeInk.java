@@ -64,6 +64,33 @@ import java.util.Map;
  * the other half of the same fact: it continues the pane's material but carries no content, so it
  * is nobody's band and asks for no veil of its own.</p>
  *
+ * <h3>Bands whose ink is not the chrome's</h3>
+ * <p>Two bands stand outside the ink half of all this: the terminal pane
+ * ({@link GlassBackdropCache.Band#TERMINAL_PANE}) and the in-app keyboard
+ * ({@link GlassBackdropCache.Band#KEYBOARD}). The terminal's foreground belongs to its palette and a
+ * key label to its keyboard theme, and neither is re-toned to suit a wallpaper, so these bands are
+ * answered with a veil alone ({@link OnGlass#resolveFixedInk}), up to the opaque ground their ink
+ * was authored for. They still vote: the polarity is decided from what <em>every</em> band stands
+ * on, and a terminal filling most of the screen is most of what the chrome is seen against. They
+ * never take the polarity back, because they have no ink to flip. A split window is several rects
+ * of the one pane band, each memoised here on its own rect ({@link #terminalPane}); the band's vote
+ * is the mean of its panes, so a split cannot outvote the rest of the chrome.</p>
+ *
+ * <h3>How hard, and where</h3>
+ * <p>Every target a band asks at is scaled by the user's one legibility control,
+ * {@link LegibilityLevel} (the "Terminal contrast" choice: body text at 3.0, 4.5 or 7.0), before
+ * anything is resolved. Callers keep asking in {@link OnGlass}'s tiers; the level is applied here,
+ * once, so no band can forget it.</p>
+ *
+ * <p>A band's rect is kept in the root container's own untransformed space, not on screen. The
+ * editor shows the launcher scaled down inside a frame by scaling {@code terminal_root_container},
+ * which carries the wallpaper backdrop with it, so a band drawn at three quarters size is still
+ * over the wallpaper pixels it covers at full size. {@link #onGlass} and {@link #backdropUnder}
+ * take the screen rects their callers have always passed and map them back through the root's
+ * scale and translation ({@link #mapIntoRoot}); the new bands pass laid-out rects, which already
+ * ignore every transform. Either way the memo is keyed on the root-space rect, so a scale animation
+ * does not re-sample every frame.</p>
+ *
  * <p>Main thread only, like the rest of the chrome renderer.</p>
  */
 public final class ChromeInk {
@@ -102,7 +129,50 @@ public final class ChromeInk {
         /** The veil the band last derived; only for noticing a change worth a repaint. */
         int veil = Color.TRANSPARENT;
         boolean seen;
+        /**
+         * True for a band whose ink is fixed ({@link #onFixedInk}): {@link #darkInk} is its ink,
+         * {@link #secondInk} a second ink held to the same target, {@link #cap} what stands
+         * between the veil and both.
+         */
+        boolean fixedInk;
+        int secondInk;
+        int cap = Color.TRANSPARENT;
+        /** The last fixed-ink answer and every input it was searched from; null when stale. */
+        @Nullable OnGlass.Resolution fixedAnswer;
+        int fixedBackdrop;
+        int fixedVeilColor;
+        int fixedCap;
+        int fixedInkAsked;
+        int fixedSecondInkAsked;
+        double fixedTarget;
     }
+
+    /** One terminal pane's standing answer, remembered on its own rect. */
+    private static final class PaneAnswer {
+        int wallpaper;
+        boolean sampled;
+        int dim;
+        int tint;
+        int veilColor;
+        int ink;
+        int dimInk;
+        double target;
+        int flat;
+        @NonNull OnGlass.Resolution resolution;
+
+        PaneAnswer(@NonNull OnGlass.Resolution resolution) {
+            this.resolution = resolution;
+        }
+
+        boolean matches(int dim, int tint, int veilColor, int ink, int dimInk, double target) {
+            return this.dim == dim && this.tint == tint && this.veilColor == veilColor
+                && this.ink == ink && this.dimInk == dimInk
+                && Double.compare(this.target, target) == 0;
+        }
+    }
+
+    /** Panes a window can hold at once, and then some; an older rect is dropped, not an error. */
+    static final int MAX_PANE_ANSWERS = 8;
 
     /** What a band's glass is, as far as measuring it goes: opacity, foot, and the slice it draws. */
     private static final class BandGlass {
@@ -130,7 +200,13 @@ public final class ChromeInk {
     @NonNull private final Map<GlassBackdropCache.Band, Integer> mVotes =
         new EnumMap<>(GlassBackdropCache.Band.class);
 
+    /** Each terminal pane's answer by its root-space rect, eldest first. Cleared by {@link #invalidate}. */
+    @NonNull private final java.util.LinkedHashMap<Rect, PaneAnswer> mPanes =
+        new java.util.LinkedHashMap<>(MAX_PANE_ANSWERS, 0.75f, true);
+
     @Nullable private Polarity mPolarity;
+    /** The user's legibility control as last read; every target is scaled by it. */
+    @NonNull private LegibilityLevel mLevel = LegibilityLevel.DEFAULT;
     @ColorInt private int mBaseColor;
     @ColorInt private int mAccentColor;
     @ColorInt private int mDimColor;
@@ -138,6 +214,9 @@ public final class ChromeInk {
 
     @NonNull private final Rect mTmpSampleRect = new Rect();
     @NonNull private final int[] mTmpLocation = new int[2];
+    @NonNull private final int[] mTmpRootLocation = new int[2];
+    @NonNull private final int[] mTmpRootScratch = new int[2];
+    @NonNull private final Rect mTmpRootRect = new Rect();
 
     ChromeInk(@NonNull ChromeRenderer.Surfaces surfaces, @NonNull WallpaperBlurCache blurCache,
               @Nullable Runnable onVeilChanged) {
@@ -168,12 +247,14 @@ public final class ChromeInk {
      * caller in the frame would win.</p>
      *
      * @param band which chrome band the content sits on
-     * @param screenRect that band's rect in screen coordinates; a change re-samples the wallpaper
+     * @param screenRect that band's rect in screen coordinates; a change re-samples the wallpaper.
+     *     Mapped into the root container's untransformed space here ({@link #toRootSpace}), so a
+     *     scaled root is sampled over the wallpaper it really shows
      * @param darkInk the on-light ink for this content — the mode's dark role colour
      * @param paleInk the on-dark ink for it — the other role colour, for a band standing on a dark
      *     backdrop. Pass the same colour twice for content whose hue carries meaning of its own.
      * @param target one of {@link OnGlass#TARGET_BODY_TEXT}, {@link OnGlass#TARGET_LARGE_TEXT},
-     *     {@link OnGlass#TARGET_DECORATION}
+     *     {@link OnGlass#TARGET_DECORATION}, at the Default level; {@link LegibilityLevel} scales it
      */
     @NonNull
     public OnGlass.Resolution onGlass(@NonNull GlassBackdropCache.Band band,
@@ -182,12 +263,171 @@ public final class ChromeInk {
                                       double target) {
         readMode();
         Contract contract = contractFor(band);
-        contract.rect.set(screenRect);
+        toRootSpace(screenRect, contract.rect);
         contract.darkInk = darkInk;
         contract.paleInk = paleInk;
         contract.target = target;
+        contract.fixedInk = false;
         contract.seen = true;
         return resolveBand(band, contract);
+    }
+
+    /**
+     * {@link #onGlass} for a band whose ink is not the chrome's to choose: the in-app keyboard,
+     * whose key labels are its theme's and stand on its theme's key caps. The answer is a veil for
+     * the band's glass and nothing else — {@link OnGlass.Resolution#ink} is whichever given ink
+     * reads worst on it, never a re-toned one — and it is recorded exactly as {@link #onGlass}'s
+     * is, so {@link GlassSurfaceFactory} draws it from {@link #bandVeil} over the light model. The
+     * band still votes in the chrome's polarity; it just never takes one.
+     *
+     * @param rootRect the band's rect in the root container's untransformed space — a laid-out
+     *     rect, as {@link GlassAnchor#layoutOriginOnScreen} gives it; a change re-samples
+     * @param ink the band's ink (the key labels')
+     * @param secondInk a second ink held to the same target; {@code ink} again for none
+     * @param cap what stands between the band's glass and the ink — the key cap, alpha and all —
+     *     or {@link Color#TRANSPARENT}
+     * @param target an {@link OnGlass} tier at the Default level; {@link LegibilityLevel} scales it
+     */
+    @NonNull
+    public OnGlass.Resolution onFixedInk(@NonNull GlassBackdropCache.Band band,
+                                         @NonNull Rect rootRect, @ColorInt int ink,
+                                         @ColorInt int secondInk, @ColorInt int cap,
+                                         double target) {
+        readMode();
+        Contract contract = contractFor(band);
+        contract.rect.set(rootRect);
+        contract.darkInk = ink;
+        contract.paleInk = ink;
+        contract.secondInk = secondInk;
+        contract.cap = cap;
+        contract.target = target;
+        contract.fixedInk = true;
+        contract.seen = true;
+        return resolveBand(band, contract);
+    }
+
+    /**
+     * One terminal pane's answer: the veil its slab is drawn with so the palette's foreground
+     * reads at the body-text target and its dim foreground at the large-text target (both scaled
+     * by the legibility level), over the pane's own tint and in addition to it.
+     *
+     * <p>The pane has no light model — its glass is the frost, the terminal tint at the user's
+     * opacity, and grain — so what is measured is the wallpaper under the launcher's dim with the
+     * tint over it, and the veil moves that toward the terminal's own background. The foreground
+     * is never moved: it is the palette's, and the palette holds it to its own contrast against
+     * the opaque background this veil is allowed to climb to. The veil is drawn by
+     * {@code PaneGlassBackdropView} over the tint and under the rim.</p>
+     *
+     * <p>Memoised on the pane's rect, one entry per pane, so a split window's panes do not take
+     * turns re-sampling each other's wallpaper; any input moving, the rect moving, or
+     * {@link #invalidate} re-derives it. A pane asked about before the wallpaper is readable is
+     * answered on the mode's nominal glass and asks again next time, like every band.</p>
+     *
+     * @param rootRect the pane's laid-out rect, in the root container's untransformed space
+     * @param tint the pane's tint as drawn, alpha included (the user's terminal opacity); may be
+     *     transparent
+     * @param veilColor the terminal's own background, which the veil moves toward
+     * @param ink the palette's default foreground
+     * @param dimInk the same foreground dimmed, as the renderer draws faint text; held to the
+     *     large-text tier
+     */
+    @NonNull
+    public OnGlass.Resolution terminalPane(@NonNull Rect rootRect, @ColorInt int tint,
+                                           @ColorInt int veilColor, @ColorInt int ink,
+                                           @ColorInt int dimInk) {
+        readMode();
+        double target = mLevel.target(OnGlass.TARGET_BODY_TEXT);
+        PaneAnswer answer = mPanes.get(rootRect);
+        if (answer != null && answer.sampled
+                && answer.matches(mDimColor, tint, veilColor, ink, dimInk, target)) {
+            return answer.resolution;
+        }
+        int wallpaper;
+        boolean sampled;
+        if (answer != null && answer.sampled) {
+            wallpaper = answer.wallpaper;
+            sampled = true;
+        } else {
+            int read = mCache.sampleUncached(rootRect);
+            sampled = Color.alpha(read) != 0;
+            wallpaper = sampled ? read : mCache.fallbackWallpaper();
+        }
+        int flat = OnGlass.backdrop(wallpaper, mDimColor, tint);
+        // The normal foreground is body text; the dim one is text a program asked to recede, and
+        // is held to the large-text tier, scaled by the same level.
+        OnGlass.Resolution resolution = OnGlass.resolveFixedInk(flat, Color.TRANSPARENT, ink,
+            target, dimInk, mLevel.target(OnGlass.TARGET_LARGE_TEXT), veilColor);
+        if (answer == null) {
+            answer = new PaneAnswer(resolution);
+            if (mPanes.size() >= MAX_PANE_ANSWERS) {
+                java.util.Iterator<Rect> eldest = mPanes.keySet().iterator();
+                eldest.next();
+                eldest.remove();
+            }
+            mPanes.put(new Rect(rootRect), answer);
+        }
+        answer.resolution = resolution;
+        answer.wallpaper = wallpaper;
+        answer.sampled = sampled;
+        answer.dim = mDimColor;
+        answer.tint = tint;
+        answer.veilColor = veilColor;
+        answer.ink = ink;
+        answer.dimInk = dimInk;
+        answer.target = target;
+        answer.flat = flat;
+        vote(GlassBackdropCache.Band.TERMINAL_PANE, meanPaneVote());
+        return resolution;
+    }
+
+    /** Terminal panes remembered right now, for tests. */
+    int paneAnswerCountForTests() {
+        return mPanes.size();
+    }
+
+    /** The pane band's one vote: the mean of its panes' flat glass. */
+    @ColorInt
+    private int meanPaneVote() {
+        long red = 0, green = 0, blue = 0;
+        for (PaneAnswer pane : mPanes.values()) {
+            red += Color.red(pane.flat);
+            green += Color.green(pane.flat);
+            blue += Color.blue(pane.flat);
+        }
+        int count = Math.max(1, mPanes.size());
+        return Color.rgb((int) (red / count), (int) (green / count), (int) (blue / count));
+    }
+
+    /** The user's legibility control as this answers by it. */
+    @NonNull
+    public LegibilityLevel legibility() {
+        readMode();
+        return mLevel;
+    }
+
+    /**
+     * {@code tier} at the user's legibility level: what a band asking at that tier is really held
+     * to. For a caller that measures something on a band itself and must promise what the band
+     * promises.
+     */
+    public double target(double tier) {
+        readMode();
+        return mLevel.target(tier);
+    }
+
+    /**
+     * What {@code band} is drawn on before its own glass, from a screen rect — the one-call read
+     * for a band with no glass of its own (the A&ndash;Z strip). Mapped into root space exactly as
+     * {@link #onGlass} maps it, so the two share one sample instead of taking turns.
+     *
+     * @see GlassBackdropCache#backdropUnder
+     */
+    @ColorInt
+    public int backdropUnder(@NonNull GlassBackdropCache.Band band, @NonNull Rect screenRect,
+                             @ColorInt int dim, @ColorInt int glassTint) {
+        readMode();
+        toRootSpace(screenRect, mTmpRootRect);
+        return mCache.backdropUnder(band, mTmpRootRect, dim, glassTint);
     }
 
     /**
@@ -236,7 +476,8 @@ public final class ChromeInk {
     private OnGlass.Resolution resolveAt(@NonNull GlassBackdropCache.Band band,
                                          @NonNull Contract contract, int floorAlpha) {
         Rect screenRect = contract.rect;
-        double target = contract.target;
+        double target = mLevel.target(contract.target);
+        if (contract.fixedInk) return resolveFixedAt(band, contract, target);
         BandGlass glass = glassFor(band);
         int baseAlpha = ChromePolicy.dockGlassBaseAlpha(glass.opacity);
         // The band's flat glass: wallpaper, the launcher's dim, the base layer. No light model, so
@@ -275,6 +516,47 @@ public final class ChromeInk {
             resolved = resolveAtStop(band, screenRect, worst, under, mBaseColor, baseAlpha, top,
                 mid, foot, ink, target, floorAlpha);
         }
+        return resolved;
+    }
+
+    /**
+     * A fixed-ink band ({@link #onFixedInk}) measured on its own glass at the row where the model
+     * works hardest against its ink, and veiled toward its own base colour until the ink clears
+     * {@code target} on the cap over that. Nothing shares such a pane, so there is no floor, and
+     * the ink never moves, so there is no second pass: the row is the ink's own worst.
+     */
+    @NonNull
+    private OnGlass.Resolution resolveFixedAt(@NonNull GlassBackdropCache.Band band,
+                                              @NonNull Contract contract, double target) {
+        BandGlass glass = glassFor(band);
+        int baseAlpha = ChromePolicy.dockGlassBaseAlpha(glass.opacity);
+        int wallpaper = mCache.wallpaperUnder(band, contract.rect);
+        vote(band, OnGlass.backdrop(wallpaper, mDimColor, OnGlass.withAlpha(mBaseColor, baseAlpha)));
+        int under = OnGlass.backdrop(wallpaper, mDimColor, Color.TRANSPARENT);
+        int top = DockGlassRendering.topSheenAlpha(glass.opacity);
+        int mid = DockGlassRendering.midSheenAlpha(glass.opacity);
+        int foot = DockGlassRendering.footAlpha(glass.opacity, glass.withFoot);
+        float worst = DockGlassRendering.worstLightModelStop(contract.darkInk, under, mBaseColor,
+            baseAlpha, mAccentColor, top, mid, foot, glass.sliceStart, glass.sliceEnd);
+        int backdrop = DockGlassRendering.glassSurfaceAt(worst, under, mBaseColor, baseAlpha,
+            mAccentColor, top, mid, foot);
+        OnGlass.Resolution known = contract.fixedAnswer;
+        if (known != null && contract.fixedBackdrop == backdrop
+                && contract.fixedVeilColor == mBaseColor && contract.fixedCap == contract.cap
+                && contract.fixedInkAsked == contract.darkInk
+                && contract.fixedSecondInkAsked == contract.secondInk
+                && Double.compare(contract.fixedTarget, target) == 0) {
+            return known;
+        }
+        OnGlass.Resolution resolved = OnGlass.resolveFixedInk(backdrop, contract.cap,
+            contract.darkInk, contract.secondInk, mBaseColor, target);
+        contract.fixedAnswer = resolved;
+        contract.fixedBackdrop = backdrop;
+        contract.fixedVeilColor = mBaseColor;
+        contract.fixedCap = contract.cap;
+        contract.fixedInkAsked = contract.darkInk;
+        contract.fixedSecondInkAsked = contract.secondInk;
+        contract.fixedTarget = target;
         return resolved;
     }
 
@@ -351,6 +633,8 @@ public final class ChromeInk {
     public int inkOn(@NonNull OnGlass.Resolution resolved, @ColorInt int ground,
                      @ColorInt int darkInk, @ColorInt int paleInk, double target) {
         boolean pale = polarity() == Polarity.PALE_INK;
+        // Asked in the Default level's tiers like every band, held to the user's level.
+        target = mLevel.target(target);
         int opaqueGround = OnGlass.opaque(ground);
         // The answer is a function of these five and nothing else, and every chrome pass asks the
         // same questions again for every widget on the bar: remember them rather than re-walk the
@@ -541,6 +825,59 @@ public final class ChromeInk {
             : band;
     }
 
+    // ------------------------------------------------------------------ root space
+
+    /**
+     * {@code screenRect} in the root container's untransformed space, written to {@code out}:
+     * where the band would be on screen if {@code terminal_root_container} carried no scale and no
+     * translation. That is the space the wallpaper frame is captured in and the wallpaper backdrop
+     * is laid out in, and the backdrop is inside the root, so a scaled root scales its wallpaper
+     * with it: the pixels under a band are the ones under its unscaled rect.
+     *
+     * <p>Identity — and free — while the root is untransformed, which is every moment outside the
+     * editor, and whenever the root cannot be found (before inflation, in a test). Rotation is not
+     * undone: nothing rotates the root.</p>
+     */
+    void toRootSpace(@NonNull Rect screenRect, @NonNull Rect out) {
+        View root = mSurfaces.findChromeView(R.id.terminal_root_container);
+        if (root == null || (root.getScaleX() == 1f && root.getScaleY() == 1f
+                && root.getTranslationX() == 0f && root.getTranslationY() == 0f)) {
+            out.set(screenRect);
+            return;
+        }
+        GlassAnchor.layoutOriginOnScreen(root, mTmpRootLocation, mTmpRootScratch);
+        mapIntoRoot(screenRect, mTmpRootLocation[0], mTmpRootLocation[1], root.getScaleX(),
+            root.getScaleY(), root.getPivotX(), root.getPivotY(), root.getTranslationX(),
+            root.getTranslationY(), out);
+    }
+
+    /**
+     * The arithmetic of {@link #toRootSpace}: undoes a view's scale about its pivot and its
+     * translation, for a rect measured on screen inside it.
+     *
+     * <p>A view at laid-out origin {@code O} on screen draws its own point {@code p} at
+     * {@code O + pivot + scale * (p - pivot) + translation}. Solving for {@code p} and adding
+     * {@code O} back gives the point where the same content sits with the transform gone. A zero
+     * scale draws nothing and maps nothing: the rect comes back as it went in.</p>
+     *
+     * @param originX the root's laid-out left edge on screen, transforms ignored
+     * @param originY its laid-out top edge
+     */
+    @VisibleForTesting
+    public static void mapIntoRoot(@NonNull Rect screenRect, float originX, float originY,
+                                   float scaleX, float scaleY, float pivotX, float pivotY,
+                                   float translationX, float translationY, @NonNull Rect out) {
+        if (scaleX == 0f || scaleY == 0f) {
+            out.set(screenRect);
+            return;
+        }
+        out.set(
+            Math.round(originX + pivotX + (screenRect.left - originX - translationX - pivotX) / scaleX),
+            Math.round(originY + pivotY + (screenRect.top - originY - translationY - pivotY) / scaleY),
+            Math.round(originX + pivotX + (screenRect.right - originX - translationX - pivotX) / scaleX),
+            Math.round(originY + pivotY + (screenRect.bottom - originY - translationY - pivotY) / scaleY));
+    }
+
     // ------------------------------------------------------------------ lifecycle
 
     /**
@@ -551,7 +888,11 @@ public final class ChromeInk {
     public void invalidate() {
         mCache.invalidate();
         mVotes.clear();
-        for (Contract contract : mContracts.values()) contract.veil = Color.TRANSPARENT;
+        mPanes.clear();
+        for (Contract contract : mContracts.values()) {
+            contract.veil = Color.TRANSPARENT;
+            contract.fixedAnswer = null;
+        }
     }
 
     /** The backing cache, for tests and for a caller that wants the raw backdrop. */
@@ -568,15 +909,24 @@ public final class ChromeInk {
      * on every call, rather than left to callers: four phases wire views into this and a palette or
      * light/dark change that nobody remembered to report would show as stale ink for a whole
      * session. Three int comparisons is the price.
+     *
+     * <p>The legibility level is read here for the same reason. A new level asks every band for a
+     * new veil, and the targets it scales are part of every memo key, so the invalidate below is
+     * only there to drop the veils recorded against the old one.</p>
      */
     private void readMode() {
         int base = mSurfaces.glassBaseColor();
         int accent = mSurfaces.accentColor();
         int dim = mSurfaces.wallpaperDimColor();
-        if (mModeRead && base == mBaseColor && accent == mAccentColor && dim == mDimColor) return;
+        LegibilityLevel level = mSurfaces.legibilityLevel();
+        if (mModeRead && base == mBaseColor && accent == mAccentColor && dim == mDimColor
+                && level == mLevel) {
+            return;
+        }
         mBaseColor = base;
         mAccentColor = accent;
         mDimColor = dim;
+        mLevel = level;
         mModeRead = true;
         // Before anything is measured a band is answered with the mode's nominal glass, which is
         // exactly what the app drew before this round: no flash, and no crash.
@@ -654,6 +1004,9 @@ public final class ChromeInk {
      *       device's own mid-dark glass the filter darkens by a few RGB units, so an unmodelled
      *       sample would report the band as lighter than the user sees it.</li>
      * </ul>
+     *
+     * <p>{@code screenRect} arrives in root space ({@link #toRootSpace}), which is the space the
+     * frame rect is captured in, so the crop below is the same with the root scaled or not.</p>
      */
     @ColorInt
     private int sampleWallpaper(@NonNull Rect screenRect) {
