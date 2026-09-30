@@ -19,6 +19,9 @@ public final class TaiModelSpec {
     public static final String BACKEND_LITERT_LM = "litert-lm";
     public static final String BACKEND_MITERT_LM = BACKEND_LITERT_LM;
     public static final String BACKEND_MNN_LLM = "mnn-llm";
+    // MNN Diffusion engine packages (Stable Diffusion 1.5, Taiyi, Sana): a directory of .mnn graphs,
+    // never a chat model. Served on demand by MnnDiffusionRuntime behind /v1/ai/images/generations.
+    public static final String BACKEND_MNN_DIFFUSION = "mnn-diffusion";
     public static final String FORMAT_LITERTLM = "litertlm";
     public static final String FORMAT_MNN = "mnn";
     public static final String FORMAT_GGUF = "gguf";
@@ -30,6 +33,9 @@ public final class TaiModelSpec {
     // KittenTTS .tflite graphs (speech output, KittenTtsRuntime). Speech-only like speech_to_text:
     // kept out of chat catalogues, the installed chat list, the STT picker and /v1/models.
     public static final String CAPABILITY_TEXT_TO_SPEECH = "text_to_speech";
+    // Text-to-image generation (mnn-diffusion packages). Image-only like speech_to_text: kept out of
+    // chat catalogues, the installed chat list, /v1/models and `tai load`.
+    public static final String CAPABILITY_IMAGE_GENERATION = "image_generation";
     public static final String CAPABILITY_IMAGE_INPUT = "image_input";
     public static final String CAPABILITY_AUDIO_INPUT = "audio_input";
     // Declared-only intent: no runtime processes video yet, so this rides on sourceCapabilities
@@ -177,7 +183,9 @@ public final class TaiModelSpec {
         this.architecture = architecture;
         this.quantization = quantization;
         LinkedHashSet<String> sourceCaps = normalizedCapabilities(sourceCapabilities);
-        if (sourceCaps.isEmpty()) sourceCaps.add(CAPABILITY_TEXT_CHAT);
+        if (sourceCaps.isEmpty()) {
+            sourceCaps.add(BACKEND_MNN_DIFFUSION.equals(this.backend) ? CAPABILITY_IMAGE_GENERATION : CAPABILITY_TEXT_CHAT);
+        }
         LinkedHashSet<String> supportedEndpointCaps = endpointCapabilitiesFor(
             id, this.backend, this.format, sourceCaps, localPath);
         LinkedHashSet<String> endpointCaps = endpointCapabilities == null
@@ -299,12 +307,20 @@ public final class TaiModelSpec {
 
     public static boolean isSupportedBackendFormat(@Nullable String backend, @Nullable String format) {
         return (BACKEND_LITERT_LM.equals(backend) && FORMAT_LITERTLM.equals(format))
-            || (BACKEND_MNN_LLM.equals(backend) && FORMAT_MNN.equals(format));
+            || (BACKEND_MNN_LLM.equals(backend) && FORMAT_MNN.equals(format))
+            || (BACKEND_MNN_DIFFUSION.equals(backend) && FORMAT_MNN.equals(format));
+    }
+
+    /** True for a text-to-image model: it never loads into the chat runtime or shows in chat lists. */
+    public boolean isImageGeneration() {
+        return BACKEND_MNN_DIFFUSION.equals(backend)
+            || endpointCapabilities.contains(CAPABILITY_IMAGE_GENERATION);
     }
 
     @NonNull
     private static String requireSupportedBackend(@Nullable String backend) {
-        if (BACKEND_LITERT_LM.equals(backend) || BACKEND_MNN_LLM.equals(backend)) return backend;
+        if (BACKEND_LITERT_LM.equals(backend) || BACKEND_MNN_LLM.equals(backend)
+            || BACKEND_MNN_DIFFUSION.equals(backend)) return backend;
         throw new IllegalArgumentException("unsupported_backend");
     }
 
@@ -326,6 +342,12 @@ public final class TaiModelSpec {
         LinkedHashSet<String> endpoint = new LinkedHashSet<>();
         if (!isSupportedBackendFormat(backend, format)) return endpoint;
         String normalizedId = normalizedIdentity(id);
+
+        if (BACKEND_MNN_DIFFUSION.equals(backend)) {
+            // A diffusion package does one thing; whatever else the source metadata claims is dropped.
+            endpoint.add(CAPABILITY_IMAGE_GENERATION);
+            return endpoint;
+        }
 
         if (BACKEND_MNN_LLM.equals(backend)) {
             // MNN embedding packages (config.json declaring text_embeddings) route to MnnEmbeddingRuntime,

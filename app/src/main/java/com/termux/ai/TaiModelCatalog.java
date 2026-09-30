@@ -44,6 +44,7 @@ public final class TaiModelCatalog {
         for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
             if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
             if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) continue;
+            if (isImageGeneration(entry.getValue())) continue;
             if (isEmbeddingOnly(entry.getValue())) continue;
             chat.put(entry.getKey(), entry.getValue());
         }
@@ -58,6 +59,11 @@ public final class TaiModelCatalog {
             if (isEmbeddingOnly(entry.getValue())) embeddings.put(entry.getKey(), entry.getValue());
         }
         return embeddings;
+    }
+
+    private static boolean isImageGeneration(@NonNull CatalogEntry entry) {
+        return TaiModelSpec.BACKEND_MNN_DIFFUSION.equals(entry.backend)
+            || entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_GENERATION);
     }
 
     private static boolean isEmbeddingOnly(@NonNull CatalogEntry entry) {
@@ -183,6 +189,9 @@ public final class TaiModelCatalog {
                     item.optString("ramTier", ""), item.optBoolean("recommended", false),
                     item.optBoolean("downloadAvailable", true), item.optString("unavailableReason", ""));
                 if (!TaiModelSpec.isSupportedBackendFormat(entry.backend, entry.format)) continue;
+                // Remote payloads never add image models: they install through the importer, and a
+                // remote entry would have nowhere to download an MNN diffusion directory to yet.
+                if (TaiModelSpec.BACKEND_MNN_DIFFUSION.equals(entry.backend)) continue;
                 merged.put(entry.modelId, entry);
             } catch (Exception ignored) {}
         }
@@ -469,6 +478,7 @@ public final class TaiModelCatalog {
         if (capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)) tags.add("Embeddings");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) tags.add("Speech");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) tags.add("Voice");
+        if (capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_GENERATION)) tags.add("Image");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)) tags.add("Vision");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)) tags.add("Audio");
         if (capabilities.contains(TaiModelSpec.CAPABILITY_CODE)) tags.add("Code");

@@ -50,6 +50,12 @@ final class TaiPressureWatch {
      */
     static final long TTS_IDLE_MS = TimeUnit.MINUTES.toMillis(5);
     /**
+     * A resident image model (memory mode 1 only; every other mode frees after each run) nobody has
+     * used for this long is closed: it holds more memory than any other auxiliary resident, and
+     * image generation comes in bursts.
+     */
+    static final long IMAGE_IDLE_MS = TimeUnit.MINUTES.toMillis(3);
+    /**
      * With only the {@link TaiResidency#RUNTIME_BASELINE_BYTES} entry left and no request for this
      * long, the process exits to give the baseline back (§3b of the plan).
      */
@@ -93,7 +99,7 @@ final class TaiPressureWatch {
 
     /**
      * The one resident {@code tier} gives up next, or {@code null} when it has nothing to give:
-     * idle embeddings first, then idle speech output, then idle STT, then — in {@link Tier#CHAT} only — idle chat; the
+     * idle embeddings first, then idle speech output, then an idle image model, then idle STT, then — in {@link Tier#CHAT} only — idle chat; the
      * least recently used first within a kind. Busy residents and the RUNTIME baseline are never
      * candidates. {@link Tier#RELEASE_ALL} is not an eviction and answers {@code null}.
      */
@@ -109,7 +115,7 @@ final class TaiPressureWatch {
     static List<TaiResidency.Entry> idleInEvictionOrder(@NonNull List<TaiResidency.Entry> residents, boolean includeChat) {
         ArrayList<TaiResidency.Entry> ordered = new ArrayList<>();
         for (TaiResidency.Kind kind : new TaiResidency.Kind[] {TaiResidency.Kind.EMBEDDING, TaiResidency.Kind.TTS,
-                TaiResidency.Kind.STT, TaiResidency.Kind.CHAT}) {
+                TaiResidency.Kind.IMAGE, TaiResidency.Kind.STT, TaiResidency.Kind.CHAT}) {
             if (kind == TaiResidency.Kind.CHAT && !includeChat) continue;
             ArrayList<TaiResidency.Entry> ofKind = new ArrayList<>();
             for (TaiResidency.Entry entry : residents) {
@@ -139,6 +145,8 @@ final class TaiPressureWatch {
                 return sttIdleLimitMs;
             case TTS:
                 return TTS_IDLE_MS;
+            case IMAGE:
+                return IMAGE_IDLE_MS;
             default:
                 return 0L;
         }

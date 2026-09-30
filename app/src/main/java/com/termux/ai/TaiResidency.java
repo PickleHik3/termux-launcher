@@ -37,7 +37,7 @@ public final class TaiResidency {
      * chat and closed after its own idle limit, and nothing it loads is ever credited against
      * another kind's load.
      */
-    public enum Kind { CHAT, EMBEDDING, STT, RUNTIME, TTS }
+    public enum Kind { CHAT, EMBEDDING, STT, RUNTIME, TTS, IMAGE }
 
     private static final long MIB = 1024L * 1024L;
 
@@ -77,6 +77,19 @@ public final class TaiResidency {
      * deliberate over-estimate (2×) until the load meter has measured one on a phone.
      */
     static final long TTS_FACTOR_TENTHS = 20L;
+    /**
+     * Image-generation footprint per byte of the package's peak working set (every graph for
+     * Stable Diffusion, the larger of the prompt LLM and the diffusion graphs for Sana, which never
+     * has both alive) until a measured load is on record, by the engine's memory mode. Mode 1 keeps
+     * the text encoder, UNet and VAE resident and, on OpenCL with fp16 buffers, holds the weights
+     * about as they are on disk plus the driver's copies and the UNet's activation buffers: 1.5x is
+     * a deliberate over-estimate until the load meter has measured one on a phone. Mode 2 drops the
+     * text encoder before the UNet runs (1.1x); mode 0 also defers the UNet/VAE load and disables
+     * the larger Winograd buffers (0.8x).
+     */
+    static final long IMAGE_MODE1_FACTOR_TENTHS = 15L;
+    static final long IMAGE_MODE2_FACTOR_TENTHS = 11L;
+    static final long IMAGE_MODE0_FACTOR_TENTHS = 8L;
 
     /** One resident. Immutable; {@link #setBusy} replaces the entry rather than mutating it. */
     public static final class Entry {
@@ -142,6 +155,16 @@ public final class TaiResidency {
         public static Entry tts(@NonNull TaiModelSpec spec) {
             return new Entry(spec.id, Kind.TTS, spec.backend, "cpu", 0,
                 ttsEstimateBytes(spec), null, System.currentTimeMillis(), false);
+        }
+
+        /**
+         * An image-generation model (an MNN diffusion package). {@code memoryMode} rides in the
+         * window field so {@code /v1/ai/runtime} shows which mode holds the memory.
+         */
+        @NonNull
+        public static Entry image(@NonNull String modelId, @NonNull String accelerator, int memoryMode, long estimatedBytes) {
+            return new Entry(modelId, Kind.IMAGE, TaiModelSpec.BACKEND_MNN_DIFFUSION, accelerator, memoryMode,
+                estimatedBytes, null, System.currentTimeMillis(), false);
         }
 
         /** The bytes the budget counts for this resident: measured when known, else the estimate. */
@@ -294,6 +317,9 @@ public final class TaiResidency {
                 return availableBytes + bytes(residents, Kind.EMBEDDING, backend);
             case STT:
                 return availableBytes + bytes(residents, Kind.STT, null);
+            case IMAGE:
+                // One image model is resident at a time; a new image load closes the old one first.
+                return availableBytes + bytes(residents, Kind.IMAGE, null);
             default:
                 return availableBytes;
         }
@@ -305,16 +331,20 @@ public final class TaiResidency {
      * within a kind. Left out: anything busy, the RUNTIME baseline, and what {@link
      * #creditedAvailable} already counts as replaced — every CHAT resident for a chat load (so a
      * chat load never "evicts" chat; it replaces it), this backend's EMBEDDING resident for an
-     * embedding load, and every STT resident for an STT load. Only an STT load may evict idle
-     * chat: an embedding load saving a few hundred MB by closing a multi-GB chat model would make
-     * the next chat turn pay a full reload.
+     * embedding load, and every STT resident for an STT load. Only an STT or an image load may
+     * evict idle chat: an embedding load saving a few hundred MB by closing a multi-GB chat model
+     * would make the next chat turn pay a full reload. An image load (minutes of generation, gigabytes
+     * of weights) may also close idle speech output; any other load may close an idle image model,
+     * which sits between idle embeddings and idle STT in the order.
      */
     @NonNull
     public static List<Entry> evictionCandidates(@NonNull List<Entry> residents, @NonNull Kind kind, @Nullable String backend) {
         ArrayList<Entry> ordered = new ArrayList<>();
-        for (Kind victimKind : new Kind[] {Kind.EMBEDDING, Kind.STT, Kind.CHAT}) {
-            if (victimKind == Kind.CHAT && kind != Kind.STT) continue;
+        for (Kind victimKind : new Kind[] {Kind.EMBEDDING, Kind.TTS, Kind.IMAGE, Kind.STT, Kind.CHAT}) {
+            if (victimKind == Kind.CHAT && kind != Kind.STT && kind != Kind.IMAGE) continue;
             if (victimKind == Kind.STT && kind == Kind.STT) continue;
+            if (victimKind == Kind.TTS && kind != Kind.IMAGE) continue;
+            if (victimKind == Kind.IMAGE && kind == Kind.IMAGE) continue;
             ArrayList<Entry> ofKind = new ArrayList<>();
             for (Entry entry : residents) {
                 if (entry.kind != victimKind || entry.busy) continue;
@@ -349,6 +379,16 @@ public final class TaiResidency {
     public static long sttEstimateBytes(@NonNull TaiModelSpec spec) {
         long factorTenths = MultiBackendTaiRuntime.isParakeetModel(spec) ? PARAKEET_STT_FACTOR_TENTHS : STT_FACTOR_TENTHS;
         return fileBytes(spec) * factorTenths / 10L;
+    }
+
+    /**
+     * What an image load costs at {@code memoryMode} (0, 1 or 2): the package's peak working set
+     * times the mode's factor, see {@link #IMAGE_MODE1_FACTOR_TENTHS}.
+     */
+    public static long imageEstimateBytes(long peakBytes, int memoryMode) {
+        long factorTenths = memoryMode == 1 ? IMAGE_MODE1_FACTOR_TENTHS
+            : memoryMode == 2 ? IMAGE_MODE2_FACTOR_TENTHS : IMAGE_MODE0_FACTOR_TENTHS;
+        return peakBytes * factorTenths / 10L;
     }
 
     /** What a speech-output load of this spec costs: the package size times {@link #TTS_FACTOR_TENTHS}. */

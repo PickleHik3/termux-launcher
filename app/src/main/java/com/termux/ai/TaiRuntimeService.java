@@ -94,6 +94,18 @@ public final class TaiRuntimeService extends Service {
     /** Speech-output requests running now; the service stays in the foreground while one plays. */
     private final AtomicInteger ttsInFlight = new AtomicInteger();
     /**
+     * Image generation has its own lane: a run lasts from seconds to minutes and holds the GPU, and
+     * neither a chat turn nor a transcription should wait for it, nor it for them. One thread, so
+     * images are made one at a time (the runtime also refuses a second with image_generation_active).
+     */
+    private final ExecutorService imageExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "tai-runtime-image");
+        thread.setDaemon(true);
+        return thread;
+    });
+    /** Image generations running now; the service stays in the foreground while one runs. */
+    private final AtomicInteger imageInFlight = new AtomicInteger();
+    /**
      * Carries out what the watch decides. Evictions take the router's load lock, so a load in
      * progress holds them up; that must stall neither the watch tick (which also publishes
      * presence) nor the cancel/unload lane, hence a lane of their own. One action is queued at a
@@ -168,6 +180,7 @@ public final class TaiRuntimeService extends Service {
         controlExecutor.shutdownNow();
         sttExecutor.shutdownNow();
         ttsExecutor.shutdownNow();
+        imageExecutor.shutdownNow();
         pressureExecutor.shutdownNow();
         super.onDestroy();
         if (idleExitAnnounced) {
@@ -250,6 +263,10 @@ public final class TaiRuntimeService extends Service {
                 ttsExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
                 return;
             }
+            if (isImageOperation(operation)) {
+                imageExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
+                return;
+            }
             // Raised as the bench is queued, so everything already ahead of it on the serial lane
             // is still served and everything after it is refused at once rather than left to wait.
             if (TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)) benchRunning.set(true);
@@ -259,7 +276,8 @@ public final class TaiRuntimeService extends Service {
 
     static boolean isConcurrentControlOperation(@NonNull String operation) {
         return TaiRuntimeIpc.OP_CANCEL.equals(operation) || TaiRuntimeIpc.OP_UNLOAD_MODEL.equals(operation)
-            || TaiRuntimeIpc.OP_TTS_STOP.equals(operation) || TaiRuntimeIpc.OP_BENCH_SKIP_WAIT.equals(operation)
+            || TaiRuntimeIpc.OP_TTS_STOP.equals(operation) || TaiRuntimeIpc.OP_IMAGE_CANCEL.equals(operation)
+            || TaiRuntimeIpc.OP_BENCH_SKIP_WAIT.equals(operation)
             || TaiRuntimeIpc.OP_BENCH_HOLD.equals(operation);
     }
 
@@ -268,7 +286,8 @@ public final class TaiRuntimeService extends Service {
      * lane is refused with {@code benchmark_running}, a second bench included. Status reads pass;
      * cancel and unload pass on the control lane and end the bench ({@link TaiManager#cancelRuntime},
      * {@link TaiManager#unloadModel} stop the harness first); preflight only reads; speech in and
-     * out have lanes and models of their own and are left to the user, who can hear them.
+     * out have lanes and models of their own and are left to the user, who can hear them. Image
+     * generation is refused: it holds the GPU and gigabytes of memory, which a measurement must not share.
      */
     static boolean isRefusedDuringBench(@NonNull String operation) {
         return TaiRuntimeIpc.OP_LOAD_MODEL.equals(operation)
@@ -280,7 +299,13 @@ public final class TaiRuntimeService extends Service {
             || TaiRuntimeIpc.OP_EMBEDDINGS.equals(operation)
             || TaiRuntimeIpc.OP_TOKENIZE.equals(operation)
             || TaiRuntimeIpc.OP_BENCHMARK.equals(operation)
-            || TaiRuntimeIpc.OP_BENCH_RUN.equals(operation);
+            || TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)
+            || TaiRuntimeIpc.OP_IMAGE_GENERATE.equals(operation);
+    }
+
+    /** Image generation runs on {@link #imageExecutor}; its cancel is a control operation, not one of these. */
+    static boolean isImageOperation(@NonNull String operation) {
+        return TaiRuntimeIpc.OP_IMAGE_GENERATE.equals(operation);
     }
 
     /** Speech output runs on {@link #ttsExecutor}; its stop is a control operation, not one of these. */
@@ -307,17 +332,21 @@ public final class TaiRuntimeService extends Service {
         @Nullable String bodyFile
     ) {
         boolean speech = isTtsOperation(operation);
+        boolean image = isImageOperation(operation);
         boolean bench = TaiRuntimeIpc.OP_BENCH_RUN.equals(operation);
         if (speech) ttsInFlight.incrementAndGet();
+        if (image) imageInFlight.incrementAndGet();
         try {
             String payload = body != null ? body : readBodyFile(bodyFile);
             if (bench) acquireBenchWakeLock();
             if (isForegroundOperation(operation)) {
-                ensureForeground("On-device AI runtime", speech ? "Speaking" : bench ? "Benchmarking" : "Preparing " + operation);
+                ensureForeground("On-device AI runtime", speech ? "Speaking" : image ? "Generating an image"
+                    : bench ? "Benchmarking" : "Preparing " + operation);
             }
             if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
                 || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)
                 || TaiRuntimeIpc.OP_TTS_SYNTHESIZE.equals(operation)
+                || TaiRuntimeIpc.OP_IMAGE_GENERATE.equals(operation)
                 || bench) {
                 runStreamRequest(replyTo, requestId, operation, payload);
                 return;
@@ -332,6 +361,7 @@ public final class TaiRuntimeService extends Service {
                 benchRunning.set(false);
             }
             if (speech) ttsInFlight.decrementAndGet();
+            if (image) imageInFlight.decrementAndGet();
             deleteBodyFile(bodyFile);
             if (!isStatusOperation(operation)) lastActivityMs = System.currentTimeMillis();
             inFlight.decrementAndGet();
@@ -404,6 +434,8 @@ public final class TaiRuntimeService extends Service {
                 return manager.ttsWarm(body);
             case TaiRuntimeIpc.OP_TTS_STOP:
                 return manager.stopSpeaking();
+            case TaiRuntimeIpc.OP_IMAGE_CANCEL:
+                return manager.cancelImage();
             default:
                 return error(400, "bad_runtime_operation", "Unknown On-device AI runtime operation: " + operation);
         }
@@ -429,6 +461,8 @@ public final class TaiRuntimeService extends Service {
         };
         if (TaiRuntimeIpc.OP_TTS_SYNTHESIZE.equals(operation)) {
             manager.synthesizeSpeechToEvents(body, sink);
+        } else if (TaiRuntimeIpc.OP_IMAGE_GENERATE.equals(operation)) {
+            manager.generateImageToEvents(body, sink);
         } else if (TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)) {
             manager.benchRun(body, sink);
         } else if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)) {
@@ -438,7 +472,7 @@ public final class TaiRuntimeService extends Service {
         }
     }
 
-    private boolean isForegroundOperation(@NonNull String operation) {
+    static boolean isForegroundOperation(@NonNull String operation) {
         return TaiRuntimeIpc.OP_LOAD_MODEL.equals(operation)
             || TaiRuntimeIpc.OP_KEEP_WARM.equals(operation)
             || TaiRuntimeIpc.OP_OPENAI_CHAT.equals(operation)
@@ -453,7 +487,10 @@ public final class TaiRuntimeService extends Service {
             || TaiRuntimeIpc.OP_STT_WARM.equals(operation)
             // Speech output for the same cpuset reason, and so playback is not cut off when the
             // launcher goes to the background mid-sentence.
-            || isTtsOperation(operation);
+            || isTtsOperation(operation)
+            // Image generation holds the GPU for seconds to minutes; it must not be cut off when
+            // the launcher goes to the background, nor run in the little-core cpuset.
+            || isImageOperation(operation);
     }
 
     /** A chat model is held, coming up, warm or generating: the foreground and presence cases. */
@@ -476,6 +513,8 @@ public final class TaiRuntimeService extends Service {
             if (ttsInFlight.get() > 0) {
                 // Speaking: stay in the foreground whatever else finished just now.
                 ensureForeground("On-device AI runtime", chat ? state.status : "Speaking");
+            } else if (imageInFlight.get() > 0) {
+                ensureForeground("On-device AI runtime", chat ? state.status : "Generating an image");
             } else if (chat) {
                 ensureForeground("On-device AI runtime", state.status);
             } else if (foreground) {

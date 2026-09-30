@@ -63,6 +63,14 @@ final class TaiRuntimeIpc {
     static final String OP_TTS_WARM = "ttsWarm";
     static final String OP_TTS_STOP = "ttsStop";
 
+    /**
+     * Text-to-image. Generate is a stream (progress events, then the result with the PNG's path
+     * under cacheDir/tai-ipc) on the service's own image lane; cancel runs on the control lane so
+     * it reaches a run in progress instead of queuing behind it.
+     */
+    static final String OP_IMAGE_GENERATE = "imageGenerate";
+    static final String OP_IMAGE_CANCEL = "imageCancel";
+
     private TaiRuntimeIpc() {
     }
 }
