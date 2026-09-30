@@ -340,7 +340,15 @@ public final class SurfaceEditorController {
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(content);
         Insets bars = insets == null ? Insets.NONE
             : insets.getInsets(WindowInsetsCompat.Type.systemBars());
-        mNavInsetPx = bars.bottom;
+        // The insets are the window's; the content view may already stand clear of either bar
+        // (a window that fits them), so only the part of each bar over the content counts.
+        int[] contentInWindow = new int[2];
+        content.getLocationInWindow(contentInWindow);
+        int decorHeight = content.getRootView().getHeight();
+        mNavInsetPx = Math.max(0, contentInWindow[1] + windowHeight
+            - (decorHeight - bars.bottom));
+        int statusInset = Math.max(0, Math.max(bars.top, mHost.statusBarInsetTop())
+            - contentInWindow[1]);
         View panelView = panel.view();
         panelView.setPadding(panelView.getPaddingLeft(), panelView.getPaddingTop(),
             panelView.getPaddingRight(), dp(12) + mNavInsetPx);
@@ -357,8 +365,7 @@ public final class SurfaceEditorController {
         if (!AppearanceEditorFrame.offsetIn((View) root.getParent(), content, parentOffset))
             return;
         int containerTop = parentOffset[1] + root.getTop();
-        int frameTop = Math.max(containerTop, Math.max(0, mHost.statusBarInsetTop()))
-            + dp(FRAME_GAP_DP);
+        int frameTop = Math.max(containerTop, statusInset) + dp(FRAME_GAP_DP);
         int frameBottom = windowHeight - mRestHeightPx - dp(FRAME_GAP_DP);
         float scale = AppearanceEditorFrame.fitScale(root.getHeight(), frameTop, frameBottom);
         frame.show(scale, frameTop - containerTop, animate);
