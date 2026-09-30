@@ -562,6 +562,8 @@ launcherctl wallpaper get
 | POST | `/v1/audio/speech` | Speech output with the voice model (KittenTTS): `wav` whole, `pcm` streamed per sentence; see [Text to speech](Text_To_Speech.md) |
 | POST | `/v1/ai/speak` | `tai speak`: plays the text on the phone (JSON or plain-text body; `?voice=&speed=`; `?format=wav` returns audio instead) |
 | POST | `/v1/ai/speak/stop` | Stops whatever the phone is reading aloud |
+| POST | `/v1/ai/images/generations` | Text to image with an MNN diffusion model (Stable Diffusion 1.5, Taiyi, Sana); see [`POST /v1/ai/images/generations`](#post-v1aiimagesgenerations) |
+| POST | `/v1/ai/images/cancel` | Discards the image generation in flight (the engine cannot stop mid-run) |
 
 OpenAI `/v1/*` streaming uses Server-Sent Events (`text/event-stream`) and ends with `data: [DONE]`.
 
@@ -596,6 +598,47 @@ LiteRT EmbeddingGemma `.tflite` installs require `sentencepiece.model` in the sa
 The embedder's `/v1/models` entry additionally carries `_endpoint_dimensions` (the model's native output width; recognised families only), `_endpoint_matryoshka_dims` (the only sizes `dimensions` accepts when listed, largest first; any other size gets `400 invalid_dimensions`), `_endpoint_normalized` (`true`: every vector is L2-normalised), `_endpoint_max_batch`, and a stable `_revision` (a cheap hash of the model file's name/size/mtime, never its bytes) a client can use to know when to rebuild its index.
 
 EmbeddingGemma ships fixed-shape graphs per context window (`seq256`, `seq512`, `seq1024`, `seq2048`); every input costs the full window regardless of how short it is. When a new EmbeddingGemma download fetches a graph bigger than `seq512`, it also fetches the smaller `seq256`/`seq512` siblings alongside it, best effort. When more than one window graph is installed next to each other, TAI routes each input independently to the smallest installed window it fits in (prefix + body + BOS/EOS), only falling back to the largest window — and truncating the body, as always — when nothing fits; this is transparent to the request and response shape. `_endpoint_context_window` reports the largest installed window, and a new field, `_endpoint_windows`, lists every installed window ascending, for example `[256, 512, 1024]`, so a client can tell a single-graph install (`_endpoint_windows` has one entry) from a multi-window one.
+
+#### `POST /v1/ai/images/generations`
+
+Text-to-image through the MNN Diffusion engine, on the GPU (OpenCL) by default. The body follows OpenAI's
+image generation shape, with a few additions:
+
+| Field | Meaning |
+| --- | --- |
+| `model` | A registered image model id. Exactly one of `model` and `model_path`. |
+| `model_path` | A model folder, under Termux home or shared storage: the way to try a package before it can be imported. |
+| `model_type` | `sd15` (default for the Stable Diffusion file layout), `taiyi` or `sana`. Taiyi shares Stable Diffusion's files, so it must be said. |
+| `prompt` | Required, up to 2000 characters. |
+| `size` | `"WxH"`. Stable Diffusion and Taiyi: `512x512` only (the engine is fixed). Sana: multiples of 32 from 256 to 2048. Default `512x512`. |
+| `n` | Only `1`. |
+| `steps` | 1-100, default 20. |
+| `seed` | Whole number; `-1` (default) picks one, reported back in `tai.seed`. |
+| `cfg_scale` | Sana only; default 4.5, `0` turns guidance off. Stable Diffusion's guidance is fixed inside the engine. |
+| `image` | Sana only: an input picture to edit. Needs `vae_encoder.mnn` in the package. |
+| `backend` | `opencl` (default) or `cpu`. |
+| `memory_mode` | `0` saves memory, `1` is fastest and keeps the model loaded (Stable Diffusion/Taiyi), `2` balances. Left out, the fastest mode whose estimate fits the memory free now is chosen, closing idle embeddings, speech models or an idle chat model if that is needed. |
+| `output` | A `.png` path under Termux home or shared storage: the image is written there and `data[0].path` returned instead of base64. |
+| `response_format` | `b64_json` (the only one). |
+| `stream` | `true` answers with SSE progress events. |
+
+Response: `{created, data: [{b64_json | path}], tai: {model, width, height, steps, seed, backend, memoryMode, modelType, loadMs, generateMs, evicted?}}`.
+With `stream: true` each event is `{type: "image_generation.progress", progress: 0-100}`, then one
+`{type: "image_generation.completed", ...}` carrying the response above (or an error object), then `data: [DONE]`.
+A request that cannot run is refused with its own status before any stream starts: `400` for a bad field
+(`missing_prompt`, `unsupported_n`, `invalid_size`, `invalid_steps`, `invalid_backend`, `invalid_memory_mode`,
+`image_input_unavailable`), `400` with `tokenizer_mtok_missing` for a package that ships the raw tokenizer
+(`vocab.json`/`merges.txt`) instead of `tokenizer.mtok`, `403` for a path outside the allowed roots, `404` for an
+unknown model or folder, `409 image_generation_active` while another image is being made, `409 insufficient_memory`,
+`501 mnn_image_unavailable` when the installed native library predates image support.
+
+Only one image is generated at a time, on a lane of its own: chat and speech are not queued behind it.
+The engine ignores the progress callback's return value, so a run cannot be stopped part-way:
+`POST /v1/ai/images/cancel` (and a client that disconnects) discards the result when the engine returns.
+Image models never appear in `/v1/models` or the chat lists, and `tai load` answers `400 image_model_not_loadable`.
+
+`tai image "prompt" [--model ID | --model-dir DIR] [--type sd15|taiyi|sana] [--out FILE.png] [--steps N] [--seed N] [--size WxH] [--cfg X] [--image IN.png] [--cpu] [--memory-mode 0|1|2]`
+calls this route (progress on stderr, the PNG saved to `--out`, default `./tai-image-<time>.png`; Ctrl-C and `tai image --stop` cancel; `tai --json image ...` prints the response).
 
 #### `POST /v1/tokenize`
 

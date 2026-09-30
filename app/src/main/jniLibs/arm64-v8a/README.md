@@ -25,6 +25,11 @@ Local artifact SHA-256 values:
 - `libmnnllmapp.so`: `83044ab470ca531b97efeb03f38b40f11f75ae57b648c3a1998eb2fe04b0c56d`
   (after `llvm-strip --strip-debug`)
 
+Pending rebuild: `ci/mnn-patch/tai_diffusion_jni.cpp` adds the `TaiDiffusionSession` text-to-image
+bridge (SD 1.5, Taiyi, Sana; OpenCL or CPU; persistent OpenCL tuning cache). The binaries above do
+not contain it yet; until `libmnnllmapp.so` is rebuilt, image generation reports the MNN image
+engine as unavailable in this build.
+
 Built with NDK r27c, `ANDROID_STL=c++_static`, min API 30. The Java shims
 `com.alibaba.mnnllm.android.llm.LlmSession` and `MnnEmbeddingSession` match the JNI method
 names and signatures exported by this `libmnnllmapp.so` (verified with `llvm-nm -D`);

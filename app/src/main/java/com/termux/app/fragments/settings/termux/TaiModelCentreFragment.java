@@ -273,7 +273,7 @@ public class TaiModelCentreFragment extends Fragment
         installedAll = store.getInstalledUserModels();
         List<TaiModelSpec> chat = new ArrayList<>();
         for (TaiModelSpec spec : installedAll.values()) {
-            if (!TaiSpeechModels.isSpeechModel(spec) && !TaiTtsModels.isTtsModel(spec)) chat.add(spec);
+            if (!TaiSpeechModels.isSpeechModel(spec) && !TaiTtsModels.isTtsModel(spec) && !spec.isImageGeneration()) chat.add(spec);
         }
         installedChat = chat;
         installedSpeech = TaiSpeechModels.installed(store);

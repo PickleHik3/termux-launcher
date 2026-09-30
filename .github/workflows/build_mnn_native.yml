@@ -58,6 +58,14 @@ jobs:
           fi
           grep -q "embedding_jni.cpp" "$CPP/CMakeLists.txt"   # fail fast if the source did not register
 
+          # TAI diffusion JNI: text-to-image through the MNN Diffusion engine (SD 1.5, Taiyi, Sana)
+          # with model type + backend selectable and a persistent per-model OpenCL tuning cache.
+          cp -v self/ci/mnn-patch/tai_diffusion_jni.cpp "$CPP/tai_diffusion_jni.cpp"
+          if ! grep -q "tai_diffusion_jni.cpp" "$CPP/CMakeLists.txt"; then
+            sed -i 's/        llm_mnn_jni.cpp/        llm_mnn_jni.cpp\n        tai_diffusion_jni.cpp/' "$CPP/CMakeLists.txt"
+          fi
+          grep -q "tai_diffusion_jni.cpp" "$CPP/CMakeLists.txt"   # fail fast if the source did not register
+
       - name: Setup Android NDK 27.2.12479018
         id: ndk
         uses: nttld/setup-ndk@v1

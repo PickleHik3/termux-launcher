@@ -42,6 +42,8 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     private final ParakeetSttRuntime parakeetStt;
     /** Speech output; serialises its own synthesis and close, like the STT engines. */
     private final KittenTtsRuntime tts;
+    /** Text-to-image; serialises its own generation and close, and never takes the router lock. */
+    private final MnnDiffusionRuntime image;
     private final TaiResidency residency;
     /** Held across load, keep-warm and unload; never by a read, a cancel or a generation. */
     private final Object loadLock = new Object();
@@ -86,6 +88,7 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         whisperStt = new WhisperSttRuntime(residency, context);
         parakeetStt = new ParakeetSttRuntime(residency, context);
         tts = new KittenTtsRuntime(residency, context);
+        image = new MnnDiffusionRuntime(residency, context);
         activeAssistant = liteRt;
     }
 
@@ -126,6 +129,9 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
             parakeetStt.close();
             tts.interrupt();
             tts.close();
+            // A generation in flight is not interrupted by an unload (the engine cannot be stopped
+            // mid-run); a resident image model of an idle runtime is closed with the rest.
+            if (!image.isActive()) image.close();
             return result;
         }
     }
@@ -168,6 +174,11 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
                     case TTS:
                         // Waits on the TTS monitor for a sentence that started since the plan.
                         tts.close();
+                        break;
+                    case IMAGE:
+                        // A generation that started since the plan holds the image monitor; skip it.
+                        if (image.isActive()) continue;
+                        image.close();
                         break;
                     case CHAT: {
                         TaiRuntime holder = chatHolder(victim.modelId);
@@ -218,6 +229,22 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         response.put("error", error);
         response.put("_statusCode", 400);
         return response;
+    }
+
+    /** One image generation; see {@link MnnDiffusionRuntime#generate}. No router lock: a cancel never queues behind it. */
+    @NonNull
+    public JSONObject generateImage(@NonNull MnnDiffusionRuntime.Params params, @NonNull MnnDiffusionRuntime.Progress progress)
+            throws JSONException {
+        return image.generate(params, progress);
+    }
+
+    /** Discards the image generation in flight (the engine cannot stop mid-run); false when none is running. */
+    public boolean cancelImage() {
+        return image.requestCancel();
+    }
+
+    public boolean isImageActive() {
+        return image.isActive();
     }
 
     // Each embedding runtime serializes embed() and close() on its own monitor, so a running batch
