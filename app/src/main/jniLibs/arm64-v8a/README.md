@@ -22,13 +22,13 @@ These binaries were built locally on **2026-09-28** from upstream MNN **3.6.1**
 Local artifact SHA-256 values:
 
 - `libMNN.so`: `9711e66fe177eca9ab0d3b7ae81858979c86c2f00b0aa4e339b92b80ac54db7a`
-- `libmnnllmapp.so`: `83044ab470ca531b97efeb03f38b40f11f75ae57b648c3a1998eb2fe04b0c56d`
+- `libmnnllmapp.so`: `005f6c78224936e6fffc39a522202f7934ac9966e78767f8842c489c1be6b6af`
   (after `llvm-strip --strip-debug`)
 
-Pending rebuild: `ci/mnn-patch/tai_diffusion_jni.cpp` adds the `TaiDiffusionSession` text-to-image
-bridge (SD 1.5, Taiyi, Sana; OpenCL or CPU; persistent OpenCL tuning cache). The binaries above do
-not contain it yet; until `libmnnllmapp.so` is rebuilt, image generation reports the MNN image
-engine as unavailable in this build.
+`libmnnllmapp.so` was rebuilt locally on **2026-09-30** to add `ci/mnn-patch/tai_diffusion_jni.cpp`,
+the `TaiDiffusionSession` text-to-image bridge (SD 1.5, Taiyi, Sana; OpenCL or CPU; persistent
+OpenCL tuning cache). Only the bridge was rebuilt: it was compiled from the patched 3.6.1
+`MnnLlmChat` sources and linked against the committed `libMNN.so` above, which is unchanged.
 
 Built with NDK r27c, `ANDROID_STL=c++_static`, min API 30. The Java shims
 `com.alibaba.mnnllm.android.llm.LlmSession` and `MnnEmbeddingSession` match the JNI method
