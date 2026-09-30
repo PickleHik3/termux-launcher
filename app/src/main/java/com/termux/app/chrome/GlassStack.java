@@ -186,7 +186,34 @@ public final class GlassStack {
         Drawable material = layers.size() == 1
             ? layers.get(0) : new LayerDrawable(layers.toArray(new Drawable[0]));
         if (spec.stackAlphaPercent < 100)
-            material.setAlpha(Math.round(255f * spec.stackAlphaPercent / 100f));
+            applyStackAlpha(material, Math.round(255f * spec.stackAlphaPercent / 100f));
         return material;
+    }
+
+    /**
+     * Fades a finished glass stack by {@code alpha} (0..255) without flattening it.
+     *
+     * <p>{@code LayerDrawable.setAlpha} hands the same alpha to every layer, which overwrote the
+     * alpha each layer was built at: the grain, built faint on purpose
+     * ({@code DockGlassRendering.grainAlpha}, never over 60), came out at the stack's alpha and
+     * several times too strong. This scales each layer's own alpha instead, so the grain keeps its
+     * proportion to the tint at any opacity. A {@code ColorDrawable} already treats its alpha as a
+     * modulator of its colour's own, so it is handed the stack alpha as is.</p>
+     */
+    public static void applyStackAlpha(@Nullable Drawable drawable, int alpha) {
+        if (drawable == null) return;
+        int clamped = Math.max(0, Math.min(255, alpha));
+        if (clamped == 255) return;
+        if (drawable instanceof LayerDrawable) {
+            LayerDrawable layers = (LayerDrawable) drawable;
+            for (int index = 0; index < layers.getNumberOfLayers(); index++)
+                applyStackAlpha(layers.getDrawable(index), clamped);
+            return;
+        }
+        if (drawable instanceof android.graphics.drawable.ColorDrawable) {
+            drawable.setAlpha(clamped);
+            return;
+        }
+        drawable.setAlpha(Math.round(drawable.getAlpha() * clamped / 255f));
     }
 }

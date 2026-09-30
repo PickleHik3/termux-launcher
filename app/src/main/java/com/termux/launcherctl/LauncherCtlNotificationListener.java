@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.drawable.Icon;
 import android.media.MediaMetadata;
 import android.media.session.MediaController;
 import android.media.session.MediaSessionManager;
@@ -24,6 +25,7 @@ import androidx.core.app.Person;
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
 import com.termux.app.statusbar.EssentialNotificationRule;
 import com.termux.app.statusbar.EssentialNotificationRules;
+import com.termux.app.statusbar.PinnedConversations;
 import com.termux.app.statusbar.PinnedNotification;
 import com.termux.app.statusbar.TopPaneFeed;
 import com.termux.app.statusbar.TopPaneMediaState;
@@ -61,7 +63,10 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
     /** Read from the listener, main and API threads, so concurrent. */
     private final Map<String, String> mAppLabels = new ConcurrentHashMap<>();
-    /** Insertion-ordered so a fourth match evicts the oldest pin. */
+    /**
+     * The cards on the pane, by conversation ({@link PinnedNotification#conversationId}), in the
+     * order they are shown; insertion-ordered so a match past the ceiling evicts the oldest.
+     */
     private final LinkedHashMap<String, PinnedNotification> mPinned = new LinkedHashMap<>();
     /** Keys unpinned by hand, so an unpinned but still-posted notification does not come back. */
     private final Set<String> mUnpinned = new HashSet<>();
@@ -380,7 +385,7 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
 
     private void rebuildPinnedNotifications() {
         List<EssentialNotificationRule> rules = EssentialNotificationRules.load(this);
-        Map<String, PinnedNotification> matched = new LinkedHashMap<>();
+        List<PinnedConversations.Candidate> candidates = new ArrayList<>();
         Set<String> activeKeys = new HashSet<>();
         StatusBarNotification[] active = null;
         try {
@@ -401,6 +406,11 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
             }
             if (!rules.isEmpty()) {
                 sorted.sort(Comparator.comparingLong(StatusBarNotification::getPostTime));
+                // Two notifications reading exactly the same are one message seen twice, whatever
+                // their keys (a summary beside its only child, a re-post): the first is kept and
+                // the repeat neither makes a card nor adds to a conversation's count. Messages
+                // that differ from one conversation are no longer dropped here — they fold into
+                // one card below (PinnedConversations), which counts them.
                 Set<String> seenContent = new HashSet<>();
                 for (StatusBarNotification sbn : sorted) {
                     if (mUnpinned.contains(sbn.getKey())) continue;
@@ -409,26 +419,30 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
                     if (isGroupSummary(sbn) && groupsWithChildren.contains(sbn.getGroupKey())) {
                         continue;
                     }
-                    PinnedNotification pin = toPinnedNotification(sbn, rules);
-                    if (pin == null) continue;
-                    if (!seenContent.add(contentSignature(pin))) continue;
-                    matched.put(pin.key, pin);
+                    PinnedConversations.Candidate candidate = toPinnedCandidate(sbn, rules);
+                    if (candidate == null) continue;
+                    if (!seenContent.add(contentSignature(candidate.pin))) continue;
+                    candidates.add(candidate);
                 }
             }
         }
         mUnpinned.retainAll(activeKeys);
 
-        // Keep the order of pins already on screen, then append new matches oldest-first.
+        Map<String, PinnedNotification> matched = new LinkedHashMap<>();
+        for (PinnedNotification card : PinnedConversations.group(candidates)) {
+            matched.put(card.conversationId, card);
+        }
+        // Keep the order of cards already on screen, then append new conversations oldest-first.
         List<PinnedNotification> ordered = new ArrayList<>();
-        for (String key : mPinned.keySet()) {
-            PinnedNotification pin = matched.remove(key);
+        for (String conversation : mPinned.keySet()) {
+            PinnedNotification pin = matched.remove(conversation);
             if (pin != null) ordered.add(pin);
         }
         ordered.addAll(matched.values());
         while (ordered.size() > TopPaneSlotMode.MAX_PINNED) ordered.remove(0);
 
         mPinned.clear();
-        for (PinnedNotification pin : ordered) mPinned.put(pin.key, pin);
+        for (PinnedNotification pin : ordered) mPinned.put(pin.conversationId, pin);
         TopPaneFeed.setPinned(ordered);
     }
 
@@ -442,18 +456,72 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         return pin.packageName + '\n' + pin.sender + '\n' + pin.body;
     }
 
+    /**
+     * A rule-matched notification with what grouping needs: its conversation (shortcut id, else
+     * conversation title, else sender; {@link PinnedConversations#key}), how many messages its
+     * MessagingStyle carries, and the sender's picture — the latest incoming message's person
+     * icon, else the notification's large icon, else none (the card then shows the app icon).
+     */
     @Nullable
-    private PinnedNotification toPinnedNotification(@NonNull StatusBarNotification sbn,
-                                                    @NonNull List<EssentialNotificationRule> rules) {
-        Bundle extras = sbn.getNotification().extras;
-        String title = toStringOrNull(extras, "android.title");
-        String body = toStringOrNull(extras, "android.text");
-        if (body == null || body.isEmpty()) body = toStringOrNull(extras, "android.bigText");
+    private PinnedConversations.Candidate toPinnedCandidate(@NonNull StatusBarNotification sbn,
+                                                            @NonNull List<EssentialNotificationRule> rules) {
+        Notification notification = sbn.getNotification();
+        Bundle extras = notification.extras;
+        String title = toStringOrNull(extras, Notification.EXTRA_TITLE);
+        String body = toStringOrNull(extras, Notification.EXTRA_TEXT);
+        if (body == null || body.isEmpty()) body = toStringOrNull(extras, Notification.EXTRA_BIG_TEXT);
         EssentialNotificationRule rule =
             EssentialNotificationRules.firstMatch(rules, sbn.getPackageName(), title, body);
         if (rule == null) return null;
-        return new PinnedNotification(sbn.getKey(), sbn.getPackageName(), title,
-            appLabel(sbn.getPackageName()), body, rule.id, rule.clearOnDismiss, sbn.getPostTime());
+
+        String conversationTitle = toStringOrNull(extras, Notification.EXTRA_CONVERSATION_TITLE);
+        int messages = 0;
+        Icon avatar = null;
+        try {
+            NotificationCompat.MessagingStyle style =
+                NotificationCompat.MessagingStyle.extractMessagingStyleFromNotification(notification);
+            if (style != null) {
+                CharSequence styleTitle = style.getConversationTitle();
+                if (styleTitle != null && styleTitle.length() > 0) {
+                    conversationTitle = styleTitle.toString();
+                }
+                List<NotificationCompat.MessagingStyle.Message> list = style.getMessages();
+                messages = list.size();
+                for (int i = list.size() - 1; i >= 0; i--) {
+                    // A message with no person is the user's own reply; the picture wanted is
+                    // the latest one from the other side.
+                    Person person = list.get(i).getPerson();
+                    if (person == null) continue;
+                    if (person.getIcon() != null) avatar = person.getIcon().toIcon(this);
+                    break;
+                }
+            }
+        } catch (Throwable throwable) {
+            Logger.logWarn(LOG_TAG, "Could not read pinned messaging style: " + throwable.getMessage());
+        }
+        if (avatar == null) avatar = largeIcon(notification);
+
+        String key = sbn.getKey();
+        PinnedNotification pin = new PinnedNotification(key, sbn.getPackageName(), title,
+            appLabel(sbn.getPackageName()), body, rule.id, rule.clearOnDismiss, sbn.getPostTime(),
+            null, null, 1, avatar);
+        String conversation = PinnedConversations.key(sbn.getPackageName(),
+            notification.getShortcutId(), conversationTitle, title, key);
+        return new PinnedConversations.Candidate(pin, conversation, messages);
+    }
+
+    @Nullable
+    private static Icon largeIcon(@NonNull Notification notification) {
+        try {
+            Icon icon = notification.getLargeIcon();
+            if (icon != null) return icon;
+            Object extra = notification.extras == null ? null
+                : notification.extras.get(Notification.EXTRA_LARGE_ICON);
+            if (extra instanceof Icon) return (Icon) extra;
+            if (extra instanceof Bitmap) return Icon.createWithBitmap((Bitmap) extra);
+        } catch (Throwable ignored) {
+        }
+        return null;
     }
 
     private String appLabel(@NonNull String packageName) {
@@ -598,7 +666,10 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     @Override
     public boolean dismissPinned(@NonNull String key, boolean clear) {
         mUnpinned.add(key);
-        boolean unpinned = mPinned.remove(key) != null;
+        // The card goes as a whole: the slot dismisses every key folded into it, and whichever
+        // of them arrives first takes the card off the pane.
+        String conversation = conversationOf(key);
+        boolean unpinned = conversation != null && mPinned.remove(conversation) != null;
         TopPaneFeed.setPinned(new ArrayList<>(mPinned.values()));
         if (!clear) return unpinned;
         try {
@@ -623,14 +694,20 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
     public boolean openPinned(@NonNull String key) {
         StatusBarNotification sbn = activeNotification(key);
         Notification notification = sbn == null ? null : sbn.getNotification();
+        String conversation = conversationOf(key);
         String packageName = sbn == null
-            ? (mPinned.containsKey(key) ? mPinned.get(key).packageName : null)
+            ? (conversation != null ? mPinned.get(conversation).packageName : null)
             : sbn.getPackageName();
         if (notification != null && notification.contentIntent != null) {
             try {
                 notification.contentIntent.send();
                 if ((notification.flags & Notification.FLAG_AUTO_CANCEL) != 0) {
-                    dismissPinned(key, true);
+                    // The conversation was opened: its older messages folded into the card go
+                    // with the latest, or the card would come back showing one of them.
+                    List<String> keys = conversation == null
+                        ? java.util.Collections.singletonList(key)
+                        : new ArrayList<>(mPinned.get(conversation).keys);
+                    for (String folded : keys) dismissPinned(folded, true);
                 }
                 return true;
             } catch (Throwable throwable) {
@@ -653,6 +730,20 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
             Logger.logWarn(LOG_TAG, "Cannot open " + packageName + ": " + throwable.getMessage());
             return false;
         }
+    }
+
+    @Override
+    public void refreshPinned() {
+        mMainHandler.post(this::rebuildPinnedNotifications);
+    }
+
+    /** The conversation whose card holds {@code key}, or null. */
+    @Nullable
+    private String conversationOf(@NonNull String key) {
+        for (Map.Entry<String, PinnedNotification> entry : mPinned.entrySet()) {
+            if (entry.getValue().keys.contains(key)) return entry.getKey();
+        }
+        return null;
     }
 
     @Nullable

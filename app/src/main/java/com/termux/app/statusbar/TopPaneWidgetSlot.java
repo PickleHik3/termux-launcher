@@ -107,6 +107,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             mNotifications.setVisibility(GONE);
             mNotifications.setListener(this::dismissPinned);
             mNotifications.setOpenListener(this::openPinned);
+            mNotifications.setMuteListener(this::muteRule);
         }
         if (mMedia != null) mMedia.setVisibility(GONE);
         applyFeed(false);
@@ -155,8 +156,14 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         applyFeed(true);
     }
 
+    /** A card's dismissal, after its undo ran out: every notification folded into it goes. */
     private void dismissPinned(@NonNull PinnedNotification notification) {
-        TopPaneFeed.dismissPinned(notification.key, notification.clearOnDismiss);
+        TopPaneFeed.dismissPinnedAll(notification.keys, notification.clearOnDismiss);
+    }
+
+    /** "Mute this rule": the card's rule stops matching, so the rebuild takes the card away. */
+    private void muteRule(@NonNull PinnedNotification notification) {
+        TopPaneFeed.muteRule(getContext(), notification.matchedRuleId);
     }
 
     private void openPinned(@NonNull PinnedNotification notification) {
@@ -165,6 +172,8 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
     private void applyFeed(boolean animate) {
         if (mClock == null) return;
+        // Reduced motion: every mode change lands at once, clock form and cards alike.
+        if (animate && com.termux.app.ReducedMotion.isEnabled(getContext())) animate = false;
         List<PinnedNotification> pinned = TopPaneFeed.getPinned();
         TopPaneMediaState media = TopPaneFeed.getMedia();
         TopPaneSlotMode mode = TopPaneSlotMode.derive(pinned.size(), media != null);
@@ -178,6 +187,10 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             mNotifications.setItems(pinned);
             mNotifications.setCompactCard(mode == TopPaneSlotMode.NOTIFICATIONS_AND_MEDIA
                 || pinnedCount >= TopPaneSlotMode.VISIBLE_PINNED);
+        } else if (mNotifications != null) {
+            // The cards are leaving the slot because nothing is pinned any more: an undo whose
+            // notification went meanwhile has nothing left to dismiss, so it is dropped.
+            mNotifications.dropPendingMissingFrom(pinned);
         }
         if (mMedia != null && mode.showsMedia() && media != null) {
             mMedia.setForm(mode == TopPaneSlotMode.NOTIFICATIONS_AND_MEDIA
@@ -341,36 +354,16 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         int contentRight = contentEnd;
         int contentWidth = Math.max(0, contentRight - contentLeft);
 
-        switch (mMode) {
-            case NOTIFICATIONS_AND_MEDIA: {
-                int cardHeight = Math.round(dp(PinnedNotificationsView.CONTENTION_CARD_HEIGHT_DP));
-                int stripHeight = Math.round(dp(MediaWidgetView.STRIP_HEIGHT_DP));
-                int columnGap = Math.round(dp(6f));
-                int columnHeight = Math.min(height, cardHeight + columnGap + stripHeight);
-                int top = Math.max(0, (height - columnHeight) / 2);
-                cardHeight = Math.max(0, columnHeight - columnGap - stripHeight);
-                mNotificationBounds.set(contentLeft, top, contentRight, top + cardHeight);
-                mMediaBounds.set(contentLeft, top + cardHeight + columnGap, contentRight,
-                    top + columnHeight);
-                break;
-            }
-            case NOTIFICATIONS: {
-                // One card gets two body lines and 48dp; two or more fill the slot at one line
-                // each, and anything past the second scrolls into the same two cards' room.
-                int desired = Math.round(dp(mPinnedCount == 1 ? 48f : 68f));
-                int cardsHeight = Math.min(height, desired);
-                int top = Math.max(0, (height - cardsHeight) / 2);
-                mNotificationBounds.set(contentLeft, top, contentRight, top + cardsHeight);
-                break;
-            }
-            case MEDIA: {
-                int mediaHeight = Math.min(height, Math.round(dp(MediaWidgetView.FULL_HEIGHT_DP)));
-                int top = Math.max(0, (height - mediaHeight) / 2);
-                mMediaBounds.set(contentLeft, top, contentRight, top + mediaHeight);
-                break;
-            }
-            default:
-                break;
+        // The column keeps its air off the bar's edge and off the row; see TopPaneSlotBudget.
+        TopPaneSlotBudget.Column column = TopPaneSlotBudget.layout(mMode, mPinnedCount, height,
+            getResources().getDisplayMetrics().density);
+        if (column.cardsHeight > 0) {
+            mNotificationBounds.set(contentLeft, column.cardsTop, contentRight,
+                column.cardsTop + column.cardsHeight);
+        }
+        if (column.mediaHeight > 0) {
+            mMediaBounds.set(contentLeft, column.mediaTop, contentRight,
+                column.mediaTop + column.mediaHeight);
         }
         if (contentWidth <= 0) {
             mNotificationBounds.setEmpty();

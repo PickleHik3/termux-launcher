@@ -1404,6 +1404,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mStatusBarOnDockPlank;
         }
 
+        @NonNull @Override public com.termux.app.chrome.ChromeEdgeRule.TopLead topStackLead() {
+            return topEdgeStackLead();
+        }
+
+        @NonNull @Override public PlaceLayout.Edge statusBarEdge() {
+            return mStatusBarEdge;
+        }
+
         @Override public float statusBarRimCornerRadiusPx() {
             return resolveStatusBarCapsuleCornerRadiusPx(targetStatusBarHeightPx(true,
                 isStatusBarCompact()));
@@ -3809,6 +3817,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private com.termux.app.chrome.GlassRefraction.Program mDockRefraction;
 
     /**
+     * The under-pill strip's own program. It used to share the dock's, and was right only because
+     * a {@code RenderEffect} copies the uniforms at creation: a dock lens rebuild between the two
+     * would have handed the strip the dock's rect and the pressed key's lens.
+     */
+    @Nullable private com.termux.app.chrome.GlassRefraction.Program mNavStripRefraction;
+
+    /** Where the dock host's origin sits in its backdrop's pixels, for mapping a pressed key into it. */
+    private float mGlassOriginLeft, mGlassOriginTop;
+
+    /**
      * What Fancier Glass draws right now, or null in the default mode — see
      * {@link com.termux.app.chrome.FancierGlassPolicy}. Re-read at the head of every apply
      * ({@link #syncFancierGlassLook}) rather than per surface: the answer asks Android for the
@@ -3833,15 +3851,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private RenderEffect buildGlassRefractionEffect(float blurPx, float capLeft, float capTop,
                                                     float capRight, float capBottom, float radiusPx) {
+        return buildRefractionEffect(false, blurPx, capLeft, capTop, capRight, capBottom, radiusPx);
+    }
+
+    /** The under-pill strip's effect: its own program, square, and never a key's lens. */
+    @Nullable
+    private RenderEffect buildNavStripRefractionEffect(float left, float top, float right,
+                                                       float bottom) {
+        return buildRefractionEffect(true, 0f, left, top, right, bottom, 0f);
+    }
+
+    @Nullable
+    private RenderEffect buildRefractionEffect(boolean navStrip, float blurPx, float capLeft,
+                                               float capTop, float capRight, float capBottom,
+                                               float radiusPx) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             return null;
         }
         try {
-            com.termux.app.chrome.GlassRefraction.Program program = mDockRefraction;
+            com.termux.app.chrome.GlassRefraction.Program program =
+                navStrip ? mNavStripRefraction : mDockRefraction;
             if (program == null) {
                 program = com.termux.app.chrome.GlassRefraction.Program.create(
                     getResources().getDisplayMetrics().density);
-                mDockRefraction = program;
+                if (navStrip) mNavStripRefraction = program;
+                else mDockRefraction = program;
             }
             if (program == null) {
                 return null;
@@ -3853,7 +3887,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // otherwise, so the default mode's dock and strip are pixel for pixel what they were.
             program.setLook(com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook));
             // Per-key lens state (0 intensity == no lens, dock refraction unchanged).
-            if (mKeyLensActive && mKeyLensIntensity > 0f) {
+            if (!navStrip && mKeyLensActive && mKeyLensIntensity > 0f) {
                 program.setLens(mKeyLensCx, mKeyLensCy, mKeyLensHx, mKeyLensHy, mKeyLensRadius,
                     mKeyLensIntensity);
             } else {
@@ -3889,10 +3923,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int[] hostLoc = new int[2];
         surfaceHost.getLocationOnScreen(hostLoc);
         // surfaceHost's left maps to fragCoord x == capLeft (the overscan); top maps to capTop.
-        float fl = (screenLeft - hostLoc[0]) + mGlassCapLeft;
-        float fr = (screenRight - hostLoc[0]) + mGlassCapLeft;
-        float ft = (screenTop - hostLoc[1]) + mGlassCapTop;
-        float fb = (screenBottom - hostLoc[1]) + mGlassCapTop;
+        float fl = (screenLeft - hostLoc[0]) + mGlassOriginLeft;
+        float fr = (screenRight - hostLoc[0]) + mGlassOriginLeft;
+        float ft = (screenTop - hostLoc[1]) + mGlassOriginTop;
+        float fb = (screenBottom - hostLoc[1]) + mGlassOriginTop;
         mKeyLensCx = (fl + fr) * 0.5f;
         mKeyLensCy = (ft + fb) * 0.5f;
         mKeyLensHx = Math.max(1f, (fr - fl) * 0.5f);
@@ -4104,61 +4138,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         int fallback = resolveDockAccentColor();
-        int color = extractDominantIconColor(drawable, fallback);
+        int color = com.termux.app.chrome.IconColor.dominant(drawable, fallback);
         mLaunchIconColorCache.put(packageName, color);
         return color;
-    }
-
-    static int extractDominantIconColor(@Nullable Drawable drawable, int fallback) {
-        if (drawable == null) return fallback;
-        final int size = 40;
-        Bitmap bitmap;
-        try {
-            bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            Rect oldBounds = drawable.copyBounds();
-            drawable.setBounds(0, 0, size, size);
-            drawable.draw(canvas);
-            drawable.setBounds(oldBounds);
-        } catch (Throwable throwable) {
-            return fallback;
-        }
-        int[] buckets = new int[4096];
-        int[] pixels = new int[size * size];
-        bitmap.getPixels(pixels, 0, size, 0, 0, size, size);
-        bitmap.recycle();
-        // Only chromatic pixels vote: adaptive icons are mostly white/neutral background, and letting
-        // that mass win pushed every launch color to the theme-accent fallback. Neutral-only icons
-        // still fall back below.
-        int bestBucket = -1;
-        int bestWeight = 0;
-        int opaqueCount = 0;
-        int chromaticCount = 0;
-        float[] hsv = new float[3];
-        for (int pixel : pixels) {
-            int alpha = Color.alpha(pixel);
-            if (alpha < 64) continue;
-            opaqueCount++;
-            Color.colorToHSV(pixel, hsv);
-            if (hsv[1] < 0.18f || hsv[2] < 0.18f) continue;
-            chromaticCount++;
-            int r = Color.red(pixel) >> 4;
-            int g = Color.green(pixel) >> 4;
-            int b = Color.blue(pixel) >> 4;
-            int bucket = (r << 8) | (g << 4) | b;
-            int weight = Math.round(alpha * hsv[1]);
-            buckets[bucket] += weight;
-            if (buckets[bucket] > bestWeight) {
-                bestWeight = buckets[bucket];
-                bestBucket = bucket;
-            }
-        }
-        if (bestBucket < 0 || opaqueCount == 0 || chromaticCount * 25 < opaqueCount)
-            return fallback;
-        int r = ((bestBucket >> 8) & 0xF) * 17;
-        int g = ((bestBucket >> 4) & 0xF) * 17;
-        int b = (bestBucket & 0xF) * 17;
-        return Color.rgb(r, g, b);
     }
 
     private void applyGlassSurfaceColor(int viewId, int surfaceColor) {
@@ -4405,7 +4387,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     ? mPreferences.getDockGlassGrain()
                     : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN,
                 radiusPx, mFancierGlassLook)
-            .withRim(true).withSlice(1f, true);
+            // A card in both styles: it keeps the dock's side inset and the air above the pill,
+            // so it touches no screen edge and the edge rule leaves it its whole rim.
+            .withRim(com.termux.app.chrome.ChromeEdgeRule.strokes(isRoundedDockStyle(), true, true,
+                com.termux.app.chrome.ChromeEdgeRule.NONE, com.termux.app.chrome.ChromeEdgeRule.NONE))
+            .withSlice(1f, true);
         under.setBackground(new com.termux.app.chrome.RoundedSheetDrawable(
             com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec,
                 getResources().getDisplayMetrics().density, backdrop),
@@ -4888,13 +4874,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? -1 : mPreferences.getStatusBarCornerRadius(), surfaceHeightPx);
     }
 
-    private final com.termux.app.surfaces.InnerEdgeOutlineProvider mDockInnerEdgeOutline =
-        new com.termux.app.surfaces.InnerEdgeOutlineProvider(
-            com.termux.app.surfaces.InnerEdgeOutlineProvider.Edge.TOP);
+    /** The docked dock's outline: it stands on the bottom edge, so only its top corners round. */
+    private final com.termux.app.statusbar.StatusBarSurfaceOutlineProvider mDockInnerEdgeOutline =
+        newDockInnerEdgeOutline();
+
+    @NonNull
+    private static com.termux.app.statusbar.StatusBarSurfaceOutlineProvider newDockInnerEdgeOutline() {
+        com.termux.app.statusbar.StatusBarSurfaceOutlineProvider outline =
+            new com.termux.app.statusbar.StatusBarSurfaceOutlineProvider();
+        outline.setEdge(PlaceLayout.Edge.BOTTOM);
+        outline.setInnerEdgeOnly(true);
+        return outline;
+    }
 
     private void applyDockSurfaceShape(@NonNull View surface, boolean capsule, int surfaceHeightPx,
                                        boolean ownsInnerEdge) {
-        if (!capsule) {
+        // The edge rule: docked, the dock's bottom and sides run into the screen and the strip
+        // under the pill, and its inner edge has never carried a stroke, so it draws none at all.
+        boolean stroked = com.termux.app.chrome.ChromeEdgeRule.strokes(capsule, true, false,
+            com.termux.app.chrome.ChromeEdgeRule.flushEdges(PlaceLayout.Edge.BOTTOM), 0);
+        if (!stroked) {
             surface.setBackground(null);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 // Clip the normal dock to its own bounds so the reactive edge-glow's outward blur
@@ -4905,7 +4904,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     surface.setClipToOutline(true);
                     return;
                 }
-                boolean changed = mDockInnerEdgeOutline.setRadiusPx(
+                boolean changed = mDockInnerEdgeOutline.setFrame(
                     resolveDockedDockInnerRadiusPx(surfaceHeightPx));
                 if (surface.getOutlineProvider() != mDockInnerEdgeOutline)
                     surface.setOutlineProvider(mDockInnerEdgeOutline);
@@ -5439,13 +5438,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mDecorNavBarTintOverlay.setVisibility(View.VISIBLE);
         }
 
-        if (state.blurEnabled && (!state.keyboardShown || isInAppKeyboardGlassSurface())) {
+        if (navStripBlurEnabled(state)) {
             updateDecorNavBarBackdrop(state);
         } else {
             clearDecorNavBarBackdrop();
         }
 
         overlay.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * The blur radius of the glass the under-pill strip continues: the keyboard's own while it is
+     * up — it may be detached from Base — and the dock's otherwise, so the frost under the pill is
+     * the frost directly above it.
+     */
+    private int navStripBlurRadiusDp(@NonNull ChromeSpec state) {
+        return state.keyboardShown && isInAppKeyboardGlassSurface()
+            ? getEffectiveInAppKeyboardBlurRadius() : state.blurRadiusDp;
+    }
+
+    /** The same surface's frost gate: the keyboard blurs by its own radius, the dock by its own. */
+    private boolean navStripBlurEnabled(@NonNull ChromeSpec state) {
+        if (!state.keyboardShown) return state.blurEnabled;
+        return isInAppKeyboardGlassSurface()
+            && ChromePolicy.dockBlurEnabled(getEffectiveInAppKeyboardBlurRadius());
     }
 
     /**
@@ -5485,7 +5501,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The keyboard's own grain, not the dock's — it may now have its own.
         Drawable strip = mChrome.glass().surface(inAppKeyboardGlassAlpha(state), foot, 1f, false,
             getInAppKeyboardGrainPercent());
-        strip.setAlpha(stackAlpha);
+        // Each layer's own alpha scaled, never replaced: a plain setAlpha on the stack put the
+        // faint grain layer at full strength, several times coarser than the keyboard's.
+        com.termux.app.chrome.GlassStack.applyStackAlpha(strip, stackAlpha);
         return strip;
     }
 
@@ -5951,14 +5969,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int blurRadiusDp = getEffectiveInAppKeyboardBlurRadius();
         // Render only the keyboard's slice of the shared light model — the under-pill nav strip
         // renders the remainder so the single foot lands under the pill (see the slice overload).
-        // A docked keyboard over that strip continues into it, so its bottom edge takes no rim.
+        // A docked keyboard over that strip continues into it, so its bottom edge takes no rim;
+        // its sides, and its bottom where no card stands under it, run into the screen (the edge
+        // rule). Its inner edge has never carried a stroke in docked, so it draws none.
+        boolean floating = isKeyboardFloating();
+        boolean stripBelow = shouldShowDecorNavBarSurface(state);
+        int keyboardOuter = floating ? com.termux.app.chrome.ChromeEdgeRule.NONE
+            : com.termux.app.chrome.ChromeEdgeRule.LEFT | com.termux.app.chrome.ChromeEdgeRule.RIGHT
+                | (underKeyboardBandsShown() ? 0 : com.termux.app.chrome.ChromeEdgeRule.BOTTOM);
+        int keyboardJoined = stripBelow ? com.termux.app.chrome.ChromeEdgeRule.BOTTOM : 0;
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.keyboard(
                 mPreferences, state.barAlpha, capsule ? cornerRadiusPx : 0f, mFancierGlassLook)
             .withBlur(blurRadiusDp)
-            .withRim(capsule && !isKeyboardFloating())
+            .withRim(com.termux.app.chrome.ChromeEdgeRule.strokes(capsule, !floating, false,
+                keyboardOuter, keyboardJoined))
             .withSlice(defaultDockGlassFootFraction(), false)
-            .withSeams(!capsule && shouldShowDecorNavBarSurface(state)
-                ? com.termux.app.chrome.GlassRefraction.SEAM_BOTTOM : 0)
+            .withSeams(com.termux.app.chrome.ChromeEdgeRule.seams(capsule, keyboardOuter,
+                capsule ? 0 : keyboardJoined))
             .withTintColor(schemeBackground == null ? null : withAlphaComponent(schemeBackground,
                 Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)));
         com.termux.app.chrome.SharedFrameDrawable backdrop = null;
@@ -6148,6 +6175,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         backdrop.setAlpha(1f);
+        // The frost of the surface right above: the keyboard's radius while it is up.
+        int stripRadiusDp = navStripBlurRadiusDp(state);
         // Overscan the strip's blur bitmap upward past the seam with the dock/keyboard (default dock
         // only) so the refraction edge band clears the visible seam and meets the dock's downward
         // overscan. The bitmap is taller than the overlay; a negative top margin pushes the overscan
@@ -6178,7 +6207,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         boolean usingManagedWallpaperSource = shouldUseManagedWallpaperBlurSource();
         if (!mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) &&
-            mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) == state.blurRadiusDp &&
+            mChrome.ledger().lastRadiusDp(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) == stripRadiusDp &&
             mChrome.ledger().lastManagedSource(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR) == usingManagedWallpaperSource &&
             mChrome.ledger().matchesLastRect(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, targetRect) &&
             backdrop.getDrawable() != null) {
@@ -6188,7 +6217,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         com.termux.app.chrome.SharedFrameDrawable installed =
             com.termux.app.chrome.SharedFrameDrawable.of(backdrop.getDrawable());
-        Bitmap frame = mChrome.blurCache().obtain(state.blurRadiusDp, wallpaperFrame);
+        Bitmap frame = mChrome.blurCache().obtain(stripRadiusDp, wallpaperFrame);
         Rect frameRect = mChrome.blurCache().frameRectRef();
         if (frame == null) {
             // A blur in flight: the frame already up stays while it still describes this screen.
@@ -6203,7 +6232,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // nothing transforms — fading in over the frame a wallpaper change displaced, as the dock
         // it abuts does, so the seam never shows two pictures.
         if (installed != null) {
-            installed.setFrame(frame, frameRect, mChrome.blurCache().isCrossfadedRadius(state.blurRadiusDp)
+            installed.setFrame(frame, frameRect, mChrome.blurCache().isCrossfadedRadius(stripRadiusDp)
                 && !ReducedMotion.isEnabled(this));
         } else {
             backdrop.setImageDrawable(new com.termux.app.chrome.SharedFrameDrawable(frame, frameRect,
@@ -6217,8 +6246,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // keyboard-off dock+nav overlay and the keyboard-on under-pill strip now match the
             // refraction-lit content dock instead of being a flatter, darker plain blur. Falls back
             // to plain blur when the shader is unavailable (< API 33 or shader failure).
-            RenderEffect glass = buildGlassRefractionEffect(0f, 0f, 0f,
-                Math.max(1, targetRect.width()), Math.max(1, targetRect.height()), 0f);
+            //
+            // Docked, every edge of the strip is a seam (the edge rule): its top runs on into the
+            // keyboard or the dock, the rest into the screen. The rim rect is pushed out past all
+            // four, so the strip draws no hairline and no bend of its own — the surface above has
+            // its bottom and sides seamed too, so neither bends there and the picture runs straight
+            // through. The capsule's overlay keeps the rim it always had. Its own program, not the
+            // dock's: the two effects were only apart because RenderEffect copies uniforms.
+            boolean capsuleOverlay = isRoundedDockStyle();
+            int stripSeams = com.termux.app.chrome.ChromeEdgeRule.seams(capsuleOverlay,
+                com.termux.app.chrome.ChromeEdgeRule.flushEdges(PlaceLayout.Edge.BOTTOM),
+                capsuleOverlay ? 0 : com.termux.app.chrome.ChromeEdgeRule.TOP);
+            float reachPx = com.termux.app.chrome.GlassRefraction.seamReachPx(
+                com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook),
+                getResources().getDisplayMetrics().density, 0f);
+            float[] rect = new float[4];
+            com.termux.app.chrome.GlassRefraction.rimRect(rect, 0f, 0f,
+                Math.max(1, targetRect.width()), Math.max(1, targetRect.height()), reachPx,
+                stripSeams);
+            RenderEffect glass = buildNavStripRefractionEffect(rect[0], rect[1], rect[2], rect[3]);
             backdrop.setRenderEffect(glass);
         }
 
@@ -6226,7 +6272,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // under-pill strip reads as the same glass material rather than a plain blur.
         backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost());
         backdrop.setVisibility(View.VISIBLE);
-        mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, state.blurRadiusDp,
+        mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, stripRadiusDp,
             usingManagedWallpaperSource, targetRect);
     }
 
@@ -6744,16 +6790,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Put the shader's bottom edge at the overscanned bitmap bottom (below the visible seam)
             // so the visible dock bottom reads as interior glass, not a refracting edge.
             float capBottom = Math.max(1, surfaceHost.getHeight()) + seamOverscanPx;
-            float radiusPx = isRoundedDockStyle()
+            boolean capsuleDock = isRoundedDockStyle();
+            float radiusPx = capsuleDock
                 ? resolveDockCapsuleCornerRadiusPx(surfaceHost.getHeight())
                 : 0f;
-            RenderEffect glass = buildGlassRefractionEffect(0f, capLeft, 0f, capRight, capBottom, radiusPx);
+            // The edge rule: docked, the dock's sides and its bottom run into the screen (or the
+            // strip under the pill), so they are seams and the rim rect is pushed past them; only
+            // its top, facing the terminal, keeps the rim and the bend. The capsule is unchanged.
+            int dockSeams = com.termux.app.chrome.ChromeEdgeRule.seams(capsuleDock,
+                com.termux.app.chrome.ChromeEdgeRule.flushEdges(PlaceLayout.Edge.BOTTOM),
+                seamOverscanPx > 0 ? com.termux.app.chrome.ChromeEdgeRule.BOTTOM : 0);
+            float[] capRect = new float[4];
+            com.termux.app.chrome.GlassRefraction.rimRect(capRect, capLeft, 0f, capRight, capBottom,
+                com.termux.app.chrome.GlassRefraction.seamReachPx(
+                    com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook),
+                    getResources().getDisplayMetrics().density, radiusPx),
+                capsuleDock ? 0 : dockSeams);
+            RenderEffect glass = buildGlassRefractionEffect(0f, capRect[0], capRect[1], capRect[2],
+                capRect[3], radiusPx);
             // Remember the dock params so a key-press lens can rebuild this effect cheaply (no recapture).
             mGlassBlurPx = 0f;
-            mGlassCapLeft = capLeft;
-            mGlassCapTop = 0f;
-            mGlassCapRight = capRight;
-            mGlassCapBottom = capBottom;
+            mGlassOriginLeft = capLeft;
+            mGlassOriginTop = 0f;
+            mGlassCapLeft = capRect[0];
+            mGlassCapTop = capRect[1];
+            mGlassCapRight = capRect[2];
+            mGlassCapBottom = capRect[3];
             mGlassRadiusPx = radiusPx;
             mGlassParamsValid = (glass != null);
             backdrop.setRenderEffect(glass);
@@ -7231,23 +7293,97 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * laid out in the pane below it — so it is not a chrome band and asks for no veil. See
      * {@link #STATUS_INSET_STRIP_CONTINUES_PANE_VEIL}.</p>
      */
+    /**
+     * The first band showing in the top edge's stack — outermost first, so the one against the
+     * system status bar — or null while that stack shows none.
+     */
+    @Nullable
+    private View topEdgeStackLeadView() {
+        View stack = findViewById(R.id.place_edge_stack_top);
+        if (!(stack instanceof ViewGroup) || stack.getVisibility() != View.VISIBLE) return null;
+        ViewGroup bands = (ViewGroup) stack;
+        for (int index = 0; index < bands.getChildCount(); index++) {
+            View band = bands.getChildAt(index);
+            if (band.getVisibility() == View.VISIBLE) return band;
+        }
+        return null;
+    }
+
+    /**
+     * What leads the top edge in the docked style: the window bar, a sheet in the dock's material
+     * (the pinned-apps plank, the alphabets bar's own capsule), or nothing a strip could continue.
+     * The capsule has no lead: it floats clear of the status bar. Extra keys standing along the top
+     * wear no glass of their own, so they count as nothing here.
+     */
+    @NonNull
+    private com.termux.app.chrome.ChromeEdgeRule.TopLead topEdgeStackLead() {
+        if (isRoundedDockStyle()) return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
+        View lead = topEdgeStackLeadView();
+        if (lead == null) return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
+        int id = lead.getId();
+        if (id == R.id.terminal_window_bar_host)
+            return com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR;
+        if (id == R.id.place_off_dock_plank_host || id == R.id.place_az_bar_host)
+            return com.termux.app.chrome.ChromeEdgeRule.TopLead.DOCK_SHEET;
+        return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
+    }
+
+    /** The lead the strip behind the system status bar continues, or NONE while it is not shown. */
+    @NonNull
+    private com.termux.app.chrome.ChromeEdgeRule.TopLead statusInsetStripLead() {
+        return com.termux.app.chrome.ChromeEdgeRule.statusInsetLead(isRoundedDockStyle(),
+            !shouldEnableSeamlessStatusBackground(), mLastStatusBarInsetTop, topEdgeStackLead());
+    }
+
+    /** The lead the status inset strip was last given; see {@link #applyTerminalWindowBarBackdropInsets}. */
+    @NonNull private com.termux.app.chrome.ChromeEdgeRule.TopLead mStatusStripLead =
+        com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
+
+    /** Whether {@code sheet} is the band the status inset strip continues. */
+    private boolean continuesIntoStatusInsetStrip(@Nullable View sheet) {
+        return sheet != null && statusInsetStripLead() != com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE
+            && topEdgeStackLeadView() == sheet;
+    }
+
+    /**
+     * The strip behind the system status bar, in the docked style, for whatever leads the top
+     * edge: the window bar's own glass, as it always was, or the dock's material over a sheet off
+     * the dock — each at its own opacity, blur and frost, and on the upper slice of the light model
+     * the surface below renders the rest of, so the two read as one card running up under the
+     * system bar. Nothing leading, the capsule, or fullscreen: no strip.
+     */
     private void applyTerminalWindowBarBackdropInsets() {
         View host = findViewById(R.id.terminal_window_bar_host);
         View statusGlass = findViewById(R.id.terminal_status_bar_background);
         if (host == null || statusGlass == null) return;
-        boolean show = host.getVisibility() == View.VISIBLE
-            && mStatusBarEdge == PlaceLayout.Edge.TOP
-            && isSplitPanesEnabled()
-            && shouldEnableSeamlessStatusBackground()
-            && !isRoundedDockStyle()
-            && mLastStatusBarInsetTop > 0;
+        com.termux.app.chrome.ChromeEdgeRule.TopLead lead = statusInsetStripLead();
+        com.termux.app.chrome.ChromeEdgeRule.TopLead previous = mStatusStripLead;
+        mStatusStripLead = lead;
+        if (previous != lead) {
+            // The surface the strip used to continue, or now continues, renders a different slice
+            // and takes a different top seam: re-glaze it, after this pass rather than inside it.
+            if (previous == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR
+                || lead == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR)
+                host.post(this::refreshTerminalWindowBar);
+            if (previous == com.termux.app.chrome.ChromeEdgeRule.TopLead.DOCK_SHEET
+                || lead == com.termux.app.chrome.ChromeEdgeRule.TopLead.DOCK_SHEET)
+                host.post(this::refreshOffDockGlass);
+        }
         View statusBlur = findViewById(R.id.terminal_status_bar_glass_blur);
         View statusSurface = findViewById(R.id.terminal_status_bar_glass_surface);
-        if (!show) {
+        if (lead == com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE) {
+            // Over the wallpaper this view is only ever the strip, so a strip that has just lost
+            // its lead goes with it rather than waiting for the next appearance pass.
+            if (previous != lead && shouldUseWallpaperPassthroughMode())
+                statusGlass.setVisibility(View.GONE);
             statusGlass.setTranslationY(0f);
             if (statusBlur != null) statusBlur.setVisibility(View.GONE);
             if (statusSurface != null) statusSurface.setVisibility(View.GONE);
             mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+            return;
+        }
+        if (lead == com.termux.app.chrome.ChromeEdgeRule.TopLead.DOCK_SHEET) {
+            applyStatusInsetStripOverDockSheet(statusGlass, statusBlur, statusSurface);
             return;
         }
         float opacity = mPreferences != null ? mPreferences.getStatusBarOpacity() / 100f : 1f;
@@ -7292,6 +7428,58 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             statusSurface.setVisibility(View.VISIBLE);
         }
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+    }
+
+    /**
+     * The strip over a sheet in the dock's material leading the top edge: the dock's opacity, the
+     * dock's blur radius, and the slice of the light model above the one the sheet renders
+     * ({@link #statusInsetSheetSliceStart}). The frost is the painter's, at the dock's radius.
+     */
+    private void applyStatusInsetStripOverDockSheet(@NonNull View statusGlass,
+                                                    @Nullable View statusBlur,
+                                                    @Nullable View statusSurface) {
+        float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity() / 100f;
+        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
+        int glassInset = getDockLayout().horizontalInsetPx;
+        ViewGroup.LayoutParams glassParams = statusGlass.getLayoutParams();
+        if (glassParams instanceof ViewGroup.MarginLayoutParams) {
+            ViewGroup.MarginLayoutParams glassMargins = (ViewGroup.MarginLayoutParams) glassParams;
+            if (glassMargins.leftMargin != glassInset || glassMargins.rightMargin != glassInset) {
+                glassMargins.leftMargin = glassInset;
+                glassMargins.rightMargin = glassInset;
+                statusGlass.setLayoutParams(glassMargins);
+            }
+        }
+        statusGlass.setTranslationY(-mLastStatusBarInsetTop);
+        statusGlass.setBackgroundColor(Color.TRANSPARENT);
+        statusGlass.setVisibility(View.VISIBLE);
+        applyRealtimeBlurRadius(statusBlur, blurRadiusDp);
+        applyRealtimeBlurDownsampleFactor(statusBlur, ChromePolicy.ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
+        // Blur only, no tint: the drawable below paints the dock's wash, as on the sheet itself.
+        applyRealtimeBlurOverlayColor(statusBlur, Color.TRANSPARENT);
+        if (statusBlur != null) {
+            statusBlur.setVisibility(ChromePolicy.dockBlurEnabled(blurRadiusDp)
+                ? View.VISIBLE : View.GONE);
+            restLiveBlur(statusBlur, true);
+        }
+        if (statusSurface != null) {
+            statusSurface.setBackground(mChrome.glass().dockSurface(opacity, 0f,
+                statusInsetSheetSliceStart(topEdgeStackLeadView()), false));
+            statusSurface.setVisibility(View.VISIBLE);
+        }
+        mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+    }
+
+    /**
+     * Where the dock's light model splits between the status inset strip and the sheet leading the
+     * top edge under it: the strip renders {@code [0, f]}, the sheet {@code [f, 1]}. 0 for a sheet
+     * the strip does not continue, which then renders the whole model as it always has.
+     */
+    private float statusInsetSheetSliceStart(@Nullable View sheet) {
+        if (!continuesIntoStatusInsetStrip(sheet)) return 0f;
+        int sheetPx = sheet.getId() == R.id.place_off_dock_plank_host
+            ? offDockPlankGlassHeightPx() : azBarThicknessPx();
+        return com.termux.app.chrome.ChromeEdgeRule.stripFraction(mLastStatusBarInsetTop, sheetPx);
     }
 
     /** Wallpaper frost for the command palette glass; true when the live blur should rest. */
@@ -8585,11 +8773,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mOffDockPlankOutline, mOffDockPlankEdge, offDockPlankGlassHeightPx());
         }
         View host = findViewById(R.id.place_az_bar_host);
-        if (host == null || host.getVisibility() != View.VISIBLE || mAzBarOnPlank) return;
-        applyOffDockPlankGlass(R.id.place_az_bar_host_glass, R.id.place_az_bar_host_blur,
-            R.id.place_az_bar_host_frost, R.id.place_az_bar_host_surface,
-            com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST,
-            mAzBarHostOutline, mAzBarEdge, azBarThicknessPx());
+        if (host != null && host.getVisibility() == View.VISIBLE && !mAzBarOnPlank) {
+            applyOffDockPlankGlass(R.id.place_az_bar_host_glass, R.id.place_az_bar_host_blur,
+                R.id.place_az_bar_host_frost, R.id.place_az_bar_host_surface,
+                com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST,
+                mAzBarHostOutline, mAzBarEdge, azBarThicknessPx());
+        }
+        // The strip behind the status bar is these sheets' glass whenever one of them leads the
+        // top edge, so it is re-glazed with them — and when the lead has just come or gone.
+        if (mStatusStripLead == com.termux.app.chrome.ChromeEdgeRule.TopLead.DOCK_SHEET
+            || statusInsetStripLead() != mStatusStripLead)
+            applyTerminalWindowBarBackdropInsets();
     }
 
     /** The bar's own view inside a host, filling whatever box the host's padding leaves it. */
@@ -8646,13 +8840,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int width = column ? azBarHostBandPx() : LinearLayout.LayoutParams.MATCH_PARENT;
         int height = column ? LinearLayout.LayoutParams.MATCH_PARENT : thicknessPx;
         int topMargin = column ? 0 : marginPx;
+        int bottomMargin = topMargin;
+        // Docked and leading the top edge, the capsule runs on into the strip behind the status
+        // bar: its air goes below it, so the band it claims is the same and no gap opens above.
+        if (!column && edge == PlaceLayout.Edge.TOP
+            && dockedStatusStripLeadsWith(currentPlaceLayout(),
+                java.util.Collections.singletonList(Element.AZ))) {
+            bottomMargin = topMargin + bottomMargin;
+            topMargin = 0;
+        }
         if (params.width != width || params.height != height
-            || params.topMargin != topMargin || params.bottomMargin != topMargin
+            || params.topMargin != topMargin || params.bottomMargin != bottomMargin
             || host.getLayoutParams() != params) {
             params.width = width;
             params.height = height;
             params.topMargin = topMargin;
-            params.bottomMargin = topMargin;
+            params.bottomMargin = bottomMargin;
             host.setLayoutParams(params);
         }
         if (!column) {
@@ -8698,9 +8901,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Appearance editor's dock radius, resolved through the same follow-the-style sentinel
         // the dock reads, and clamped to a half-capsule of the sheet being glazed.
         float cornerRadiusPx = getDockLayout().capsuleCornerRadiusPx(heightPx);
+        View glass = findViewById(glassId);
+        View sheetHost = glass != null && glass.getParent() instanceof View
+            ? (View) glass.getParent() : null;
+        // The edge rule. Docked, a sheet flush with the screen's sides has them as seams, and the
+        // one leading the top edge runs on into the strip behind the status bar as well: its top
+        // is a seam, its top corners square, and it renders the lower slice of the light model the
+        // strip renders the top of. Standing clear, a sheet keeps a rim all round, as it always has.
+        boolean capsule = isRoundedDockStyle();
+        boolean continuesStrip = !capsule && edge == PlaceLayout.Edge.TOP
+            && continuesIntoStatusInsetStrip(sheetHost);
+        int outer = com.termux.app.chrome.ChromeEdgeRule.NONE;
+        if (!capsule && !edge.isOnSide() && getDockLayout().horizontalInsetPx == 0)
+            outer |= com.termux.app.chrome.ChromeEdgeRule.LEFT | com.termux.app.chrome.ChromeEdgeRule.RIGHT;
+        if (continuesStrip) outer |= com.termux.app.chrome.ChromeEdgeRule.TOP;
+        int seams = com.termux.app.chrome.ChromeEdgeRule.seams(capsule, outer,
+            com.termux.app.chrome.ChromeEdgeRule.NONE);
+        float sliceStart = continuesStrip ? statusInsetSheetSliceStart(sheetHost) : 0f;
         View frostView = findViewById(frostId);
         boolean frosted = frostView instanceof ImageView && mChrome.frost().applyOffDockSheet(
-            (ImageView) frostView, frostKey, cornerRadiusPx);
+            (ImageView) frostView, frostKey, cornerRadiusPx, seams);
         View blur = findViewById(blurId);
         applyRealtimeBlurRadius(blur, blurRadiusDp);
         applyRealtimeBlurDownsampleFactor(blur, ChromePolicy.ACCESSORY_BLUR_DOWNSAMPLE_FACTOR);
@@ -8717,15 +8937,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (surface != null) {
             // Without the dark foot: this is a plank floating clear of the screen's edges, not a
             // slab standing on one, so a shaded underside would read as a drawn border.
-            surface.setBackground(mChrome.glass().dockSurface(opacity, 0f, 1f, false));
+            surface.setBackground(mChrome.glass().dockSurface(opacity, sliceStart, 1f, false));
             surface.setAlpha(1f);
         }
-        // A plank on every side, so all four corners are on screen and carry the dock's radius.
+        // A plank standing clear has all four corners on screen, carrying the dock's radius; one
+        // running on into the status inset strip keeps only the two facing the terminal.
         // The sheet is what clips, not the host: the host has to let the wave's lift out of it.
-        View glass = findViewById(glassId);
         if (glass == null) return;
         outline.setEdge(edge);
-        outline.setInnerEdgeOnly(false);
+        outline.setInnerEdgeOnly(com.termux.app.chrome.ChromeEdgeRule.innerCornersOnly(capsule,
+            outer & com.termux.app.chrome.ChromeEdgeRule.edgeBit(edge)));
         outline.setFrame(cornerRadiusPx);
         if (glass.getOutlineProvider() != outline) glass.setOutlineProvider(outline);
         glass.setClipToOutline(outline.clipsCorners());
@@ -11782,6 +12003,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Docked, with the strip behind the status bar showing: whether the band the top edge shows
+     * first is one of {@code elements}. Read off the arrangement rather than the views, because the
+     * sheets are sized before the walk stands them in their stack. A status bar the split panes do
+     * not show stands nowhere, so the band after it leads.
+     */
+    private boolean dockedStatusStripLeadsWith(@NonNull PlaceLayout layout,
+                                               @NonNull List<Element> elements) {
+        if (isRoundedDockStyle() || !shouldEnableSeamlessStatusBackground()
+            || mLastStatusBarInsetTop <= 0) return false;
+        for (Element element : EdgeStackPolicy.stack(layout, PlaceLayout.Edge.TOP)) {
+            if (element == Element.STATUS && !isSplitPanesEnabled()) continue;
+            return elements.contains(element);
+        }
+        return false;
+    }
+
+    /**
      * Whether the pinned-apps row is the band immediately next to the canvas on the edge it stands
      * on: nothing between it and the terminal, the widgets or the display pane. Read off that
      * edge's stack, whose last band is the innermost one.
@@ -11847,8 +12085,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int airPx = offDockPlankAirPx(onPlank);
             // Padding rather than margins: the glass fills the padded box, so whatever air the
             // plank keeps is outside the sheet and the sheet is exactly what the radius rounds.
-            // A lone row keeps none here — its air is inside the sheet instead.
-            updateViewPadding(host, sideInsetPx, airPx, sideInsetPx, airPx);
+            // A lone row keeps none here — its air is inside the sheet instead. Docked and leading
+            // the top edge, the sheet runs on into the strip behind the status bar, so its air goes
+            // below it instead: the same band claimed, with no gap between the sheet and the strip.
+            boolean flushTop = dockedStatusStripLeadsWith(layout, onPlank);
+            updateViewPadding(host, sideInsetPx, flushTop ? 0 : airPx, sideInsetPx,
+                flushTop ? 2 * airPx : airPx);
         }
         boolean changed = (host.getVisibility() == View.VISIBLE) != want
             || mOffDockPlankGlassHeightPx != glassHeightPx;
@@ -19805,12 +20047,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The capsule floats below the status bar as its own slab, so its glass spans the full
             // pane height. The default pane merges with the behind-status glass, so it renders only
             // the lower slice and the extension draws the rest.
+            // The edge rule: docked, the bar's screen edges, and its top while it leads the top
+            // edge, take no stroke — the strip behind the system status bar continues it there.
+            // Only the edge facing the terminal keeps the line. The capsule keeps it all round.
+            boolean leads = topEdgeStackLead() == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR;
+            boolean stripContinues = statusInsetStripLead()
+                == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR;
+            int barOuter = mStatusBarEdge == PlaceLayout.Edge.TOP
+                ? com.termux.app.chrome.ChromeEdgeRule.LEFT | com.termux.app.chrome.ChromeEdgeRule.RIGHT
+                    | (leads ? com.termux.app.chrome.ChromeEdgeRule.TOP : 0)
+                : com.termux.app.chrome.ChromeEdgeRule.edgeBit(mStatusBarEdge);
+            int barStroke = com.termux.app.chrome.ChromeEdgeRule.strokeEdges(capsuleStatusBar,
+                true, true, barOuter, 0);
             background.setBackground(onPlank ? null
                 : joinsDock
                     ? mChrome.glass().dockSurface(opacity, 0f, 1f, false)
                     : mChrome.glass().statusBarSurface(opacity,
-                        capsuleStatusBar || isStatusBarVertical()
-                            ? 0f : terminalWindowGlassStatusFraction(host), 1f, true,
+                        capsuleStatusBar || isStatusBarVertical() || !stripContinues
+                            ? 0f : terminalWindowGlassStatusFraction(host), 1f, barStroke,
                         com.termux.app.chrome.GlassBackdropCache.Band.WINDOW_BAR));
         }
         applyStatusBarStyle(host);

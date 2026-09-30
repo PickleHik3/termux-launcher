@@ -280,7 +280,15 @@ long-press menu, and are the same on every place.
 
 - **Use 12-hour time**.
 - **CPU usage**, **Memory usage**, and **Weather** status cards.
-- **Media and pinned notifications** and their essential notification rules.
+- **Media and pinned notifications** and their essential notification rules. A rule pins the
+  notifications that match its app package, its keywords, or both. Each rule has a switch: off keeps
+  the rule but stops it pinning anything. **Mute this rule** on a card turns that switch off.
+
+A pinned card shows the sender, the message, how long ago it arrived, and a count when several
+messages from one conversation are folded into it. Tap a card to open the notification. Swipe it
+left or right to dismiss it; **Undo** stays in its place for 4 seconds. Long-press a card to read
+the whole message and choose **Open**, **Dismiss**, or **Mute this rule**. With two cards or more,
+swipe up or down on them to see the rest.
 
 The expanded status panel's clock opens Android's clock app and its cog opens Settings. Window pills
 also show CPU-based working state and bell-based attention state; those indicators need no toggle.

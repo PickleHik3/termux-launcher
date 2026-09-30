@@ -31,7 +31,8 @@ import java.util.List;
 
 /**
  * Essential notification rules, in the benchmark screens' dress: a header card, the stored rules
- * as tonal cards with a quiet Remove, and an Add card with the package and keywords fields. The
+ * as tonal cards with an on/off switch ({@link EssentialNotificationRule#enabled}, which a pinned
+ * card's "Mute this rule" turns off) and a quiet Remove, and an Add card with the package and keywords fields. The
  * data model and behaviour are the old dialog's: the same {@link EssentialNotificationRules}
  * store, the same validation, and a pinned-notification refresh after every change.
  */
@@ -234,6 +235,21 @@ public class EssentialNotificationRulesFragment extends Fragment {
             pillParams.setMarginStart(TaiBenchViews.dp(context, 8));
             line.addView(pill, pillParams);
         }
+        // On/off without deleting: a pinned card's "Mute this rule" turns this off, and it can be
+        // turned back on here. A muted rule's text dims so the list reads which ones pin.
+        if (!rule.enabled) middle.setAlpha(.55f);
+        MaterialSwitch enabled = new MaterialSwitch(context);
+        enabled.setChecked(rule.enabled);
+        enabled.setContentDescription(getString(R.string.essential_rules_enabled_description, match));
+        enabled.setOnCheckedChangeListener((button, checked) -> {
+            if (EssentialNotificationRules.setEnabled(prefs, rule.id, checked) != null) {
+                LauncherCtlNotificationListener.requestPinnedRefresh();
+            }
+            button.post(this::rebuildRules);
+        });
+        LinearLayout.LayoutParams enabledParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        enabledParams.setMarginStart(TaiBenchViews.dp(context, 8));
+        line.addView(enabled, enabledParams);
         TextView remove = TaiBenchViews.ghostButton(context, getString(R.string.essential_rules_remove));
         remove.setMinHeight(TaiBenchViews.dp(context, 32));
         remove.setContentDescription(getString(R.string.essential_rules_remove_description));

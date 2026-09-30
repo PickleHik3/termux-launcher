@@ -64,31 +64,48 @@ public final class WallpaperFrostPainter {
         // The status surface's own radius, not the dock's: the editor tunes them apart, and the
         // status slider has to visibly change this pane.
         int blurRadiusDp = mSurfaces.effectiveStatusBarBlurRadiusDp();
-        if (!mSurfaces.wallpaperPassthroughEnabled() || blurRadiusDp <= 0) {
-            clearTopPane();
-            return;
-        }
         // Rounded style: the pane is a floating capsule already clipped to its outline, so it takes
         // frost like any surface; the inset band above it shows raw wallpaper by design. This used
         // to bail out for the whole style, which left the capsule with no blur at all — its live
         // blur view is as blind to the wallpaper as every other RealtimeBlurView here.
         boolean capsule = mSurfaces.roundedDockStyle();
-        // The band and the bar are one sheet of glass in the docked style, so neither takes a rim
-        // along the edge they share; the capsule stands alone and rounds by its own corner.
-        boolean statusApplied = !capsule && applyFrost(statusFrost,
-            mSurfaces.findChromeView(R.id.terminal_status_bar_background), blurRadiusDp,
-            SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS, SurfaceDirtyLedger.FrostRadius.TOP_PANE,
-            0f, GlassRefraction.SEAM_BOTTOM);
-        if (capsule) hide(statusFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS);
+        ChromeEdgeRule.TopLead lead = capsule ? ChromeEdgeRule.TopLead.NONE : mSurfaces.topStackLead();
+        // The strip continues whatever leads the top edge: the window bar's own glass, or the
+        // dock's material on a sheet off the dock, at that material's own radius.
+        boolean stripIsDockSheet = lead == ChromeEdgeRule.TopLead.DOCK_SHEET;
+        int stripRadiusDp = stripIsDockSheet ? mSurfaces.effectiveDockBlurRadiusDp() : blurRadiusDp;
+        if (!mSurfaces.wallpaperPassthroughEnabled() || (blurRadiusDp <= 0 && stripRadiusDp <= 0)) {
+            clearTopPane();
+            return;
+        }
+        // Docked: the strip touches the screen's top and sides and runs on into the surface below
+        // it, so every one of its edges is a seam — no rim along the physical top of the screen.
+        boolean statusApplied = lead != ChromeEdgeRule.TopLead.NONE && applyFrost(statusFrost,
+            mSurfaces.findChromeView(R.id.terminal_status_bar_background), stripRadiusDp,
+            SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS,
+            stripIsDockSheet ? SurfaceDirtyLedger.FrostRadius.OFF_DOCK
+                : SurfaceDirtyLedger.FrostRadius.TOP_PANE,
+            0f, ChromeEdgeRule.seams(false, ChromeEdgeRule.flushEdges(
+                com.termux.app.place.PlaceLayout.Edge.TOP), ChromeEdgeRule.BOTTOM));
+        if (lead == ChromeEdgeRule.TopLead.NONE)
+            hide(statusFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS);
         // A bar standing between the dock's own rows is on the dock's sheet, which already carries
         // this frost: a frost of its own here would draw the same blurred wallpaper a second time,
         // and with no wash over it — the bar wears no glass on the plank.
         boolean onPlank = mSurfaces.statusBarOnDockPlank();
+        // Docked, the bar's screen edges are seams, and so is its top while the strip continues
+        // it — whether or not the strip's own frost is up this pass. Only the edge facing the
+        // terminal keeps its rim. The capsule keeps its rim all round.
+        com.termux.app.place.PlaceLayout.Edge barEdge = mSurfaces.statusBarEdge();
+        int paneOuter = barEdge == com.termux.app.place.PlaceLayout.Edge.TOP
+            ? ChromeEdgeRule.LEFT | ChromeEdgeRule.RIGHT
+            : ChromeEdgeRule.edgeBit(barEdge);
+        int paneJoined = lead == ChromeEdgeRule.TopLead.WINDOW_BAR ? ChromeEdgeRule.TOP : 0;
         boolean paneApplied = !onPlank && applyFrost(paneFrost,
             mSurfaces.findChromeView(R.id.terminal_window_bar_host), blurRadiusDp,
             SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR, SurfaceDirtyLedger.FrostRadius.TOP_PANE,
             capsule ? mSurfaces.statusBarRimCornerRadiusPx() : 0f,
-            statusApplied ? GlassRefraction.SEAM_TOP : 0);
+            ChromeEdgeRule.seams(capsule, paneOuter, paneJoined));
         if (onPlank) hide(paneFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
         View statusBlur = mSurfaces.findChromeView(R.id.terminal_status_bar_glass_blur);
         View paneBlur = mSurfaces.findChromeView(R.id.terminal_window_bar_blur);
@@ -173,9 +190,20 @@ public final class WallpaperFrostPainter {
     public boolean applyOffDockSheet(@NonNull ImageView frost,
                                      @NonNull SurfaceDirtyLedger.FrostRect rectKey,
                                      float cornerRadiusPx) {
+        return applyOffDockSheet(frost, rectKey, cornerRadiusPx, 0);
+    }
+
+    /**
+     * @param seams the sheet's edges that take no rim ({@link ChromeEdgeRule#seams}): none for a
+     *     sheet standing clear, the screen's sides for a docked one flush with them, and its top
+     *     as well while it leads the top edge and the strip behind the status bar continues it
+     */
+    public boolean applyOffDockSheet(@NonNull ImageView frost,
+                                     @NonNull SurfaceDirtyLedger.FrostRect rectKey,
+                                     float cornerRadiusPx, int seams) {
         followMoves(frost);
         return applyFrost(frost, glassOf(frost, null), mSurfaces.effectiveDockBlurRadiusDp(),
-            rectKey, SurfaceDirtyLedger.FrostRadius.OFF_DOCK, cornerRadiusPx, 0);
+            rectKey, SurfaceDirtyLedger.FrostRadius.OFF_DOCK, cornerRadiusPx, seams);
     }
 
     /** The frosts {@link #followMoves} already watches. */

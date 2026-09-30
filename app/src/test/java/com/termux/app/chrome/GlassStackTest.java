@@ -131,6 +131,45 @@ public class GlassStackTest {
     }
 
     @Test
+    public void theStackAlphaScalesEachLayerRatherThanReplacingIt() {
+        GradientDrawable tint = new GradientDrawable();
+        GradientDrawable grain = new GradientDrawable();
+        grain.setAlpha(40);
+        LayerDrawable stack = new LayerDrawable(new android.graphics.drawable.Drawable[] {
+            tint, new LayerDrawable(new android.graphics.drawable.Drawable[] {grain})});
+
+        GlassStack.applyStackAlpha(stack, 128);
+
+        assertEquals(128, tint.getAlpha());
+        assertEquals("the faint grain stays faint", Math.round(40 * 128 / 255f), grain.getAlpha());
+    }
+
+    @Test
+    public void anOpaqueStackAlphaLeavesTheGrainAtItsOwnAlpha() {
+        GradientDrawable grain = new GradientDrawable();
+        grain.setAlpha(40);
+        GlassStack.applyStackAlpha(new LayerDrawable(
+            new android.graphics.drawable.Drawable[] {grain}), 255);
+        assertEquals(40, grain.getAlpha());
+    }
+
+    @Test
+    public void aRimAlongSomeEdgesLeavesTheOthersOpen() {
+        assertSame(null, glass.rimDrawable(0f, ChromeEdgeRule.NONE));
+        assertTrue(glass.rimDrawable(0f, ChromeEdgeRule.ALL) instanceof GradientDrawable);
+        OpenEdgeDrawable bottomOnly =
+            (OpenEdgeDrawable) glass.rimDrawable(0f, ChromeEdgeRule.BOTTOM);
+        assertEquals(ChromeEdgeRule.LEFT | ChromeEdgeRule.TOP | ChromeEdgeRule.RIGHT,
+            bottomOnly.openEdges());
+        bottomOnly.setBounds(0, 0, 100, 40);
+        Rect rim = bottomOnly.rim().getBounds();
+        assertTrue("carried off the top", rim.top < 0);
+        assertTrue(rim.left < 0);
+        assertTrue(rim.right > 100);
+        assertEquals("the inner edge stays on the surface", 40, rim.bottom);
+    }
+
+    @Test
     public void withoutAFrameTheTintIsTheWholeStack() {
         GlassStack.Spec spec = keyboardSpec(null).withRim(false);
 
