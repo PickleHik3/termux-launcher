@@ -20754,13 +20754,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 android.graphics.Bitmap.Config.ARGB_8888);
             android.graphics.Canvas canvas = new android.graphics.Canvas(snapshot);
             canvas.scale(0.5f, 0.5f);
-            // The glass under the panes: a slab is translucent and its refracted frame cannot be
-            // drawn on this software canvas, so the shared blur frame is painted under each
-            // slab's own rounded outline. Nowhere else: the gaps and corners around the panes are
-            // the live wallpaper, which both sheets share, so they stay see-through and no
-            // window-sized rectangle rides along with the pan. The flat colour is only the
-            // fallback for glass off, where the terminal ground really is that colour.
-            boolean paintedGround = paintWallpaperGlassGround(canvas, terminal);
+            // Glass on: the card is the slabs alone (DepartureCard), each pane drawn at its own
+            // place under a clip at the slab's radius over the shared blur frame, on a bitmap that
+            // stays transparent everywhere else. The frame's own clip-to-outline does not run on
+            // this software canvas, so drawing the whole surface host put a square plate around
+            // the rounded panes.
+            com.termux.app.terminal.DepartureCard.Ground glassGround = wallpaperGlassGround(terminal);
+            boolean paintedGround = glassGround != null && mPaneController != null
+                && mPaneController.drawDepartureSlabs(canvas, terminal, glassGround);
             // The flat base colour is only right where the live ground really is opaque. In
             // wallpaper passthrough mode with glass off the ground is the wallpaper seen through
             // the unified dim — painting the opaque base there turned the outgoing card into a
@@ -20769,9 +20770,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // and the card's trailing edge meets the incoming surface's leading edge, so the
             // see-through card never double-exposes over anything the live layout didn't.
             boolean translucentGround = !paintedGround && shouldUseWallpaperPassthroughMode();
-            if (!paintedGround && !translucentGround)
-                canvas.drawColor(resolveTerminalSurfaceBaseColor());
-            terminal.draw(canvas);
+            if (!paintedGround) {
+                if (!translucentGround) canvas.drawColor(resolveTerminalSurfaceBaseColor());
+                terminal.draw(canvas);
+            }
             mTerminalDepartureSnapshot = snapshot;
             // A ground painted under the slabs only leaves the gaps see-through, like the
             // passthrough case: the ghost carries no plate or shadow rectangle either.
@@ -20783,23 +20785,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Paints the shared pre-blurred wallpaper frame under the panes' slabs on {@code canvas}
-     * (never the whole surface), mapped exactly as
-     * {@link com.termux.app.terminal.PaneGlassBackdropView} maps it (frame rect in screen
-     * coordinates, clamped shader), so a departure snapshot's ground matches what the live layout
-     * showed around the panes. False when the glass frame is unavailable (glass off, no blur).
+     * The shared pre-blurred wallpaper frame as the ground under the panes' slabs, mapped exactly
+     * as {@link com.termux.app.terminal.PaneGlassBackdropView} maps it (frame rect in screen
+     * coordinates, clamped shader), so a departure card's ground matches what the live layout
+     * showed. Null when the glass frame is unavailable (glass off, no blur). The card's canvas may
+     * be scaled down; the shader matrix is built in the card's own (view) coordinates.
      */
-    private boolean paintWallpaperGlassGround(@NonNull android.graphics.Canvas canvas,
-                                              @NonNull View terminal) {
+    @Nullable
+    private com.termux.app.terminal.DepartureCard.Ground wallpaperGlassGround(@NonNull View terminal) {
         android.graphics.Bitmap frame = obtainTerminalPaneGlassFrame();
-        if (frame == null || frame.isRecycled()) return false;
+        if (frame == null || frame.isRecycled()) return null;
         android.graphics.Rect frameRect = mChrome.blurCache().frameRectRef();
-        if (frameRect.isEmpty() || mPaneController == null) return false;
-        // Only where the panes' slabs are: the gaps and rounded corners around them show the live
-        // wallpaper, and a rectangle of the blurred frame over them is the hard-edged block that
-        // rode along with every window switch.
-        android.graphics.Path slabs = mPaneController.paneGlassOutline(terminal);
-        if (slabs.isEmpty()) return false;
+        if (frameRect.isEmpty()) return null;
         int[] location = new int[2];
         terminal.getLocationOnScreen(location);
         android.graphics.Matrix matrix = new android.graphics.Matrix();
@@ -20813,11 +20810,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
         paint.setShader(shader);
         paint.setColorFilter(com.termux.app.chrome.GlassFilters.frost());
-        // View coordinates, not bitmap coordinates: the caller's canvas may be scaled down for a
-        // reduced-resolution snapshot, and the shader matrix above is built in view space.
         paint.setAntiAlias(true);
-        canvas.drawPath(slabs, paint);
-        return true;
+        return (canvas, slabs) -> canvas.drawPath(slabs, paint);
     }
 
     /** The opaque ground the departure card is composited onto. */
@@ -20845,19 +20839,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTerminalDepartureSnapshot = null;
         mTerminalDepartureTranslucent = false;
         if (departure == null) return;
-        android.widget.ImageView ghost = new android.widget.ImageView(this);
-        ghost.setImageBitmap(departure);
-        // The snapshot is captured at half resolution (see captureTerminalDeparture); the ghost
-        // stretches it back over the full surface. It only ever exists moving, so the softness
-        // never reads.
-        ghost.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
-        // A translucent snapshot stays translucent: an opaque plate here is the black flash the
-        // capture just avoided. The plate (and the shadow its outline enables) belongs only to
-        // the opaque-ground cards.
-        if (!translucent) {
-            ghost.setBackgroundColor(resolveTerminalSurfaceBaseColor());
-            ghost.setElevation(dpToPx(12));
-        }
+        // A translucent snapshot stays translucent and bare: an opaque plate here is the black
+        // flash the capture just avoided. The plate and its shadow belong only to the
+        // opaque-ground cards.
+        android.widget.ImageView ghost = com.termux.app.terminal.DepartureCard.view(this, departure,
+            translucent, resolveTerminalSurfaceBaseColor(), dpToPx(12));
         surfaceHost.addView(ghost, new android.widget.FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         ghost.animate()

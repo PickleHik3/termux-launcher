@@ -3078,13 +3078,12 @@ public class TerminalPaneController {
     }
 
     /**
-     * Where the pane glass is drawn, in {@code origin}'s coordinates: see
-     * {@link PaneGlass#slabOutline}. Empty while no pane wears a slab.
+     * Draws the panes' slabs onto {@code canvas} as the window-switch card: see
+     * {@link DepartureCard#draw}. False, drawing nothing, while no pane wears a slab.
      */
-    @NonNull
-    public android.graphics.Path paneGlassOutline(@NonNull View origin) {
-        return PaneGlass.slabOutline(mPaneFrames.values(), origin, paneRadiusPx(),
-            new android.graphics.Path());
+    public boolean drawDepartureSlabs(@NonNull android.graphics.Canvas canvas, @NonNull View origin,
+                                      @NonNull DepartureCard.Ground ground) {
+        return DepartureCard.draw(canvas, origin, mPaneFrames.values(), paneRadiusPx(), ground);
     }
 
     /**

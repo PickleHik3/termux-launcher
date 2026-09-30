@@ -58,6 +58,14 @@ public final class PaneGlass {
         return style != null ? Math.max(0, style.paneGapDp()) : fallbackDp;
     }
 
+    /** Whether {@code frame} is laid out, attached and wearing a visible glass slab. */
+    public static boolean wearsSlab(@NonNull View frame) {
+        View backdrop = frame.findViewById(R.id.terminal_pane_glass);
+        return backdrop instanceof PaneGlassBackdropView
+            && backdrop.getVisibility() == View.VISIBLE
+            && frame.getParent() != null && frame.getWidth() > 0 && frame.getHeight() > 0;
+    }
+
     /**
      * The shapes the glass is actually drawn in: one rounded rect per frame that wears a visible
      * slab, cut at the radius {@link #apply} gives it, in {@code origin}'s coordinates. Whatever
@@ -75,11 +83,7 @@ public final class PaneGlass {
         int[] base = new int[2];
         origin.getLocationOnScreen(base);
         for (View frame : frames) {
-            View backdrop = frame.findViewById(R.id.terminal_pane_glass);
-            if (!(backdrop instanceof PaneGlassBackdropView)
-                    || backdrop.getVisibility() != View.VISIBLE
-                    || frame.getParent() == null || frame.getWidth() <= 0 || frame.getHeight() <= 0)
-                continue;
+            if (!wearsSlab(frame)) continue;
             frame.getLocationOnScreen(at);
             float radius = PaneShape.radiusForBounds(requestedRadiusPx,
                 frame.getWidth(), frame.getHeight());
