@@ -85,6 +85,15 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
         return null;
     }
 
+    /** The legibility control as the preferences would answer it; Default unless a test moves it. */
+    @NonNull LegibilityLevel legibility = LegibilityLevel.DEFAULT;
+
+    @NonNull
+    @Override
+    public LegibilityLevel legibilityLevel() {
+        return legibility;
+    }
+
     @Override
     public int orientation() {
         return orientation;

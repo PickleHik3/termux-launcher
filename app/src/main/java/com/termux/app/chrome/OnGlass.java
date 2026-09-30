@@ -44,6 +44,10 @@ public final class OnGlass {
      * Contrast a label, a value or any run of body-sized text has to clear: WCAG AA for normal
      * text. The status widgets' CPU/RAM labels, the session chip's label and the window chip's
      * title are all this tier.
+     *
+     * <p>These three are the tiers at the Default legibility level. {@link LegibilityLevel} scales
+     * every one of them by the user's one legibility control before a band is resolved; nothing
+     * here reads it, so the arithmetic stays pure.</p>
      */
     public static final double TARGET_BODY_TEXT = 4.5d;
 
@@ -538,6 +542,88 @@ public final class OnGlass {
         Resolution bare = resolveBare(surface, ink, target, paleSide);
         return new Resolution(veil, surface, bare.ink, bare.ratio, target,
             Color.alpha(veil) >= MAX_VEIL_ALPHA_255, bare.inkFlipped, bare.shortfall);
+    }
+
+    /**
+     * A band whose ink is not the chrome's to move: only the veil can buy its contrast.
+     *
+     * <p>The terminal pane and the in-app keyboard are the two. The terminal's foreground is the
+     * palette's, authored against the palette's own background; a key label is the keyboard
+     * theme's, authored against its key cap. Neither may be re-toned to suit a wallpaper, so the
+     * ladder {@link #resolve} climbs has one rung here: the smallest alpha of {@code veilColor},
+     * laid over {@code backdrop}, at which every ink clears {@code target} on what it really
+     * stands on — {@code cap} over the veiled backdrop. {@link Resolution#ink} is the ink that
+     * reads worst on the answer, which is the one the promise was made for.</p>
+     *
+     * <p>The ceiling is the opaque {@code veilColor}, not {@link #MAX_VEIL_ALPHA}. That cap exists
+     * because a chrome band can move its ink instead of deleting the wallpaper; a band that cannot
+     * has nowhere else to go, and its opaque ground is exactly the surface its ink was authored
+     * for — the palette's background, which the palette already holds to its own contrast. So the
+     * search runs to 255 and {@link Resolution#veilCapped} says it went past the chrome's cap.
+     * Where even that is not enough (an ink the veil colour does not help, a cap too close to its
+     * label) the veil that helped most is returned with {@link Resolution#shortfall} set, and no
+     * veil at all when none helped: a veil that only moves the surface the wrong way is not
+     * drawn.</p>
+     *
+     * @param backdrop the opaque colour the band's glass comes to before any veil
+     * @param cap what stands between the veil and the ink — a key cap — or
+     *     {@link Color#TRANSPARENT} when the ink stands on the veil itself
+     * @param ink the band's ink
+     * @param secondInk a second ink on the same band held to the same target (the terminal's dim
+     *     foreground); pass {@code ink} again for none
+     * @param veilColor what the veil moves toward; its alpha is ignored
+     */
+    @NonNull
+    public static Resolution resolveFixedInk(@ColorInt int backdrop, @ColorInt int cap,
+                                             @ColorInt int ink, @ColorInt int secondInk,
+                                             @ColorInt int veilColor, double target) {
+        int base = opaque(backdrop);
+        int bareSurface = opaque(composite(cap, base));
+        double bare = worstRatio(ink, secondInk, bareSurface);
+        int bareInk = worseInk(ink, secondInk, bareSurface);
+        if (bare >= target) {
+            return new Resolution(Color.TRANSPARENT, bareSurface, bareInk, bare, target,
+                false, false, false);
+        }
+        // An opaque cap hides everything under it: nothing below it can help.
+        if (Color.alpha(cap) < 255) {
+            int bestAlpha = 0;
+            double bestRatio = bare;
+            for (int alpha = 1; alpha <= 255; alpha++) {
+                int veiled = opaque(composite(withAlpha(veilColor, alpha), base));
+                int surface = opaque(composite(cap, veiled));
+                double achieved = worstRatio(ink, secondInk, surface);
+                if (achieved >= target) {
+                    return new Resolution(withAlpha(veilColor, alpha), surface,
+                        worseInk(ink, secondInk, surface), achieved, target,
+                        alpha > MAX_VEIL_ALPHA_255, false, false);
+                }
+                if (achieved > bestRatio) {
+                    bestRatio = achieved;
+                    bestAlpha = alpha;
+                }
+            }
+            if (bestAlpha > 0) {
+                int veil = withAlpha(veilColor, bestAlpha);
+                int surface = opaque(composite(cap, opaque(composite(veil, base))));
+                return new Resolution(veil, surface, worseInk(ink, secondInk, surface), bestRatio,
+                    target, bestAlpha > MAX_VEIL_ALPHA_255, false, true);
+            }
+        }
+        return new Resolution(Color.TRANSPARENT, bareSurface, bareInk, bare, target,
+            false, false, true);
+    }
+
+    /** The lower of two inks' ratios on one surface. */
+    private static double worstRatio(@ColorInt int ink, @ColorInt int secondInk,
+                                     @ColorInt int surface) {
+        return Math.min(ratio(ink, surface), ratio(secondInk, surface));
+    }
+
+    /** Whichever of two inks reads worse on {@code surface}; the first on a tie. */
+    @ColorInt
+    private static int worseInk(@ColorInt int ink, @ColorInt int secondInk, @ColorInt int surface) {
+        return ratio(secondInk, surface) < ratio(ink, surface) ? secondInk : ink;
     }
 
     /**

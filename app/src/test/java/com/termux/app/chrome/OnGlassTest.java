@@ -310,6 +310,74 @@ public class OnGlassTest {
         }
     }
 
+    // ---------------------------------------------------------------- a band whose ink is fixed
+
+    /** A terminal's pale foreground and its dim, over a light wallpaper under a thin dark tint. */
+    private static final int TERMINAL_FG = 0xFFE6E1E5;
+    private static final int TERMINAL_DIM = 0xFF999699;
+    private static final int TERMINAL_BG = 0xFF1C1B1F;
+
+    /** The ink never moves: only a veil is bought, and past the chrome's cap when it must be. */
+    @Test
+    public void aFixedInkIsReachedByVeilAloneEvenPastTheChromesCap() {
+        int backdrop = OnGlass.backdrop(0xFFE8E4DA, Color.TRANSPARENT,
+            OnGlass.withAlpha(TERMINAL_BG, 77));
+        OnGlass.Resolution r = OnGlass.resolveFixedInk(backdrop, Color.TRANSPARENT, TERMINAL_FG,
+            TERMINAL_DIM, TERMINAL_BG, OnGlass.TARGET_BODY_TEXT);
+
+        assertFalse(r.toString(), r.shortfall);
+        assertTrue("the dim foreground is the worse, so the promise is made for it",
+            r.ink == TERMINAL_DIM);
+        assertTrue("both clear the target on the veiled surface",
+            OnGlass.ratio(TERMINAL_FG, r.surface) >= OnGlass.TARGET_BODY_TEXT
+                && OnGlass.ratio(TERMINAL_DIM, r.surface) >= OnGlass.TARGET_BODY_TEXT);
+        assertTrue("more than the chrome's cap was needed, and allowed", r.veilCapped
+            && Color.alpha(r.veil) > OnGlass.MAX_VEIL_ALPHA_255);
+        // The smallest such veil: one step less misses.
+        int less = OnGlass.opaque(OnGlass.composite(
+            OnGlass.withAlpha(TERMINAL_BG, Color.alpha(r.veil) - 1), backdrop));
+        assertTrue(OnGlass.ratio(TERMINAL_DIM, less) < OnGlass.TARGET_BODY_TEXT);
+    }
+
+    @Test
+    public void aFixedInkThatAlreadyReadsIsLeftBare() {
+        OnGlass.Resolution r = OnGlass.resolveFixedInk(TERMINAL_BG, Color.TRANSPARENT,
+            TERMINAL_FG, TERMINAL_FG, TERMINAL_BG, OnGlass.TARGET_BODY_TEXT);
+        assertTrue(r.isBare());
+        assertEquals(TERMINAL_FG, r.ink);
+    }
+
+    /** The cap stands between the veil and the label: measured on it, and opaque it ends the search. */
+    @Test
+    public void aFixedInkIsMeasuredOnItsCap() {
+        int cap = OnGlass.withAlpha(0xFF2B2930, 96);
+        OnGlass.Resolution r = OnGlass.resolveFixedInk(0xFFE8E4DA, cap, TERMINAL_FG, TERMINAL_FG,
+            TERMINAL_BG, OnGlass.TARGET_BODY_TEXT);
+        assertTrue(Color.alpha(r.veil) > 0);
+        int expected = OnGlass.opaque(OnGlass.composite(cap,
+            OnGlass.opaque(OnGlass.composite(r.veil, 0xFFE8E4DA))));
+        assertEquals("the surface is the cap over the veiled backdrop", expected, r.surface);
+
+        OnGlass.Resolution opaqueCap = OnGlass.resolveFixedInk(0xFFE8E4DA, 0xFF808080,
+            TERMINAL_FG, TERMINAL_FG, TERMINAL_BG, OnGlass.TARGET_BODY_TEXT);
+        assertTrue("nothing under an opaque cap can help", opaqueCap.isBare());
+        assertTrue(opaqueCap.shortfall);
+    }
+
+    /** A veil that only moves the surface the wrong way for the ink is not drawn. */
+    @Test
+    public void aVeilThatCannotHelpIsNotDrawn() {
+        OnGlass.Resolution r = OnGlass.resolveFixedInk(0xFF303030, Color.TRANSPARENT,
+            0xFF202020, 0xFF202020, Color.WHITE, OnGlass.TARGET_BODY_TEXT);
+        // Veiling toward white helps a dark ink on a dark ground, so this one does veil...
+        assertTrue(Color.alpha(r.veil) > 0);
+        OnGlass.Resolution wrong = OnGlass.resolveFixedInk(0xFFE0E0E0, Color.TRANSPARENT,
+            Color.WHITE, Color.WHITE, Color.WHITE, OnGlass.TARGET_BODY_TEXT);
+        // ...while a white veil under a white ink only ever lowers the ratio, so nothing is spent.
+        assertTrue(wrong.isBare());
+        assertTrue(wrong.shortfall);
+    }
+
     /** One resolution, checked against {@link SchemeTone#contrastRatio} rather than its own word. */
     private static void assertResolves(int backdrop, int preferred, int alternate, int veilColor,
                                        double target) {

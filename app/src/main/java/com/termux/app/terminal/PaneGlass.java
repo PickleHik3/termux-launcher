@@ -106,8 +106,24 @@ public final class PaneGlass {
     public static boolean apply(@Nullable PaneSurfaceStyle style, @NonNull View frame,
                                 @Nullable PaneGlassBackdropView backdrop,
                                 float requestedRadiusPx) {
+        return apply(style, frame, backdrop, requestedRadiusPx, false);
+    }
+
+    /**
+     * {@link #apply(PaneSurfaceStyle, View, PaneGlassBackdropView, float)}, and for a terminal
+     * pane the veil that keeps its text legible on this glass.
+     *
+     * @param terminalPane true for a terminal pane: the slab is a
+     *     {@link com.termux.app.chrome.GlassBackdropCache.Band#TERMINAL_PANE} band and asks
+     *     {@link PaneSurfaceStyle#paneGlassVeil} for its veil, drawn over the tint. A wall page's
+     *     content is not the terminal's and wears no veil.
+     */
+    public static boolean apply(@Nullable PaneSurfaceStyle style, @NonNull View frame,
+                                @Nullable PaneGlassBackdropView backdrop,
+                                float requestedRadiusPx, boolean terminalPane) {
         if (backdrop == null) return false;
         if (!isActive(style)) {
+            backdrop.setVeilSource(null);
             backdrop.setVisibility(View.GONE);
             return false;
         }
@@ -125,7 +141,20 @@ public final class PaneGlass {
         backdrop.setParallax(style.wallpaperParallax());
         backdrop.setRefraction(style.paneGlassRefraction());
         backdrop.setVisibility(View.VISIBLE);
+        backdrop.setVeilSource(terminalPane ? style : null);
         return true;
+    }
+
+    /**
+     * {@code foreground} as the terminal renderer draws faint (SGR 2) text: each channel at two
+     * thirds, opaque. The second ink a pane's veil is measured with, since on a dark background it
+     * is the worse of the two.
+     */
+    public static int dimTerminalInk(int foreground) {
+        int red = ((foreground >> 16) & 0xFF) * 2 / 3;
+        int green = ((foreground >> 8) & 0xFF) * 2 / 3;
+        int blue = (foreground & 0xFF) * 2 / 3;
+        return 0xFF000000 | (red << 16) | (green << 8) | blue;
     }
 
     /**

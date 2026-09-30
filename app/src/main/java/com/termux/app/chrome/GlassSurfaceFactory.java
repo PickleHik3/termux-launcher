@@ -291,6 +291,14 @@ public final class GlassSurfaceFactory {
     }
 
     /**
+     * The veil {@code band}'s glass is drawn with, for a surface that lays its own tint rather than
+     * going through {@link #surface}: {@link Color#TRANSPARENT} for no band, or none needed.
+     */
+    int bandVeil(@Nullable GlassBackdropCache.Band band) {
+        return band != null && mInk != null ? mInk.bandVeil(band) : Color.TRANSPARENT;
+    }
+
+    /**
      * The one containing stroke every glass surface draws: barely there, or it reads as a drawn
      * border over the glass rather than the edge of the material. Also the dock capsule's
      * background, whose outline it supplies.

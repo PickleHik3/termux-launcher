@@ -29,6 +29,18 @@ public interface PaneSurfaceStyle {
     @Nullable android.graphics.ColorFilter paneGlassFrostFilter();
     /** The terminal tint painted over the frost. */
     int paneGlassTintColor();
+    /**
+     * The veil a terminal pane laid out at {@code rootRect} is drawn with, over its tint: the
+     * terminal's background at the smallest alpha that keeps the palette's worst foreground at the
+     * legibility target over whatever wallpaper is under that rect ({@code ChromeInk#terminalPane}).
+     * Transparent when nothing is needed or nobody measures.
+     *
+     * @param rootRect the pane's laid-out rect on screen, every transform ignored — the root
+     *     container's own space
+     */
+    default int paneGlassVeil(@NonNull android.graphics.Rect rootRect) {
+        return android.graphics.Color.TRANSPARENT;
+    }
     /** Film grain layer for one pane, or null while grain is off. */
     @Nullable android.graphics.drawable.Drawable paneGlassGrainLayer();
     /**

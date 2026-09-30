@@ -42,10 +42,17 @@ public final class GlassStack {
         public final int stackAlphaPercent;
         /** Stands in for the tint (a colour scheme's background), or null for the glass tint. */
         @Nullable public final Integer tintColor;
+        /**
+         * The band this glass is, so it is measured and drawn with the veil {@link ChromeInk}
+         * resolves for it; null for glass no content is measured against.
+         */
+        @Nullable public final GlassBackdropCache.Band band;
 
         private Spec(int blurRadiusDp, float tintAlpha, int grainPercent, float cornerRadiusPx,
                      boolean rim, @NonNull GlassRefraction.Look look, int seams, float sliceEnd,
-                     boolean foot, int stackAlphaPercent, @Nullable Integer tintColor) {
+                     boolean foot, int stackAlphaPercent, @Nullable Integer tintColor,
+                     @Nullable GlassBackdropCache.Band band) {
+            this.band = band;
             this.blurRadiusDp = blurRadiusDp;
             this.tintAlpha = tintAlpha;
             this.grainPercent = grainPercent;
@@ -64,37 +71,43 @@ public final class GlassStack {
         public static Spec of(int blurRadiusDp, float tintAlpha, int grainPercent,
                               float cornerRadiusPx, @Nullable GlassRefraction.Look fancierLook) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, false,
-                lookFor(fancierLook), 0, 1f, false, 100, null);
+                lookFor(fancierLook), 0, 1f, false, 100, null, null);
         }
 
         @NonNull public Spec withBlur(int dp) {
             return new Spec(dp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                sliceEnd, foot, stackAlphaPercent, tintColor);
+                sliceEnd, foot, stackAlphaPercent, tintColor, band);
         }
 
         @NonNull public Spec withRim(boolean on) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, on, look, seams,
-                sliceEnd, foot, stackAlphaPercent, tintColor);
+                sliceEnd, foot, stackAlphaPercent, tintColor, band);
         }
 
         @NonNull public Spec withSeams(int edges) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, edges,
-                sliceEnd, foot, stackAlphaPercent, tintColor);
+                sliceEnd, foot, stackAlphaPercent, tintColor, band);
         }
 
         @NonNull public Spec withSlice(float end, boolean withFoot) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                end, withFoot, stackAlphaPercent, tintColor);
+                end, withFoot, stackAlphaPercent, tintColor, band);
         }
 
         @NonNull public Spec withStackAlpha(int percent) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                sliceEnd, foot, percent, tintColor);
+                sliceEnd, foot, percent, tintColor, band);
         }
 
         @NonNull public Spec withTintColor(@Nullable Integer argb) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                sliceEnd, foot, stackAlphaPercent, argb);
+                sliceEnd, foot, stackAlphaPercent, argb, band);
+        }
+
+        /** This glass as {@code band}'s, measured and veiled for it; null for none. */
+        @NonNull public Spec withBand(@Nullable GlassBackdropCache.Band band) {
+            return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
+                sliceEnd, foot, stackAlphaPercent, tintColor, band);
         }
 
         @Override
@@ -107,13 +120,13 @@ public final class GlassStack {
                 && rim == that.rim && look.equals(that.look) && seams == that.seams
                 && sliceEnd == that.sliceEnd && foot == that.foot
                 && stackAlphaPercent == that.stackAlphaPercent
-                && java.util.Objects.equals(tintColor, that.tintColor);
+                && java.util.Objects.equals(tintColor, that.tintColor) && band == that.band;
         }
 
         @Override
         public int hashCode() {
             return java.util.Objects.hash(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx,
-                rim, look, seams, sliceEnd, foot, stackAlphaPercent, tintColor);
+                rim, look, seams, sliceEnd, foot, stackAlphaPercent, tintColor, band);
         }
     }
 
@@ -178,10 +191,15 @@ public final class GlassStack {
         }
         if (spec.tintColor != null) {
             layers.add(new android.graphics.drawable.ColorDrawable(spec.tintColor));
+            // A scheme colour stands in for the glass tint, and the band's veil still goes over
+            // it, under the rim, exactly where the glass path puts it.
+            int veil = glass.bandVeil(spec.band);
+            if (android.graphics.Color.alpha(veil) > 0)
+                layers.add(new android.graphics.drawable.ColorDrawable(veil));
             if (spec.rim) layers.add(glass.rimDrawable(spec.cornerRadiusPx));
         } else {
             layers.add(glass.surface(spec.tintAlpha, 0f, spec.sliceEnd, spec.foot,
-                spec.grainPercent, spec.cornerRadiusPx, spec.rim));
+                spec.grainPercent, spec.cornerRadiusPx, spec.rim, spec.band));
         }
         Drawable material = layers.size() == 1
             ? layers.get(0) : new LayerDrawable(layers.toArray(new Drawable[0]));

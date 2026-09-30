@@ -3129,7 +3129,7 @@ public class TerminalPaneController {
         for (FrameLayout frame : mPaneFrames.values()) {
             PaneGlassBackdropView backdrop = frame.findViewById(R.id.terminal_pane_glass);
             if (backdrop == null) continue;
-            if (!PaneGlass.apply(mSurfaceStyle, frame, backdrop, radiusPx))
+            if (!PaneGlass.apply(mSurfaceStyle, frame, backdrop, radiusPx, true))
                 releasePanePlank(frame);
         }
         // The corner tab is cut from the same glass as the pane it grows out of, and re-dressed

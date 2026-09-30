@@ -233,8 +233,10 @@ public final class GlassInk {
         OnGlass.Resolution voted = ink.onGlass(band, screenRect, darkInk, paleInk, target);
         if (voted.isBare()) return voted;
         int seed = ink.polarity() == ChromeInk.Polarity.DARK_INK ? darkInk : paleInk;
-        int backdrop = ink.backdrops().backdropUnder(band, screenRect, dim, Color.TRANSPARENT);
-        return OnGlass.resolveBare(backdrop, seed, target);
+        // Through the ink, not the raw cache: it maps the rect into root space as onGlass did, so
+        // the two share the band's one sample, and it holds the ink to the user's legibility level.
+        int backdrop = ink.backdropUnder(band, screenRect, dim, Color.TRANSPARENT);
+        return OnGlass.resolveBare(backdrop, seed, ink.target(target));
     }
 
     // ---------------------------------------------------------------- the halo
