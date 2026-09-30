@@ -190,16 +190,9 @@ Scrub horizontally across the A–Z row to jump to installed apps beginning with
 a browsing control, not a text field. It can be hidden in the Layout editor, on the place
 you want it hidden for.
 
-Set it to **Minimised** in the Layout editor and the index folds into a small tab against the edge
-of the screen, outside the terminal, the widgets or the display, taking no room from them. A
-side index keeps its tab on its own side; an index along the top or the bottom keeps it on the
-left (the right in a right-to-left language), next to where its letters start. Put a thumb on the
-tab and slide: the letters come out along their edge and you are already scrubbing them, with the
-matching apps floating beside the letters as they do whenever the index stands without the pinned
-apps row. Slide onto an app and let go to open it; let go anywhere else and the letters tuck back
-away. The tab is glass like the dock, or solid when the dock is, and stays clear of the corner, so
-the corner tab and the border drag work as everywhere else. Minimal mode puts it away with the
-rest of the chrome.
+The index used to have a **Minimised** form, a small pull tab against the screen's edge. It is
+gone: the index is on an edge or in the Layout editor's tray, and an index that was minimised
+comes back as the bar it folded from.
 
 ### Search from the shell prompt
 

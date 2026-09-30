@@ -22,31 +22,48 @@ host and no display, and the Linux display is only built while its switch is on.
 
 ## Layout editor
 
-Settings has no Layout page: open **Layout** from a corner tab or the long-press menu. Home,
-Terminal and Display share one layout, so whatever you arrange lands on all three; the miniature
-shows the place you opened it on. A Portrait/Landscape toggle above the miniature switches which
-orientation you are arranging, since each orientation has its own layout; the real screen behind
-the editor follows what you change only for the orientation you are actually holding the phone in.
-Done and Discard let you keep or throw away everything you changed in that visit.
+Open **Layout** from a corner tab, the long-press menu, or the **Layout** row at the top of
+Settings, beside **Look**. Home, Terminal and Display share one layout, so whatever you arrange
+lands on all three; the layout canvas shows the place you opened it on. A Portrait/Landscape
+toggle above the canvas (a phone standing up, a phone on its side) switches which orientation you
+are arranging, since each orientation has its own layout; the real screen behind the editor
+follows what you change only for the orientation you are actually holding the phone in. Done and
+Undo let you keep or throw away everything you changed in that visit.
 
-- **Status bar**, **Apps row**, **A–Z index** and **Extra keys**: every bar is dragged by the
-  six-dot grip at its corner to the edge you want it on — any of the four, in either orientation
-  — or into the **Hidden** tray under the phone to put it away. A bar in the tray is a chip with
-  the same grip, so it comes back the same way it went. Dropping a bar between two others on the
-  same edge sets the order they stack in. The A–Z index rides the pinned apps row while the two
-  share an edge; dropped on another edge it stands on a bar of its own.
-- **Under the keyboard.** Where the miniature shows the keyboard, it also offers a slot below it:
+There are no rows of settings under the canvas: you move things by dragging them, hide them by
+dropping them in the tray, and size them by their handles.
+
+- **Move.** Every bar — **Status bar**, **Apps row**, **A–Z index** and **Extra keys** — is
+  dragged by the six-dot grip at its corner to the edge you want it on, any of the four, in either
+  orientation. Dropping a bar between two others on the same edge sets the order they stack in.
+  The A–Z index rides the pinned apps row while the two share an edge; dropped on another edge it
+  stands on a bar of its own.
+- **Under the keyboard.** Where the canvas shows the keyboard, it also offers a slot below it:
   drop the apps row, the A–Z index or the extra keys there and they stand under the keyboard
   instead of over it, in the order you stack them. With the keyboard down or switched off they
   simply sit at the bottom of the dock with the other rows, with no gap between them. The status
   bar always stands over the keyboard.
-- **A–Z index: On / Minimised / Off.** Minimised folds the index into a small tab against the edge
-  of the screen, outside the content and taking no room: on its own side for a side index, on the
-  left (the right in a right-to-left language) for one along the top or the bottom. Sliding a thumb
-  along the tab brings the letters out along their edge and scrubs them in the same movement, and
-  the miniature shows the tab over the pane. The Position choice still says which edge the letters
-  come out of, and the tab can be dragged by its grip like any bar. Each orientation keeps its own
-  choice.
+- **Hide and bring back.** Drop a bar into the tray under the phone to put it away; while a bar is
+  lifted the tray reads **Drop here to hide**. Each hidden element is a chip in the tray with a
+  struck-through eye; tap it and the element comes back to the edge it was hidden from.
+- **Keyboard on/off.** Drag the keyboard itself off the phone and into the tray to switch it off;
+  its chip in the tray switches it back on. Off, nothing raises it — not a tap on the terminal,
+  not a text field — until you turn it on again, which makes it the setting for a hardware
+  keyboard or a touch-driven full-screen program. It is the same switch as **Keyboard on/off** in
+  the command palette and on the extra-keys row, and unlike the rest of the layout it is one
+  switch for both orientations and every place.
+- **Select and resize.** Tap anything on the canvas to select it: it gets one outline, and the
+  pieces with a size get a handle. Drag the dock's inner edge for its height; the keyboard's top
+  edge for its height, and the bottom of its keys upward for the padding under its last row; and
+  on Home the round handle on the corner of the first cell for the widget grid, which snaps to
+  whole cells (dragging it out makes the cells bigger and fewer). While you hold a handle it shows
+  the size in real units — the dock or keyboard in dp as the launcher lays it out, the padding in
+  dp, the grid in cells — and each is set separately per orientation.
+- **Keyboard type.** With the keyboard selected, three chips beside it pick docked, floating or
+  split, for the orientation on the toggle. The chips go when you select something else.
+
+The A–Z index is on, somewhere, or in the tray: there is no longer a Minimised form, and an index
+that was minimised comes back as the bar it folded from.
 
 The status bar can be hidden like the rest, which is how a full-screen layout is built by hand:
 with it away the clock, the weather and the window pills go with it, the content takes its band,
@@ -61,31 +78,11 @@ edge with the pinned apps and the extra keys when those stand there too, in the 
 them.
 
 The card is a sheet from the bottom of the screen, like the Appearance card. Its header — the
-title, Undo, Discard and Done — stays at the top, and everything under it (the Portrait/Landscape
-toggle, the miniature and its Hidden tray, and every row below) scrolls as one list. It rests
-low enough to leave the top of the real screen in view; pull it up by the handle, the header or
-the list itself and it grows toward the top of the screen before the list starts scrolling, and a
-tap on the handle does the same. Pulling down on the list when it is back at its top brings the
-card down again. A firm pull down past its resting size closes the editor the way Back does:
-straight away when nothing has changed, and with the keep-or-discard question when something has.
-While you drag a bar by its grip, the card stays still.
-
-The rows under the miniature:
-- **Dock height** and **Keyboard height**: how tall the dock and the built-in keyboard stand, and
-  **Keyboard bottom padding** for the clearance it leaves below the keyboard, each set separately
-  per orientation; upgrading carries your terminal's values over unchanged.
-- **Keyboard on/off**: whether the built-in keyboard is part of the layout at all. Off, nothing
-  raises it — not a tap on the terminal, not a text field — until you turn it on again, which
-  makes it the setting for a hardware keyboard or a touch-driven full-screen program. It is the
-  same switch as **Keyboard on/off** in the command palette and on the extra-keys row, and unlike
-  the rest of the layout it is one switch for both orientations and every place. Turning it off
-  here puts the keyboard down; turning it on lets the next tap raise it, and the keyboard key or
-  the palette raise it straight away. Discard puts it back the way the editor found it.
-- **Keyboard type**: whether the on-screen keyboard is docked along the bottom, floats over the
-  content where you put it, or is split in the middle for two thumbs. Set per orientation, and
-  reachable from a key or the command palette as well.
-- **Keyboard mode** (opened on Display only): whether the keyboard floats over the display or
-  shrinks it. Floats in landscape until you change it.
+title, Undo, Discard and Done — stays at the top. It rests low enough to leave the top of the real
+screen in view; pull it up by the handle or the header and it grows toward the top of the screen,
+and a tap on the handle does the same. A firm pull down past its resting size closes the editor the
+way Back does: straight away when nothing has changed, and with the keep-or-discard question when
+something has. While you drag a bar by its grip or hold a handle, the card stays still.
 
 The keyboard itself remembers where it was: Terminal and Display each come back with the keyboard
 up or down the way you left them, and Home always comes back with it down. On Home the keyboard
@@ -97,10 +94,8 @@ Minimal mode is a preset of the same elements: with it on, the status bar, the p
 A–Z index and the extra keys are put away and the keyboard is put down, and turning it off brings
 each one back exactly where the layout has it. Anything you want left on screen in minimal mode is
 therefore arranged here — a terminal with only the A–Z index and the keyboard, say, is that layout
-with the other bars hidden, and minimal mode adds nothing to it but the full-screen pane.
-- **Grid columns** and **Grid rows** (Home only): how many widgets fit across and down a page, set
-  separately for portrait and landscape; widgets that no longer fit a smaller grid move to free
-  space or a new page rather than being dropped.
+with the other bars hidden, and minimal mode adds nothing to it but the full-screen pane. Widgets
+that no longer fit a smaller grid move to free space or a new page rather than being dropped.
 
 ## Look
 
@@ -132,12 +127,10 @@ Use this section for visible surfaces and colors:
 - **Wallpaper:** show or hide the system wallpaper behind launcher surfaces.
 - **Icon appearance:** monochrome icons, system or custom icon pack, and pinned-app icon behavior.
 - **Keyboard look:** **Theme**, **Keyboard colors**, and **Typeface** for the built-in keyboard,
-  **Bottom padding** to lift its bottom key row away from the edge of the screen (the same value
-  Layout sets, for the orientation you are holding the phone in; it adds to the one gap the dock
-  style keeps at the bottom edge under the dock, the keyboard and the pane alike — Floating's card
-  gap, or none for Docked), and **Customize keyboard appearance** for live size,
-  spacing, radius, and color tuning. These rows are only enabled while the built-in keyboard is the
-  chosen input method on the **Keyboard** page.
+  and **Customize keyboard appearance** for live size, spacing, radius, and color tuning. These
+  rows are only enabled while the built-in keyboard is the chosen input method on the **Keyboard**
+  page. The padding under the keyboard's last key row is set in the **Layout** editor, by the
+  handle on the bottom of the keys.
 
 The font picker writes its managed selection to `~/.termux/fonts.d/10-launcher.conf`. **Use font.ttf
 / Termux:Styling** removes that one managed config; it does not delete your own `fonts.conf` or
@@ -325,9 +318,6 @@ Open-Meteo attribution.
   and nudges presses near a boundary toward the key you usually mean. Only letters, digits and
   punctuation are ever moved; Enter, Backspace, Ctrl and the other action keys are not. **Forget
   learned taps** clears what it has learned. It stores per-key averages only, never what you typed.
-- **Keyboard type:** docked, floating or split, on every place at once, for the orientation you
-  are holding the phone in. The **Layout** editor is where one place is given a type of its own, and
-  this row shows no choice while the places disagree.
 - **Floating keyboard width**, **Floating keyboard height** and **Split keyboard gap**: how much
   of the screen a floating keyboard takes, how tall it is, and how far apart the halves of a split
   one sit. All three are set separately for portrait and landscape; which type a place uses is
@@ -343,7 +333,10 @@ Open-Meteo attribution.
   aloud. See [Voice input](Voice_Input.md) and [Text to speech](Text_To_Speech.md).
 - **Haptic feedback** and **Keypress sound**.
 
-The keyboard's look — theme, colors, typeface, and bottom padding — moved to the **Look** page,
+Whether the keyboard is docked, floating or split is picked in the **Layout** editor: select the
+keyboard and three chips beside it choose the type, for the orientation on the toggle.
+
+The keyboard's look — theme, colors and typeface — moved to the **Look** page,
 alongside the launcher's other visual choices; **Theme**, **Keyboard colors**, **Typeface** and
 **Customize keyboard appearance** are greyed out here while the on-screen keyboard is not the
 built-in one. Keyboard height is remembered separately for portrait and landscape.

@@ -485,7 +485,7 @@ The keyboard is docked along the bottom of the screen by default. Two other type
 beside it: **Floating**, a narrower keyboard over the content that you place where you want it,
 and **Split**, the same bottom keyboard with every row parted in the middle for two thumbs. The
 choice belongs to the place and the orientation — the terminal in landscape can float while Home
-in portrait stays docked — and Settings ▸ Layout ▸ **Keyboard type** is where it is picked. How
+in portrait stays docked — and the Layout editor is where it is picked: select the keyboard and choose one of the three type chips beside it. How
 wide a float is, how tall it is, and how far a split parts are on Settings ▸ Keyboard, one value
 per orientation. Dragging the handle in the bottom-left corner of a floating keyboard resizes it
 in place — out to the left makes it wider and up makes its rows taller, so the right and bottom
