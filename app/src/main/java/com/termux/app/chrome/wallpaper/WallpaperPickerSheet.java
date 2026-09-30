@@ -277,11 +277,18 @@ public final class WallpaperPickerSheet {
     @RequiresApi(34)
     private void renderThumb(@NonNull AnimatedWallpaper w, @NonNull String mode, @NonNull String key,
                              @NonNull ImageView image) {
+        // Theme attributes are read here on the main thread; the worker gets plain colours.
+        final int[] palette;
+        try {
+            palette = WallpaperPaletteCapture.resolve(mActivity, w, mode);
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Thumbnail palette failed", e);
+            return;
+        }
         try {
             mRenderer.execute(() -> {
                 Bitmap bmp = null;
                 try {
-                    int[] palette = WallpaperPaletteCapture.resolve(mActivity, w, mode);
                     bmp = AnimatedWallpaperStill.render(w, palette, mThumbW, mThumbH);
                 } catch (RuntimeException | OutOfMemoryError e) {
                     Logger.logStackTraceWithMessage(LOG_TAG, "Thumbnail render failed", e);
@@ -324,7 +331,10 @@ public final class WallpaperPickerSheet {
     private void applyOnApi34(@NonNull AnimatedWallpaper w, @NonNull String mode, @NonNull String target) {
         GeneratedWallpaperApplier.apply(mActivity, w, mode, target, (ok, error) -> {
             mApplying = false;
-            if (mActivity.isFinishing() || mActivity.isDestroyed()) return;
+            if (mActivity.isFinishing() || mActivity.isDestroyed()) {
+                if (!mDismissed) mSheet.dismiss();
+                return;
+            }
             if (ok) {
                 if (!mDismissed) mSheet.dismiss();
                 mListener.onGeneratedApplied(w, mode);

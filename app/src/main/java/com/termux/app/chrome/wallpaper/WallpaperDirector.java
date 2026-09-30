@@ -29,6 +29,8 @@ public final class WallpaperDirector {
     public static final long LOCK_SETTLE_MS = 350;
     /** How long the picture takes to come back after an unlock. */
     public static final long UNLOCK_MS = 900;
+    /** How long an unlock that arrived while the launcher was hidden may wait to play. */
+    public static final long UNLOCK_QUEUE_WINDOW_MS = 1000;
     /** Dim, 0..1, reached at the end of the lock settle. */
     public static final float LOCK_DIM = 0.5f;
 
@@ -165,6 +167,7 @@ public final class WallpaperDirector {
     private long lockStartNanos;
     private boolean lockForced;
     private long unlockStartNanos;
+    private long unlockQueuedNanos;
     private float unlockFromDim;
     private float lastDim;
 
@@ -205,7 +208,8 @@ public final class WallpaperDirector {
     /**
      * The screen was unlocked. Plays at once when the background is playing; when it is paused only
      * because the launcher is not visible or the screen is off, it waits and starts on the first
-     * playing frame. In any other state it is dropped.
+     * playing frame within {@link #UNLOCK_QUEUE_WINDOW_MS}, else it expires. In any other state it
+     * is dropped. A dropped or expired unlock still leaves the lock rest pose for normal play.
      */
     public void unlock(long nowNanos) {
         if (cond == null) return;
@@ -213,7 +217,11 @@ public final class WallpaperDirector {
             beginUnlock(nowNanos);
         } else if (gateOpen(cond) && (!cond.visible || !cond.screenOn)) {
             unlockFromDim = lastDim;
+            unlockQueuedNanos = nowNanos;
             mode = UNLOCK_WAIT;
+            lockForced = false;
+        } else if (mode == LOCKED || mode == LOCKING) {
+            mode = PLAY;
             lockForced = false;
         }
     }
@@ -283,7 +291,13 @@ public final class WallpaperDirector {
         lastFramePlayed = playing;
         lastFrameNanos = frameTimeNanos;
 
-        if (mode == UNLOCK_WAIT && playing) beginUnlock(frameTimeNanos);
+        if (mode == UNLOCK_WAIT) {
+            if (frameTimeNanos - unlockQueuedNanos > UNLOCK_QUEUE_WINDOW_MS * NANOS_PER_MS) {
+                mode = PLAY;
+            } else if (playing) {
+                beginUnlock(frameTimeNanos);
+            }
+        }
 
         float energy = 1f;
         float dim = 0f;

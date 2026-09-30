@@ -3121,6 +3121,21 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED_PALETTE, "own".equals(mode) ? "own" : "material", false);
     }
 
+    /** {@code home} (default), {@code lock} or {@code both}: where the last generated still went. */
+    @androidx.annotation.NonNull
+    public String getManagedWallpaperAnimatedTarget() {
+        String target = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED_TARGET,
+            TERMUX_APP.DEFAULT_VALUE_MANAGED_WALLPAPER_ANIMATED_TARGET, true);
+        return "lock".equals(target) || "both".equals(target) ? target : "home";
+    }
+
+    public void setManagedWallpaperAnimatedTarget(@Nullable String target) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED_TARGET,
+            "lock".equals(target) || "both".equals(target) ? target : "home", false);
+    }
+
     /** The four ARGB colours of the last rendered still, or null when unset or malformed. */
     @Nullable
     public int[] getManagedWallpaperAnimatedColors() {

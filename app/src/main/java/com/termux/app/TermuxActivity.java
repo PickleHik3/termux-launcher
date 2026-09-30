@@ -2192,9 +2192,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * A tap nothing took, on the Home place, is the generated wallpaper's touch moment. "Nothing
-     * took it" is two tests that must both hold at DOWN: the dispatch returned false (every
-     * pane, the dock, tiles and the keyboard consume a DOWN), and the point is outside the chrome
-     * that can be non-consuming in its gaps (dock, keyboard, status bar, window bar, A-Z).
+     * took it" is two tests that must both hold at DOWN: the point is on the widget grid's empty
+     * space (a widget cell consumes its own DOWN) or the dispatch returned false, and the point is
+     * outside the chrome that can be non-consuming in its gaps (dock, keyboard, status bar,
+     * window bar, A-Z). The grid itself consumes DOWNs on empty space (it watches for a long
+     * press), so a true dispatch there is not a widget's and does not veto the ripple.
      */
     private void trackWallpaperTap(@NonNull MotionEvent ev, boolean handled) {
         if (mLiveWallpaperHost == null) return;
@@ -2207,7 +2209,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 tap.down(ev.getRawX(), ev.getRawY(), ev.getEventTime(),
-                    !handled && isBareWallpaperPoint(ev));
+                    isBareWallpaperPoint(ev, handled));
                 break;
             case MotionEvent.ACTION_MOVE:
                 tap.move(ev.getRawX(), ev.getRawY());
@@ -2228,10 +2230,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    private boolean isBareWallpaperPoint(@NonNull MotionEvent ev) {
+    private boolean isBareWallpaperPoint(@NonNull MotionEvent ev, boolean handled) {
         if (mPaneWallController == null
-            || mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.TERMINAL
+            || mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.WIDGETS
             || mPaneWallController.wall().isMoving()) return false;
+        View grid = findViewById(R.id.widget_grid);
+        boolean onEmptyGrid = viewContainsScreenPoint(grid, ev)
+            && !widgetCellContainsScreenPoint((ViewGroup) grid, ev);
+        if (handled && !onEmptyGrid) return false;
         final int[] chrome = {
             R.id.inapp_keyboard_container, R.id.place_off_dock_plank_host,
             R.id.place_az_bar_host, R.id.place_az_tab_layer, R.id.terminal_window_bar,
@@ -2273,6 +2279,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return false;
         if (!viewContainsScreenPoint(findViewById(R.id.terminal_surface_host), ev)) return false;
         return !viewContainsScreenPoint(findViewById(R.id.inapp_keyboard_container), ev);
+    }
+
+    private static boolean widgetCellContainsScreenPoint(@NonNull ViewGroup grid,
+                                                         @NonNull MotionEvent ev) {
+        for (int i = 0; i < grid.getChildCount(); i++) {
+            if (viewContainsScreenPoint(grid.getChildAt(i), ev)) return true;
+        }
+        return false;
     }
 
     private static boolean viewContainsScreenPoint(@Nullable View view, @NonNull MotionEvent ev) {
@@ -3427,13 +3441,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return frame;
     }
 
-    /**
-     * Puts the wallpaper where the wall is: the offset is a function of the wall's live
-     * position ({@link com.termux.app.wall.WallParallax#offsetPx}), so a drag, a fling and a
-     * settle all move the picture on the wall's own curve, and every surface that samples the
-     * frame is told to draw again when it moved. Per frame of a slide, so nothing here allocates:
-     * one number written, and invalidates.
-     */
     @Nullable private com.termux.app.wall.PaneWallPage mLastSettledWallPage;
 
     /** One page-change moment per settled change; the direction is the page ordinal's sign. */
@@ -3455,6 +3462,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             at[0] + pane.getWidth(), at[1] + pane.getHeight())));
     }
 
+    /**
+     * Puts the wallpaper where the wall is: the offset is a function of the wall's live
+     * position ({@link com.termux.app.wall.WallParallax#offsetPx}), so a drag, a fling and a
+     * settle all move the picture on the wall's own curve, and every surface that samples the
+     * frame is told to draw again when it moved. Per frame of a slide, so nothing here allocates:
+     * one number written, and invalidates.
+     */
     private void syncWallpaperParallax() {
         float offsetPx = 0f;
         int sparePx = mWallpaperParallaxSparePx;

@@ -98,31 +98,31 @@ public final class GeneratedWallpaperApplier {
 
     /**
      * Renders and applies {@code w} for {@code target} ({@code home}, {@code lock} or {@code both}).
-     * {@code paletteMode} is {@code material} or {@code own}. Runs on a worker thread; call it with
-     * a themed context (the activity) so Material roles resolve to the launcher's scheme.
-     * {@code cb} is called on the main thread.
+     * {@code paletteMode} is {@code material} or {@code own}. Call it on the main thread with a
+     * themed context (the activity) so Material roles resolve to the launcher's scheme there; the
+     * render and set run on a worker that holds only the application context. {@code cb} is
+     * called on the main thread.
      */
     @RequiresApi(34)
     public static void apply(@NonNull Context ctx, @NonNull AnimatedWallpaper w, @Nullable String paletteMode,
                              @NonNull String target, @Nullable Callback cb) {
-        final Context themed = ctx;
         final Context app = ctx.getApplicationContext();
         final String mode = WallpaperPaletteCapture.MODE_OWN.equals(paletteMode)
             ? WallpaperPaletteCapture.MODE_OWN : WallpaperPaletteCapture.MODE_MATERIAL;
         final int flags = ManagedWallpaper.flagsForTarget(target);
+        if (flags == 0) {
+            finish(cb, false, "target must be home, lock or both");
+            return;
+        }
+        final int[] palette;
+        try {
+            palette = WallpaperPaletteCapture.resolve(ctx, w, mode);
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Palette resolve failed", e);
+            finish(cb, false, "palette_failed");
+            return;
+        }
         WORKER.execute(() -> {
-            if (flags == 0) {
-                finish(cb, false, "target must be home, lock or both");
-                return;
-            }
-            int[] palette;
-            try {
-                palette = WallpaperPaletteCapture.resolve(themed, w, mode);
-            } catch (RuntimeException e) {
-                Logger.logStackTraceWithMessage(LOG_TAG, "Palette resolve failed", e);
-                finish(cb, false, "palette_failed");
-                return;
-            }
             String error = renderAndSet(app, w, palette, flags);
             if (error != null) {
                 finish(cb, false, error);
@@ -133,6 +133,7 @@ public final class GeneratedWallpaperApplier {
                 prefs.setManagedWallpaperAnimatedId(w.id());
                 prefs.setManagedWallpaperAnimatedPalette(mode);
                 prefs.setManagedWallpaperAnimatedColors(palette);
+                prefs.setManagedWallpaperAnimatedTarget(ManagedWallpaper.targetName(flags));
             }
             notifyChanged();
             finish(cb, true, null);
@@ -151,7 +152,8 @@ public final class GeneratedWallpaperApplier {
     /**
      * For a launcher colour-scheme change: when a generated background is stored in Material mode,
      * resolve the palette again and, if the four colours differ from the stored ones, re-render
-     * and re-apply the still to the home screen. Otherwise {@code cb} gets {@code (true, null)}
+     * and re-apply the still to the target it was applied to. Call it on the main thread with the
+     * themed context (the palette is read there). Otherwise {@code cb} gets {@code (true, null)}
      * with nothing done.
      *
      * <p>Never call this from an {@code OnColorsChangedListener}: our own still becomes the system
@@ -160,8 +162,15 @@ public final class GeneratedWallpaperApplier {
      */
     @RequiresApi(34)
     public static void recaptureIfMaterial(@NonNull Context ctx, @Nullable Callback cb) {
-        final Context themed = ctx;
         final Context app = ctx.getApplicationContext();
+        final int[] palette;
+        try {
+            palette = WallpaperPaletteCapture.material(ctx);
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Palette resolve failed", e);
+            finish(cb, false, "palette_failed");
+            return;
+        }
         WORKER.execute(() -> {
             TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, false);
             if (prefs == null) {
@@ -174,19 +183,12 @@ public final class GeneratedWallpaperApplier {
                 finish(cb, true, null);
                 return;
             }
-            int[] palette;
-            try {
-                palette = WallpaperPaletteCapture.material(themed);
-            } catch (RuntimeException e) {
-                Logger.logStackTraceWithMessage(LOG_TAG, "Palette resolve failed", e);
-                finish(cb, false, "palette_failed");
-                return;
-            }
             if (Arrays.equals(palette, prefs.getManagedWallpaperAnimatedColors())) {
                 finish(cb, true, null);
                 return;
             }
-            String error = renderAndSet(app, w, palette, ManagedWallpaper.FLAGS_HOME);
+            int flags = ManagedWallpaper.flagsForTarget(prefs.getManagedWallpaperAnimatedTarget());
+            String error = renderAndSet(app, w, palette, flags == 0 ? ManagedWallpaper.FLAGS_HOME : flags);
             if (error != null) {
                 finish(cb, false, error);
                 return;

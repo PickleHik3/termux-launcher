@@ -237,11 +237,11 @@ public class WallpaperDirectorTest {
         d.setConditions(hidden.build(), T0);
         d.unlock(T0 + 100 * MS);
         assertEquals(0, at(d, 200).fps);
-        d.setConditions(Conditions.playing().build(), T0 + 5000 * MS);
-        Frame first = at(d, 5000);
+        d.setConditions(Conditions.playing().build(), T0 + 500 * MS);
+        Frame first = at(d, 500);
         assertEquals(WallpaperDirector.MAX_FPS, first.fps);
         assertEquals("starts from the rest pose, not already finished", 0f, first.energy, 0.02f);
-        assertEquals(1f, at(d, 5000 + WallpaperDirector.UNLOCK_MS + 33).energy, EPS);
+        assertEquals(1f, at(d, 500 + WallpaperDirector.UNLOCK_MS + 33).energy, EPS);
     }
 
     @Test
@@ -251,8 +251,54 @@ public class WallpaperDirectorTest {
         off.screenOn = false;
         d.setConditions(off.build(), T0);
         d.unlock(T0 + 10 * MS);
-        d.setConditions(Conditions.playing().build(), T0 + 3000 * MS);
-        assertEquals(0f, at(d, 3000).energy, 0.02f);
+        d.setConditions(Conditions.playing().build(), T0 + 500 * MS);
+        assertEquals(0f, at(d, 500).energy, 0.02f);
+    }
+
+    @Test
+    public void aQueuedUnlockExpiresAfterOneSecond() {
+        WallpaperDirector d = new WallpaperDirector(60f, PALETTE);
+        Conditions.Builder hidden = Conditions.playing();
+        hidden.visible = false;
+        d.setConditions(hidden.build(), T0);
+        d.unlock(T0 + 100 * MS);
+        d.setConditions(Conditions.playing().build(), T0 + 2000 * MS);
+        Frame first = at(d, 2000);
+        assertEquals(WallpaperDirector.MAX_FPS, first.fps);
+        assertEquals("no bloom from a stale unlock", 1f, first.energy, EPS);
+        assertEquals(0f, first.dim, EPS);
+    }
+
+    @Test
+    public void anUnlockDroppedWhilePausedLeavesLocked() {
+        WallpaperDirector d = playing();
+        run(d, 0, 100);
+        d.lockRequested(T0 + 100 * MS);
+        run(d, 133, 600);
+        Conditions.Builder lazy = Conditions.playing();
+        lazy.lazyMode = true;
+        d.setConditions(lazy.build(), T0 + 700 * MS);
+        d.unlock(T0 + 800 * MS);
+        d.setConditions(Conditions.playing().build(), T0 + 900 * MS);
+        Frame f = at(d, 900);
+        assertEquals(1f, f.energy, EPS);
+        assertEquals(0f, f.dim, EPS);
+    }
+
+    @Test
+    public void anExpiredQueuedUnlockLeavesLocked() {
+        WallpaperDirector d = playing();
+        run(d, 0, 100);
+        d.lockRequested(T0 + 100 * MS);
+        run(d, 133, 600);
+        Conditions.Builder hidden = Conditions.playing();
+        hidden.visible = false;
+        d.setConditions(hidden.build(), T0 + 700 * MS);
+        d.unlock(T0 + 800 * MS);
+        d.setConditions(Conditions.playing().build(), T0 + 4000 * MS);
+        Frame f = at(d, 4000);
+        assertEquals(1f, f.energy, EPS);
+        assertEquals(0f, f.dim, EPS);
     }
 
     @Test
