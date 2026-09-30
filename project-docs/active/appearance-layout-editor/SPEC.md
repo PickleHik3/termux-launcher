@@ -1,9 +1,13 @@
 # Appearance and Layout editor — spec (2026-09-30)
 
-Status: approved with changes by the developer on 2026-09-30 (Lavish review, five rounds). The
-review page and its interactive mock live at `.lavish/appearance-strip-mock.html` (gitignored; a
-copy travels with the worktree that built this spec). Nothing here is built yet except §7's rim
-work.
+Status: approved with changes by the developer on 2026-09-30 (Lavish review, five rounds), and
+built the same day: §7 items 1–5 merged to dev at ad68d275, reviewed on Waydroid (API 33), on
+pong since 2026-09-30 23:39. The review page and its interactive mock lived at
+`.lavish/appearance-strip-mock.html` (gitignored). Known leftovers: the three Layout notices and
+the "Minimal layout" title have no place in the bottom area and their strings are unused; the
+layout canvas keeps its artwork rim insets in fill mode; a tray with four or more hidden elements
+may wrap past its row; `KeyboardPreferencesFragmentTest.theVoiceRowsWriteThroughToTheSharedPreferencesAndRejectStrays`
+is order-dependent (passes alone and in the last full run).
 
 Supersedes: the on-screen Appearance card with per-surface pages, the Look page's glass rows, the
 Layout editor's control rows, and the Fancier Glass switch and its three sliders.
