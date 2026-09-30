@@ -10,7 +10,7 @@
 Runs NVIDIA parakeet-tdt-0.6b-v3 from Google's LiteRT conversion
 (litert-community/parakeet-tdt-0.6b-v3 -> parakeet_tdt_0.6b_v3_5s_i8_stateful.tflite, with
 nvidia/parakeet-tdt-0.6b-v3's tokenizer.json) so the rig can compare it with Whisper on the same
-segments. See project-docs/parakeet-stt-research.md.
+segments. See project-docs/reference/voice-ai/parakeet-stt-research.md.
 
 Same protocol as whisper_replay_server.py, JSON lines on stdin/stdout:
   in:  {"wav": "<16 kHz mono PCM16 WAV>", "terminal": true|false}   ("terminal" is ignored:

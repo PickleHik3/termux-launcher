@@ -33,13 +33,13 @@ import java.util.concurrent.TimeUnit;
  *
  * <p>Skipped ({@link Assume}) unless {@code -Dvoice.replay.in} names a WAV file or a directory of
  * them; {@code app/build.gradle} forwards the {@code voice.replay.*} system properties to the test
- * JVM. See {@code project-docs/plans/whisper-voice-input.md} "Replay rig" for the exact commands.
+ * JVM. See {@code scripts/voice-eval/README.md} for the exact commands.
  *
  * <ul>
  *   <li>{@code voice.replay.in} — a WAV file or a directory of WAVs (required to run this test)</li>
  *   <li>{@code voice.replay.model} — {@code base} (default), {@code small}, or {@code parakeet}
  *       (NVIDIA parakeet-tdt-0.6b-v3, LiteRT int8 stateful 5 s, from
- *       {@code ~/.cache/termux-launcher/parakeet/}; see project-docs/parakeet-stt-research.md)</li>
+ *       {@code ~/.cache/termux-launcher/parakeet/}; see project-docs/reference/voice-ai/parakeet-stt-research.md)</li>
  *   <li>{@code voice.replay.pause} — the VAD pause in ms, {@code VoiceInputSession}'s own default 600</li>
  *   <li>{@code voice.replay.out} — where the report and per-segment WAVs land; default {@code app/build/voice-replay}</li>
  *   <li>{@code voice.replay.python} — the interpreter; default {@code ~/.cache/termux-launcher/venv/bin/python}</li>
@@ -71,7 +71,7 @@ public class VoiceReplayRig {
     public void replay() throws Exception {
         String inProperty = System.getProperty("voice.replay.in", "").trim();
         Assume.assumeTrue("set -Dvoice.replay.in=<wav-or-dir> to run the voice replay rig (see "
-            + "project-docs/plans/whisper-voice-input.md \"Replay rig\")", !inProperty.isEmpty());
+            + "scripts/voice-eval/README.md)", !inProperty.isEmpty());
         File in = new File(inProperty);
         Assume.assumeTrue("voice.replay.in does not exist: " + in, in.exists());
 

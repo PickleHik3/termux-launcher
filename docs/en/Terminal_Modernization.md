@@ -1039,5 +1039,5 @@ Pane and window commands need split panes enabled; enable them in settings and r
 - Kitty graphics Tier 2/3, desktop notification escape sequences, TTY file transfer, Kitty kittens,
   and multiple Android top-level terminal windows are not implemented.
 
-See [LauncherCtl API](LauncherCtl_API) for the authenticated On-device AI and app-launch routes and
-[Launcher troubleshooting](Launcher_Troubleshooting) for general app diagnostics.
+See [LauncherCtl API](LauncherCtl_API.md) for the authenticated On-device AI and app-launch routes and
+[Launcher troubleshooting](Launcher_Troubleshooting.md) for general app diagnostics.

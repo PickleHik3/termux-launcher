@@ -10,7 +10,7 @@ ADR 0004 left every glass surface sampling the one pre-blurred wallpaper frame a
 screen position, through a `BitmapShader` aimed per draw. The dock and the under-pill strip
 alone carried a second effect on top: an AGSL program (`GLASS_AGSL`, API 33+) applied as a
 `RenderEffect` over their backdrop views, bending the frame under the rim, lighting the rim and
-carrying the key-press lens. Fancier Glass (`project-docs/fancier-glass/SPEC.md`) asks for that
+carrying the key-press lens. Fancier Glass (`project-docs/active/fancier-glass/SPEC.md`) asks for that
 refraction on every glass surface, behind one opt-in switch, with three global knobs.
 
 We decided on one program, `chrome/GlassRefraction`, with two ways in, and one rule for when it

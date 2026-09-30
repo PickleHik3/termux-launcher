@@ -12,8 +12,7 @@ import android.util.Log;
  * litert's {@code Interpreter}. litert 1.4.2's {@code NativeInterpreterWrapper} does pass
  * {@code getNumThreads()}/{@code getUseXNNPACK()} down to its native {@code createInterpreter},
  * but the XNNPACK delegate it builds internally never gets worker threads: simpleperf on pong
- * showed Whisper inference 99.56% on one thread (see {@link WhisperSttRuntime} and
- * {@code project-docs/plans/whisper-voice-input.md}). The native shim dlopens the already-loaded
+ * showed Whisper inference 99.56% on one thread (see {@link WhisperSttRuntime}). The native shim dlopens the already-loaded
  * {@code libtensorflowlite_jni.so} and calls its exported {@code TfLiteXNNPackDelegateCreate}
  * directly, which does spawn a pthreadpool.
  *

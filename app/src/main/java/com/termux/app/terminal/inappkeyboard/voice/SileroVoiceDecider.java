@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <em>finished</em> by the end of that frame, so no frame waits for or sees later audio; the very
  * first frame (480 samples) has no finished chunk yet and is unvoiced. This is the alignment the
  * PC harness evaluated ({@code scripts/voice-eval/vads.py}, {@code SileroDecider}) and the decision
- * record in {@code project-docs/plans/voice-vad-eval-2026-09-27.md} rests on.
+ * record in {@code project-docs/reference/voice-ai/voice-vad-eval-2026-09-27.md} rests on.
  *
  * <p>The hysteresis mirrors the energy detector's 9 dB onset / 6 dB hold pair: a probability over
  * {@link #ONSET} opens a segment and one over {@link #HOLD} keeps an open segment voiced, the same

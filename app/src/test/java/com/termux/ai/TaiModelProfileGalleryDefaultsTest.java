@@ -11,7 +11,7 @@ import static org.junit.Assert.assertNull;
 
 /**
  * Covers the importer-default gaps recorded in
- * {@code project-docs/gallery-gpu-loading-comparison.md} ("Official defaults (for the TAI
+ * {@code project-docs/reference/voice-ai/gallery-gpu-loading-comparison.md} ("Official defaults (for the TAI
  * importer)"): Gemma 3n E2B/E4B and Gemma3-1B filename matches, the maxTokens-as-context-window
  * mapping, and the {@code ekvNNNN} filename fallback.
  */

@@ -8,7 +8,7 @@ import com.termux.app.place.PlaceLayout.KeyboardForm;
  * What material the in-app keyboard renders, given the form it is in and whether the place it is
  * on lets it lie over the content instead of shrinking it.
  *
- * <p>The rule (keyboard-overlays spec, D1 and D3) is one sentence: <em>overlays are solid, the
+ * <p>The rule is one sentence: <em>overlays are solid, the
  * dock is glass</em>. Anything lying over content is one opaque Material surface — no wallpaper
  * crop, no frost, no glass slice, no rim — and it ignores the Keyboard surface's opacity and its
  * scheme background colour, because both describe how much of the wallpaper shows through a

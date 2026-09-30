@@ -1608,7 +1608,7 @@ public final class TermuxInAppKeyboard {
      * launcher attributes.
      *
      * <p>A parted keyboard lies over the content on every place — the halves are the panel, not
-     * a fill inside one of the host's surfaces — so per the keyboard-overlays spec (D1, D2) they
+     * a fill inside one of the host's surfaces — so they
      * are opaque in that one role and ignore the Keyboard surface's opacity. Pushed from the two
      * places the view's appearance is settled: with the layout, and with every palette refresh,
      * so a theme or wallpaper change repaints the slabs with the keys.

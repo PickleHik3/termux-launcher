@@ -17,7 +17,7 @@ import java.util.List;
  * its {@code AppRef} instead. Collapsing the ordinary way would hand whatever reads this map a
  * single fake "app" standing in for all of them — which is exactly how an on-device categorizer
  * run once wrote one machine-made guess that filed every Linux app under the same category
- * (see {@code project-docs/distro-apps/SPEC.md}). The drawer already has its own rule for these
+ * (a Linux app is filed by what it is, not by the shared package). The drawer already has its own rule for these
  * ({@code AppDrawerCategoryClassifier}'s {@code LINUX_APP} source); nothing that reads this map
  * should ever get a turn to guess on their behalf.
  *

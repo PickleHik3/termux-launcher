@@ -1,5 +1,5 @@
 """Mixes a speech WAV with a noise WAV, to build noisy variants for VoiceReplayRig
-(project-docs/plans/whisper-voice-input.md "Replay rig"). Both must be 16 kHz mono PCM16; the
+(see scripts/voice-eval/README.md). Both must be 16 kHz mono PCM16; the
 noise loops (or is trimmed) to the speech's length, optionally with extra seconds of noise-only
 audio before and/or after the speech so the mixed clip still opens and closes on room tone the way
 a real session does.

@@ -64,7 +64,7 @@ import java.util.Map;
  * A release anywhere else springs the bar back and reports nothing. {@link MiniatureDragPolicy} owns which targets exist and which one
  * the finger is over.
  *
- * <p>The artwork is drawn from {@code project-docs/layout-editor/miniature-material}: its
+ * <p>The artwork is drawn from {@code project-docs/reference/launcher/miniature-material/}: its
  * geometry is in units of a 240-wide phone, and {@link #unitPx} is what one of those comes to on
  * the frame this view is drawing, so the same picture holds at every size the editor gives it.
  */

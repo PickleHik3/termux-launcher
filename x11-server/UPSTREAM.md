@@ -20,7 +20,7 @@ not listed is upstream's code unchanged, and should be updated by taking upstrea
 Termux:X11 is a second app: the `termux-x11` command starts the server as `app_process`, which
 class-loads that app's APK and hands its running activity a Binder. A launcher cannot embed
 another app's surface on Android 14–16, so the only way to put an X display inside the home
-screen is to own the server. See `project-docs/plans/pane-wall-x11-study.md`.
+screen is to own the server. See `project-docs/reference/launcher/pane-wall-x11-study.md`.
 
 ## What is not vendored
 

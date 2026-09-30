@@ -13,7 +13,8 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
  * is drawn by exactly the code that drew it before this existed.
  *
  * <p>The Obsidian values (Apache-2.0, Obsidian-Music 2.5.1; see
- * project-docs/mist-preset/OBSIDIAN-VALUES.md): dark glass is #161822 at the user's opacity with a
+ * project-docs/reference/launcher/mist-preset-obsidian-values.md): dark
+ * glass is #161822 at the user's opacity with a
  * white 0.05 wash over it; light glass is white with the same wash; the rim is a 1dp diagonal
  * gradient, white 0.25 at the top-left to white 0.03. Pure ints, no {@code Context}.</p>
  */

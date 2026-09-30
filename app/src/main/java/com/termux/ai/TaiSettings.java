@@ -288,7 +288,7 @@ public final class TaiSettings {
     /** The preferred window (in seconds) for the next speech model download: 10 (default) or 5.
      *  The window of an installed model is read off its file name ({@link TaiSpeechModels#windowSeconds}).
      *  Falls back to the default for any stored value the plan doesn't offer (only 5s/10s are ever
-     *  downloaded; 30s hallucinates on short speech and isn't offered — see whisper-voice-input.md). */
+     *  downloaded; 30s hallucinates on short speech and isn't offered). */
     public int getSttWindowSeconds() {
         int value = preferences.getInt(KEY_STT_WINDOW_SECONDS, DEFAULT_STT_WINDOW_SECONDS);
         return value == 5 ? 5 : DEFAULT_STT_WINDOW_SECONDS;

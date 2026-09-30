@@ -72,5 +72,5 @@ it is now the **minimal variant** of the layout, kept under `layout.minimal.<ori
 beside the normal keys (which are unchanged) and edited in the Layout editor while the mode is on.
 The first time the minimal variant is used it is seeded from the normal layout with every element
 put away, so minimal looks as it always did until the user adds something back. The look stays
-one look: minimal mode has no appearance of its own. See `project-docs/minimal-layout/SPEC.md`.
+one look: minimal mode has no appearance of its own. See `PlaceLayoutStore` for the variant's keys.
 

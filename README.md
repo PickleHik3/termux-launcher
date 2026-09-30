@@ -122,6 +122,8 @@ In-repo references:
 - [Building showcase tools](docs/en/Building_Terminal_Showcase_Tools.md): reproducible recipes for Sigye and animated-Kitty Fastfetch, on device and cross-built.
 - [VAJ to Nix migration](docs/en/VAJ_To_Nix_Migration.md): moving off the deprecated VAJ edition.
 - [Developer Docs](docs/en/Developer_Docs.md): advanced API routes, runtime notes, helper scripts, and security details.
+- [Glossary](docs/GLOSSARY.md): the words the code, the docs and the developer use.
+- [Developer specs and research](project-docs/README.md): active specs, delivered records, research and the backlog.
 
 ## Upstream Base
 

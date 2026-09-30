@@ -2,8 +2,8 @@
 # Pulls the voice-debug recordings VoiceInputSession keeps in debug builds
 # (cache/voice-debug/session-*.pcm, the whole session as the VAD sees it; segment-*.pcm, one
 # segment each, 0-7 cycling) off the phone and wraps each in a WAV header at
-# ~/.cache/termux-launcher/voice-clips/, ready for VoiceReplayRig (project-docs/plans/
-# whisper-voice-input.md "Replay rig"). These recordings are the developer's own voice: never
+# ~/.cache/termux-launcher/voice-clips/, ready for VoiceReplayRig (scripts/voice-eval/
+# README.md). These recordings are the developer's own voice: never
 # committed, never copied into the repo.
 set -euo pipefail
 

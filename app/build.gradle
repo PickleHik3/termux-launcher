@@ -42,7 +42,7 @@ android {
         // libtai_xnnpack.so (com.termux.ai.TaiXnnpackDelegate): a JNI shim that dlopens the
         // already-loaded libtensorflowlite_jni.so and calls its exported XNNPACK delegate C API
         // directly, so Whisper inference gets a real multi-threaded XNNPACK pthreadpool (see
-        // WhisperSttRuntime and project-docs/plans/whisper-voice-input.md).
+        // WhisperSttRuntime).
         externalNativeBuild {
             ndkBuild {
                 cFlags "-std=c11", "-Wall", "-Wextra", "-Werror", "-Os"

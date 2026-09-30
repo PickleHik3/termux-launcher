@@ -20,7 +20,3 @@ clients for the `tai-ext` LauncherCtl agent platform.
 
 All scripts read `~/.launcherctl/endpoint` and `~/.launcherctl/token`.
 They do not print the bearer token.
-
-## Current Live Report
-
-- `live-test-report-2026-06-20.md`

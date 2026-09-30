@@ -1,4 +1,4 @@
-"""Reference Whisper-ACFT decoder for the LiteRT graphs (numpy + ai-edge-litert). Generates app/src/test/resources/whisper fixtures; see project-docs/plans/whisper-voice-input.md."""
+"""Reference Whisper-ACFT decoder for the LiteRT graphs (numpy + ai-edge-litert). Generates app/src/test/resources/whisper fixtures."""
 import json, sys, time, wave, glob, os
 import numpy as np
 from ai_edge_litert.interpreter import Interpreter
