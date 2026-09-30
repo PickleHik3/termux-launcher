@@ -230,7 +230,7 @@ _Avoid_: arrange mode, surface editor, place editor
 
 **Layout canvas**:
 The scaled model of a place's layout that the user drags elements around on, in the Layout
-editor; there is no second one. Code still calls it the miniature (`PlaceMiniatureView`) until
+editor; there is no second one. Code still calls it the miniature (`LayoutCanvasView`) until
 it is redrawn from the layout element pack.
 _Avoid_: miniature (in new prose), preview, thumbnail, overview
 

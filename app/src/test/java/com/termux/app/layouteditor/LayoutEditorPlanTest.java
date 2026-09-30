@@ -14,7 +14,7 @@ import android.os.Build;
 
 import com.termux.app.fragments.settings.MiniatureDragPolicy.Bar;
 import com.termux.app.editorshell.EditorShellMetrics;
-import com.termux.app.fragments.settings.PlaceMiniatureView;
+import com.termux.app.fragments.settings.LayoutCanvasView;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -453,7 +453,7 @@ public class LayoutEditorPlanTest {
             // No rows stand under the canvas any more, so nothing peeks under it.
             int peek = 0;
             int reserved = Math.round(density * 48f);
-            float aspect = PlaceMiniatureView.frameAspect(LANDSCAPE);
+            float aspect = LayoutCanvasView.frameAspect(LANDSCAPE);
             for (int[] viewport : LANDSCAPE_VIEWPORTS) {
                 int rest = LayoutEditorPlan.restingCardHeightPx(viewport[0], viewport[1],
                     viewport[1] - Math.round(density * 42f));
@@ -523,7 +523,7 @@ public class LayoutEditorPlanTest {
             PONG_DENSITY);
         int column = EditorShellMetrics.contentWidthPx(PONG_WIDTH_PX, PONG_DENSITY);
         int miniature = LayoutEditorPlan.miniatureHeightPx(PORTRAIT, PONG_HEIGHT_PX,
-            PlaceMiniatureView.frameAspect(PORTRAIT), reserved, column, chrome + peek, rest);
+            LayoutCanvasView.frameAspect(PORTRAIT), reserved, column, chrome + peek, rest);
 
         assertEquals("the sheet rests in four fifths of the screen",
             Math.round(0.80f * PONG_HEIGHT_PX), rest);
@@ -568,7 +568,7 @@ public class LayoutEditorPlanTest {
 
     @Test
     public void aMiniatureInItsOwnPaneTakesWhicheverOfTheTwoRunsOutFirst() {
-        float aspect = PlaceMiniatureView.frameAspect(PORTRAIT);
+        float aspect = LayoutCanvasView.frameAspect(PORTRAIT);
         int reserved = 54;
         // A tall pane: the width runs out first, so the frame is as wide as the pane.
         int wide = LayoutEditorPlan.miniatureHeightInPanePx(aspect, reserved, 200, 4000);
@@ -582,7 +582,7 @@ public class LayoutEditorPlanTest {
     @Test
     public void thePaneFrameNeverExceedsThePaneAtAnyReferenceSize() {
         for (float density : new float[]{180f / 160f, 260f / 160f}) {
-            float aspect = PlaceMiniatureView.frameAspect(PORTRAIT);
+            float aspect = LayoutCanvasView.frameAspect(PORTRAIT);
             int reserved = Math.round(density * 48f);
             for (int paneWidth = 100; paneWidth <= 900; paneWidth += 13) {
                 for (int paneHeight = 120; paneHeight <= 900; paneHeight += 31) {

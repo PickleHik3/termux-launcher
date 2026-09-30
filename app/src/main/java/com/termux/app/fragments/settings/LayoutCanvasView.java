@@ -66,7 +66,7 @@ import java.util.Map;
  * and reports nothing. {@link MiniatureDragPolicy} owns which targets exist and which one the
  * finger is over. A tap selects an element: one outline, and the handles that resize it.
  */
-public final class PlaceMiniatureView extends View {
+public final class LayoutCanvasView extends View {
 
     /**
      * One region of the layout canvas. The keyboard is one too: it has no edge and no order, but
@@ -397,7 +397,7 @@ public final class PlaceMiniatureView extends View {
     @NonNull private final Drawable mIconDisplay;
     @NonNull private final Drawable mIconTerminal;
 
-    public PlaceMiniatureView(@NonNull Context context, @Nullable AttributeSet attrs) {
+    public LayoutCanvasView(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         mFramePaint.setStyle(Paint.Style.STROKE);
         mFillPaint.setStyle(Paint.Style.FILL);
@@ -504,7 +504,7 @@ public final class PlaceMiniatureView extends View {
         return Math.min(metrics.widthPixels, metrics.heightPixels) / metrics.density;
     }
 
-    public PlaceMiniatureView(@NonNull Context context) {
+    public LayoutCanvasView(@NonNull Context context) {
         this(context, null);
     }
 
@@ -2778,8 +2778,7 @@ public final class PlaceMiniatureView extends View {
         float swatchGap = dp(LEGEND_SWATCH_GAP_DP);
         float swatchRadius = dp(5);
         int onSurface = surfaceInk();
-        int outline = themeColor(com.termux.shared.R.attr.termuxColorOutlineVariant,
-            R.color.termux_outline_variant);
+        int outline = lineColor();
         boolean rtl = isRtl();
         mLegendPaint.setTextSize(legendTextSizePx());
         mLegendPaint.setTypeface(Typeface.DEFAULT);

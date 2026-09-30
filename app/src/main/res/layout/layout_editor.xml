@@ -199,7 +199,7 @@
                         android:textSize="12sp" />
                 </FrameLayout>
 
-                <com.termux.app.fragments.settings.PlaceMiniatureView
+                <com.termux.app.fragments.settings.LayoutCanvasView
                     android:id="@+id/layout_editor_miniature"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content" />
