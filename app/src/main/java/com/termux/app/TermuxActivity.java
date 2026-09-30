@@ -8640,9 +8640,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * a band of that row's plank and the glass under both of them is the plank's, so the capsule
      * this host carries everywhere else is put away.
      *
-     * <p>Minimised, the index has no band anywhere: the dock's row and this host both go, and the
-     * letters live in the pull tab's layer over the canvas ({@link AzPullTabLayer}), which is where
-     * the one scrub callback moves to.
+     * <p>The minimised pull tab is gone from the arrangement (2026-09-30), so the tab's layer is
+     * only ever put away here; the layer itself is left for a later cleanup.
      *
      * @return whether a host appeared or went, which the content's edge padding is derived from
      */
@@ -8650,7 +8649,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         FrameLayout host = findViewById(R.id.place_az_bar_host);
         if (host == null) return false;
         PlaceLayout layout = currentPlaceLayout();
-        boolean tabShown = mPreferences != null && PlaceChromePolicy.azTabShown(layout);
+        boolean tabShown = false;
         boolean lettersShown = mPreferences != null && PlaceChromePolicy.azRowShown(layout);
         PlaceLayout.Edge edge = lettersShown || tabShown ? azBarEdge() : PlaceLayout.Edge.BOTTOM;
         boolean wantHost = lettersShown && edge != PlaceLayout.Edge.BOTTOM;

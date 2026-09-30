@@ -43,7 +43,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * showed on — the terminal's for everything the terminal draws — and then drops every place's own
  * copy. The same step folds the place-scoped look overrides into the shared look, since those were
  * kept in this file's key scheme too. Version 7 folds the per-place minimal flags into the one
- * launcher-wide flag.
+ * launcher-wide flag. Version 8 drops the alphabets index's minimised flag: the pull tab is gone,
+ * and an index that was minimised reads as shown.
  *
  * <p>No Android views here, on purpose: this is a resolver over {@link SharedPreferences} and it is
  * tested as one.
@@ -51,7 +52,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class PlaceLayoutStore {
 
     /** Bumped when a new set of old keys has to be folded into the current ones. */
-    @VisibleForTesting static final int MIGRATION_VERSION = 7;
+    @VisibleForTesting static final int MIGRATION_VERSION = 8;
 
     @VisibleForTesting static final String KEY_MIGRATED = "place.migrated";
 
@@ -66,12 +67,11 @@ public final class PlaceLayoutStore {
     private static final String KEY_AZ_ROW = "az_row";
     private static final String KEY_AZ_BAR = Element.AZ.storageKey();
     /**
-     * Whether a shown alphabets index stands as its pull tab, beside {@code az_row}: the
-     * three-way On / Minimised / Off is the two of them together, so an install that has only
-     * ever stored {@code az_row} reads exactly as it did — true is On, false is Off — and nothing
-     * has to be migrated for it.
+     * Whether a shown alphabets index stood as its pull tab, beside {@code az_row}. The tab was
+     * removed on 2026-09-30; version 8 of the migration deletes the key, and {@code az_row} alone
+     * says on or off, so an index that was minimised comes back as the band it folded from.
      */
-    private static final String KEY_AZ_MINIMISED = "az_minimised";
+    private static final String LEGACY_KEY_AZ_MINIMISED = "az_minimised";
     private static final String KEY_EXTRA_KEYS = Element.EXTRA_KEYS.storageKey();
 
     /**
@@ -137,7 +137,7 @@ public final class PlaceLayoutStore {
     private static final String LEGACY_KEY_X11_HIDE_STATUS_BAR = "x11_hide_status_bar";
 
     private static final String[] ARRANGEMENT_KEYS = {
-        KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_AZ_MINIMISED, KEY_EXTRA_KEYS,
+        KEY_STATUS_BAR, KEY_APPS_ROW, KEY_AZ_ROW, KEY_AZ_BAR, KEY_EXTRA_KEYS,
         KEY_KEYBOARD_MODE,
         KEY_KEYBOARD_FORM, KEY_WIDGET_COLUMNS, KEY_WIDGET_ROWS,
         KEY_DOCK_HEIGHT, KEY_KEYBOARD_HEIGHT, KEY_KEYBOARD_CHIN,
@@ -268,7 +268,6 @@ public final class PlaceLayoutStore {
             keyboardMode(orientation),
             keyboardForm(orientation),
             isKeyboardShown(),
-            azMinimised(orientation),
             widgetColumns(orientation),
             widgetRows(orientation));
     }
@@ -479,49 +478,6 @@ public final class PlaceLayoutStore {
         writeBoolean(variantKey(orientation, KEY_AZ_ROW), shown);
     }
 
-    /**
-     * Whether the alphabets index, while it is shown, stands minimised as a pull tab on its edge
-     * rather than as a band of its own. False until the user asks: every install that predates
-     * the tab keeps the band it had.
-     */
-    public boolean azMinimised(@NonNull PlaceOrientation orientation) {
-        return mStore != null
-            && mStore.getBoolean(variantKey(orientation, KEY_AZ_MINIMISED), false);
-    }
-
-    public void setAzMinimised(@NonNull PlaceOrientation orientation, boolean minimised) {
-        writeBoolean(variantKey(orientation, KEY_AZ_MINIMISED), minimised);
-    }
-
-    /** The Layout editor's three-way choice for the index: a band, the pull tab, or put away. */
-    @NonNull
-    public PlaceLayout.AzIndexMode azIndexMode(@NonNull PlaceOrientation orientation) {
-        if (!azRowShown(orientation)) return PlaceLayout.AzIndexMode.OFF;
-        return azMinimised(orientation)
-            ? PlaceLayout.AzIndexMode.MINIMISED : PlaceLayout.AzIndexMode.ON;
-    }
-
-    /**
-     * Writes the three-way choice. Off leaves the minimised flag where it was, the way putting a
-     * bar away keeps the edge it comes back to, so a tab dragged back out of the Hidden tray
-     * returns as a tab.
-     */
-    public void setAzIndexMode(@NonNull PlaceOrientation orientation,
-                               @NonNull PlaceLayout.AzIndexMode mode) {
-        switch (mode) {
-            case OFF:
-                setAzRowShown(orientation, false);
-                return;
-            case MINIMISED:
-                setAzMinimised(orientation, true);
-                setAzRowShown(orientation, true);
-                return;
-            case ON:
-            default:
-                setAzMinimised(orientation, false);
-                setAzRowShown(orientation, true);
-        }
-    }
 
     /**
      * Where the alphabets bar stands while it rides on its own — with the apps row under it, it
@@ -925,6 +881,7 @@ public final class PlaceLayoutStore {
         SharedPreferences.Editor editor = mStore.edit();
         if (fromVersion < 6) migrateToSharedLayout(editor);
         if (fromVersion < 7) migrateToOneMinimalMode(editor);
+        if (fromVersion < 8) migrateAwayFromAzTab(editor);
         editor.putInt(KEY_MIGRATED, MIGRATION_VERSION);
         editor.apply();
         mRevision.incrementAndGet();
@@ -944,6 +901,19 @@ public final class PlaceLayoutStore {
         if (minimal != null) editor.putBoolean(minimalKey(), minimal);
         for (PaneWallPage place : PaneWallPage.values())
             editor.remove(memoryKey(place, KEY_MINIMAL));
+    }
+
+    /**
+     * Version 8: the alphabets index's minimised pull tab is gone. Its flag is deleted from both
+     * layouts in both orientations and nothing else is written: {@code az_row} is still true for
+     * an index that was minimised, so it reads as shown, standing as a band on the edge the tab
+     * was on — the form it folded from.
+     */
+    private void migrateAwayFromAzTab(@NonNull SharedPreferences.Editor editor) {
+        for (LayoutVariant variant : LayoutVariant.values()) {
+            for (PlaceOrientation orientation : PlaceOrientation.values())
+                editor.remove(layoutKey(variant, orientation, LEGACY_KEY_AZ_MINIMISED));
+        }
     }
 
     /** Versions 1 to 5, exactly as they ran when the arrangement was still kept per place. */

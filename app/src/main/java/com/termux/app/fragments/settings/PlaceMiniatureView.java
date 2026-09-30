@@ -31,7 +31,6 @@ import com.termux.R;
 import com.termux.app.Spring;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
-import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
@@ -193,14 +192,6 @@ public final class PlaceMiniatureView extends View {
     private static final float APPS_DESIGN_H = 48f;
     private static final float ALPHABETS_DESIGN_H = 36f;
     private static final float EXTRA_KEYS_DESIGN_H = 56f;
-    /**
-     * The minimised index's pull tab ({@code alphabets_tab}): 48 &times; 28 with the design's
-     * radius, laid over the pane at the leading end of its edge, {@value #TAB_EDGE_GAP_U} in from
-     * the pane's own edge, the way {@code miniature_portrait_terminal} has it.
-     */
-    private static final float TAB_LENGTH_U = 48f;
-    private static final float TAB_THICKNESS_U = 28f;
-    private static final float TAB_EDGE_GAP_U = 8f;
 
     // ---- The theme's roles, as the design maps them ---------------------------------------------
     /** Outlines and text lines: the on-surface-variant at the design's 45%. */
@@ -741,9 +732,6 @@ public final class PlaceMiniatureView extends View {
             }
         }
         mBlockRects.put(Block.CANVAS, new RectF(mRemaining));
-        // The minimised index claims no band: its tab is laid over the canvas once the canvas is
-        // known, and it is a block like any other from here, so it carries a grip and lifts.
-        if (isAzTab()) mBlockRects.put(Block.ALPHABETS_ROW, tabBlock(mRemaining));
         computeContent();
         computeGrips();
         computeTrayChips();
@@ -775,51 +763,6 @@ public final class PlaceMiniatureView extends View {
         mRemaining.bottom -= h;
     }
 
-    /** Whether the arrangement stands the A–Z index minimised, as its pull tab over the pane. */
-    @VisibleForTesting
-    public boolean isAzTab() {
-        return mLayout != null && PlaceChromePolicy.azTabShown(mLayout);
-    }
-
-    /**
-     * The tab's block on the canvas: the pill and the card padding around it, at the leading end
-     * of the index's edge and {@value #TAB_EDGE_GAP_U} in from the pane's own edge. Along a row
-     * the leading end is the left, the right in a right-to-left layout; down a column it is the
-     * top. A canvas too small for it shrinks it rather than letting it past the pane.
-     */
-    @NonNull
-    private RectF tabBlock(@NonNull RectF canvasRect) {
-        Edge edge = EdgeStackPolicy.edgeOf(mLayout, Element.AZ);
-        boolean column = edge.isOnSide();
-        float pad = u(CARD_PAD_U);
-        float length = Math.min(u(TAB_LENGTH_U) + 2f * pad,
-            column ? canvasRect.height() : canvasRect.width());
-        float thickness = Math.min(u(TAB_THICKNESS_U) + 2f * pad,
-            (column ? canvasRect.width() : canvasRect.height()) / 2f);
-        // The pane card is the canvas less the padding; the pill, the block less the same padding,
-        // stands the gap in from the card, so the block stands the gap in from the canvas.
-        float gap = u(TAB_EDGE_GAP_U);
-        RectF rect = new RectF();
-        switch (edge) {
-            case TOP:
-            case BOTTOM: {
-                float left = isRtl() ? canvasRect.right - length : canvasRect.left;
-                float top = edge == Edge.TOP ? canvasRect.top + gap
-                    : canvasRect.bottom - gap - thickness;
-                rect.set(left, top, left + length, top + thickness);
-                break;
-            }
-            case LEFT:
-            case RIGHT:
-            default: {
-                float left = edge == Edge.LEFT ? canvasRect.left + gap
-                    : canvasRect.right - gap - thickness;
-                rect.set(left, canvasRect.top, left + thickness, canvasRect.top + length);
-                break;
-            }
-        }
-        return rect;
-    }
 
     /** The model's name for one of the miniature's bands, or null for a band with no placement. */
     @Nullable
@@ -1154,7 +1097,7 @@ public final class PlaceMiniatureView extends View {
         }
     }
 
-    /** The word for where a bar stands: its edge, or that it is hidden, or minimised there. */
+    /** The word for where a bar stands: its edge, or that it is hidden. */
     @NonNull
     private String barPosition(@NonNull Block bar) {
         if (mLayout == null || isBlockHidden(bar)) {
@@ -1164,14 +1107,9 @@ public final class PlaceMiniatureView extends View {
         boolean underKeyboard = element != null
             && EdgeStackPolicy.standsUnderKeyboard(mLayout, element)
             && EdgeStackPolicy.claimsBand(mLayout, element);
-        String edge = getContext().getString(underKeyboard
+        return getContext().getString(underKeyboard
             ? R.string.settings_layout_edge_under_keyboard
             : LayoutChooserModel.edgeLabel(edgeOfBlock(bar)));
-        if (bar == Block.ALPHABETS_ROW && isAzTab()) {
-            return getContext().getString(R.string.settings_layout_miniature_minimised_format,
-                edge);
-        }
-        return edge;
     }
 
     /** Decisions that do not need a {@link Canvas} to make, recomputed whenever the blocks move. */
@@ -1203,10 +1141,6 @@ public final class PlaceMiniatureView extends View {
         }
         if (isBlockHidden(block)) {
             return getContext().getString(R.string.settings_layout_miniature_hidden_format, label);
-        }
-        if (block == Block.ALPHABETS_ROW && isAzTab()) {
-            return getContext().getString(R.string.settings_layout_miniature_minimised_format,
-                label);
         }
         return label;
     }
@@ -1477,10 +1411,7 @@ public final class PlaceMiniatureView extends View {
             drawStatusColumnContent(canvas, card);
             return;
         }
-        if (block == Block.ALPHABETS_ROW && isAzTab()) {
-            drawAlphabetsTabContent(canvas, card, vertical);
-            return;
-        }
+
         int saved = beginBandOrientation(canvas, card, vertical, mScratchRectA);
         shrinkForGrip(mScratchRectA, vertical);
         switch (block) {
@@ -1619,30 +1550,6 @@ public final class PlaceMiniatureView extends View {
             float x = local.left + inset + slot * (i + 0.5f);
             canvas.drawText(ALPHABETS_SAMPLE[i], x, baseline, mTextPaint);
         }
-    }
-
-    /**
-     * The pull tab: the letter A at its leading end, upright on every edge, clear of the grip at
-     * its trailing end — the top of a column's.
-     */
-    private void drawAlphabetsTabContent(@NonNull Canvas canvas, @NonNull RectF card,
-                                         boolean vertical) {
-        float across = vertical ? card.width() : card.height();
-        float k = Math.max(0.01f, Math.min(mUnit, across / TAB_THICKNESS_U));
-        RectF room = mScratchRectA;
-        room.set(card);
-        if (vertical) {
-            room.top += Math.min(u(GRIP_CLEARANCE_U), card.height() / 2f);
-        } else {
-            shrinkForGrip(room, false);
-        }
-        mTextPaint.setColor(text());
-        mTextPaint.setTypeface(Typeface.DEFAULT_BOLD);
-        mTextPaint.setTextAlign(Paint.Align.CENTER);
-        mTextPaint.setTextSize(Math.min(10f * k, across * 0.5f));
-        float baseline = room.centerY() - (mTextPaint.ascent() + mTextPaint.descent()) / 2f;
-        canvas.drawText("A", room.centerX(), baseline, mTextPaint);
-        mTextPaint.setTypeface(Typeface.DEFAULT);
     }
 
     // ---- Extra keys ---------------------------------------------------------------------------

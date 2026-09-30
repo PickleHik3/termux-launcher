@@ -40,7 +40,7 @@ import java.util.Arrays;
 public class PlaceLayoutStoreTest {
 
     /** What a migrated store says it has folded. Bumped with {@code MIGRATION_VERSION}. */
-    private static final int MIGRATED = 7;
+    private static final int MIGRATED = 8;
 
     private Application app;
     private SharedPreferences prefs;
@@ -338,6 +338,29 @@ public class PlaceLayoutStoreTest {
             .putBoolean("place.terminal.minimal", false)
             .commit();
         assertTrue(store().isMinimal());
+    }
+
+    /**
+     * Version 8: the A–Z index's minimised pull tab is gone. Its flag is deleted from both layouts
+     * in both orientations, and an index that was minimised reads as shown, on the edge it held.
+     */
+    @Test
+    public void aMinimisedIndexComesBackAsShown() {
+        prefs.edit().putInt("place.migrated", 7)
+            .putBoolean("layout.portrait.az_row", true)
+            .putBoolean("layout.portrait.az_minimised", true)
+            .putString("layout.portrait.az_bar", "right")
+            .putBoolean("layout.minimal.landscape.az_minimised", true)
+            .commit();
+        PlaceLayoutStore store = store();
+        assertEquals(MIGRATED, prefs.getInt("place.migrated", 0));
+        assertFalse(prefs.contains("layout.portrait.az_minimised"));
+        assertFalse(prefs.contains("layout.minimal.landscape.az_minimised"));
+        Slot az = store.slot(PlaceOrientation.PORTRAIT, Element.AZ);
+        assertFalse("a minimised index reads as shown", az.hidden);
+        assertEquals(Edge.RIGHT, az.edge);
+        assertTrue(EdgeStackPolicy.claimsBand(store.resolve(PlaceOrientation.PORTRAIT),
+            Element.AZ));
     }
 
     @Test

@@ -33,8 +33,6 @@ public final class PlaceArrangeSnapshot {
         final boolean statusHidden;
         final PlaceLayout.RowPlacement appsRow;
         final boolean azRowShown;
-        /** The index standing as its pull tab, which the shown/hidden switch alone cannot say. */
-        final boolean azMinimised;
         final PlaceLayout.Edge azBarEdge;
         final PlaceLayout.RowPlacement extraKeys;
         final PlaceLayout.KeyboardMode keyboardMode;
@@ -55,7 +53,6 @@ public final class PlaceArrangeSnapshot {
             statusHidden = places.slot(orientation, Element.STATUS).hidden;
             appsRow = places.appsRow(orientation);
             azRowShown = places.azRowShown(orientation);
-            azMinimised = places.azMinimised(orientation);
             azBarEdge = places.azBarEdge(orientation);
             extraKeys = places.extraKeys(orientation);
             keyboardMode = places.keyboardMode(orientation);
@@ -79,7 +76,6 @@ public final class PlaceArrangeSnapshot {
                 new Slot(statusHidden, statusBarEdge, slotOrders[Element.STATUS.ordinal()]));
             places.setAppsRow(orientation, appsRow);
             places.setAzRowShown(orientation, azRowShown);
-            places.setAzMinimised(orientation, azMinimised);
             places.setAzBarEdge(orientation, azBarEdge);
             places.setExtraKeys(orientation, extraKeys);
             places.setKeyboardMode(orientation, keyboardMode);
@@ -102,7 +98,7 @@ public final class PlaceArrangeSnapshot {
             out.append(orientation.storageValue()).append(':')
                 .append(statusHidden ? "hidden@" : "").append(statusBarEdge).append(',')
                 .append(appsRow).append(',')
-                .append(azRowShown).append(azMinimised ? "(tab)" : "").append(',')
+                .append(azRowShown).append(',')
                 .append(azBarEdge).append(',')
                 .append(extraKeys).append(',')
                 .append(keyboardMode).append(',')
