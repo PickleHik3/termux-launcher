@@ -67,4 +67,21 @@ public class TaiRuntimeServiceDispatchTest {
         assertFalse(TaiRuntimeService.isConcurrentControlOperation(TaiRuntimeIpc.OP_TRANSCRIBE));
         assertFalse(TaiRuntimeService.isStatusOperation(TaiRuntimeIpc.OP_TRANSCRIBE));
     }
+
+    /** Image generation has its own lane and is refused during a bench; its cancel rides the control lane. */
+    @Test
+    public void imageGenerate_usesItsOwnLaneIsRefusedDuringBenchAndCancelIsAControlOperation() {
+        assertTrue(TaiRuntimeService.isImageOperation(TaiRuntimeIpc.OP_IMAGE_GENERATE));
+        assertFalse(TaiRuntimeService.isImageOperation(TaiRuntimeIpc.OP_IMAGE_CANCEL));
+        assertFalse(TaiRuntimeService.isImageOperation(TaiRuntimeIpc.OP_OPENAI_CHAT));
+        assertFalse(TaiRuntimeService.isConcurrentControlOperation(TaiRuntimeIpc.OP_IMAGE_GENERATE));
+        assertFalse(TaiRuntimeService.isSttOperation(TaiRuntimeIpc.OP_IMAGE_GENERATE));
+        assertFalse(TaiRuntimeService.isTtsOperation(TaiRuntimeIpc.OP_IMAGE_GENERATE));
+        assertTrue(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_IMAGE_GENERATE));
+        assertTrue(TaiRuntimeService.isConcurrentControlOperation(TaiRuntimeIpc.OP_IMAGE_CANCEL));
+        assertFalse(TaiRuntimeService.isRefusedDuringBench(TaiRuntimeIpc.OP_IMAGE_CANCEL));
+        assertFalse(TaiRuntimeService.isStatusOperation(TaiRuntimeIpc.OP_IMAGE_GENERATE));
+        assertTrue(TaiRuntimeService.isForegroundOperation(TaiRuntimeIpc.OP_IMAGE_GENERATE));
+        assertFalse(TaiRuntimeService.isForegroundOperation(TaiRuntimeIpc.OP_IMAGE_CANCEL));
+    }
 }

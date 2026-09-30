@@ -57,6 +57,9 @@ process, load on demand beside the chat model, and are never queued behind a cha
 Their request fields, the `tai transcribe` and `tai speak` commands and Read aloud are described in
 [Voice input](Voice_Input.md) and [Text to speech](Text_To_Speech.md).
 
+Image generation (`/v1/ai/images/generations`, `tai image`) is a third MNN use, see
+[MNN diffusion backend](#mnn-diffusion-backend-text-to-image).
+
 ## Embeddings and tokenizer internals
 
 `/v1/embeddings` accepts a string or an array of strings (at most `_endpoint_max_batch`, currently
@@ -472,6 +475,47 @@ MNN keeps a converted-weights cache in the app's cache directory, which can grow
 model itself. It is rebuilt automatically after an app or runtime update, or after a load with
 different settings; `tai load MODEL_ID --fresh` throws it away and rebuilds it on demand, if a
 loaded MNN model ever starts giving degenerate replies.
+
+## MNN diffusion backend (text to image)
+
+Backend id `mnn-diffusion`, capability `image_generation`. It drives the MNN 3.6.1 Diffusion engine the way
+upstream MnnLlmChat does (same engine calls, OpenCL by default, the engine's own memory modes) through the
+TAI bridge `ci/mnn-patch/tai_diffusion_jni.cpp` (`TaiDiffusionSession`), which differs from upstream's in
+taking the model type and backend and in the fixes below.
+
+Supported models:
+
+| Family | Package files the engine opens | Size |
+| --- | --- | --- |
+| Stable Diffusion 1.5 | `text_encoder.mnn`, `unet.mnn`, `vae_decoder.mnn`, `tokenizer.mtok` (each optionally with a `.weight` sidecar) | 512x512 only |
+| Taiyi (Chinese SD 1.5) | the same files; only the tokenizer and its special tokens differ, so the type must be given | 512x512 only |
+| Sana | `connector.mnn`, `projector.mnn`, `transformer.mnn`, `vae_decoder.mnn`, `vae_encoder.mnn` (only for editing a picture) and `llm/` (`config.json`, `meta_queries.mnn`, the prompt LLM and its tokenizer) | multiples of 32, 256-2048 |
+
+Not supported yet: Wan video and Stable Diffusion 3.5 (the 3.6.1 build does not wire them into the model
+type the bridge uses). The published `taobao-mnn` Stable Diffusion packages ship `vocab.json` and `merges.txt`
+rather than `tokenizer.mtok`; MNN 3.6.1 only loads the latter, so such a package is refused with
+`tokenizer_mtok_missing` until it is re-exported with MNN's diffusion export tool. Nothing is converted on the phone.
+
+Runtime behaviour:
+
+- **Memory modes** are the engine's: `1` keeps every module resident and is fastest, `2` balances, `0` saves
+  memory by loading modules as they are needed. Stable Diffusion/Taiyi stay loaded after a run only in mode 1
+  and are closed by the pressure watch after 3 minutes idle; every other combination frees the engine after each
+  run, as upstream does (Sana also frees its prompt LLM before loading the diffusion graphs).
+- **Admission** estimates the package's peak working set (every graph for Stable Diffusion; the larger of the
+  prompt LLM and the diffusion graphs for Sana) times 1.5 (mode 1), 1.1 (mode 2) or 0.8 (mode 0), or uses the
+  measured peak of an earlier run on this device. It picks the fastest mode that fits, closing idle embeddings,
+  speech output, speech-to-text and idle chat, in that order (the image model it replaces is credited, not closed), and answers
+  `409 insufficient_memory` when no mode fits. The factors are conservative guesses until a phone has measured them.
+- **OpenCL tuning cache.** The engine writes its tuning cache to a relative `.tempcache`, and an app's working
+  directory is `/`, so upstream never persists it and every load re-tunes. The bridge changes into
+  `cacheDir/tai-diffusion-cache/<model id>` before loading, so the first load on a phone is slow and later loads
+  reuse the cache.
+- **No mid-run cancel.** The engine ignores the progress callback's return value, and the bridge does not throw
+  through it. Cancelling sets a flag that is checked when the run returns; the result is discarded.
+- **Isolation.** Generation runs in `:tai_runtime` on its own single-thread lane, is refused while a benchmark
+  runs, and hands the PNG back through `cacheDir/tai-ipc`. A `libmnnllmapp.so` built before the bridge was added
+  answers `501 mnn_image_unavailable` instead of crashing.
 
 ## Runtime and safety behavior
 

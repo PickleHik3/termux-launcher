@@ -429,6 +429,10 @@ public final class TaiModelStore {
     private boolean isModelReadable(@NonNull TaiModelSpec spec) {
         if (spec.localPath == null || spec.localPath.trim().isEmpty()) return false;
         File modelFile = new File(spec.localPath);
+        if (TaiModelSpec.BACKEND_MNN_DIFFUSION.equals(spec.backend)) {
+            // A diffusion model is a directory; its type rides on the spec's architecture field.
+            return TaiDiffusionPackage.inspect(modelFile, TaiDiffusionPackage.parseType(spec.architecture)).ok();
+        }
         if (TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
             return mnnPackageReadable(modelFile);
         }
