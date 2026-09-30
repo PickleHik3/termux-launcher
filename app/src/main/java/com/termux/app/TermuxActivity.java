@@ -845,8 +845,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new SurfaceEditorController(new SurfaceEditorHost());
 
     /**
-     * The Layout editor overlay, the surface editor's sibling: where a place's elements sit rather
-     * than how its surfaces look. Only one of the two is ever open.
+     * Layout mode of the one editor: where a place's elements sit rather than how its surfaces
+     * look. {@link #mSurfaceEditor} hosts it, lending it the frame's canvas and the bottom area's
+     * tray; its session opens and closes with that editor.
      */
     private final com.termux.app.layouteditor.LayoutEditorController mLayoutEditor =
         new com.termux.app.layouteditor.LayoutEditorController(new LayoutEditorHost());
@@ -8012,8 +8013,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mCommandPalette.refreshAppearance();
         mChrome.onConfigurationChanged();
         if (mLiveWallpaperHost != null) mLiveWallpaperHost.onConfigurationChanged();
-        // The Layout editor's miniature shows the place behind it, so it turns with the phone.
-        mLayoutEditor.onPlaceOrientationChanged();
+        // Layout mode's canvas defaults to the orientation the phone is in, so it turns with it.
+        mSurfaceEditor.onPlaceOrientationChanged();
         scheduleOrientationGeometryPass();
     }
 
@@ -10347,9 +10348,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         String initialSection = intent.getStringExtra(EXTRA_SURFACE_EDITOR_SECTION);
         intent.removeExtra(EXTRA_SURFACE_EDITOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR_SECTION);
-        // Only one editor holds the screen at a time; the Layout editor is already up.
-        if (mLayoutEditor.isActive())
-            return;
         mSurfaceEditor.enter(initialSection);
     }
 
@@ -10382,15 +10380,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         openLayoutEditor(place);
     }
 
-    /** Opens the Layout editor on one place, or on the place the user is looking at for null. */
+    /**
+     * Opens the editor in Layout mode on one place, or on the place the user is looking at for
+     * null (SPEC §3.1: the Layout glyph and sheet item open the same screen in Layout mode).
+     */
     void openLayoutEditor(@Nullable com.termux.app.wall.PaneWallPage place) {
         // The wall has to be built before the editor can be held on a place, and a cold start
         // delivers the intent while the root view is still being laid out.
         View root = findViewById(R.id.activity_termux_root_view);
-        com.termux.app.wall.PaneWallPage target = place;
-        if (root != null) root.post(() -> mLayoutEditor.enter(
-            target == null ? currentWallPlace() : target));
-        else mLayoutEditor.enter(target == null ? currentWallPlace() : target);
+        if (root != null) root.post(() -> mSurfaceEditor.enterLayout(place));
+        else mSurfaceEditor.enterLayout(place);
     }
 
     /** The activity's half of the Layout editor's seam: its views, the places, the chrome pass. */
@@ -10398,10 +10397,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             implements com.termux.app.layouteditor.LayoutEditorController.Host {
         @NonNull @Override public Context context() {
             return TermuxActivity.this;
-        }
-
-        @Nullable @Override public <T extends View> T findView(int viewId) {
-            return findViewById(viewId);
         }
 
         @Nullable @Override public PlaceLayoutStore places() {
@@ -10433,10 +10428,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public int themeColor(int attr, int fallbackRes) {
             return getTermuxThemeColor(attr, fallbackRes);
-        }
-
-        @Override public boolean isSurfaceEditorActive() {
-            return mSurfaceEditor.isActive();
         }
 
         // The dock's own corner, resolved as the dock draws it — the configured Corners value or
@@ -10608,8 +10599,79 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
         }
 
-        @Override public void openLayoutEditor() {
-            TermuxActivity.this.openLayoutEditor(null);
+        @Nullable @Override
+        public com.termux.app.layouteditor.LayoutEditorController layoutEditor() {
+            return mLayoutEditor;
+        }
+
+        // Passthrough mode leaves the wallpaper to the system, outside the editor's scaled frame;
+        // for the editor's lifetime the frame paints it itself. Off the main thread.
+        @Nullable @Override public Drawable readEditorWallpaper() {
+            if (!shouldUseWallpaperPassthroughMode()) return null;
+            Context context = TermuxActivity.this;
+            java.io.File exact =
+                com.termux.app.chrome.WallpaperPictureReader.managedWallpaperExactFile(context);
+            if (com.termux.app.chrome.WallpaperPictureReader.managedPictureOnScreen(context,
+                    mPreferences)) {
+                Drawable managed = decodeEditorWallpaper(exact);
+                if (managed != null) return managed;
+            }
+            try {
+                WallpaperManager manager = WallpaperManager.getInstance(context);
+                // A live wallpaper has no still to stand in for it; the system's stays.
+                if (manager.getWallpaperInfo() == null) {
+                    Drawable system = manager.getDrawable();
+                    if (system != null) return system;
+                }
+            } catch (Exception ignored) {
+                // No permission to read it, or no wallpaper service: try the launcher's own copy.
+            }
+            return exact.isFile() ? decodeEditorWallpaper(exact) : null;
+        }
+
+        @Nullable
+        private Drawable decodeEditorWallpaper(@NonNull java.io.File file) {
+            if (!file.isFile()) return null;
+            try {
+                BitmapFactory.Options bounds = new BitmapFactory.Options();
+                bounds.inJustDecodeBounds = true;
+                BitmapFactory.decodeFile(file.getAbsolutePath(), bounds);
+                android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+                int longSide = Math.max(metrics.widthPixels, metrics.heightPixels);
+                int sample = 1;
+                while (Math.max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= longSide)
+                    sample *= 2;
+                BitmapFactory.Options options = new BitmapFactory.Options();
+                options.inSampleSize = sample;
+                Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+                return bitmap == null ? null
+                    : new android.graphics.drawable.BitmapDrawable(getResources(), bitmap);
+            } catch (Exception | OutOfMemoryError e) {
+                return null;
+            }
+        }
+
+        @Override public int editorWallpaperDimColor() {
+            return wallGroundColor();
+        }
+
+        @Nullable private Drawable mEditorSavedWindowBackground;
+        private boolean mEditorWindowOpaque;
+
+        @Override public void setEditorWindowOpaque(boolean opaque) {
+            android.view.Window window = getWindow();
+            if (window == null || opaque == mEditorWindowOpaque) return;
+            if (opaque) {
+                mEditorSavedWindowBackground = window.getDecorView().getBackground();
+                window.setBackgroundDrawable(new ColorDrawable(getTermuxThemeColor(
+                    com.google.android.material.R.attr.colorSurface,
+                    R.color.termux_surface_base)));
+            } else {
+                window.setBackgroundDrawable(mEditorSavedWindowBackground != null
+                    ? mEditorSavedWindowBackground : new ColorDrawable(Color.TRANSPARENT));
+                mEditorSavedWindowBackground = null;
+            }
+            mEditorWindowOpaque = opaque;
         }
     }
 
@@ -14208,19 +14270,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
-                if (!mLayoutEditor.isActive()) return false;
-                mLayoutEditor.requestClose();
-                return true;
-            }
-            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                // Back to the home screen means leaving the editor — through its own
-                // unsaved-changes rule, never by discarding. A stop leaves it standing.
-                if (reason == com.termux.app.chrome.OverlayRegistry.CloseReason.HOME)
-                    mLayoutEditor.requestExit();
-            }
-        });
-        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
-            @Override public boolean onBack() {
                 if (!mSurfaceEditor.isActive()) return false;
                 mSurfaceEditor.requestClose();
                 return true;
@@ -16470,7 +16519,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void openSurfaceEditor() {
         // The look is every place's, so the editor opens over whatever place is on screen and
         // what it moves lands everywhere.
-        if (mLayoutEditor.isActive()) return;
         mSurfaceEditor.enter();
     }
 

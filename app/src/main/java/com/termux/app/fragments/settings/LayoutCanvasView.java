@@ -108,6 +108,13 @@ public final class LayoutCanvasView extends View {
 
         /** The keyboard was dropped in the tray: the same switch as Keyboard on/off. */
         default void onKeyboardPutAway() {}
+
+        /**
+         * Whether the lifted element may be put away in the tray, and whether the finger is over
+         * it now. A host whose tray stands outside the view ({@link #setExternalTrayRect}) draws
+         * its own "Drop here to hide" from this; both are false once nothing is lifted.
+         */
+        default void onTrayOfferChanged(boolean offered, boolean hovered) {}
     }
 
     /** What the canvas band draws, driven by which place is selected. */
@@ -389,6 +396,17 @@ public final class LayoutCanvasView extends View {
     @Nullable private Boolean mStatusCompact;
     /** Canvas pixels per real dp: what every dp figure is multiplied by to stand on the canvas. */
     private float mCanvasScale = 1f;
+
+    // ---- Frame-filling host (the unified editor, SPEC §3.5) -------------------------------------
+    /** Whether the phone outline is the view's own bounds rather than a picture inside them. */
+    private boolean mFillsView;
+    /** The tray in view coordinates while it stands outside the view; empty for none. */
+    private final RectF mExternalTray = new RectF();
+    /** The outline's corner in px set by a frame-filling host; negative draws the artwork's. */
+    private float mFrameRadiusOverridePx = -1f;
+    /** What {@link OnCanvasEditListener#onTrayOfferChanged} last said. */
+    private boolean mToldTrayOffered;
+    private boolean mToldTrayHovered;
 
     @NonNull private final Drawable mIconStatus;
     @NonNull private final Drawable mIconApps;
@@ -823,6 +841,10 @@ public final class LayoutCanvasView extends View {
      * aspect. In RTL the legend stands on the left and the phone on the right.
      */
     private void layoutFrame(int viewWidth, int viewHeight) {
+        if (mFillsView) {
+            layoutFilledFrame(viewWidth, viewHeight);
+            return;
+        }
         float pad = dp(4);
         float availableWidth = Math.max(0f, viewWidth - 2 * pad);
         // The tray's room is reserved whether or not anything is in it, so neither the phone nor
@@ -888,6 +910,100 @@ public final class LayoutCanvasView extends View {
 
         layoutLegend(legendLeft, legendWidth, Math.round(viewHeight - trayHeight), swatch);
         computeBlocks();
+    }
+
+    /**
+     * The frame-filling layout: the phone outline is the view itself when the orientation shown is
+     * the view's own shape, so the canvas stands exactly where the live launcher it replaces stood;
+     * the other orientation is fitted, centred, inside it. No legend, no padding, and the tray is
+     * wherever the host said it is ({@link #setExternalTrayRect}), which may be outside the view.
+     */
+    private void layoutFilledFrame(int viewWidth, int viewHeight) {
+        mLegendRects.clear();
+        boolean landscape = mOrientation == PlaceOrientation.LANDSCAPE;
+        boolean viewLandscape = viewWidth > viewHeight;
+        if (landscape == viewLandscape) {
+            mFrameRect.set(0f, 0f, viewWidth, viewHeight);
+        } else {
+            float aspect = landscape ? LANDSCAPE_ASPECT : PORTRAIT_ASPECT;
+            float gap = dp(16);
+            float width = Math.max(0f, viewWidth - 2 * gap);
+            float height = width / aspect;
+            float maxHeight = Math.max(0f, viewHeight - 2 * gap);
+            if (height > maxHeight) {
+                height = maxHeight;
+                width = height * aspect;
+            }
+            float left = (viewWidth - width) / 2f;
+            float top = (viewHeight - height) / 2f;
+            mFrameRect.set(left, top, left + width, top + height);
+        }
+        mUnit = Math.max(0.01f,
+            Math.min(mFrameRect.width(), mFrameRect.height()) / PHONE_SHORT_SIDE_UNITS);
+        mContentRect.set(mFrameRect.left + u(FRAME_INSET_SIDE_U),
+            mFrameRect.top + u(FRAME_INSET_TOP_U),
+            mFrameRect.right - u(FRAME_INSET_SIDE_U),
+            mFrameRect.bottom - u(landscape ? FRAME_INSET_TOP_U : FRAME_INSET_BOTTOM_U));
+        if (mContentRect.width() < 0f || mContentRect.height() < 0f) mContentRect.set(mFrameRect);
+        mCanvasScale = LayoutCanvasGeometry.canvasScale(mContentRect.width(), screenWidthDp());
+        mTrayRect.set(mExternalTray);
+        computeBlocks();
+    }
+
+    /**
+     * Makes the phone outline the view's own bounds (SPEC §3.5: Layout is not a miniature). The
+     * host sizes the view to the frame the live launcher is scaled into; the tray then stands
+     * wherever {@link #setExternalTrayRect} puts it and the legend is never drawn.
+     */
+    public void setFillsView(boolean fills) {
+        if (mFillsView == fills) return;
+        mFillsView = fills;
+        if (getWidth() > 0 && getHeight() > 0) layoutFrame(getWidth(), getHeight());
+        requestLayout();
+        invalidate();
+    }
+
+    /** Whether the phone outline is the view's own bounds. */
+    public boolean fillsView() {
+        return mFillsView;
+    }
+
+    /**
+     * Where the tray stands, in this view's coordinates, while it is a view of the host's outside
+     * this one (a frame-filling canvas has no room under its phone). The rect may lie past the
+     * view's bounds: a lifted element's finger keeps reporting to this view wherever it travels,
+     * so a drop there still lands. Null or empty takes the tray away. Ignored unless
+     * {@link #setFillsView} is on.
+     */
+    public void setExternalTrayRect(@Nullable RectF rectInView) {
+        if (rectInView == null) {
+            if (mExternalTray.isEmpty()) return;
+            mExternalTray.setEmpty();
+        } else {
+            if (rectInView.equals(mExternalTray)) return;
+            mExternalTray.set(rectInView);
+        }
+        if (mFillsView && mDraggedBar == null) mTrayRect.set(mExternalTray);
+    }
+
+    /**
+     * The outline's corner radius, in px, for a frame-filling host that clips the view to the
+     * device's own corners; negative goes back to the artwork's.
+     */
+    public void setFrameCornerRadiusPx(float radiusPx) {
+        if (Float.compare(radiusPx, mFrameRadiusOverridePx) == 0) return;
+        mFrameRadiusOverridePx = radiusPx;
+        invalidate();
+    }
+
+    /** Tells the listener when the tray's offer or the finger's hover over it changed. */
+    private void notifyTrayOffer() {
+        boolean offered = mDraggedBar != null && !mSpringingBack && isTrayOffered();
+        boolean hovered = offered && mHoverSlot != null && mHoverSlot.isTray();
+        if (offered == mToldTrayOffered && hovered == mToldTrayHovered) return;
+        mToldTrayOffered = offered;
+        mToldTrayHovered = hovered;
+        if (mEditListener != null) mEditListener.onTrayOfferChanged(offered, hovered);
     }
 
     private void layoutLegend(float left, float width, int viewHeight, float swatch) {
@@ -1883,6 +1999,9 @@ public final class LayoutCanvasView extends View {
     /** The phone's corner radius: the design's, at this frame's unit. */
     @VisibleForTesting
     float frameRadiusPx() {
+        if (mFillsView && mFrameRadiusOverridePx >= 0f
+            && mFrameRect.width() >= getWidth() && mFrameRect.height() >= getHeight())
+            return mFrameRadiusOverridePx;
         return u(FRAME_RADIUS_U);
     }
 
@@ -3150,6 +3269,7 @@ public final class LayoutCanvasView extends View {
         mHoverSlot = MiniatureDragPolicy.slotUnder(mSlots, x, y);
         startMotion();
         invalidate();
+        notifyTrayOffer();
         return true;
     }
 
@@ -3158,6 +3278,7 @@ public final class LayoutCanvasView extends View {
         mGhostY.reset(y - mDownY);
         mHoverSlot = MiniatureDragPolicy.slotUnder(mSlots, x, y);
         invalidate();
+        notifyTrayOffer();
     }
 
     /** Over a target, the new placement is reported at once; anywhere else the bar goes back. */
@@ -3191,6 +3312,7 @@ public final class LayoutCanvasView extends View {
         mGhostScale.target = 1f;
         startMotion();
         invalidate();
+        notifyTrayOffer();
     }
 
     private void endDrag() {
@@ -3206,6 +3328,7 @@ public final class LayoutCanvasView extends View {
         mLastFrameNanos = 0L;
         removeCallbacks(mMotionTick);
         if (lifted) invalidate();
+        notifyTrayOffer();
     }
 
     private void startMotion() {
