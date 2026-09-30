@@ -40,7 +40,7 @@ decision.
 
 | Item | Size | State |
 |---|---|---|
-| In-app animated wallpapers over a live shared frame | L | Moved to the next release on 2026-09-30, and nothing is built. The spec is `active/animated-wallpaper/SPEC.md`. Open questions 1–4 were settled on 2026-09-30: API 34+ with `HardwareBufferRenderer` only, the wallpapers play whether Fancier Glass is on or off, a fixed 30 fps that drops to 15 under pressure, and the wallpaper plays whenever it is visible. Questions 5–11 are still open. The first step is phase 0, a throwaway prototype (spec §10) that measures the render cost and the full-window redraw on pong. That measurement decides whether the rest gets built. |
+| In-app animated wallpapers over a live shared frame | L | Moved to the next release on 2026-09-30. Now being built under [#41](https://github.com/PickleHik3/termux-launcher/issues/41) as generated backgrounds (Aurora, Mesh, Tide, Rain) with moments and a Material palette, gated behind Fancier Glass (API 34 is its own floor). The specs are `active/animated-wallpaper/SPEC.md` and `generated-backgrounds-issue.md`. Phase 0 (spec §10) comes first: a throwaway prototype whose numbers are measured on the real build on pong, and they decide whether the rest is kept. Spec questions 5, 6 and 8–11 are still open. |
 
 ## Deferred on purpose
 

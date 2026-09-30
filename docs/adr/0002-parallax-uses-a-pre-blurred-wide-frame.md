@@ -1,7 +1,7 @@
 ---
 status: accepted
 date: 2026-09-26
-amended-by: 0004 (every surface samples the shared frame through a shader; the frame is held at blur resolution)
+amended-by: 0004 (every surface samples the shared frame through a shader; the frame is held at blur resolution), 0006 (the frame goes live for generated backgrounds)
 ---
 
 # Wallpaper parallax reads from a pre-blurred wide frame, not a real-time blur

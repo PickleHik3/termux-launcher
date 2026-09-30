@@ -56,6 +56,10 @@ access; skip it if command-line tools do not need your shared files.
 - [Nix fork differences](Nix_Fork_Differences.md)
 - [Migrating from the VAJ edition](VAJ_To_Nix_Migration.md) — moving `io.vaj.tl` off the deprecated APT repo
 
+## Look
+
+- [Animated backgrounds](Animated_Backgrounds.md) — generated wallpapers behind the glass, and what kitty shaders have a counterpart
+
 ## Voice
 
 - [Voice input](Voice_Input.md) — dictate into the terminal, the palette, widgets and the display

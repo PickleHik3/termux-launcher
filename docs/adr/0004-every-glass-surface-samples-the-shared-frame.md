@@ -2,6 +2,7 @@
 status: accepted
 date: 2026-09-27
 amends: 0002 (the crop-holding surfaces now sample the frame too; the frame is held at blur resolution)
+amended-by: 0006 (the frame goes live for generated backgrounds)
 ---
 
 # Every glass surface samples the shared frame at its live position; the frame is held at blur resolution

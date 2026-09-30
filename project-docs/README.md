@@ -30,7 +30,9 @@ Three rules keep this directory from rotting:
 
 | | |
 |---|---|
-| [`active/animated-wallpaper/SPEC.md`](active/animated-wallpaper/SPEC.md) | In-app animated wallpapers over the shared frame. Draft; planned for the next release. |
+| [`active/animated-wallpaper/SPEC.md`](active/animated-wallpaper/SPEC.md) | In-app animated wallpapers over the shared frame: the pipeline and the phase 0 measurement. Draft; planned for the next release. |
+| [`active/animated-wallpaper/generated-backgrounds-issue.md`](active/animated-wallpaper/generated-backgrounds-issue.md) | Copy of issue #41: generated backgrounds with moments and Material colour, gated behind Fancier Glass. Amends the SPEC. |
+| [`active/animated-wallpaper/kitty-custom-shaders-research.md`](active/animated-wallpaper/kitty-custom-shaders-research.md) | Research: which of kitty's custom shaders can carry over, and under which licences. |
 | [`active/fancier-glass/SPEC.md`](active/fancier-glass/SPEC.md) | Fancier Glass: refraction, motions and their bug list. Partly built; `evidence-*/` holds the frame measurements. |
 | [`active/benchmark/SPEC.md`](active/benchmark/SPEC.md) | The model benchmark (bench_v2), with the recommended-set publish checklist and draft catalogue. |
 | [`active/agent-skill/spec.md`](active/agent-skill/spec.md) | The shipped agent skill. Draft, not agreed. |
