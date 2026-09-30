@@ -3266,6 +3266,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : Color.TRANSPARENT;
             }
 
+            @Override public int paneGlassVeil(@NonNull Rect rootRect) {
+                // The terminal pane band (appearance-layout-editor SPEC §2): the scheme's default
+                // foreground and its dim, veiled toward the terminal's own background.
+                if (mChrome == null) return Color.TRANSPARENT;
+                int foreground = com.termux.terminal.TerminalColors.COLOR_SCHEME
+                    .mDefaultColors[com.termux.terminal.TextStyle.COLOR_INDEX_FOREGROUND];
+                return mChrome.ink().terminalPane(rootRect, paneGlassTintColor(),
+                    com.termux.app.chrome.OnGlass.opaque(resolveTerminalSurfaceColor()),
+                    com.termux.app.chrome.OnGlass.opaque(foreground),
+                    com.termux.app.terminal.PaneGlass.dimTerminalInk(foreground)).veil;
+            }
+
             @Override public boolean paneGlassRimWanted() {
                 return mChrome.glass().look().gradientRim;
             }
@@ -5863,7 +5875,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // band above it. Both sample the one shared frame at the host's own position, so the
             // wallpaper under the keys is the same picture on either side of the handoff.
             if (isUnifiedAccessoryBackdropReady(state)) {
-                surfaceHost.setBackground(null);
+                // No glass of its own, but the keyboard band's veil: over the unified glass,
+                // under the keys, on the host's bounds only, so the dock rows are never veiled.
+                surfaceHost.setBackground(buildInAppKeyboardVeilOnly(state, surfaceHost));
                 clearInAppKeyboardBackdrop();
             } else {
                 surfaceHost.setBackground(buildInAppKeyboardSurfaceBackground(
@@ -5996,7 +6010,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .withSeams(com.termux.app.chrome.ChromeEdgeRule.seams(capsule, keyboardOuter,
                 capsule ? 0 : keyboardJoined))
             .withTintColor(schemeBackground == null ? null : withAlphaComponent(schemeBackground,
-                Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)));
+                Math.round(255f * getInAppKeyboardBackgroundOpacityPercent() / 100f)))
+            .withBand(noteInAppKeyboardBand(surfaceHost));
         com.termux.app.chrome.SharedFrameDrawable backdrop = null;
         if (ChromePolicy.dockBlurEnabled(blurRadiusDp)) {
             Bitmap frame = obtainInAppKeyboardBackdropFrame(state, surfaceHost);
@@ -6013,6 +6028,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // subsequently shorter keyboard. Decoration must follow content geometry, never define it.
         return new LayoutNeutralDrawable(com.termux.app.chrome.GlassStack.build(mChrome.glass(),
             spec, getResources().getDisplayMetrics().density, backdrop));
+    }
+
+    /**
+     * The docked keyboard's host while the unified dock glass is its material: the keyboard band's
+     * veil alone, measured on the keyboard's slice of that glass, or null when none is needed.
+     */
+    @Nullable
+    private Drawable buildInAppKeyboardVeilOnly(@NonNull ChromeSpec state, @NonNull View surfaceHost) {
+        com.termux.app.chrome.GlassBackdropCache.Band band = noteInAppKeyboardBand(surfaceHost);
+        if (band == null) return null;
+        Drawable veil = mChrome.glass().veilOnlyLayer(band, inAppKeyboardGlassAlpha(state), 0f,
+            defaultDockGlassFootFraction(), false);
+        return veil == null ? null : new LayoutNeutralDrawable(veil);
+    }
+
+    /**
+     * Asks the keyboard band (appearance-layout-editor SPEC §2) what the host's glass has to become
+     * for a letter key's label to read on its cap, and names the band for the surface to draw
+     * that veil. Measured at the host's laid-out rect, which ignores the stack's travel and the
+     * editor's scale alike; null, and no veil, before the host is laid out or the keyboard view
+     * exists. The veil lands on the next build when this one changes it.
+     */
+    @Nullable
+    private com.termux.app.chrome.GlassBackdropCache.Band noteInAppKeyboardBand(
+            @NonNull View surfaceHost) {
+        int[] inks = mInAppKeyboard != null ? mInAppKeyboard.letterKeyLegibilityInks() : null;
+        if (inks == null || surfaceHost.getWidth() <= 0 || surfaceHost.getHeight() <= 0)
+            return null;
+        int[] origin = new int[2];
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(surfaceHost, origin, new int[2]);
+        Rect host = new Rect(origin[0], origin[1],
+            origin[0] + surfaceHost.getWidth(), origin[1] + surfaceHost.getHeight());
+        mChrome.ink().onFixedInk(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD, host,
+            inks[0], inks[0], inks[1], com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+        return com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD;
     }
 
     /**

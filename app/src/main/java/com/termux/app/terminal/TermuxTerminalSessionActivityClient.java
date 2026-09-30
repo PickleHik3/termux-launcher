@@ -842,7 +842,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 && mHost.preferences().isTerminalDynamicColorsEnabled();
             final Properties props;
             if (dynamic) {
-                TerminalContrastLevel level = mHost.preferences().getTerminalContrastLevel();
+                TerminalContrastLevel level =
+                    com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences());
                 props = MaterialTerminalColorScheme.create(mContext, level);
                 mLastMaterialTerminalPaletteSignature =
                     MaterialTerminalColorScheme.signature(mContext, level);
@@ -1028,7 +1029,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return;
         }
         int signature = MaterialTerminalColorScheme.signature(mContext,
-            mHost.preferences().getTerminalContrastLevel());
+            com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences()));
         if (signature == mLastMaterialTerminalPaletteSignature) return;
         applyTerminalColors();
     }

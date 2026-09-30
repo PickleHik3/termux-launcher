@@ -728,6 +728,22 @@ public final class TermuxInAppKeyboard {
         return 100;
     }
 
+    /**
+     * What a letter key's label is drawn in and the cap it stands on, for the keyboard's legibility
+     * band: {@code {label, cap}}, the cap in its key colour at its live fill alpha (the user's key
+     * opacity, or the theme's own). Null while there is no keyboard view. The labels and caps are
+     * the theme's; the band measures them and veils the host, and never moves either.
+     */
+    @Nullable
+    public int[] letterKeyLegibilityInks() {
+        if (mDestroyed || mKeyboardView == null)
+            return null;
+        juloo.keyboard2.Theme.Palette palette = createPalette();
+        int alpha = Math.round(255f * getEffectiveKeyOpacityPercent() / 100f);
+        int cap = (Math.max(0, Math.min(255, alpha)) << 24) | (palette.keyBackground & 0x00FFFFFF);
+        return new int[] {palette.labelColor | 0xFF000000, cap};
+    }
+
     private void applyKeyCornerRadiusDp(float radiusDp) {
         applyKeyCornerRadiusDp(radiusDp, false);
     }
