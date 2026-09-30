@@ -15981,7 +15981,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the palette, a keybind, and a remote caller reach the same code.
      */
     void openWallpaperPicker() {
-        launchManagedWallpaperPicker();
+        boolean animatedOffered = com.termux.app.chrome.wallpaper.GeneratedWallpaperApplier.offeredFor(
+            Build.VERSION.SDK_INT, mPreferences.isFancierGlassEnabled());
+        // With no Animated row the sheet would only hold Photo, so keep the one-step photo path.
+        if (!animatedOffered) {
+            launchManagedWallpaperPicker();
+            return;
+        }
+        com.termux.app.chrome.wallpaper.WallpaperPickerSheet.show(this, true,
+            new com.termux.app.chrome.wallpaper.WallpaperPickerSheet.Listener() {
+                @Override public void onPickPhoto() {
+                    launchManagedWallpaperPicker();
+                }
+
+                @Override public void onGeneratedApplied(
+                        @NonNull com.termux.app.chrome.wallpaper.AnimatedWallpaper wallpaper,
+                        @NonNull String paletteMode) {
+                    // The applier's changed listener has already told the live host; the glass
+                    // still has to pick up the new still as its managed picture.
+                    if (isFinishing() || isDestroyed()) return;
+                    refreshWallpaperPicture();
+                    setWallpaperModeEnabled(TermuxActivity.this, true);
+                    updateWindowBackgroundForCurrentSession();
+                    mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+                }
+            });
     }
 
     /** Flips wallpaper passthrough mode and reports the value it moved to. */
