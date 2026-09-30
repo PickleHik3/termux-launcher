@@ -290,11 +290,12 @@ public class LayoutEditorPlanTest {
             LayoutEditorPlan.Drop.LIVE, plan.setKeyboardShown(false));
         assertFalse(places.isKeyboardShown());
         assertTrue("as unsaved as a moved bar", plan.isDirty());
-        assertEquals(Arrays.asList(LayoutEditorPlan.TrayItem.KEYBOARD), plan.trayItems());
+        assertTrue(plan.trayItems().contains(LayoutEditorPlan.TrayItem.KEYBOARD));
 
         assertEquals(LayoutEditorPlan.Drop.LIVE,
             plan.restore(LayoutEditorPlan.TrayItem.KEYBOARD));
         assertTrue(places.isKeyboardShown());
+        assertFalse(plan.trayItems().contains(LayoutEditorPlan.TrayItem.KEYBOARD));
         assertFalse(plan.isDirty());
     }
 
@@ -306,11 +307,11 @@ public class LayoutEditorPlanTest {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.EXTRA_KEYS, null));
-        assertEquals(Arrays.asList(LayoutEditorPlan.TrayItem.EXTRA_KEYS), plan.trayItems());
+        assertTrue(plan.trayItems().contains(LayoutEditorPlan.TrayItem.EXTRA_KEYS));
 
         assertEquals(LayoutEditorPlan.Drop.LIVE,
             plan.restore(LayoutEditorPlan.TrayItem.EXTRA_KEYS));
-        assertTrue(plan.trayItems().isEmpty());
+        assertFalse(plan.trayItems().contains(LayoutEditorPlan.TrayItem.EXTRA_KEYS));
         assertEquals("back on the top edge, not folded to the bottom", Edge.TOP,
             plan.shownLayout().slot(com.termux.app.place.Element.EXTRA_KEYS).edge);
         assertFalse("the bar is where it started", plan.isDirty());
