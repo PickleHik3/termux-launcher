@@ -34,6 +34,7 @@ Three rules keep this directory from rotting:
 | [`active/animated-wallpaper/generated-backgrounds-issue.md`](active/animated-wallpaper/generated-backgrounds-issue.md) | Copy of issue #41: generated backgrounds with moments and Material colour, gated behind Fancier Glass. Amends the SPEC. |
 | [`active/animated-wallpaper/kitty-custom-shaders-research.md`](active/animated-wallpaper/kitty-custom-shaders-research.md) | Research: which of kitty's custom shaders can carry over, and under which licences. |
 | [`active/fancier-glass/SPEC.md`](active/fancier-glass/SPEC.md) | Fancier Glass: refraction, motions and their bug list. Partly built; `evidence-*/` holds the frame measurements. |
+| [`active/appearance-layout-editor/SPEC.md`](active/appearance-layout-editor/SPEC.md) | One editor for appearance and layout: the launcher scaled into a frame, a Look slider with stops, Custom with tap-to-reveal controls, Layout by drag and handle; every surface a legibility band. Approved 2026-09-30; not built. |
 | [`active/benchmark/SPEC.md`](active/benchmark/SPEC.md) | The model benchmark (bench_v2), with the recommended-set publish checklist and draft catalogue. |
 | [`active/agent-skill/spec.md`](active/agent-skill/spec.md) | The shipped agent skill. Draft, not agreed. |
 | [`active/display-fullscreen/PARKED.md`](active/display-fullscreen/PARKED.md) | Full-screen Display with edge slide-outs. Parked. |
