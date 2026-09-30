@@ -301,6 +301,8 @@ public final class TaiManager {
             return denied;
         }
         File modelFile = new File(resolvedPath);
+        File imageDirectory = diffusionImportDirectory(modelFile);
+        if (imageDirectory != null) return importDiffusionPackage(request, imageDirectory, path);
         if (!modelFile.isFile() || !modelFile.canRead()) {
             JSONObject error = error(404, "model_file_not_readable", "Model file does not exist or is not readable by the app process");
             error.put("path", path);
@@ -359,6 +361,72 @@ public final class TaiManager {
         data.put("requiresUserApprovedPath", true);
         data.put("copiedIntoAppPrivateStorage", false);
         data.put("message", "Model path registered. Load it with On-device AI to run through the isolated Android LiteRT-LM runtime when preflight passes.");
+        return data;
+    }
+
+    /**
+     * The text-to-image package folder {@code target} is or sits in (Stable Diffusion, Taiyi, Sana), or
+     * null for anything else, so {@code tai import} takes a package by its folder or by any file in it.
+     */
+    @Nullable
+    private static File diffusionImportDirectory(@NonNull File target) {
+        File directory = target.isDirectory() ? target : target.isFile() ? target.getParentFile() : null;
+        // Sana's llm/ holds its own config.json and graphs; a file in it belongs to the package above.
+        if (directory != null && directory.getName().equals("llm") && directory.getParentFile() != null
+            && TaiDiffusionImport.detectLayout(rootNames(directory.getParentFile())) != TaiDiffusionPackage.TYPE_AUTO) {
+            directory = directory.getParentFile();
+        }
+        if (directory == null) return null;
+        return TaiDiffusionImport.detectLayout(rootNames(directory)) == TaiDiffusionPackage.TYPE_AUTO ? null : directory;
+    }
+
+    @NonNull
+    private static List<String> rootNames(@NonNull File directory) {
+        List<String> names = new ArrayList<>();
+        File[] children = directory.listFiles();
+        if (children != null) for (File child : children) if (child.isFile()) names.add(child.getName());
+        return names;
+    }
+
+    /**
+     * Registers a text-to-image folder where it is (as {@code tai import} does for any model). A
+     * Stable Diffusion folder that ships the raw CLIP tokenizer gets the app's converted
+     * {@code tokenizer.mtok} written beside it.
+     */
+    @NonNull
+    private JSONObject importDiffusionPackage(@NonNull JSONObject request, @NonNull File directory,
+                                              @NonNull String requestedPath) throws JSONException {
+        String modelId = sanitizeModelId(request.optString("modelId", request.optString("model", directory.getName())));
+        if (modelId.isEmpty()) return error(400, "bad_request", "Missing model id");
+        int layout = TaiDiffusionImport.detectLayout(rootNames(directory));
+        int hinted = TaiDiffusionPackage.parseType(request.optString("modelType", request.optString("type", "")));
+        int type = hinted >= 0 && (layout == TaiDiffusionPackage.TYPE_SANA) == (hinted == TaiDiffusionPackage.TYPE_SANA)
+            ? hinted : TaiDiffusionImport.typeFor(layout, directory.getName());
+        if (type != TaiDiffusionPackage.TYPE_SANA) {
+            TaiDiffusionTokenizer.Result tokenizer = TaiDiffusionTokenizer.ensure(directory, appContext);
+            if (!tokenizer.proceed()) {
+                JSONObject refused = error(400, "unsupported_image_model", tokenizer.message);
+                refused.put("path", requestedPath);
+                return refused;
+            }
+        }
+        TaiDiffusionPackage.Result checked = TaiDiffusionPackage.inspect(directory, type);
+        if (!checked.ok()) {
+            JSONObject refused = error(400, "unsupported_image_model", checked.message);
+            refused.put("path", requestedPath);
+            return refused;
+        }
+        TaiModelSpec spec = TaiDiffusionImport.spec(modelId, request.optString("displayName", modelId), "imported",
+            request.optString("license", "User-provided model; license accepted externally"),
+            directory.getAbsolutePath(), checked.type, checked.totalBytes);
+        modelStore.upsertUserModel(spec);
+        JSONObject data = new JSONObject();
+        data.put("ok", true);
+        data.put("imported", true);
+        data.put("model", spec.toJson());
+        data.put("requiresUserApprovedPath", true);
+        data.put("copiedIntoAppPrivateStorage", false);
+        data.put("message", "Image model registered. Generate with tai image --model " + modelId + ".");
         return data;
     }
 

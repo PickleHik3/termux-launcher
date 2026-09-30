@@ -164,8 +164,19 @@ public final class TaiModelDownloader {
     public JSONObject startDownload(String modelId, String url, String displayName, String license,
             LinkedHashSet<String> capabilities, String authToken, TaiModelProfile runtimeProfile,
             JSONObject artifact) throws JSONException {
-        boolean packageDownload = TaiModelSpec.BACKEND_MNN_LLM.equals(TaiModelSpec.inferBackend(url));
         String artifactLicense = artifact == null ? "" : artifact.optString("license", "");
+        String diffusionType = artifact == null ? "" : artifact.optString("diffusion", "");
+        if (!diffusionType.isEmpty()) {
+            // A text-to-image package: the candidate's size is the whole package, and the record keeps
+            // the model type so the image routes need no hint.
+            LinkedHashSet<String> imageCapabilities = new LinkedHashSet<>();
+            imageCapabilities.add(TaiModelSpec.CAPABILITY_IMAGE_GENERATION);
+            return startDownload(modelId, url, displayName, artifactLicense.isEmpty() ? license : artifactLicense,
+                imageCapabilities, TaiModelSpec.BACKEND_MNN_DIFFUSION, TaiModelSpec.FORMAT_MNN, diffusionType, "", 4096, 0,
+                artifact.optString("sha256", ""), Math.max(0L, artifact.optLong("sizeBytes", 0)), authToken, null,
+                Collections.<TaiModelCatalog.CatalogEntry.Sidecar>emptyList());
+        }
+        boolean packageDownload = TaiModelSpec.BACKEND_MNN_LLM.equals(TaiModelSpec.inferBackend(url));
         return startDownload(modelId, url, displayName, artifactLicense.isEmpty() ? license : artifactLicense, capabilities,
             TaiModelSpec.inferBackend(url), TaiModelSpec.inferFormat(url), "", "", 4096, 0,
             artifact == null ? "" : artifact.optString("sha256", ""),
@@ -379,12 +390,32 @@ public final class TaiModelDownloader {
             // Fold the existing file into the .part slot so everything below (hash check, the
             // MNN-package expansion, the final rename) runs exactly as it would after a real
             // transfer.
-            boolean keptExisting = !partial.exists() && isFileAlreadyComplete(output, expectedSizeBytes)
+            // An image package's record carries the size of the whole package; the file this first
+            // transfer fetches is one of them, sized by the repository listing.
+            boolean diffusion = TaiModelSpec.BACKEND_MNN_DIFFUSION.equals(backend);
+            HfPackageListing diffusionListing = null;
+            long primaryExpectedBytes = expectedSizeBytes;
+            long shownTotalBytes = expectedSizeBytes;
+            if (diffusion) {
+                diffusionListing = diffusionPackageListingFromHuggingFace(url, authToken);
+                if (diffusionListing.files.isEmpty()) {
+                    throw new IllegalStateException("The file list of this image model could not be read from Hugging Face.");
+                }
+                Long primarySize = diffusionListing.sizes.get(output.getName());
+                primaryExpectedBytes = primarySize == null ? 0L : primarySize;
+                long listed = 0L;
+                for (String name : diffusionListing.files) {
+                    Long size = diffusionListing.sizes.get(name);
+                    if (size != null) listed += size;
+                }
+                if (listed > 0L) shownTotalBytes = listed;
+            }
+            boolean keptExisting = !partial.exists() && isFileAlreadyComplete(output, primaryExpectedBytes)
                 && output.renameTo(partial);
             if (keptExisting) {
                 bytesRead = partial.length();
                 startBytes = bytesRead;
-                contentLength = expectedSizeBytes;
+                contentLength = shownTotalBytes;
                 run.persist(run.record(TaiModelStore.STATE_VERIFYING, bytesRead, contentLength, ""));
             } else {
                 long existing = resumeOffset(partial, url);
@@ -410,7 +441,7 @@ public final class TaiModelDownloader {
                 // to the user) may be raised to the catalogue's size when the server says less.
                 long promised = responseLength > 0 ? existing + responseLength : -1L;
                 contentLength = promised;
-                if (expectedSizeBytes > 0L) contentLength = Math.max(contentLength, expectedSizeBytes);
+                if (shownTotalBytes > 0L) contentLength = Math.max(contentLength, shownTotalBytes);
                 bytesRead = existing;
                 startBytes = existing;
                 run.persist(run.record(TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""));
@@ -455,6 +486,48 @@ public final class TaiModelDownloader {
                 if (!expectedSha256.equalsIgnoreCase(actual)) {
                     throw new IllegalStateException("Downloaded model failed SHA-256 verification.");
                 }
+            }
+
+            if (diffusion) {
+                if (output.exists() && !output.delete()) throw new IllegalStateException("Could not replace model file.");
+                if (!partial.renameTo(output)) throw new IllegalStateException("Could not finalize model download.");
+                clearResumeMarker(partial);
+
+                File modelDir = output.getParentFile();
+                String baseUrl = baseUrlFromUrl(url);
+                int type = TaiDiffusionPackage.parseType(architecture);
+                long currentBytes = output.length();
+                bytesRead = currentBytes;
+                long packageTotalBytes = shownTotalBytes > 0L ? shownTotalBytes : -1L;
+                run.persist(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""));
+                // The listing is ordered small files first: the tokenizer is known to fit (or not)
+                // before the first graph is fetched, so a package that cannot run is refused early.
+                boolean tokenizerChecked = false;
+                for (String fileName : diffusionListing.files) {
+                    if (output.getName().equals(fileName)) continue;
+                    if (!tokenizerChecked && TaiDiffusionImport.isHeavy(fileName)) {
+                        checkDiffusionTokenizer(modelDir, type);
+                        tokenizerChecked = true;
+                    }
+                    long[] counted = {currentBytes};
+                    try {
+                        fetchPackageFile(run, control, baseUrl, modelDir, fileName,
+                            diffusionListing.sizes.get(fileName), authToken, counted, packageTotalBytes);
+                    } finally {
+                        currentBytes = counted[0];
+                        bytesRead = currentBytes;
+                    }
+                }
+                if (!tokenizerChecked) checkDiffusionTokenizer(modelDir, type);
+
+                run.persist(run.record(TaiModelStore.STATE_VERIFYING, currentBytes, packageTotalBytes, ""));
+                TaiDiffusionPackage.Result installed = TaiDiffusionPackage.inspect(modelDir, type);
+                if (!installed.ok()) throw new IllegalStateException(installed.message);
+                store.upsertUserModel(TaiDiffusionImport.spec(modelId, displayName.isEmpty() ? modelId : displayName,
+                    "downloaded", license.isEmpty() ? "User accepted provider terms externally" : license,
+                    modelDir.getAbsolutePath(), installed.type, currentBytes));
+                run.persist(run.record(TaiModelStore.STATE_INSTALLED, currentBytes, currentBytes, ""));
+                return;
             }
 
             if (isMnnPackage(url, backend, format)) {
@@ -1271,6 +1344,66 @@ public final class TaiModelDownloader {
         } catch (Exception ignored) {
         }
         return listing;
+    }
+
+    /**
+     * The runnable files of the image package the link's directory holds, nested folders (Sana's
+     * {@code llm/}) included, small files first; hidden files and the model card are left out.
+     * Empty when the repository could not be read.
+     */
+    @NonNull
+    private HfPackageListing diffusionPackageListingFromHuggingFace(@NonNull String url, @Nullable String authToken) {
+        HfPackageListing listing = new HfPackageListing();
+        try {
+            TaiHuggingFace source = TaiHuggingFace.parse(url);
+            if (source == null) return listing;
+            HttpURLConnection connection = open(source.metadataUrl(), authToken, 0);
+            int status = connection.getResponseCode();
+            if (status < 200 || status >= 300) return listing;
+            JSONObject json = new JSONObject(readSmallUtf8(connection.getInputStream(), 2L * 1024L * 1024L));
+            JSONArray siblings = json.optJSONArray("siblings");
+            if (siblings == null) return listing;
+            String directory = source.path.substring(0, source.path.lastIndexOf('/') + 1);
+            List<String> names = new ArrayList<>();
+            for (int i = 0; i < siblings.length(); i++) {
+                JSONObject sibling = siblings.optJSONObject(i);
+                if (sibling == null) continue;
+                String fileName = sibling.optString("rfilename", "");
+                if (!fileName.startsWith(directory)) continue;
+                String relative = fileName.substring(directory.length());
+                if (!TaiHuggingFace.safePath(relative)) continue;
+                JSONObject lfs = sibling.optJSONObject("lfs");
+                long size = sibling.optLong("size", lfs == null ? -1L : lfs.optLong("size", -1L));
+                if (size > 0L) listing.sizes.put(relative, size);
+                if (lfs != null) {
+                    String sha256 = lfs.optString("sha256", "");
+                    if (!sha256.isEmpty()) listing.sha256s.put(relative, sha256);
+                }
+                names.add(relative);
+            }
+            listing.files.addAll(TaiDiffusionImport.packageFiles(names, ""));
+        } catch (Exception ignored) {
+        }
+        return listing;
+    }
+
+    /**
+     * Makes a Stable Diffusion package loadable: installs the app's bundled tokenizer when its raw
+     * files are the standard CLIP ones. A package that needs a different tokenizer is refused, and
+     * what was fetched for it is removed.
+     */
+    private void checkDiffusionTokenizer(@NonNull File modelDir, int type) {
+        if (type == TaiDiffusionPackage.TYPE_SANA) return;
+        TaiDiffusionTokenizer.Result result = TaiDiffusionTokenizer.ensure(modelDir, appContext);
+        if (result.proceed()) return;
+        if (result.outcome == TaiDiffusionTokenizer.Outcome.INCOMPATIBLE) deleteTree(modelDir);
+        throw new IllegalStateException(result.message);
+    }
+
+    private static void deleteTree(@NonNull File file) {
+        File[] children = file.listFiles();
+        if (children != null) for (File child : children) deleteTree(child);
+        file.delete();
     }
 
     public static final class HfResolve {
