@@ -145,6 +145,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         boolean noteIsError;
         /** A speech-output (voice) model: its own menu and install path, the wave icon like speech. */
         boolean voiceOutput;
+        /** A text-to-image model: the picture icon, and a menu with Delete only. */
+        boolean image;
 
         ModelRow(@NonNull String modelId, boolean speech, @Nullable TaiModelSpec installed,
                  @Nullable TaiModelCatalog.CatalogEntry entry) {
@@ -652,7 +654,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         void bind(@NonNull ModelRow next) {
             Context context = itemView.getContext();
             row = next;
-            kind.setImageResource(next.speech ? R.drawable.ic_tai_wave : R.drawable.ic_tai_chat);
+            kind.setImageResource(next.image ? R.drawable.ic_tai_image
+                : next.speech ? R.drawable.ic_tai_wave : R.drawable.ic_tai_chat);
             setText(title, next.title);
             setText(subtitle, next.subtitle);
             setText(pillSpeed, next.pillSpeed);

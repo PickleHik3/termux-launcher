@@ -122,8 +122,15 @@ final class TaiImportFlow {
         String cardQuote = "";
         /** "eagle" when the chosen candidate ships an EAGLE-3 draft head beside it; "" otherwise. */
         String speculative = "";
+        /** "sd15", "taiyi" or "sana" when the chosen package is a text-to-image model; "" otherwise. */
+        String diffusionType = "";
         Processor processor = Processor.AUTO;
         TaiModelProfile customProfile;
+
+        /** A text-to-image model: nothing to chat with, no chat profile, no chat speeds. */
+        boolean imageOnly() {
+            return !diffusionType.isEmpty();
+        }
 
         /** The text the guesses read: link, file name and folder name together. */
         @NonNull
@@ -150,6 +157,13 @@ final class TaiImportFlow {
          */
         void detectCapabilities(@NonNull String guessIdentity) {
             groundedCapabilities.clear();
+            if (imageOnly()) {
+                // The package's own files say what it is; no name guess or repository tag adds chat.
+                groundedCapabilities.put(TaiModelSpec.CAPABILITY_IMAGE_GENERATION, R.string.termux_ai_import_source_package);
+                capabilities.clear();
+                capabilities.add(TaiModelSpec.CAPABILITY_IMAGE_GENERATION);
+                return;
+            }
             groundedCapabilities.putAll(TaiImportFacts.groundedCapabilities(identity(), factFileName(), modelFacts,
                 candidateCount <= 1));
             // Speculative decoding is a property of the package (its config.json and the eagle.mnn
@@ -565,10 +579,11 @@ final class TaiImportFlow {
         draft.sizeBytes = candidate.optLong("sizeBytes", -1L);
         draft.cardQuote = candidate.optString("cardQuote", "");
         draft.speculative = candidate.optString("speculative", "");
+        draft.diffusionType = candidate.optString("diffusion", "");
         // The name the file itself carries when it says more than the repository's: the VL file of
         // litert-community/Qwen3.5-2B is added as "Qwen3.5 2B VL", its text file as "Qwen3.5 2B".
         // Not on the way to the download, where the name is the one the user confirmed.
-        if (rename && !draft.repositoryName.isEmpty()) {
+        if (rename && !draft.repositoryName.isEmpty() && !draft.imageOnly()) {
             String name = TaiImportFacts.modelName(draft.repositoryName, draft.fileName);
             if (!name.isEmpty()) draft.displayName = name;
         }
@@ -612,6 +627,8 @@ final class TaiImportFlow {
         }
         String folderName = draft.metadata == null ? "" : draft.metadata.displayName;
         draft.displayName = TaiImportNames.displayName(folderName);
+        // A text-to-image folder (Stable Diffusion, Sana) is told from a chat package by its files.
+        draft.diffusionType = TaiManager.getInstance(context).diffusionTypeOfFolder(uri);
         draft.detectCapabilities(folderName + " config.json");
         // A folder's size is not known until its config names the files; the fit is checked
         // after the copy by the load itself.
@@ -650,7 +667,7 @@ final class TaiImportFlow {
         List<String> lines = new ArrayList<>();
         lines.add(context.getString(R.string.termux_ai_import_size_label,
             draft.sizeBytes > 0L ? TaiImportMessages.formatBytes(draft.sizeBytes) : context.getString(R.string.termux_ai_import_size_unknown)));
-        int[] window = TaiImportFacts.contextWindow(draft.identity(), draft.factFileName());
+        int[] window = draft.imageOnly() ? null : TaiImportFacts.contextWindow(draft.identity(), draft.factFileName());
         if (window != null) {
             lines.add(context.getString(R.string.termux_ai_import_context_fact, window[0], context.getString(window[1])));
         }
@@ -663,7 +680,8 @@ final class TaiImportFlow {
         layout.addView(label(context, R.string.termux_ai_import_fit_label));
         TextView fitView = new TextView(context);
         long ram = deviceMemoryBytes(context);
-        TaiImportFit fit = TaiImportFit.check(draft.sizeBytes, ram, draft.embeddingOnly());
+        // The fit tiers are chat packages'; an image model states its size and the phone's RAM only.
+        TaiImportFit fit = TaiImportFit.check(draft.imageOnly() ? -1L : draft.sizeBytes, ram, draft.embeddingOnly());
         fitView.setText(TaiImportFacts.fitLine(context::getString, draft.sizeBytes, ram, freeMemoryBytes(context)));
         if (fit.verdict == TaiImportFit.Verdict.TOO_BIG) {
             fitView.setTextColor(resolveAttrColor(context, com.termux.shared.R.attr.termuxColorError));
@@ -696,6 +714,8 @@ final class TaiImportFlow {
             // Speculative decoding is detected, not declared: it shows only as a chip above,
             // never as a box the user could tick on a package that does not have it.
             if (TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING.equals(keys[i])) continue;
+            // Image generation is what an image package is, never a box; such a package has no chat boxes.
+            if (TaiModelSpec.CAPABILITY_IMAGE_GENERATION.equals(keys[i]) || draft.imageOnly()) continue;
             CheckBox box = new CheckBox(context);
             box.setText(titles[i]);
             box.setTag(keys[i]);
@@ -716,7 +736,9 @@ final class TaiImportFlow {
             advanced.addView(box);
         }
 
-        advanced.addView(label(context, R.string.termux_ai_import_processor_label));
+        // Processor and sampling profile are chat settings; an image model has neither here.
+        boolean chatSettings = !draft.imageOnly();
+        if (chatSettings) advanced.addView(label(context, R.string.termux_ai_import_processor_label));
         Spinner processor = new Spinner(context);
         ArrayAdapter<CharSequence> processorAdapter = new ArrayAdapter<>(context, android.R.layout.simple_spinner_item,
             new CharSequence[]{context.getString(R.string.termux_ai_import_processor_auto),
@@ -725,13 +747,13 @@ final class TaiImportFlow {
         processorAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         processor.setAdapter(processorAdapter);
         processor.setSelection(draft.processor.ordinal());
-        advanced.addView(processor);
+        if (chatSettings) advanced.addView(processor);
 
         Button profileButton = new Button(context);
         profileButton.setText(R.string.termux_ai_import_profile);
         profileButton.setOnClickListener(v -> TaiImportProfileDialog.show(context, runtimeProfile(),
             profile -> draft.customProfile = profile));
-        advanced.addView(profileButton);
+        if (chatSettings) advanced.addView(profileButton);
 
         EditText internalName = new EditText(context);
         internalName.setSingleLine(true);
@@ -817,6 +839,10 @@ final class TaiImportFlow {
 
     private void captureCapabilities(@NonNull List<CheckBox> boxes) {
         draft.capabilities.clear();
+        if (draft.imageOnly()) {
+            draft.capabilities.add(TaiModelSpec.CAPABILITY_IMAGE_GENERATION);
+            return;
+        }
         for (CheckBox box : boxes) {
             if (box.isChecked()) draft.capabilities.add((String) box.getTag());
         }
@@ -931,7 +957,7 @@ final class TaiImportFlow {
                         host.modelsChanged();
                         if (host.context() == null) return;
                         if (finalResult != null && finalResult.optBoolean("ok", false)) {
-                            showReady(modelId, displayName, adding.embeddingOnly());
+                            showReady(modelId, displayName, adding.embeddingOnly(), adding.imageOnly());
                         } else {
                             showError(TaiImportMessages.forResult(finalResult,
                                 adding.metadata == null ? adding.fileName : adding.metadata.displayName));
@@ -1001,6 +1027,7 @@ final class TaiImportFlow {
         String modelId = modelId();
         String displayName = draft.displayName;
         boolean embeddingOnly = draft.embeddingOnly();
+        boolean imageOnly = draft.imageOnly();
         TaiDownloadHub hub = TaiDownloadHub.get(context);
         AppNotice.show(context, context.getString(R.string.tai_centre_install_queued, displayName), false);
         hub.addListener(new TaiDownloadHub.Listener() {
@@ -1018,7 +1045,7 @@ final class TaiImportFlow {
                 if (TaiModelStore.STATE_INSTALLED.equals(status)) {
                     hub.removeListener(this);
                     host.modelsChanged();
-                    showReady(modelId, displayName, embeddingOnly);
+                    showReady(modelId, displayName, embeddingOnly, imageOnly);
                 } else if (TaiModelStore.STATE_FAILED.equals(status)) {
                     // A failed row stays in Downloads with Retry; the dialog says why, once.
                     hub.removeListener(this);
@@ -1034,12 +1061,15 @@ final class TaiImportFlow {
 
     // ---- step 5: ready ----
 
-    private void showReady(@NonNull String modelId, @NonNull String displayName, boolean embeddingOnly) {
+    /** An embedding or image model has nothing to chat with, so it offers only Done. */
+    private void showReady(@NonNull String modelId, @NonNull String displayName, boolean embeddingOnlyModel, boolean imageOnly) {
+        boolean embeddingOnly = embeddingOnlyModel || imageOnly;
         Context context = host.context();
         if (context == null) return;
         MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(context)
             .setTitle(context.getString(R.string.termux_ai_import_ready_title, displayName))
-            .setMessage(embeddingOnly ? R.string.termux_ai_import_ready_embedding_message : R.string.termux_ai_import_ready_message)
+            .setMessage(imageOnly ? R.string.termux_ai_import_ready_image_message
+                : embeddingOnly ? R.string.termux_ai_import_ready_embedding_message : R.string.termux_ai_import_ready_message)
             .setNegativeButton(R.string.termux_ai_import_done_action, null);
         if (!embeddingOnly) {
             builder.setPositiveButton(R.string.termux_ai_import_try_action, null)
@@ -1296,7 +1326,8 @@ final class TaiImportFlow {
     private static String[] capabilityKeys() {
         return new String[]{TaiModelSpec.CAPABILITY_TEXT_CHAT, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS,
             TaiModelSpec.CAPABILITY_IMAGE_INPUT, TaiModelSpec.CAPABILITY_AUDIO_INPUT, TaiModelSpec.CAPABILITY_TOOL_USE,
-            TaiModelSpec.CAPABILITY_CODE, "reasoning", "multilingual", TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING};
+            TaiModelSpec.CAPABILITY_CODE, "reasoning", "multilingual", TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING,
+            TaiModelSpec.CAPABILITY_IMAGE_GENERATION};
     }
 
     @NonNull
@@ -1304,7 +1335,7 @@ final class TaiImportFlow {
         return new int[]{R.string.termux_ai_import_cap_chat, R.string.termux_ai_import_cap_embeddings,
             R.string.termux_ai_import_cap_image, R.string.termux_ai_import_cap_audio, R.string.termux_ai_import_cap_tools,
             R.string.termux_ai_import_cap_code, R.string.termux_ai_import_cap_reasoning, R.string.termux_ai_import_cap_multilingual,
-            R.string.termux_ai_import_cap_speculative};
+            R.string.termux_ai_import_cap_speculative, R.string.termux_ai_import_cap_image_generation};
     }
 
     /** "Chat · Image input": capabilities in plain words, in the Advanced list's order. */

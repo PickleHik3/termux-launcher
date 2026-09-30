@@ -440,6 +440,12 @@ public final class TaiManager {
         return new TaiModelImporter(appContext, modelStore).readMetadata(uri);
     }
 
+    /** The image model type ({@code sd15}, {@code taiyi}, {@code sana}) a picked folder holds, or "". */
+    @NonNull
+    public String diffusionTypeOfFolder(@NonNull Uri tree) {
+        return new TaiModelImporter(appContext, modelStore).diffusionTypeOfFolder(tree);
+    }
+
     @NonNull
     public JSONObject downloadModel(@NonNull String body) throws JSONException {
         JSONObject request = parseBody(body);

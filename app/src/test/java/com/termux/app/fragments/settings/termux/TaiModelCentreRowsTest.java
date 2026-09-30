@@ -265,4 +265,33 @@ public class TaiModelCentreRowsTest {
         assertEquals(0, TaiModelCentreFragment.segmentIndex("downloads"));
         assertEquals(0, TaiModelCentreFragment.segmentIndex(null));
     }
+
+    private static com.termux.ai.TaiModelSpec image(String id, String name, String type) {
+        java.util.LinkedHashSet<String> caps = new java.util.LinkedHashSet<>();
+        caps.add(com.termux.ai.TaiModelSpec.CAPABILITY_IMAGE_GENERATION);
+        return new com.termux.ai.TaiModelSpec(id, name, "Image generation model", "imported", "/models/" + id, "x", GB,
+            caps, false, null, com.termux.ai.TaiModelSpec.BACKEND_MNN_DIFFUSION, com.termux.ai.TaiModelSpec.FORMAT_MNN,
+            type, null, 4096, 0, null);
+    }
+
+    @Test
+    public void imageModelsFormTheirOwnGroupAndChatModelsStayOut() {
+        com.termux.ai.TaiModelSpec chat = new com.termux.ai.TaiModelSpec("qwen", "Qwen", "Imported local model", "imported",
+            "/models/qwen/config.json", "x", GB, new java.util.LinkedHashSet<>(Arrays.asList(com.termux.ai.TaiModelSpec.CAPABILITY_TEXT_CHAT)), false, null,
+            com.termux.ai.TaiModelSpec.BACKEND_MNN_LLM, com.termux.ai.TaiModelSpec.FORMAT_MNN, null, null, 4096, 0, null);
+        java.util.List<com.termux.ai.TaiModelSpec> images = TaiModelCentreRows.imageModels(
+            Arrays.asList(chat, image("sana", "Sana", "sana"), image("sd", "Stable Diffusion", "sd15")));
+        assertEquals(2, images.size());
+        assertEquals("sana", images.get(0).id);
+        assertEquals("sd", images.get(1).id);
+        assertTrue(TaiModelCentreRows.imageModels(Arrays.asList(chat)).isEmpty());
+    }
+
+    @Test
+    public void imageFamilyNamesTheRecordedType() {
+        assertEquals("Sana", TaiModelCentreRows.imageFamily("sana"));
+        assertEquals("Taiyi", TaiModelCentreRows.imageFamily("taiyi"));
+        assertEquals("Stable Diffusion 1.5", TaiModelCentreRows.imageFamily("sd15"));
+        assertEquals("Stable Diffusion 1.5", TaiModelCentreRows.imageFamily(null));
+    }
 }

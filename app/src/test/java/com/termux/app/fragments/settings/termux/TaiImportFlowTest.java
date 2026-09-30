@@ -157,4 +157,20 @@ public class TaiImportFlowTest {
         assertEquals("", TaiImportFlow.normalizeLink("   "));
         assertEquals("", TaiImportFlow.normalizeLink(null));
     }
+
+    @Test
+    public void anImagePackageIsOnlyEverAnImageModel() {
+        // The name says "chat-ish" nothing here, but a repository tag or a name guess must never add chat
+        // to a package whose own files are a text-to-image model.
+        TaiImportFlow.Draft draft = new TaiImportFlow.Draft();
+        draft.url = "https://huggingface.co/taobao-mnn/MNN-Sana-Edit-V2/resolve/abc/config.json";
+        draft.fileName = "config.json";
+        draft.diffusionType = "sana";
+        draft.detectCapabilities(draft.identity());
+        assertTrue(draft.imageOnly());
+        assertEquals(1, draft.capabilities.size());
+        assertTrue(draft.capabilities.contains(com.termux.ai.TaiModelSpec.CAPABILITY_IMAGE_GENERATION));
+        assertFalse(draft.embeddingOnly());
+        assertTrue(draft.groundedCapabilities.containsKey(com.termux.ai.TaiModelSpec.CAPABILITY_IMAGE_GENERATION));
+    }
 }
