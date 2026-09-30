@@ -91,12 +91,13 @@ public final class PlaceLayoutStore {
 
     /**
      * The edge a put-away bar comes back to, beside its placement:
-     * {@code layout.<orientation>.<placement key>_restore_edge}. The status bar, the pinned apps and
-     * the extra keys store {@code hidden} in their placement key, which leaves no room for the edge
-     * they went away from, so the Layout editor's tray could only ever bring them back to where
-     * each one started. Written when a bar is put away and read only while it is; absent is the
-     * bar's own default edge. The alphabets index needs none: its edge has always had a key of its
-     * own ({@code az_bar}) beside the on/off switch.
+     * {@code layout.<orientation>.<placement key>_restore_edge}. The pinned apps and the extra keys
+     * store {@code hidden} in their placement key, which leaves no room for the edge they went away
+     * from, so the Layout editor's tray could only ever bring them back to where each one started.
+     * Written when a row is put away and read only while it is; absent is the row's own default
+     * edge. The alphabets index needs none: its edge has always had a key of its own
+     * ({@code az_bar}) beside the on/off switch. The status bar keeps none either: put away, it
+     * reads as the top it started on, and the tray brings it back there.
      */
     private static final String RESTORE_EDGE_SUFFIX = "_restore_edge";
 
@@ -158,8 +159,7 @@ public final class PlaceLayoutStore {
         orderKeyName(Element.EXTRA_KEYS),
         underKeyboardKeyName(Element.APPS), underKeyboardKeyName(Element.AZ),
         underKeyboardKeyName(Element.EXTRA_KEYS),
-        restoreEdgeKeyName(Element.STATUS), restoreEdgeKeyName(Element.APPS),
-        restoreEdgeKeyName(Element.EXTRA_KEYS)
+        restoreEdgeKeyName(Element.APPS), restoreEdgeKeyName(Element.EXTRA_KEYS)
     };
 
     /**
@@ -347,8 +347,9 @@ public final class PlaceLayoutStore {
     /** Moves one element: its edge, whether it is put away, and where it sits in the stack. */
     public void setSlot(@NonNull PlaceOrientation orientation, @NonNull Element element,
                         @NonNull Slot slot) {
-        // A bar put away keeps the edge it came from, so the tray brings it back there.
-        if (slot.hidden && element != Element.AZ)
+        // A row put away keeps the edge it came from, so the tray brings it back there. The status
+        // bar comes back to the top it started on, and the index's edge has a key of its own.
+        if (slot.hidden && (element == Element.APPS || element == Element.EXTRA_KEYS))
             writeString(orientation, restoreEdgeKeyName(element), slot.edge.storageValue());
         switch (element) {
             case STATUS:
@@ -413,9 +414,9 @@ public final class PlaceLayoutStore {
 
     /**
      * The edge an element's own placement key names, without reading its order. A bar that is put
-     * away names none there — the key holds nothing but {@code hidden} — so it answers with the
-     * edge remembered when it went away ({@link #restoreEdgeKeyName}), and failing that the
-     * bar's own default edge: the top for the status bar, the bottom for the rows.
+     * away names none there — the key holds nothing but {@code hidden}. The status bar then reads
+     * as the top it started on; a row answers with the edge remembered when it went away
+     * ({@link #restoreEdgeKeyName}), and failing that the bottom, where both rows started.
      */
     @NonNull
     private Edge elementEdge(@NonNull PlaceOrientation orientation, @NonNull Element element) {
@@ -427,8 +428,8 @@ public final class PlaceLayoutStore {
                 ? Edge.LEFT : Edge.BOTTOM;
         String raw = readString(orientation, key);
         if (!VALUE_HIDDEN.equals(raw)) return Edge.parse(raw, fallback);
-        Edge hiddenFallback = element == Element.STATUS ? Edge.TOP : Edge.BOTTOM;
-        return Edge.parse(readString(orientation, restoreEdgeKeyName(element)), hiddenFallback);
+        if (element == Element.STATUS) return Edge.TOP;
+        return Edge.parse(readString(orientation, restoreEdgeKeyName(element)), Edge.BOTTOM);
     }
 
     /** A slot as the pinned apps and the extra keys have always spelled it. */
