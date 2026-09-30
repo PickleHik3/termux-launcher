@@ -111,8 +111,13 @@ public class ImageGenerationRouteTest {
 
     @Test
     public void theRouteIsListedAmongTheSupportedEndpoints() throws Exception {
-        assertTrue(server.endpointSettings(context).getJSONArray("supportedEndpoints").toString()
-            .contains("/v1/ai/images/generations"));
+        // Compare entries, not toString(): org.json escapes "/" as "\/".
+        org.json.JSONArray endpoints = server.endpointSettings(context).getJSONArray("supportedEndpoints");
+        boolean listed = false;
+        for (int i = 0; i < endpoints.length(); i++) {
+            listed |= "/v1/ai/images/generations".equals(endpoints.getString(i));
+        }
+        assertTrue(listed);
     }
 
     private HttpURLConnection post(String path, JSONObject body) throws Exception {

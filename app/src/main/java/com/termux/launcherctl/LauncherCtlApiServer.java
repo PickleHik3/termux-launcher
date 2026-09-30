@@ -821,7 +821,11 @@ public class LauncherCtlApiServer {
             return textStreamResponse(output -> writeImageTextStream(manager, body, output));
         }
         if (stream) return sseResponse(output -> writeImageSseStream(manager, body, output));
-        return jsonResponse(manager.generateImage(body, percent -> { }));
+        try {
+            return jsonResponse(manager.generateImage(body, percent -> { }));
+        } catch (IOException e) {
+            return jsonResponse(jsonError("internal_error", e.getMessage() == null ? "" : e.getMessage()));
+        }
     }
 
     private void writeImageSseStream(TaiManager manager, String body, OutputStream output) throws IOException {
