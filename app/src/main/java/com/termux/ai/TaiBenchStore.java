@@ -177,7 +177,7 @@ public final class TaiBenchStore {
      * {@code skipReason} (which the run screen shows as the entry's note).
      */
     @NonNull
-    static JSONObject crashedRecord(@NonNull JSONObject marker, @NonNull String reason) {
+    public static JSONObject crashedRecord(@NonNull JSONObject marker, @NonNull String reason) {
         try {
             long started = marker.optLong("timestamp", System.currentTimeMillis());
             JSONObject phases = new JSONObject().put("load", JSONObject.NULL).put("chat", JSONObject.NULL)
