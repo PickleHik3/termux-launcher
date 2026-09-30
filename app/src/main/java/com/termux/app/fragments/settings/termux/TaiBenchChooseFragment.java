@@ -51,7 +51,7 @@ import java.util.concurrent.Executors;
  * first, then "Worth a download" (the catalogue's recommended entries that pass the filter), each
  * row with backend, size, processors and the estimated time; the hidden models counted with
  * "Show why"; a bar floating over the list's foot with the model count, the total time and the
- * download size, Select all, and Continue, which opens the Check sheet. Installed models start
+ * download size, Clear all, Select all, and Continue, which opens the Check sheet. Installed models start
  * selected unless the leaderboard already has a result for them. Opened with a model id as
  * {@link SettingsActivity#EXTRA_INITIAL_PLACE}, only that model starts selected.
  */
@@ -583,12 +583,18 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         all.setOnClickListener(v -> {
             TaiMotion.tick(v);
             touched = true;
-            if (allSelected()) {
-                selected.clear();
-            } else {
-                for (Offer offer : installed) selected.add(offer.candidate.modelId);
-                for (Offer offer : downloads) selected.add(offer.candidate.modelId);
-            }
+            for (Offer offer : installed) selected.add(offer.candidate.modelId);
+            for (Offer offer : downloads) selected.add(offer.candidate.modelId);
+            rebuild();
+        });
+        // Its own button, so the preselected untested models clear in one tap.
+        TextView clear = TaiBenchViews.ghostButton(context, getString(R.string.tai_bench_select_none));
+        clear.setId(R.id.tai_bench_select_none);
+        clear.setMinHeight(TaiBenchViews.dp(context, 44));
+        clear.setOnClickListener(v -> {
+            TaiMotion.tick(v);
+            touched = true;
+            selected.clear();
             rebuild();
         });
         TextView go = TaiBenchViews.goButton(context, getString(R.string.tai_bench_continue));
@@ -600,7 +606,10 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         });
         LinearLayout buttons = new LinearLayout(context);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.addView(all, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        buttons.addView(clear, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams allParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        allParams.setMarginStart(TaiBenchViews.dp(context, 8));
+        buttons.addView(all, allParams);
         LinearLayout.LayoutParams goParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         goParams.setMarginStart(TaiBenchViews.dp(context, 8));
         buttons.addView(go, goParams);
@@ -616,9 +625,9 @@ public class TaiBenchChooseFragment extends Fragment implements TaiBenchListAdap
         if (count > 0) text.append(" · ").append(TaiBenchViews.duration(context, totalMs));
         if (bytes > 0L) text.append(" · ").append(getString(R.string.tai_bench_footer_download, TaiModelCentreRows.formatBytes(bytes)));
         ((TextView) view.findViewById(R.id.tai_bench_text)).setText(text);
-        TextView all = view.findViewById(R.id.tai_bench_select_all);
-        all.setText(allSelected() ? R.string.tai_bench_select_none : R.string.tai_bench_select_all);
-        TaiBenchViews.setEnabled(all, device != null && !(installed.isEmpty() && downloads.isEmpty()));
+        TaiBenchViews.setEnabled(view.findViewById(R.id.tai_bench_select_all), device != null && !allSelected()
+            && !(installed.isEmpty() && downloads.isEmpty()));
+        TaiBenchViews.setEnabled(view.findViewById(R.id.tai_bench_select_none), !selected.isEmpty());
         TaiBenchViews.setEnabled(view.findViewById(R.id.tai_bench_action), count > 0 && !TaiBenchSession.get().isActive());
     }
 

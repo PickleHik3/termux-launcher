@@ -9,6 +9,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -41,8 +42,8 @@ import java.util.concurrent.Executors;
 
 /**
  * The benchmark's Home (spec Screen 1): a device card, the one leaderboard list (ranked by
- * verdict, then decode speed, then the first reply), the broken entries apart, a "Run a benchmark"
- * button and when the last run was. {@link #open} is the one entry point the wiring slice calls:
+ * verdict, then decode speed, then the first reply), the broken entries apart, and a bar floating
+ * over the list's foot with the "Run a benchmark" button and when the last run was. {@link #open} is the one entry point the wiring slice calls:
  * it lands on the Run screen while a run is going, on Choose with one model preselected when
  * asked for a model, and here otherwise. Hosted by {@link SettingsActivity} like the Model centre.
  */
@@ -54,7 +55,6 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     private static final int TYPE_SECTION = 4;
     private static final int TYPE_NOTE = 5;
     private static final int TYPE_EMPTY = 6;
-    private static final int TYPE_ACTION = 7;
 
     /** The device card's facts, gathered off the main thread. */
     private static final class DeviceFacts {
@@ -77,6 +77,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     private final TaiBenchListAdapter adapter = new TaiBenchListAdapter(this);
     @Nullable private TaiBenchLeaderboard.Board board;
     @Nullable private DeviceFacts facts;
+    @Nullable private View bar;
     private int lastSeenEntries = -1;
 
     /**
@@ -136,7 +137,23 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             list.setItemAnimator(animator);
         }
         list.setAdapter(adapter);
-        return list;
+        FrameLayout root = new FrameLayout(context);
+        root.addView(list, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        View floating = createBar(context);
+        root.addView(floating, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+        // The last row scrolls clear of the bar.
+        floating.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            int pad = (bottom - top) + TaiBenchViews.dp(context, 8);
+            if (list.getPaddingBottom() != pad) list.setPadding(0, 0, 0, pad);
+        });
+        bar = floating;
+        return root;
+    }
+
+    @Override
+    public void onDestroyView() {
+        bar = null;
+        super.onDestroyView();
     }
 
     @Override
@@ -261,8 +278,8 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             }
         }
         String lastRun = b == null || b.lastRunMs <= 0L ? "" : getString(R.string.tai_bench_last_run, TaiBenchViews.ago(b.lastRunMs));
-        items.add(new TaiBenchListAdapter.Item(TYPE_ACTION, "action", "action|" + lastRun + '|' + session.isActive(), lastRun));
         adapter.submit(items);
+        bindBar(lastRun);
     }
 
     @NonNull
@@ -282,8 +299,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             case TYPE_ROW: return createRow(context);
             case TYPE_SECTION: return TaiBenchViews.sectionHeader(context, "", "");
             case TYPE_NOTE: return createNote(context);
-            case TYPE_EMPTY: return createEmpty(context);
-            default: return createAction(context);
+            default: return createEmpty(context);
         }
     }
 
@@ -295,8 +311,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             case TYPE_ROW: bindRow(view, (TaiBenchLeaderboard.Row) item.data); break;
             case TYPE_SECTION: bindSection(view, (String) item.data); break;
             case TYPE_NOTE: ((TextView) view.findViewById(R.id.tai_bench_text)).setText((String) item.data); break;
-            case TYPE_EMPTY: bindEmpty(view, Boolean.TRUE.equals(item.data)); break;
-            default: bindAction(view, (String) item.data); break;
+            default: bindEmpty(view, Boolean.TRUE.equals(item.data)); break;
         }
     }
 
@@ -491,12 +506,16 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             : getString(R.string.tai_bench_empty_summary));
     }
 
+    // ---- the floating bar ----
+
     @NonNull
-    private View createAction(@NonNull Context context) {
-        LinearLayout column = new LinearLayout(context);
-        column.setOrientation(LinearLayout.VERTICAL);
-        column.setGravity(Gravity.CENTER_HORIZONTAL);
-        column.setPadding(TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 8));
+    private View createBar(@NonNull Context context) {
+        TaiBenchViews.Card card = TaiBenchViews.card(context);
+        card.outer.setPadding(TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 6), TaiBenchViews.dp(context, 16), TaiBenchViews.dp(context, 12));
+        card.shell.setElevation(TaiBenchViews.dp(context, 6));
+        TextView last = TaiBenchViews.mono(context, "");
+        last.setId(R.id.tai_bench_text);
+        card.core.addView(last);
         TextView run = TaiBenchViews.goButton(context, getString(R.string.tai_bench_run_action));
         run.setId(R.id.tai_bench_action);
         run.setMinHeight(TaiBenchViews.dp(context, 44));
@@ -504,19 +523,20 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             TaiMotion.tick(v);
             openChoose();
         });
-        column.addView(run, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        TextView last = TaiBenchViews.body(context, "");
-        last.setId(R.id.tai_bench_text);
-        last.setGravity(Gravity.CENTER);
-        column.addView(last, TaiBenchViews.block(context, 8));
-        return column;
+        card.core.addView(run, TaiBenchViews.block(context, 10));
+        return card.outer;
     }
 
-    private void bindAction(@NonNull View view, @NonNull String lastRun) {
+    private void bindBar(@NonNull String lastRun) {
+        View view = bar;
+        if (view == null) return;
         TextView last = view.findViewById(R.id.tai_bench_text);
         last.setText(lastRun);
         last.setVisibility(lastRun.isEmpty() ? View.GONE : View.VISIBLE);
         View run = view.findViewById(R.id.tai_bench_action);
+        // With no summary line above it, the button needs no gap either.
+        ((ViewGroup.MarginLayoutParams) run.getLayoutParams()).topMargin = lastRun.isEmpty() ? 0 : TaiBenchViews.dp(view.getContext(), 10);
+        run.requestLayout();
         TaiBenchViews.setEnabled(run, !TaiBenchSession.get().isActive());
     }
 

@@ -126,12 +126,12 @@ public class TaiBenchHomeFragmentTest {
     public void withAnEmptyStoreHomeShowsTheDeviceCardTheEmptyStateAndTheRunButton() throws Exception {
         TaiBenchHomeFragment home = launch();
         assertFalse(home.hasRowsForTest());
-        RecyclerView list = (RecyclerView) home.getView();
+        RecyclerView list = home.requireView().findViewById(R.id.tai_bench_list);
         assertNotNull(list);
         RecyclerView.Adapter<?> adapter = list.getAdapter();
         assertNotNull(adapter);
-        // Device card, the empty state, the action block.
-        assertEquals(3, adapter.getItemCount());
+        // Device card and the empty state; the action floats over the list.
+        assertEquals(2, adapter.getItemCount());
     }
 
     @Test
@@ -139,12 +139,12 @@ public class TaiBenchHomeFragmentTest {
         seed(record("qwen3-vl-2b", "cpu", 21.0), record("gemma-4-e2b", "gpu", 12.0));
         TaiBenchHomeFragment home = launch();
         assertTrue(home.hasRowsForTest());
-        RecyclerView list = (RecyclerView) home.getView();
+        RecyclerView list = home.requireView().findViewById(R.id.tai_bench_list);
         assertNotNull(list);
         RecyclerView.Adapter<?> adapter = list.getAdapter();
         assertNotNull(adapter);
-        // Device card, two rows, the action block: one list, no sort tabs.
-        assertEquals(4, adapter.getItemCount());
+        // Device card and two rows: one list, no sort tabs; the action floats over the list.
+        assertEquals(3, adapter.getItemCount());
     }
 
     @Test
@@ -152,11 +152,11 @@ public class TaiBenchHomeFragmentTest {
         seed(record("qwen3-vl-2b", "cpu", 21.0, "bench_v1"));
         TaiBenchHomeFragment home = launch();
         assertFalse(home.hasRowsForTest());
-        RecyclerView list = (RecyclerView) home.getView();
+        RecyclerView list = home.requireView().findViewById(R.id.tai_bench_list);
         assertNotNull(list);
         RecyclerView.Adapter<?> adapter = list.getAdapter();
         assertNotNull(adapter);
-        // Device card, the empty state, the action block.
-        assertEquals(3, adapter.getItemCount());
+        // Device card and the empty state; the action floats over the list.
+        assertEquals(2, adapter.getItemCount());
     }
 }
