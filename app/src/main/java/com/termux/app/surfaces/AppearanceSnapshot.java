@@ -59,8 +59,13 @@ final class AppearanceSnapshot {
             mBase[property.ordinal()] = prefs.getSurfaceBaseValue(property);
         List<SurfaceEditorRows.Row> rows = SurfaceEditorRows.rows();
         mRaws = new int[rows.size()];
-        for (int i = 0; i < rows.size(); i++)
-            mRaws[i] = prefs.getSurfaceOverrideValue(rows.get(i).slot, rows.get(i).property);
+        for (int i = 0; i < rows.size(); i++) {
+            // The keyboard's blur is the one cell whose getter resolves an absent key to the
+            // shipped default while its setter stores the raw -1: read it raw here, so a value
+            // that was "follow" at open still reads "follow" after restore.
+            mRaws[i] = isKeyboardBlur(rows.get(i)) ? prefs.getInAppKeyboardBlurRadiusRaw()
+                : prefs.getSurfaceOverrideValue(rows.get(i).slot, rows.get(i).property);
+        }
         mMaterial = prefs.getSurfaceMaterial();
         mIntensity = prefs.getSurfaceMaterialIntensity();
         mDockStyle = prefs.getAppLauncherDockStyle();
@@ -84,6 +89,10 @@ final class AppearanceSnapshot {
         mClockAlignment = prefs.getTopPaneClockAlignment();
     }
 
+    private static boolean isKeyboardBlur(@NonNull SurfaceEditorRows.Row row) {
+        return row.slot == SurfaceSlot.KEYBOARD && row.property == SurfaceProperty.BLUR;
+    }
+
     @NonNull
     static AppearanceSnapshot capture(@NonNull TermuxAppSharedPreferences prefs) {
         return new AppearanceSnapshot(prefs);
@@ -94,8 +103,10 @@ final class AppearanceSnapshot {
         for (SurfaceProperty property : SurfaceProperty.values())
             prefs.setSurfaceBaseValue(property, mBase[property.ordinal()]);
         List<SurfaceEditorRows.Row> rows = SurfaceEditorRows.rows();
-        for (int i = 0; i < rows.size() && i < mRaws.length; i++)
+        for (int i = 0; i < rows.size() && i < mRaws.length; i++) {
+            if (isKeyboardBlur(rows.get(i))) continue; // mKeyboardBlurRaw restores it below
             prefs.setSurfaceRawValue(rows.get(i).slot, rows.get(i).property, mRaws[i]);
+        }
         restoreLinks(prefs, mLinks);
         prefs.setSurfaceMaterial(mMaterial);
         prefs.setSurfaceMaterialIntensity(mIntensity);
