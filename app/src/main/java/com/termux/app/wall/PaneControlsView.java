@@ -27,6 +27,7 @@ import com.termux.R;
 import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.chrome.GlassRefraction;
+import com.termux.app.chrome.wallpaper.LiveWallpaperFrames;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.ArrayList;
@@ -206,6 +207,14 @@ public final class PaneControlsView extends View {
     @Nullable private com.termux.app.chrome.WallpaperParallax mParallax;
     private final int[] mRootLocation = new int[2];
     @Nullable private ColorFilter mFrostFilter;
+    /**
+     * The radius, in dp, the tab's frame was blurred at; the key of its live frame. 0 (the
+     * default) opts out: the still is always drawn.
+     */
+    private float mLiveRadiusDp;
+    private final LiveWallpaperFrames.ShaderCache mLiveShaders = new LiveWallpaperFrames.ShaderCache();
+    /** The live slot shader the paint is bound to right now, or null while it holds the still. */
+    @Nullable private BitmapShader mBoundLive;
     /** Fancier Glass on the tab's blur, or null for the plain frost. */
     @Nullable private GlassRefraction.Look mLook;
     /** The program the blur draws through while {@link #mLook} is set and the phone runs one. */
@@ -320,6 +329,7 @@ public final class PaneControlsView extends View {
      * input when it is set.
      */
     private void syncRefraction() {
+        mBoundLive = null;
         BitmapShader shader = mFrostShader;
         GlassRefraction.Look look = mLook;
         if (look == null || shader == null || !GlassRefraction.available()) {
@@ -341,6 +351,16 @@ public final class PaneControlsView extends View {
         program.setLook(look);
         program.setInput(shader);
         program.applyTo(mFrostPaint);
+    }
+
+    /**
+     * Opts the tab into the live wallpaper frame for {@code radiusDp} (the radius its still was
+     * blurred at); 0 opts out. See {@link LiveWallpaperFrames}.
+     */
+    public void setLiveRadiusDp(float radiusDp) {
+        if (mLiveRadiusDp == radiusDp) return;
+        mLiveRadiusDp = radiusDp;
+        invalidate();
     }
 
     /** True while the tab shows the wallpaper blur under its scrim. */
@@ -669,7 +689,30 @@ public final class PaneControlsView extends View {
         boolean frosted = mFrostFrame != null && !mFrostFrame.isRecycled() && mFrostShader != null
             && (program == null || canvas.isHardwareAccelerated());
         if (frosted) {
-            aimFrost();
+            // The live pick (animated-wallpaper SPEC §3.3): the live slot for this radius stands in
+            // for the still on a hardware canvas, aimed the same way at its own pixel size.
+            Bitmap live = mLiveRadiusDp > 0f && canvas.isHardwareAccelerated()
+                ? LiveWallpaperFrames.get().frame(mLiveRadiusDp) : null;
+            BitmapShader aimShader = mFrostShader;
+            Bitmap aimFrame = mFrostFrame;
+            if (live != null) {
+                aimShader = mLiveShaders.shader(live);
+                aimFrame = live;
+                if (mBoundLive != aimShader) {
+                    mBoundLive = aimShader;
+                    if (program != null) {
+                        // A child rebind, not a compile.
+                        program.setInput(aimShader);
+                        program.applyTo(mFrostPaint);
+                    } else {
+                        mFrostPaint.setShader(aimShader);
+                    }
+                }
+            } else if (mBoundLive != null) {
+                syncRefraction();
+                program = mProgram;
+            }
+            aimFrost(aimFrame);
             if (program != null) {
                 // The same aim, as uniforms; the rim runs along the tab's own free edge and its
                 // one corner, and past the two edges that are the frame's.
@@ -683,7 +726,7 @@ public final class PaneControlsView extends View {
             } else {
                 mFrostMatrix.setScale(mAim[0], mAim[1]);
                 mFrostMatrix.postTranslate(mAim[2], mAim[3]);
-                mFrostShader.setLocalMatrix(mFrostMatrix);
+                aimShader.setLocalMatrix(mFrostMatrix);
             }
             mFrostPaint.setAlpha(Math.round(255f * mProgress));
             canvas.drawRect(mTab.left - dp(1), mTab.top - dp(1), mTab.right + dp(1),
@@ -707,14 +750,13 @@ public final class PaneControlsView extends View {
      * only briefly and the overlay it lives in moves under the keyboard, so caching by position
      * buys nothing here and risks a stale aim.
      */
-    private void aimFrost() {
-        if (mFrostFrame == null || mFrostShader == null) return;
+    private void aimFrost(@NonNull Bitmap frame) {
         float slideX = layoutOriginOnScreen(mLocation);
         // Past the page's slide and the wallpaper's parallax, exactly as the slab aims: the tab
         // is cut from the same glass and has to show the same wallpaper mid-slide.
         float shiftX = slideX + (mParallax == null ? 0f : mParallax.offsetPx());
-        mAim[0] = mFrostRect.width() / (float) Math.max(1, mFrostFrame.getWidth());
-        mAim[1] = mFrostRect.height() / (float) Math.max(1, mFrostFrame.getHeight());
+        mAim[0] = mFrostRect.width() / (float) Math.max(1, frame.getWidth());
+        mAim[1] = mFrostRect.height() / (float) Math.max(1, frame.getHeight());
         mAim[2] = mFrostRect.left - mLocation[0] - shiftX;
         mAim[3] = mFrostRect.top - mLocation[1];
     }

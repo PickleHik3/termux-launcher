@@ -16,6 +16,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.app.chrome.wallpaper.LiveWallpaperFrames;
+
 import java.util.Objects;
 
 /**
@@ -65,6 +67,16 @@ public final class SharedFrameDrawable extends Drawable {
     @Nullable private Bitmap mPreviousFrame;
     @Nullable private BitmapShader mPreviousShader;
     private int mAlpha = 255;
+
+    /**
+     * The radius, in dp, of the blur this surface's frame was cut for; the key of its live frame
+     * ({@link LiveWallpaperFrames#frame}). 0 (the default) opts out: the still is always drawn.
+     */
+    private float mLiveRadiusDp;
+    @NonNull private final LiveWallpaperFrames.ShaderCache mLiveShaders =
+        new LiveWallpaperFrames.ShaderCache();
+    /** The live slot shader the paint is bound to right now, or null while it holds the still. */
+    @Nullable private BitmapShader mBoundLive;
 
     /** Fancier Glass, or null for the plain draw. */
     @Nullable private GlassRefraction.Look mLook;
@@ -139,6 +151,16 @@ public final class SharedFrameDrawable extends Drawable {
         invalidateSelf();
     }
 
+    /**
+     * Opts this surface into the live wallpaper frame for {@code radiusDp} (the radius its still
+     * was blurred at); 0 opts out. See {@link LiveWallpaperFrames}.
+     */
+    public void setLiveRadiusDp(float radiusDp) {
+        if (mLiveRadiusDp == radiusDp) return;
+        mLiveRadiusDp = radiusDp;
+        invalidateSelf();
+    }
+
     /** True while the frame is drawn through the refraction program rather than plain. */
     public boolean refracts() {
         return mProgram != null;
@@ -167,6 +189,7 @@ public final class SharedFrameDrawable extends Drawable {
      * captures its input when it is set.
      */
     private void syncRefraction() {
+        mBoundLive = null;
         GlassRefraction.Look look = mLook;
         BitmapShader shader = mShader;
         if (look == null || shader == null || !GlassRefraction.available()) {
@@ -272,7 +295,31 @@ public final class SharedFrameDrawable extends Drawable {
         // window into its bitmap is one. That pass only feeds another view's blur, so the frame
         // is left out of it rather than drawn and thrown.
         if (program != null && !canvas.isHardwareAccelerated()) return;
-        aim(mAim, mFrameRect, frame.getWidth(), frame.getHeight(), mOrigin[0], mOrigin[1],
+        // The live pick (animated-wallpaper SPEC §3.3): on a hardware canvas the live slot for this
+        // radius stands in for the still, aimed the same way at its own pixel size; null draws the
+        // still exactly as before.
+        Bitmap live = mLiveRadiusDp > 0f && canvas.isHardwareAccelerated()
+            ? LiveWallpaperFrames.get().frame(mLiveRadiusDp) : null;
+        BitmapShader aimShader = shader;
+        Bitmap aimFrame = frame;
+        if (live != null) {
+            aimShader = mLiveShaders.shader(live);
+            aimFrame = live;
+            if (mBoundLive != aimShader) {
+                mBoundLive = aimShader;
+                if (program != null) {
+                    // A child rebind, not a compile.
+                    program.setInput(aimShader);
+                    program.applyTo(mPaint);
+                } else {
+                    mPaint.setShader(aimShader);
+                }
+            }
+        } else if (mBoundLive != null) {
+            syncRefraction();
+            program = mProgram;
+        }
+        aim(mAim, mFrameRect, aimFrame.getWidth(), aimFrame.getHeight(), mOrigin[0], mOrigin[1],
             offsetPx);
         if (program != null) {
             // The same aim, as uniforms: the program samples the frame by its own pixels.
@@ -280,12 +327,12 @@ public final class SharedFrameDrawable extends Drawable {
             program.setRect(mRim[0], mRim[1], mRim[2], mRim[3], mRimRadiusPx);
         } else {
             matrixOf(mMatrix, mAim);
-            shader.setLocalMatrix(mMatrix);
+            aimShader.setLocalMatrix(mMatrix);
         }
         float progress = mCrossfade.progress();
         Bitmap previous = mPreviousFrame;
         BitmapShader previousShader = mPreviousShader;
-        boolean fading = progress < 1f && previous != null && !previous.isRecycled()
+        boolean fading = live == null && progress < 1f && previous != null && !previous.isRecycled()
             && previousShader != null;
         if (fading) {
             // The retired frame shares this rect; only its own pixel size may differ.
