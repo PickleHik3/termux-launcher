@@ -258,7 +258,7 @@ public class EdgeStackPolicyTest {
     // ------------------------------------------------------------------ the stack itself
 
     /**
-     * The order {@code PlaceMiniatureView.computeBlocks} claimed its strips in before it read the
+     * The order {@code LayoutCanvasView.computeBlocks} claimed its strips in before it read the
      * stack: outermost first, the status bar before anything else, a top A&#8211;Z band right
      * under it, then the side columns rail-first, then the bottom stack. The miniature loops over
      * {@link EdgeStackPolicy#stack} now, so this is the shipped picture rather than a second

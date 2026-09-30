@@ -171,7 +171,7 @@ The canvas is drawn from `termux-layout-elements-v2` (developer's pack, 2026-09-
 element states, four palettes, `tokens.json`, `renderer.py`). As its README says: derive every
 bound from the real layout, paint content inside those bounds, keep selection and handles in the
 editor layer, map palette roles onto the live scheme. The SVGs are design sources; the renderer's
-geometry functions port to `PlaceMiniatureView`'s block painters (which already paint from bounds
+geometry functions port to `LayoutCanvasView`'s block painters (which already paint from bounds
 with Canvas and resolve colours through Material attributes). No stretched PNGs.
 
 States from real keys: status bar collapsed or expanded from `status_compact`; keyboard docked,
@@ -226,7 +226,7 @@ missing Left/Right (moot: drag only).
    widget-grid handle; keyboard-type chips; restore tray; Undo snapshot fix; Settings row; labelled
    corner glyph. Can start now.
 2. **Layout canvas redraw** from the element pack; editor layer; rename from miniature. Can start
-   now, disjoint files from item 1 except `PlaceMiniatureView`, so run after item 1 or coordinate.
+   now, disjoint files from item 1 except `LayoutCanvasView`, so run after item 1 or coordinate.
 3. **Bands** for the terminal pane and keyboard; sampler in root coordinates; Legibility as the
    global multiplier.
 4. **The editor shell**: scaled root in a device-radius frame; M3 rebuild; mode pill; Look slider;

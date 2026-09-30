@@ -21,6 +21,7 @@ import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 
 import com.termux.R;
+import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -42,7 +43,7 @@ import org.robolectric.annotation.Config;
 /** The Layout page's miniature follows the rows: a new arrangement at the same size redraws. */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
-public class PlaceMiniatureViewTest {
+public class LayoutCanvasViewTest {
 
     /** A parent that remembers being told to keep its hands off the rest of the gesture. */
     private static final class ScrollingParent extends FrameLayout {
@@ -81,12 +82,12 @@ public class PlaceMiniatureViewTest {
             KeyboardMode.RESIZE, KeyboardForm.DOCKED, widgetColumns, widgetRows);
     }
 
-    private static PlaceMiniatureView sized() {
+    private static LayoutCanvasView sized() {
         return sized(1000, 400);
     }
 
-    private static PlaceMiniatureView sized(int width, int height) {
-        PlaceMiniatureView view = new PlaceMiniatureView(RuntimeEnvironment.getApplication());
+    private static LayoutCanvasView sized(int width, int height) {
+        LayoutCanvasView view = new LayoutCanvasView(RuntimeEnvironment.getApplication());
         view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
         view.layout(0, 0, width, height);
@@ -95,23 +96,23 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void aRowChangeAtTheSameSizeMovesTheBlocks() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        RectF appsBottom = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF appsBottom = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(appsBottom);
-        RectF canvas = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        RectF canvas = view.blockRect(LayoutCanvasView.Block.CANVAS);
         assertTrue("apps row sits under the canvas", appsBottom.top >= canvas.bottom - 0.5f);
 
         view.setLayout(layout(Edge.TOP, RowPlacement.LEFT, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        RectF appsLeft = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF appsLeft = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(appsLeft);
         assertTrue("apps row now stands on the left edge", appsLeft.right <= appsBottom.left
             + appsBottom.width() / 2f);
         assertTrue(appsLeft.height() > appsLeft.width());
         // The A–Z band no longer depends on the apps row: it is still on screen.
-        assertNotNull(view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW));
+        assertNotNull(view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW));
     }
 
     @Test
@@ -119,13 +120,13 @@ public class PlaceMiniatureViewTest {
         // The A-Z index is off for this one: a band claims its share of what the bands outside it
         // left, so a bar measured against a bare edge and one measured under another is not the
         // same height, and the question here is which edge it went to.
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.HIDDEN),
             PlaceOrientation.PORTRAIT);
-        RectF top = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
+        RectF top = view.blockRect(LayoutCanvasView.Block.STATUS_BAR);
         view.setLayout(layout(Edge.BOTTOM, RowPlacement.HIDDEN, false, RowPlacement.HIDDEN),
             PlaceOrientation.PORTRAIT);
-        RectF bottom = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
+        RectF bottom = view.blockRect(LayoutCanvasView.Block.STATUS_BAR);
         assertNotNull(top);
         assertNotNull(bottom);
         assertTrue(bottom.top > top.bottom);
@@ -134,34 +135,34 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void theFrameTurnsWithTheOrientation() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         PlaceLayout arrangement = layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM);
         view.setLayout(arrangement, PlaceOrientation.PORTRAIT);
-        RectF portrait = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        RectF portrait = view.blockRect(LayoutCanvasView.Block.CANVAS);
         view.setLayout(arrangement, PlaceOrientation.LANDSCAPE);
-        RectF landscape = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        RectF landscape = view.blockRect(LayoutCanvasView.Block.CANVAS);
         assertTrue(portrait.width() < portrait.height() * 1.5f);
         assertTrue(landscape.width() > landscape.height());
     }
 
     @Test
     public void thePlaceChangesWhatTheCanvasDraws() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         PlaceLayout arrangement = layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM);
 
         view.setLayout(arrangement, PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
-        assertEquals(PlaceMiniatureView.CanvasKind.TERMINAL, view.canvasKind());
+        assertEquals(LayoutCanvasView.CanvasKind.TERMINAL, view.canvasKind());
 
         view.setLayout(arrangement, PlaceOrientation.PORTRAIT, PaneWallPage.WIDGETS);
-        assertEquals(PlaceMiniatureView.CanvasKind.HOME_GRID, view.canvasKind());
+        assertEquals(LayoutCanvasView.CanvasKind.HOME_GRID, view.canvasKind());
 
         view.setLayout(arrangement, PlaceOrientation.PORTRAIT, PaneWallPage.DISPLAY);
-        assertEquals(PlaceMiniatureView.CanvasKind.DISPLAY, view.canvasKind());
+        assertEquals(LayoutCanvasView.CanvasKind.DISPLAY, view.canvasKind());
     }
 
     @Test
     public void theWidgetGridCollapsesOnlyWhenACellWouldBeTooSmall() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLayout(layout(RowPlacement.BOTTOM, 4, 5), PlaceOrientation.PORTRAIT,
             PaneWallPage.WIDGETS);
         assertTrue("a modest grid draws real cells", !view.isWidgetGridCollapsed());
@@ -173,12 +174,12 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void theAlphabetsRowSitsBetweenThePinnedAppsAndTheExtraKeys() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
-        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
-        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF apps = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        RectF az = view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW);
+        RectF keys = view.blockRect(LayoutCanvasView.Block.EXTRA_KEYS);
         assertNotNull(apps);
         assertNotNull(az);
         assertNotNull(keys);
@@ -189,22 +190,22 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void everyBlockHasALegendRowAndHiddenOnesAreMarked() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        for (PlaceMiniatureView.Block block : PlaceMiniatureView.Block.values()) {
+        for (LayoutCanvasView.Block block : LayoutCanvasView.Block.values()) {
             assertNotNull("legend row for " + block, view.legendRect(block));
         }
-        assertTrue("hidden apps row is marked", view.isBlockHidden(PlaceMiniatureView.Block.APPS_ROW));
+        assertTrue("hidden apps row is marked", view.isBlockHidden(LayoutCanvasView.Block.APPS_ROW));
         assertTrue("A–Z shows regardless of the apps row",
-            !view.isBlockHidden(PlaceMiniatureView.Block.ALPHABETS_ROW));
-        assertTrue("extra keys are on screen", !view.isBlockHidden(PlaceMiniatureView.Block.EXTRA_KEYS));
+            !view.isBlockHidden(LayoutCanvasView.Block.ALPHABETS_ROW));
+        assertTrue("extra keys are on screen", !view.isBlockHidden(LayoutCanvasView.Block.EXTRA_KEYS));
         assertNull("a hidden block is off the picture",
-            view.blockRect(PlaceMiniatureView.Block.APPS_ROW));
+            view.blockRect(LayoutCanvasView.Block.APPS_ROW));
 
         // The legend stands beside the phone, never over it.
-        RectF frame = view.blockRect(PlaceMiniatureView.Block.CANVAS);
-        RectF legend = view.legendRect(PlaceMiniatureView.Block.STATUS_BAR);
+        RectF frame = view.blockRect(LayoutCanvasView.Block.CANVAS);
+        RectF legend = view.legendRect(LayoutCanvasView.Block.STATUS_BAR);
         assertNotNull(frame);
         assertTrue("legend clear of the phone", legend.left >= frame.right);
     }
@@ -212,51 +213,51 @@ public class PlaceMiniatureViewTest {
     @Test
     public void withoutALegendThePhoneTakesTheWholeView() {
         // Narrow enough that the width, not the height, is what the phone has to fit inside.
-        PlaceMiniatureView view = sized(200, 400);
+        LayoutCanvasView view = sized(200, 400);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
-        RectF withLegend = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        RectF withLegend = view.blockRect(LayoutCanvasView.Block.CANVAS);
         assertNotNull(withLegend);
-        assertNotNull(view.legendRect(PlaceMiniatureView.Block.STATUS_BAR));
+        assertNotNull(view.legendRect(LayoutCanvasView.Block.STATUS_BAR));
 
         view.setLegendVisible(false);
-        RectF alone = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        RectF alone = view.blockRect(LayoutCanvasView.Block.CANVAS);
         assertNotNull(alone);
         assertNull("no legend row is laid out",
-            view.legendRect(PlaceMiniatureView.Block.STATUS_BAR));
+            view.legendRect(LayoutCanvasView.Block.STATUS_BAR));
         assertTrue("the phone grew into the legend's width", alone.width() > withLegend.width());
     }
 
     @Test
     public void theAlphabetsRowIsIndependentOfTheAppsRow() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
 
         // Apps row hidden entirely: the A–Z band still shows.
         view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, true, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
         assertNotNull("A–Z shows with the apps row hidden",
-            view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW));
+            view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW));
 
         // Apps row on a side rail: the A–Z band still shows, along the bottom.
         view.setLayout(layout(Edge.TOP, RowPlacement.LEFT, true, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
         assertNotNull("A–Z shows with the apps row on a rail",
-            view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW));
+            view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW));
 
         // The switch itself, not the apps row, controls the band.
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, false, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
         assertNull("the switch being off hides the band",
-            view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW));
+            view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW));
     }
 
     @Test
     public void aSideRailStandsOutsideAnExtraKeysColumnOnTheSameSide() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLayout(layout(Edge.TOP, RowPlacement.LEFT, RowPlacement.LEFT),
             PlaceOrientation.LANDSCAPE);
-        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
-        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF apps = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        RectF keys = view.blockRect(LayoutCanvasView.Block.EXTRA_KEYS);
         assertNotNull(apps);
         assertNotNull(keys);
         // The real device: the pinned-apps rail sits at the screen edge, the extra-keys column is
@@ -267,14 +268,14 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void theAzBarEdgeAlwaysApplies() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         // Riding the apps row is the two of them sharing the bottom: the band lies between the
         // pinned apps and the extra keys, which is the default arrangement.
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
             RowPlacement.BOTTOM), PlaceOrientation.LANDSCAPE);
-        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
-        RectF ridingRow = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
-        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF apps = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        RectF ridingRow = view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW);
+        RectF keys = view.blockRect(LayoutCanvasView.Block.EXTRA_KEYS);
         assertNotNull(apps);
         assertNotNull(ridingRow);
         assertNotNull(keys);
@@ -287,7 +288,7 @@ public class PlaceMiniatureViewTest {
         // it stands in a column of its own.
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.LEFT, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
-        RectF column = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        RectF column = view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW);
         assertNotNull(column);
         assertTrue("its stored side edge stands it in a column", column.height() > column.width());
     }
@@ -299,13 +300,13 @@ public class PlaceMiniatureViewTest {
     @Test
     public void draggingOnlyTheAppsRowToTheTopLeavesTheIndexAtTheBottom() {
         PlaceLayoutStore places = store();
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
             RowPlacement.BOTTOM), PlaceOrientation.LANDSCAPE);
         view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
 
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         MiniatureDragPolicy.Slot top = view.slotFor(Edge.TOP);
@@ -319,8 +320,8 @@ public class PlaceMiniatureViewTest {
         assertFalse("and so stopped riding the row", after.slot(Element.AZ).hidden);
 
         view.setLayout(after, PlaceOrientation.LANDSCAPE);
-        RectF movedRow = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
-        RectF index = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        RectF movedRow = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        RectF index = view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW);
         assertNotNull(movedRow);
         assertNotNull(index);
         assertTrue("the row went to the top", movedRow.top < view.getHeight() / 2f);
@@ -329,11 +330,11 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void aTopAzBarStandsRightUnderTheStatusBar() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLayout(layout(Edge.TOP, RowPlacement.LEFT, true, Edge.TOP, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
-        RectF status = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
-        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        RectF status = view.blockRect(LayoutCanvasView.Block.STATUS_BAR);
+        RectF az = view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW);
         assertNotNull(status);
         assertNotNull(az);
         assertTrue("the band sits right under the status bar", az.top >= status.bottom - 0.5f);
@@ -342,12 +343,12 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void aSideAzBarIsInnermostOfTheSideColumns() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLayout(layout(Edge.TOP, RowPlacement.LEFT, true, Edge.LEFT, RowPlacement.LEFT),
             PlaceOrientation.LANDSCAPE);
-        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
-        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
-        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        RectF apps = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        RectF keys = view.blockRect(LayoutCanvasView.Block.EXTRA_KEYS);
+        RectF az = view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW);
         assertNotNull(apps);
         assertNotNull(keys);
         assertNotNull(az);
@@ -358,9 +359,9 @@ public class PlaceMiniatureViewTest {
         // The right edge mirrors the same order from the other side.
         view.setLayout(layout(Edge.TOP, RowPlacement.RIGHT, true, Edge.RIGHT, RowPlacement.RIGHT),
             PlaceOrientation.LANDSCAPE);
-        RectF appsRight = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
-        RectF keysRight = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
-        RectF azRight = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        RectF appsRight = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        RectF keysRight = view.blockRect(LayoutCanvasView.Block.EXTRA_KEYS);
+        RectF azRight = view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW);
         assertNotNull(appsRight);
         assertNotNull(keysRight);
         assertNotNull(azRight);
@@ -370,12 +371,12 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void bottomStackingOrderIsUnchanged() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
-        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
-        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF apps = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        RectF az = view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW);
+        RectF keys = view.blockRect(LayoutCanvasView.Block.EXTRA_KEYS);
         assertNotNull(apps);
         assertNotNull(az);
         assertNotNull(keys);
@@ -389,13 +390,13 @@ public class PlaceMiniatureViewTest {
     public void aBottomStatusBarIsTheInnermostBandOfTheBottomStack() {
         // The launcher draws it above the whole dock; the picture used to claim it first and draw
         // it under everything, which is the one arrangement the two disagreed on.
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLayout(layout(Edge.BOTTOM, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        RectF status = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
-        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
-        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
-        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF status = view.blockRect(LayoutCanvasView.Block.STATUS_BAR);
+        RectF apps = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        RectF az = view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW);
+        RectF keys = view.blockRect(LayoutCanvasView.Block.EXTRA_KEYS);
         assertNotNull(status);
         assertNotNull(apps);
         assertNotNull(az);
@@ -409,13 +410,13 @@ public class PlaceMiniatureViewTest {
     public void everyBandOnOneEdgeIsDrawnInTheStackOrder() {
         // All four down the left: the status column, the rail, the extra keys and then the index,
         // which is the order a side stack has always been drawn in.
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLayout(layout(Edge.LEFT, RowPlacement.LEFT, true, Edge.LEFT, RowPlacement.LEFT),
             PlaceOrientation.LANDSCAPE);
-        RectF status = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
-        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
-        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
-        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        RectF status = view.blockRect(LayoutCanvasView.Block.STATUS_BAR);
+        RectF apps = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        RectF keys = view.blockRect(LayoutCanvasView.Block.EXTRA_KEYS);
+        RectF az = view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW);
         assertNotNull(status);
         assertNotNull(apps);
         assertNotNull(keys);
@@ -423,28 +424,28 @@ public class PlaceMiniatureViewTest {
         assertTrue("the status column is outermost", status.right <= apps.left + 0.5f);
         assertTrue("then the rail", apps.right <= keys.left + 0.5f);
         assertTrue("then the extra keys", keys.right <= az.left + 0.5f);
-        RectF canvas = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        RectF canvas = view.blockRect(LayoutCanvasView.Block.CANVAS);
         assertNotNull(canvas);
         assertTrue("and the canvas has what is left", az.right <= canvas.left + 0.5f);
     }
 
     @Test
     public void aReorderedStackIsDrawnInItsNewOrder() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         PlaceLayout stacked = layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM);
         view.setLayout(stacked, PlaceOrientation.PORTRAIT);
         assertTrue("the extra keys start against the screen edge",
-            view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS).bottom
-                >= view.blockRect(PlaceMiniatureView.Block.APPS_ROW).bottom);
+            view.blockRect(LayoutCanvasView.Block.EXTRA_KEYS).bottom
+                >= view.blockRect(LayoutCanvasView.Block.APPS_ROW).bottom);
 
         // The pinned apps pulled out to the screen edge, everything else pushed in behind them.
         view.setLayout(stacked
             .withSlot(Element.APPS, Slot.on(Edge.BOTTOM, 0))
             .withSlot(Element.EXTRA_KEYS, Slot.on(Edge.BOTTOM, 1))
             .withSlot(Element.AZ, Slot.on(Edge.BOTTOM, 2)), PlaceOrientation.PORTRAIT);
-        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
-        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
-        RectF az = view.blockRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        RectF apps = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        RectF keys = view.blockRect(LayoutCanvasView.Block.EXTRA_KEYS);
+        RectF az = view.blockRect(LayoutCanvasView.Block.ALPHABETS_ROW);
         assertNotNull(apps);
         assertNotNull(keys);
         assertNotNull(az);
@@ -455,8 +456,8 @@ public class PlaceMiniatureViewTest {
 
     // ---- Grips, slots and the drag -------------------------------------------------------------
 
-    private static PlaceMiniatureView inParent(ScrollingParent parent, int width, int height) {
-        PlaceMiniatureView view = new PlaceMiniatureView(parent.getContext());
+    private static LayoutCanvasView inParent(ScrollingParent parent, int width, int height) {
+        LayoutCanvasView view = new LayoutCanvasView(parent.getContext());
         parent.addView(view, new FrameLayout.LayoutParams(width, height));
         parent.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
@@ -468,17 +469,17 @@ public class PlaceMiniatureViewTest {
         return new ScrollingParent(RuntimeEnvironment.getApplication());
     }
 
-    private static void touch(PlaceMiniatureView view, int action, float x, float y) {
+    private static void touch(LayoutCanvasView view, int action, float x, float y) {
         MotionEvent event = MotionEvent.obtain(0L, 0L, action, x, y, 0);
         view.onTouchEvent(event);
         event.recycle();
     }
 
     /** Writes a drop the way the Layout editor does, for one miniature's orientation. */
-    private static PlaceMiniatureView.OnBarDroppedListener writer(
+    private static LayoutCanvasView.OnBarDroppedListener writer(
         PlaceLayoutStore places, PlaceOrientation orientation) {
         return (bar, edge, index) -> {
-            MiniatureDragPolicy.Bar dragged = PlaceMiniatureView.barOf(bar);
+            MiniatureDragPolicy.Bar dragged = LayoutCanvasView.barOf(bar);
             assertNotNull(dragged);
             LayoutChooserModel.applyDrop(places, orientation, dragged, edge,
                 index);
@@ -501,13 +502,13 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void everyBarWithAPlacementCarriesAGripAndNothingElseDoes() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        for (PlaceMiniatureView.Block bar : new PlaceMiniatureView.Block[]{
-            PlaceMiniatureView.Block.STATUS_BAR, PlaceMiniatureView.Block.APPS_ROW,
-            PlaceMiniatureView.Block.ALPHABETS_ROW, PlaceMiniatureView.Block.EXTRA_KEYS}) {
+        for (LayoutCanvasView.Block bar : new LayoutCanvasView.Block[]{
+            LayoutCanvasView.Block.STATUS_BAR, LayoutCanvasView.Block.APPS_ROW,
+            LayoutCanvasView.Block.ALPHABETS_ROW, LayoutCanvasView.Block.EXTRA_KEYS}) {
             RectF grip = view.gripRect(bar);
             assertNotNull("grip for " + bar, grip);
             RectF band = view.blockRect(bar);
@@ -516,7 +517,7 @@ public class PlaceMiniatureViewTest {
                 band.contains(grip.centerX(), grip.centerY()));
         }
         assertNull("the terminal has no placement to drag",
-            view.gripRect(PlaceMiniatureView.Block.CANVAS));
+            view.gripRect(LayoutCanvasView.Block.CANVAS));
     }
 
     /**
@@ -525,17 +526,17 @@ public class PlaceMiniatureViewTest {
      */
     @Test
     public void aHiddenBarIsListedForTheTrayAndHasNoGripOnThePhone() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
         assertNull("nothing is drawn on the phone for it",
-            view.blockRect(PlaceMiniatureView.Block.APPS_ROW));
+            view.blockRect(LayoutCanvasView.Block.APPS_ROW));
         assertTrue("the hidden bar is listed for the tray",
-            view.hiddenBlocks().contains(PlaceMiniatureView.Block.APPS_ROW));
+            view.hiddenBlocks().contains(LayoutCanvasView.Block.APPS_ROW));
         assertFalse("a bar on the phone is not",
-            view.hiddenBlocks().contains(PlaceMiniatureView.Block.EXTRA_KEYS));
-        assertNull(view.gripRect(PlaceMiniatureView.Block.APPS_ROW));
+            view.hiddenBlocks().contains(LayoutCanvasView.Block.EXTRA_KEYS));
+        assertNull(view.gripRect(LayoutCanvasView.Block.APPS_ROW));
         RectF frame = view.frameRect();
         assertTrue("the tray stands under the phone", view.trayRect().top >= frame.bottom);
     }
@@ -543,16 +544,16 @@ public class PlaceMiniatureViewTest {
     @Test
     public void aTouchOnAGripLiftsTheBarAtOnceAndStopsTheListScrolling() {
         ScrollingParent parent = parent();
-        PlaceMiniatureView view = inParent(parent, 1000, 400);
+        LayoutCanvasView view = inParent(parent, 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
 
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         assertEquals("no long press: the bar is up on touch-down",
-            PlaceMiniatureView.Block.APPS_ROW, view.draggedBar());
+            LayoutCanvasView.Block.APPS_ROW, view.draggedBar());
         assertTrue("the preference list is told to keep out", parent.disallowedIntercept);
         assertNotNull("landscape offers a column down the left", view.slotFor(Edge.LEFT));
         assertNotNull(view.slotFor(Edge.RIGHT));
@@ -562,12 +563,12 @@ public class PlaceMiniatureViewTest {
     @Test
     public void aTouchOffTheGripsLiftsNothingAndLeavesTheListAlone() {
         ScrollingParent parent = parent();
-        PlaceMiniatureView view = inParent(parent, 1000, 400);
+        LayoutCanvasView view = inParent(parent, 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
 
-        RectF band = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF band = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(band);
         touch(view, MotionEvent.ACTION_DOWN, band.left + 2f, band.centerY());
         assertNull("a tap on the band is still a tap", view.draggedBar());
@@ -578,13 +579,13 @@ public class PlaceMiniatureViewTest {
     @Test
     public void aDragOntoASideSlotWritesThatEdgeForTheOrientationItWasDoneIn() {
         PlaceLayoutStore places = store();
-        PlaceMiniatureView landscape = inParent(parent(), 1000, 400);
+        LayoutCanvasView landscape = inParent(parent(), 1000, 400);
         landscape.setLegendVisible(false);
         landscape.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
         landscape.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
 
-        RectF grip = landscape.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF grip = landscape.gripRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(grip);
         touch(landscape, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         MiniatureDragPolicy.Slot slot = landscape.slotFor(Edge.LEFT);
@@ -598,12 +599,12 @@ public class PlaceMiniatureViewTest {
             prefs().getString("layout.portrait.apps_row", null));
 
         // The same drag on the portrait miniature writes portrait's own key.
-        PlaceMiniatureView portrait = inParent(parent(), 1000, 400);
+        LayoutCanvasView portrait = inParent(parent(), 1000, 400);
         portrait.setLegendVisible(false);
         portrait.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
         portrait.setOnBarDroppedListener(writer(places, PlaceOrientation.PORTRAIT));
-        RectF portraitGrip = portrait.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF portraitGrip = portrait.gripRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(portraitGrip);
         touch(portrait, MotionEvent.ACTION_DOWN, portraitGrip.centerX(), portraitGrip.centerY());
         assertNotNull("portrait offers the side columns too", portrait.slotFor(Edge.LEFT));
@@ -618,17 +619,17 @@ public class PlaceMiniatureViewTest {
     @Test
     public void aReleaseOffEverySlotWritesNothing() {
         PlaceLayoutStore places = store();
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
         view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
 
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.EXTRA_KEYS);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         // The middle of the canvas is inside no slot at all.
-        RectF canvas = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        RectF canvas = view.blockRect(LayoutCanvasView.Block.CANVAS);
         assertNotNull(canvas);
         touch(view, MotionEvent.ACTION_MOVE, canvas.centerX(), canvas.centerY());
         touch(view, MotionEvent.ACTION_UP, canvas.centerX(), canvas.centerY());
@@ -642,13 +643,13 @@ public class PlaceMiniatureViewTest {
     @Test
     public void theStatusBarIsOfferedTheTrayLikeAnyOtherBar() {
         PlaceLayoutStore places = store();
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
         view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
 
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.STATUS_BAR);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.STATUS_BAR);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         assertNotNull("it may stand on any edge", view.slotFor(Edge.TOP));
@@ -664,15 +665,15 @@ public class PlaceMiniatureViewTest {
 
         // Put away, it is listed for the tray's chips and is gone from the phone.
         view.setLayout(places.resolve(PlaceOrientation.LANDSCAPE), PlaceOrientation.LANDSCAPE);
-        assertNull(view.blockRect(PlaceMiniatureView.Block.STATUS_BAR));
-        assertTrue(view.hiddenBlocks().contains(PlaceMiniatureView.Block.STATUS_BAR));
-        assertEquals(PlaceMiniatureView.TrayState.CHIPS, view.trayState());
+        assertNull(view.blockRect(LayoutCanvasView.Block.STATUS_BAR));
+        assertTrue(view.hiddenBlocks().contains(LayoutCanvasView.Block.STATUS_BAR));
+        assertEquals(LayoutCanvasView.TrayState.CHIPS, view.trayState());
     }
 
     /** At rest a touch on the tray is not the canvas's: the editor's chips stand there. */
     @Test
     public void aTouchOnTheTrayAtRestGoesOnToTheChipsUnderIt() {
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
@@ -688,32 +689,32 @@ public class PlaceMiniatureViewTest {
     /** A tap selects an element; the dock's selection carries one handle on its inner edge. */
     @Test
     public void aTapSelectsTheDockAndItsHandleStandsOnItsInnerEdge() {
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
-        RectF band = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF band = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(band);
         touch(view, MotionEvent.ACTION_DOWN, band.left + 2f, band.centerY());
         touch(view, MotionEvent.ACTION_UP, band.left + 2f, band.centerY());
-        assertEquals(PlaceMiniatureView.Block.APPS_ROW, view.selectedBlock());
-        RectF handle = view.handleRect(PlaceMiniatureView.Handle.DOCK_HEIGHT);
+        assertEquals(LayoutCanvasView.Block.APPS_ROW, view.selectedBlock());
+        RectF handle = view.handleRect(LayoutCanvasView.Handle.DOCK_HEIGHT);
         assertNotNull(handle);
         assertEquals("on the edge that faces the canvas", band.top, handle.centerY(), 1f);
         assertNull("no keyboard handles for the dock",
-            view.handleRect(PlaceMiniatureView.Handle.KEYBOARD_HEIGHT));
+            view.handleRect(LayoutCanvasView.Handle.KEYBOARD_HEIGHT));
     }
 
     /** Dragging the dock's handle up reports a taller dock; letting go ends the gesture. */
     @Test
     public void theDocksHandleDraggedUpAsksForATallerDock() {
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
         float[] asked = {Float.NaN};
         boolean[] released = {false};
-        view.setOnCanvasEditListener(new PlaceMiniatureView.OnCanvasEditListener() {
+        view.setOnCanvasEditListener(new LayoutCanvasView.OnCanvasEditListener() {
             @Override public void onDockHeightDragged(float scale) {
                 asked[0] = scale;
             }
@@ -722,11 +723,11 @@ public class PlaceMiniatureViewTest {
                 released[0] = true;
             }
         });
-        view.setSelectedBlock(PlaceMiniatureView.Block.APPS_ROW);
-        RectF handle = view.handleRect(PlaceMiniatureView.Handle.DOCK_HEIGHT);
+        view.setSelectedBlock(LayoutCanvasView.Block.APPS_ROW);
+        RectF handle = view.handleRect(LayoutCanvasView.Handle.DOCK_HEIGHT);
         assertNotNull(handle);
         touch(view, MotionEvent.ACTION_DOWN, handle.centerX(), handle.centerY());
-        assertEquals(PlaceMiniatureView.Handle.DOCK_HEIGHT, view.draggedHandle());
+        assertEquals(LayoutCanvasView.Handle.DOCK_HEIGHT, view.draggedHandle());
         assertNull("a handle is not a lift", view.draggedBar());
         touch(view, MotionEvent.ACTION_MOVE, handle.centerX(), handle.centerY() - 10f);
         assertTrue("taller", asked[0] > com.termux.shared.termux.settings.preferences
@@ -739,7 +740,7 @@ public class PlaceMiniatureViewTest {
     /** The keyboard, selected, has a handle on its top and one on the bottom of its keys. */
     @Test
     public void theKeyboardSelectedCarriesItsHeightAndChinHandles() {
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
@@ -747,9 +748,9 @@ public class PlaceMiniatureViewTest {
         assertNotNull(keyboard);
         touch(view, MotionEvent.ACTION_DOWN, keyboard.centerX(), keyboard.centerY());
         touch(view, MotionEvent.ACTION_UP, keyboard.centerX(), keyboard.centerY());
-        assertEquals(PlaceMiniatureView.Block.KEYBOARD, view.selectedBlock());
-        RectF height = view.handleRect(PlaceMiniatureView.Handle.KEYBOARD_HEIGHT);
-        RectF chin = view.handleRect(PlaceMiniatureView.Handle.KEYBOARD_CHIN);
+        assertEquals(LayoutCanvasView.Block.KEYBOARD, view.selectedBlock());
+        RectF height = view.handleRect(LayoutCanvasView.Handle.KEYBOARD_HEIGHT);
+        RectF chin = view.handleRect(LayoutCanvasView.Handle.KEYBOARD_CHIN);
         assertNotNull(height);
         assertNotNull(chin);
         assertTrue("the height handle is above the chin's", height.centerY() < chin.centerY());
@@ -758,12 +759,12 @@ public class PlaceMiniatureViewTest {
     /** The keyboard lifted off the phone may go to the tray alone, and is put away there. */
     @Test
     public void theKeyboardDraggedIntoTheTrayIsPutAway() {
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
         boolean[] putAway = {false};
-        view.setOnCanvasEditListener(new PlaceMiniatureView.OnCanvasEditListener() {
+        view.setOnCanvasEditListener(new LayoutCanvasView.OnCanvasEditListener() {
             @Override public void onKeyboardPutAway() {
                 putAway[0] = true;
             }
@@ -773,7 +774,7 @@ public class PlaceMiniatureViewTest {
         RectF tray = view.trayRect();
         touch(view, MotionEvent.ACTION_DOWN, keyboard.centerX(), keyboard.centerY());
         touch(view, MotionEvent.ACTION_MOVE, tray.centerX(), tray.centerY());
-        assertEquals(PlaceMiniatureView.Block.KEYBOARD, view.draggedBar());
+        assertEquals(LayoutCanvasView.Block.KEYBOARD, view.draggedBar());
         for (MiniatureDragPolicy.Slot slot : view.slots())
             assertTrue("the tray is the keyboard's one target", slot.isTray());
         touch(view, MotionEvent.ACTION_UP, tray.centerX(), tray.centerY());
@@ -783,30 +784,30 @@ public class PlaceMiniatureViewTest {
     @Test
     public void aCornerHandleSnapsToWholeCells() {
         // The first cell's corner at a third of the way across a 300px area with a 6px gap.
-        assertEquals(3, PlaceMiniatureView.cellsFor(0f, 300f, 96f, 6f, 1, 8));
+        assertEquals(3, LayoutCanvasView.cellsFor(0f, 300f, 96f, 6f, 1, 8));
         assertEquals("dragged out, bigger and fewer cells", 2,
-            PlaceMiniatureView.cellsFor(0f, 300f, 147f, 6f, 1, 8));
+            LayoutCanvasView.cellsFor(0f, 300f, 147f, 6f, 1, 8));
         assertEquals("never past the store's range", 8,
-            PlaceMiniatureView.cellsFor(0f, 300f, 2f, 6f, 1, 8));
+            LayoutCanvasView.cellsFor(0f, 300f, 2f, 6f, 1, 8));
     }
 
     @Test
     public void aScaleDraggedKeepsTheEdgeUnderTheFingerAndStaysInRange() {
-        assertEquals(2f, PlaceMiniatureView.scaleFor(1f, 50f, 50f, 0.5f, 3f), 1e-4f);
-        assertEquals(0.5f, PlaceMiniatureView.scaleFor(1f, 50f, -100f, 0.5f, 3f), 1e-4f);
-        assertEquals(3f, PlaceMiniatureView.scaleFor(1f, 50f, 500f, 0.5f, 3f), 1e-4f);
+        assertEquals(2f, LayoutCanvasView.scaleFor(1f, 50f, 50f, 0.5f, 3f), 1e-4f);
+        assertEquals(0.5f, LayoutCanvasView.scaleFor(1f, 50f, -100f, 0.5f, 3f), 1e-4f);
+        assertEquals(3f, LayoutCanvasView.scaleFor(1f, 50f, 500f, 0.5f, 3f), 1e-4f);
     }
 
     @Test
     public void theAzIndexRidingThePinnedAppsIsDraggedOffTheRowOrIntoTheTray() {
         PlaceLayoutStore places = store();
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
         view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
 
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.ALPHABETS_ROW);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.ALPHABETS_ROW);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         // Riding is the two of them sharing an edge, so the index may be lifted off the row onto
@@ -821,12 +822,12 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void anEdgeOffersAGapBetweenEveryPairOfItsBands() {
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
 
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.EXTRA_KEYS);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         // The bottom keeps the A-Z index and the pinned apps while the keys are in the air: a gap
@@ -854,7 +855,7 @@ public class PlaceMiniatureViewTest {
     @Test
     public void aDropIntoAGapWritesEveryBandOnThatEdgeItsNewPosition() {
         PlaceLayoutStore places = store();
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
@@ -862,7 +863,7 @@ public class PlaceMiniatureViewTest {
 
         // The pinned apps lifted off the innermost band of the bottom and dropped against the
         // screen edge: every band down there is renumbered, not only the one that moved.
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         MiniatureDragPolicy.Slot outermost = view.slotFor(Edge.BOTTOM, 0);
@@ -894,13 +895,13 @@ public class PlaceMiniatureViewTest {
         // height of the phone — past the dock and into its corner, taking the grip that lifts it
         // down there — while the dock's rows were narrowed by it. The screen has done neither
         // since the canvas band.
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLegendVisible(false);
         view.setLayout(appsOnTheLeft(), PlaceOrientation.PORTRAIT);
 
-        RectF column = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
-        RectF canvas = view.blockRect(PlaceMiniatureView.Block.CANVAS);
-        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
+        RectF column = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        RectF canvas = view.blockRect(LayoutCanvasView.Block.CANVAS);
+        RectF keys = view.blockRect(LayoutCanvasView.Block.EXTRA_KEYS);
         assertNotNull(column);
         assertNotNull(canvas);
         assertNotNull(keys);
@@ -912,12 +913,12 @@ public class PlaceMiniatureViewTest {
     @Test
     public void aSideColumnCarriesItsGripInsideItselfAndLiftsFromRightAcrossIt() {
         ScrollingParent parent = parent();
-        PlaceMiniatureView view = inParent(parent, 1000, 400);
+        LayoutCanvasView view = inParent(parent, 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(appsOnTheLeft(), PlaceOrientation.PORTRAIT);
 
-        RectF column = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF column = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(column);
         assertNotNull(grip);
         assertTrue("the grip rides inside the column it lifts",
@@ -926,15 +927,15 @@ public class PlaceMiniatureViewTest {
         // A column the picture draws is a few dp wide; the grip has to be the width of the band
         // rather than of the glyph, or no fingertip lands on it.
         touch(view, MotionEvent.ACTION_DOWN, column.centerX(), grip.centerY());
-        assertEquals(PlaceMiniatureView.Block.APPS_ROW, view.draggedBar());
+        assertEquals(LayoutCanvasView.Block.APPS_ROW, view.draggedBar());
         assertEquals(Element.APPS,
-            PlaceMiniatureView.barOf(view.draggedBar()).element());
+            LayoutCanvasView.barOf(view.draggedBar()).element());
         assertTrue("the preference list is told to keep out", parent.disallowedIntercept);
     }
 
     @Test
     public void thePictureNamesEveryBarAndWhereItStands() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
@@ -957,10 +958,10 @@ public class PlaceMiniatureViewTest {
         int container = ContextCompat.getColor(app, R.color.termux_surface_panel_high);
         int[] roles = {R.color.termux_primary, R.color.termux_secondary,
             R.color.termux_accent_container, R.color.termux_tertiary_container};
-        for (PlaceMiniatureView.Block bar : new PlaceMiniatureView.Block[]{
-            PlaceMiniatureView.Block.STATUS_BAR, PlaceMiniatureView.Block.APPS_ROW,
-            PlaceMiniatureView.Block.ALPHABETS_ROW, PlaceMiniatureView.Block.EXTRA_KEYS}) {
-            int fill = PlaceMiniatureView.blockColor(app, bar);
+        for (LayoutCanvasView.Block bar : new LayoutCanvasView.Block[]{
+            LayoutCanvasView.Block.STATUS_BAR, LayoutCanvasView.Block.APPS_ROW,
+            LayoutCanvasView.Block.ALPHABETS_ROW, LayoutCanvasView.Block.EXTRA_KEYS}) {
+            int fill = LayoutCanvasView.blockColor(app, bar);
             assertEquals(bar + " is the raised container", container, fill);
             assertEquals(bar + " is opaque: a card, not glass", 255, Color.alpha(fill));
             assertNotEquals(bar + " stands off the surface", surface, fill);
@@ -970,29 +971,29 @@ public class PlaceMiniatureViewTest {
             }
         }
         assertEquals("the canvas is the surface itself",
-            surface, PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.CANVAS));
+            surface, LayoutCanvasView.blockColor(app, LayoutCanvasView.Block.CANVAS));
     }
 
     @Test
     public void everyStripCarriesTheSameContainer() {
         Context app = RuntimeEnvironment.getApplication();
-        int status = PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.STATUS_BAR);
-        assertEquals(status, PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.APPS_ROW));
+        int status = LayoutCanvasView.blockColor(app, LayoutCanvasView.Block.STATUS_BAR);
+        assertEquals(status, LayoutCanvasView.blockColor(app, LayoutCanvasView.Block.APPS_ROW));
         assertEquals(status,
-            PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.ALPHABETS_ROW));
+            LayoutCanvasView.blockColor(app, LayoutCanvasView.Block.ALPHABETS_ROW));
         assertEquals(status,
-            PlaceMiniatureView.blockColor(app, PlaceMiniatureView.Block.EXTRA_KEYS));
+            LayoutCanvasView.blockColor(app, LayoutCanvasView.Block.EXTRA_KEYS));
     }
 
     @Test
     public void thePhoneIsDrawnInUnitsOfItsOwnShortSide() {
         // The artwork is laid out on a 240-wide phone; whatever size the editor gives the frame,
         // its corner and its rim are the design's, scaled by that unit.
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        RectF canvas = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        RectF canvas = view.blockRect(LayoutCanvasView.Block.CANVAS);
         assertNotNull(canvas);
         float unit = view.unitPx();
         assertTrue("one unit is a 240th of the short side, so under a px here", unit < 1f);
@@ -1000,7 +1001,7 @@ public class PlaceMiniatureViewTest {
         assertEquals("the rim is the design's 1.5 units", 1.5f * unit, view.frameStrokePx(), 0.01f);
 
         // A larger view scales the unit with it: the picture grows rather than the gaps.
-        PlaceMiniatureView larger = sized(1000, 800);
+        LayoutCanvasView larger = sized(1000, 800);
         larger.setLegendVisible(false);
         larger.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
@@ -1009,14 +1010,14 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void theKeyboardBlockStandsAlongTheBottomWhereThePlaceShowsIt() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLegendVisible(false);
         PlaceLayout arrangement = layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM);
 
         view.setLayout(arrangement, PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
         RectF keyboard = view.keyboardRect();
-        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
-        RectF canvas = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        RectF keys = view.blockRect(LayoutCanvasView.Block.EXTRA_KEYS);
+        RectF canvas = view.blockRect(LayoutCanvasView.Block.CANVAS);
         assertNotNull("the terminal shows its keyboard", keyboard);
         assertNotNull(keys);
         assertNotNull(canvas);
@@ -1038,19 +1039,19 @@ public class PlaceMiniatureViewTest {
         view.setLayout(arrangement.withKeyboardShown(false), PlaceOrientation.PORTRAIT,
             PaneWallPage.TERMINAL);
         assertNull("the keyboard element off is no keyboard at all", view.keyboardRect());
-        RectF taller = view.blockRect(PlaceMiniatureView.Block.CANVAS);
+        RectF taller = view.blockRect(LayoutCanvasView.Block.CANVAS);
         assertNotNull(taller);
         assertTrue("and the pane takes the room it left", taller.height() > canvas.height());
     }
 
     @Test
     public void theGripSitsAtTheUpperTrailingCornerAndTakesAFingertip() {
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
-        RectF band = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.STATUS_BAR);
+        RectF band = view.blockRect(LayoutCanvasView.Block.STATUS_BAR);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.STATUS_BAR);
         assertNotNull(band);
         assertNotNull(grip);
         assertTrue("at the trailing end", grip.centerX() > band.centerX() + band.width() * 0.3f);
@@ -1060,54 +1061,54 @@ public class PlaceMiniatureViewTest {
         // little off the dots, across the band, still lifts the bar.
         float density = view.getResources().getDisplayMetrics().density;
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY() + 20f * density);
-        assertEquals(PlaceMiniatureView.Block.STATUS_BAR, view.draggedBar());
+        assertEquals(LayoutCanvasView.Block.STATUS_BAR, view.draggedBar());
         touch(view, MotionEvent.ACTION_UP, grip.centerX(), grip.centerY() + 20f * density);
     }
 
     @Test
     public void theShelfIsUnderThePhoneBeforeAnythingIsPutAway() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
         assertEquals("nothing is hidden, but the shelf is still drawn",
-            PlaceMiniatureView.TrayState.EMPTY, view.trayState());
+            LayoutCanvasView.TrayState.EMPTY, view.trayState());
         assertFalse("and it has room of its own", view.trayRect().isEmpty());
 
         view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
         assertEquals("a put-away bar fills it with chips",
-            PlaceMiniatureView.TrayState.CHIPS, view.trayState());
+            LayoutCanvasView.TrayState.CHIPS, view.trayState());
     }
 
     @Test
     public void theShelfOffersItselfWhileABarIsInTheAir() {
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         assertEquals("the lifted bar may be dropped on the shelf",
-            PlaceMiniatureView.TrayState.OFFERING, view.trayState());
+            LayoutCanvasView.TrayState.OFFERING, view.trayState());
 
         touch(view, MotionEvent.ACTION_UP, grip.centerX(), grip.centerY());
         assertEquals("and the shelf goes back to resting",
-            PlaceMiniatureView.TrayState.EMPTY, view.trayState());
+            LayoutCanvasView.TrayState.EMPTY, view.trayState());
     }
 
     @Test
     public void theShelfOffersItselfToTheStatusBarInTheAir() {
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.STATUS_BAR);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.STATUS_BAR);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         assertEquals("the status bar hides like the rest now",
-            PlaceMiniatureView.TrayState.OFFERING, view.trayState());
+            LayoutCanvasView.TrayState.OFFERING, view.trayState());
     }
 
     // ---- Under the keyboard -----------------------------------------------------------------
@@ -1120,12 +1121,12 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void aBandUnderTheKeyboardIsDrawnBelowItAndTheRestAbove() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLegendVisible(false);
         view.setLayout(keysUnderKeyboard(), PlaceOrientation.PORTRAIT);
         RectF keyboard = view.keyboardRect();
-        RectF keys = view.blockRect(PlaceMiniatureView.Block.EXTRA_KEYS);
-        RectF apps = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF keys = view.blockRect(LayoutCanvasView.Block.EXTRA_KEYS);
+        RectF apps = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(keyboard);
         assertNotNull(keys);
         assertNotNull(apps);
@@ -1136,30 +1137,30 @@ public class PlaceMiniatureViewTest {
     @Test
     public void theKeyboardOffersADropSlotUnderItAndTheDropSaysSo() {
         PlaceLayoutStore places = store();
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
         boolean[] heardUnder = {false};
-        view.setOnBarDroppedListener(new PlaceMiniatureView.OnBarDroppedListener() {
+        view.setOnBarDroppedListener(new LayoutCanvasView.OnBarDroppedListener() {
             @Override
-            public void onBarDropped(@NonNull PlaceMiniatureView.Block bar, Edge edge,
+            public void onBarDropped(@NonNull LayoutCanvasView.Block bar, Edge edge,
                                      int index) {
                 onBarDropped(bar, edge, index, false);
             }
 
             @Override
-            public void onBarDropped(@NonNull PlaceMiniatureView.Block bar, Edge edge, int index,
+            public void onBarDropped(@NonNull LayoutCanvasView.Block bar, Edge edge, int index,
                                      boolean underKeyboard) {
                 heardUnder[0] = underKeyboard;
-                MiniatureDragPolicy.Bar dragged = PlaceMiniatureView.barOf(bar);
+                MiniatureDragPolicy.Bar dragged = LayoutCanvasView.barOf(bar);
                 assertNotNull(dragged);
                 LayoutChooserModel.applyDrop(places, PlaceOrientation.PORTRAIT, dragged, edge,
                     index, underKeyboard);
             }
         });
 
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         RectF keyboard = view.keyboardRect();
@@ -1183,13 +1184,13 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void withNoKeyboardDrawnThereIsNothingToBeUnder() {
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         // Home: the keyboard opens over the page, so the picture draws none.
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT, PaneWallPage.WIDGETS);
         assertNull(view.keyboardRect());
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         assertNull(view.underKeyboardSlotFor(0));
@@ -1197,11 +1198,11 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void theStatusBarIsOfferedNoSlotUnderTheKeyboard() {
-        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.STATUS_BAR);
+        RectF grip = view.gripRect(LayoutCanvasView.Block.STATUS_BAR);
         assertNotNull(grip);
         touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         assertNull(view.underKeyboardSlotFor(0));
@@ -1212,29 +1213,29 @@ public class PlaceMiniatureViewTest {
     @Test
     public void theDocksRadiusIsScaledOntoThePictureByTheShortSides() {
         // The picture's short side is 240 units, a 411dp phone's is 411dp: 24dp is 14 units.
-        assertEquals(24f * 240f / 411f, PlaceMiniatureView.surfaceRadiusUnits(24f, 411f), 0.001f);
+        assertEquals(24f * 240f / 411f, LayoutCanvasView.surfaceRadiusUnits(24f, 411f), 0.001f);
         assertEquals("no screen to ask: the reference phone",
-            PlaceMiniatureView.surfaceRadiusUnits(24f, 411f),
-            PlaceMiniatureView.surfaceRadiusUnits(24f, 0f), 0.001f);
-        assertEquals(0f, PlaceMiniatureView.surfaceRadiusUnits(-1f, 411f), 0.001f);
+            LayoutCanvasView.surfaceRadiusUnits(24f, 411f),
+            LayoutCanvasView.surfaceRadiusUnits(24f, 0f), 0.001f);
+        assertEquals(0f, LayoutCanvasView.surfaceRadiusUnits(-1f, 411f), 0.001f);
     }
 
     @Test
     public void everyCardSharesTheRadiusUpToAHalfCapsuleOfItsOwn() {
         assertEquals("a tall card keeps the whole radius", 14f,
-            PlaceMiniatureView.cardRadiusPx(14f, 200f, 80f), 0.001f);
+            LayoutCanvasView.cardRadiusPx(14f, 200f, 80f), 0.001f);
         assertEquals("a thin band is a capsule", 6f,
-            PlaceMiniatureView.cardRadiusPx(14f, 200f, 12f), 0.001f);
+            LayoutCanvasView.cardRadiusPx(14f, 200f, 12f), 0.001f);
     }
 
     @Test
     public void theBandsAndTheKeyboardAreRoundedFromTheDocksOneRadius() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
         float before = view.surfaceRadiusPx();
         assertTrue(before > 0f);
-        view.setDockCornerRadiusDp(PlaceMiniatureView.DEFAULT_DOCK_RADIUS_DP * 2f);
+        view.setDockCornerRadiusDp(LayoutCanvasView.DEFAULT_DOCK_RADIUS_DP * 2f);
         assertEquals("the Corners control moves every card together", before * 2f,
             view.surfaceRadiusPx(), 0.01f);
     }
@@ -1243,14 +1244,14 @@ public class PlaceMiniatureViewTest {
 
     @Test
     public void everyRowsGripStandsInTheSameSpotCentredAcrossIt() {
-        PlaceMiniatureView view = sized();
+        LayoutCanvasView view = sized();
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
         Float end = null;
-        for (PlaceMiniatureView.Block bar : new PlaceMiniatureView.Block[]{
-            PlaceMiniatureView.Block.STATUS_BAR, PlaceMiniatureView.Block.APPS_ROW,
-            PlaceMiniatureView.Block.ALPHABETS_ROW, PlaceMiniatureView.Block.EXTRA_KEYS}) {
+        for (LayoutCanvasView.Block bar : new LayoutCanvasView.Block[]{
+            LayoutCanvasView.Block.STATUS_BAR, LayoutCanvasView.Block.APPS_ROW,
+            LayoutCanvasView.Block.ALPHABETS_ROW, LayoutCanvasView.Block.EXTRA_KEYS}) {
             RectF grip = view.gripRect(bar);
             RectF band = view.blockRect(bar);
             assertNotNull(grip);
@@ -1267,14 +1268,14 @@ public class PlaceMiniatureViewTest {
     @Test
     public void aThinBandSqueezesTheColumnOfDotsWithoutMergingThem() {
         assertEquals("room to spare: the whole column", 7.7f,
-            PlaceMiniatureView.gripHalfHeightPx(7.7f, 40f, 2f), 0.001f);
+            LayoutCanvasView.gripHalfHeightPx(7.7f, 40f, 2f), 0.001f);
         assertEquals("a thin band: the card less its rim", 4f,
-            PlaceMiniatureView.gripHalfHeightPx(7.7f, 12f, 2f), 0.001f);
-        float radius = PlaceMiniatureView.gripDotRadiusPx(2.2f, 4f);
+            LayoutCanvasView.gripHalfHeightPx(7.7f, 12f, 2f), 0.001f);
+        float radius = LayoutCanvasView.gripDotRadiusPx(2.2f, 4f);
         assertTrue("squeezed dots shrink", radius < 2.2f);
         assertTrue("and still stand apart", 4f - radius >= 2.4f * radius - 0.001f);
         assertEquals("unsqueezed they keep the design's size", 2.2f,
-            PlaceMiniatureView.gripDotRadiusPx(2.2f, 7.7f), 0.001f);
+            LayoutCanvasView.gripDotRadiusPx(2.2f, 7.7f), 0.001f);
     }
 
     // ---- The keyboard's form ----------------------------------------------------------------------
@@ -1283,7 +1284,7 @@ public class PlaceMiniatureViewTest {
     public void aFloatingKeyboardIsASmallerCardInsideItsBlock() {
         RectF block = new RectF(0f, 300f, 200f, 380f);
         RectF card = new RectF();
-        PlaceMiniatureView.floatingKeyboardCardInto(block, card);
+        LayoutCanvasView.floatingKeyboardCardInto(block, card);
         assertTrue(card.width() < block.width() && card.height() < block.height());
         assertEquals(block.centerX(), card.centerX(), 0.001f);
         assertEquals(block.centerY(), card.centerY(), 0.001f);
@@ -1294,10 +1295,103 @@ public class PlaceMiniatureViewTest {
         RectF block = new RectF(0f, 300f, 200f, 380f);
         RectF left = new RectF();
         RectF right = new RectF();
-        PlaceMiniatureView.splitKeyboardHalvesInto(block, left, right);
+        LayoutCanvasView.splitKeyboardHalvesInto(block, left, right);
         assertEquals(block.left, left.left, 0.001f);
         assertEquals(block.right, right.right, 0.001f);
         assertTrue("a gap between the halves", right.left - left.right >= block.width() * 0.19f);
         assertEquals(left.width(), right.width(), 0.001f);
     }
+
+    // ---- The canvas is to scale ------------------------------------------------------------------
+
+    private static float screenHeightDp(LayoutCanvasView view, boolean landscape) {
+        android.util.DisplayMetrics metrics = view.getResources().getDisplayMetrics();
+        float shortDp = Math.min(metrics.widthPixels, metrics.heightPixels) / metrics.density;
+        return landscape ? shortDp : shortDp * 19.5f / 9f;
+    }
+
+    @Test
+    public void theKeyboardBlockIsItsRealHeightPlusItsChinTimesTheCanvasScale() {
+        LayoutCanvasView view = sized();
+        view.setLegendVisible(false);
+        view.setSizes(TERMUX_APP_DEFAULT_DOCK, 1.2f, 0);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        float scale = view.canvasScalePx();
+        assertTrue(scale > 0f);
+        RectF keyboard = view.keyboardRect();
+        assertNotNull(keyboard);
+        assertEquals(LayoutCanvasGeometry.keyboardHeightDp(1.2f, false,
+                screenHeightDp(view, false)) * scale, keyboard.height(), 0.6f);
+
+        view.setSizes(TERMUX_APP_DEFAULT_DOCK, 1.2f, 20);
+        RectF withChin = view.keyboardRect();
+        assertNotNull(withChin);
+        assertEquals("the chin is 20 real dp more block", 20f * scale,
+            withChin.height() - keyboard.height(), 0.6f);
+    }
+
+    @Test
+    public void theStatusBarIsItsRealThicknessCollapsedOrExpanded() {
+        LayoutCanvasView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.HIDDEN),
+            PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        float scale = view.canvasScalePx();
+        view.setStatusCompact(false);
+        RectF expanded = view.blockRect(LayoutCanvasView.Block.STATUS_BAR);
+        view.setStatusCompact(true);
+        RectF compact = view.blockRect(LayoutCanvasView.Block.STATUS_BAR);
+        assertNotNull(expanded);
+        assertNotNull(compact);
+        assertTrue("collapsed is thinner than expanded", compact.height() < expanded.height());
+        assertEquals(LayoutCanvasGeometry.statusBandDp(Edge.TOP, true, true) * scale,
+            compact.height(), 0.6f);
+        assertTrue(view.isStatusCompact());
+    }
+
+    @Test
+    public void theDocksBandFollowsItsScaleAndTheSquareDockHasNoRadius() {
+        LayoutCanvasView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.HIDDEN),
+            PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        float scale = view.canvasScalePx();
+        RectF shipped = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        assertNotNull(shipped);
+        assertEquals(LayoutCanvasGeometry.dockBandHeightDp(TERMUX_APP_DEFAULT_DOCK, true) * scale,
+            shipped.height(), 0.6f);
+
+        view.setSizes(DockLayoutPolicy.maxSizePreset(), 1f, 0);
+        RectF tall = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        assertNotNull(tall);
+        assertTrue("a bigger dock scale is a taller band", tall.height() > shipped.height());
+
+        view.setDockCornerRadiusDp(0f);
+        assertEquals("the docked dock is square", 0f, view.surfaceRadiusPx(), 0f);
+    }
+
+    @Test
+    public void theChinHandleKeepsItsFullTargetWhileTheChinIsNothing() {
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setSizes(TERMUX_APP_DEFAULT_DOCK, 1f, 0);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        RectF keyboard = view.keyboardRect();
+        assertNotNull(keyboard);
+        touch(view, MotionEvent.ACTION_DOWN, keyboard.centerX(), keyboard.centerY());
+        touch(view, MotionEvent.ACTION_UP, keyboard.centerX(), keyboard.centerY());
+        RectF chin = view.handleRect(LayoutCanvasView.Handle.KEYBOARD_CHIN);
+        assertNotNull(chin);
+        float density = view.getResources().getDisplayMetrics().density;
+        // A finger 20dp off the thin pill, inside the 48dp target, still takes hold of it.
+        touch(view, MotionEvent.ACTION_DOWN, chin.centerX(), chin.centerY() - 20f * density);
+        assertEquals(LayoutCanvasView.Handle.KEYBOARD_CHIN, view.draggedHandle());
+        touch(view, MotionEvent.ACTION_UP, chin.centerX(), chin.centerY() - 20f * density);
+    }
+
+    private static final float TERMUX_APP_DEFAULT_DOCK =
+        com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+            .DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
 }

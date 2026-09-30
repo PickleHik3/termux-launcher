@@ -36,7 +36,7 @@ import com.termux.app.editorshell.EditorShellPaint;
 import com.termux.app.editorshell.EditorShellRows;
 import com.termux.app.editorshell.EditorShellSheet;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
-import com.termux.app.fragments.settings.PlaceMiniatureView;
+import com.termux.app.fragments.settings.LayoutCanvasView;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayoutStore;
@@ -119,7 +119,7 @@ public final class LayoutEditorController {
          * rounded from, scaled to the picture, so they read as the surfaces they stand for.
          */
         default float dockCornerRadiusDp() {
-            return PlaceMiniatureView.DEFAULT_DOCK_RADIUS_DP;
+            return LayoutCanvasView.DEFAULT_DOCK_RADIUS_DP;
         }
 
         /**
@@ -165,7 +165,7 @@ public final class LayoutEditorController {
         final TextView narrowNotice;
         /** The canvas and what stands over it: the tray's chips and the keyboard's type chips. */
         final FrameLayout canvasHost;
-        final PlaceMiniatureView miniature;
+        final LayoutCanvasView miniature;
         final View tray;
         final View trayScroller;
         final ChipGroup trayChips;
@@ -219,7 +219,7 @@ public final class LayoutEditorController {
     /** True while a toggle or a chip group is being restated from the plan, so it writes nothing. */
     private boolean mRestatingToggle;
     /** The handle a finger is on, whose readout a late measurement may restate; or null. */
-    @Nullable private PlaceMiniatureView.Handle mHeldHandle;
+    @Nullable private LayoutCanvasView.Handle mHeldHandle;
     /** What the tray's chips were built for, so they are rebuilt only when that changes. */
     @NonNull private List<LayoutEditorPlan.TrayItem> mTrayShown = Collections.emptyList();
     /**
@@ -370,46 +370,46 @@ public final class LayoutEditorController {
 
         card.orientationNotice.setText(R.string.termux_layout_editor_other_orientation_notice);
         card.miniature.setLegendVisible(false);
-        card.miniature.setOnBarDroppedListener(new PlaceMiniatureView.OnBarDroppedListener() {
+        card.miniature.setOnBarDroppedListener(new LayoutCanvasView.OnBarDroppedListener() {
             @Override
-            public void onBarDropped(@NonNull PlaceMiniatureView.Block bar,
+            public void onBarDropped(@NonNull LayoutCanvasView.Block bar,
                                      @Nullable PlaceLayout.Edge edge, int index) {
                 LayoutEditorController.this.onBarDropped(bar, edge, index, false);
             }
 
             @Override
-            public void onBarDropped(@NonNull PlaceMiniatureView.Block bar,
+            public void onBarDropped(@NonNull LayoutCanvasView.Block bar,
                                      @Nullable PlaceLayout.Edge edge, int index,
                                      boolean underKeyboard) {
                 LayoutEditorController.this.onBarDropped(bar, edge, index, underKeyboard);
             }
         });
-        card.miniature.setOnCanvasEditListener(new PlaceMiniatureView.OnCanvasEditListener() {
-            @Override public void onSelectionChanged(@Nullable PlaceMiniatureView.Block selected) {
+        card.miniature.setOnCanvasEditListener(new LayoutCanvasView.OnCanvasEditListener() {
+            @Override public void onSelectionChanged(@Nullable LayoutCanvasView.Block selected) {
                 syncKeyboardForms(card);
             }
 
             @Override public void onDockHeightDragged(float scale) {
                 if (mPlan != null)
-                    onHandleWrite(PlaceMiniatureView.Handle.DOCK_HEIGHT,
+                    onHandleWrite(LayoutCanvasView.Handle.DOCK_HEIGHT,
                         mPlan.setDockHeightScale(scale));
             }
 
             @Override public void onKeyboardHeightDragged(float scale) {
                 if (mPlan != null)
-                    onHandleWrite(PlaceMiniatureView.Handle.KEYBOARD_HEIGHT,
+                    onHandleWrite(LayoutCanvasView.Handle.KEYBOARD_HEIGHT,
                         mPlan.setKeyboardHeightScale(scale));
             }
 
             @Override public void onKeyboardChinDragged(int dp) {
                 if (mPlan != null)
-                    onHandleWrite(PlaceMiniatureView.Handle.KEYBOARD_CHIN,
+                    onHandleWrite(LayoutCanvasView.Handle.KEYBOARD_CHIN,
                         mPlan.setKeyboardChinDp(dp));
             }
 
             @Override public void onWidgetGridDragged(int columns, int rows) {
                 if (mPlan != null)
-                    onHandleWrite(PlaceMiniatureView.Handle.WIDGET_GRID,
+                    onHandleWrite(LayoutCanvasView.Handle.WIDGET_GRID,
                         mPlan.setWidgetGrid(columns, rows));
             }
 
@@ -462,16 +462,16 @@ public final class LayoutEditorController {
      * that is the orientation the phone is in.
      */
     @VisibleForTesting
-    void onBarDropped(@NonNull PlaceMiniatureView.Block block, @Nullable PlaceLayout.Edge edge,
+    void onBarDropped(@NonNull LayoutCanvasView.Block block, @Nullable PlaceLayout.Edge edge,
                       int index) {
         onBarDropped(block, edge, index, false);
     }
 
     /** As above, on either side of the keyboard; {@code underKeyboard} is the far one. */
     @VisibleForTesting
-    void onBarDropped(@NonNull PlaceMiniatureView.Block block, @Nullable PlaceLayout.Edge edge,
+    void onBarDropped(@NonNull LayoutCanvasView.Block block, @Nullable PlaceLayout.Edge edge,
                       int index, boolean underKeyboard) {
-        MiniatureDragPolicy.Bar bar = PlaceMiniatureView.barOf(block);
+        MiniatureDragPolicy.Bar bar = LayoutCanvasView.barOf(block);
         if (mPlan == null || bar == null)
             return;
         if (mPlan.drop(bar, edge, index, underKeyboard) == LayoutEditorPlan.Drop.LIVE)
@@ -596,7 +596,7 @@ public final class LayoutEditorController {
         int chromePx = cardChromePx(expandedPx, chooserPx,
             card.column.getPaddingTop() + card.column.getPaddingBottom(), noticeLines(plan),
             density);
-        float frameAspect = PlaceMiniatureView.frameAspect(plan.shownOrientation());
+        float frameAspect = LayoutCanvasView.frameAspect(plan.shownOrientation());
         int reservedPx = Math.round(card.miniature.reservedHeightPx());
         int columnPx = applyCardWidth(card, metrics.widthPixels, density);
         int height = LayoutEditorPlan.miniatureHeightPx(plan.shownOrientation(),
@@ -695,7 +695,7 @@ public final class LayoutEditorController {
      * from the live launcher once it has laid the new size out, so it is restated once more on the
      * next frame.
      */
-    private void onHandleWrite(@NonNull PlaceMiniatureView.Handle handle,
+    private void onHandleWrite(@NonNull LayoutCanvasView.Handle handle,
                                @NonNull LayoutEditorPlan.Drop drop) {
         mHeldHandle = handle;
         afterCanvasWrite(drop);
@@ -716,7 +716,7 @@ public final class LayoutEditorController {
      * the multiple of the unscaled height the store keeps.
      */
     @Nullable
-    private String readoutFor(@NonNull PlaceMiniatureView.Handle handle) {
+    private String readoutFor(@NonNull LayoutCanvasView.Handle handle) {
         LayoutEditorPlan plan = mPlan;
         if (plan == null)
             return null;
@@ -842,7 +842,7 @@ public final class LayoutEditorController {
         LayoutEditorPlan plan = mPlan;
         RectF keyboard = card.miniature.keyboardRect();
         boolean shown = plan != null && keyboard != null
-            && card.miniature.selectedBlock() == PlaceMiniatureView.Block.KEYBOARD;
+            && card.miniature.selectedBlock() == LayoutCanvasView.Block.KEYBOARD;
         if (!shown) {
             card.keyboardForms.setVisibility(View.GONE);
             return;
