@@ -66,8 +66,8 @@ public class SurfacePresetsGlassTest {
     }
 
     @Test
-    public void theOtherThreePresetsStateTheDefaultsForTheNewKeys() {
-        for (String id : new String[] {"stock", "solid", "minimal"}) {
+    public void clearAndSolidStateTheDefaultsForTheNewKeys() {
+        for (String id : new String[] {"solid", "minimal"}) {
             SurfacePresets.Preset preset = preset(id);
             assertEquals(id, TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT,
                 preset.values.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
@@ -79,38 +79,47 @@ public class SurfacePresetsGlassTest {
     }
 
     @Test
-    public void classicSlateAndBareApplyTheNumbersTheyAlwaysDid() {
-        // Blur / opacity / grain come from the material curves, as before.
-        int[] stock = SurfaceMaterials.triple(TERMUX_APP.SURFACE_MATERIAL_GLASS, 50);
-        int[] solid = SurfaceMaterials.triple(TERMUX_APP.SURFACE_MATERIAL_SOLID, 78);
-        int[] bare = SurfaceMaterials.triple(TERMUX_APP.SURFACE_MATERIAL_GLASS, 0);
-        assertTriple(preset("stock"), stock);
-        assertTriple(preset("solid"), solid);
-        assertTriple(preset("minimal"), bare);
+    public void clearTintAndSolidCarryTheRecipesOfTheSpec() {
+        assertRecipe(preset("minimal"), 3, 16, 4, 20, 4, 10, 18);
+        assertRecipe(preset("stock"), 6, 46, 14, 22, 4, 10, 18);
+        assertRecipe(preset("solid"), 0, 92, 0, 14, 0, 1, 0);
+        assertRecipe(preset("frost"), 25, 60, 8, 28, 9, 20, 18);
+        assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN,
+            preset("stock").values.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
 
-        // Leaving Mist for Classic hands the three glass keys back.
+        // Leaving Mist for Tint hands rim and motion back.
         SurfacePresets.apply(preferences, preset("frost"));
         SurfacePresets.apply(preferences, preset("stock"));
-        assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, preferences.getSurfaceGlassTint());
+        assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN, preferences.getSurfaceGlassTint());
         assertEquals(TERMUX_APP.GLASS_RIM_HAIRLINE, preferences.getSurfaceGlassRim());
         assertEquals(TERMUX_APP.GLASS_MOTION_CLASSIC, preferences.getSurfaceGlassMotion());
+        assertEquals(10, preferences.getFancierGlassEdgeWidthDp());
         assertTrue(SurfacePresets.matches(preferences, preset("stock")));
     }
 
-    private static void assertTriple(SurfacePresets.Preset preset, int[] triple) {
-        assertEquals(preset.id, triple[SurfaceMaterials.BLUR],
-            preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
-        assertEquals(preset.id, triple[SurfaceMaterials.OPACITY],
-            preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
-        assertEquals(preset.id, triple[SurfaceMaterials.GRAIN],
-            preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
+    private static void assertRecipe(SurfacePresets.Preset preset, int blur, int opacity,
+                                     int grain, int corners, int bend, int edgeWidth,
+                                     int edgeLight) {
+        assertEquals(preset.id, blur, preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
+        assertEquals(preset.id, opacity, preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
+        assertEquals(preset.id, grain, preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
+        assertEquals(preset.id, corners,
+            preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS));
+        assertEquals(preset.id, corners, preset.values.get(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS));
+        assertEquals(preset.id, 4, preset.values.get(TERMUX_APP.KEY_TERMINAL_PANE_GAP));
+        assertEquals(preset.id, bend, preset.values.get(TERMUX_APP.KEY_FANCIER_GLASS_BEND));
+        assertEquals(preset.id, edgeWidth,
+            preset.values.get(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH));
+        assertEquals(preset.id, edgeLight,
+            preset.values.get(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT));
+        assertFalse(preset.id, preset.values.containsKey(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE));
     }
 
     @Test
     public void customRoundTripsTheNewKeys() {
         SurfacePresets.apply(preferences, preset("frost"));
         SurfacePresets.saveCustom(preferences);
-        SurfacePresets.apply(preferences, preset("stock"));
+        SurfacePresets.apply(preferences, preset("minimal"));
 
         SurfacePresets.Preset custom = SurfacePresets.custom(preferences);
         assertNotNull(custom);

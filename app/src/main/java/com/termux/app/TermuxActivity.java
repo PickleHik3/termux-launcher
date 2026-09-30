@@ -3382,6 +3382,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private com.termux.app.chrome.GlassRefraction.Look currentFancierGlassLook() {
         if (mPreferences == null) return null;
+        // Lazy mode turns the refraction look off with the other effects.
+        if (isLazyModeEnabled()) return null;
         if (!com.termux.app.chrome.FancierGlassPolicy.active(Build.VERSION.SDK_INT,
                 mPreferences.isFancierGlassEnabled(), shouldUseManagedWallpaperBlurSource())) {
             return null;

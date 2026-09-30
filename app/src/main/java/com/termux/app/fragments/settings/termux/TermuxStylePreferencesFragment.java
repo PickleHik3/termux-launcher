@@ -26,7 +26,6 @@ import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
 import com.termux.R;
 import com.termux.app.TermuxActivity;
-import com.termux.app.chrome.FancierGlassPolicy;
 import com.termux.app.chrome.WallpaperBackdropPolicy;
 import com.termux.app.chrome.WallpaperPictureReader;
 import com.termux.app.notice.AppNotice;
@@ -119,7 +118,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         refreshThemeEntries();
         updateKeyboardLookEnabled(context);
         configureWallpaperAlignment(context);
-        gateFancierGlass(context);
     }
 
     @Override
@@ -138,30 +136,6 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         refreshThemeEntries();
         if (context != null) updateKeyboardLookEnabled(context);
         if (context != null) updateWallpaperAlignmentVisibility(context);
-        if (context != null) gateFancierGlass(context);
-    }
-
-    /**
-     * Fancier Glass is offered only where it can run: hidden below Android 13, and shown but
-     * greyed out, with the summary saying why, until the wallpaper on screen is one set from inside
-     * the launcher. The stored switch is left alone either way ({@link FancierGlassPolicy#active}
-     * is what the chrome asks), and this is re-read on every resume, so a wallpaper changed
-     * elsewhere is picked up on return.
-     */
-    private void gateFancierGlass(@NonNull Context context) {
-        PreferenceCategory header = findPreference("fancier_glass_header");
-        SwitchPreferenceCompat toggle = findPreference("fancier_glass");
-        if (header == null || toggle == null) return;
-        if (!FancierGlassPolicy.offered(Build.VERSION.SDK_INT)) {
-            header.setVisible(false);
-            return;
-        }
-        boolean flippable = FancierGlassPolicy.flippable(Build.VERSION.SDK_INT,
-            WallpaperPictureReader.managedPictureOnScreen(context,
-                TermuxAppSharedPreferences.build(context, false)));
-        toggle.setEnabled(flippable);
-        toggle.setSummary(flippable ? R.string.settings_fancier_glass_summary
-            : R.string.settings_fancier_glass_hint);
     }
 
     /**

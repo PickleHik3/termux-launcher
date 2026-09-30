@@ -67,26 +67,22 @@ public class SurfaceEditorPropertiesTest {
         List<String> ids = new ArrayList<>();
         for (Control control : SurfaceEditorProperties.global())
             ids.add(control.id);
-        // Fancier Glass's three knobs follow the material they refine and stand before the shape;
-        // the controller drops them while the switch is off, which leaves the old list intact.
+        // Depth is owned by each Look now; the refraction knobs have no row here.
         assertEquals(Arrays.asList(
             SurfaceEditorProperties.ID_ALL_OPACITY,
             SurfaceEditorProperties.ID_ALL_BLUR,
             SurfaceEditorProperties.ID_ALL_GRAIN,
-            SurfaceEditorProperties.ID_BEND,
-            SurfaceEditorProperties.ID_EDGE_WIDTH,
-            SurfaceEditorProperties.ID_EDGE_LIGHT,
             SurfaceEditorProperties.ID_ALL_CORNERS,
             SurfaceEditorProperties.ID_ALL_MARGIN,
             SurfaceEditorProperties.ID_WALLPAPER), ids);
     }
 
     @Test
-    public void theRefractionKnobsAreKnownByNameAndLiveOnTheSharedLayerAlone() {
+    public void theRefractionKnobsHaveNoRowAnywhere() {
         for (String id : Arrays.asList(SurfaceEditorProperties.ID_BEND,
                 SurfaceEditorProperties.ID_EDGE_WIDTH, SurfaceEditorProperties.ID_EDGE_LIGHT)) {
             assertTrue(id, SurfaceEditorProperties.isRefractionRow(id));
-            assertNotNull(id, SurfaceEditorProperties.find(null, id));
+            assertNull(id + " on the shared layer", SurfaceEditorProperties.find(null, id));
             for (SurfaceSlot slot : SurfaceSlot.values())
                 assertNull(id + " on " + slot, SurfaceEditorProperties.find(slot, id));
         }
@@ -125,10 +121,7 @@ public class SurfaceEditorPropertiesTest {
             SurfaceEditorProperties.ID_KEYBOARD_KEY_OPACITY,
             SurfaceEditorProperties.ID_KEYBOARD_COLORS,
             SurfaceEditorProperties.ID_CHIP_RADIUS,
-            SurfaceEditorProperties.ID_WALLPAPER,
-            SurfaceEditorProperties.ID_BEND,
-            SurfaceEditorProperties.ID_EDGE_WIDTH,
-            SurfaceEditorProperties.ID_EDGE_LIGHT);
+            SurfaceEditorProperties.ID_WALLPAPER);
 
         Set<String> reachable = new HashSet<>();
         for (List<Control> panel : panels()) {

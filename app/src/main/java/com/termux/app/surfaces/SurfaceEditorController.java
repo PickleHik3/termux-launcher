@@ -610,6 +610,9 @@ public final class SurfaceEditorController {
         final int initialBend = prefs.getFancierGlassBendDp();
         final int initialEdgeWidth = prefs.getFancierGlassEdgeWidthDp();
         final int initialEdgeLight = prefs.getFancierGlassEdgeLightPercent();
+        final String initialGlassTint = prefs.getSurfaceGlassTint();
+        final String initialGlassRim = prefs.getSurfaceGlassRim();
+        final String initialGlassMotion = prefs.getSurfaceGlassMotion();
         final String initialMaterial = prefs.getSurfaceMaterial();
         final int initialMaterialIntensity = prefs.getSurfaceMaterialIntensity();
         final int[] initialBase = new int[SurfaceProperty.values().length];
@@ -657,6 +660,9 @@ public final class SurfaceEditorController {
             prefs().setFancierGlassEdgeLightPercent(initialEdgeLight);
             for (SurfaceProperty property : SurfaceProperty.values())
                 prefs().setSurfaceBaseValue(property, initialBase[property.ordinal()]);
+            prefs().setSurfaceGlassTint(initialGlassTint);
+            prefs().setSurfaceGlassRim(initialGlassRim);
+            prefs().setSurfaceGlassMotion(initialGlassMotion);
             prefs().setSurfaceMaterial(initialMaterial);
             prefs().setSurfaceMaterialIntensity(initialMaterialIntensity);
         };
@@ -1564,11 +1570,8 @@ public final class SurfaceEditorController {
      * the terminal's own Frame switch) is one tap away.
      */
     private boolean isAvailable(@Nullable SurfaceSlot slot, @NonNull Control control) {
-        if (slot == null) {
-            // The refraction knobs turn nothing while Fancier Glass is off; the switch that brings
-            // them back is on the Terminal settings page.
-            return !SurfaceEditorProperties.isRefractionRow(control.id) || mHost.fancierGlassActive();
-        }
+        if (slot == null)
+            return true;
         // What the place's arrangement leaves the row nothing to move: the dock's own two rows
         // about its pinned apps, once those stand in a rail instead.
         if (!scene().offersRow(slot, control.id))
@@ -2784,6 +2787,18 @@ public final class SurfaceEditorController {
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_INDICATOR_CORNER_RADIUS);
         prefs().setTerminalPaneGap(
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
+        prefs().setSurfaceGlassTint(
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT);
+        prefs().setSurfaceGlassRim(
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLASS_RIM);
+        prefs().setSurfaceGlassMotion(
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLASS_MOTION);
+        prefs().setFancierGlassBendDp(
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_BEND);
+        prefs().setFancierGlassEdgeWidthDp(
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_WIDTH);
+        prefs().setFancierGlassEdgeLightPercent(
+            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_LIGHT);
     }
 
     // ------------------------------------------------------------------------------- the presets
@@ -2987,8 +3002,8 @@ public final class SurfaceEditorController {
             TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_BLUR, 0);
         int marginDp = presetInt(preset,
             TermuxPreferenceConstants.TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP, 10);
-        boolean floating = SegmentedPillPreference.VALUE_ROUNDED.equals(preset.values.get(
-            TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE));
+        // Style is never part of a Look: the mock wears the live style.
+        boolean floating = SegmentedPillPreference.VALUE_ROUNDED.equals(prefs().getAppLauncherDockStyle());
 
         float density = dpToPx(1);
         Drawable backdrop = buildPresetBackdrop(widthPx, heightPx, blurDp);
@@ -3136,6 +3151,12 @@ public final class SurfaceEditorController {
         final boolean border = prefs().isTerminalBorderEnabled();
         final int terminalRadius = prefs().getTerminalCornerRadius();
         final int paneGap = prefs().getTerminalPaneGap();
+        final String glassTint = prefs().getSurfaceGlassTint();
+        final String glassRim = prefs().getSurfaceGlassRim();
+        final String glassMotion = prefs().getSurfaceGlassMotion();
+        final int bend = prefs().getFancierGlassBendDp();
+        final int edgeWidth = prefs().getFancierGlassEdgeWidthDp();
+        final int edgeLight = prefs().getFancierGlassEdgeLightPercent();
         return () -> {
             if (prefs() == null)
                 return;
@@ -3150,6 +3171,12 @@ public final class SurfaceEditorController {
             prefs().setTerminalBorderEnabled(border);
             prefs().setTerminalCornerRadius(terminalRadius);
             prefs().setTerminalPaneGap(paneGap);
+            prefs().setSurfaceGlassTint(glassTint);
+            prefs().setSurfaceGlassRim(glassRim);
+            prefs().setSurfaceGlassMotion(glassMotion);
+            prefs().setFancierGlassBendDp(bend);
+            prefs().setFancierGlassEdgeWidthDp(edgeWidth);
+            prefs().setFancierGlassEdgeLightPercent(edgeLight);
         };
     }
 
@@ -3578,6 +3605,9 @@ public final class SurfaceEditorController {
             .append(prefs().getSurfaceBaseValue(SurfaceProperty.SIDE_GAP)).append('|')
             .append(prefs().getSurfaceMaterial()).append('|')
             .append(prefs().getSurfaceMaterialIntensity()).append('|')
+            .append(prefs().getSurfaceGlassTint()).append('|')
+            .append(prefs().getSurfaceGlassRim()).append('|')
+            .append(prefs().getSurfaceGlassMotion()).append('|')
             .append(mStagedKeyColors.signature())
             .toString();
     }

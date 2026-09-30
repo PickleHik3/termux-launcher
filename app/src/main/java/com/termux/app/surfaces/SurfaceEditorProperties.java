@@ -285,25 +285,6 @@ public final class SurfaceEditorProperties {
             prefs -> prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN),
             (prefs, value) -> prefs.setSurfaceBaseValue(SurfaceProperty.GRAIN, value),
             PREVIEW_GLASS | PREVIEW_SURFACES | PREVIEW_KEYBOARD),
-        // Fancier Glass. Offered only while it is on (the controller drops them otherwise): the
-        // glass pass re-dresses the dock, the strip, the keyboard and every frost, and the
-        // surfaces pass the pane slabs, so a tick lands everywhere in one frame and nothing is
-        // re-blurred for it.
-        own(ID_BEND, R.string.termux_surface_editor_bend, Section.REFRACTION,
-            Kind.SLIDER, Unit.DP, TERMUX_APP.MAX_FANCIER_GLASS_BEND,
-            TermuxAppSharedPreferences::getFancierGlassBendDp,
-            TermuxAppSharedPreferences::setFancierGlassBendDp,
-            PREVIEW_GLASS | PREVIEW_SURFACES),
-        own(ID_EDGE_WIDTH, R.string.termux_surface_editor_edge_width, Section.REFRACTION,
-            Kind.SLIDER, Unit.DP, TERMUX_APP.MAX_FANCIER_GLASS_EDGE_WIDTH,
-            TermuxAppSharedPreferences::getFancierGlassEdgeWidthDp,
-            TermuxAppSharedPreferences::setFancierGlassEdgeWidthDp,
-            PREVIEW_GLASS | PREVIEW_SURFACES),
-        own(ID_EDGE_LIGHT, R.string.termux_surface_editor_edge_light, Section.REFRACTION,
-            Kind.SLIDER, Unit.PERCENT, TERMUX_APP.MAX_FANCIER_GLASS_EDGE_LIGHT,
-            TermuxAppSharedPreferences::getFancierGlassEdgeLightPercent,
-            TermuxAppSharedPreferences::setFancierGlassEdgeLightPercent,
-            PREVIEW_GLASS | PREVIEW_SURFACES),
         // The terminal rounds by its own knob in either style, and every pane in it reads that
         // knob, so the shared radius has to carry it too — otherwise "round everything" leaves one
         // square hole in the middle of the screen.

@@ -83,7 +83,7 @@ Known, left as they are: the live-blur fallbacks of the palette, the sheet, the 
 ## 4. Refraction
 
 - **One shader for every glass surface.** It extends today's `GLASS_AGSL` (`TermuxActivity.java:3399-3495`) and samples the shared frame, or the live-recorded backdrop while a video plays. Per pixel it bends the frame near the rim and adds the rim light.
-- **Controls:** global only, in the Appearance editor, visible only while Fancier Glass is on.
+- **Controls:** none in the UI since 2026-09-30 (appearance-layout-editor SPEC §4): each Look sets bend / edge width / edge light, Fancier Glass is on wherever supported, and Lazy mode turns it off. The keys and accessors remain.
   - **Bend** (`uStrength`): how strongly the glass bends the image behind it.
   - **Edge width** (`uBand`): how far in from the rim the bending reaches.
   - **Edge light** (`uRim`): how bright the rim highlight is.

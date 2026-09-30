@@ -5,7 +5,6 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
 import com.termux.R;
-import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -67,18 +66,10 @@ public final class SurfacePresets {
     }
 
     private static final List<Preset> PRESETS = Collections.unmodifiableList(Arrays.asList(
-        // The shipped look: Docked, the default glass, and the one asymmetry a default cannot
-        // express - the dock sitting a few points denser than the surfaces behind it.
-        preset("stock", R.string.termux_surface_preset_stock,
-            SegmentedPillPreference.VALUE_DEFAULT, TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 24, 12,
-            look -> {
-                look.put(TermuxAppSharedPreferences.surfaceOverrideKey(
-                    SurfaceSlot.DOCK, SurfaceProperty.OPACITY),
-                    TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY);
-                look.put(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS,
-                    TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS);
-                look.put(TERMUX_APP.KEY_TERMINAL_PANE_GAP, TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
-            }),
+        // Clear (id minimal): wallpaper forward, the thinnest glass that still reads as a surface.
+        preset("minimal", R.string.termux_surface_preset_minimal,
+            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 3, 16, 4, 20, 12, 4, 4, 10, 18,
+            look -> { }),
         // Mist: Obsidian-Music's glass and motion (Apache-2.0; see
         // project-docs/reference/launcher/mist-preset-obsidian-values.md). Blur 25
         // and opacity 60 are Obsidian's own numbers. Grain 8 is not its 0.08 noise carried over:
@@ -86,24 +77,19 @@ public final class SurfacePresets {
         // 60/255 of the percentage, so a literal match (about 68) would read as sand. 8 is the
         // same faint tooth.
         preset("frost", R.string.termux_surface_preset_frost,
-            SegmentedPillPreference.VALUE_ROUNDED, TERMUX_APP.SURFACE_MATERIAL_FROST, 50, 28, 14,
+            TERMUX_APP.SURFACE_MATERIAL_FROST, 50, 25, 60, 8, 28, 14, 4, 9, 20, 18,
             look -> {
-                look.put(TERMUX_APP.KEY_SURFACE_BASE_BLUR, 25);
-                look.put(TERMUX_APP.KEY_SURFACE_BASE_OPACITY, 60);
-                look.put(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, 8);
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_OBSIDIAN);
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.GLASS_RIM_GRADIENT);
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_MOTION, TERMUX_APP.GLASS_MOTION_MIST);
             }),
+        // Tint (id stock): tinted, low blur, denser; for loud wallpapers and a dark terminal.
+        preset("stock", R.string.termux_surface_preset_stock,
+            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 6, 46, 14, 22, 12, 4, 4, 10, 18,
+            look -> look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_OBSIDIAN)),
+        // Solid: opaque, no blur cost. Rounded (14), not square: square reads as another app.
         preset("solid", R.string.termux_surface_preset_solid,
-            SegmentedPillPreference.VALUE_DEFAULT, TERMUX_APP.SURFACE_MATERIAL_SOLID, 78, 0, 12,
-            look -> {
-                look.put(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS, 0);
-                look.put(TERMUX_APP.KEY_TERMINAL_PANE_GAP, TERMUX_APP.DEFAULT_TERMINAL_PANE_GAP);
-            }),
-        preset("minimal", R.string.termux_surface_preset_minimal,
-            SegmentedPillPreference.VALUE_ROUNDED, TERMUX_APP.SURFACE_MATERIAL_GLASS, 0, 20, 12,
-            // The frame is always on now, so the bare look is the glass alone.
+            TERMUX_APP.SURFACE_MATERIAL_SOLID, 78, 0, 92, 0, 14, 12, 4, 0, 1, 0,
             look -> { })
     ));
 
@@ -112,22 +98,28 @@ public final class SurfacePresets {
     }
 
     /**
-     * Shape, material point (the triple falls out of it), radius and margin, the default glass
-     * tint, rim and motion; then the extras, whose puts replace any of those in place.
+     * Material point, the Base triple, corners (Base and terminal), side gap, pane gap and the
+     * three Fancier Glass depth keys; the default glass tint, rim and motion; then the extras,
+     * whose puts replace any of those in place. The dock style is deliberately absent: a Look
+     * never changes Style.
      */
-    private static Preset preset(String id, @StringRes int nameRes, String dockStyle,
-                                 String material, int intensity, int cornerRadius, int sideGap,
-                                 Extras extras) {
+    private static Preset preset(String id, @StringRes int nameRes, String material,
+                                 int intensity, int blur, int opacity, int grain,
+                                 int cornerRadius, int sideGap, int paneGap,
+                                 int bend, int edgeWidth, int edgeLight, Extras extras) {
         LinkedHashMap<String, Object> look = new LinkedHashMap<>();
-        look.put(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE, dockStyle);
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL, material);
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, intensity);
-        int[] triple = SurfaceMaterials.triple(material, intensity);
-        look.put(TERMUX_APP.KEY_SURFACE_BASE_BLUR, triple[SurfaceMaterials.BLUR]);
-        look.put(TERMUX_APP.KEY_SURFACE_BASE_OPACITY, triple[SurfaceMaterials.OPACITY]);
-        look.put(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, triple[SurfaceMaterials.GRAIN]);
+        look.put(TERMUX_APP.KEY_SURFACE_BASE_BLUR, blur);
+        look.put(TERMUX_APP.KEY_SURFACE_BASE_OPACITY, opacity);
+        look.put(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, grain);
         look.put(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS, cornerRadius);
         look.put(TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP, sideGap);
+        look.put(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS, cornerRadius);
+        look.put(TERMUX_APP.KEY_TERMINAL_PANE_GAP, paneGap);
+        look.put(TERMUX_APP.KEY_FANCIER_GLASS_BEND, bend);
+        look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, edgeWidth);
+        look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, edgeLight);
         putGlassDefaults(look);
         extras.addTo(look);
         return new Preset(id, nameRes, look);
@@ -170,14 +162,13 @@ public final class SurfacePresets {
     }
 
     /**
-     * The live look in the preset format: the shape, the material point, the Base numbers, the
+     * The live look in the preset format: the material point, the Base numbers, the
      * terminal's own three, and every per-surface cell that is currently detached — named cells
      * being exactly what {@link #apply} re-detaches, and what {@link #matches} tests against.
      */
     @NonNull
     public static Map<String, Object> captureLook(@NonNull TermuxAppSharedPreferences prefs) {
         LinkedHashMap<String, Object> look = new LinkedHashMap<>();
-        look.put(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE, prefs.getAppLauncherDockStyle());
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL, prefs.getSurfaceMaterial());
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, prefs.getSurfaceMaterialIntensity());
         // After the material point, never before it: a hand-tuned triple no longer sits on any
@@ -190,6 +181,9 @@ public final class SurfacePresets {
         look.put(TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED, prefs.isTerminalBorderEnabled());
         look.put(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS, prefs.getTerminalCornerRadius());
         look.put(TERMUX_APP.KEY_TERMINAL_PANE_GAP, prefs.getTerminalPaneGap());
+        look.put(TERMUX_APP.KEY_FANCIER_GLASS_BEND, prefs.getFancierGlassBendDp());
+        look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, prefs.getFancierGlassEdgeWidthDp());
+        look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, prefs.getFancierGlassEdgeLightPercent());
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (prefs.isSurfaceInheriting(row.slot, row.property))
                 continue;
@@ -265,8 +259,18 @@ public final class SurfacePresets {
     private static void applyOne(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key,
                                  @NonNull Object value) {
         switch (key) {
+            // Style is never part of a Look: a stored look from before this rule may still carry
+            // the key, and it is ignored on apply and in matches().
             case TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE:
-                prefs.setAppLauncherDockStyle((String) value);
+                return;
+            case TERMUX_APP.KEY_FANCIER_GLASS_BEND:
+                prefs.setFancierGlassBendDp(intOf(value));
+                return;
+            case TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH:
+                prefs.setFancierGlassEdgeWidthDp(intOf(value));
+                return;
+            case TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT:
+                prefs.setFancierGlassEdgeLightPercent(intOf(value));
                 return;
             case TERMUX_APP.KEY_SURFACE_MATERIAL:
                 prefs.setSurfaceMaterial((String) value);
@@ -335,7 +339,13 @@ public final class SurfacePresets {
                                      @NonNull String key) {
         switch (key) {
             case TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE:
-                return prefs.getAppLauncherDockStyle();
+                return null;
+            case TERMUX_APP.KEY_FANCIER_GLASS_BEND:
+                return prefs.getFancierGlassBendDp();
+            case TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH:
+                return prefs.getFancierGlassEdgeWidthDp();
+            case TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT:
+                return prefs.getFancierGlassEdgeLightPercent();
             case TERMUX_APP.KEY_SURFACE_MATERIAL:
                 return prefs.getSurfaceMaterial();
             case TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY:
