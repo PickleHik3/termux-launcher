@@ -68,18 +68,6 @@
             app:defaultValue="false" />
     </PreferenceCategory>
 
-    <!-- Hidden below Android 13 and disabled without a wallpaper set from inside the launcher;
-         TermuxStylePreferencesFragment decides both. -->
-    <PreferenceCategory
-        app:key="fancier_glass_header"
-        app:title="@string/settings_fancier_glass_header">
-        <SwitchPreferenceCompat
-            app:key="fancier_glass"
-            app:title="@string/settings_fancier_glass_title"
-            app:summary="@string/settings_fancier_glass_summary"
-            app:defaultValue="false" />
-    </PreferenceCategory>
-
     <PreferenceCategory app:title="@string/settings_icon_appearance_header">
         <SwitchPreferenceCompat
             app:key="app_launcher_bw_icons"

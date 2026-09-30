@@ -76,7 +76,7 @@
     <string name="az_pull_tab_description">A–Z index. Slide along it to find and open apps.</string>
     <string name="settings_layout_drop_to_hide">Drop here to hide</string>
     <string name="settings_destination_appearance">Look</string>
-    <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons, keyboard look, and sessions opacity</string>
+    <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons and keyboard look</string>
     <string name="settings_destination_terminal">Terminal</string>
     <string name="settings_destination_terminal_summary">Split panes, full screen, and Recents</string>
     <string name="settings_destination_status_bar">Status bar</string>
@@ -1769,10 +1769,10 @@
                      "Glass", "Frost" and "Solid" are what the Material control is called, and a
                      preset named after one of them read as a shortcut to that control rather than
                      as a complete look. -->
-                <string name="termux_surface_preset_stock">Classic</string>
+                <string name="termux_surface_preset_stock">Tint</string>
                 <string name="termux_surface_preset_frost">Mist</string>
-                <string name="termux_surface_preset_solid">Slate</string>
-                <string name="termux_surface_preset_minimal">Bare</string>
+                <string name="termux_surface_preset_solid">Solid</string>
+                <string name="termux_surface_preset_minimal">Clear</string>
                 <string name="termux_surface_preset_custom">Custom</string>
                 <string name="termux_surface_preset_applied">%1$s applied</string>
                 <string name="termux_surface_preset_saved">Look saved as Custom</string>
