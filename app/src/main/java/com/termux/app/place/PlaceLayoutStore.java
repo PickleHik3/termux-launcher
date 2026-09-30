@@ -89,6 +89,17 @@ public final class PlaceLayoutStore {
      */
     private static final String UNDER_KEYBOARD_SUFFIX = "_under_keyboard";
 
+    /**
+     * The edge a put-away bar comes back to, beside its placement:
+     * {@code layout.<orientation>.<placement key>_restore_edge}. The status bar, the pinned apps and
+     * the extra keys store {@code hidden} in their placement key, which leaves no room for the edge
+     * they went away from, so the Layout editor's tray could only ever bring them back to where
+     * each one started. Written when a bar is put away and read only while it is; absent is the
+     * bar's own default edge. The alphabets index needs none: its edge has always had a key of its
+     * own ({@code az_bar}) beside the on/off switch.
+     */
+    private static final String RESTORE_EDGE_SUFFIX = "_restore_edge";
+
     /** A row placement that is not an edge at all. */
     private static final String VALUE_HIDDEN = "hidden";
     private static final String KEY_KEYBOARD_MODE = "keyboard_mode";
@@ -146,7 +157,9 @@ public final class PlaceLayoutStore {
         orderKeyName(Element.STATUS), orderKeyName(Element.APPS), orderKeyName(Element.AZ),
         orderKeyName(Element.EXTRA_KEYS),
         underKeyboardKeyName(Element.APPS), underKeyboardKeyName(Element.AZ),
-        underKeyboardKeyName(Element.EXTRA_KEYS)
+        underKeyboardKeyName(Element.EXTRA_KEYS),
+        restoreEdgeKeyName(Element.STATUS), restoreEdgeKeyName(Element.APPS),
+        restoreEdgeKeyName(Element.EXTRA_KEYS)
     };
 
     /**
@@ -162,6 +175,13 @@ public final class PlaceLayoutStore {
     @NonNull
     static String orderKeyName(@NonNull Element element) {
         return element.storageKey() + ORDER_SUFFIX;
+    }
+
+    /** The unscoped key a put-away bar's edge is remembered under. */
+    @VisibleForTesting
+    @NonNull
+    static String restoreEdgeKeyName(@NonNull Element element) {
+        return element.storageKey() + RESTORE_EDGE_SUFFIX;
     }
 
     /** The unscoped key saying whether one element stands under the keyboard. */
@@ -312,7 +332,7 @@ public final class PlaceLayoutStore {
             case STATUS:
                 // Spelled the way the rows have always been: an edge, or "hidden".
                 return new Slot(VALUE_HIDDEN.equals(readString(orientation, KEY_STATUS_BAR)),
-                    statusBarEdge(orientation), order);
+                    elementEdge(orientation, element), order);
             case AZ:
                 return new Slot(!azRowShown(orientation), azBarEdge(orientation), order, under);
             case APPS:
@@ -327,6 +347,9 @@ public final class PlaceLayoutStore {
     /** Moves one element: its edge, whether it is put away, and where it sits in the stack. */
     public void setSlot(@NonNull PlaceOrientation orientation, @NonNull Element element,
                         @NonNull Slot slot) {
+        // A bar put away keeps the edge it came from, so the tray brings it back there.
+        if (slot.hidden && element != Element.AZ)
+            writeString(orientation, restoreEdgeKeyName(element), slot.edge.storageValue());
         switch (element) {
             case STATUS:
                 writeString(orientation, KEY_STATUS_BAR, rowValue(slot));
@@ -389,25 +412,23 @@ public final class PlaceLayoutStore {
     }
 
     /**
-     * The edge an element's own placement key names, without reading its order. A row that is put
-     * away names none: the key holds nothing but {@code hidden}, so the edge it would come back to
-     * was never stored and the bottom — where both rows have always started — stands for it.
+     * The edge an element's own placement key names, without reading its order. A bar that is put
+     * away names none there — the key holds nothing but {@code hidden} — so it answers with the
+     * edge remembered when it went away ({@link #restoreEdgeKeyName}), and failing that the
+     * bar's own default edge: the top for the status bar, the bottom for the rows.
      */
     @NonNull
     private Edge elementEdge(@NonNull PlaceOrientation orientation, @NonNull Element element) {
-        switch (element) {
-            case STATUS: return statusBarEdge(orientation);
-            case AZ: return azBarEdge(orientation);
-            case APPS:
-            case EXTRA_KEYS:
-            default: {
-                String key = element == Element.APPS ? KEY_APPS_ROW : KEY_EXTRA_KEYS;
-                Edge fallback = element == Element.APPS && orientation == PlaceOrientation.LANDSCAPE
-                    ? Edge.LEFT : Edge.BOTTOM;
-                String raw = readString(orientation, key);
-                return VALUE_HIDDEN.equals(raw) ? Edge.BOTTOM : Edge.parse(raw, fallback);
-            }
-        }
+        if (element == Element.AZ) return azBarEdge(orientation);
+        String key = element == Element.STATUS ? KEY_STATUS_BAR
+            : element == Element.APPS ? KEY_APPS_ROW : KEY_EXTRA_KEYS;
+        Edge fallback = element == Element.STATUS ? Edge.TOP
+            : element == Element.APPS && orientation == PlaceOrientation.LANDSCAPE
+                ? Edge.LEFT : Edge.BOTTOM;
+        String raw = readString(orientation, key);
+        if (!VALUE_HIDDEN.equals(raw)) return Edge.parse(raw, fallback);
+        Edge hiddenFallback = element == Element.STATUS ? Edge.TOP : Edge.BOTTOM;
+        return Edge.parse(readString(orientation, restoreEdgeKeyName(element)), hiddenFallback);
     }
 
     /** A slot as the pinned apps and the extra keys have always spelled it. */
@@ -449,8 +470,8 @@ public final class PlaceLayoutStore {
      * A slot as the three-way row placement the pinned apps and the extra keys were stored as. A
      * column down the side of a portrait screen used to be refused here; it is allowed in both
      * orientations now and the Layout editor warns about a narrow canvas instead. The old spelling
-     * has no top row, so a slot on the top edge reads as the bottom until the views that draw
-     * them learn the edge.
+     * has no top row, so a slot on the top edge reads as the bottom: anything that has to put a
+     * bar back where it was — the editor's snapshot above all — reads {@link #slot} instead.
      */
     @NonNull
     private static RowPlacement placementOf(@NonNull Slot slot) {
