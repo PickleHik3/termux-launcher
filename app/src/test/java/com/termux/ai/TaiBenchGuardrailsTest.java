@@ -45,6 +45,10 @@ public class TaiBenchGuardrailsTest {
 
     // ---- a host that does whatever the test needs ---------------------------------------------
 
+    interface ChatScript {
+        JSONObject run(@NonNull TaiGenerationCallback callback) throws JSONException;
+    }
+
     private static class ScriptedHost implements TaiBenchHarness.Host {
         final List<String> calls = new ArrayList<>();
         @Nullable TaiBenchHarness harness;
@@ -53,6 +57,9 @@ public class TaiBenchGuardrailsTest {
         boolean loadHangs;
         boolean stopForMemoryOnLoad;
         boolean restoreThrows;
+        /** What {@link #chat} does instead of failing at once; it may drive the callback like a runtime would. */
+        @Nullable ChatScript chatScript;
+        final AtomicInteger cancels = new AtomicInteger();
         final AtomicInteger restores = new AtomicInteger();
         final AtomicInteger abandons = new AtomicInteger();
         final CountDownLatch neverReleased = new CountDownLatch(1);
@@ -85,11 +92,13 @@ public class TaiBenchGuardrailsTest {
         @Override
         public JSONObject chat(@NonNull TaiBenchSuite.EntryPlan entry, @NonNull String userPrompt, int maxTokens,
                                @NonNull TaiGenerationCallback callback) throws JSONException {
+            if (chatScript != null) return chatScript.run(callback);
             return new JSONObject().put("ok", false).put("error", "generation_failed");
         }
 
         @Override
         public void cancel() {
+            cancels.incrementAndGet();
         }
 
         @NonNull
@@ -362,7 +371,7 @@ public class TaiBenchGuardrailsTest {
     }
 
     @Test
-    public void aCrashedRecordNeverRanksAndDoesNotAppearAsBroken() throws Exception {
+    public void aCrashedRecordNeverRanksButShowsAsBrokenWithACrashedVerdict() throws Exception {
         JSONObject marker = new JSONObject().put("modelId", "model-b").put("backend", TaiModelSpec.BACKEND_MNN_LLM)
             .put("accelerator", "gpu").put("speculative", false).put("preset", "quick")
             .put("benchVersion", TaiBenchSuite.BENCH_VERSION);
@@ -371,7 +380,8 @@ public class TaiBenchGuardrailsTest {
         JSONObject board = TaiBenchStore.leaderboard(records, TaiBenchSuite.BENCH_VERSION);
 
         assertEquals(0, board.getJSONArray("ranked").length());
-        assertEquals(0, board.getJSONArray("broken").length());
+        assertEquals(1, board.getJSONArray("broken").length());
+        assertEquals(TaiBenchStats.VERDICT_CRASHED, board.getJSONArray("broken").getJSONObject(0).getString("verdict"));
     }
 
     @Test
@@ -451,5 +461,60 @@ public class TaiBenchGuardrailsTest {
         assertNotNull(store.recoverStaleMarker("x"));
         assertNull(store.recoverStaleMarker("x"));
         assertEquals(1, store.records().length());
+    }
+
+    // ---- 5. the sink going away and the user stopping mid-generation ----------------------------
+
+    @Test
+    public void aSinkThatFailsWhileTokensStreamCancelsTheGenerationAndEndsTheRunWithTheIoError() throws Exception {
+        ScriptedHost host = new ScriptedHost();
+        host.loadRefuses = false;
+        host.resident = new JSONObject().put("modelId", "chat");
+        host.chatScript = callback -> {
+            callback.onToken("hello");
+            callback.onComplete("hello");
+            return new JSONObject().put("ok", true);
+        };
+        TaiBenchHarness harness = harness(host, event -> {
+            if ("token".equals(event.optString("event"))) throw new IOException("client went away");
+        }, A);
+
+        try {
+            harness.run();
+            org.junit.Assert.fail("the sink's IOException should end the run");
+        } catch (IOException expected) {
+            assertEquals("client went away", expected.getMessage());
+        }
+
+        assertTrue(host.cancels.get() >= 1);
+        // The user's chat model still comes back, and the model this entry loaded goes.
+        assertEquals(1, host.restores.get());
+        assertTrue(host.calls.contains("unload"));
+    }
+
+    @Test
+    public void aUserStopMidGenerationCancelsItRecordsTheEntryStoppedAndEndsTheRun() throws Exception {
+        ScriptedHost host = new ScriptedHost();
+        host.loadRefuses = false;
+        AtomicInteger chats = new AtomicInteger();
+        List<Boolean> cancelSeenAfterStop = new ArrayList<>();
+        List<JSONObject> events = new ArrayList<>();
+        host.chatScript = callback -> {
+            chats.incrementAndGet();
+            callback.onToken("par");
+            cancelSeenAfterStop.add(callback.shouldCancelGeneration());
+            host.harness.requestStop(TaiBenchHarness.STOP_CANCELLED);
+            cancelSeenAfterStop.add(callback.shouldCancelGeneration());
+            return new JSONObject().put("ok", false).put("error", "cancelled").put("message", "stopped");
+        };
+
+        JSONObject summary = harness(host, events::add, A, B).run();
+
+        assertEquals(Arrays.asList(false, true), cancelSeenAfterStop);
+        assertTrue(host.cancels.get() >= 1);
+        assertEquals(TaiBenchHarness.STOP_CANCELLED, summary.getString("stopped"));
+        assertEquals("stopped:" + TaiBenchHarness.STOP_CANCELLED, lastRecord(events).getString("status"));
+        // The second entry never starts.
+        assertFalse(host.calls.contains("load:model-b"));
     }
 }

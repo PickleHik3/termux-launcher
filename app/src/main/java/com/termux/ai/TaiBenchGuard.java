@@ -72,9 +72,9 @@ interface TaiBenchGuard {
 
     /**
      * The record's {@code conditions} field for {@code entry}: {@code {batteryStart, batteryEnd,
-     * charging, thermalStart, thermalEnd, headroomStart, headroomEnd, warmStart}}. The default
-     * (what {@link #ALWAYS_CONTINUE} answers) is every field {@code null} except {@code warmStart},
-     * which is {@code false} — the shape slice 1's callers already expect.
+     * charging, thermalStart, thermalEnd, headroomStart, headroomEnd, warmStart, thermalRose,
+     * thermalPeak, powerSave, screenOff}}. The default (what {@link #ALWAYS_CONTINUE} answers) is
+     * every field {@code null} except the flags, which are {@code false} — the shape slice 1's callers already expect.
      */
     @NonNull
     default JSONObject entryConditions(@NonNull TaiBenchSuite.EntryPlan entry) throws JSONException {
@@ -84,6 +84,9 @@ interface TaiBenchGuard {
             json.put(key, JSONObject.NULL);
         }
         json.put("warmStart", false);
+        json.put("thermalRose", false);
+        json.put("powerSave", false);
+        json.put("screenOff", false);
         return json;
     }
 

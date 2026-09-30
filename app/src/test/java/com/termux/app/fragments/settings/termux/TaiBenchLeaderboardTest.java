@@ -240,4 +240,83 @@ public class TaiBenchLeaderboardTest {
         for (int i = 0; i < rows.size(); i++) ids[i] = rows.get(i).modelId;
         return Arrays.asList(ids);
     }
+
+    // ---- hot-phone records, crashes, saver and screen-off marks --------------------------------
+
+    @Test
+    public void aWarmRecordNeverReplacesACleanOneOfTheSameEntryEvenWhenNewerAndFaster() throws JSONException {
+        JSONObject clean = record("a", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1000L, 20.0, 200.0, 900L, true, "0.2.40", "3.6.1", conditions(80, false, false));
+        JSONObject rose = record("a", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 2000L, 30.0, 200.0, 900L, true, "0.2.40", "3.6.1",
+            conditions(80, false, false).put("thermalRose", true));
+        TaiBenchLeaderboard.Board board = TaiBenchLeaderboard.read(benchmarks(clean, rose), NOW);
+        assertEquals(1, board.ranked.size());
+        TaiBenchLeaderboard.Row row = board.ranked.get(0);
+        assertEquals(clean.getString("id"), row.recordId);
+        assertFalse(row.warmStart);
+        assertEquals(20.0, row.decodeTps, 1e-9);
+    }
+
+    @Test
+    public void aWarmRecordWithNoCleanOneStaysRankedWithTheWarmMarkAndIsNotTheBest() throws JSONException {
+        JSONObject startedWarm = record("a", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1000L, 30.0, 200.0, 900L, true, "0.2.40", "3.6.1", conditions(80, false, true));
+        JSONObject rose = record("b", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1001L, 25.0, 200.0, 900L, true, "0.2.40", "3.6.1",
+            conditions(80, false, false).put("thermalRose", true));
+        JSONObject clean = record("c", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1002L, 15.0, 200.0, 900L, true, "0.2.40", "3.6.1", conditions(80, false, false));
+        TaiBenchLeaderboard.Board board = TaiBenchLeaderboard.read(benchmarks(startedWarm, rose, clean), NOW);
+        assertEquals(3, board.ranked.size());
+        assertTrue(TaiBenchLeaderboard.find(board, TaiBenchStore.keyOf(startedWarm)).warmStart);
+        assertTrue(TaiBenchLeaderboard.find(board, TaiBenchStore.keyOf(rose)).warmStart);
+        assertFalse(TaiBenchLeaderboard.find(board, TaiBenchStore.keyOf(clean)).warmStart);
+        assertEquals(15.0, board.bestTps(), 1e-9);
+    }
+
+    @Test
+    public void batterySaverAndScreenOffBecomeMarks() throws JSONException {
+        JSONObject saver = record("a", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1000L, 20.0, 200.0, 900L, true, "0.2.40", "3.6.1",
+            conditions(80, false, false).put("powerSave", true));
+        JSONObject off = record("b", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1001L, 19.0, 200.0, 900L, true, "0.2.40", "3.6.1",
+            conditions(80, false, false).put("screenOff", true));
+        TaiBenchLeaderboard.Board board = TaiBenchLeaderboard.read(benchmarks(saver, off), NOW);
+        TaiBenchLeaderboard.Row a = TaiBenchLeaderboard.find(board, TaiBenchStore.keyOf(saver));
+        TaiBenchLeaderboard.Row b = TaiBenchLeaderboard.find(board, TaiBenchStore.keyOf(off));
+        assertTrue(a.powerSave);
+        assertFalse(a.screenOff);
+        assertTrue(b.screenOff);
+        assertFalse(b.powerSave);
+    }
+
+    private static JSONObject crashed(String modelId, String accelerator, long timestamp) throws JSONException {
+        JSONObject marker = new JSONObject().put("modelId", modelId).put("backend", TaiModelSpec.BACKEND_MNN_LLM)
+            .put("accelerator", accelerator).put("speculative", false).put("preset", "standard")
+            .put("benchVersion", TaiBenchSuite.BENCH_VERSION).put("timestamp", timestamp);
+        return TaiBenchStore.crashedRecord(marker, "runtime died");
+    }
+
+    @Test
+    public void aCrashedEntryShowsInTheBrokenListWithACrashedVerdict() throws JSONException {
+        JSONObject dead = crashed("a", "gpu", 3000L);
+        JSONObject fine = record("b", TaiModelSpec.BACKEND_MNN_LLM, "cpu", 1000L, 20.0, 200.0, 900L, true, "0.2.40", "3.6.1", null);
+        TaiBenchLeaderboard.Board board = TaiBenchLeaderboard.read(benchmarks(fine, dead), NOW);
+        assertEquals(1, board.ranked.size());
+        assertEquals(1, board.broken.size());
+        TaiBenchLeaderboard.Row row = board.broken.get(0);
+        assertEquals("a", row.modelId);
+        assertEquals("crashed", row.verdict);
+        assertTrue(row.crashed);
+        assertEquals(0, row.rank);
+    }
+
+    @Test
+    public void onlyTheLatestCrashShowsAndACompleteRecordAfterItClearsIt() throws JSONException {
+        JSONObject firstCrash = crashed("a", "gpu", 1000L);
+        JSONObject secondCrash = crashed("a", "gpu", 2000L);
+        TaiBenchLeaderboard.Board twice = TaiBenchLeaderboard.read(benchmarks(firstCrash, secondCrash), NOW);
+        assertEquals(1, twice.broken.size());
+        assertEquals(2000L, twice.broken.get(0).timestamp);
+        // The file is in time order: a complete record after the crash means the entry ran again.
+        JSONObject cleared = record("a", TaiModelSpec.BACKEND_MNN_LLM, "gpu", 3000L, 18.0, 200.0, 900L, true, "0.2.40", "3.6.1", null);
+        TaiBenchLeaderboard.Board recovered = TaiBenchLeaderboard.read(benchmarks(firstCrash, secondCrash, cleared), NOW);
+        assertEquals(0, recovered.broken.size());
+        assertEquals(1, recovered.ranked.size());
+    }
 }

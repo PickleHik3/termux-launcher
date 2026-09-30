@@ -38,7 +38,8 @@ import java.util.Set;
  * <p>Record layout (bench v2): {@code id, benchVersion, preset, timestamp, durationMs, modelId,
  * displayName, sizeBytes, sha256, backend, accelerator, speculative, runtimeVersion, appVersion,
  * device{soc, ramClassGb}, conditions{batteryStart, batteryEnd, charging, thermalStart,
- * thermalEnd, headroomStart, headroomEnd, warmStart},
+ * thermalEnd, headroomStart, headroomEnd, warmStart, thermalRose, thermalPeak, powerSave,
+ * screenOff},
  * phases{load{ms, memBytes}, chat{ttftMs{med,min,max,runs}, decodeTps{…}, tokens, reply,
  * finishReason, reasoningTokens, tokenLimit}, longInput{readMs{…}, promptTps{…}, promptTokens,
  * contextWindow, truncated, keptChars, totalChars, peakPssBytes, finishReason, …}},
@@ -251,29 +252,49 @@ public final class TaiBenchStore {
     }
 
     /**
-     * The leaderboard for one bench version: the latest complete record per entry, ranked by
-     * verdict (Smooth, Usable, Slow), then decode speed, then the chat's first token. Entries whose
-     * sanity check failed are {@code broken}: returned, not ranked. Records of other bench versions
-     * are not looked at, so two versions never share a ranking; stopped, skipped and timed-out
-     * records never rank either, though an older complete record of the same entry does. The
-     * verdict is worked out from the record's figures, so a change to the thresholds re-grades the
-     * records already on file.
+     * The leaderboard for one bench version: one complete record per entry, ranked by
+     * verdict (Smooth, Usable, Slow), then decode speed, then the chat's first token. The record is
+     * the latest clean one; a record that {@link #ranWarm ran warm} stands in only for an entry
+     * with no clean one, so a hot-phone run never outranks (or replaces) a clean run of the same
+     * model on the same processor. Entries whose sanity check failed are {@code broken}: returned,
+     * not ranked, and so is an entry whose latest record is a crash with no complete record after
+     * it. Records of other bench versions are not looked at, so two versions never share a
+     * ranking; stopped, skipped and timed-out records never rank either, though an older complete
+     * record of the same entry does. The verdict is worked out from the record's figures, so a
+     * change to the thresholds re-grades the records already on file.
      */
     @NonNull
     public static JSONObject leaderboard(@NonNull JSONArray records, @NonNull String benchVersion) throws JSONException {
-        Map<String, JSONObject> latestComplete = new LinkedHashMap<>();
+        Map<String, JSONObject> latestClean = new LinkedHashMap<>();
+        Map<String, JSONObject> latestWarm = new LinkedHashMap<>();
+        Map<String, JSONObject> crashed = new LinkedHashMap<>();
         for (int i = 0; i < records.length(); i++) {
             JSONObject record = records.optJSONObject(i);
             if (record == null) continue;
             if (!benchVersion.equals(record.optString("benchVersion", ""))) continue;
-            if (!STATUS_COMPLETE.equals(record.optString("status", ""))) continue;
-            latestComplete.put(keyOf(record), record);
+            String status = record.optString("status", "");
+            String key = keyOf(record);
+            if (STATUS_CRASHED.equals(status)) {
+                crashed.put(key, record);
+                continue;
+            }
+            if (!STATUS_COMPLETE.equals(status)) continue;
+            // A complete record after a crash means the entry runs again.
+            crashed.remove(key);
+            (ranWarm(record) ? latestWarm : latestClean).put(key, record);
+        }
+        Map<String, JSONObject> latestComplete = new LinkedHashMap<>(latestClean);
+        for (Map.Entry<String, JSONObject> entry : latestWarm.entrySet()) {
+            if (!latestComplete.containsKey(entry.getKey())) latestComplete.put(entry.getKey(), entry.getValue());
         }
         List<JSONObject> ranked = new ArrayList<>();
         List<JSONObject> broken = new ArrayList<>();
         for (Map.Entry<String, JSONObject> entry : latestComplete.entrySet()) {
             JSONObject row = row(entry.getKey(), entry.getValue());
             (row.optBoolean("checkPassed", false) ? ranked : broken).add(row);
+        }
+        for (Map.Entry<String, JSONObject> entry : crashed.entrySet()) {
+            broken.add(row(entry.getKey(), entry.getValue()));
         }
         Collections.sort(ranked, new Comparator<JSONObject>() {
             @Override
@@ -321,6 +342,16 @@ public final class TaiBenchStore {
         return figure == null ? fallback : figure.optDouble("med", fallback);
     }
 
+    /**
+     * Whether a record was measured on a hot phone: it started after a cool-down that was skipped
+     * or ran out ({@code warmStart}), or the thermal status rose above the run's start during the
+     * entry ({@code thermalRose}).
+     */
+    public static boolean ranWarm(@NonNull JSONObject record) {
+        JSONObject conditions = record.optJSONObject("conditions");
+        return conditions != null && (conditions.optBoolean("warmStart", false) || conditions.optBoolean("thermalRose", false));
+    }
+
     /** A missing first-token figure sorts after every measured one. */
     private static double ttftForSort(@NonNull JSONObject row) {
         double value = row.optDouble("ttftMs", Double.NaN);
@@ -357,7 +388,9 @@ public final class TaiBenchStore {
         row.put("loadMs", load == null ? JSONObject.NULL : load.optLong("ms", 0L));
         row.put("memBytes", memoryBytes(phases));
         row.put("checkPassed", checkPassed);
-        row.put("verdict", TaiBenchStats.verdict(decodeTps, Math.round(ttftMs), Math.round(readMs), checkPassed));
+        row.put("status", record.optString("status", ""));
+        row.put("verdict", STATUS_CRASHED.equals(record.optString("status", "")) ? TaiBenchStats.VERDICT_CRASHED
+            : TaiBenchStats.verdict(decodeTps, Math.round(ttftMs), Math.round(readMs), checkPassed));
         row.put("conditions", record.opt("conditions") == null ? JSONObject.NULL : record.opt("conditions"));
         row.put("runtimeVersion", record.optString("runtimeVersion", ""));
         row.put("appVersion", record.optString("appVersion", ""));

@@ -338,6 +338,7 @@ final class TaiBenchViews {
             case TaiBenchStats.VERDICT_USABLE: return context.getString(R.string.tai_bench_verdict_usable);
             case TaiBenchStats.VERDICT_SLOW: return context.getString(R.string.tai_bench_verdict_slow);
             case TaiBenchStats.VERDICT_BROKEN: return context.getString(R.string.tai_bench_verdict_broken);
+            case TaiBenchStats.VERDICT_CRASHED: return context.getString(R.string.tai_bench_verdict_crashed);
             default: return "";
         }
     }

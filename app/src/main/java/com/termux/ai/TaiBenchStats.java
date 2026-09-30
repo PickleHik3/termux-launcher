@@ -21,6 +21,8 @@ public final class TaiBenchStats {
     public static final String VERDICT_USABLE = "usable";
     public static final String VERDICT_SLOW = "slow";
     public static final String VERDICT_BROKEN = "broken";
+    /** Not a measured verdict: the entry's runtime died, see {@link TaiBenchStore#STATUS_CRASHED}. */
+    public static final String VERDICT_CRASHED = "crashed";
 
     // The verdict's thresholds. Each figure is what a person notices in ordinary use, so they are
     // constants to argue with here, not numbers scattered through the harness and the screens.

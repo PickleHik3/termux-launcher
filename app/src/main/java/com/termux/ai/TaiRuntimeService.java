@@ -14,6 +14,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
+import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteException;
 import android.util.Log;
@@ -106,6 +107,12 @@ public final class TaiRuntimeService extends Service {
     private final AtomicBoolean pressureActionQueued = new AtomicBoolean();
     /** A {@link TaiRuntimeIpc#OP_BENCH_RUN} is on the serial lane; see {@link #isRefusedDuringBench}. */
     private final AtomicBoolean benchRunning = new AtomicBoolean();
+    /**
+     * Held for a bench run so the CPU keeps running with the screen off; the timeout is a ceiling
+     * for a run that never reaches its {@code finally}, not a run length.
+     */
+    static final long BENCH_WAKE_LOCK_CEILING_MS = 4 * 60 * 60_000L;
+    @Nullable private PowerManager.WakeLock benchWakeLock;
     private final Messenger messenger = new Messenger(new IncomingHandler());
     private volatile boolean foreground;
     /** Slow enough to be invisible in battery stats, fast enough for a per-second countdown. */
@@ -155,6 +162,7 @@ public final class TaiRuntimeService extends Service {
         // the last known state keeps the UI glyph from counting down against a runtime that is gone.
         stopRuntimeWatch();
         cancelIdleExitCheck();
+        releaseBenchWakeLock();
         watchScheduler.shutdownNow();
         executor.shutdownNow();
         controlExecutor.shutdownNow();
@@ -303,6 +311,7 @@ public final class TaiRuntimeService extends Service {
         if (speech) ttsInFlight.incrementAndGet();
         try {
             String payload = body != null ? body : readBodyFile(bodyFile);
+            if (bench) acquireBenchWakeLock();
             if (isForegroundOperation(operation)) {
                 ensureForeground("On-device AI runtime", speech ? "Speaking" : bench ? "Benchmarking" : "Preparing " + operation);
             }
@@ -318,12 +327,38 @@ public final class TaiRuntimeService extends Service {
         } catch (Throwable throwable) {
             sendResponse(replyTo, requestId, error(500, "tai_runtime_service_error", message(throwable)));
         } finally {
-            if (bench) benchRunning.set(false);
+            if (bench) {
+                releaseBenchWakeLock();
+                benchRunning.set(false);
+            }
             if (speech) ttsInFlight.decrementAndGet();
             deleteBodyFile(bodyFile);
             if (!isStatusOperation(operation)) lastActivityMs = System.currentTimeMillis();
             inFlight.decrementAndGet();
             updateForegroundAfterOperation();
+        }
+    }
+
+    private synchronized void acquireBenchWakeLock() {
+        releaseBenchWakeLock();
+        try {
+            PowerManager power = (PowerManager) getSystemService(POWER_SERVICE);
+            if (power == null) return;
+            PowerManager.WakeLock lock = power.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "termux:tai-bench");
+            lock.setReferenceCounted(false);
+            lock.acquire(BENCH_WAKE_LOCK_CEILING_MS);
+            benchWakeLock = lock;
+        } catch (RuntimeException e) {
+            Log.w(LOG_TAG, "Could not hold a wake lock for the benchmark", e);
+        }
+    }
+
+    private synchronized void releaseBenchWakeLock() {
+        PowerManager.WakeLock lock = benchWakeLock;
+        benchWakeLock = null;
+        try {
+            if (lock != null && lock.isHeld()) lock.release();
+        } catch (RuntimeException ignored) {
         }
     }
 

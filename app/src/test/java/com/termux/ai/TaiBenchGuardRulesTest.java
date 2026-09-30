@@ -229,4 +229,28 @@ public class TaiBenchGuardRulesTest {
         assertEquals(TaiBenchGuard.PAUSE, result.decision.action);
         assertEquals("left", result.decision.reason);
     }
+
+    // ---- start warnings and storage --------------------------------------------------------------
+
+    @Test
+    public void startWarnings_batterySaverWarnsButNeverBlocks() {
+        TaiBenchGuardRules.Snapshot saver = new TaiBenchGuardRules.Snapshot(80, false, 0, Float.NaN, true, false);
+        assertNull(TaiBenchGuardRules.startCheck(saver));
+        assertEquals(java.util.Collections.singletonList(TaiBenchGuardRules.WARN_POWER_SAVE), TaiBenchGuardRules.startWarnings(saver));
+        assertEquals(0, TaiBenchGuardRules.startWarnings(snapshot(80, false, 0, Float.NaN)).size());
+        assertEquals(0, TaiBenchGuardRules.startWarnings(TaiBenchGuardRules.Snapshot.UNKNOWN).size());
+    }
+
+    @Test
+    public void storageShortfall_sumsPlusTenPercentAgainstFreeSpace() {
+        long gb = 1024L * 1024L * 1024L;
+        // 5 GB of downloads need 5.5 GB.
+        assertEquals(0L, TaiBenchGuardRules.storageShortfallBytes(5 * gb, 6 * gb));
+        assertEquals(0L, TaiBenchGuardRules.storageShortfallBytes(5 * gb, (long) Math.ceil(5.5 * gb)));
+        assertEquals(gb / 2, TaiBenchGuardRules.storageShortfallBytes(5 * gb, 5 * gb));
+        assertEquals((long) Math.ceil(5.5 * gb), TaiBenchGuardRules.storageShortfallBytes(5 * gb, 0L));
+        // Nothing to download, or free space unknown, never blocks.
+        assertEquals(0L, TaiBenchGuardRules.storageShortfallBytes(0L, 0L));
+        assertEquals(0L, TaiBenchGuardRules.storageShortfallBytes(5 * gb, -1L));
+    }
 }
