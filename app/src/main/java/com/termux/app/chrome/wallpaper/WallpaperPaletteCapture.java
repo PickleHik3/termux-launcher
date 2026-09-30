@@ -7,7 +7,7 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.color.MaterialColors;
-import com.termux.app.R;
+import com.termux.R;
 
 /**
  * The four colours a generated background is drawn with. "Material" reads the roles the launcher's
