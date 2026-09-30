@@ -483,77 +483,20 @@ public final class TaiModelDownloader {
                     if (pendingFiles.size() > 10000) throw new IllegalStateException("Model package has too many files.");
                     String fileName = pendingFiles.get(packageIndex);
                     if (output.getName().equals(fileName)) continue;
-                    String fileUrl = baseUrl + encodeHuggingFacePath(fileName);
-                    File fileOutput = new File(modelDir, fileName);
-                    // A file already complete on disk (a re-download of an installed package, or
-                    // one this same run already fetched under an earlier name) is kept rather than
-                    // re-fetched: the revision is pinned in the URL, so a matching length is enough
-                    // to trust it. Its bytes still count toward progress so the total lands right.
-                    Long expectedFileSize = packageListing.sizes.get(fileName);
-                    if (isFileAlreadyComplete(fileOutput, expectedFileSize == null ? -1L : expectedFileSize)) {
-                        currentBytes += fileOutput.length();
+                    long[] counted = {currentBytes};
+                    try {
+                        fetchPackageFile(run, control, baseUrl, modelDir, fileName,
+                            packageListing.sizes.get(fileName), authToken, counted, packageTotalBytes);
+                    } finally {
+                        currentBytes = counted[0];
                         bytesRead = currentBytes;
-                        run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
-                        if (fileName.endsWith(".json")) {
-                            TaiMnnPackage.references(TaiMnnPackage.readConfig(fileOutput), packageFiles);
-                            for (String dependency : packageFiles)
-                                if (!pendingFiles.contains(dependency)) pendingFiles.add(dependency);
-                        }
-                        continue;
                     }
-                    File fileParent = fileOutput.getParentFile();
-                    if (fileParent != null && !fileParent.exists() && !fileParent.mkdirs()) {
-                        throw new IllegalStateException("Could not create MNN package directory.");
-                    }
-                    File filePartial = new File(fileOutput.getAbsolutePath() + ".part");
-                    long offset = resumeOffset(filePartial, fileUrl);
-                    HttpURLConnection fileConn = open(fileUrl, authToken, offset);
-                    int fileStatus = fileConn.getResponseCode();
-                    if (fileStatus == 416 && offset > 0) {
-                        fileConn.disconnect();
-                        fileConn = open(fileUrl, authToken, 0);
-                        fileStatus = fileConn.getResponseCode();
-                        offset = 0;
-                    }
-                    boolean resume = offset > 0 && fileStatus == 206
-                        && validContentRange(fileConn.getHeaderField("Content-Range"), offset);
-                    if (fileStatus == 206 && !resume) {
-                        fileConn.disconnect();
-                        throw new IllegalStateException("Invalid partial response for " + fileName);
-                    }
-                    if (!resume) offset = 0;
-                    currentBytes += offset;
-                    if (fileStatus < 200 || fileStatus >= 300) {
-                        fileConn.disconnect();
-                        throw new IllegalStateException("MNN package file missing: " + fileName);
-                    }
-                    run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
-                    try (InputStream fileInput = new BufferedInputStream(fileConn.getInputStream());
-                         FileOutputStream fileOut = new FileOutputStream(filePartial, resume)) {
-                        byte[] buffer = new byte[1024 * 64];
-                        int read;
-                        while ((read = fileInput.read(buffer)) != -1) {
-                            control.checkpoint();
-                            fileOut.write(buffer, 0, read);
-                            currentBytes += read;
-                            bytesRead = currentBytes;
-                            if (currentBytes % PERSIST_EVERY_BYTES < read) {
-                                run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
-                            } else {
-                                run.report(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
-                            }
-                        }
-                    }
-                    fileConn.disconnect();
-                    if (fileOutput.exists() && !fileOutput.delete()) throw new IllegalStateException("Could not replace file.");
-                    if (!filePartial.renameTo(fileOutput)) throw new IllegalStateException("Could not finalize file download.");
-                    clearResumeMarker(filePartial);
+                    File fileOutput = new File(modelDir, fileName);
                     if (fileName.endsWith(".json")) {
                         TaiMnnPackage.references(TaiMnnPackage.readConfig(fileOutput), packageFiles);
                         for (String dependency : packageFiles)
                             if (!pendingFiles.contains(dependency)) pendingFiles.add(dependency);
                     }
-                    run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
                 }
 
                 run.persist(run.record(TaiModelStore.STATE_VERIFYING, currentBytes, packageTotalBytes, ""));
@@ -666,6 +609,74 @@ public final class TaiModelDownloader {
             } catch (JSONException ignored) {
             }
         }
+    }
+
+    /**
+     * Fetches one file of a multi-file package into {@code modelDir}, keeping a file that is already
+     * complete and resuming a {@code .part}. {@code counted[0]} is the running byte total across the
+     * package and is advanced as bytes arrive, so a caller that sees an exception still knows how far it got.
+     */
+    private void fetchPackageFile(@NonNull Run run, @NonNull Control control, @NonNull String baseUrl,
+                                  @NonNull File modelDir, @NonNull String fileName, @Nullable Long expectedFileSize,
+                                  @Nullable String authToken, @NonNull long[] counted, long totalBytes) throws Exception {
+        String fileUrl = baseUrl + encodeHuggingFacePath(fileName);
+        File fileOutput = new File(modelDir, fileName);
+        // A file already complete on disk (a re-download of an installed package, or
+        // one this same run already fetched under an earlier name) is kept rather than
+        // re-fetched: the revision is pinned in the URL, so a matching length is enough
+        // to trust it. Its bytes still count toward progress so the total lands right.
+        if (isFileAlreadyComplete(fileOutput, expectedFileSize == null ? -1L : expectedFileSize)) {
+            counted[0] += fileOutput.length();
+            run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, counted[0], totalBytes, ""), fileName));
+            return;
+        }
+        File fileParent = fileOutput.getParentFile();
+        if (fileParent != null && !fileParent.exists() && !fileParent.mkdirs()) {
+            throw new IllegalStateException("Could not create MNN package directory.");
+        }
+        File filePartial = new File(fileOutput.getAbsolutePath() + ".part");
+        long offset = resumeOffset(filePartial, fileUrl);
+        HttpURLConnection fileConn = open(fileUrl, authToken, offset);
+        int fileStatus = fileConn.getResponseCode();
+        if (fileStatus == 416 && offset > 0) {
+            fileConn.disconnect();
+            fileConn = open(fileUrl, authToken, 0);
+            fileStatus = fileConn.getResponseCode();
+            offset = 0;
+        }
+        boolean resume = offset > 0 && fileStatus == 206
+            && validContentRange(fileConn.getHeaderField("Content-Range"), offset);
+        if (fileStatus == 206 && !resume) {
+            fileConn.disconnect();
+            throw new IllegalStateException("Invalid partial response for " + fileName);
+        }
+        if (!resume) offset = 0;
+        counted[0] += offset;
+        if (fileStatus < 200 || fileStatus >= 300) {
+            fileConn.disconnect();
+            throw new IllegalStateException("MNN package file missing: " + fileName);
+        }
+        run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, counted[0], totalBytes, ""), fileName));
+        try (InputStream fileInput = new BufferedInputStream(fileConn.getInputStream());
+             FileOutputStream fileOut = new FileOutputStream(filePartial, resume)) {
+            byte[] buffer = new byte[1024 * 64];
+            int read;
+            while ((read = fileInput.read(buffer)) != -1) {
+                control.checkpoint();
+                fileOut.write(buffer, 0, read);
+                counted[0] += read;
+                if (counted[0] % PERSIST_EVERY_BYTES < read) {
+                    run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, counted[0], totalBytes, ""), fileName));
+                } else {
+                    run.report(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, counted[0], totalBytes, ""), fileName));
+                }
+            }
+        }
+        fileConn.disconnect();
+        if (fileOutput.exists() && !fileOutput.delete()) throw new IllegalStateException("Could not replace file.");
+        if (!filePartial.renameTo(fileOutput)) throw new IllegalStateException("Could not finalize file download.");
+        clearResumeMarker(filePartial);
+        run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, counted[0], totalBytes, ""), fileName));
     }
 
     /** One attempt's bookkeeping: the base record every progress write is derived from. */
