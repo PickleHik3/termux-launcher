@@ -2,6 +2,7 @@ package com.termux.app.layouteditor;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.util.DisplayMetrics;
 import android.util.TypedValue;
@@ -10,9 +11,6 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
-import android.widget.Button;
-import android.widget.LinearLayout;
-import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -24,6 +22,8 @@ import androidx.core.view.WindowInsetsCompat;
 import androidx.core.widget.NestedScrollView;
 
 import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 
 import com.termux.R;
@@ -37,8 +37,6 @@ import com.termux.app.editorshell.EditorShellRows;
 import com.termux.app.editorshell.EditorShellSheet;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.fragments.settings.PlaceMiniatureView;
-import com.termux.app.place.PlaceArrangeModel;
-import com.termux.app.place.PlaceArrangeModel.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayoutStore;
@@ -46,25 +44,27 @@ import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
+import java.util.Locale;
 
 /**
- * The Layout editor: a miniature of the place the user is looking at, parked over the live place,
- * with a Portrait / Landscape toggle above it. The layout it edits is every place's (ADR 0003), so
- * it has no place to pick: a drop lands on Home, the terminal and the display alike.
+ * The Layout editor: the layout canvas of the place the user is looking at, parked over the live
+ * place, with a Portrait / Landscape toggle above it. The layout it edits is every place's (ADR
+ * 0003), so it has no place to pick: a write lands on Home, the terminal and the display alike.
  *
  * <p>The sibling of the surface editor and not a page of it: this one answers where a place's
- * elements sit, that one answers how its surfaces look, and only ever one of the two is open. A bar
- * is dragged on the miniature to an edge or into the tray under it, and the drop writes straight
- * through, so the place behind the card follows every drop made in the orientation the phone is
- * actually in. The other orientation moves on the miniature alone until the phone is turned.
+ * elements sit, that one answers how its surfaces look, and only ever one of the two is open.
  *
- * <p>Beneath the picture stand the rows for what no bar can be dragged into — the dock's and the
- * keyboard's height, the keyboard's own choices and its chin, and Home's grid. They write through
- * the same way a drop does. The toggle, the picture and the rows are one list under the header,
- * scrolling as one, the way an Android sheet's content does.
+ * <p>The canvas is the whole editor (spec §3.5); there are no rows under it. A bar is dragged by
+ * its grip to an edge, or into the tray under the phone to put it away. A tap selects an element:
+ * one outline, and on the dock, the keyboard and Home's grid a handle that resizes it — the dock's
+ * height, the keyboard's height and its chin, the grid's cells — with a readout in real units
+ * while it is held. The keyboard, selected, shows its three type chips beside it, and is dropped
+ * in the tray to switch it off. The tray lists every hidden element as a chip that brings it back
+ * to the edge it left (§3.6). Every write goes straight through, so the place behind the card
+ * follows every edit made in the orientation the phone is actually in; the other orientation moves
+ * on the canvas alone until the phone is turned.
  *
  * <p>The card is the shell's sheet ({@link EditorShellSheet}), the same one the Appearance editor
  * stands in: on a portrait screen it rests about a fifth of the screen down, a pull on its handle,
@@ -75,7 +75,7 @@ import java.util.Map;
  * and Back with something moved asks rather than choosing for the user — the live write-through
  * means leaving would otherwise mean keeping by accident.
  *
- * <p>Every decision here — what is shown, what a drop writes, whether the place follows, whether
+ * <p>Every decision here — what is shown, what a write does, whether the place follows, whether
  * anything has moved — belongs to {@link LayoutEditorPlan}; this class is the shell that draws its
  * answers. {@link Host} is the seam to the activity, the same shape the surface editor's is.
  */
@@ -121,6 +121,22 @@ public final class LayoutEditorController {
         default float dockCornerRadiusDp() {
             return PlaceMiniatureView.DEFAULT_DOCK_RADIUS_DP;
         }
+
+        /**
+         * How thick the live dock's pinned apps stand, in dp, as last laid out — or -1 when there
+         * is no dock on screen to measure. What the dock's handle reads out.
+         */
+        default int measuredDockHeightDp() {
+            return -1;
+        }
+
+        /**
+         * How tall the live keyboard stands, in dp, as last laid out — or -1 while it is down.
+         * What the keyboard's height handle reads out.
+         */
+        default int measuredKeyboardHeightDp() {
+            return -1;
+        }
     }
 
     @NonNull private final Host mHost;
@@ -146,11 +162,15 @@ public final class LayoutEditorController {
         final EditorShellControlHost orientationHost;
         final MaterialButtonToggleGroup orientation;
         final TextView orientationNotice;
-        final LinearLayout body;
-        final PlaceMiniatureView miniature;
         final TextView narrowNotice;
-        /** The rows' own column, in the list under the picture or in the pane beside it. */
-        final LinearLayout rowsHost;
+        /** The canvas and what stands over it: the tray's chips and the keyboard's type chips. */
+        final FrameLayout canvasHost;
+        final PlaceMiniatureView miniature;
+        final View tray;
+        final View trayScroller;
+        final ChipGroup trayChips;
+        final TextView trayEmpty;
+        final ChipGroup keyboardForms;
 
         Card(ViewGroup host, EditorShellSheet root) {
             this.host = host;
@@ -169,10 +189,14 @@ public final class LayoutEditorController {
             orientationHost = root.findViewById(R.id.layout_editor_orientation_host);
             orientation = root.findViewById(R.id.layout_editor_orientation);
             orientationNotice = root.findViewById(R.id.layout_editor_orientation_notice);
-            body = root.findViewById(R.id.layout_editor_body);
-            miniature = root.findViewById(R.id.layout_editor_miniature);
             narrowNotice = root.findViewById(R.id.layout_editor_narrow_notice);
-            rowsHost = root.findViewById(R.id.layout_editor_rows_host);
+            canvasHost = root.findViewById(R.id.layout_editor_canvas_host);
+            miniature = root.findViewById(R.id.layout_editor_miniature);
+            tray = root.findViewById(R.id.layout_editor_tray);
+            trayScroller = root.findViewById(R.id.layout_editor_tray_scroller);
+            trayChips = root.findViewById(R.id.layout_editor_tray_chips);
+            trayEmpty = root.findViewById(R.id.layout_editor_tray_empty);
+            keyboardForms = root.findViewById(R.id.layout_editor_keyboard_forms);
         }
 
         boolean complete() {
@@ -181,20 +205,23 @@ public final class LayoutEditorController {
                 && revert != null && discard != null
                 && done != null && chooserSlot != null && orientationRow != null
                 && orientationHost != null && orientation != null && orientationNotice != null
-                && body != null && miniature != null && narrowNotice != null && rowsHost != null;
+                && narrowNotice != null && canvasHost != null && miniature != null
+                && tray != null && trayScroller != null && trayChips != null && trayEmpty != null
+                && keyboardForms != null;
         }
     }
 
+    /** Each orientation segment's width: a glyph and its air, no word (spec §3.5). */
+    @VisibleForTesting static final int ORIENTATION_SEGMENT_DP = 64;
+
     @Nullable private Card mCard;
     @Nullable private LayoutEditorPlan mPlan;
-    /** True while the toggle is being restated from the plan, so it writes nothing back. */
+    /** True while a toggle or a chip group is being restated from the plan, so it writes nothing. */
     private boolean mRestatingToggle;
-    /** The track a finger is on, which no restatement may move under it. */
-    @Nullable private SeekBar mDraggedSlider;
-    /** Restates every row from the store; run after anything that can move what one says. */
-    @NonNull private final List<Runnable> mRowSyncs = new ArrayList<>(5);
-    /** The place and orientation the rows standing there were built for, or null for none. */
-    @Nullable private String mRowsKey;
+    /** The handle a finger is on, whose readout a late measurement may restate; or null. */
+    @Nullable private PlaceMiniatureView.Handle mHeldHandle;
+    /** What the tray's chips were built for, so they are rebuilt only when that changes. */
+    @NonNull private List<LayoutEditorPlan.TrayItem> mTrayShown = Collections.emptyList();
     /**
      * The sheet's own channel: 1 is the card parked below the bottom edge, 0 is the card in place.
      * One spring for both directions, so a card closed while it is still opening turns round from
@@ -296,8 +323,8 @@ public final class LayoutEditorController {
         card.root.setBackground(cardBackground());
         EditorShellPaint.applyCardElevation(card.root,
             mHost.context().getResources().getDisplayMetrics().density);
-        // Which editor this is. The place under it is what the card is pointed at.
-        EditorShellHeader.applyEyebrow(card.header, R.string.termux_layout_editor_title);
+        // Which editor this is; the title under it says which layout, so the two never repeat.
+        EditorShellHeader.applyEyebrow(card.header, R.string.termux_layout_editor_eyebrow);
         EditorShellHeader.applyDoneGlyph(card.done,
             androidx.core.content.ContextCompat.getDrawable(
                 mHost.context(), R.drawable.ic_symbol_check),
@@ -323,11 +350,11 @@ public final class LayoutEditorController {
         });
         // A long list scrolls under the header with the shell's fade and its quiet scrollbar.
         EditorShellRows.applyBodyScroller(card.scroller);
-        // The chooser is a pill sized to its own two words, not a control column stretched to
-        // whatever the card had left.
+        // The chooser is a pill of two glyphs, not a control column stretched to whatever the card
+        // had left.
         ViewGroup.LayoutParams pill = card.orientationHost.getLayoutParams();
         if (pill != null) {
-            pill.width = EditorShellMetrics.px(2 * EditorShellMetrics.CHOOSER_SEGMENT_DP,
+            pill.width = EditorShellMetrics.px(2 * ORIENTATION_SEGMENT_DP,
                 mHost.context().getResources().getDisplayMetrics().density);
             card.orientationHost.setLayoutParams(pill);
         }
@@ -357,6 +384,62 @@ public final class LayoutEditorController {
                 LayoutEditorController.this.onBarDropped(bar, edge, index, underKeyboard);
             }
         });
+        card.miniature.setOnCanvasEditListener(new PlaceMiniatureView.OnCanvasEditListener() {
+            @Override public void onSelectionChanged(@Nullable PlaceMiniatureView.Block selected) {
+                syncKeyboardForms(card);
+            }
+
+            @Override public void onDockHeightDragged(float scale) {
+                if (mPlan != null)
+                    onHandleWrite(PlaceMiniatureView.Handle.DOCK_HEIGHT,
+                        mPlan.setDockHeightScale(scale));
+            }
+
+            @Override public void onKeyboardHeightDragged(float scale) {
+                if (mPlan != null)
+                    onHandleWrite(PlaceMiniatureView.Handle.KEYBOARD_HEIGHT,
+                        mPlan.setKeyboardHeightScale(scale));
+            }
+
+            @Override public void onKeyboardChinDragged(int dp) {
+                if (mPlan != null)
+                    onHandleWrite(PlaceMiniatureView.Handle.KEYBOARD_CHIN,
+                        mPlan.setKeyboardChinDp(dp));
+            }
+
+            @Override public void onWidgetGridDragged(int columns, int rows) {
+                if (mPlan != null)
+                    onHandleWrite(PlaceMiniatureView.Handle.WIDGET_GRID,
+                        mPlan.setWidgetGrid(columns, rows));
+            }
+
+            @Override public void onHandleReleased() {
+                mHeldHandle = null;
+                card.miniature.setHandleReadout(null);
+                if (mPlan != null)
+                    syncDirty(card, mPlan);
+            }
+
+            @Override public void onKeyboardPutAway() {
+                if (mPlan != null)
+                    afterCanvasWrite(mPlan.setKeyboardShown(false));
+            }
+        });
+        card.keyboardForms.setOnCheckedStateChangeListener((group, checkedIds) -> {
+            if (!checkedIds.isEmpty())
+                onKeyboardFormPicked(checkedIds.get(0));
+        });
+        card.keyboardForms.setContentDescription(
+            mHost.context().getString(R.string.layout_editor_keyboard_forms));
+        // The type chips stand beside the keyboard, which moves whenever the canvas is laid out
+        // again: a new size, a new orientation, a keyboard grown by its handle. Posted, since the
+        // chips' own layout params may change and a layout pass is no place to ask for another.
+        card.miniature.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft,
+                                                  oldTop, oldRight, oldBottom) ->
+            card.miniature.post(() -> {
+                if (mCard == card)
+                    syncKeyboardForms(card);
+            }));
         card.orientation.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (!isChecked || mRestatingToggle || mPlan == null)
                 return;
@@ -365,11 +448,13 @@ public final class LayoutEditorController {
             if (picked == mPlan.shownOrientation())
                 return;
             mPlan.showOrientation(picked);
+            // The selection was on the other orientation's picture.
+            card.miniature.setSelectedBlock(null);
             sync();
         });
     }
 
-    // ------------------------------------------------------------------------------- the canvas
+    // ------------------------------------------------------------------------------- the drops
 
     /**
      * A bar dropped into a gap in an edge's stack, or in the tray when {@code edge} is null. The
@@ -394,7 +479,7 @@ public final class LayoutEditorController {
         sync();
     }
 
-    /** Re-reads the miniature, the toggle, the rows and the two unsaved glyphs from the plan. */
+    /** Re-reads the canvas, the toggle, the tray and the two unsaved glyphs from the plan. */
     private void sync() {
         Card card = mCard;
         LayoutEditorPlan plan = mPlan;
@@ -412,9 +497,12 @@ public final class LayoutEditorController {
             plan.warnsOtherOrientation() ? View.VISIBLE : View.GONE);
         applyCanvasHeight(card, plan);
         card.miniature.setDockCornerRadiusDp(mHost.dockCornerRadiusDp());
+        card.miniature.setSizes(plan.dockHeightScale(), plan.keyboardHeightScale(),
+            plan.keyboardChinDp());
         card.miniature.setLayout(plan.shownLayout(), plan.shownOrientation(), plan.place());
         syncNotice(card, plan);
-        syncRows(card, plan);
+        syncTray(card, plan);
+        syncKeyboardForms(card);
         syncDirty(card, plan);
     }
 
@@ -479,18 +567,15 @@ public final class LayoutEditorController {
     }
 
     /**
-     * Sizes the canvas to the frame the shown orientation asks for, decides whether the rows stand
-     * beside it or beneath it, and tells the sheet the two heights it stands at.
+     * Sizes the canvas to the frame the shown orientation asks for and tells the sheet the two
+     * heights it stands at.
      *
      * <p>The canvas is sized once, from the resting card, and never from the pull: pulling the
      * sheet up shows more of the list, it does not reshape the picture in it. The frame is bounded
      * by the card's width — a landscape frame as wide as the screen in a card a row wide was a
      * frame with dead air above and below it — and by what the resting card leaves once its chrome
-     * and a peek of the rows have theirs, so the first rows are in view before anything scrolls.
-     *
-     * <p>A portrait miniature on a landscape screen was a ~150px frame in a 1300px card with two
-     * ~550px empty gutters around it. Beside it there is room for a whole row of controls, and the
-     * frame gets the body's whole height instead.
+     * has its share. There are no rows under the canvas any more (spec §3.5), so it keeps no peek
+     * of them either, and it never shares the body with a pane beside it.
      */
     private void applyCanvasHeight(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
         DisplayMetrics metrics = mHost.context().getResources().getDisplayMetrics();
@@ -506,7 +591,6 @@ public final class LayoutEditorController {
         // Appearance card asks: compact only where even the pulled-up card is short.
         EditorShellHeader.apply(card.header, expandedPx);
 
-        int floorPx = Math.round(dpToPx(ROWS_PEEK_DP));
         int chooserPx = Math.max(card.orientationRow.getHeight(),
             Math.round(dpToPx(EditorShellMetrics.CHOOSER_DP)));
         int chromePx = cardChromePx(expandedPx, chooserPx,
@@ -514,70 +598,14 @@ public final class LayoutEditorController {
             density);
         float frameAspect = PlaceMiniatureView.frameAspect(plan.shownOrientation());
         int reservedPx = Math.round(card.miniature.reservedHeightPx());
-
-        int naturalPx = LayoutEditorPlan.miniatureNaturalWidthPx(plan.shownOrientation(),
-            metrics.widthPixels, metrics.heightPixels, frameAspect);
-        EditorShellMetrics.PaneSplit split = EditorShellMetrics.paneSplit(
-            EditorShellMetrics.contentWidthPx(metrics.widthPixels, density), naturalPx, density);
-        boolean twoPanes = rowsBesideMiniature(naturalPx, split, density);
-        int columnPx = applyCardWidth(card, metrics.widthPixels, split, density, twoPanes);
-
-        int height = twoPanes
-            ? LayoutEditorPlan.miniatureHeightInPanePx(frameAspect, reservedPx,
-                split.leadingWidthPx, Math.max(floorPx, restPx - chromePx))
-            : LayoutEditorPlan.miniatureHeightPx(plan.shownOrientation(), metrics.heightPixels,
-                frameAspect, reservedPx, columnPx, chromePx + floorPx, restPx);
-        applyBodyPanes(card, split, twoPanes, height);
+        int columnPx = applyCardWidth(card, metrics.widthPixels, density);
+        int height = LayoutEditorPlan.miniatureHeightPx(plan.shownOrientation(),
+            metrics.heightPixels, frameAspect, reservedPx, columnPx, chromePx, restPx);
         ViewGroup.LayoutParams params = card.miniature.getLayoutParams();
         if (params == null || params.height == height)
             return;
         params.height = height;
         card.miniature.setLayoutParams(params);
-    }
-
-    /**
-     * Whether the rows can stand beside the miniature rather than beneath it.
-     *
-     * <p>Two things have to be true: the frame has to fit in the leading pane at the width it
-     * asked for — a frame squeezed into half the body is a frame that has been cut — and the
-     * trailing pane has to hold a whole row. A landscape frame is as wide as the screen, so it
-     * fails the first and the body falls back to one column, which is the case P1 bounds.
-     */
-    @VisibleForTesting
-    static boolean rowsBesideMiniature(int naturalWidthPx,
-                                       @NonNull EditorShellMetrics.PaneSplit split,
-                                       float density) {
-        if (split.paneCount < 2)
-            return false;
-        int asked = naturalWidthPx + EditorShellMetrics.px(
-            EditorShellMetrics.LEADING_PANE_AIR_DP, density);
-        return asked <= split.leadingWidthPx
-            && split.trailingWidthPx >= EditorShellMetrics.px(
-                EditorShellMetrics.ROW_MIN_INNER_DP, density);
-    }
-
-    /** Miniature and rows side by side, or one under the other. */
-    private void applyBodyPanes(@NonNull Card card, @NonNull EditorShellMetrics.PaneSplit split,
-                                boolean twoPanes, int miniatureHeightPx) {
-        card.body.setOrientation(twoPanes
-            ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
-        setPane(card.miniature, twoPanes ? split.leadingWidthPx
-            : ViewGroup.LayoutParams.MATCH_PARENT, 0, twoPanes ? miniatureHeightPx : -1);
-        setPane(card.rowsHost, twoPanes ? split.trailingWidthPx
-            : ViewGroup.LayoutParams.MATCH_PARENT, twoPanes ? split.gutterPx : 0, -1);
-    }
-
-    private static void setPane(@NonNull View view, int widthPx, int startMarginPx,
-                                int heightPx) {
-        ViewGroup.LayoutParams params = view.getLayoutParams();
-        if (!(params instanceof LinearLayout.LayoutParams))
-            return;
-        LinearLayout.LayoutParams pane = (LinearLayout.LayoutParams) params;
-        pane.width = widthPx;
-        pane.setMarginStart(startMarginPx);
-        if (heightPx >= 0)
-            pane.height = heightPx;
-        view.setLayoutParams(pane);
     }
 
     /**
@@ -591,15 +619,11 @@ public final class LayoutEditorController {
      * The card stops inheriting the screen's width. What is left over is symmetric air with the
      * live place showing through it, which is the thing the editor is a picture of.
      *
-     * @return the width one column of the card's body has, which is what a canvas under the header
-     *     can be as wide as
+     * @return the width the card's column has, which is what the canvas can be as wide as
      */
-    private int applyCardWidth(@NonNull Card card, int screenWidthPx,
-                               @NonNull EditorShellMetrics.PaneSplit split, float density,
-                               boolean twoPanes) {
-        // One column wide enough for one whole row, or two panes and the gutter between them.
-        EditorShellMetrics.PaneSplit shown = twoPanes ? split
-            : EditorShellMetrics.paneSplit(Math.min(
+    private int applyCardWidth(@NonNull Card card, int screenWidthPx, float density) {
+        // One column, as wide as the shell's widest row would be.
+        EditorShellMetrics.PaneSplit shown = EditorShellMetrics.paneSplit(Math.min(
                 EditorShellMetrics.contentWidthPx(screenWidthPx, density),
                 EditorShellMetrics.px(EditorShellMetrics.ROW_MAX_INNER_DP, density)), 0, density);
         int width = EditorShellMetrics.cardWidthPx(screenWidthPx, shown, density);
@@ -614,22 +638,16 @@ public final class LayoutEditorController {
         }
         return Math.max(0, width - card.root.getPaddingStart() - card.root.getPaddingEnd());
     }
+    // ------------------------------------------------------------------------ the card's chrome
 
-    // --------------------------------------------------------------------------------- the rows
-
-    /** The four segment slots a pill row declares; the ones a value set does not use come off. */
-    private static final int[] SEGMENT_IDS = {
-        R.id.editor_shell_row_segment_0, R.id.editor_shell_row_segment_1,
-        R.id.editor_shell_row_segment_2, R.id.editor_shell_row_segment_3};
-
-    /** The gaps the miniature stands between: above it, and above the rows under it. */
+    /** The gaps the canvas stands between: above it, and above the tray under it. */
     @VisibleForTesting static final float GAPS_DP = 16f;
     /** One line of notice under the chooser, and the air above it. */
     @VisibleForTesting static final float NOTICE_LINE_DP = 22f;
 
     /**
-     * Everything on the resting card that is not the canvas or the rows: the handle, the header,
-     * the chooser, the gaps and the notices.
+     * Everything on the resting card that is not the canvas: the handle, the header, the chooser,
+     * the gaps and the notices.
      *
      * <p>Declared rather than derived, so the canvas's size is a question about the arrangement
      * and the card's height and never about a view measured in the pass that is sizing it. The
@@ -657,256 +675,241 @@ public final class LayoutEditorController {
         return lines;
     }
 
-    /**
-     * How much of the rows the resting card keeps in view under the canvas, however tall the
-     * canvas would like to be: the list's first rows are what say there is more to scroll to.
-     */
-    @VisibleForTesting static final float ROWS_PEEK_DP = 96f;
+    // ------------------------------------------------------------------------------ the canvas
 
     /**
-     * The rows for the place and orientation on show. They are rebuilt only when one of those two
-     * moves — a pick changes what a row says, not which rows there are — and restated from the
-     * store every time anything else might have.
+     * A write from the canvas landed: the live place follows it when it was written for the
+     * orientation on screen — or, for the keyboard's switch, always — and the canvas, the tray and
+     * the header are read again. A write that changed nothing does neither.
      */
-    private void syncRows(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
-        String key = plan.place().name() + '.' + plan.shownOrientation().name() + '.'
-            + plan.rows().size();
-        if (!key.equals(mRowsKey)) {
-            rebuildRows(card, plan);
-            mRowsKey = key;
-        }
-        for (Runnable sync : mRowSyncs) sync.run();
+    private void afterCanvasWrite(@NonNull LayoutEditorPlan.Drop drop) {
+        if (drop == LayoutEditorPlan.Drop.NONE)
+            return;
+        if (drop == LayoutEditorPlan.Drop.LIVE)
+            mHost.applyPlaceArrangement();
+        sync();
     }
 
-    private void rebuildRows(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
-        LinearLayout rows = card.rowsHost;
-        rows.removeAllViews();
-        mRowSyncs.clear();
-        // The tracks being replaced are gone, finger or no finger, and the reference would outlive
-        // the view.
-        mDraggedSlider = null;
+    /**
+     * A handle moved: the value written through, and its readout restated. The readout's dp come
+     * from the live launcher once it has laid the new size out, so it is restated once more on the
+     * next frame.
+     */
+    private void onHandleWrite(@NonNull PlaceMiniatureView.Handle handle,
+                               @NonNull LayoutEditorPlan.Drop drop) {
+        mHeldHandle = handle;
+        afterCanvasWrite(drop);
+        Card card = mCard;
+        if (card == null)
+            return;
+        card.miniature.setHandleReadout(readoutFor(handle));
+        card.root.post(() -> {
+            if (mCard == card && mHeldHandle == handle)
+                card.miniature.setHandleReadout(readoutFor(handle));
+        });
+    }
+
+    /**
+     * What a held handle reads out, in the store's real units (spec §3.5: no bare percents). The
+     * dock and the keyboard are measured on the live launcher while the canvas shows the phone's
+     * own orientation; for the other one there is nothing live to measure, and the readout says
+     * the multiple of the unscaled height the store keeps.
+     */
+    @Nullable
+    private String readoutFor(@NonNull PlaceMiniatureView.Handle handle) {
+        LayoutEditorPlan plan = mPlan;
+        if (plan == null)
+            return null;
         Context context = mHost.context();
-        Element heading = null;
-        for (LayoutEditorPlan.Row row : plan.rows()) {
-            if (row.element != heading) {
-                EditorShellRows.addSection(context, rows, headingRes(row.element),
-                    heading == null);
-                heading = row.element;
+        switch (handle) {
+            case DOCK_HEIGHT: {
+                int dp = plan.liveFollows() ? mHost.measuredDockHeightDp() : -1;
+                return dp > 0
+                    ? context.getString(R.string.layout_editor_readout_dock_dp, dp)
+                    : context.getString(R.string.layout_editor_readout_dock_scale,
+                        scaleText(plan.dockHeightScale()));
             }
-            if (row.group instanceof PlaceArrangeModel.Pills)
-                addPillsRow(context, rows, row, (PlaceArrangeModel.Pills) row.group);
-            else if (row.group instanceof PlaceArrangeModel.Track)
-                addTrackRow(context, rows, row, (PlaceArrangeModel.Track) row.group);
+            case KEYBOARD_HEIGHT: {
+                int dp = plan.liveFollows() ? mHost.measuredKeyboardHeightDp() : -1;
+                return dp > 0
+                    ? context.getString(R.string.layout_editor_readout_keyboard_dp, dp)
+                    : context.getString(R.string.layout_editor_readout_keyboard_scale,
+                        scaleText(plan.keyboardHeightScale()));
+            }
+            case KEYBOARD_CHIN:
+                return context.getString(R.string.layout_editor_readout_chin,
+                    plan.keyboardChinDp());
+            case WIDGET_GRID:
+            default: {
+                PlaceLayout layout = plan.shownLayout();
+                return context.getString(R.string.layout_editor_readout_grid,
+                    layout.widgetColumns, layout.widgetRows);
+            }
         }
-        restoreScroll(card, plan);
     }
 
-    /**
-     * Where each place-and-orientation was scrolled to. Flipping the toggle and flipping it back
-     * comes back to where the user was, rather than to the top of a list they had scrolled past.
-     */
-    private final Map<String, Integer> mPanelScroll = new LinkedHashMap<>();
-    /** Which place-and-orientation the list is scrolled for, so the outgoing one is kept. */
-    @Nullable private String mScrollKey;
+    @NonNull
+    private static String scaleText(float scale) {
+        return String.format(Locale.getDefault(), "%.2f", scale);
+    }
 
-    private void restoreScroll(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
-        NestedScrollView scroller = card.scroller;
-        if (mScrollKey != null)
-            mPanelScroll.put(mScrollKey, scroller.getScrollY());
-        String key = plan.place().name() + '.' + plan.shownOrientation().name();
-        mScrollKey = key;
-        Integer remembered = mPanelScroll.get(key);
-        int target = remembered == null ? 0 : remembered;
-        scroller.scrollTo(0, 0);
-        if (target > 0)
-            scroller.post(() -> scroller.scrollTo(0, target));
+    // -------------------------------------------------------------------------------- the tray
+
+    /**
+     * The restore tray (spec §3.6): a Material chip per hidden element, with the eye-off glyph,
+     * that brings the element back to the edge it left; one short line when nothing is hidden. The
+     * chips stand over the canvas's own tray strip, under the canvas, which draws its drop zone
+     * over them while an element is lifted. Rebuilt only when what is hidden changes.
+     */
+    private void syncTray(@NonNull Card card, @NonNull LayoutEditorPlan plan) {
+        List<LayoutEditorPlan.TrayItem> items = plan.trayItems();
+        // The chips stand exactly over the canvas's strip: its height and its air under it.
+        ViewGroup.LayoutParams params = card.tray.getLayoutParams();
+        int height = Math.round(card.miniature.trayHeightPx());
+        int inset = Math.round(card.miniature.trayBottomInsetPx());
+        if (params instanceof FrameLayout.LayoutParams) {
+            FrameLayout.LayoutParams frame = (FrameLayout.LayoutParams) params;
+            if (frame.height != height || frame.bottomMargin != inset) {
+                frame.height = height;
+                frame.bottomMargin = inset;
+                frame.setMarginStart(inset);
+                frame.setMarginEnd(inset);
+                card.tray.setLayoutParams(frame);
+            }
+        }
+        card.trayEmpty.setVisibility(items.isEmpty() ? View.VISIBLE : View.GONE);
+        card.trayScroller.setVisibility(items.isEmpty() ? View.GONE : View.VISIBLE);
+        if (items.equals(mTrayShown))
+            return;
+        mTrayShown = new ArrayList<>(items);
+        card.trayChips.removeAllViews();
+        LayoutInflater inflater = LayoutInflater.from(mHost.context());
+        for (LayoutEditorPlan.TrayItem item : items) {
+            View view = inflater.inflate(R.layout.layout_editor_tray_chip, card.trayChips, false);
+            if (!(view instanceof Chip))
+                continue;
+            Chip chip = (Chip) view;
+            String name = mHost.context().getString(trayItemName(item));
+            chip.setText(name);
+            chip.setContentDescription(mHost.context().getString(
+                R.string.layout_editor_tray_chip_description, name));
+            chip.setOnClickListener(tapped -> {
+                LayoutEditorPlan current = mPlan;
+                if (current != null)
+                    afterCanvasWrite(current.restore(item));
+            });
+            card.trayChips.addView(chip);
+        }
     }
 
     @StringRes
-    private static int headingRes(@NonNull Element element) {
-        switch (element) {
+    private static int trayItemName(@NonNull LayoutEditorPlan.TrayItem item) {
+        switch (item) {
+            case STATUS_BAR:
+                return R.string.settings_layout_miniature_status;
             case PINNED_APPS:
-                return R.string.termux_surface_tuning_dock;
+                return R.string.settings_layout_miniature_apps;
             case AZ_INDEX:
                 return R.string.settings_layout_miniature_alphabets;
-            case WIDGET_GRID:
-                return R.string.settings_layout_widget_grid_title;
+            case EXTRA_KEYS:
+                return R.string.settings_layout_miniature_keys;
+            case KEYBOARD:
             default:
-                return R.string.settings_layout_keyboard_title;
+                return R.string.layout_editor_keyboard;
         }
     }
+
+    // --------------------------------------------------------------------- the keyboard's type
+
+    /** The three type chips, in the order the group holds them, and the forms they stand for. */
+    private static final int[] FORM_CHIP_IDS = {
+        R.id.layout_editor_keyboard_form_docked, R.id.layout_editor_keyboard_form_floating,
+        R.id.layout_editor_keyboard_form_split};
+    private static final PlaceLayout.KeyboardForm[] FORM_CHIP_FORMS = {
+        PlaceLayout.KeyboardForm.DOCKED, PlaceLayout.KeyboardForm.FLOATING,
+        PlaceLayout.KeyboardForm.SPLIT};
+
+    /** The air between the keyboard's card and its type chips. */
+    private static final float FORM_CHIPS_GAP_DP = 6f;
 
     /**
-     * One pick row. Both the pick and the restatement re-read the plan rather than trusting the
-     * group the row was built from: a rotation, or the revert, can move what this row is showing
-     * without the row itself being rebuilt.
+     * The keyboard's type chips (spec §3.5): shown beside the keyboard while it is selected, with
+     * the shown orientation's form checked, and gone on deselect. Beside the phone where the
+     * canvas leaves a gutter wide enough for a column of them — a portrait phone in a wide card —
+     * and above the keyboard's leading end otherwise, clear of the handle on its middle.
      */
-    private void addPillsRow(@NonNull Context context, @NonNull ViewGroup into,
-                             @NonNull LayoutEditorPlan.Row row,
-                             @NonNull PlaceArrangeModel.Pills pills) {
-        View view = LayoutInflater.from(context)
-            .inflate(R.layout.editor_shell_pills_row, into, false);
-        EditorShellRows.apply(view);
-        ((TextView) view.findViewById(R.id.editor_shell_row_label)).setText(pills.labelRes);
-        MaterialButtonToggleGroup group = view.findViewById(R.id.editor_shell_row_pills);
-        if (group == null)
-            return;
-        final int count = Math.min(pills.values.length, SEGMENT_IDS.length);
-        for (int i = SEGMENT_IDS.length - 1; i >= count; i--) {
-            View extra = view.findViewById(SEGMENT_IDS[i]);
-            if (extra != null) group.removeView(extra);
-        }
-        // After the unused slots come off, so the widths are for the segments actually offered.
-        EditorShellControlHost host = view.findViewById(R.id.editor_shell_row_control);
-        if (host != null)
-            host.setSegmentCount(count);
-        for (int i = 0; i < count; i++) {
-            Button segment = view.findViewById(SEGMENT_IDS[i]);
-            if (segment != null) segment.setText(pills.labelResIds[i]);
-        }
-        group.setContentDescription(context.getString(pills.labelRes));
-        group.addOnButtonCheckedListener((toggleGroup, checkedId, isChecked) -> {
-            if (!isChecked || mRestatingToggle)
-                return;
-            PlaceArrangeModel.Pills current = rowPills(row);
-            int picked = indexOfSegment(checkedId);
-            if (current == null || picked < 0 || picked >= current.values.length)
-                return;
-            if (current.values[picked].equals(current.selected))
-                return;
-            current.writer.write(current.values[picked]);
-            afterRowWrite(row);
-        });
-        mRowSyncs.add(() -> {
-            PlaceArrangeModel.Pills current = rowPills(row);
-            if (current == null)
-                return;
-            int selected = current.selectedIndex();
-            int wanted = selected < 0 || selected >= count ? View.NO_ID : SEGMENT_IDS[selected];
-            if (group.getCheckedButtonId() == wanted)
-                return;
-            mRestatingToggle = true;
-            try {
-                if (wanted == View.NO_ID) group.clearChecked();
-                else group.check(wanted);
-            } finally {
-                mRestatingToggle = false;
-            }
-        });
-        into.addView(view);
-        mRowSyncs.get(mRowSyncs.size() - 1).run();
-    }
-
-    /**
-     * One number on a track: the widget grid's two counts, and the three sizes. Both kinds are the
-     * same row — a label, a track and a number in its own unit — and both write through on every
-     * tick, so the live place follows a finger that is still moving.
-     */
-    private void addTrackRow(@NonNull Context context, @NonNull ViewGroup into,
-                             @NonNull LayoutEditorPlan.Row row,
-                             @NonNull PlaceArrangeModel.Track track) {
-        View view = LayoutInflater.from(context)
-            .inflate(R.layout.editor_shell_row, into, false);
-        EditorShellRows.apply(view);
-        ((TextView) view.findViewById(R.id.editor_shell_row_label)).setText(track.labelRes);
-        SeekBar slider = view.findViewById(R.id.editor_shell_row_slider);
-        TextView value = view.findViewById(R.id.editor_shell_row_value);
-        slider.setContentDescription(context.getString(track.labelRes));
-        slider.setMax(Math.max(1, track.max - track.min));
-        slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar bar, int progress, boolean fromUser) {
-                PlaceArrangeModel.Track current = rowTrack(row);
-                if (current == null)
-                    return;
-                int picked = current.min + progress;
-                value.setText(trackValueText(current, picked));
-                if (!fromUser || picked == current.value)
-                    return;
-                // One re-lay per tick and nothing else: the rows are left standing while the thumb
-                // is down, so the one being dragged is not rebuilt out from under it.
-                current.writer.write(picked);
-                afterRowWrite(row);
-            }
-
-            @Override public void onStartTrackingTouch(SeekBar bar) {
-                mDraggedSlider = bar;
-            }
-
-            @Override public void onStopTrackingTouch(SeekBar bar) {
-                mDraggedSlider = null;
-            }
-        });
-        mRowSyncs.add(() -> {
-            PlaceArrangeModel.Track current = rowTrack(row);
-            if (current == null)
-                return;
-            int progress = Math.max(0, Math.min(slider.getMax(), current.value - current.min));
-            // A size read back through the store's clamp can land a step off what the finger asked
-            // for; moving the thumb there under the finger would fight the drag.
-            if (slider.getProgress() != progress && mDraggedSlider != slider)
-                slider.setProgress(progress);
-            value.setText(trackValueText(current, current.value));
-        });
-        into.addView(view);
-        mRowSyncs.get(mRowSyncs.size() - 1).run();
-    }
-
-    /** One track's number in its own unit: a bare count, a step of its range, or a length. */
-    @NonNull
-    private String trackValueText(@NonNull PlaceArrangeModel.Track track, int value) {
-        switch (track.unit) {
-            case PERCENT:
-                return mHost.context().getString(
-                    R.string.termux_dock_tuning_value_percent, value);
-            case DP:
-                return mHost.context().getString(R.string.termux_dock_tuning_value_dp, value);
-            default:
-                return Integer.toString(value);
-        }
-    }
-
-    /**
-     * A row wrote through: the place behind the card follows when the orientation on the
-     * miniature is the one on screen, or when the row is one both orientations share — the
-     * keyboard's on/off switch, which puts the keyboard down on that pass.
-     */
-    private void afterRowWrite(@NonNull LayoutEditorPlan.Row row) {
-        Card card = mCard;
+    private void syncKeyboardForms(@NonNull Card card) {
         LayoutEditorPlan plan = mPlan;
-        if (card == null || plan == null)
+        RectF keyboard = card.miniature.keyboardRect();
+        boolean shown = plan != null && keyboard != null
+            && card.miniature.selectedBlock() == PlaceMiniatureView.Block.KEYBOARD;
+        if (!shown) {
+            card.keyboardForms.setVisibility(View.GONE);
             return;
-        if (plan.follows(row)) mHost.applyPlaceArrangement();
-        // A row can change the picture (the keyboard's block, the A–Z index's tab) and the rows
-        // offered (Off takes the A–Z index's Position away), so both are re-read. The rebuild is
-        // posted: the toggle group that was picked on is still dispatching its listener.
-        card.miniature.setLayout(plan.shownLayout(), plan.shownOrientation(), plan.place());
-        for (Runnable sync : mRowSyncs) sync.run();
-        card.root.post(() -> {
-            if (mCard == card && mPlan == plan) syncRows(card, plan);
-        });
-        syncDirty(card, plan);
-    }
-
-    /** What one row says right now, read fresh, or null where the place no longer offers it. */
-    @Nullable
-    private PlaceArrangeModel.Pills rowPills(@NonNull LayoutEditorPlan.Row row) {
-        PlaceArrangeModel.Group group = mPlan == null ? null : mPlan.row(row.element, row.index);
-        return group instanceof PlaceArrangeModel.Pills ? (PlaceArrangeModel.Pills) group : null;
-    }
-
-    @Nullable
-    private PlaceArrangeModel.Track rowTrack(@NonNull LayoutEditorPlan.Row row) {
-        PlaceArrangeModel.Group group = mPlan == null ? null : mPlan.row(row.element, row.index);
-        return group instanceof PlaceArrangeModel.Track ? (PlaceArrangeModel.Track) group : null;
-    }
-
-    /** Which segment an id is, or -1 for anything that is not one of the four. */
-    private static int indexOfSegment(int viewId) {
-        for (int i = 0; i < SEGMENT_IDS.length; i++) {
-            if (SEGMENT_IDS[i] == viewId) return i;
         }
-        return -1;
+        mRestatingToggle = true;
+        try {
+            PlaceLayout.KeyboardForm form = plan.keyboardForm();
+            for (int i = 0; i < FORM_CHIP_IDS.length; i++) {
+                if (FORM_CHIP_FORMS[i] == form)
+                    card.keyboardForms.check(FORM_CHIP_IDS[i]);
+            }
+        } finally {
+            mRestatingToggle = false;
+        }
+        card.keyboardForms.setVisibility(View.VISIBLE);
+        placeKeyboardForms(card, keyboard);
+    }
+
+    private void placeKeyboardForms(@NonNull Card card, @NonNull RectF keyboard) {
+        ChipGroup chips = card.keyboardForms;
+        RectF frame = card.miniature.frameRect();
+        int hostWidth = card.canvasHost.getWidth() > 0 ? card.canvasHost.getWidth()
+            : card.miniature.getWidth();
+        int unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        View first = chips.getChildAt(0);
+        if (first == null)
+            return;
+        first.measure(unspecified, unspecified);
+        int chipWidth = first.getMeasuredWidth();
+        float gap = dpToPx(FORM_CHIPS_GAP_DP);
+        boolean column = hostWidth - frame.right >= chipWidth + 2 * gap;
+        ViewGroup.LayoutParams params = chips.getLayoutParams();
+        int wantedWidth = column ? chipWidth : ViewGroup.LayoutParams.WRAP_CONTENT;
+        if (params != null && params.width != wantedWidth) {
+            params.width = wantedWidth;
+            chips.setLayoutParams(params);
+        }
+        chips.setSingleLine(!column);
+        chips.measure(column
+                ? View.MeasureSpec.makeMeasureSpec(chipWidth, View.MeasureSpec.EXACTLY)
+                : unspecified, unspecified);
+        float width = chips.getMeasuredWidth();
+        float height = chips.getMeasuredHeight();
+        float x;
+        float y;
+        if (column) {
+            x = frame.right + gap;
+            y = keyboard.bottom - height;
+        } else {
+            x = keyboard.left + gap;
+            y = keyboard.top - height - gap;
+        }
+        float maxX = Math.max(0f, hostWidth - width);
+        chips.setTranslationX(Math.max(0f, Math.min(maxX, x)));
+        chips.setTranslationY(Math.max(0f, y));
+    }
+
+    private void onKeyboardFormPicked(int checkedId) {
+        LayoutEditorPlan plan = mPlan;
+        if (plan == null || mRestatingToggle)
+            return;
+        for (int i = 0; i < FORM_CHIP_IDS.length; i++) {
+            if (FORM_CHIP_IDS[i] == checkedId) {
+                afterCanvasWrite(plan.setKeyboardForm(FORM_CHIP_FORMS[i]));
+                return;
+            }
+        }
     }
 
     // ------------------------------------------------------------------------- unsaved and exit
@@ -972,10 +975,13 @@ public final class LayoutEditorController {
             return;
         PaneWallPage place = mPlan == null ? null : mPlan.place();
         mPlan = null;
-        mRowsKey = null;
-        mDraggedSlider = null;
+        mHeldHandle = null;
+        mTrayShown = Collections.emptyList();
         mShowing = false;
         if (mCard != null) {
+            // The next session opens with nothing selected and no chips over the keyboard.
+            mCard.miniature.setSelectedBlock(null);
+            mCard.keyboardForms.setVisibility(View.GONE);
             fadeChrome(mCard.revert, false);
             fadeChrome(mCard.discard, false);
             // The card is leaving: from here the touches are the live place's again, which is

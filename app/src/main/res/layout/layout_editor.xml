@@ -1,18 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The Layout editor's card: a miniature of the place the user is looking at, with a Portrait /
-     Landscape toggle above it, parked over the live place so the real thing stays visible behind.
+<!-- The Layout editor's card: the layout canvas of the place the user is looking at, with a
+     Portrait / Landscape toggle above it, parked over the live place so the real thing stays
+     visible behind.
 
-     Everything else about the editor is the miniature itself — a bar is dragged to an edge or into
-     the tray under the phone, and the write goes straight through. The header carries the whole
-     chrome: the revert glyph and Discard appear only once something has moved, and ✓ is the way
-     out that keeps it.
+     Everything else about the editor is the canvas itself (spec §3.5): a bar is dragged to an
+     edge by its grip, anything is put away by dropping it in the tray under the phone and brought
+     back by its chip there, and a tap selects an element and shows its resize handle. Every write
+     goes straight through. The header carries the whole chrome: the revert glyph and Discard
+     appear only once something has moved, and ✓ is the way out that keeps it.
 
      The fill is opaque for the same reason the Appearance card's is: the card sits over the chrome
      it is moving, and a translucent one left neither edge reading as belonging to anything.
 
      The card is a sheet, the same one the Appearance editor's is (EditorShellSheet): the handle and
-     the header stay put and everything under them — the toggle, the miniature, the Hidden tray and
-     every row — is one list that scrolls in editor_shell_sheet_body. On a portrait screen it rests
+     the header stay put and everything under them — the toggle, the canvas and its tray — is one
+     list that scrolls in editor_shell_sheet_body. On a portrait screen it rests
      about a fifth of the screen down, so the place it is editing keeps its status strip and its
      chip row in view above it; a pull on the handle, the header or the list grows it toward the
      top inset before the list scrolls, and a firm pull down past rest closes it the way Back does. -->
@@ -77,10 +79,10 @@
                     android:minHeight="44dp"
                     android:orientation="horizontal">
 
-                    <!-- No label: two segments that each say a phone and a word are the question
-                         as well as the answer. The host is given its width in code, from the
-                         shell's own segment metric, so the pill stays the size of its words on
-                         any card. -->
+                    <!-- No label and no words: two segments that each draw a phone, standing up
+                         or on its side, are the question as well as the answer, and each says its
+                         word to a screen reader. The host is given its width in code, from the
+                         shell's own segment metric. -->
                     <com.termux.app.editorshell.EditorShellControlHost
                         android:id="@+id/layout_editor_orientation_host"
                         android:layout_width="wrap_content"
@@ -96,20 +98,20 @@
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/layout_editor_orientation_portrait"
                                 style="@style/Widget.Termux.EditorShell.Segment"
-                                android:text="@string/settings_layout_orientation_portrait"
+                                android:contentDescription="@string/settings_layout_orientation_portrait"
                                 app:icon="@drawable/ic_symbol_phone_portrait"
                                 app:iconGravity="textStart"
-                                app:iconPadding="4dp"
-                                app:iconSize="16dp" />
+                                app:iconPadding="0dp"
+                                app:iconSize="20dp" />
 
                             <com.google.android.material.button.MaterialButton
                                 android:id="@+id/layout_editor_orientation_landscape"
                                 style="@style/Widget.Termux.EditorShell.Segment"
-                                android:text="@string/settings_layout_orientation_landscape"
+                                android:contentDescription="@string/settings_layout_orientation_landscape"
                                 app:icon="@drawable/ic_symbol_phone_landscape"
                                 app:iconGravity="textStart"
-                                app:iconPadding="4dp"
-                                app:iconSize="16dp" />
+                                app:iconPadding="0dp"
+                                app:iconSize="20dp" />
                         </com.google.android.material.button.MaterialButtonToggleGroup>
                     </com.termux.app.editorshell.EditorShellControlHost>
                 </LinearLayout>
@@ -141,36 +143,100 @@
                 android:textSize="12sp"
                 android:visibility="gone" />
 
-            <!-- One column on a phone, with the rows under the picture; two beside each other
-                 where the card is wide enough for a whole row on each side, which is what turns a
-                 150px miniature marooned between two 550px gutters into a miniature that fills
-                 its column with the rows beside it. LayoutEditorController flips the orientation. -->
-            <LinearLayout
-                android:id="@+id/layout_editor_body"
+            <!-- The layout canvas and what stands over it, in one frame. Its height is set in code
+                 from the orientation it is showing and the card's width: the portrait frame
+                 stands at about two fifths of the screen, the landscape one as wide as the card.
+
+                 There are no rows under it (spec §3.5): a bar moves by its grip, anything is put
+                 away by dropping it in the tray, and a size is a handle on the selected element.
+                 Children in drawing order: the tray's chips under the canvas, so a lifted element's
+                 drop zone is drawn over them; the canvas; and the keyboard's type chips over it. -->
+            <FrameLayout
+                android:id="@+id/layout_editor_canvas_host"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:baselineAligned="false"
-                android:orientation="vertical">
+                android:layout_marginTop="8dp">
 
-                <!-- The canvas. Its height is set in code from the orientation it is showing and
-                     the card's width: the portrait frame stands at about two fifths of the
-                     screen, the landscape one as wide as the card. It scrolls with the rows. -->
+                <!-- The restore tray (spec §3.6): one chip per hidden element, with the eye-off
+                     glyph, that brings it back to the edge it left; one short line when nothing
+                     is hidden. It stands over the canvas's own tray strip at the bottom, whose
+                     height and bottom air LayoutEditorController copies from the canvas. -->
+                <FrameLayout
+                    android:id="@+id/layout_editor_tray"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_gravity="bottom"
+                    android:layout_marginStart="4dp"
+                    android:layout_marginEnd="4dp"
+                    android:layout_marginBottom="4dp">
+
+                    <HorizontalScrollView
+                        android:id="@+id/layout_editor_tray_scroller"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:overScrollMode="never"
+                        android:scrollbars="none">
+
+                        <com.google.android.material.chip.ChipGroup
+                            android:id="@+id/layout_editor_tray_chips"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_gravity="center_vertical"
+                            app:chipSpacingHorizontal="8dp"
+                            app:singleLine="true" />
+                    </HorizontalScrollView>
+
+                    <TextView
+                        android:id="@+id/layout_editor_tray_empty"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_vertical"
+                        android:gravity="center"
+                        android:maxLines="1"
+                        android:ellipsize="end"
+                        android:text="@string/layout_editor_tray_empty"
+                        android:textColor="?attr/termuxColorOnSurfaceVariant"
+                        android:textSize="12sp" />
+                </FrameLayout>
+
                 <com.termux.app.fragments.settings.PlaceMiniatureView
                     android:id="@+id/layout_editor_miniature"
                     android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp" />
+                    android:layout_height="wrap_content" />
 
-                <!-- Everything about the place that no bar can be dragged into: how its keyboard
-                     stands, and on Home how many cells its grid has. Filled in code from
-                     LayoutEditorPlan; the list around it is what scrolls. -->
-                <LinearLayout
-                    android:id="@+id/layout_editor_rows_host"
-                    android:layout_width="match_parent"
+                <!-- The keyboard's type (spec §3.5): three glyph chips, one of them checked, shown
+                     beside the keyboard's handle while the keyboard is selected and gone on
+                     deselect. LayoutEditorController places the group from the canvas's frame. -->
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/layout_editor_keyboard_forms"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:orientation="vertical" />
-            </LinearLayout>
+                    android:layout_gravity="top|start"
+                    android:visibility="gone"
+                    app:chipSpacingHorizontal="4dp"
+                    app:chipSpacingVertical="4dp"
+                    app:selectionRequired="true"
+                    app:singleSelection="true">
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/layout_editor_keyboard_form_docked"
+                        style="@style/Widget.Termux.LayoutEditor.KeyboardFormChip"
+                        android:contentDescription="@string/settings_layout_keyboard_form_docked"
+                        app:chipIcon="@drawable/ic_symbol_keyboard_docked" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/layout_editor_keyboard_form_floating"
+                        style="@style/Widget.Termux.LayoutEditor.KeyboardFormChip"
+                        android:contentDescription="@string/settings_layout_keyboard_form_floating"
+                        app:chipIcon="@drawable/ic_symbol_keyboard_floating" />
+
+                    <com.google.android.material.chip.Chip
+                        android:id="@+id/layout_editor_keyboard_form_split"
+                        style="@style/Widget.Termux.LayoutEditor.KeyboardFormChip"
+                        android:contentDescription="@string/settings_layout_keyboard_form_split"
+                        app:chipIcon="@drawable/ic_symbol_keyboard_split" />
+                </com.google.android.material.chip.ChipGroup>
+            </FrameLayout>
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
 </com.termux.app.editorshell.EditorShellSheet>

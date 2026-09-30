@@ -519,21 +519,25 @@ public class PlaceMiniatureViewTest {
             view.gripRect(PlaceMiniatureView.Block.CANVAS));
     }
 
+    /**
+     * A hidden bar is listed for the tray, where the editor stands a real chip for it that brings
+     * it back on a tap; the canvas itself draws nothing for it and gives it no grip.
+     */
     @Test
-    public void aHiddenBarIsAChipInTheTrayWithAGripOfItsOwn() {
+    public void aHiddenBarIsListedForTheTrayAndHasNoGripOnThePhone() {
         PlaceMiniatureView view = sized();
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
         assertNull("nothing is drawn on the phone for it",
             view.blockRect(PlaceMiniatureView.Block.APPS_ROW));
-        RectF chip = view.trayChipRect(PlaceMiniatureView.Block.APPS_ROW);
-        assertNotNull("the hidden bar is listed in the tray", chip);
-        assertTrue("the tray stands under the phone", chip.top >= view.trayRect().top - 0.5f);
-        assertNotNull("and it can be lifted back out",
-            view.gripRect(PlaceMiniatureView.Block.APPS_ROW));
-        assertNull("a bar on the phone has no chip",
-            view.trayChipRect(PlaceMiniatureView.Block.EXTRA_KEYS));
+        assertTrue("the hidden bar is listed for the tray",
+            view.hiddenBlocks().contains(PlaceMiniatureView.Block.APPS_ROW));
+        assertFalse("a bar on the phone is not",
+            view.hiddenBlocks().contains(PlaceMiniatureView.Block.EXTRA_KEYS));
+        assertNull(view.gripRect(PlaceMiniatureView.Block.APPS_ROW));
+        RectF frame = view.frameRect();
+        assertTrue("the tray stands under the phone", view.trayRect().top >= frame.bottom);
     }
 
     @Test
@@ -658,33 +662,139 @@ public class PlaceMiniatureViewTest {
         touch(view, MotionEvent.ACTION_UP, shelf.centerX(), shelf.centerY());
         assertEquals("hidden", prefs().getString("layout.landscape.status_bar", null));
 
-        // Put away, it is a chip in the tray with a grip that brings it back.
+        // Put away, it is listed for the tray's chips and is gone from the phone.
         view.setLayout(places.resolve(PlaceOrientation.LANDSCAPE), PlaceOrientation.LANDSCAPE);
         assertNull(view.blockRect(PlaceMiniatureView.Block.STATUS_BAR));
-        assertNotNull(view.trayChipRect(PlaceMiniatureView.Block.STATUS_BAR));
-        assertNotNull(view.gripRect(PlaceMiniatureView.Block.STATUS_BAR));
+        assertTrue(view.hiddenBlocks().contains(PlaceMiniatureView.Block.STATUS_BAR));
         assertEquals(PlaceMiniatureView.TrayState.CHIPS, view.trayState());
     }
 
+    /** At rest a touch on the tray is not the canvas's: the editor's chips stand there. */
     @Test
-    public void aChipInTheTrayIsDraggedBackOntoAnEdge() {
-        PlaceLayoutStore places = store();
-        places.setAppsRow(PlaceOrientation.PORTRAIT, RowPlacement.HIDDEN);
+    public void aTouchOnTheTrayAtRestGoesOnToTheChipsUnderIt() {
         PlaceMiniatureView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        view.setOnBarDroppedListener(writer(places, PlaceOrientation.PORTRAIT));
+        RectF tray = view.trayRect();
+        MotionEvent down = MotionEvent.obtain(0L, 0L, MotionEvent.ACTION_DOWN, tray.centerX(),
+            tray.centerY(), 0);
+        assertFalse(view.onTouchEvent(down));
+        down.recycle();
+    }
 
-        RectF grip = view.gripRect(PlaceMiniatureView.Block.APPS_ROW);
-        assertNotNull("the chip carries the same grip", grip);
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
-        MiniatureDragPolicy.Slot bottom = view.slotFor(Edge.BOTTOM);
-        assertNotNull(bottom);
-        touch(view, MotionEvent.ACTION_MOVE, bottom.centerX(), bottom.centerY());
-        touch(view, MotionEvent.ACTION_UP, bottom.centerX(), bottom.centerY());
+    // ---- Selection and handles ----------------------------------------------------------------
 
-        assertEquals("bottom", prefs().getString("layout.portrait.apps_row", null));
+    /** A tap selects an element; the dock's selection carries one handle on its inner edge. */
+    @Test
+    public void aTapSelectsTheDockAndItsHandleStandsOnItsInnerEdge() {
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        RectF band = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(band);
+        touch(view, MotionEvent.ACTION_DOWN, band.left + 2f, band.centerY());
+        touch(view, MotionEvent.ACTION_UP, band.left + 2f, band.centerY());
+        assertEquals(PlaceMiniatureView.Block.APPS_ROW, view.selectedBlock());
+        RectF handle = view.handleRect(PlaceMiniatureView.Handle.DOCK_HEIGHT);
+        assertNotNull(handle);
+        assertEquals("on the edge that faces the canvas", band.top, handle.centerY(), 1f);
+        assertNull("no keyboard handles for the dock",
+            view.handleRect(PlaceMiniatureView.Handle.KEYBOARD_HEIGHT));
+    }
+
+    /** Dragging the dock's handle up reports a taller dock; letting go ends the gesture. */
+    @Test
+    public void theDocksHandleDraggedUpAsksForATallerDock() {
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        float[] asked = {Float.NaN};
+        boolean[] released = {false};
+        view.setOnCanvasEditListener(new PlaceMiniatureView.OnCanvasEditListener() {
+            @Override public void onDockHeightDragged(float scale) {
+                asked[0] = scale;
+            }
+
+            @Override public void onHandleReleased() {
+                released[0] = true;
+            }
+        });
+        view.setSelectedBlock(PlaceMiniatureView.Block.APPS_ROW);
+        RectF handle = view.handleRect(PlaceMiniatureView.Handle.DOCK_HEIGHT);
+        assertNotNull(handle);
+        touch(view, MotionEvent.ACTION_DOWN, handle.centerX(), handle.centerY());
+        assertEquals(PlaceMiniatureView.Handle.DOCK_HEIGHT, view.draggedHandle());
+        assertNull("a handle is not a lift", view.draggedBar());
+        touch(view, MotionEvent.ACTION_MOVE, handle.centerX(), handle.centerY() - 10f);
+        assertTrue("taller", asked[0] > com.termux.shared.termux.settings.preferences
+            .TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT);
+        touch(view, MotionEvent.ACTION_UP, handle.centerX(), handle.centerY() - 10f);
+        assertNull(view.draggedHandle());
+        assertTrue(released[0]);
+    }
+
+    /** The keyboard, selected, has a handle on its top and one on the bottom of its keys. */
+    @Test
+    public void theKeyboardSelectedCarriesItsHeightAndChinHandles() {
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        RectF keyboard = view.keyboardRect();
+        assertNotNull(keyboard);
+        touch(view, MotionEvent.ACTION_DOWN, keyboard.centerX(), keyboard.centerY());
+        touch(view, MotionEvent.ACTION_UP, keyboard.centerX(), keyboard.centerY());
+        assertEquals(PlaceMiniatureView.Block.KEYBOARD, view.selectedBlock());
+        RectF height = view.handleRect(PlaceMiniatureView.Handle.KEYBOARD_HEIGHT);
+        RectF chin = view.handleRect(PlaceMiniatureView.Handle.KEYBOARD_CHIN);
+        assertNotNull(height);
+        assertNotNull(chin);
+        assertTrue("the height handle is above the chin's", height.centerY() < chin.centerY());
+    }
+
+    /** The keyboard lifted off the phone may go to the tray alone, and is put away there. */
+    @Test
+    public void theKeyboardDraggedIntoTheTrayIsPutAway() {
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        boolean[] putAway = {false};
+        view.setOnCanvasEditListener(new PlaceMiniatureView.OnCanvasEditListener() {
+            @Override public void onKeyboardPutAway() {
+                putAway[0] = true;
+            }
+        });
+        RectF keyboard = view.keyboardRect();
+        assertNotNull(keyboard);
+        RectF tray = view.trayRect();
+        touch(view, MotionEvent.ACTION_DOWN, keyboard.centerX(), keyboard.centerY());
+        touch(view, MotionEvent.ACTION_MOVE, tray.centerX(), tray.centerY());
+        assertEquals(PlaceMiniatureView.Block.KEYBOARD, view.draggedBar());
+        for (MiniatureDragPolicy.Slot slot : view.slots())
+            assertTrue("the tray is the keyboard's one target", slot.isTray());
+        touch(view, MotionEvent.ACTION_UP, tray.centerX(), tray.centerY());
+        assertTrue(putAway[0]);
+    }
+
+    @Test
+    public void aCornerHandleSnapsToWholeCells() {
+        // The first cell's corner at a third of the way across a 300px area with a 6px gap.
+        assertEquals(3, PlaceMiniatureView.cellsFor(0f, 300f, 96f, 6f, 1, 8));
+        assertEquals("dragged out, bigger and fewer cells", 2,
+            PlaceMiniatureView.cellsFor(0f, 300f, 147f, 6f, 1, 8));
+        assertEquals("never past the store's range", 8,
+            PlaceMiniatureView.cellsFor(0f, 300f, 2f, 6f, 1, 8));
+    }
+
+    @Test
+    public void aScaleDraggedKeepsTheEdgeUnderTheFingerAndStaysInRange() {
+        assertEquals(2f, PlaceMiniatureView.scaleFor(1f, 50f, 50f, 0.5f, 3f), 1e-4f);
+        assertEquals(0.5f, PlaceMiniatureView.scaleFor(1f, 50f, -100f, 0.5f, 3f), 1e-4f);
+        assertEquals(3f, PlaceMiniatureView.scaleFor(1f, 50f, 500f, 0.5f, 3f), 1e-4f);
     }
 
     @Test

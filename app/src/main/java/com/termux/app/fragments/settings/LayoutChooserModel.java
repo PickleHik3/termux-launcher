@@ -18,9 +18,9 @@ import com.termux.app.place.Slot;
  * store in, a write out, nothing drawn, so the picture and the Layout editor's drops are testable
  * on their own.
  *
- * <p>What the layout offers that no bar can be dragged into — its keyboard, its grid — is
- * {@link com.termux.app.place.PlaceArrangeModel}'s, which answers for one orientation at a time,
- * the way an editor standing on the live screen needs.
+ * <p>What the layout offers that no bar can be dragged into — the keyboard's height, chin and
+ * type, the grid's cells — is a handle or a chip on the layout canvas, written through
+ * {@link com.termux.app.layouteditor.LayoutEditorPlan} one orientation at a time.
  */
 public final class LayoutChooserModel {
 

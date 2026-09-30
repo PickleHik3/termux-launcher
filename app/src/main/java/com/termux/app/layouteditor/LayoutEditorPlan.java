@@ -5,13 +5,13 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
-import com.termux.app.place.PlaceArrangeModel;
-import com.termux.app.place.PlaceArrangeModel.Element;
+import com.termux.app.place.Element;
 import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
+import com.termux.app.place.Slot;
 import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
@@ -28,16 +28,16 @@ import java.util.List;
  * agree. Editing the other orientation therefore changes the miniature and nothing else until the
  * phone is turned.
  *
- * <p>The rows beneath the miniature are the same question asked of the same store: what the layout
- * offers that no bar can be dragged into — how the keyboard stands, how many cells the widget grid
- * has, and how tall the dock and the keyboard stand. They come from {@link PlaceArrangeModel},
- * which already answers for one orientation at a time, so the toggle moves the rows exactly as it
- * moves the picture.
+ * <p>There are no rows under the canvas (spec §3.5): what used to be a row is a handle on the
+ * canvas — the dock's height, the keyboard's height and chin, Home's grid — the tray, which puts
+ * any element away and brings it back, and the keyboard's type chips. Each writes the orientation
+ * on the toggle through the store's own setters, the same way a drop does, so the snapshot and the
+ * dirty check see every one of them.
  *
  * <p>The layout is every place's (ADR 0003), so there is no place to pick and every write lands
  * everywhere. The session still knows which place it was opened over, because that is what the
- * miniature draws — Home's grid, the terminal's text, the display's screen — and what decides the
- * rows worth offering: the grid only on Home, the keyboard's mode only over the display.
+ * layout canvas draws — Home's grid, the terminal's text, the display's screen — and what decides
+ * the handles worth offering: the grid's only on Home.
  *
  * <p>Pure: a store in, an answer out, no views, so every case above is testable without a window.
  * {@link LayoutEditorController} is the shell that draws it.
@@ -64,29 +64,6 @@ public final class LayoutEditorPlan {
      */
     public static final float PORTRAIT_CARD_SCREEN_FRACTION = 0.80f;
 
-    /**
-     * The headings the rows stand under, in the order they stand in, and whether that element's
-     * own choices stand there too. Everything else about a place's arrangement is a bar, and a bar
-     * is moved on the picture rather than picked from a row — which is why the Dock heading carries
-     * nothing but its height: where the dock stands is a drag on the miniature.
-     */
-    private enum Section {
-        DOCK(Element.PINNED_APPS, false),
-        // On, Minimised to a pull tab, or Off: the tab has no edge band to drag on the picture,
-        // so the three-way choice is a row, with the edge beside it.
-        AZ_INDEX(Element.AZ_INDEX, true),
-        KEYBOARD(Element.KEYBOARD, true),
-        WIDGET_GRID(Element.WIDGET_GRID, true);
-
-        @NonNull final Element element;
-        final boolean offersChoices;
-
-        Section(@NonNull Element element, boolean offersChoices) {
-            this.element = element;
-            this.offersChoices = offersChoices;
-        }
-    }
-
     /** What one drop on the miniature did. */
     public enum Drop {
         /** The bar cannot stand there: nothing was written and nothing moved. */
@@ -95,24 +72,6 @@ public final class LayoutEditorPlan {
         MINIATURE,
         /** Written for the orientation on screen: the live place follows it. */
         LIVE
-    }
-
-    /**
-     * One row beneath the miniature. The element and the place it takes among that element's own
-     * groups are what the row is; the group is only what it says right now, so a row that has just
-     * been picked on — or that a rotation has moved — is re-read through {@link #row} rather than
-     * trusted.
-     */
-    public static final class Row {
-        @NonNull public final Element element;
-        public final int index;
-        @NonNull public final PlaceArrangeModel.Group group;
-
-        Row(@NonNull Element element, int index, @NonNull PlaceArrangeModel.Group group) {
-            this.element = element;
-            this.index = index;
-            this.group = group;
-        }
     }
 
     /** The store pinned to the variant being edited, so nothing here can reach the other one. */
@@ -187,60 +146,147 @@ public final class LayoutEditorPlan {
         return mShownOrientation == mDeviceOrientation;
     }
 
-    /**
-     * Whether a pick on this row lands on the live place: any row while the miniature shows the
-     * phone's orientation, and a row shared by both orientations — the keyboard's on/off switch
-     * — whichever one it shows.
-     */
-    public boolean follows(@NonNull Row row) {
-        return liveFollows() || row.group.sharedByOrientations;
-    }
-
     /** The arrangement the miniature draws: the shown orientation's, resolved. */
     @NonNull
     public PlaceLayout shownLayout() {
         return mPlaces.resolve(mShownOrientation);
     }
 
+    // ------------------------------------------------------------------------ what a handle does
+
+    /*
+     * Layout has no rows (spec §3.5): every size is a handle on the canvas and every on/off is the
+     * tray. These are what those write, for the orientation on the toggle, through the store's own
+     * setters and clamps, so the snapshot and the dirty check see them like any drop.
+     */
+
+    /** The dock's height in the shown orientation, as a multiple of its unscaled height. */
+    public float dockHeightScale() {
+        return mPlaces.dockHeightScale(mShownOrientation);
+    }
+
+    /** The keyboard's height in the shown orientation, as a multiple of its unscaled height. */
+    public float keyboardHeightScale() {
+        return mPlaces.keyboardHeightScale(mShownOrientation);
+    }
+
+    /** The air under the keyboard's last key row in the shown orientation, in dp. */
+    public int keyboardChinDp() {
+        return mPlaces.keyboardChinDp(mShownOrientation);
+    }
+
+    @NonNull
+    public PlaceLayout.KeyboardForm keyboardForm() {
+        return mPlaces.keyboardForm(mShownOrientation);
+    }
+
+    /** The dock's handle dragged. */
+    @NonNull
+    public Drop setDockHeightScale(float scale) {
+        mPlaces.setDockHeightScale(mShownOrientation, scale);
+        return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
+    }
+
+    /** The keyboard's top handle dragged. */
+    @NonNull
+    public Drop setKeyboardHeightScale(float scale) {
+        mPlaces.setKeyboardHeightScale(mShownOrientation, scale);
+        return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
+    }
+
+    /** The keyboard's bottom handle dragged: the chin, which Settings called bottom padding. */
+    @NonNull
+    public Drop setKeyboardChinDp(int dp) {
+        mPlaces.setKeyboardChinDp(mShownOrientation, dp);
+        return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
+    }
+
+    /** Home's corner handle dragged: the grid in whole cells. */
+    @NonNull
+    public Drop setWidgetGrid(int columns, int rows) {
+        mPlaces.setWidgetColumns(mShownOrientation, columns);
+        mPlaces.setWidgetRows(mShownOrientation, rows);
+        return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
+    }
+
     /**
-     * The rows beneath the miniature: the dock's height, the keyboard, and on Home the grid, for
-     * the orientation on the toggle. A pick or a drag writes through the group's own writer,
-     * the same way a drop writes through the picture.
+     * One of the keyboard's type chips: docked, floating or split, for the shown orientation of
+     * the variant being edited, which is the key Settings' Keyboard type row used to write.
      */
     @NonNull
-    public List<Row> rows() {
-        List<Row> rows = new ArrayList<>(8);
-        for (Section section : Section.values()) {
-            List<PlaceArrangeModel.Group> groups = groupsOf(section);
-            for (int index = 0; index < groups.size(); index++)
-                rows.add(new Row(section.element, index, groups.get(index)));
-        }
-        return rows;
+    public Drop setKeyboardForm(@NonNull PlaceLayout.KeyboardForm form) {
+        if (form == keyboardForm())
+            return Drop.NONE;
+        mPlaces.setKeyboardForm(mShownOrientation, form);
+        return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
     }
 
-    /** One row's answer, read fresh, or null where the place no longer offers it. */
-    @Nullable
-    public PlaceArrangeModel.Group row(@NonNull Element element, int index) {
-        for (Section section : Section.values()) {
-            if (section.element != element)
-                continue;
-            List<PlaceArrangeModel.Group> groups = groupsOf(section);
-            return index < 0 || index >= groups.size() ? null : groups.get(index);
-        }
-        return null;
-    }
-
-    /** Everything under one heading: what that element offers, then how big it stands. */
+    /**
+     * The keyboard dropped in the tray, or brought back out of it. One switch for both
+     * orientations and every place — the palette's Keyboard on/off — so the live place follows it
+     * whichever orientation the toggle shows.
+     */
     @NonNull
-    private List<PlaceArrangeModel.Group> groupsOf(@NonNull Section section) {
-        List<PlaceArrangeModel.Group> groups = new ArrayList<>(4);
-        if (section.offersChoices)
-            groups.addAll(
-                PlaceArrangeModel.groups(mPlaces, mPlace, mShownOrientation, section.element));
-        groups.addAll(PlaceArrangeModel.sizes(mPlaces, mPlace, mShownOrientation, section.element));
-        return groups;
+    public Drop setKeyboardShown(boolean shown) {
+        if (mPlaces.isKeyboardShown() == shown)
+            return Drop.NONE;
+        mPlaces.setKeyboardShown(shown);
+        return Drop.LIVE;
     }
 
+    // ------------------------------------------------------------------------------- the tray
+
+    /** One chip in the tray: a hidden bar, or the keyboard switched off. */
+    public enum TrayItem {
+        STATUS_BAR(Element.STATUS),
+        PINNED_APPS(Element.APPS),
+        AZ_INDEX(Element.AZ),
+        EXTRA_KEYS(Element.EXTRA_KEYS),
+        KEYBOARD(null);
+
+        /** The bar this chip brings back, or null for the keyboard, which has no slot. */
+        @Nullable public final Element element;
+
+        TrayItem(@Nullable Element element) {
+            this.element = element;
+        }
+    }
+
+    /**
+     * What the tray holds for the shown orientation, in the order it lists them: the bars the
+     * arrangement puts away, then the keyboard while it is switched off.
+     */
+    @NonNull
+    public List<TrayItem> trayItems() {
+        List<TrayItem> items = new ArrayList<>(5);
+        PlaceLayout layout = shownLayout();
+        for (TrayItem item : TrayItem.values()) {
+            if (item.element == null) {
+                if (!layout.keyboardShown) items.add(item);
+            } else if (layout.slot(item.element).hidden) {
+                items.add(item);
+            }
+        }
+        return items;
+    }
+
+    /**
+     * A tray chip tapped: the element comes back to the edge it was put away from, at the place
+     * in that edge's stack it held, the way a bar that was never moved comes back to its default
+     * edge (spec §3.6). The keyboard is switched back on.
+     */
+    @NonNull
+    public Drop restore(@NonNull TrayItem item) {
+        if (item.element == null)
+            return setKeyboardShown(true);
+        Slot slot = mPlaces.slot(mShownOrientation, item.element);
+        if (!slot.hidden && !shownLayout().slot(item.element).hidden)
+            return Drop.NONE;
+        // The terminal's own toolbar switch can have put the extra keys away everywhere; setSlot
+        // turns it back on, since placing the keys somewhere is asking to see them.
+        mPlaces.setSlot(mShownOrientation, item.element, slot.withHidden(false));
+        return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
+    }
     /**
      * The place on the miniature. A second door opened while the editor is up moves it rather than
      * starting a session over, so what Discard puts back is still the arrangement the user first
