@@ -107,8 +107,12 @@ final class AppearanceEditorPanel {
     static final int ROW2_HEIGHT_DP = 88;
     /** Row 2 with its second control on a line of its own. */
     static final int ROW2_STACKED_HEIGHT_DP = 152;
-    /** Under this width row 2's two controls stack rather than share the row. */
-    static final int NARROW_DP = 400;
+    /**
+     * Under this width row 2's two controls stack rather than share the row. Every phone in
+     * portrait is under it: three Legibility words beside a slider ellipsised at 533dp on the
+     * review device, so side by side is for tablets and landscape only.
+     */
+    static final int NARROW_DP = 600;
 
     @Nullable private Listener mListener;
     private boolean mRestating;

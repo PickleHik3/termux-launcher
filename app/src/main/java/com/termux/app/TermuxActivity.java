@@ -10607,12 +10607,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Passthrough mode leaves the wallpaper to the system, outside the editor's scaled frame;
         // for the editor's lifetime the frame paints it itself. Off the main thread.
         @Nullable @Override public Drawable readEditorWallpaper() {
-            if (!shouldUseWallpaperPassthroughMode()) return null;
+            boolean passthrough = shouldUseWallpaperPassthroughMode();
+            Logger.logDebug(LOG_TAG, "Editor wallpaper: passthrough=" + passthrough);
+            if (!passthrough) return null;
             Context context = TermuxActivity.this;
             java.io.File exact =
                 com.termux.app.chrome.WallpaperPictureReader.managedWallpaperExactFile(context);
-            if (com.termux.app.chrome.WallpaperPictureReader.managedPictureOnScreen(context,
-                    mPreferences)) {
+            boolean managedOnScreen = com.termux.app.chrome.WallpaperPictureReader
+                .managedPictureOnScreen(context, mPreferences);
+            Logger.logDebug(LOG_TAG, "Editor wallpaper: managedOnScreen=" + managedOnScreen
+                + " exact=" + exact.isFile());
+            if (managedOnScreen) {
                 Drawable managed = decodeEditorWallpaper(exact);
                 if (managed != null) return managed;
             }
@@ -10621,12 +10626,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // A live wallpaper has no still to stand in for it; the system's stays.
                 if (manager.getWallpaperInfo() == null) {
                     Drawable system = manager.getDrawable();
+                    Logger.logDebug(LOG_TAG, "Editor wallpaper: system drawable="
+                        + (system != null));
                     if (system != null) return system;
                 }
-            } catch (Exception ignored) {
+            } catch (Exception e) {
                 // No permission to read it, or no wallpaper service: try the launcher's own copy.
+                Logger.logDebug(LOG_TAG, "Editor wallpaper: system read failed: " + e);
             }
-            return exact.isFile() ? decodeEditorWallpaper(exact) : null;
+            Drawable fallback = exact.isFile() ? decodeEditorWallpaper(exact) : null;
+            Logger.logDebug(LOG_TAG, "Editor wallpaper: exact fallback=" + (fallback != null));
+            return fallback;
         }
 
         @Nullable
