@@ -1,6 +1,7 @@
 # In-app animated wallpapers: spec (draft)
 
-Written 2026-09-29. Status: draft for the developer's review; nothing is built.
+Written 2026-09-29. Status: draft; open questions 1–4 settled 2026-09-30 (§13), the rest open.
+Nothing is built.
 Related: ADR 0002 (the pre-blurred wide frame; real-time blur "stays an experiment for a future
 live wallpaper"), ADR 0004 (every glass surface samples the shared frame), ADR 0005 (Fancier Glass
 refracts it), `project-docs/fancier-glass/SPEC.md` §1, §3, §5.
@@ -18,7 +19,7 @@ Anything marked **(assumption)** was not verified in code or on pong.
 ## 1. Scope
 
 In:
-- Procedural AGSL wallpapers built into the APK (phase 1, API 33+).
+- Procedural AGSL wallpapers built into the APK (phase 1, API 34+).
 - A live shared frame that every existing glass surface reads, in both the default mode and
   Fancier Glass.
 - One pure policy that decides when to play, at what rate, and when to pause.
@@ -97,7 +98,8 @@ frame has to be a **hardware bitmap**.
   Each acquired `Image` is a new `HardwareBuffer` object, so the frame is re-wrapped per frame
   unless buffers can be keyed by `HardwareBuffer.getId()` **(assumption: stable per slot)**.
   That means about 1 + N small allocations per frame.
-- **Recommended: API 34+ only, one path** (open question 1). Pong is API 36.
+- **Decided (2026-09-30): API 34+ only, one path.** The `ImageReader` path is not built. Pong is
+  API 36.
 - **Buffer safety:** the renderer writes slot k+1 while the window samples slot k. Slot k−1 was
   last drawn a frame ago. We assume that `HardwareBufferRenderer`'s work and the window's frame are
   ordered on the same RenderThread and GPU queue, and that the draw callback's fence covers the
@@ -203,7 +205,7 @@ The source shader runs once per live radius. At about 0.24 Mpx each, that is neg
 
 ## 6. Wallpaper kinds and API levels
 
-### 6.1 Phase 1: procedural AGSL (API 34+, or 33 if open question 1 goes that way)
+### 6.1 Phase 1: procedural AGSL (API 34+)
 
 - Three built-ins: Aurora (slow ribbons), Gradient flow (four-colour mesh drifting), Tide (soft
   waves). Each has a loop of 60 s or more and low contrast, so the ink sampled from the still stays
@@ -270,9 +272,9 @@ The source shader runs once per live radius. At about 0.24 Mpx each, that is neg
   for free. The blur cache is keyed on the still's file, so it doesn't churn.
 - `WallpaperPicture` is `MATCHES_SCREEN` (no service is running), so the self-drawn backdrop is
   allowed.
-- **Conflict to settle:** Fancier Glass §3 lists video wallpapers under the Fancier Glass toggle.
-  This spec plays built-ins with the toggle off too, because the glass works the same in both
-  modes. See open question 2.
+- **Decided (2026-09-30):** built-ins play with the Fancier Glass toggle off too, because the
+  glass works the same in both modes. This amends Fancier Glass §3, which put video wallpapers
+  under the toggle.
 
 ## 8. Interaction with existing features
 
@@ -401,15 +403,15 @@ full-window composite.
 
 ## 13. Open questions for the developer
 
-1. **Minimum API:** 34+ with `HardwareBufferRenderer` (one path, zero allocation per frame;
-   recommended), or 33+ to match Fancier Glass, with the `ImageReader` path and its per-frame
-   wrap?
-2. **Gating:** do built-in animated wallpapers play with Fancier Glass off (recommended; the glass
-   works the same in both modes), or only under the toggle, as Fancier Glass §3 says for video?
-3. **Frame rate:** a fixed 30 fps with 15 under pressure (recommended; no setting), or the 30/60
-   choice Fancier Glass §5 gave video?
-4. **Playing rule:** always while visible (recommended), or only for a few seconds after a
-   movement (a slide, an unlock, a return home), then paused on its current frame?
+Settled 2026-09-30:
+
+1. **Minimum API:** 34+, `HardwareBufferRenderer` only.
+2. **Gating:** built-ins play in both modes, with Fancier Glass on or off.
+3. **Frame rate:** a fixed 30 fps, 15 under pressure, no setting.
+4. **Playing rule:** always while visible, paused only by the §5 conditions.
+
+Still open (numbered as in the first draft):
+
 5. **Backdrop resolution:** the full-screen shader per frame, or half resolution upscaled if
    phase 0 shows it costs more than 1 ms?
 6. **Departure card:** is the still acceptable under the card, or should it copy the live slot at
