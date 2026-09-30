@@ -18,6 +18,10 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxActivity;
 import com.termux.app.chrome.ManagedWallpaper;
+import com.termux.app.chrome.wallpaper.AnimatedWallpaper;
+import com.termux.app.chrome.wallpaper.AnimatedWallpaperStatus;
+import com.termux.app.chrome.wallpaper.AnimatedWallpapers;
+import com.termux.app.chrome.wallpaper.GeneratedWallpaperApplier;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.terminal.TerminalActionDispatcher;
@@ -32,6 +36,8 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 /**
  * The device routes {@code launcherctl vibrate|torch|battery|volume|toast|wallpaper} sit on: small,
@@ -61,6 +67,7 @@ final class DeviceControlRoutes {
             case "/v1/toast":
                 return "POST".equals(method);
             case "/v1/battery":
+            case "/v1/wallpaper/builtins":
                 return "GET".equals(method);
             case "/v1/volume":
             case "/v1/wallpaper":
@@ -96,6 +103,8 @@ final class DeviceControlRoutes {
                 return toast(context, arguments);
             case "/v1/wallpaper":
                 return "GET".equals(method) ? wallpaperGet(context) : wallpaperSet(context, arguments);
+            case "/v1/wallpaper/builtins":
+                return wallpaperBuiltins();
             default:
                 return error(404, "not_found", "Unknown endpoint");
         }
@@ -345,7 +354,12 @@ final class DeviceControlRoutes {
     private static JSONObject wallpaperSet(@NonNull Context context, @NonNull JSONObject arguments)
             throws JSONException {
         String path = arguments.optString("path", "").trim();
-        if (path.isEmpty()) return error(400, "bad_request", "Missing 'path'");
+        String builtin = arguments.optString("builtin", "").trim();
+        if (!path.isEmpty() && !builtin.isEmpty()) {
+            return error(400, "bad_request", "'path' and 'builtin' are mutually exclusive");
+        }
+        if (!builtin.isEmpty()) return wallpaperSetBuiltin(context, arguments, builtin);
+        if (path.isEmpty()) return error(400, "bad_request", "Missing 'path' or 'builtin'");
         int flags = ManagedWallpaper.flagsForTarget(arguments.optString("target", "both"));
         if (flags == 0) return error(400, "bad_request", "'target' must be home, lock or both");
         File file = new File(path);
@@ -380,6 +394,8 @@ final class DeviceControlRoutes {
             portrait[0], portrait[1], TermuxAppSharedPreferences.build(app, false));
         if (!applied) return error(500, "wallpaper_failed", "Android refused the wallpaper");
 
+        // A photo is the wallpaper now: forget any generated background.
+        GeneratedWallpaperApplier.clear(app);
         boolean live = TerminalActionDispatcher.getInstance().isAttached();
         if ((flags & WallpaperManager.FLAG_SYSTEM) != 0) {
             // What the picker does once its apply finishes: the picture is ours again, so turn
@@ -389,6 +405,85 @@ final class DeviceControlRoutes {
         return ok().put("target", ManagedWallpaper.targetName(flags))
             .put("width", bounds.width()).put("height", bounds.height())
             .put("launcher_refresh", live ? "live" : "on_next_open");
+    }
+
+    /** How long a generated background may take to render and be taken by Android. */
+    static final long BUILTIN_TIMEOUT_SECONDS = 30;
+
+    /**
+     * {@code {"builtin":"aurora","palette":"material|own","target":"home|lock|both"}}. Unknown id
+     * is 404; below API 34 the still cannot be rendered, so 409 with {@code reason: "api"}. The
+     * still is set whenever the phone can render it; {@code animated} says whether the live frames
+     * will play (API 34 and Fancier Glass active), else {@code reason} is {@code fancier_glass_off}.
+     * Material colours come from the application context here (no Activity), so they follow the
+     * launcher scheme only as far as the application theme does.
+     */
+    @NonNull
+    private static JSONObject wallpaperSetBuiltin(@NonNull Context context, @NonNull JSONObject arguments,
+                                                  @NonNull String builtin) throws JSONException {
+        AnimatedWallpaper w = AnimatedWallpapers.byId(builtin);
+        if (w == null) return error(404, "not_found", "Unknown built-in background: " + builtin);
+        String palette = arguments.optString("palette", "material").trim().toLowerCase(java.util.Locale.ROOT);
+        if (!"material".equals(palette) && !"own".equals(palette)) {
+            return error(400, "bad_request", "'palette' must be material or own");
+        }
+        String target = arguments.optString("target", "both").trim().toLowerCase(java.util.Locale.ROOT);
+        int flags = ManagedWallpaper.flagsForTarget(target);
+        if (flags == 0) return error(400, "bad_request", "'target' must be home, lock or both");
+        int sdk = android.os.Build.VERSION.SDK_INT;
+        if (sdk < 34) {
+            return error(409, "unsupported", "Generated backgrounds need Android 14 (API 34) to render")
+                .put("reason", "api").put("animated", false);
+        }
+        Context app = context.getApplicationContext();
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, false);
+        boolean switchOn = preferences != null && preferences.isFancierGlassEnabled();
+        boolean animated = GeneratedWallpaperApplier.offeredFor(sdk, switchOn);
+        if (preferences != null && preferences.isAnimatedWallpaperDisabled()) animated = false;
+
+        final CountDownLatch done = new CountDownLatch(1);
+        final boolean[] ok = {false};
+        final String[] failure = {null};
+        applyBuiltin(app, w, palette, ManagedWallpaper.targetName(flags), (success, message) -> {
+            ok[0] = success;
+            failure[0] = message;
+            done.countDown();
+        });
+        try {
+            if (!done.await(BUILTIN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                return error(500, "wallpaper_failed", "The background took too long to render");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return error(500, "wallpaper_failed", "Interrupted");
+        }
+        if (!ok[0]) return error(500, "wallpaper_failed", failure[0] == null ? "Android refused the wallpaper" : failure[0]);
+
+        boolean live = TerminalActionDispatcher.getInstance().isAttached();
+        if ((flags & WallpaperManager.FLAG_SYSTEM) != 0) TermuxActivity.setWallpaperModeEnabled(app, true);
+        return ok().put("target", ManagedWallpaper.targetName(flags)).put("builtin", w.id())
+            .put("palette", palette).put("animated", animated)
+            .put("reason", animated ? JSONObject.NULL
+                : (preferences != null && preferences.isAnimatedWallpaperDisabled() ? "killed" : "fancier_glass_off"))
+            .put("launcher_refresh", live ? "live" : "on_next_open");
+    }
+
+    @android.annotation.SuppressLint("NewApi")
+    private static void applyBuiltin(@NonNull Context app, @NonNull AnimatedWallpaper w, @NonNull String palette,
+                                     @NonNull String target,
+                                     @NonNull GeneratedWallpaperApplier.Callback callback) {
+        GeneratedWallpaperApplier.apply(app, w, palette, target, callback);
+    }
+
+    /** {@code [{id,label,palettes:["material","own"]}]} under {@code builtins}. */
+    @NonNull
+    private static JSONObject wallpaperBuiltins() throws JSONException {
+        JSONArray list = new JSONArray();
+        for (AnimatedWallpaper w : AnimatedWallpapers.all()) {
+            list.put(new JSONObject().put("id", w.id()).put("label", w.label())
+                .put("palettes", new JSONArray().put("material").put("own")));
+        }
+        return ok().put("builtins", list);
     }
 
     /** {@code {"ok":true,"home_id","lock_id","live","managed",...}}: what is on screen now. */
@@ -407,8 +502,18 @@ final class DeviceControlRoutes {
         }
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, false);
         int storedId = preferences == null ? -1 : preferences.getManagedWallpaperSystemId();
+        String animatedId = preferences == null ? null : preferences.getManagedWallpaperAnimatedId();
+        String palette = preferences == null ? null : preferences.getManagedWallpaperAnimatedPalette();
+        AnimatedWallpaperStatus status = GeneratedWallpaperApplier.statusProvider();
+        boolean playing = status != null && status.playing();
+        String reason = playing ? null : status == null ? "inactive" : status.reason();
+        if (!playing && reason == null) reason = "inactive";
         return ok().put("home_id", homeId).put("lock_id", lockId).put("live", live)
             .put("managed", storedId > 0 && storedId == homeId)
+            .put("animated", animatedId == null ? JSONObject.NULL : animatedId)
+            .put("palette", animatedId == null ? JSONObject.NULL : palette)
+            .put("playing", playing)
+            .put("reason", reason == null ? JSONObject.NULL : reason)
             .put("desired_width", manager.getDesiredMinimumWidth())
             .put("desired_height", manager.getDesiredMinimumHeight());
     }
