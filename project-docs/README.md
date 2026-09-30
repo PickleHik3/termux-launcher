@@ -30,7 +30,9 @@ Three rules keep this directory from rotting:
 
 | | |
 |---|---|
-| [`active/animated-wallpaper/SPEC.md`](active/animated-wallpaper/SPEC.md) | In-app animated wallpapers over the shared frame. Draft; planned for the next release. |
+| [`active/animated-wallpaper/SPEC.md`](active/animated-wallpaper/SPEC.md) | In-app animated wallpapers over the shared frame: the pipeline and the phase 0 measurement. Draft; planned for the next release. |
+| [`active/animated-wallpaper/generated-backgrounds-issue.md`](active/animated-wallpaper/generated-backgrounds-issue.md) | Copy of issue #41: generated backgrounds with moments and Material colour, gated behind Fancier Glass. Amends the SPEC. |
+| [`active/animated-wallpaper/kitty-custom-shaders-research.md`](active/animated-wallpaper/kitty-custom-shaders-research.md) | Research: which of kitty's custom shaders can carry over, and under which licences. |
 | [`active/fancier-glass/SPEC.md`](active/fancier-glass/SPEC.md) | Fancier Glass: refraction, motions and their bug list. Partly built; `evidence-*/` holds the frame measurements. |
 | [`active/benchmark/SPEC.md`](active/benchmark/SPEC.md) | The model benchmark (bench_v2), with the recommended-set publish checklist and draft catalogue. |
 | [`active/agent-skill/spec.md`](active/agent-skill/spec.md) | The shipped agent skill. Draft, not agreed. |
@@ -87,6 +89,8 @@ task-oriented guide for the terminal is
 | [`reference/voice-ai/freestyle-voice-comparison.md`](reference/voice-ai/freestyle-voice-comparison.md) | Freestyle's dictation compared with ours. |
 | [`reference/voice-ai/gallery-gpu-loading-comparison.md`](reference/voice-ai/gallery-gpu-loading-comparison.md), [`litert-llm-opendroid-comparison.md`](reference/voice-ai/litert-llm-opendroid-comparison.md) | Model loading and runtime comparisons. |
 | [`reference/voice-ai/tai-model-ecosystem-research.md`](reference/voice-ai/tai-model-ecosystem-research.md), [`tai-importer-user-review.md`](reference/voice-ai/tai-importer-user-review.md) | The model ecosystem and the importer, reviewed. |
+| [`reference/voice-ai/local-llm-inference-speed-2026-09-30.md`](reference/voice-ai/local-llm-inference-speed-2026-09-30.md) | Ways to speed up local LLM inference on a phone (quantization, threads, GPU/NPU, speculative decoding, KV and prefix caching, thermal), ranked for TAI on pong, with MNN / LiteRT-LM / llama.cpp support. |
+| [`reference/voice-ai/local-llm-speedups-verification-2026-09-30.md`](reference/voice-ai/local-llm-speedups-verification-2026-09-30.md) | The top five speed-ups checked against MNN 3.6.1 and LiteRT-LM 0.17.1 source and Hugging Face model files, set against TAI's code: verdicts, gaps with file:line fixes, which official models have 4-bit / `-gpu` / MTP / lookahead builds, and a bench plan. |
 
 ## Release notes
 

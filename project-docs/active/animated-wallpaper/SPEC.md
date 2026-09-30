@@ -3,6 +3,9 @@
 Written 2026-09-29. Status: draft; open questions 1–4 settled 2026-09-30 (§13), the rest open.
 Nothing is built. Target: the next release (decided 2026-09-30); tracked in
 `project-docs/backlog.md`.
+Amended 2026-09-30 by [`generated-backgrounds-issue.md`](generated-backgrounds-issue.md) (#41), which
+adds the moments (unlock, lock, pane open and close, page change, touch, bell), the Material
+palette and the rest pose. Where the two disagree, the issue wins.
 Related: ADR 0002 (the pre-blurred wide frame; real-time blur "stays an experiment for a future
 live wallpaper"), ADR 0004 (every glass surface samples the shared frame), ADR 0005 (Fancier Glass
 refracts it), `project-docs/active/fancier-glass/SPEC.md` §1, §3, §5.
@@ -149,12 +152,12 @@ is too high (open question 5).
 | Class | Job |
 |---|---|
 | `AnimatedWallpaper` | Interface: `id()`, `label()`, `RuntimeShader newShader()`, `setTime(shader, seconds)`, `periodSeconds()`. |
-| `Aurora`, `GradientFlow`, `Tide` | Built-ins. Each is an AGSL string plus uniforms. Coordinates are in frame pixels, so they are resolution-independent. |
+| `Aurora`, `Mesh`, `Tide`, `Rain` | Built-ins. Each is an AGSL string plus uniforms. Coordinates are in frame pixels, so they are resolution-independent. |
 | `LiveWallpaperRenderer` | Owns the `HardwareBufferRenderer`s, the source node, one blur node per live radius, and the rings. Runs `render(t, radii)`. Releases everything in `release()`. |
 | `LiveWallpaperFrames` | Written on the main thread, read in draws: `frame(radiusDp)`, slot shaders, and a generation counter. It is the `WallpaperParallax` of time. |
 | `AnimatedWallpaperClock` | A `Choreographer.FrameCallback`. It holds `t`, steps it at the policy's rate, starts renders and publishes slots. It stops posting callbacks while paused. |
-| `AnimatedWallpaperPolicy` | Pure. A `Snapshot` goes in, fps comes out (0 means paused). Built like `FancierGlassPolicy` and `TaiBenchGuardRules`. |
-| `AnimatedWallpaperStill` | Renders frame t=0 at full resolution (1.5× wide) to a software bitmap for `ManagedWallpaper.apply`. |
+| `WallpaperDirector` | Pure, no Android types. Inputs go in, and per frame comes out fps (0 means paused), shader time, energy, dim, the palette and up to two moment slots. It also owns the moments, the energy and the lock delay. Built like `FancierGlassPolicy` and `WallSlideClock`. Replaces the earlier `AnimatedWallpaperPolicy`. |
+| `AnimatedWallpaperStill` | Renders the rest pose (energy 0) at full resolution (1.5× wide) to a software bitmap for `ManagedWallpaper.apply`. |
 
 The render graph per frame:
 - the **source node** (frame rect ÷4) is `drawRect` with the wallpaper's shader;
@@ -177,11 +180,11 @@ The source shader runs once per live radius. At about 0.24 Mpx each, that is neg
 
 ## 5. When it plays
 
-`AnimatedWallpaperPolicy.fps(Snapshot)`:
+`WallpaperDirector` (its fps output):
 
 | Condition | Result |
 |---|---|
-| No animated id, or `managedPictureOnScreen` is false, or passthrough mode, or SDK < `MIN_SDK` | Not animated. The still path is today's. |
+| No animated id, or `managedPictureOnScreen` is false, or passthrough mode, or SDK < `MIN_SDK`, or Fancier Glass not active (§13 Q2) | Not animated. The still path is today's. |
 | Kill switch on (§9.4) | Paused |
 | Launcher not visible (`onStop`), screen off, another activity in front | Paused, and the renderer is released after 30 s |
 | Lazy mode | Paused |
@@ -208,8 +211,8 @@ The source shader runs once per live radius. At about 0.24 Mpx each, that is neg
 
 ### 6.1 Phase 1: procedural AGSL (API 34+)
 
-- Three built-ins: Aurora (slow ribbons), Gradient flow (four-colour mesh drifting), Tide (soft
-  waves). Each has a loop of 60 s or more and low contrast, so the ink sampled from the still stays
+- Four built-ins: Aurora (slow ribbons), Mesh (four-colour gradient drifting; was Gradient flow),
+  Tide (soft waves) and Rain (sparse glyph-cell rain). Each has a loop of 60 s or more and low contrast, so the ink sampled from the still stays
   valid (§8).
 - Each is under about 60 ALU ops per pixel, with no texture reads **(target, to be checked)**.
 - Each has a palette-seed uniform. Recolouring is open question 7.
@@ -242,10 +245,10 @@ The source shader runs once per live radius. At about 0.24 Mpx each, that is neg
 - `openWallpaperPicker` launches the system photo picker straight away today
   (`launchManagedWallpaperPicker`, `PickVisualMedia.ImageOnly`). It becomes a small sheet with
   "Choose a photo…" at the top and an **Animated** row of built-in tiles. Each tile is a static
-  thumbnail rendered from t=0. The tiles are not live, because live previews would cost a
+  thumbnail rendered at the rest pose (energy 0). The tiles are not live, because live previews would cost a
   renderer per tile.
 - Tapping a tile:
-  1. `AnimatedWallpaperStill` renders t=0 (1.5× wide, portrait size, as `launchWallpaperCrop`
+  1. `AnimatedWallpaperStill` renders the rest pose, energy 0, not t=0 (1.5× wide, portrait size, as `launchWallpaperCrop`
      sizes it).
   2. It writes the exact copy (`managedWallpaperExactFile`) and calls `ManagedWallpaper.apply`.
      The system gets the centre crop, and the stored id follows.
@@ -273,9 +276,7 @@ The source shader runs once per live radius. At about 0.24 Mpx each, that is neg
   for free. The blur cache is keyed on the still's file, so it doesn't churn.
 - `WallpaperPicture` is `MATCHES_SCREEN` (no service is running), so the self-drawn backdrop is
   allowed.
-- **Decided (2026-09-30):** built-ins play with the Fancier Glass toggle off too, because the
-  glass works the same in both modes. This amends Fancier Glass §3, which put video wallpapers
-  under the toggle.
+- **Decided (2026-09-30, #41):** built-ins are gated behind Fancier Glass (§13 Q2).
 
 ## 8. Interaction with existing features
 
@@ -349,7 +350,7 @@ full-window composite.
 
 **Phase 1a: the pipeline.**
 - New: `chrome/wallpaper/AnimatedWallpaper`, `Aurora`, `LiveWallpaperRenderer`,
-  `LiveWallpaperFrames`, `AnimatedWallpaperClock`, `AnimatedWallpaperPolicy` (with unit tests like
+  `LiveWallpaperFrames`, `AnimatedWallpaperClock`, `WallpaperDirector` (with unit tests like
   `FancierGlassPolicy`'s).
 - Touches: `SharedFrameDrawable.draw`, `PaneGlassBackdropView.onDraw` and
   `PaneControlsView` (the draw-time pick and the slot shader cache); `WallpaperBackdropView` (live
@@ -357,7 +358,7 @@ full-window composite.
   extracted from `syncWallpaperParallax`, power, thermal and lazy inputs).
 
 **Phase 1b: choosing.**
-- New: `AnimatedWallpaperStill`, the picker sheet, and `GradientFlow` and `Tide`.
+- New: `AnimatedWallpaperStill`, the picker sheet, and `Mesh`, `Tide` and `Rain`.
 - Touches: `openWallpaperPicker`/`launchManagedWallpaperPicker`, `ManagedWallpaper` (applying a
   generated bitmap), `TermuxAppSharedPreferences` (`managed_wallpaper_animated`),
   `launcherctl/DeviceControlRoutes`, `LauncherToolRegistry`, `docs/en/LauncherCtl_API.md`.
@@ -373,7 +374,7 @@ full-window composite.
 
 ## 11. Tests
 
-- Unit: `AnimatedWallpaperPolicy` over every row of §5. The radius quantisation. The draw-time pick
+- Unit: `WallpaperDirector` over every row of §5. The radius quantisation. The draw-time pick
   (software canvas → still). `LiveWallpaperFrames`' slot rotation.
 - On pong:
   - §9.2 frame timing on the three places, playing and paused, in the default mode and Fancier
@@ -407,7 +408,7 @@ full-window composite.
 Settled 2026-09-30:
 
 1. **Minimum API:** 34+, `HardwareBufferRenderer` only.
-2. **Gating:** built-ins play in both modes, with Fancier Glass on or off.
+2. **Gating:** gated behind Fancier Glass (developer, 2026-09-30, #41); API 34 remains its own floor. Amended from "plays with Fancier Glass on or off".
 3. **Frame rate:** a fixed 30 fps, 15 under pressure, no setting.
 4. **Playing rule:** always while visible, paused only by the §5 conditions.
 
@@ -417,8 +418,7 @@ Still open (numbered as in the first draft):
    phase 0 shows it costs more than 1 ms?
 6. **Departure card:** is the still acceptable under the card, or should it copy the live slot at
    capture time (one GPU readback per window switch)?
-7. **Colour:** fixed palettes per built-in, or a seed taken from the Material palette, so that the
-   system's colours and the animation always agree?
+7. **Colour:** settled 2026-09-30 (#41): the Material palette captured at set time and on scheme change, never from `OnColorsChangedListener`; or the background's own palette.
 8. **`launcherctl` below the minimum API:** set the still and report `animated: false`
    (recommended), or refuse with 409?
 9. **Live radii cap:** is 3 live radii with 3 dp merging acceptable, or must every exact radius be

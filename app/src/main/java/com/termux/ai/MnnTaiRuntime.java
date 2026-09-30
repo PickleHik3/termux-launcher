@@ -1206,6 +1206,9 @@ public final class MnnTaiRuntime implements TaiRuntime {
         }
         if (!json.has("backend_type")) json.put("backend_type", "cpu");
         if (!json.has("thread_num")) json.put("thread_num", 4);
+        // "high" binds MNN's threads to the fastest clusters (Llm reads it into BackendConfig::Power_High);
+        // the default "normal" leaves them unpinned, free to land on the little cores.
+        if (!json.has("power")) json.put("power", "high");
         if (!json.has("precision")) json.put("precision", "low");
         if (!json.has("memory")) json.put("memory", "low");
         if (!json.has("max_all_tokens")) json.put("max_all_tokens", modelSpec.endpointContextWindow);

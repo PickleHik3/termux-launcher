@@ -2943,4 +2943,15 @@
 
     <!-- The shelf under the phone in the Layout editor, when nothing is put away. -->
     <string name="settings_layout_tray_empty">Hidden</string>
+
+    <!-- Wallpaper picker sheet -->
+    <string name="wallpaper_picker_title">Wallpaper</string>
+    <string name="wallpaper_picker_photo">Photo</string>
+    <string name="wallpaper_picker_photo_hint">Choose a picture from your gallery</string>
+    <string name="wallpaper_picker_animated">Animated</string>
+    <string name="wallpaper_picker_current">In use</string>
+    <string name="wallpaper_picker_palette_material">Material</string>
+    <string name="wallpaper_picker_palette_own">Own</string>
+    <string name="wallpaper_picker_applying">Applying background…</string>
+    <string name="wallpaper_picker_apply_failed">Could not apply the background</string>
 </resources>

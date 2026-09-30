@@ -52,6 +52,7 @@ public class MnnTaiRuntimeConfigTest {
 
         assertEquals("cpu", merged.getString("backend_type"));
         assertEquals(4, merged.getInt("thread_num"));
+        assertEquals("high", merged.getString("power"));
         assertEquals("low", merged.getString("precision"));
         assertEquals("low", merged.getString("memory"));
         assertEquals(0.8d, merged.getDouble("temperature"), 0.0d);
