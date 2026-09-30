@@ -20,6 +20,7 @@ import com.termux.app.chrome.FrameCrossfade;
 import com.termux.app.chrome.GlassAnchor;
 import com.termux.app.chrome.GlassRefraction;
 import com.termux.app.chrome.WallpaperParallax;
+import com.termux.app.chrome.wallpaper.LiveWallpaperFrames;
 
 /**
  * One pane's glass. Draws the shared pre-blurred wallpaper frame through this pane's own rect, the
@@ -90,6 +91,17 @@ public final class PaneGlassBackdropView extends View {
     @Nullable private WallpaperParallax mParallax;
     /** The wall slide and parallax the matrix was last aimed for, in px. */
     private float mLastShiftX;
+    /**
+     * The radius, in dp, this slab's frame was blurred at; the key of its live frame. 0 (the
+     * default) opts out: the still is always drawn.
+     */
+    private float mLiveRadiusDp;
+    @NonNull private final LiveWallpaperFrames.ShaderCache mLiveShaders =
+        new LiveWallpaperFrames.ShaderCache();
+    /** The live slot shader the paint is bound to right now, or null while it holds the still. */
+    @Nullable private BitmapShader mBoundLive;
+    /** The shader the aim was last written for; a slot swap needs its own matrix. */
+    @Nullable private BitmapShader mLastAimShader;
     /** Fancier Glass, or null for the plain draw. */
     @Nullable private GlassRefraction.Look mLook;
     /** The program the frame draws through while {@link #mLook} is set and the phone runs one. */
@@ -238,6 +250,16 @@ public final class PaneGlassBackdropView extends View {
         invalidate();
     }
 
+    /**
+     * Opts this slab into the live wallpaper frame for {@code radiusDp} (the radius its still was
+     * blurred at); 0 opts out. See {@link LiveWallpaperFrames}.
+     */
+    public void setLiveRadiusDp(float radiusDp) {
+        if (mLiveRadiusDp == radiusDp) return;
+        mLiveRadiusDp = radiusDp;
+        invalidate();
+    }
+
     /** True while the frame is drawn through the refraction program rather than plain. */
     public boolean refracts() {
         return mProgram != null;
@@ -249,6 +271,8 @@ public final class PaneGlassBackdropView extends View {
      * captures its input when it is set.
      */
     private void syncRefraction() {
+        mBoundLive = null;
+        mLastAimShader = null;
         GlassRefraction.Look look = mLook;
         BitmapShader shader = mFrameShader;
         if (look == null || shader == null || mCornerMaskRadiusPx > 0f || !GlassRefraction.available()) {
@@ -345,21 +369,44 @@ public final class PaneGlassBackdropView extends View {
         // one), so the refracted frame sits that pass out; it only feeds another view's blur.
         if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null
                 && (mProgram == null || canvas.isHardwareAccelerated())) {
+            // The live pick (animated-wallpaper SPEC §3.3): the live slot for this radius stands in
+            // for the still on a hardware canvas, aimed the same way at its own pixel size.
+            Bitmap live = mLiveRadiusDp > 0f && canvas.isHardwareAccelerated()
+                ? LiveWallpaperFrames.get().frame(mLiveRadiusDp) : null;
+            BitmapShader aimShader = mFrameShader;
+            Bitmap aimFrame = mFrame;
+            if (live != null) {
+                aimShader = mLiveShaders.shader(live);
+                aimFrame = live;
+                if (mBoundLive != aimShader) {
+                    mBoundLive = aimShader;
+                    if (mProgram != null) {
+                        // A child rebind, not a compile.
+                        mProgram.setInput(aimShader);
+                        mProgram.applyTo(mFramePaint);
+                    } else {
+                        mFramePaint.setShader(aimShader);
+                    }
+                }
+            } else if (mBoundLive != null) {
+                syncRefraction();
+            }
             float slideX = layoutOriginOnScreen(mLocation);
             // The page's slide carries this view to the right over the wallpaper, and the parallax
             // carries the wallpaper to the left under it; either way the frame is sampled that
             // much further along.
             float shiftX = (mParallax == null ? 0f : mParallax.offsetPx()) + slideX;
             GlassRefraction.Program program = mProgram;
-            if (mLocation[0] != mLastLeft || mLocation[1] != mLastTop
+            if (aimShader != mLastAimShader || mLocation[0] != mLastLeft || mLocation[1] != mLastTop
                 || width != mLastWidth || height != mLastHeight || shiftX != mLastShiftX) {
                 mLastLeft = mLocation[0];
                 mLastTop = mLocation[1];
                 mLastWidth = width;
                 mLastHeight = height;
                 mLastShiftX = shiftX;
-                mAim[0] = mFrameRect.width() / (float) Math.max(1, mFrame.getWidth());
-                mAim[1] = mFrameRect.height() / (float) Math.max(1, mFrame.getHeight());
+                mLastAimShader = aimShader;
+                mAim[0] = mFrameRect.width() / (float) Math.max(1, aimFrame.getWidth());
+                mAim[1] = mFrameRect.height() / (float) Math.max(1, aimFrame.getHeight());
                 mAim[2] = mFrameRect.left - mLastLeft - shiftX;
                 mAim[3] = mFrameRect.top - mLastTop;
                 if (program != null) {
@@ -381,7 +428,7 @@ public final class PaneGlassBackdropView extends View {
                     mFrameMatrix.reset();
                     mFrameMatrix.setScale(mAim[0], mAim[1]);
                     mFrameMatrix.postTranslate(mAim[2], mAim[3]);
-                    mFrameShader.setLocalMatrix(mFrameMatrix);
+                    aimShader.setLocalMatrix(mFrameMatrix);
                     // The retired frame shares this pane's rect and, always, the current frame's
                     // own size — both are full captures of the same radius — so the same matrix
                     // aims it.
@@ -389,7 +436,7 @@ public final class PaneGlassBackdropView extends View {
                 }
             }
             float progress = mCrossfade.progress();
-            boolean fading = progress < 1f && mPreviousFrame != null && !mPreviousFrame.isRecycled()
+            boolean fading = live == null && progress < 1f && mPreviousFrame != null && !mPreviousFrame.isRecycled()
                 && mPreviousFrameShader != null
                 && mPreviousFrame.getWidth() == mFrame.getWidth()
                 && mPreviousFrame.getHeight() == mFrame.getHeight();
