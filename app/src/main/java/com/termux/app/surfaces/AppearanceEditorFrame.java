@@ -1,11 +1,16 @@
 package com.termux.app.surfaces;
 
+import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Outline;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.RoundedCorner;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.view.WindowInsets;
+import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -22,6 +27,12 @@ import com.termux.app.terminal.Motion;
  * transform, so the editor's tap targets, laid out in the container's own unscaled coordinates,
  * still land on what they cover. The chrome sampler maps its rects back into root space
  * ({@code ChromeInk#mapIntoRoot}), so the veils stay right under the scale.</p>
+ *
+ * <p>In wallpaper passthrough mode the wallpaper is not the launcher's to scale: the system draws
+ * it behind the translucent window, and the scaled launcher would sit as a cut-out over an
+ * unscaled picture. For the editor's lifetime the frame then paints the wallpaper itself, at the
+ * decor's rect inside the container ({@link #showWallpaper}), so it scales with everything else,
+ * and the host makes the window opaque around it.</p>
  */
 final class AppearanceEditorFrame {
 
@@ -133,6 +144,107 @@ final class AppearanceEditorFrame {
         mRoot.animate().scaleX(1f).scaleY(1f).translationY(0f)
             .setDuration(EXIT_MS).setInterpolator(Motion.settle())
             .withEndAction(finish).start();
+    }
+
+    // -------------------------------------------------------------------- the editor's wallpaper
+
+    @Nullable private EditorWallpaperView mWallpaper;
+
+    /**
+     * Paints {@code wallpaper} under everything in the container, centre-cropped to the decor's
+     * rect as the system would draw it, with {@code dimColor} over it (the dim the window's root
+     * paints over the system wallpaper, which the picture now covers).
+     *
+     * @param decorLeftInRootPx the decor's left edge in the container's unscaled coordinates
+     * @param decorTopInRootPx  its top edge
+     */
+    void showWallpaper(@NonNull Drawable wallpaper, int dimColor, int decorLeftInRootPx,
+                       int decorTopInRootPx, int decorWidthPx, int decorHeightPx) {
+        if (!(mRoot instanceof ViewGroup))
+            return;
+        ViewGroup container = (ViewGroup) mRoot;
+        if (mWallpaper == null || mWallpaper.getParent() != container) {
+            if (mWallpaper != null && mWallpaper.getParent() instanceof ViewGroup)
+                ((ViewGroup) mWallpaper.getParent()).removeView(mWallpaper);
+            mWallpaper = new EditorWallpaperView(container.getContext());
+            // Under everything, the launcher's own backdrop included (invisible in passthrough).
+            container.addView(mWallpaper, 0, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        }
+        mWallpaper.set(wallpaper, dimColor, decorLeftInRootPx, decorTopInRootPx, decorWidthPx,
+            decorHeightPx);
+        mWallpaper.setVisibility(View.VISIBLE);
+    }
+
+    boolean isShowingWallpaper() {
+        return mWallpaper != null && mWallpaper.getParent() != null;
+    }
+
+    /** Takes the editor's wallpaper away; the system's shows through again. */
+    void hideWallpaper() {
+        EditorWallpaperView view = mWallpaper;
+        mWallpaper = null;
+        if (view != null && view.getParent() instanceof ViewGroup)
+            ((ViewGroup) view.getParent()).removeView(view);
+    }
+
+    /**
+     * The picture, centre-cropped to the decor's rect (which may reach past the container, under
+     * the transparent system bars), and the dim over it. Takes no touches.
+     */
+    private static final class EditorWallpaperView extends View {
+        @Nullable private Drawable mDrawable;
+        private int mDim;
+        private int mDecorLeft;
+        private int mDecorTop;
+        private int mDecorWidth;
+        private int mDecorHeight;
+
+        EditorWallpaperView(@NonNull Context context) {
+            super(context);
+            setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+            setClickable(false);
+            setFocusable(false);
+            setWillNotDraw(false);
+        }
+
+        void set(@NonNull Drawable drawable, int dim, int decorLeft, int decorTop,
+                 int decorWidth, int decorHeight) {
+            mDrawable = drawable;
+            mDim = dim;
+            mDecorLeft = decorLeft;
+            mDecorTop = decorTop;
+            mDecorWidth = decorWidth;
+            mDecorHeight = decorHeight;
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(@NonNull Canvas canvas) {
+            Drawable drawable = mDrawable;
+            if (drawable == null)
+                return;
+            int width = mDecorWidth > 0 ? mDecorWidth : getWidth();
+            int height = mDecorHeight > 0 ? mDecorHeight : getHeight();
+            int left = mDecorWidth > 0 ? mDecorLeft : 0;
+            int top = mDecorHeight > 0 ? mDecorTop : 0;
+            int intrinsicWidth = drawable.getIntrinsicWidth();
+            int intrinsicHeight = drawable.getIntrinsicHeight();
+            if (intrinsicWidth > 0 && intrinsicHeight > 0 && width > 0 && height > 0) {
+                float scale = Math.max(width / (float) intrinsicWidth,
+                    height / (float) intrinsicHeight);
+                int drawnWidth = Math.round(intrinsicWidth * scale);
+                int drawnHeight = Math.round(intrinsicHeight * scale);
+                int x = left + (width - drawnWidth) / 2;
+                int y = top + (height - drawnHeight) / 2;
+                drawable.setBounds(x, y, x + drawnWidth, y + drawnHeight);
+            } else {
+                drawable.setBounds(left, top, left + width, top + height);
+            }
+            drawable.draw(canvas);
+            if ((mDim >>> 24) != 0)
+                canvas.drawColor(mDim);
+        }
     }
 
     boolean isScaled() {

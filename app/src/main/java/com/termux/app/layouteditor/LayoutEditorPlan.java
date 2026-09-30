@@ -40,29 +40,11 @@ import java.util.List;
  * the handles worth offering: the grid's only on Home.
  *
  * <p>Pure: a store in, an answer out, no views, so every case above is testable without a window.
- * {@link LayoutEditorController} is the shell that draws it.
+ * {@link LayoutEditorController} is the wiring that draws it, in Layout mode of the one editor.
+ * The canvas stands in the editor's frame at its full size (spec §3.5), so there is no sheet or
+ * miniature to size here any more.
  */
 public final class LayoutEditorPlan {
-
-    /**
-     * How much of the screen's height the portrait miniature's phone frame stands in. It is the
-     * same at rest and pulled up: the pull shows more of the list the picture stands in, it does
-     * not reshape the picture.
-     */
-    public static final float PORTRAIT_FRAME_SCREEN_FRACTION = 0.42f;
-
-    /**
-     * How much of a portrait screen the card stands in at rest. The editor is a sheet from the
-     * bottom edge rather than a panel over the whole screen: what is left above it is the live
-     * place it is a picture of, still showing its status strip and its chip row, so a drop can be
-     * seen landing on the real thing rather than only on the miniature. The sheet can then be
-     * pulled up to {@link #expandedCardBudgetPx}, which is as far as the top inset allows.
-     *
-     * <p>A landscape screen has no height to give away — its card is already the short edge — so
-     * the rule is the portrait screen's alone, and {@link #cardBudgetPx(int, int)} says which it
-     * is.
-     */
-    public static final float PORTRAIT_CARD_SCREEN_FRACTION = 0.80f;
 
     /** What one drop on the miniature did. */
     public enum Drop {
@@ -377,103 +359,5 @@ public final class LayoutEditorPlan {
     /** Puts the arrangement back the way the editor found it. */
     public void revert() {
         mEntry.restore(mPlaces);
-    }
-
-    /**
-     * How tall the miniature has to be for its phone frame to stand at the size this orientation
-     * asks for: {@value #PORTRAIT_FRAME_SCREEN_FRACTION} of the screen's height in portrait, and
-     * as wide as the card's column in landscape, where a frame sized from the height would be a
-     * sliver.
-     *
-     * <p>Either frame is bounded twice. By the column's width: a frame wider than the card it
-     * stands in is drawn at the width it has, and the height it asked for beyond that is dead air
-     * above and below it. And by what the resting card has left once its chrome and a peek of the
-     * rows have theirs: a landscape phone is about as wide as the screen is tall, so a frame sized
-     * from the width alone would push every row below the fold; the portrait frame only meets that
-     * bound at a large font scale, where the chrome around it has grown, and there the picture
-     * gives way rather than the rows.
-     *
-     * @param frameAspect  the frame's width over its height, for the orientation asked about
-     * @param reservedPx   the room the miniature keeps under the frame for the hide tray
-     * @param columnPx     the width of the card's body, which the frame can be as wide as
-     * @param roomBelowPx  the room that has to stay for what stands around the canvas — the card's
-     *     own chrome plus the peek of the rows under it
-     * @param restPx       the card's resting height
-     */
-    public static int miniatureHeightPx(@NonNull PlaceOrientation orientation, int screenHeightPx,
-                                        float frameAspect, int reservedPx, int columnPx,
-                                        int roomBelowPx, int restPx) {
-        float aspect = Math.max(frameAspect, 0.01f);
-        float frameHeight = orientation == PlaceOrientation.LANDSCAPE
-            ? Math.max(0, columnPx) / aspect
-            : Math.min(PORTRAIT_FRAME_SCREEN_FRACTION * screenHeightPx,
-                Math.max(0, columnPx) / aspect);
-        int roomForFrame = Math.max(0, restPx - roomBelowPx - reservedPx);
-        return Math.round(Math.min(frameHeight, roomForFrame)) + reservedPx;
-    }
-
-    /**
-     * How much height the card asks for at rest: the whole screen where the screen is already
-     * short, and {@value #PORTRAIT_CARD_SCREEN_FRACTION} of it on a portrait screen, where the
-     * rest is the live place above the sheet.
-     *
-     * <p>The screen's own shape decides it, not the orientation on the toggle: flipping the
-     * miniature to the other orientation changes the picture, and the card it stands in is still
-     * the one this screen has room for.
-     */
-    public static int cardBudgetPx(int screenWidthPx, int screenHeightPx) {
-        return screenWidthPx >= screenHeightPx ? screenHeightPx
-            : Math.round(PORTRAIT_CARD_SCREEN_FRACTION * screenHeightPx);
-    }
-
-    /**
-     * How much height the card may take pulled all the way up: everything the host has under the
-     * top inset, less the air the sheet keeps at the top and its own bottom margin, which is
-     * {@code roomPx}.
-     */
-    public static int expandedCardBudgetPx(int roomPx) {
-        return Math.max(0, roomPx);
-    }
-
-    /**
-     * The card's resting height: {@link #cardBudgetPx(int, int)}, and never more than the room it
-     * could be pulled up to. On a landscape screen the two meet, so the card already stands as
-     * tall as it can and a pull has no travel.
-     */
-    public static int restingCardHeightPx(int screenWidthPx, int screenHeightPx,
-                                          int expandedPx) {
-        int resting = cardBudgetPx(screenWidthPx, screenHeightPx);
-        return expandedPx > 0 ? Math.min(resting, expandedPx) : resting;
-    }
-
-    /**
-     * The width the miniature's frame asks for of its own accord, which is what decides whether
-     * the Layout editor's body can put the rows beside it rather than under it.
-     *
-     * <p>A landscape frame is as wide as the screen, so it never leaves a pane for the rows and
-     * the body falls back to one column — which is the case P1 bounds. A portrait frame is a
-     * sliver, and beside it there is room for everything.
-     */
-    public static int miniatureNaturalWidthPx(@NonNull PlaceOrientation orientation,
-                                              int screenWidthPx, int screenHeightPx,
-                                              float frameAspect) {
-        if (orientation == PlaceOrientation.LANDSCAPE)
-            return screenWidthPx;
-        return Math.round(PORTRAIT_FRAME_SCREEN_FRACTION * screenHeightPx
-            * Math.max(frameAspect, 0.01f));
-    }
-
-    /**
-     * How tall the miniature stands in a pane of its own, where there are no rows beneath it to
-     * leave room for and the frame is bounded by the pane rather than by a fraction of the screen.
-     *
-     * <p>The frame takes the pane's width or the pane's height, whichever runs out first, so a
-     * miniature marooned between two empty gutters becomes a miniature that fills its column.
-     */
-    public static int miniatureHeightInPanePx(float frameAspect, int reservedPx, int paneWidthPx,
-                                              int paneHeightPx) {
-        float fromWidth = Math.max(0, paneWidthPx) / Math.max(frameAspect, 0.01f);
-        int room = Math.max(0, paneHeightPx - reservedPx);
-        return Math.round(Math.min(fromWidth, room)) + reservedPx;
     }
 }

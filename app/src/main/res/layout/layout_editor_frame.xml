@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Layout mode's frame (appearance-layout-editor SPEC §3.5): the layout canvas at the full size of
+     the editor's frame, the same rect the scaled launcher stands in, clipped at the same device
+     radius. SurfaceEditorController places it over the scaled launcher and cross-fades between
+     the two when the mode pill moves; LayoutEditorController drives what is in it.
+
+     Layout is not a miniature: the canvas's phone outline is this view's own bounds
+     (LayoutCanvasView.setFillsView), and the tray it drops into stands in the bottom area.
+
+     Children in drawing order: the canvas, and the keyboard's three type chips over it, shown
+     beside the keyboard's handle while the keyboard is selected. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/layout_editor_frame"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:clickable="true"
+    android:focusable="false"
+    android:visibility="gone">
+
+    <com.termux.app.fragments.settings.LayoutCanvasView
+        android:id="@+id/layout_editor_canvas"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <com.google.android.material.chip.ChipGroup
+        android:id="@+id/layout_editor_keyboard_forms"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:visibility="gone"
+        app:chipSpacingHorizontal="4dp"
+        app:chipSpacingVertical="4dp"
+        app:selectionRequired="true"
+        app:singleSelection="true">
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/layout_editor_keyboard_form_docked"
+            style="@style/Widget.Termux.LayoutEditor.KeyboardFormChip"
+            android:contentDescription="@string/settings_layout_keyboard_form_docked"
+            app:chipIcon="@drawable/ic_symbol_keyboard_docked" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/layout_editor_keyboard_form_floating"
+            style="@style/Widget.Termux.LayoutEditor.KeyboardFormChip"
+            android:contentDescription="@string/settings_layout_keyboard_form_floating"
+            app:chipIcon="@drawable/ic_symbol_keyboard_floating" />
+
+        <com.google.android.material.chip.Chip
+            android:id="@+id/layout_editor_keyboard_form_split"
+            style="@style/Widget.Termux.LayoutEditor.KeyboardFormChip"
+            android:contentDescription="@string/settings_layout_keyboard_form_split"
+            app:chipIcon="@drawable/ic_symbol_keyboard_split" />
+    </com.google.android.material.chip.ChipGroup>
+</FrameLayout>

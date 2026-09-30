@@ -8,6 +8,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -17,6 +18,7 @@ import androidx.core.content.ContextCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.shape.MaterialShapeDrawable;
 import com.google.android.material.shape.ShapeAppearanceModel;
@@ -32,12 +34,18 @@ import com.termux.R;
  *
  * <p>Every restatement from code runs with {@link #mRestating} set, so a value the controller
  * pushes in is never read back as the user's.</p>
+ *
+ * <p>Layout mode (SPEC §3.5) keeps the top row — the mode pill, Undo and Done, which are the whole
+ * editor's — and swaps rows 1, 2 and the hint for the Layout row: the orientation toggle and the
+ * restore tray. Those views are {@link com.termux.app.layouteditor.LayoutEditorController}'s to
+ * drive; this class only shows and hides them.</p>
  */
 final class AppearanceEditorPanel {
 
     /** What the user did in the bottom area. */
     interface Listener {
-        void onLayoutMode();
+        /** The mode pill moved: true for Layout, false for Appearance. */
+        void onModeChanged(boolean layout);
         void onUndo();
         void onDone();
         /** The Look slider settled on a stop (a drag reports each stop it crosses). */
@@ -79,6 +87,28 @@ final class AppearanceEditorPanel {
     private final TextView mSecondLabel;
     private final Slider mSecondSlider;
     private final TextView mHint;
+    private final View mRow1;
+    private final View mLayoutRow;
+    private final LinearLayout mRow2Controls;
+    private final View mFirstColumn;
+    private final MaterialButtonToggleGroup mOrientation;
+    private final View mTray;
+    private final ChipGroup mTrayChips;
+    private final TextView mTrayEmpty;
+    private final TextView mTrayDrop;
+    /** Whether Layout mode's row is showing in place of rows 1, 2 and the hint. */
+    private boolean mLayoutMode;
+    /** Whether row 2 was up when Layout mode took its place, so Appearance gets it back. */
+    private boolean mRow2BeforeLayout;
+    /** Whether row 2 stacks its two controls (a panel under {@link #NARROW_DP}). */
+    private boolean mNarrow;
+
+    /** Row 2's height side by side, as appearance_editor_panel declares it. */
+    static final int ROW2_HEIGHT_DP = 88;
+    /** Row 2 with its second control on a line of its own. */
+    static final int ROW2_STACKED_HEIGHT_DP = 152;
+    /** Under this width row 2's two controls stack rather than share the row. */
+    static final int NARROW_DP = 400;
 
     @Nullable private Listener mListener;
     private boolean mRestating;
@@ -104,6 +134,15 @@ final class AppearanceEditorPanel {
         mSecondLabel = root.findViewById(R.id.appearance_editor_c2_label);
         mSecondSlider = root.findViewById(R.id.appearance_editor_c2_slider);
         mHint = root.findViewById(R.id.appearance_editor_hint);
+        mRow1 = root.findViewById(R.id.appearance_editor_row1);
+        mLayoutRow = root.findViewById(R.id.appearance_editor_layout_row);
+        mRow2Controls = root.findViewById(R.id.appearance_editor_row2_controls);
+        mFirstColumn = root.findViewById(R.id.appearance_editor_c1);
+        mOrientation = root.findViewById(R.id.layout_editor_orientation);
+        mTray = root.findViewById(R.id.layout_editor_tray);
+        mTrayChips = root.findViewById(R.id.layout_editor_tray_chips);
+        mTrayEmpty = root.findViewById(R.id.layout_editor_tray_empty);
+        mTrayDrop = root.findViewById(R.id.layout_editor_tray_drop);
         paintSheet();
         buildLookLabels();
         bind();
@@ -218,10 +257,8 @@ final class AppearanceEditorPanel {
             syncCheckIcons(group);
             if (mRestating || !isChecked)
                 return;
-            // TODO(spec §3.5): host Layout mode in this frame. Until then the Layout segment
-            // leaves Appearance mode and opens the Layout editor on its own.
-            if (checkedId == R.id.appearance_editor_mode_layout && mListener != null)
-                mListener.onLayoutMode();
+            if (mListener != null)
+                mListener.onModeChanged(checkedId == R.id.appearance_editor_mode_layout);
         });
         syncCheckIcons(mMode);
         mUndo.setOnClickListener(view -> {
@@ -272,6 +309,9 @@ final class AppearanceEditorPanel {
                 if (mListener != null) mListener.onSliderReleased();
             }
         });
+        syncCheckIcons(mOrientation);
+        mOrientation.addOnButtonCheckedListener((group, checkedId, isChecked) ->
+            syncCheckIcons(group));
         MaterialButtonToggleGroup.OnButtonCheckedListener segments =
             (group, checkedId, isChecked) -> {
                 syncCheckIcons(group);
@@ -288,6 +328,10 @@ final class AppearanceEditorPanel {
      * narrow three-way row spends its width on the words.
      */
     private void syncCheckIcons(@NonNull MaterialButtonToggleGroup group) {
+        // Legibility's three words have no room for the icon on a narrow panel: its checked
+        // segment is told by the fill alone. The orientation toggle is glyphs already.
+        if (group == mLegibility || group == mOrientation)
+            return;
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
             if (!(child instanceof MaterialButton))
@@ -301,10 +345,98 @@ final class AppearanceEditorPanel {
     // ------------------------------------------------------------------------- restatements
 
     void showAppearanceMode() {
-        mRestating = true;
-        mMode.check(R.id.appearance_editor_mode_appearance);
-        mRestating = false;
+        setMode(false);
+    }
+
+    /**
+     * Shows one mode's rows and checks its segment, without reporting it. Row 2's state is kept
+     * across a visit to Layout mode, so Appearance comes back as it was left.
+     */
+    void setMode(boolean layout) {
+        int id = layout ? R.id.appearance_editor_mode_layout
+            : R.id.appearance_editor_mode_appearance;
+        if (mMode.getCheckedButtonId() != id) {
+            mRestating = true;
+            mMode.check(id);
+            mRestating = false;
+        }
         syncCheckIcons(mMode);
+        if (layout == mLayoutMode)
+            return;
+        mLayoutMode = layout;
+        if (layout) {
+            mRow2BeforeLayout = isRow2Shown();
+            mRow1.setVisibility(View.GONE);
+            mRow2.setVisibility(View.GONE);
+            mHint.setVisibility(View.GONE);
+            mLayoutRow.setVisibility(View.VISIBLE);
+        } else {
+            mLayoutRow.setVisibility(View.GONE);
+            mRow1.setVisibility(View.VISIBLE);
+            mRow2.setVisibility(mRow2BeforeLayout ? View.VISIBLE : View.GONE);
+            mHint.setVisibility(mRow2BeforeLayout ? View.GONE : View.VISIBLE);
+        }
+    }
+
+    boolean isLayoutMode() {
+        return mLayoutMode;
+    }
+
+    /**
+     * Row 2 side by side on a wide panel, stacked on a narrow one: three Legibility words and a
+     * Blur slider do not share half a 333dp row each.
+     */
+    void setNarrow(boolean narrow) {
+        if (mNarrow == narrow)
+            return;
+        mNarrow = narrow;
+        mRow2Controls.setOrientation(narrow ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        mRow2Controls.setGravity(narrow ? Gravity.CENTER_HORIZONTAL : Gravity.CENTER_VERTICAL);
+        layoutColumn(mFirstColumn, narrow, 0);
+        layoutColumn(mSecondColumn, narrow, narrow ? 0 : Math.round(dp(16)));
+        ViewGroup.LayoutParams row2 = mRow2.getLayoutParams();
+        if (row2 != null) {
+            row2.height = Math.round(dp(row2HeightDp()));
+            mRow2.setLayoutParams(row2);
+        }
+    }
+
+    private static void layoutColumn(@NonNull View column, boolean narrow, int startMarginPx) {
+        ViewGroup.LayoutParams params = column.getLayoutParams();
+        if (!(params instanceof LinearLayout.LayoutParams))
+            return;
+        LinearLayout.LayoutParams linear = (LinearLayout.LayoutParams) params;
+        linear.width = narrow ? ViewGroup.LayoutParams.MATCH_PARENT : 0;
+        linear.weight = narrow ? 0f : 1f;
+        linear.setMarginStart(startMarginPx);
+        column.setLayoutParams(linear);
+    }
+
+    /** Row 2's one height for the width the panel has. */
+    int row2HeightDp() {
+        return mNarrow ? ROW2_STACKED_HEIGHT_DP : ROW2_HEIGHT_DP;
+    }
+
+    // ------------------------------------------------------------- Layout mode's views, lent
+
+    @NonNull MaterialButtonToggleGroup orientationToggle() {
+        return mOrientation;
+    }
+
+    @NonNull View tray() {
+        return mTray;
+    }
+
+    @NonNull ChipGroup trayChips() {
+        return mTrayChips;
+    }
+
+    @NonNull TextView trayEmpty() {
+        return mTrayEmpty;
+    }
+
+    @NonNull TextView trayDrop() {
+        return mTrayDrop;
     }
 
     void setDirty(boolean dirty) {
@@ -337,12 +469,17 @@ final class AppearanceEditorPanel {
         mHint.setText(text);
     }
 
+    /** Whether row 2 is up in Appearance mode (kept, though hidden, while Layout is shown). */
     boolean isRow2Shown() {
-        return mRow2.getVisibility() == View.VISIBLE;
+        return mLayoutMode ? mRow2BeforeLayout : mRow2.getVisibility() == View.VISIBLE;
     }
 
     /** Row 2 down and the hint back in its place. */
     void hideRow2() {
+        if (mLayoutMode) {
+            mRow2BeforeLayout = false;
+            return;
+        }
         mRow2.setVisibility(View.GONE);
         mHint.setVisibility(View.VISIBLE);
     }
@@ -350,6 +487,10 @@ final class AppearanceEditorPanel {
     /** Row 2 up, with the tapped element's name; the controls are set by the calls below. */
     void showRow2(@StringRes int name) {
         mRow2Name.setText(name);
+        if (mLayoutMode) {
+            mRow2BeforeLayout = true;
+            return;
+        }
         mRow2.setVisibility(View.VISIBLE);
         mHint.setVisibility(View.GONE);
     }
