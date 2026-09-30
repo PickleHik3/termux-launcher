@@ -940,6 +940,9 @@ public final class TaiModelDownloader {
         long addedBytes = 0L;
 
         for (TaiModelCatalog.CatalogEntry.Sidecar sidecar : sidecars) {
+            // Sidecars carry no size; once they pass the entry's size (EmbeddingGemma's windows are
+            // most of its package) the total is unknown rather than a bar past 100%.
+            if (packageTotalBytes > 0L && currentBytes >= packageTotalBytes) packageTotalBytes = -1L;
             File sidecarOutput = new File(modelDir, sidecar.localName);
             if (sidecarOutput.isFile() && sidecarOutput.length() > 0L
                 && (sidecar.sha256 == null || sidecar.sha256.equalsIgnoreCase(sha256(sidecarOutput, null, null)))) {
