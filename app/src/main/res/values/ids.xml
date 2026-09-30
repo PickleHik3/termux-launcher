@@ -26,4 +26,7 @@
     <item name="tai_bench_numbers" type="id" />
     <item name="tai_bench_compare" type="id" />
     <item name="tai_bench_compare_row" type="id" />
+    <!-- Pinned notification cards: TalkBack custom actions on each card. -->
+    <item name="pinned_notification_action_dismiss" type="id" />
+    <item name="pinned_notification_action_mute" type="id" />
 </resources>

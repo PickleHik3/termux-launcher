@@ -921,6 +921,19 @@
                 <string name="essential_rules_remove_description">Remove rule</string>
                 <string name="essential_rules_any_package">any app</string>
                 <string name="essential_rules_any_text">any text</string>
+                <!-- The per-rule on/off switch; %1$s is the rule's keywords or "any text". -->
+                <string name="essential_rules_enabled_description">Pin notifications matching %1$s</string>
+                <!-- Pinned card: the long-press menu, the undo row, and what TalkBack reads. -->
+                <string name="pinned_notification_open">Open</string>
+                <string name="pinned_notification_dismiss">Dismiss</string>
+                <string name="pinned_notification_mute_rule">Mute this rule</string>
+                <string name="pinned_notification_dismissed">Dismissed</string>
+                <string name="pinned_notification_undo">Undo</string>
+                <string name="pinned_notification_undo_description">Dismissed. Double-tap to undo</string>
+                <plurals name="pinned_notification_messages">
+                    <item quantity="one">%1$d message</item>
+                    <item quantity="other">%1$d messages</item>
+                </plurals>
                 <string name="termux_sessions_indicator_content_description">Session %1$d of %2$d</string>
                 <string name="termux_named_sessions_indicator_content_description">Session %1$d of %2$d: %3$s</string>
                 <string name="termux_sessions_indicator_empty_content_description">No sessions</string>

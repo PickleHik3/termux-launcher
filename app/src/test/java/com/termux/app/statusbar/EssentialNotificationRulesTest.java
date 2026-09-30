@@ -92,6 +92,41 @@ public class EssentialNotificationRulesTest {
     }
 
     @Test
+    public void enabledRoundTripsAndDefaultsToOnForOlderRules() {
+        List<EssentialNotificationRule> rules = Arrays.asList(
+            new EssentialNotificationRule("a", "com.whatsapp", "", false, false),
+            new EssentialNotificationRule("b", "", "otp", true));
+        List<EssentialNotificationRule> parsed =
+            EssentialNotificationRules.parse(EssentialNotificationRules.serialize(rules));
+        assertFalse(parsed.get(0).enabled);
+        assertTrue(parsed.get(1).enabled);
+
+        // Stored before the key existed: on.
+        List<EssentialNotificationRule> legacy = EssentialNotificationRules.parse(
+            "[{\"id\":\"a\",\"package\":\"com.bank\",\"match\":\"otp\",\"clear\":true}]");
+        assertTrue(legacy.get(0).enabled);
+        assertTrue(legacy.get(0).clearOnDismiss);
+    }
+
+    @Test
+    public void aMutedRuleNeverMatchesAndLetsTheNextOneWin() {
+        EssentialNotificationRule muted =
+            new EssentialNotificationRule("a", "com.bank", "otp", true, false);
+        assertFalse(muted.matches("com.bank", "HDFC", "OTP 1234"));
+        assertTrue(muted.withEnabled(true).matches("com.bank", "HDFC", "OTP 1234"));
+        assertEquals("the switch keeps everything else", "otp", muted.withEnabled(true).match);
+
+        List<EssentialNotificationRule> rules = Arrays.asList(muted,
+            new EssentialNotificationRule("b", "com.bank", "", false));
+        EssentialNotificationRule matched =
+            EssentialNotificationRules.firstMatch(rules, "com.bank", "HDFC", "OTP 1234");
+        assertNotNull(matched);
+        assertEquals("b", matched.id);
+        assertNull(EssentialNotificationRules.firstMatch(Collections.singletonList(muted),
+            "com.bank", "HDFC", "OTP 1234"));
+    }
+
+    @Test
     public void duplicateIdsCollapseToOne() {
         List<EssentialNotificationRule> parsed = EssentialNotificationRules.parse(
             "[{\"id\":\"a\",\"match\":\"otp\"},{\"id\":\"a\",\"match\":\"pin\"}]");

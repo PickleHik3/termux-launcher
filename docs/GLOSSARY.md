@@ -109,6 +109,16 @@ The wallpaper panning by a fraction of the distance while the places slide sidew
 glass on every surface staying aligned to the wallpaper behind it.
 _Avoid_: wallpaper scroll, wall motion
 
+**Pinned notification**:
+A notification held as a card in the status bar's widget slot, beside the clock, because it matched
+one of the user's rules. Settings calls the rules "Essential notifications"; in code a rule is an
+`EssentialNotificationRule` (package and/or keywords, whether dismissing also clears the
+notification, and whether it is on at all) and a card is a `PinnedNotification`. Messages from one
+conversation fold into one card with a count. Tap opens it, a sideways swipe dismisses it with a
+4 s undo, and a long press shows the whole message with Open, Dismiss and Mute this rule. See
+`project-docs/active/pinned-notification/SPEC.md`.
+_Avoid_: essential notification (that is the rule, not the card), heads-up, pin (alone)
+
 **Place**:
 One of the three full-screen pages the launcher swipes between: Home (widgets), Terminal, Display.
 The usage mode decides which places exist: Terminal alone, Terminal with Home, or all three with

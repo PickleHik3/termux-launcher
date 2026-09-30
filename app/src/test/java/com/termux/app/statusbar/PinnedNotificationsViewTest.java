@@ -6,6 +6,7 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.RectF;
 import android.os.Build;
+import android.provider.Settings;
 import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -33,6 +34,9 @@ import static org.junit.Assert.assertTrue;
  * run a card at a time and a thin line down the right edge says where in it those two sit. The
  * swipe is the cards' own — the status bar's fold reads {@code canScrollVertically} at DOWN and
  * the drag asks the parent chain not to intercept — and a swipe anywhere else never moves them.
+ *
+ * <p>A sideways swipe dismisses the card under it, through a four-second undo; there is no
+ * dismiss control on the card any more, so a tap anywhere on it opens it.</p>
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -135,17 +139,19 @@ public class PinnedNotificationsViewTest {
     }
 
     @Test
-    public void aSidewaysDragOnTheCardsIsLeftToTheBar() {
+    public void aSidewaysDragOnACardIsItsOwnAndNeverScrollsTheRun() {
         RecordingParent parent = new RecordingParent(context());
         PinnedNotificationsView view = new PinnedNotificationsView(context());
         parent.addView(view);
         view.setItems(items(5));
         measure(view);
 
-        view.onTouchEvent(event(MotionEvent.ACTION_DOWN, WIDTH / 2f, HEIGHT / 2f));
-        view.onTouchEvent(event(MotionEvent.ACTION_MOVE, WIDTH / 2f + 60f, HEIGHT / 2f));
-        assertFalse("a drag along the bar is the wall's, not the cards'", parent.disallowed);
+        view.onTouchEvent(event(MotionEvent.ACTION_DOWN, WIDTH / 2f, HEIGHT / 4f));
+        view.onTouchEvent(event(MotionEvent.ACTION_MOVE, WIDTH / 2f + 60f, HEIGHT / 4f));
+        assertTrue("a drag along the bar is the card's swipe: neither fold nor wall takes it",
+            parent.disallowed);
         assertEquals(0f, view.scrollPx(), .01f);
+        assertTrue("and ancestors that page sideways are told so", view.canScrollHorizontally(1));
     }
 
     @Test
@@ -179,25 +185,102 @@ public class PinnedNotificationsViewTest {
     }
 
     @Test
-    public void aTapOpensThePinItLandedOnAndTheCrossDismissesIt() {
+    public void aTapOpensTheCardItLandedOn() {
         PinnedNotificationsView view = view(5);
         List<PinnedNotification> opened = new ArrayList<>();
-        List<PinnedNotification> dismissed = new ArrayList<>();
         view.setOpenListener(opened::add);
-        view.setListener(dismissed::add);
         draw(view);
 
         float cardCentreY = PinnedNotificationsView.cardHeightPx(5, HEIGHT, gap(view)) / 2f;
-        view.onTouchEvent(event(MotionEvent.ACTION_DOWN, 60f, cardCentreY));
-        view.onTouchEvent(event(MotionEvent.ACTION_UP, 60f, cardCentreY));
-        assertEquals(1, opened.size());
+        view.onTouchEvent(event(MotionEvent.ACTION_DOWN, WIDTH - 12f, cardCentreY));
+        view.onTouchEvent(event(MotionEvent.ACTION_UP, WIDTH - 12f, cardCentreY));
+        assertEquals("the whole card opens, where the cross used to be too", 1, opened.size());
         assertEquals("key0", opened.get(0).key);
+    }
 
-        float crossX = WIDTH - 6f - 5f - 10f;
-        view.onTouchEvent(event(MotionEvent.ACTION_DOWN, crossX, cardCentreY));
-        view.onTouchEvent(event(MotionEvent.ACTION_UP, crossX, cardCentreY));
+    @Test
+    public void aSwipePastTheThresholdOffersTheUndoAndDismissesOnlyWhenItRunsOut() {
+        reduceMotion();
+        PinnedNotificationsView view = view(2);
+        List<PinnedNotification> dismissed = new ArrayList<>();
+        view.setListener(dismissed::add);
+        float y = PinnedNotificationsView.cardHeightPx(2, HEIGHT, gap(view)) / 2f;
+
+        swipe(view, y, WIDTH * .5f);
+        assertNotNull("the card's place offers the undo", view.pendingDismiss());
+        assertEquals("key0", view.pendingDismiss().key);
+        assertTrue("nothing is dismissed while the undo is on offer", dismissed.isEmpty());
+
+        view.commitPendingDismiss();
         assertEquals(1, dismissed.size());
         assertEquals("key0", dismissed.get(0).key);
+        assertNull(view.pendingDismiss());
+    }
+
+    @Test
+    public void aShortSwipeSpringsBack() {
+        reduceMotion();
+        PinnedNotificationsView view = view(2);
+        float y = PinnedNotificationsView.cardHeightPx(2, HEIGHT, gap(view)) / 2f;
+        swipe(view, y, -WIDTH * .2f);
+        assertNull("under a third of the width and no fling: back into place",
+            view.pendingDismiss());
+    }
+
+    @Test
+    public void undoBringsTheCardBackAndDismissesNothing() {
+        reduceMotion();
+        PinnedNotificationsView view = view(2);
+        List<PinnedNotification> dismissed = new ArrayList<>();
+        view.setListener(dismissed::add);
+        float y = PinnedNotificationsView.cardHeightPx(2, HEIGHT, gap(view)) / 2f;
+        swipe(view, y, -WIDTH * .6f);
+        assertNotNull(view.pendingDismiss());
+
+        // A tap on the undo row takes the undo.
+        view.onTouchEvent(event(MotionEvent.ACTION_DOWN, 60f, y));
+        view.onTouchEvent(event(MotionEvent.ACTION_UP, 60f, y));
+        assertNull(view.pendingDismiss());
+        view.commitPendingDismiss();
+        assertTrue(dismissed.isEmpty());
+    }
+
+    @Test
+    public void aSecondDismissalCarriesOutTheFirst() {
+        PinnedNotificationsView view = view(2);
+        List<PinnedNotification> dismissed = new ArrayList<>();
+        view.setListener(dismissed::add);
+        view.beginPendingDismiss(view.getItems().get(0));
+        view.beginPendingDismiss(view.getItems().get(1));
+        assertEquals(1, dismissed.size());
+        assertEquals("key0", dismissed.get(0).key);
+        assertEquals("key1", view.pendingDismiss().key);
+    }
+
+    @Test
+    public void anUndoWhoseNotificationWentIsDroppedNotCarriedOut() {
+        PinnedNotificationsView view = view(3);
+        List<PinnedNotification> dismissed = new ArrayList<>();
+        view.setListener(dismissed::add);
+        view.beginPendingDismiss(view.getItems().get(0));
+
+        view.setItems(items(3).subList(1, 3));
+        assertNull(view.pendingDismiss());
+        view.commitPendingDismiss();
+        assertTrue(dismissed.isEmpty());
+    }
+
+    @Test
+    public void theLabelReadsSenderMessageAppAndCount() {
+        PinnedNotificationsView view = view(1);
+        PinnedNotification grouped = new PinnedNotification("k", "com.chat", "Amma", "Chat",
+            "Lands at 9:40", "rule", false, System.currentTimeMillis(), "c", null, 3, null);
+        assertEquals("Amma, Lands at 9:40, Chat, now, 3 messages",
+            view.accessibilityLabel(grouped));
+        PinnedNotification untitled = new PinnedNotification("k", "com.bank", null, "Bank",
+            "OTP 1234", "rule", false, System.currentTimeMillis());
+        assertEquals("the app's name takes the sender line, once", "Bank, OTP 1234, now",
+            view.accessibilityLabel(untitled));
     }
 
     @Test
@@ -252,6 +335,20 @@ public class PinnedNotificationsViewTest {
     private static void drag(@NonNull PinnedNotificationsView view, float dy) {
         view.onTouchEvent(event(MotionEvent.ACTION_DOWN, WIDTH / 2f, HEIGHT / 2f));
         view.onTouchEvent(event(MotionEvent.ACTION_MOVE, WIDTH / 2f, HEIGHT / 2f + dy));
+    }
+
+    private static void swipe(@NonNull PinnedNotificationsView view, float y, float dx) {
+        float x = WIDTH / 2f;
+        view.onTouchEvent(event(MotionEvent.ACTION_DOWN, x, y));
+        view.onTouchEvent(event(MotionEvent.ACTION_MOVE, x + dx / 2f, y));
+        view.onTouchEvent(event(MotionEvent.ACTION_MOVE, x + dx, y));
+        view.onTouchEvent(event(MotionEvent.ACTION_UP, x + dx, y));
+    }
+
+    /** Animations off, so a swipe's settle lands at once. */
+    private static void reduceMotion() {
+        Settings.Global.putFloat(context().getContentResolver(),
+            Settings.Global.ANIMATOR_DURATION_SCALE, 0f);
     }
 
     private static void dragAndRelease(@NonNull PinnedNotificationsView view, float dy) {
