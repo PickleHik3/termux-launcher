@@ -499,6 +499,11 @@ public final class LayoutEditorController {
         card.miniature.setDockCornerRadiusDp(mHost.dockCornerRadiusDp());
         card.miniature.setSizes(plan.dockHeightScale(), plan.keyboardHeightScale(),
             plan.keyboardChinDp());
+        // The status bar's collapsed/expanded state is a per-orientation key the status swipe
+        // sets; the canvas draws whichever the shown orientation holds (spec §5).
+        PlaceLayoutStore places = mHost.places();
+        if (places != null)
+            card.miniature.setStatusCompact(places.isStatusCompact(plan.shownOrientation()));
         card.miniature.setLayout(plan.shownLayout(), plan.shownOrientation(), plan.place());
         syncNotice(card, plan);
         syncTray(card, plan);
