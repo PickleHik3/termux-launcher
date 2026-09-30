@@ -1530,6 +1530,10 @@ public final class TermuxPreferenceConstants {
         /** The four ARGB colours the last still was rendered with, comma-separated ints. */
         public static final String KEY_MANAGED_WALLPAPER_ANIMATED_COLORS = "managed_wallpaper_animated_colors";
 
+        /** {@code home}, {@code lock} or {@code both}: where the last generated still was applied. */
+        public static final String KEY_MANAGED_WALLPAPER_ANIMATED_TARGET = "managed_wallpaper_animated_target";
+        public static final String DEFAULT_VALUE_MANAGED_WALLPAPER_ANIMATED_TARGET = "home";
+
         /** Hidden kill switch: true stops generated backgrounds animating. Not in the settings UI. */
         public static final String KEY_ANIMATED_WALLPAPER_DISABLED = "animated_wallpaper_disabled";
         public static final boolean DEFAULT_VALUE_ANIMATED_WALLPAPER_DISABLED = false;

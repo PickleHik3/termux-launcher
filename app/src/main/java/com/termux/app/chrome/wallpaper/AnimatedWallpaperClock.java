@@ -194,7 +194,8 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
                 mBackdropShaders[0] = WallpaperUniforms.newShader(wallpaper);
                 mBackdropShaders[1] = WallpaperUniforms.newShader(wallpaper);
             }
-            renderer = new LiveWallpaperRenderer(mDensity, WallpaperUniforms.newShader(wallpaper));
+            renderer = new LiveWallpaperRenderer(mDensity, WallpaperUniforms.newShader(wallpaper),
+                mFrames);
         } catch (Throwable t) {
             Logger.logStackTraceWithMessage(TAG, "Live wallpaper shader failed", t);
             die();

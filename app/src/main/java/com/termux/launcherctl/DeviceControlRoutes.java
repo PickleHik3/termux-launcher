@@ -395,7 +395,7 @@ final class DeviceControlRoutes {
         if (!applied) return error(500, "wallpaper_failed", "Android refused the wallpaper");
 
         // A photo is the wallpaper now: forget any generated background.
-        GeneratedWallpaperApplier.clear(app);
+        if ((flags & WallpaperManager.FLAG_SYSTEM) != 0) GeneratedWallpaperApplier.clear(app);
         boolean live = TerminalActionDispatcher.getInstance().isAttached();
         if ((flags & WallpaperManager.FLAG_SYSTEM) != 0) {
             // What the picker does once its apply finishes: the picture is ours again, so turn
@@ -415,8 +415,9 @@ final class DeviceControlRoutes {
      * is 404; below API 34 the still cannot be rendered, so 409 with {@code reason: "api"}. The
      * still is set whenever the phone can render it; {@code animated} says whether the live frames
      * will play (API 34 and Fancier Glass active), else {@code reason} is {@code fancier_glass_off}.
-     * Material colours come from the application context here (no Activity), so they follow the
-     * launcher scheme only as far as the application theme does.
+     * Material colours are read on the main thread from the running launcher's activity, which
+     * carries the scheme theme; with no launcher running they come from the application context
+     * and follow the launcher scheme only as far as the application theme does.
      */
     @NonNull
     private static JSONObject wallpaperSetBuiltin(@NonNull Context context, @NonNull JSONObject arguments,
@@ -472,7 +473,12 @@ final class DeviceControlRoutes {
     private static void applyBuiltin(@NonNull Context app, @NonNull AnimatedWallpaper w, @NonNull String palette,
                                      @NonNull String target,
                                      @NonNull GeneratedWallpaperApplier.Callback callback) {
-        GeneratedWallpaperApplier.apply(app, w, palette, target, callback);
+        com.termux.app.chrome.wallpaper.AnimatedWallpaperStatus status = GeneratedWallpaperApplier.statusProvider();
+        final Context themed = status instanceof com.termux.app.chrome.wallpaper.GeneratedWallpaperHost
+            ? ((com.termux.app.chrome.wallpaper.GeneratedWallpaperHost) status).themedContext() : app;
+        // The palette is read from theme attributes, so apply() runs on the main thread.
+        new android.os.Handler(android.os.Looper.getMainLooper())
+            .post(() -> GeneratedWallpaperApplier.apply(themed, w, palette, target, callback));
     }
 
     /** {@code [{id,label,palettes:["material","own"]}]} under {@code builtins}. */

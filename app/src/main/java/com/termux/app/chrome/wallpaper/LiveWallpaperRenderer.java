@@ -110,6 +110,7 @@ public final class LiveWallpaperRenderer {
     private float[] mLastRequest = new float[0];
     private int mLastRequestCount = -1;
     private final RenderBudget mBudget = new RenderBudget();
+    @NonNull private final LiveWallpaperFrames mFrames;
 
     @Nullable private ExecutorService mExecutor;
     private int mFrameW;
@@ -123,6 +124,8 @@ public final class LiveWallpaperRenderer {
     private boolean mHealthy = true;
     private int mToken;
     private long mStartNanos;
+    /** Set on the fence thread when the last radius' buffer is written; ends the timed span. */
+    private volatile long mEndNanos;
     @Nullable private Callback mCallback;
     private final AtomicInteger mPending = new AtomicInteger();
     private volatile boolean mFailed;
@@ -131,8 +134,11 @@ public final class LiveWallpaperRenderer {
      * @param density the screen density, which turns a live radius in dp into blur pixels
      * @param shader  this renderer's own wallpaper shader ({@code WallpaperUniforms.newShader});
      *                the backdrop draws its own, so no uniform is ever written under a draw
+     * @param frames  where the rings' bitmaps are published; cleared before any ring is freed
      */
-    public LiveWallpaperRenderer(float density, @NonNull RuntimeShader shader) {
+    public LiveWallpaperRenderer(float density, @NonNull RuntimeShader shader,
+                                 @NonNull LiveWallpaperFrames frames) {
+        mFrames = frames;
         mDensity = density;
         mShader = shader;
         mPaint.setShader(shader);
@@ -218,7 +224,10 @@ public final class LiveWallpaperRenderer {
         } catch (Throwable t) {
             mFailed = true;
         }
-        if (mPending.decrementAndGet() == 0) mMain.post(() -> landed(token, slot));
+        if (mPending.decrementAndGet() == 0) {
+            mEndNanos = System.nanoTime();
+            mMain.post(() -> landed(token, slot));
+        }
     }
 
     /** Main thread: every radius' buffer for this render has been written. */
@@ -232,7 +241,8 @@ public final class LiveWallpaperRenderer {
         if (mReleased) return;
         boolean ok = !mFailed;
         if (ok) {
-            ok = mBudget.add((System.nanoTime() - mStartNanos) / 1_000_000f);
+            // The render work only (submit to the last fence), not the hop to the main thread.
+            ok = mBudget.add((mEndNanos - mStartNanos) / 1_000_000f);
         }
         if (!ok) {
             mHealthy = false;
@@ -315,6 +325,12 @@ public final class LiveWallpaperRenderer {
                 }
             }
         }
+        boolean dropped = false;
+        for (int j = 0; j < mRingCount; j++) {
+            if (mRings[j] != null) dropped = true;
+        }
+        // A dropped ring's bitmaps are still published; unpublish before they are recycled.
+        if (dropped) mFrames.clear();
         for (int j = 0; j < mRingCount; j++) {
             if (mRings[j] != null) mRings[j].free();
         }
@@ -326,6 +342,7 @@ public final class LiveWallpaperRenderer {
     }
 
     private void freeRings() {
+        if (mRingCount > 0) mFrames.clear();
         for (int i = 0; i < mRings.length; i++) {
             if (mRings[i] != null) {
                 mRings[i].free();

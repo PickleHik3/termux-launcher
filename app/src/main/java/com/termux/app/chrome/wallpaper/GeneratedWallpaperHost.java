@@ -45,7 +45,7 @@ import java.util.List;
  * which read values published by the last {@link #refresh}.</p>
  *
  * <p>The moment methods take rects and points in shared-frame pixels (the frame rect the blur
- * cache captures); nothing calls them yet.</p>
+ * cache captures); the activity calls them for pane, page, tap and bell events.</p>
  */
 @SuppressLint("NewApi")
 public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, AnimatedWallpaperClock.Host {
@@ -55,6 +55,8 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
     private static final long READER_SYNC_MS = 500L;
     /** The fallback lock fires this long after the settle time, so the clock's own signal wins. */
     private static final long LOCK_FALLBACK_SLACK_MS = 60L;
+    /** The lock never waits longer than this in total, fallback included. */
+    private static final long LOCK_MAX_DELAY_MS = 400L;
     /** A lock the system did not act on is undone (the picture blooms back) after this. */
     private static final long LOCK_RECOVER_MS = 1500L;
 
@@ -311,6 +313,12 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
         if (clock != null) clock.setFrameSize(frameRect.width(), frameRect.height());
     }
 
+    /** The activity, which carries the launcher's scheme theme for reading Material colours. */
+    @NonNull
+    public Activity themedContext() {
+        return mActivity;
+    }
+
     /** A new palette for the running background (the stored colours are re-read by {@link #refresh} too). */
     public void setPalette(@Nullable int[] argb4) {
         WallpaperDirector director = mDirector;
@@ -356,6 +364,8 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
         tearDown();
         mWallpaper = wallpaper;
         if (wallpaper == null) return;
+        // A new background gets a new clock, so an earlier render failure does not carry over.
+        mRendererHealthy = true;
         mPalette = colors.clone();
         WallpaperDirector director = new WallpaperDirector(wallpaper.periodSeconds(), colors);
         AnimatedWallpaperClock clock = new AnimatedWallpaperClock(this, director, backdrop,
@@ -581,7 +591,8 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
             mHandler.postDelayed(mLockRecover, LOCK_RECOVER_MS);
         });
         mHandler.removeCallbacks(mLockFallback);
-        mHandler.postDelayed(mLockFallback, delayMs + LOCK_FALLBACK_SLACK_MS);
+        mHandler.postDelayed(mLockFallback,
+            Math.min(delayMs + LOCK_FALLBACK_SLACK_MS, LOCK_MAX_DELAY_MS));
         kick();
     }
 
