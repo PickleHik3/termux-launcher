@@ -24,6 +24,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.graphics.PathParser;
 import androidx.core.graphics.drawable.DrawableCompat;
 
 import com.google.android.material.color.MaterialColors;
@@ -33,40 +34,37 @@ import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
-import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
- * A phone-shaped miniature of one place's resolved {@link PlaceLayout} with a legend beside it.
- * The phone is a small rendering of the launcher's own chrome as Material surfaces — an outlined
- * pane, a status strip with its clock and readings, the pinned apps as a row of discs, the
- * alphabets index as a strip of letters, the extra keys as a row of glyph slots, and the keyboard
- * as its block of keys with the grabber pill at its top — each one a rounded card inside the
- * phone, tinted from the app's own theme attrs so it reads correctly in every theme. Nothing is
- * written over the bands: each one is named in the legend by a swatch of its colour, its glyph and
- * its word, and a row the arrangement leaves out is still listed there, dimmed and marked hidden,
- * so the picture never silently drops one. Tapping a band or its legend row reports the block, so
- * the settings page can scroll to its row.
+ * The layout canvas: a to-scale picture of one place's resolved {@link PlaceLayout}, and the
+ * editor that works on it. Every band stands at the launcher's own thickness in dp (see
+ * {@link LayoutCanvasGeometry}: the dock from {@code DockLayoutPolicy}, the keyboard from its
+ * height scale, the chin in dp), times the one scale that fits the screen's width to the canvas,
+ * so what the canvas shows is the arrangement at its real proportions, not a sketch.
  *
- * <p>The picture is also the editor. Every band with a placement carries a six-dot grip at its
- * trailing end, centred across it (a column's at its top); a touch-down on one lifts that bar at
- * once — no long press — and for the rest of the gesture the view keeps the preference list from
- * stealing the touch. While a bar is lifted every edge it may legally stand on is outlined, the
- * tray under the phone offers to put it away, and a release over either reports the new placement.
- * A release anywhere else springs the bar back and reports nothing. {@link MiniatureDragPolicy} owns which targets exist and which one
- * the finger is over.
+ * <p>The artwork is the layout element pack's (status bar collapsed or expanded, terminal, dock
+ * floating or docked, A-Z strip, extra-keys toolbar, keyboard docked, floating or split), ported
+ * as drawing rules: each element paints its content inside the bounds the layout gave it, glyphs
+ * keep their size, and nothing is stretched. Colours come from the live Material scheme.
  *
- * <p>The artwork is drawn from {@code project-docs/reference/launcher/miniature-material/}: its
- * geometry is in units of a 240-wide phone, and {@link #unitPx} is what one of those comes to on
- * the frame this view is drawing, so the same picture holds at every size the editor gives it.
+ * <p>Every band with a placement carries a six-dot grip at its trailing end, centred across it (a
+ * column's at its top); a touch-down on one lifts that bar at once, and for the rest of the
+ * gesture the view keeps the preference list from stealing the touch. While a bar is lifted every
+ * edge it may legally stand on is outlined, the tray under the canvas offers to put it away, and
+ * a release over either reports the new placement. A release anywhere else springs the bar back
+ * and reports nothing. {@link MiniatureDragPolicy} owns which targets exist and which one the
+ * finger is over. A tap selects an element: one outline, and the handles that resize it.
  */
 public final class PlaceMiniatureView extends View {
 
@@ -141,7 +139,8 @@ public final class PlaceMiniatureView extends View {
 
     /** Legend order, top to bottom: the way the rows stack on a default portrait screen. */
     private static final Block[] LEGEND_ORDER = {
-        Block.STATUS_BAR, Block.CANVAS, Block.APPS_ROW, Block.ALPHABETS_ROW, Block.EXTRA_KEYS};
+        Block.STATUS_BAR, Block.CANVAS, Block.APPS_ROW, Block.ALPHABETS_ROW, Block.EXTRA_KEYS,
+        Block.KEYBOARD};
 
     /** The bands with a placement to change, in the order the tray lists them. */
     private static final Block[] BARS = {
@@ -155,17 +154,29 @@ public final class PlaceMiniatureView extends View {
     private static final float LANDSCAPE_ASPECT = 19.5f / 9f;
     private static final float DEFAULT_HEIGHT_DP = 188f;
 
-    private static final String[] ALPHABETS_SAMPLE = {"A", "F", "M", "S", "Z"};
-    /**
-     * Sampled from the launcher's own default extra-keys row
-     * ({@code TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS}: the keyboard toggle, the
-     * session browser, and the three wall pages) — a preview illustrates the shape of the row, not
-     * whatever the user has actually edited it to.
-     */
-    private static final String[] EXTRA_KEY_GLYPHS =
-        {"󰥻", "󰉹", "", "", ""};
-    private static final int APPS_ROW_ICON_COUNT = 5;
-    private static final int APPS_ROW_ACTIVE_INDEX = APPS_ROW_ICON_COUNT - 1;
+    /** The A-Z strip's sample letters, with the one the strip is on lit. */
+    private static final String[] ALPHABETS_SAMPLE = {"A", "D", "G", "J", "M", "P", "S", "V", "Z"};
+    private static final int ALPHABETS_LIT_INDEX = 4;
+    /** The dock's seven simplified app symbols; the ones lit wear the accent or the secondary. */
+    private static final String[] DOCK_GLYPHS =
+        {"phone", "chat", "globe", "terminal", "play", "monitor", "grid"};
+    /** The toolbar's seven glyphs; the terminal's (index 3) is the one highlighted. */
+    private static final String[] TOOLBAR_GLYPHS =
+        {"keyboard", "mouse", "home", "terminal", "monitor", "grid", "list"};
+    private static final int TOOLBAR_LIT_INDEX = 3;
+    /** The element pack's design heights, in its own units (one unit is about one dp). */
+    private static final float PACK_STATUS_COMPACT_H = 40f;
+    private static final float PACK_STATUS_EXPANDED_H = 96f;
+    private static final float PACK_DOCK_H = 64f;
+    private static final float PACK_AZ_H = 28f;
+    private static final float PACK_TOOLBAR_H = 52f;
+    /** The pack's keyboard: side margin, top margin (floating is taller for its grabber). */
+    private static final float PACK_KEY_MARGIN = 12f;
+    private static final float PACK_KEY_TOP = 12f;
+    private static final float PACK_KEY_TOP_FLOATING = 20f;
+    private static final float PACK_KEY_GAP = 4f;
+    /** The shape of a real phone, which the canvas stands for: long side over short. */
+    private static final float SCREEN_LONG_OVER_SHORT = 19.5f / 9f;
 
     private static final float LEGEND_TEXT_SP = 12f;
     private static final float LEGEND_MAX_FONT_SCALE = 1.3f;
@@ -222,16 +233,6 @@ public final class PlaceMiniatureView extends View {
     private static final float GRIP_INSET_TOP_U = 16f;
     /** What a band's own content keeps clear of the grip at its trailing end. */
     private static final float GRIP_CLEARANCE_U = 22f;
-    /** The share of the phone's content height the keyboard block takes when it is on. */
-    private static final float KEYBOARD_FRACTION = 0.26f;
-    /** The keyboard's design viewport, which its keys are laid out in and scaled from. */
-    private static final float KEYBOARD_DESIGN_W = 216f;
-    private static final float KEYBOARD_DESIGN_H = 128f;
-    /** The design heights of the rows, which their content is scaled against. */
-    private static final float STATUS_DESIGN_H = 32f;
-    private static final float APPS_DESIGN_H = 48f;
-    private static final float ALPHABETS_DESIGN_H = 36f;
-    private static final float EXTRA_KEYS_DESIGN_H = 56f;
 
     // ---- The theme's roles, as the design maps them ---------------------------------------------
     /** Outlines and text lines: the on-surface-variant at the design's 45%. */
@@ -276,12 +277,8 @@ public final class PlaceMiniatureView extends View {
     private static final float READOUT_PAD_H_DP = 10f;
     private static final float READOUT_HEIGHT_DP = 26f;
     private static final float READOUT_GAP_DP = 10f;
-    /**
-     * How much of the keyboard's card the chin takes at the store's largest chin. The chin is
-     * drawn as a share of the card rather than at its real size, which on a phone-sized picture is
-     * a few pixels a finger could never drag; the readout says the real dp.
-     */
-    private static final float CHIN_MAX_FRACTION = 0.3f;
+    /** The most of a keyboard card the chin may take, so a huge chin never eats the keys. */
+    private static final float CHIN_MAX_SHARE = 0.5f;
     /**
      * How far a finger has to move off the keyboard before it is lifted rather than tapped. The
      * keyboard has no grip — its card is the thing held — so a lift is told from a tap by travel.
@@ -306,7 +303,6 @@ public final class PlaceMiniatureView extends View {
     private final DashPathEffect mTrayDash;
     private final Paint mLinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mNerdPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint mLegendPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mFrameRect = new RectF();
     /** The phone inside its rim and its chin: what the elements are laid out in. */
@@ -387,8 +383,13 @@ public final class PlaceMiniatureView extends View {
     private float mDockScale = TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
     private float mKeyboardScale = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
     private int mKeyboardChinDp = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING;
+    /** The dock's corner radius in dp: zero is the square docked dock, above it the floating one. */
+    private float mDockRadiusDp = DEFAULT_DOCK_RADIUS_DP;
+    /** The status bar's stored state for the orientation shown; null leaves the launcher's rest. */
+    @Nullable private Boolean mStatusCompact;
+    /** Canvas pixels per real dp: what every dp figure is multiplied by to stand on the canvas. */
+    private float mCanvasScale = 1f;
 
-    @Nullable private final Typeface mNerdTypeface;
     @NonNull private final Drawable mIconStatus;
     @NonNull private final Drawable mIconApps;
     @NonNull private final Drawable mIconKeys;
@@ -410,10 +411,6 @@ public final class PlaceMiniatureView extends View {
         mTextPaint.setStyle(Paint.Style.FILL);
         mLegendPaint.setStyle(Paint.Style.FILL);
         mLegendPaint.setTextAlign(Paint.Align.LEFT);
-        mNerdTypeface = NerdFontSpans.typeface(context);
-        mNerdPaint.setStyle(Paint.Style.FILL);
-        mNerdPaint.setTextAlign(Paint.Align.CENTER);
-        if (mNerdTypeface != null) mNerdPaint.setTypeface(mNerdTypeface);
 
         mIconStatus = loadIcon(R.drawable.ic_symbol_notifications);
         mIconApps = loadIcon(R.drawable.ic_symbol_apps);
@@ -432,9 +429,42 @@ public final class PlaceMiniatureView extends View {
      */
     public void setDockCornerRadiusDp(float radiusDp) {
         float units = surfaceRadiusUnits(radiusDp, screenShortSideDp());
-        if (units == mSurfaceRadiusU) return;
+        if (units == mSurfaceRadiusU && Float.compare(radiusDp, mDockRadiusDp) == 0) return;
         mSurfaceRadiusU = units;
+        mDockRadiusDp = radiusDp;
+        // A square dock and a floating one differ in height too, so the bands are laid again.
+        if (getWidth() > 0 && getHeight() > 0) layoutFrame(getWidth(), getHeight());
         invalidate();
+    }
+
+    /**
+     * The status bar's stored state for the orientation on the canvas ({@code status_compact}):
+     * collapsed to its one row, or expanded with the clock and the media tile. Until it is set the
+     * canvas shows the launcher's rest: landscape collapsed, portrait expanded.
+     */
+    public void setStatusCompact(boolean compact) {
+        if (mStatusCompact != null && mStatusCompact == compact) return;
+        mStatusCompact = compact;
+        if (getWidth() > 0 && getHeight() > 0) layoutFrame(getWidth(), getHeight());
+        invalidate();
+    }
+
+    /** Whether the status bar is drawn collapsed. */
+    @VisibleForTesting
+    public boolean isStatusCompact() {
+        return mStatusCompact != null ? mStatusCompact
+            : mOrientation == PlaceOrientation.LANDSCAPE;
+    }
+
+    /** Whether the dock is the floating, rounded one rather than the square docked one. */
+    private boolean isDockFloating() {
+        return mDockRadiusDp > 0f;
+    }
+
+    /** Canvas pixels per real dp, for a test to check the to-scale mapping against. */
+    @VisibleForTesting
+    public float canvasScalePx() {
+        return mCanvasScale;
     }
 
     /**
@@ -522,7 +552,7 @@ public final class PlaceMiniatureView extends View {
     /**
      * The dock's height, the keyboard's height and the keyboard's chin, in the store's units, for
      * the orientation on the canvas. The dock's band and the keyboard's block are drawn in
-     * proportion to their scales, so a handle dragged is a band that grows under the finger.
+     * real size, so a handle dragged is a band that grows under the finger.
      */
     public void setSizes(float dockHeightScale, float keyboardHeightScale, int keyboardChinDp) {
         if (Float.compare(dockHeightScale, mDockScale) == 0
@@ -700,7 +730,7 @@ public final class PlaceMiniatureView extends View {
     /**
      * Whether the legend stands beside the phone. Off, the phone takes the whole view and the
      * bands are the only tap targets — the Layout page names every element in its own rows, so a
-     * second list beside two miniatures would say everything twice.
+     * second list beside two layout canvases would say everything twice.
      */
     public void setLegendVisible(boolean visible) {
         if (mLegendVisible == visible) return;
@@ -847,6 +877,9 @@ public final class PlaceMiniatureView extends View {
             mFrameRect.right - u(FRAME_INSET_SIDE_U),
             mFrameRect.bottom - u(landscape ? FRAME_INSET_TOP_U : FRAME_INSET_BOTTOM_U));
         if (mContentRect.width() < 0f || mContentRect.height() < 0f) mContentRect.set(mFrameRect);
+        // The canvas stands for a real screen of the same shape: its content width is the
+        // screen's width in this orientation, so one dp of the launcher is this many pixels.
+        mCanvasScale = LayoutCanvasGeometry.canvasScale(mContentRect.width(), screenWidthDp());
         // The tray stands on the view's bottom edge and takes the view's width, not the phone's:
         // a portrait phone is too narrow for "Drop here to hide" or for two chips to keep their
         // names, and the editor stands its chips over this strip with a bottom gravity.
@@ -884,7 +917,7 @@ public final class PlaceMiniatureView extends View {
         // keyboard drawn they are simply the bottom stack's outer end, as on the screen.
         List<Element> underKeyboard = EdgeStackPolicy.underKeyboard(mLayout);
         for (Element element : underKeyboard) {
-            takeEdgeStrip(blockOf(element), Edge.BOTTOM, bandFraction(element));
+            takeEdgeStrip(blockOf(element), Edge.BOTTOM, bandPx(element, Edge.BOTTOM));
         }
         // The keyboard has no edge and no order: when the place shows it, it is the block along
         // the bottom that everything else — the dock's rows included, lifted above it the way the
@@ -901,7 +934,7 @@ public final class PlaceMiniatureView extends View {
         for (Edge edge : CLAIM_ORDER) {
             for (Element element : EdgeStackPolicy.stack(mLayout, edge)) {
                 if (underKeyboard.contains(element)) continue;
-                takeEdgeStrip(blockOf(element), edge, bandFraction(element));
+                takeEdgeStrip(blockOf(element), edge, bandPx(element, edge));
             }
         }
         mBlockRects.put(Block.CANVAS, new RectF(mRemaining));
@@ -918,16 +951,45 @@ public final class PlaceMiniatureView extends View {
         updateContentDescription();
     }
 
+    /** The screen's width in dp in the orientation on the canvas, at the shape of a real phone. */
+    private float screenWidthDp() {
+        float shortDp = screenShortSideDp();
+        return mOrientation == PlaceOrientation.LANDSCAPE
+            ? shortDp * SCREEN_LONG_OVER_SHORT : shortDp;
+    }
+
+    /** The screen's height in dp in the orientation on the canvas. */
+    private float screenHeightDp() {
+        float shortDp = screenShortSideDp();
+        return mOrientation == PlaceOrientation.LANDSCAPE
+            ? shortDp : shortDp * SCREEN_LONG_OVER_SHORT;
+    }
+
     /**
-     * A band's share of what the bands outside it left: the policy's, and for the pinned apps
-     * that share times the dock's height against its shipped height, so the dock's handle grows
-     * the band it is dragged on.
+     * A band's thickness on the canvas, in pixels: the launcher's own figure in dp for this
+     * element on this edge (the dock from {@code DockLayoutPolicy} at its height scale and style,
+     * the status bar from its edge geometry collapsed or expanded, the toolbar and the A-Z strip
+     * from their policies) times the canvas scale.
      */
-    private float bandFraction(@NonNull Element element) {
-        float fraction = MiniatureDragPolicy.bandFraction(element);
-        if (element != Element.APPS) return fraction;
-        return Math.min(0.45f,
-            fraction * mDockScale / TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT);
+    private float bandPx(@NonNull Element element, @NonNull Edge edge) {
+        float dp;
+        switch (element) {
+            case STATUS:
+                dp = LayoutCanvasGeometry.statusBandDp(edge, isStatusCompact(), isDockFloating());
+                break;
+            case APPS:
+                dp = edge.isOnSide() ? LayoutCanvasGeometry.dockRailWidthDp()
+                    : LayoutCanvasGeometry.dockBandHeightDp(mDockScale, isDockFloating());
+                break;
+            case AZ:
+                dp = LayoutCanvasGeometry.azBandHeightDp();
+                break;
+            case EXTRA_KEYS:
+            default:
+                dp = LayoutCanvasGeometry.toolbarHeightDp();
+                break;
+        }
+        return LayoutCanvasGeometry.toCanvasPx(dp, mCanvasScale);
     }
 
     /**
@@ -947,21 +1009,23 @@ public final class PlaceMiniatureView extends View {
     }
 
     /**
-     * The keyboard's block: its share of the content's height, off the bottom, before any edge —
-     * {@value #KEYBOARD_FRACTION} at the keyboard's shipped height, and in proportion to it
-     * otherwise, so the keyboard's handle grows the block it is dragged on.
+     * The keyboard's block, off the bottom before any edge: its real height for its scale (the
+     * rows times the scale, capped at the keyboard's share of the screen) plus the chin under its
+     * last row, in dp, times the canvas scale.
      */
     private void takeKeyboardStrip() {
-        float share = KEYBOARD_FRACTION * mKeyboardScale
-            / TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
-        float h = mRemaining.height() * Math.min(0.5f, Math.max(0.05f, share));
+        float dp = LayoutCanvasGeometry.keyboardHeightDp(mKeyboardScale,
+                mOrientation == PlaceOrientation.LANDSCAPE, screenHeightDp())
+            + LayoutCanvasGeometry.chinDp(mKeyboardChinDp);
+        float h = Math.min(mRemaining.height() * 0.5f,
+            LayoutCanvasGeometry.toCanvasPx(dp, mCanvasScale));
         mKeyboardRect.set(mRemaining.left, mRemaining.bottom - h, mRemaining.right,
             mRemaining.bottom);
         mRemaining.bottom -= h;
     }
 
 
-    /** The model's name for one of the miniature's bands, or null for a band with no placement. */
+    /** The model's name for one of the layout canvas's bands, or null for a band with no placement. */
     @Nullable
     private static Element elementOf(@NonNull Block block) {
         switch (block) {
@@ -1067,8 +1131,8 @@ public final class PlaceMiniatureView extends View {
 
     /**
      * The handles the selection carries: the dock's on the pinned apps band's inner edge, the
-     * keyboard's two on its top edge and on the bottom of its keys, and Home's on the corner of
-     * its first cell. Every other element is selected with its outline alone; it moves by its grip.
+     * keyboard's two on its top edge and on the bottom of its keys (above the chin), and Home's on
+     * the corner of its first cell. Every other element is selected with its outline alone; it moves by its grip.
      */
     private void computeHandles() {
         mHandleRects.clear();
@@ -1150,10 +1214,15 @@ public final class PlaceMiniatureView extends View {
         }
     }
 
-    /** The chin under the keys, drawn as a share of the keyboard's card. */
+    /**
+     * The chin under the keys, in pixels: the real chin in dp times the canvas scale, never more
+     * than {@value #CHIN_MAX_SHARE} of the card. Its handle keeps its full 48dp target even when
+     * the chin is zero ({@link #handleAt}), so a chin of nothing can still be dragged open.
+     */
     private float chinPx(@NonNull RectF card) {
-        int max = Math.max(1, TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING);
-        return card.height() * CHIN_MAX_FRACTION * Math.max(0, mKeyboardChinDp) / max;
+        float px = LayoutCanvasGeometry.toCanvasPx(
+            LayoutCanvasGeometry.chinDp(mKeyboardChinDp), mCanvasScale);
+        return Math.min(card.height() * CHIN_MAX_SHARE, px);
     }
 
     /** Home's widget area inside the canvas card, as {@link #drawHomeGrid} lays it; or null. */
@@ -1237,9 +1306,7 @@ public final class PlaceMiniatureView extends View {
                 break;
             case KEYBOARD_CHIN:
                 if (mKeyboardRect.isEmpty()) return abandonHandle();
-                cardOf(mKeyboardRect, mHandleStartRect);
                 mHandleStartChin = mKeyboardChinDp;
-                mHandleStartExtentPx = mHandleStartRect.height() * CHIN_MAX_FRACTION;
                 break;
             case WIDGET_GRID:
             default: {
@@ -1293,11 +1360,10 @@ public final class PlaceMiniatureView extends View {
                     TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE));
                 return;
             case KEYBOARD_CHIN: {
-                int max = TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING;
-                float perDp = Math.max(0.01f, mHandleStartExtentPx / Math.max(1, max));
+                // The chin is drawn to scale, so a pixel of drag is 1/scale of a real dp.
+                float perDp = Math.max(0.01f, mCanvasScale);
                 int chin = Math.round(mHandleStartChin + (-dy) / perDp);
-                mEditListener.onKeyboardChinDragged(Math.max(
-                    TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING, Math.min(max, chin)));
+                mEditListener.onKeyboardChinDragged(LayoutCanvasGeometry.chinDp(chin));
                 return;
             }
             case WIDGET_GRID:
@@ -1516,7 +1582,7 @@ public final class PlaceMiniatureView extends View {
         return free.bottom;
     }
 
-    /** The policy's name for one of the miniature's bands, or null for a band with no placement. */
+    /** The policy's name for one of the layout canvas's bands, or null for a band with no placement. */
     @Nullable
     public static MiniatureDragPolicy.Bar barOf(@NonNull Block block) {
         switch (block) {
@@ -1605,6 +1671,7 @@ public final class PlaceMiniatureView extends View {
             case ALPHABETS_ROW:
                 label = getContext().getString(R.string.settings_layout_miniature_alphabets); break;
             case EXTRA_KEYS: label = getContext().getString(R.string.settings_layout_miniature_keys); break;
+            case KEYBOARD: label = getContext().getString(R.string.settings_layout_keyboard_title); break;
             case CANVAS:
             default: label = canvasLabel(); break;
         }
@@ -1639,30 +1706,36 @@ public final class PlaceMiniatureView extends View {
         return LEGEND_TEXT_SP * getResources().getDisplayMetrics().density * clamped;
     }
 
-    /** Claims a strip off the current remaining rect for one edge, shrinking it in place. */
-    private void takeEdgeStrip(@NonNull Block block, @NonNull Edge edge, float fraction) {
+    /** The most of what is left one band may take, so the canvas is never squeezed out. */
+    private static final float MAX_BAND_SHARE = 0.45f;
+
+    /**
+     * Claims a strip of {@code thicknessPx} off the current remaining rect for one edge, shrinking
+     * it in place; a band never takes more than {@value #MAX_BAND_SHARE} of what is left.
+     */
+    private void takeEdgeStrip(@NonNull Block block, @NonNull Edge edge, float thicknessPx) {
         RectF rect = new RectF(mRemaining);
         switch (edge) {
             case TOP: {
-                float h = mRemaining.height() * fraction;
+                float h = Math.min(thicknessPx, mRemaining.height() * MAX_BAND_SHARE);
                 rect.bottom = mRemaining.top + h;
                 mRemaining.top += h;
                 break;
             }
             case BOTTOM: {
-                float h = mRemaining.height() * fraction;
+                float h = Math.min(thicknessPx, mRemaining.height() * MAX_BAND_SHARE);
                 rect.top = mRemaining.bottom - h;
                 mRemaining.bottom -= h;
                 break;
             }
             case LEFT: {
-                float w = mRemaining.width() * fraction;
+                float w = Math.min(thicknessPx, mRemaining.width() * MAX_BAND_SHARE);
                 rect.right = mRemaining.left + w;
                 mRemaining.left += w;
                 break;
             }
             case RIGHT: {
-                float w = mRemaining.width() * fraction;
+                float w = Math.min(thicknessPx, mRemaining.width() * MAX_BAND_SHARE);
                 rect.left = mRemaining.right - w;
                 mRemaining.right -= w;
                 break;
@@ -1672,10 +1745,13 @@ public final class PlaceMiniatureView extends View {
     }
 
     // ---- Colours -------------------------------------------------------------------------------
-    // The artwork names four roles and the theme supplies them: the surface for the phone, the
-    // pane and the keyboard's own card; the raised container for every strip; the on-surface
-    // variant, dimmed for outlines and glyphs and stronger for resting grips; and the accent for
-    // what is held, chosen or about to take a drop.
+    // The element pack's palette roles, resolved on the live Material scheme (spec 5):
+    //   canvas -> colorSurface                  surface -> colorSurfaceContainerHigh
+    //   terminal -> colorSurfaceContainerLow    key -> colorSurfaceContainerHighest
+    //   line -> colorOutlineVariant             text / muted -> colorOnSurface / OnSurfaceVariant
+    //   accent / accent_bg -> colorPrimary / colorPrimaryContainer
+    //   secondary / secondary_bg -> colorTertiary / colorTertiaryContainer
+    // A host whose theme lacks an attribute gets the launcher's own colour for the same role.
 
     /** The band's fill; the legend swatch uses the same one so the two are read as one thing. */
     @ColorInt
@@ -1684,16 +1760,16 @@ public final class PlaceMiniatureView extends View {
     }
 
     /**
-     * The colour a block is drawn in, for anything outside the miniature that has to point at the
-     * same band — the Layout page's rows carry a swatch of it beside the element's name. Every
-     * strip is the theme's raised container; the canvas is the surface itself.
+     * The colour a block is drawn in, for anything outside the canvas that has to point at the
+     * same band: the Layout page's rows carry a swatch of it beside the element's name. Every
+     * strip is the scheme's surface container; the canvas is the scheme's surface.
      */
     @ColorInt
     public static int blockColor(@NonNull Context host, @NonNull Block block) {
         if (block == Block.CANVAS)
-            return hostColor(host, com.termux.shared.R.attr.termuxColorSurfaceBase,
+            return hostColor(host, com.google.android.material.R.attr.colorSurface,
                 R.color.termux_surface_base);
-        return hostColor(host, com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+        return hostColor(host, com.google.android.material.R.attr.colorSurfaceContainerHigh,
             R.color.termux_surface_panel_high);
     }
 
@@ -1702,54 +1778,100 @@ public final class PlaceMiniatureView extends View {
         return MaterialColors.getColor(host, attr, ContextCompat.getColor(host, fallbackColorRes));
     }
 
-    /** The surface: the phone, the pane, the keyboard's card and a lifted card's underlay. */
+    /** The pack's canvas: the phone, and a lifted card's underlay. */
     @ColorInt
     private int surface() {
-        return themeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
+        return themeColor(com.google.android.material.R.attr.colorSurface,
             R.color.termux_surface_base);
     }
 
-    /** The raised container every strip is made of. */
+    /** The pack's surface: every strip, and the keyboard's shell. */
     @ColorInt
     private int container() {
-        return themeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+        return themeColor(com.google.android.material.R.attr.colorSurfaceContainerHigh,
             R.color.termux_surface_panel_high);
     }
 
-    /** The ink the design draws outlines, glyphs and text with, before it is dimmed. */
+    /** The pack's terminal: the pane. */
+    @ColorInt
+    private int terminalFill() {
+        return MaterialColors.getColor(this,
+            com.google.android.material.R.attr.colorSurfaceContainerLow, surface());
+    }
+
+    /** The pack's key: a key, a bar of dim text, a media track. */
+    @ColorInt
+    private int keyFill() {
+        return MaterialColors.getColor(this,
+            com.google.android.material.R.attr.colorSurfaceContainerHighest,
+            ColorUtils.blendARGB(container(), onVariant(), 0.14f));
+    }
+
+    /** The pack's line: every card's hairline and the phone's rim. */
+    @ColorInt
+    private int lineColor() {
+        return themeColor(com.google.android.material.R.attr.colorOutlineVariant,
+            R.color.termux_outline_variant);
+    }
+
+    /** The pack's muted ink: secondary glyphs and text. */
     @ColorInt
     private int onVariant() {
-        return themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+        return themeColor(com.google.android.material.R.attr.colorOnSurfaceVariant,
             R.color.termux_on_surface_variant);
     }
 
-    /** Outlines and key silhouettes: the ink at the design's 45%. */
+    /** Placeholders and dashes: the muted ink at the design's 45%. */
     @ColorInt
     private int dim() {
         return ColorUtils.setAlphaComponent(onVariant(), DIM_ALPHA);
     }
 
-    /** A resting grip: the ink at readable emphasis, over any band, light or dark. */
+    /** A resting grip: the muted ink at readable emphasis, over any band, light or dark. */
     @ColorInt
     private int gripInk() {
         return ColorUtils.setAlphaComponent(onVariant(), GRIP_ALPHA);
     }
 
-    /** Text and glyphs, which have to read at the real size: the ink, a little less faded. */
+    /** The pack's text. */
     @ColorInt
     private int text() {
-        return ColorUtils.setAlphaComponent(onVariant(), TEXT_ALPHA);
+        return surfaceInk();
     }
 
-    /** The screen's own ink, for the legend and the tray's chip names. */
+    /** The screen's own ink, for the legend, the tray's chip names and the pack's text. */
     @ColorInt
     private int surfaceInk() {
-        return themeColor(com.termux.shared.R.attr.termuxColorOnSurface, R.color.termux_on_surface);
+        return themeColor(com.google.android.material.R.attr.colorOnSurface,
+            R.color.termux_on_surface);
     }
 
+    /** The pack's accent. */
     @ColorInt
     private int accent() {
-        return themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary);
+        return themeColor(com.google.android.material.R.attr.colorPrimary,
+            R.color.termux_primary);
+    }
+
+    /** The pack's accent background. */
+    @ColorInt
+    private int accentBg() {
+        return themeColor(com.google.android.material.R.attr.colorPrimaryContainer,
+            R.color.termux_accent_container);
+    }
+
+    /** The pack's secondary. */
+    @ColorInt
+    private int secondary() {
+        return themeColor(com.google.android.material.R.attr.colorTertiary,
+            R.color.termux_secondary);
+    }
+
+    /** The pack's secondary background. */
+    @ColorInt
+    private int secondaryBg() {
+        return themeColor(com.google.android.material.R.attr.colorTertiaryContainer,
+            R.color.termux_tertiary_container);
     }
 
     /** The accent as a tonal layer over a container: a lifted card, an active tray. */
@@ -1803,7 +1925,7 @@ public final class PlaceMiniatureView extends View {
         canvas.restoreToCount(saved);
 
         mFramePaint.setStrokeWidth(frameStrokePx());
-        mFramePaint.setColor(dim());
+        mFramePaint.setColor(lineColor());
         canvas.drawRoundRect(mFrameRect, radius, radius, mFramePaint);
 
         drawHandles(canvas);
@@ -1945,7 +2067,7 @@ public final class PlaceMiniatureView extends View {
             mFillPaint.setColor(accentWash());
             canvas.drawRoundRect(card, radius, radius, mFillPaint);
         }
-        mLinePaint.setColor(lifted ? accent() : dim());
+        mLinePaint.setColor(lifted ? accent() : lineColor());
         mLinePaint.setStrokeWidth(u(lifted ? LIFTED_STROKE_U : CARD_STROKE_U));
         canvas.drawRoundRect(card, radius, radius, mLinePaint);
 
@@ -1967,25 +2089,217 @@ public final class PlaceMiniatureView extends View {
         endBandOrientation(canvas, saved);
     }
 
-    /** The content scale for a row: the phone's unit, or less where the row is thinner than
-     *  the design drew it, so nothing spills over the card. */
-    private float rowScale(@NonNull RectF local, float designHeightUnits) {
-        return Math.max(0.01f, Math.min(mUnit, local.height() / designHeightUnits));
+    // ---- The element pack, ported -------------------------------------------------------------
+    // The pack's geometry functions (renderer.py) draw in units of about one dp inside a shell of
+    // the element's own bounds. The painters below do the same: they open a scaled frame on the
+    // rectangle the layout gave the element ({@link #beginPack}), then place every shape in pack
+    // units by that rectangle's real size — pitch from the width, prompt from the bottom edge —
+    // so a glyph keeps its size whatever the bounds are, and nothing is ever stretched.
+
+    private static final Typeface PACK_MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
+    private static final Map<String, Path> PACK_PATHS = new HashMap<>();
+
+    /** The scale a band's content is drawn at: the canvas's, or less where the band is thinner. */
+    private float packScale(@NonNull RectF local, float designHeight) {
+        return Math.max(0.01f, Math.min(mCanvasScale, local.height() / designHeight));
+    }
+
+    /** Opens a frame whose origin is the rectangle's corner and whose unit is {@code k} pixels. */
+    private int beginPack(@NonNull Canvas canvas, @NonNull RectF area, float k) {
+        int saved = canvas.save();
+        canvas.translate(area.left, area.top);
+        canvas.scale(k, k);
+        return saved;
+    }
+
+    private void pkRect(@NonNull Canvas canvas, float x, float y, float w, float h, float r,
+                        @ColorInt int color) {
+        if (w <= 0f || h <= 0f) return;
+        mFillPaint.setColor(color);
+        mScratchRectB.set(x, y, x + w, y + h);
+        float radius = Math.min(r, Math.min(w, h) / 2f);
+        canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
+    }
+
+    private void pkStrokeRect(@NonNull Canvas canvas, float x, float y, float w, float h,
+                              float r, @ColorInt int color, float stroke) {
+        if (w <= 0f || h <= 0f) return;
+        mLinePaint.setColor(color);
+        mLinePaint.setStrokeWidth(stroke);
+        mScratchRectB.set(x, y, x + w, y + h);
+        float radius = Math.min(r, Math.min(w, h) / 2f);
+        canvas.drawRoundRect(mScratchRectB, radius, radius, mLinePaint);
+    }
+
+    private void pkBar(@NonNull Canvas canvas, float x, float y, float w, @ColorInt int color,
+                       float h) {
+        pkRect(canvas, x, y, w, h, h / 2f, color);
+    }
+
+    private void pkCircle(@NonNull Canvas canvas, float cx, float cy, float r,
+                          @ColorInt int color) {
+        if (r <= 0f) return;
+        mFillPaint.setColor(color);
+        canvas.drawCircle(cx, cy, r, mFillPaint);
+    }
+
+    private void pkText(@NonNull Canvas canvas, @NonNull String text, float x, float baseline,
+                        float size, @ColorInt int color, boolean medium) {
+        mTextPaint.setColor(color);
+        mTextPaint.setTypeface(medium ? PACK_MEDIUM : Typeface.DEFAULT);
+        mTextPaint.setTextAlign(Paint.Align.LEFT);
+        mTextPaint.setTextSize(size);
+        canvas.drawText(text, x, baseline, mTextPaint);
+    }
+
+    @Nullable
+    private static Path packPath(@NonNull String data) {
+        if (PACK_PATHS.containsKey(data)) return PACK_PATHS.get(data);
+        Path path;
+        try {
+            path = PathParser.createPathFromPathData(data);
+        } catch (RuntimeException e) {
+            path = null;
+        }
+        PACK_PATHS.put(data, path);
+        return path;
+    }
+
+    /** An SVG path drawn as a round-capped stroke (or filled), its origin moved to (x, y). */
+    private void pkPath(@NonNull Canvas canvas, @NonNull String data, float x, float y,
+                        @ColorInt int color, float stroke, boolean fill) {
+        Path path = packPath(data);
+        if (path == null) return;
+        int saved = canvas.save();
+        canvas.translate(x, y);
+        if (fill) {
+            mFillPaint.setColor(color);
+            canvas.drawPath(path, mFillPaint);
+        } else {
+            mLinePaint.setColor(color);
+            mLinePaint.setStrokeWidth(stroke);
+            mLinePaint.setStrokeCap(Paint.Cap.ROUND);
+            mLinePaint.setStrokeJoin(Paint.Join.ROUND);
+            canvas.drawPath(path, mLinePaint);
+            mLinePaint.setStrokeCap(Paint.Cap.BUTT);
+            mLinePaint.setStrokeJoin(Paint.Join.MITER);
+        }
+        canvas.restoreToCount(saved);
+    }
+
+    private void pkPath(@NonNull Canvas canvas, @NonNull String data, float x, float y,
+                        @ColorInt int color, float stroke) {
+        pkPath(canvas, data, x, y, color, stroke, false);
+    }
+
+    /**
+     * One of the pack's 24-unit glyphs with its top-left at (x, y), drawn at {@code scale}. The
+     * size a glyph has is its own: callers pass a scale from the pack's 20/24, never one derived
+     * from the bounds it stands in.
+     */
+    private void pkGlyph(@NonNull Canvas canvas, @NonNull String kind, float x, float y,
+                         float scale, @ColorInt int c) {
+        int saved = canvas.save();
+        canvas.translate(x, y);
+        canvas.scale(scale, scale);
+        switch (kind) {
+            case "terminal": pkPath(canvas, "M5 7l5 5-5 5M13 17h6", 0, 0, c, 2f); break;
+            case "phone":
+                pkPath(canvas, "M7 4l3 5-2 2c1.5 3 2.5 4 5 5l2-2 5 3c-1 4-4 4-7 2C7 16 4 12 4 8c0-2 1-3 3-4Z",
+                    0, 0, c, 2f);
+                break;
+            case "chat": pkPath(canvas, "M5 5h14v11H10l-5 4V5ZM9 9h6M9 12h4", 0, 0, c, 1.8f); break;
+            case "play": pkPath(canvas, "M9 6l10 6-10 6Z", 0, 0, c, 0f, true); break;
+            case "globe":
+                pkPath(canvas, "M3 12h18M12 3c-5 5-5 13 0 18M12 3c5 5 5 13 0 18", 0, 0, c, 1.6f);
+                mLinePaint.setColor(c);
+                mLinePaint.setStrokeWidth(1.8f);
+                canvas.drawCircle(12f, 12f, 9f, mLinePaint);
+                break;
+            case "grid":
+                pkRect(canvas, 5, 5, 5, 5, 1, c);
+                pkRect(canvas, 14, 5, 5, 5, 1, c);
+                pkRect(canvas, 5, 14, 5, 5, 1, c);
+                pkRect(canvas, 14, 14, 5, 5, 1, c);
+                break;
+            case "home":
+                pkPath(canvas, "M3 11l9-8 9 8M6 9v11h4v-6h4v6h4V9", 0, 0, c, 1.8f);
+                break;
+            case "monitor": pkPath(canvas, "M3 5h18v12H3ZM9 21h6M12 17v4", 0, 0, c, 1.8f); break;
+            case "list":
+                pkPath(canvas, "M9 6h11M9 12h11M9 18h11", 0, 0, c, 1.8f);
+                pkCircle(canvas, 4, 6, 1.3f, c);
+                pkCircle(canvas, 4, 12, 1.3f, c);
+                pkCircle(canvas, 4, 18, 1.3f, c);
+                break;
+            case "mouse":
+                pkStrokeRect(canvas, 6, 3, 12, 18, 6, c, 1.8f);
+                pkPath(canvas, "M6 10h12M12 3v7", 0, 0, c, 1.8f);
+                break;
+            case "keyboard":
+                pkStrokeRect(canvas, 2, 5, 20, 14, 3, c, 1.8f);
+                for (int col = 0; col < 4; col++) {
+                    pkCircle(canvas, 6 + 4 * col, 9, 0.8f, c);
+                    pkCircle(canvas, 6 + 4 * col, 12, 0.8f, c);
+                }
+                pkBar(canvas, 7, 15, 10, c, 1.5f);
+                break;
+            case "moon": pkPath(canvas, "M17 3a9 9 0 1 0 4 14A9 9 0 0 1 17 3Z", 0, 0, c, 0f, true); break;
+            default: break;
+        }
+        canvas.restoreToCount(saved);
     }
 
     // ---- Status bar --------------------------------------------------------------------------
 
-    /** The clock at the start, the readings — signal and battery — at the end. */
+    /**
+     * The status bar, collapsed or expanded from {@code status_compact}. Collapsed is one row of
+     * tabs (the workspace count, the current tab, a plus), the two readings and the moon. Expanded
+     * puts that row under a 07:34 clock, a media tile and two lines of text. Positions come from
+     * the bar's own width: what does not fit its bounds is left out, never squeezed.
+     */
     private void drawStatusContent(@NonNull Canvas canvas, @NonNull RectF local) {
-        float k = rowScale(local, STATUS_DESIGN_H);
-        float cy = local.centerY();
-        mTextPaint.setColor(text());
-        mTextPaint.setTypeface(Typeface.DEFAULT);
-        mTextPaint.setTextAlign(Paint.Align.LEFT);
-        mTextPaint.setTextSize(10f * k);
-        canvas.drawText("12:40", local.left + 8f * k, cy - (mTextPaint.ascent()
-            + mTextPaint.descent()) / 2f, mTextPaint);
-        drawStatusReadings(canvas, local.right - 7f * k, cy, k, false);
+        boolean compact = isStatusCompact();
+        float design = compact ? PACK_STATUS_COMPACT_H : PACK_STATUS_EXPANDED_H;
+        float k = packScale(local, design);
+        float w = local.width() / k;
+        float h = local.height() / k;
+        float oy = Math.max(0f, (h - design) / 2f);
+        int saved = beginPack(canvas, local, k);
+        float y = oy + (compact ? 8f : 66f);
+        int key = keyFill();
+        pkRect(canvas, 12, y, 25, 24, 10, key);
+        pkText(canvas, "2", 20, y + 17, 12, text(), true);
+        pkRect(canvas, 43, y, 56, 24, 10, accentBg());
+        pkText(canvas, "home", 53, y + 17, 11, accent(), true);
+        if (w >= 140f) pkPath(canvas, "M0 -5v10M-5 0h10", 111, y + 12, onVariant(), 1.6f);
+        if (w >= 250f) {
+            pkBar(canvas, w - 119, y + 8, 27, accent(), 3);
+            pkBar(canvas, w - 119, y + 15, 18, key, 3);
+            pkBar(canvas, w - 80, y + 8, 23, secondary(), 3);
+            pkBar(canvas, w - 80, y + 15, 15, key, 3);
+        }
+        if (w >= 175f) {
+            pkGlyph(canvas, "moon", w - 44, y + 3, 0.7f, secondary());
+            pkCircle(canvas, w - 17, y + 12, 2, onVariant());
+        }
+        if (!compact) {
+            pkText(canvas, "07:34", 16, oy + 42, 27, text(), true);
+            if (w >= 230f) {
+                pkRect(canvas, 126, oy + 14, 37, 37, 12, accentBg());
+                pkCircle(canvas, 144.5f, oy + 32.5f, 11, accent());
+                pkCircle(canvas, 144.5f, oy + 32.5f, 4, accentBg());
+                pkBar(canvas, 174, oy + 18, w - 218, text(), 4);
+                pkBar(canvas, 174, oy + 29, w - 239, onVariant(), 3);
+                pkBar(canvas, 174, oy + 43, w - 210, key, 3);
+                pkBar(canvas, 174, oy + 43, Math.min(38f, w - 210), accent(), 3);
+            }
+            if (w >= 260f) {
+                pkCircle(canvas, w - 22, oy + 30, 12, key);
+                pkGlyph(canvas, "play", w - 31, oy + 21, 0.75f, text());
+            }
+        }
+        canvas.restoreToCount(saved);
     }
 
     /**
@@ -2041,82 +2355,84 @@ public final class PlaceMiniatureView extends View {
         mTextPaint.setTextSize(9f * k);
         float lineH = 10f * k;
         if (top + 2f * lineH < card.bottom - 24f * k) {
-            canvas.drawText("12", cx, top + lineH - 2f * k, mTextPaint);
-            canvas.drawText("40", cx, top + 2f * lineH - 2f * k, mTextPaint);
+            canvas.drawText("07", cx, top + lineH - 2f * k, mTextPaint);
+            canvas.drawText("34", cx, top + 2f * lineH - 2f * k, mTextPaint);
         }
         if (card.height() > 40f * k)
             drawStatusReadings(canvas, cx, card.bottom - 12f * k, k, true);
     }
 
-    // ---- Apps row -----------------------------------------------------------------------------
+    // ---- Dock ---------------------------------------------------------------------------------
 
-    /** Five discs; the last one wears the accent, because that app is the one that is open. */
+    /**
+     * The dock: seven simplified app symbols in discs, at a pitch taken from the dock's width. The
+     * docked dock is square-cornered and the floating one rounded — that is the card's radius, set
+     * from the dock's corner — and the symbols are the same in both.
+     */
     private void drawAppsContent(@NonNull Canvas canvas, @NonNull RectF local) {
-        float k = rowScale(local, APPS_DESIGN_H);
-        float inset = 6f * k;
-        float slot = (local.width() - inset * 2f) / APPS_ROW_ICON_COUNT;
-        float radius = Math.min(9f * k, Math.min(slot * 0.42f, local.height() * 0.36f));
-        float cy = local.centerY();
-        for (int i = 0; i < APPS_ROW_ICON_COUNT; i++) {
-            float cx = local.left + inset + slot * (i + 0.5f);
-            boolean active = i == APPS_ROW_ACTIVE_INDEX;
-            mFillPaint.setColor(active ? accent() : dim());
-            canvas.drawCircle(cx, cy, radius, mFillPaint);
-            // A mark on each disc, so it reads as an icon rather than a dot: a dash or a square.
-            mFillPaint.setColor(surface());
-            float mark = radius * 0.5f;
-            if (i % 2 == 0) {
-                mScratchRectB.set(cx - mark, cy - mark * 0.3f, cx + mark, cy + mark * 0.3f);
-                canvas.drawRoundRect(mScratchRectB, mark * 0.3f, mark * 0.3f, mFillPaint);
-            } else {
-                mScratchRectB.set(cx - mark * 0.7f, cy - mark * 0.7f, cx + mark * 0.7f,
-                    cy + mark * 0.7f);
-                canvas.drawRoundRect(mScratchRectB, mark * 0.25f, mark * 0.25f, mFillPaint);
-            }
+        float k = packScale(local, PACK_DOCK_H);
+        float w = local.width() / k;
+        float h = local.height() / k;
+        float pitch = (w - 24f) / DOCK_GLYPHS.length;
+        float size = Math.min(36f, Math.min(pitch - 6f, h - 20f));
+        if (size < 8f) return;
+        int saved = beginPack(canvas, local, k);
+        float cy = h / 2f;
+        float glyphScale = Math.min(20f, size * 0.56f) / 24f;
+        for (int i = 0; i < DOCK_GLYPHS.length; i++) {
+            float cx = 12f + (i + 0.5f) * pitch;
+            boolean primary = i == 0 || i == 3 || i == 4;
+            boolean tertiary = i == 1 || i == 2;
+            pkCircle(canvas, cx, cy, size / 2f,
+                primary ? accentBg() : tertiary ? secondaryBg() : keyFill());
+            pkGlyph(canvas, DOCK_GLYPHS[i], cx - 12f * glyphScale, cy - 12f * glyphScale,
+                glyphScale, primary ? accent() : tertiary ? secondary() : text());
         }
+        canvas.restoreToCount(saved);
     }
 
-    // ---- Alphabets row -------------------------------------------------------------------------
+    // ---- A-Z strip ----------------------------------------------------------------------------
 
-    /** A few letters, spread along the strip. */
+    /** Nine letters spread along the strip, A D G J M P S V Z, with M in its highlight. */
     private void drawAlphabetsContent(@NonNull Canvas canvas, @NonNull RectF local) {
-        float k = rowScale(local, ALPHABETS_DESIGN_H);
-        mTextPaint.setColor(text());
-        mTextPaint.setTypeface(Typeface.DEFAULT);
-        mTextPaint.setTextAlign(Paint.Align.CENTER);
-        mTextPaint.setTextSize(Math.min(8f * k, local.height() * 0.6f));
+        float k = packScale(local, PACK_AZ_H);
+        float w = local.width() / k;
+        float h = local.height() / k;
+        float oy = Math.max(0f, (h - PACK_AZ_H) / 2f);
         int n = ALPHABETS_SAMPLE.length;
-        float inset = 8f * k;
-        float slot = (local.width() - inset * 2f) / n;
-        float baseline = local.centerY() - (mTextPaint.ascent() + mTextPaint.descent()) / 2f;
-        for (int i = 0; i < n; i++) {
-            float x = local.left + inset + slot * (i + 0.5f);
-            canvas.drawText(ALPHABETS_SAMPLE[i], x, baseline, mTextPaint);
+        float pitch = (w - 38f) / (n - 1);
+        if (pitch <= 0f) return;
+        int stride = pitch < 12f ? 2 : 1;
+        int saved = beginPack(canvas, local, k);
+        for (int i = 0; i < n; i += stride) {
+            float x = 16f + i * pitch;
+            boolean lit = i == ALPHABETS_LIT_INDEX;
+            if (lit) pkRect(canvas, x - 6, oy + 4, 22, 20, 8, accentBg());
+            pkText(canvas, ALPHABETS_SAMPLE[i], x, oy + 18, 10, lit ? accent() : onVariant(), true);
         }
+        canvas.restoreToCount(saved);
     }
 
-    // ---- Extra keys ---------------------------------------------------------------------------
+    // ---- Toolbar (the extra keys) -------------------------------------------------------------
 
-    /** Five glyph slots: a rounded key each, with the key's own glyph on it. */
+    /** Seven glyphs at a pitch from the width, the terminal's in its highlight. */
     private void drawExtraKeysContent(@NonNull Canvas canvas, @NonNull RectF local) {
-        float k = rowScale(local, EXTRA_KEYS_DESIGN_H);
-        int n = EXTRA_KEY_GLYPHS.length;
-        float inset = 8f * k;
-        float slot = (local.width() - inset * 2f) / n;
-        float size = Math.min(24f * k, Math.min(slot * 0.8f, local.height() * 0.62f));
-        float radius = 6f * k;
-        float cy = local.centerY();
-        for (int i = 0; i < n; i++) {
-            float cx = local.left + inset + slot * (i + 0.5f);
-            mScratchRectB.set(cx - size / 2f, cy - size / 2f, cx + size / 2f, cy + size / 2f);
-            mFillPaint.setColor(dim());
-            canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
-            if (mNerdTypeface == null) continue; // a bare-module test environment: no tofu boxes
-            mNerdPaint.setColor(surface());
-            mNerdPaint.setTextSize(size * 0.62f);
-            canvas.drawText(EXTRA_KEY_GLYPHS[i], cx,
-                cy - (mNerdPaint.ascent() + mNerdPaint.descent()) / 2f, mNerdPaint);
+        float k = packScale(local, PACK_TOOLBAR_H);
+        float w = local.width() / k;
+        float h = local.height() / k;
+        float oy = Math.max(0f, (h - PACK_TOOLBAR_H) / 2f);
+        float pitch = (w - 24f) / TOOLBAR_GLYPHS.length;
+        if (pitch < 8f) return;
+        int saved = beginPack(canvas, local, k);
+        float glyphScale = 20f / 24f;
+        for (int i = 0; i < TOOLBAR_GLYPHS.length; i++) {
+            float cx = 12f + (i + 0.5f) * pitch;
+            boolean lit = i == TOOLBAR_LIT_INDEX;
+            if (lit) pkRect(canvas, cx - 17, oy + 9, 34, 34, 12, accentBg());
+            pkGlyph(canvas, TOOLBAR_GLYPHS[i], cx - 10f, oy + 16f, glyphScale,
+                lit ? accent() : onVariant());
         }
+        canvas.restoreToCount(saved);
     }
 
     // ---- Canvas: Terminal / Home / Display ----------------------------------------------------
@@ -2128,9 +2444,9 @@ public final class PlaceMiniatureView extends View {
         RectF pane = mScratchRectC;
         cardOf(rect, pane);
         float radius = u(PANE_RADIUS_U);
-        mFillPaint.setColor(surface());
+        mFillPaint.setColor(terminalFill());
         canvas.drawRoundRect(pane, radius, radius, mFillPaint);
-        mLinePaint.setColor(dim());
+        mLinePaint.setColor(lineColor());
         mLinePaint.setStrokeWidth(u(CARD_STROKE_U));
         canvas.drawRoundRect(pane, radius, radius, mLinePaint);
 
@@ -2153,42 +2469,39 @@ public final class PlaceMiniatureView extends View {
         canvas.restoreToCount(saved);
     }
 
-    /** Rows of short character marks, a prompt and a cursor: text without saying anything. */
+    /**
+     * The terminal, one surface with no header of its own. A prompt and its command sit at the
+     * top and a few lines of output under them, each line drawn only while the pane is tall enough
+     * for it (they stop first when the pane gets short); the live prompt with its cursor is
+     * anchored near the pane's bottom edge, wherever that is.
+     */
     private void drawTerminalLines(@NonNull Canvas canvas, @NonNull RectF pane) {
-        float k = mUnit;
-        float left = pane.left + 14f * k;
-        float right = pane.right - 14f * k;
-        float y = pane.top + 20f * k;
-        float pitch = 13f * k;
-        float charPitch = 7f * k;
-        float dashW = 4.5f * k;
-        float dashH = Math.max(1f, 1.4f * k);
-        int[] lengths = {16, 12, 16, 9, 14, 11};
-        mFillPaint.setColor(dim());
-        int line = 0;
-        while (y + pitch * 2.2f < pane.bottom && line < lengths.length) {
-            float x = left;
-            for (int c = 0; c < lengths[line] && x + dashW <= right; c++) {
-                mScratchRectB.set(x, y, x + dashW, y + dashH);
-                canvas.drawRoundRect(mScratchRectB, dashH / 2f, dashH / 2f, mFillPaint);
-                x += charPitch;
+        float k = Math.max(0.01f, mCanvasScale);
+        float w = pane.width() / k;
+        float h = pane.height() / k;
+        if (h < 46f || w < 60f) return;
+        int saved = beginPack(canvas, pane, k);
+        int secondary = secondary();
+        int accent = accent();
+        int key = keyFill();
+        if (h >= 96f) {
+            pkPath(canvas, "M17 28l5 4-5 4", 0, 0, secondary, 1.8f);
+            pkBar(canvas, 32, 30, 36, secondary, 3);
+            pkBar(canvas, 76, 30, Math.min(55f, w - 93f), accent, 3);
+            float[][][] lines = {
+                {{17, 100}, {125, 34}}, {{17, 56}, {81, 85}}, {{17, 83}}};
+            float[] ys = {53f, 70f, 87f};
+            for (int line = 0; line < lines.length; line++) {
+                if (ys[line] >= h - 64f) break;
+                for (float[] segment : lines[line]) {
+                    pkBar(canvas, segment[0], ys[line], Math.min(segment[1], w - segment[0] - 17f),
+                        key, 3);
+                }
             }
-            y += pitch;
-            line++;
         }
-        // The prompt and its cursor block sit on the next line, wherever the text stopped.
-        if (y + pitch <= pane.bottom) {
-            mTextPaint.setColor(text());
-            mTextPaint.setTypeface(Typeface.MONOSPACE);
-            mTextPaint.setTextAlign(Paint.Align.LEFT);
-            mTextPaint.setTextSize(8f * k);
-            float baseline = y + 7f * k;
-            canvas.drawText(">_", left, baseline, mTextPaint);
-            float cursorLeft = left + mTextPaint.measureText(">_ ");
-            mFillPaint.setColor(accent());
-            mScratchRectB.set(cursorLeft, baseline - 6f * k, cursorLeft + 4f * k, baseline + k);
-            canvas.drawRect(mScratchRectB, mFillPaint);
-        }
+        pkPath(canvas, "M17 0l5 4-5 4", 0, h - 34f, secondary, 1.8f);
+        pkRect(canvas, 32, h - 36f, 5, 13, 1.5f, accent);
+        canvas.restoreToCount(saved);
     }
 
     /**
@@ -2273,7 +2586,7 @@ public final class PlaceMiniatureView extends View {
         mFillPaint.setColor(ColorUtils.setAlphaComponent(container(), TILE_ALPHA));
         float radius = u(6f);
         canvas.drawRoundRect(window, radius, radius, mFillPaint);
-        mLinePaint.setColor(dim());
+        mLinePaint.setColor(lineColor());
         mLinePaint.setStrokeWidth(u(CARD_STROKE_U));
         canvas.drawRoundRect(window, radius, radius, mLinePaint);
         float barH = Math.min(u(8f), window.height() * 0.2f);
@@ -2286,7 +2599,7 @@ public final class PlaceMiniatureView extends View {
             float height = Math.min(pane.height() * 0.36f, u(60f));
             mScratchRectA.set(pane.left + inset, pane.bottom - height - inset,
                 pane.right - inset, pane.bottom - inset);
-            drawKeyboardCard(canvas, mScratchRectA);
+            drawKeyboardCard(canvas, mScratchRectA, 0f, true);
         }
     }
 
@@ -2296,7 +2609,8 @@ public final class PlaceMiniatureView extends View {
      * The keyboard's block along the bottom of the phone, while the place shows one, drawn in the
      * form the place types with: docked across the block, floating as a smaller card lifted off
      * it, split as two halves with the parting between them. The block itself is the same in all
-     * three, so the drop targets around it do not move with the form.
+     * three, so the drop targets around it do not move with the form. The block's bottom is the
+     * chin, real dp to scale, which every form leaves bare of keys.
      */
     private void drawKeyboardBlock(@NonNull Canvas canvas) {
         if (mKeyboardRect.isEmpty()) return;
@@ -2311,8 +2625,7 @@ public final class PlaceMiniatureView extends View {
             canvas.drawRoundRect(mScratchRectC, radius, radius, mDashPaint);
             return;
         }
-        PlaceLayout.KeyboardForm form = mLayout == null
-            ? PlaceLayout.KeyboardForm.DOCKED : mLayout.keyboardForm;
+        KeyboardForm form = mLayout == null ? KeyboardForm.DOCKED : mLayout.keyboardForm;
         switch (form) {
             case FLOATING: {
                 RectF card = mKeyboardPartA;
@@ -2323,30 +2636,25 @@ public final class PlaceMiniatureView extends View {
                 float radius = cardRadius(card);
                 mFillPaint.setColor(ColorUtils.setAlphaComponent(onVariant(), PLACEHOLDER_ALPHA));
                 canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
-                drawKeyboardCard(canvas, card);
+                drawKeyboardCard(canvas, card, 0f, true);
                 break;
             }
             case SPLIT: {
                 RectF left = mKeyboardPartA;
                 RectF right = mKeyboardPartB;
                 splitKeyboardHalvesInto(mScratchRectC, left, right);
-                // The card pass reuses the scratch rects; the whole keyboard is held apart.
-                mKeyboardWhole.set(mScratchRectC);
-                drawKeyboardHalf(canvas, mKeyboardWhole, left);
-                drawKeyboardHalf(canvas, mKeyboardWhole, right);
+                float chin = chinPx(mScratchRectC);
+                LayoutCanvasGeometry.SplitRows rows = LayoutCanvasGeometry.splitKeyRows();
+                drawKeyboardShell(canvas, left, chin, rows.left, LayoutCanvasGeometry.HALF_UNITS,
+                    false);
+                drawKeyboardShell(canvas, right, chin, rows.right, LayoutCanvasGeometry.HALF_UNITS,
+                    false);
                 break;
             }
             case DOCKED:
-            default: {
-                // The chin is air under the last key row inside the keyboard's own card: the keys
-                // are laid out over what is left above it.
-                float chin = chinPx(mScratchRectC);
-                mKeyboardWhole.set(mScratchRectC);
-                mKeyboardWhole.bottom -= chin;
-                mKeyboardPartA.set(mScratchRectC);
-                drawKeyboardCard(canvas, mKeyboardWhole, mKeyboardPartA);
+            default:
+                drawKeyboardCard(canvas, mScratchRectC, chinPx(mScratchRectC), false);
                 break;
-            }
         }
     }
 
@@ -2368,83 +2676,93 @@ public final class PlaceMiniatureView extends View {
         right.set(block.right - half, block.top, block.right, block.bottom);
     }
 
-    /** One half of a split keyboard: its own card, and the whole keyboard's keys that fall on it. */
-    private void drawKeyboardHalf(@NonNull Canvas canvas, @NonNull RectF whole,
-                                  @NonNull RectF half) {
-        int saved = canvas.save();
-        mClipPath.reset();
-        float radius = cardRadius(half);
-        mClipPath.addRoundRect(half, radius, radius, Path.Direction.CW);
-        canvas.clipPath(mClipPath);
-        drawKeyboardCard(canvas, whole, half);
-        canvas.restoreToCount(saved);
+    /**
+     * A whole keyboard card: its shell and the docked key rows across it. {@code chinPx} is the
+     * bare air under the last row; a floating card carries a grabber at its top and no chin.
+     */
+    private void drawKeyboardCard(@NonNull Canvas canvas, @NonNull RectF card, float chinPx,
+                                  boolean floating) {
+        drawKeyboardShell(canvas, card, chinPx, LayoutCanvasGeometry.dockedKeyRows(),
+            LayoutCanvasGeometry.ROW_UNITS, floating);
     }
 
     /**
-     * The keyboard as the design draws it: a surface card with a tint of container inside, the
-     * grabber pill at its top, and four rows of keys — the space bar wide — laid out in its own
-     * 216x128 viewport and scaled to fit whatever card it is given.
+     * The keyboard's surface and its keys: the card in the pack's surface tone with its hairline,
+     * then the given rows laid across {@code units} key units with the pitch taken from the card's
+     * width and the row pitch from its height less the chin. The space bar wears the accent, the
+     * enter key the secondary, and shift, backspace and enter carry their glyphs.
+     *
+     * @param grabber whether the card is the floating one, which draws its grabber and starts its
+     *                keys lower
      */
-    private void drawKeyboardCard(@NonNull Canvas canvas, @NonNull RectF card) {
-        drawKeyboardCard(canvas, card, card);
-    }
-
-    /**
-     * The same, with the keys laid out over {@code keys} and the card drawn at {@code card}: a
-     * split half is the half's card with the whole keyboard's keys under its clip.
-     */
-    private void drawKeyboardCard(@NonNull Canvas canvas, @NonNull RectF keys,
-                                  @NonNull RectF card) {
+    private void drawKeyboardShell(@NonNull Canvas canvas, @NonNull RectF card, float chinPx,
+                                   @NonNull List<List<LayoutCanvasGeometry.KeyCell>> rows,
+                                   float units, boolean grabber) {
         float radius = cardRadius(card);
-        mFillPaint.setColor(surface());
+        mFillPaint.setColor(container());
         canvas.drawRoundRect(card, radius, radius, mFillPaint);
-        mScratchRectB.set(card);
-        mScratchRectB.inset(u(2f), u(2f));
-        mFillPaint.setColor(ColorUtils.setAlphaComponent(container(), KEYBOARD_TINT_ALPHA));
-        float inner = Math.max(0f, radius - u(2f));
-        canvas.drawRoundRect(mScratchRectB, inner, inner, mFillPaint);
-        mLinePaint.setColor(dim());
+        mLinePaint.setColor(lineColor());
         mLinePaint.setStrokeWidth(u(CARD_STROKE_U));
         canvas.drawRoundRect(card, radius, radius, mLinePaint);
 
-        float k = Math.max(0.01f, Math.min(keys.width() / KEYBOARD_DESIGN_W,
-            keys.height() / KEYBOARD_DESIGN_H));
-        float x0 = keys.centerX() - KEYBOARD_DESIGN_W * k / 2f;
-        float y0 = keys.centerY() - KEYBOARD_DESIGN_H * k / 2f;
-        mFillPaint.setColor(dim());
-        // The grabber: the one part of the keyboard that is not a key, and not the layout grip.
-        mScratchRectB.set(x0 + 90f * k, y0 + 8f * k, x0 + 126f * k, y0 + 11f * k);
-        canvas.drawRoundRect(mScratchRectB, 1.5f * k, 1.5f * k, mFillPaint);
-
-        float keyW = 15f * k;
-        float keyH = 18f * k;
-        float keyR = 4.5f * k;
-        float pitch = 18f * k;
-        float rowPitch = 23f * k;
-        // Row one: ten keys. Row two: nine, stepped in by half a key. Row three: seven between
-        // two wide ends. Row four: two small, the space bar, two small.
-        drawKeyRow(canvas, x0 + 19.5f * k, y0 + 24f * k, 10, keyW, keyH, keyR, pitch);
-        drawKeyRow(canvas, x0 + 28.5f * k, y0 + 24f * k + rowPitch, 9, keyW, keyH, keyR, pitch);
-        float y3 = y0 + 24f * k + 2f * rowPitch;
-        drawKey(canvas, x0 + 19.5f * k, y3, 24f * k, keyH, keyR);
-        drawKeyRow(canvas, x0 + 46.5f * k, y3, 7, keyW, keyH, keyR, pitch);
-        drawKey(canvas, x0 + 172.5f * k, y3, 24f * k, keyH, keyR);
-        float y4 = y0 + 24f * k + 3f * rowPitch;
-        drawKey(canvas, x0 + 19.5f * k, y4, keyW, keyH, keyR);
-        drawKey(canvas, x0 + 37.5f * k, y4, keyW, keyH, keyR);
-        drawKey(canvas, x0 + 55.5f * k, y4, 105f * k, keyH, keyR);
-        drawKey(canvas, x0 + 163.5f * k, y4, keyW, keyH, keyR);
-        drawKey(canvas, x0 + 181.5f * k, y4, keyW, keyH, keyR);
+        float k = Math.max(0.01f, mCanvasScale);
+        float w = card.width() / k;
+        float h = (card.height() - chinPx) / k;
+        float top = grabber ? PACK_KEY_TOP_FLOATING : PACK_KEY_TOP;
+        float pitch = (w - 2f * PACK_KEY_MARGIN) / units;
+        float rowPitch = (h - top - PACK_KEY_MARGIN) / rows.size();
+        float keyH = rowPitch - PACK_KEY_GAP;
+        if (keyH < 3f || pitch < 4f) return;
+        int saved = beginPack(canvas, card, k);
+        if (grabber && h > 30f) pkBar(canvas, w / 2f - 14f, 8f, 28f, onVariant(), 3f);
+        for (int r = 0; r < rows.size(); r++) {
+            float y = top + r * rowPitch;
+            float keyRadius = r == rows.size() - 1 ? 7f : Math.min(6f, keyH / 3f);
+            for (LayoutCanvasGeometry.KeyCell cell : rows.get(r)) {
+                drawKeyCell(canvas, cell, PACK_KEY_MARGIN + cell.x * pitch, y,
+                    cell.w * pitch - PACK_KEY_GAP, keyH, keyRadius);
+            }
+        }
+        canvas.restoreToCount(saved);
     }
 
-    private void drawKeyRow(@NonNull Canvas canvas, float left, float top, int count, float w,
-                            float h, float r, float pitch) {
-        for (int i = 0; i < count; i++) drawKey(canvas, left + i * pitch, top, w, h, r);
-    }
-
-    private void drawKey(@NonNull Canvas canvas, float left, float top, float w, float h, float r) {
-        mScratchRectB.set(left, top, left + w, top + h);
-        canvas.drawRoundRect(mScratchRectB, r, r, mFillPaint);
+    /** One key in pack units: its tone by role, and the glyph the role carries if it fits. */
+    private void drawKeyCell(@NonNull Canvas canvas, @NonNull LayoutCanvasGeometry.KeyCell cell,
+                             float x, float y, float w, float h, float radius) {
+        int fill;
+        switch (cell.role) {
+            case SPACE: fill = accentBg(); break;
+            case ENTER: fill = secondaryBg(); break;
+            default: fill = keyFill(); break;
+        }
+        pkRect(canvas, x, y, w, h, radius, fill);
+        boolean roomy = w >= 18f && h >= 12f;
+        float cx = x + w / 2f;
+        float cy = y + h / 2f;
+        switch (cell.role) {
+            case SHIFT:
+                if (roomy) pkPath(canvas, "M-4 3v-5h-3l7-5 7 5h-3v5", cx, cy, onVariant(), 1.4f);
+                break;
+            case BACKSPACE:
+                if (roomy) pkPath(canvas, "M3 -4l-5 4 5 4", cx, cy, onVariant(), 1.6f);
+                break;
+            case SYMBOLS:
+                if (roomy) pkText(canvas, "···", x + 8f, cy + 4f, 12f, onVariant(), false);
+                break;
+            case SPACE: {
+                float bar = Math.min(w * 0.3f, 30f);
+                pkBar(canvas, cx - bar / 2f, cy - 1f, bar, accent(), 2f);
+                break;
+            }
+            case ENTER:
+                if (roomy) {
+                    float gx = w >= 40f ? x + w - 22f : cx;
+                    pkPath(canvas, "M7 -4v5h-14m4-4-4 4 4 4", gx, cy, secondary(), 1.8f);
+                }
+                break;
+            default:
+                break;
+        }
     }
 
     // ---- Legend ----------------------------------------------------------------------------------
@@ -2517,7 +2835,8 @@ public final class PlaceMiniatureView extends View {
         switch (block) {
             case STATUS_BAR: icon = mIconStatus; break;
             case APPS_ROW: icon = mIconApps; break;
-            case EXTRA_KEYS: icon = mIconKeys; break;
+            case EXTRA_KEYS:
+            case KEYBOARD: icon = mIconKeys; break;
             case CANVAS:
             default:
                 switch (canvasKind()) {
@@ -2742,7 +3061,7 @@ public final class PlaceMiniatureView extends View {
             mFillPaint.setColor(surface());
             canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
             mKeyboardPartA.set(mKeyboardWhole);
-            drawKeyboardCard(canvas, mKeyboardWhole, mKeyboardPartA);
+            drawKeyboardCard(canvas, mKeyboardWhole, chinPx(mKeyboardWhole), false);
             mLinePaint.setColor(accent());
             mLinePaint.setStrokeWidth(u(LIFTED_STROKE_U));
             canvas.drawRoundRect(mKeyboardPartA, radius, radius, mLinePaint);

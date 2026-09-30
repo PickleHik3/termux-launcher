@@ -21,6 +21,7 @@ import androidx.annotation.NonNull;
 import androidx.core.content.ContextCompat;
 
 import com.termux.R;
+import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -1300,4 +1301,97 @@ public class PlaceMiniatureViewTest {
         assertTrue("a gap between the halves", right.left - left.right >= block.width() * 0.19f);
         assertEquals(left.width(), right.width(), 0.001f);
     }
+
+    // ---- The canvas is to scale ------------------------------------------------------------------
+
+    private static float screenHeightDp(PlaceMiniatureView view, boolean landscape) {
+        android.util.DisplayMetrics metrics = view.getResources().getDisplayMetrics();
+        float shortDp = Math.min(metrics.widthPixels, metrics.heightPixels) / metrics.density;
+        return landscape ? shortDp : shortDp * 19.5f / 9f;
+    }
+
+    @Test
+    public void theKeyboardBlockIsItsRealHeightPlusItsChinTimesTheCanvasScale() {
+        PlaceMiniatureView view = sized();
+        view.setLegendVisible(false);
+        view.setSizes(TERMUX_APP_DEFAULT_DOCK, 1.2f, 0);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        float scale = view.canvasScalePx();
+        assertTrue(scale > 0f);
+        RectF keyboard = view.keyboardRect();
+        assertNotNull(keyboard);
+        assertEquals(LayoutCanvasGeometry.keyboardHeightDp(1.2f, false,
+                screenHeightDp(view, false)) * scale, keyboard.height(), 0.6f);
+
+        view.setSizes(TERMUX_APP_DEFAULT_DOCK, 1.2f, 20);
+        RectF withChin = view.keyboardRect();
+        assertNotNull(withChin);
+        assertEquals("the chin is 20 real dp more block", 20f * scale,
+            withChin.height() - keyboard.height(), 0.6f);
+    }
+
+    @Test
+    public void theStatusBarIsItsRealThicknessCollapsedOrExpanded() {
+        PlaceMiniatureView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.HIDDEN),
+            PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        float scale = view.canvasScalePx();
+        view.setStatusCompact(false);
+        RectF expanded = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
+        view.setStatusCompact(true);
+        RectF compact = view.blockRect(PlaceMiniatureView.Block.STATUS_BAR);
+        assertNotNull(expanded);
+        assertNotNull(compact);
+        assertTrue("collapsed is thinner than expanded", compact.height() < expanded.height());
+        assertEquals(LayoutCanvasGeometry.statusBandDp(Edge.TOP, true, true) * scale,
+            compact.height(), 0.6f);
+        assertTrue(view.isStatusCompact());
+    }
+
+    @Test
+    public void theDocksBandFollowsItsScaleAndTheSquareDockHasNoRadius() {
+        PlaceMiniatureView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.HIDDEN),
+            PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        float scale = view.canvasScalePx();
+        RectF shipped = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(shipped);
+        assertEquals(LayoutCanvasGeometry.dockBandHeightDp(TERMUX_APP_DEFAULT_DOCK, true) * scale,
+            shipped.height(), 0.6f);
+
+        view.setSizes(DockLayoutPolicy.maxSizePreset(), 1f, 0);
+        RectF tall = view.blockRect(PlaceMiniatureView.Block.APPS_ROW);
+        assertNotNull(tall);
+        assertTrue("a bigger dock scale is a taller band", tall.height() > shipped.height());
+
+        view.setDockCornerRadiusDp(0f);
+        assertEquals("the docked dock is square", 0f, view.surfaceRadiusPx(), 0f);
+    }
+
+    @Test
+    public void theChinHandleKeepsItsFullTargetWhileTheChinIsNothing() {
+        PlaceMiniatureView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setSizes(TERMUX_APP_DEFAULT_DOCK, 1f, 0);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        RectF keyboard = view.keyboardRect();
+        assertNotNull(keyboard);
+        touch(view, MotionEvent.ACTION_DOWN, keyboard.centerX(), keyboard.centerY());
+        touch(view, MotionEvent.ACTION_UP, keyboard.centerX(), keyboard.centerY());
+        RectF chin = view.handleRect(PlaceMiniatureView.Handle.KEYBOARD_CHIN);
+        assertNotNull(chin);
+        float density = view.getResources().getDisplayMetrics().density;
+        // A finger 20dp off the thin pill, inside the 48dp target, still takes hold of it.
+        touch(view, MotionEvent.ACTION_DOWN, chin.centerX(), chin.centerY() - 20f * density);
+        assertEquals(PlaceMiniatureView.Handle.KEYBOARD_CHIN, view.draggedHandle());
+        touch(view, MotionEvent.ACTION_UP, chin.centerX(), chin.centerY() - 20f * density);
+    }
+
+    private static final float TERMUX_APP_DEFAULT_DOCK =
+        com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+            .DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
 }
