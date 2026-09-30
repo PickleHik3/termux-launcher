@@ -27,7 +27,7 @@
 > side by side. Termux is a trademark of its respective owners.
 
 <p align="center">
-  <img src="screenshots/banner.png" alt="Termux Launcher hero showing terminal-first Android features and five device screenshots" width="100%">
+  <img src="screenshots/banner.webp" alt="Termux Launcher hero showing terminal-first Android features and five device screenshots" width="100%">
 </p>
 
 **[🌐 Website & docs](https://picklehik3.github.io/termux-launcher-site/)** | [Releases & changelog](https://github.com/PickleHik3/termux-launcher/releases) | [Local AI API](docs/en/LauncherCtl_API.md) | [On-device AI](docs/en/On_Device_AI.md)
@@ -40,7 +40,7 @@ What started out as me just wanting sixel image drawing in [TEL](https://github.
 All credits go to the amazing developers and contributors of Termux, TEL, and Termux:Monet.
 
 <p align="center">
-  <img src="screenshots/demo.gif" alt="Termux Launcher walkthrough showing the command palette, Kitty graphics, split panes, media, and keyboard shortcuts" width="360">
+  <img src="screenshots/demo.webp" alt="Termux Launcher walkthrough showing the command palette, Kitty graphics, split panes, media, and keyboard shortcuts" width="360">
 </p>
 
 ## Features
