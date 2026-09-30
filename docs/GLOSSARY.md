@@ -54,6 +54,9 @@ bottom by default. It is one Surface. It comes in two styles: **Docked** (flush 
 and **Floating** (a card already rounded at rest); the stored values are still the old Default and
 Rounded. Its rows may stand under the keyboard instead of over it. Not the same as the Layout
 editor's "Hidden tray", which holds elements that are put away.
+In Docked the top and bottom chrome are two cards peeking in from the screen's edges: an edge that
+touches the screen or the strip behind a system bar draws no rim or line, so the glass under the
+status bar and the navigation pill reads as the card beside it; only the inner edge keeps one.
 _Avoid_: taskbar, nav bar, hotseat
 
 **Keyboard swipe**:

@@ -59,16 +59,18 @@ The look is `TermuxActivity.mFancierGlassLook` (null in the default mode). The d
 
 | Surface | Frost | Refraction | Rim |
 |---|---|---|---|
-| Dock | shared frame | (c) | the capsule, or square; overscanned bottom |
-| Under-pill nav strip | shared frame | (c) | square |
-| Keyboard host | shared frame | (a), built by `GlassStack.build`; `Look.DEFAULT` in the default mode | the capsule, or square with a bottom seam over the strip |
+| Dock | shared frame | (c) | the capsule; docked, only its top (the sides and the bottom are seams); overscanned bottom |
+| Under-pill nav strip | shared frame, at the keyboard's own radius and gate while it is up, the dock's otherwise | (c), its own program | none in the docked style (all four edges are seams, so no bend either); the capsule overlay keeps its square rim |
+| Keyboard host | shared frame | (a), built by `GlassStack.build`; `Look.DEFAULT` in the default mode | the capsule; docked, the sides and the bottom are seams |
 | Under-keyboard card (`UnderKeyboardBand`) | shared frame | (a), built by `GlassStack.build`; `Look.DEFAULT` in the default mode | the card's own radius |
-| Status band and window bar | shared frame, `WallpaperFrostPainter.updateTopPane`; live blur when there is no frame | (a) | one sheet in the docked style (the band's bottom and the bar's top are seams); the capsule's own radius in the floating style; none for a bar on the dock's plank, which has no frost of its own |
+| Status band and window bar | shared frame, `WallpaperFrostPainter.updateTopPane`; live blur when there is no frame | (a) | docked (the edge rule below): the band has no rim at all, and the bar only along its bottom, facing the terminal — its sides and, while it leads the top edge, its top are seams whether or not the band's own frost is up; no containing stroke on those edges either. The capsule's own radius in the floating style; none for a bar on the dock's plank, which has no frost of its own. When a sheet off the dock leads the top edge instead, the band continues that sheet (dock opacity, dock radius, frost at the dock's radius) |
 | Command palette, terminal sheet | shared frame; live blur when there is no frame | (a) | the plane's corner |
 | App drawer plane | shared frame, with the live blur kept on top of it so the terminal ghosts through; tint only in wallpaper mode with no frame | (a) | the plane's corner |
 | Terminal panes, Widgets page, Display page | shared frame | (b) | the slab's own radius; none under a corner mask |
 | Corner tabs, every place (since 2026-09-29) | shared frame, under the tab's fixed scrim; no tint or grain of the pane's | the tab's own program, as (a) | the tab's rect turning its one free corner; the edge it slid out of and the frame side are seams (`CornerTabGeometry.refractionSeams`) |
-| Off-dock plank, and the A–Z bar's capsule off the dock (since 2026-09-29) | shared frame, `WallpaperFrostPainter.applyOffDockSheet`, at the dock's radius; live blur only when there is no frame | (a) | the outline's own clamped radius on all four sides |
+| Off-dock plank, and the A–Z bar's capsule off the dock (since 2026-09-29) | shared frame, `WallpaperFrostPainter.applyOffDockSheet`, at the dock's radius; live blur only when there is no frame | (a) | the outline's own clamped radius on all four sides; docked, sides flush with the screen are seams, and the sheet leading the top edge has its top as a seam, square top corners and no air above it, running on into the status band |
+
+**The edge rule** (`chrome/ChromeEdgeRule`, since 2026-09-30). Docked is two cards peeking in from the top and the bottom of the screen: every edge of a docked surface that touches the screen or runs on into a system-bar strip is a refraction seam and draws no containing stroke; only the inner edge facing the terminal keeps the line it had. The capsule is unchanged. Every rim, stroke and seam decision above comes from that class.
 
 The dock's frame, tint, grain, rim and refraction, the keyboard capsule's and the under-keyboard card's are one stack, `chrome/GlassStack` (a plain `Spec` in, the layered drawable out), so a value that differs between them is a value in the spec and nowhere else. The rim is `GlassSurfaceFactory.rim`, written once.
 
