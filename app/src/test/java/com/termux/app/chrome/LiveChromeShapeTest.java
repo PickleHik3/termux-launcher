@@ -181,4 +181,24 @@ public class LiveChromeShapeTest {
         assertEquals(28f * 3f, LiveChromeShape.screenRadiusPx(0f, 3f), D);
         assertEquals(40f, LiveChromeShape.screenRadiusPx(40f, 3f), D);
     }
+
+    @Test
+    public void dockedOpeningKeepsNoAirFromAnythingAroundIt() {
+        for (PlaceLayout layout : new PlaceLayout[] {bottomStack(), sideBars()}) {
+            ChromeShape shape = shape(layout, LayoutStyle.DOCKED);
+            for (Edge edge : new Edge[] {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT})
+                assertEquals(edge.toString(), 0f,
+                    LiveChromeShape.openingInsetPx(shape, edge, 400, 800), D);
+        }
+    }
+
+    @Test
+    public void floatingOpeningKeepsMarginFromEveryBarAndScreenEdge() {
+        for (PlaceLayout layout : new PlaceLayout[] {bottomStack(), sideBars()}) {
+            ChromeShape shape = shape(layout, LayoutStyle.FLOATING);
+            for (Edge edge : new Edge[] {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT})
+                assertEquals(edge.toString(), MARGIN,
+                    LiveChromeShape.openingInsetPx(shape, edge, 400, 800), D);
+        }
+    }
 }

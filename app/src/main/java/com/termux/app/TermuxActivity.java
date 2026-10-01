@@ -2854,8 +2854,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * width plus a small gap so terminal content never renders under the line, and is clipped to
      * the same rounded outline so its corners don't poke past a rounded border.
      */
-    /** Gap the terminal border keeps from the status bar above it and the dock below it, in dp. */
-    private static final int TERMINAL_BORDER_VERTICAL_INSET_DP = 5;
     /**
      * Ceiling on the radius Floating lends the terminal's edge. The dock capsule is a pill; the
      * terminal it floats above is a tall slab, and a pill's radius on a slab reads as a lozenge, so
@@ -2936,12 +2934,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int terminalFrameInsetPx(boolean vertical, boolean framed) {
         // Docked the pane is the opening: no margin of its own, the bars' inner edges and the
-        // screen's edge are its border.
+        // screen's edge are its border. Floating the model's opening keeps Margin from every bar
+        // and screen edge, and the pane card stands at exactly that.
         if (!isRoundedDockStyle())
             return 0;
-        return vertical
-            ? (framed ? Math.round(dpToPx(TERMINAL_BORDER_VERTICAL_INSET_DP)) : 0)
-            : getDockLayout().horizontalInsetPx;
+        return terminalFrameInsetPx(vertical);
     }
 
     /**
@@ -2966,9 +2963,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The same two numbers the frame is laid out with, for a surface that has to meet its edge. */
     private int terminalFrameInsetPx(boolean vertical) {
-        boolean framed = mPreferences != null
-            && (mPreferences.isTerminalBorderEnabled() || isTerminalPaneGlassActive());
-        return terminalFrameInsetPx(vertical, framed);
+        if (!isRoundedDockStyle()) return 0;
+        com.termux.app.place.ChromeShape shape = chromeShape();
+        View root = findViewById(R.id.activity_termux_root_view);
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        float width = root != null && root.getWidth() > 0 ? root.getWidth() : metrics.widthPixels;
+        float height = root != null && root.getHeight() > 0 ? root.getHeight() : metrics.heightPixels;
+        return Math.round(com.termux.app.chrome.LiveChromeShape.openingInsetPx(shape,
+            vertical ? PlaceLayout.Edge.TOP : PlaceLayout.Edge.LEFT, width, height));
     }
 
     private void applyTerminalBorderAppearance() {
