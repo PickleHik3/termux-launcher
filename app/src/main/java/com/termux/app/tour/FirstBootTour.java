@@ -147,12 +147,6 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @Nullable private HomeHost mHomeHost;
     @Nullable private KeyRowHost mKeyRowHost;
     @Nullable private UsageModeHost mUsageModeHost;
-    /**
-     * Whether the row the user would keep has no keyboard key on it, read when the run is built.
-     * The keyboard lesson points at that key, so a "Keep mine" on such a row takes the lesson out
-     * of the rest of the run.
-     */
-    private boolean mOwnKeyRowLacksKeyboardKey;
     /** A run that was asked for while help was up, held until help goes away. */
     @Nullable private Runnable mStartWaitingForHelp;
     /** Whether the pinned-apps sheet is in front of the user, which only it can say. */
@@ -314,28 +308,27 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     }
 
     /**
-     * The run, built for the phone it is about to run on. Two of its sentences depend on what the
-     * phone is set to right now — the way back from an app, and which way round the keyboard
-     * lesson goes — and both were read from a launcher that had not been asked yet when the tour
-     * was first wired up.
+     * The run, built for the phone it is about to run on. Some of its sentences depend on what the
+     * phone is set to right now — the way back from an app, and which way round the keyboard and
+     * the status bar lessons go — and all were read from a launcher that had not been asked yet
+     * when the tour was first wired up.
      */
     private void rebuildRunForThisPhone() {
         String ownRow = mKeyRowHost == null ? null : mKeyRowHost.ownKeyRow();
         boolean hasOwnRow = ExtraKeysDefaultOffer.isCustomRow(ownRow);
         boolean answered = mKeyRowHost != null && mKeyRowHost.keyRowAnswered();
-        mOwnKeyRowLacksKeyboardKey =
-            hasOwnRow && !ExtraKeysDefaultOffer.hasKeyboardKey(ownRow);
         mController.setSteps(TourRun.steps(new TourRun.RunContext(
             mHomeHost != null && mHomeHost.isLauncherHomeApp(), mSignals.isKeyboardShown(),
             hasOwnRow && !answered,
-            mUsageModeHost == null || mUsageModeHost.isDisplayOffered())));
-        // Someone who was asked in an earlier run and kept a row with no keyboard key on it still
-        // has nothing for the keyboard lesson to point at.
-        if (answered && mOwnKeyRowLacksKeyboardKey) mController.dropStep(TourRun.KEYBOARD);
-        // A terminal-only install has no home screen to be the phone's; the question is back
-        // the moment the usage card is answered with one.
-        if (mUsageModeHost != null && mUsageModeHost.isTerminalOnly())
+            mUsageModeHost == null || mUsageModeHost.isDisplayOffered(),
+            mSignals.isStatusBarExpanded())));
+        // A terminal-only install has one place, so there is nothing to drag the border towards,
+        // and no home screen to be the phone's; both are back the moment the usage card is
+        // answered with a Home.
+        if (mUsageModeHost != null && mUsageModeHost.isTerminalOnly()) {
+            mController.dropStep(TourRun.BORDER_DRAG);
             mController.dropStep(TourRun.HOME_CHOICE);
+        }
     }
 
     /**
@@ -618,8 +611,8 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
 
     /**
      * The usage card's answer: applied by the launcher, which rebuilds its chrome around it and
-     * picks the run back up on its stored card. The terminal alone takes the home-screen question
-     * out of the rest of the run; either other answer puts it back.
+     * picks the run back up on its stored card. The terminal alone takes the border drag and the
+     * home-screen question out of the rest of the run; either other answer puts them back.
      */
     @Override
     public void onTourUsageModeChoice(TourController.Choice choice) {
@@ -631,8 +624,13 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             case USE_DISPLAY: mode = com.termux.app.launcher.LauncherUseCaseMode.MODE_DISPLAY; break;
             default: return;
         }
-        if (choice == TourController.Choice.USE_TERMINAL) mController.dropStep(TourRun.HOME_CHOICE);
-        else mController.keepStep(TourRun.HOME_CHOICE);
+        if (choice == TourController.Choice.USE_TERMINAL) {
+            mController.dropStep(TourRun.BORDER_DRAG);
+            mController.dropStep(TourRun.HOME_CHOICE);
+        } else {
+            mController.keepStep(TourRun.BORDER_DRAG);
+            mController.keepStep(TourRun.HOME_CHOICE);
+        }
         if (mUsageModeHost != null) mUsageModeHost.applyUsageMode(mode);
     }
 
@@ -651,8 +649,6 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         }
         if (choice != TourController.Choice.KEEP_KEY_ROW) return;
         mKeyRowHost.keepOwnKeyRow();
-        // The keyboard lesson is the key they have just decided not to have.
-        if (mOwnKeyRowLacksKeyboardKey) mController.dropStep(TourRun.KEYBOARD);
     }
 
     @Override

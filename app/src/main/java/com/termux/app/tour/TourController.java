@@ -26,7 +26,15 @@ import java.util.List;
 public final class TourController {
 
     /** Bumped when the run changes enough that a run in progress has to be mapped onto the new one. */
-    public static final int RUN_VERSION = 5;
+    public static final int RUN_VERSION = 6;
+
+    /**
+     * The run before the border lessons and before the usage question moved to the front. Every
+     * card of it is a card of this one under the same id, but the usage question, the keyboard
+     * lesson and the three after it all moved, so a run in progress from it is mapped by name; its
+     * keyboard card (the tap on the keyboard key) is this run's keyboard swipe.
+     */
+    public static final int VERSION_BEFORE_THE_BORDER_LESSONS = 5;
 
     /**
      * The run before the usage card. Every card of it is a card of this one under the same id;
@@ -61,6 +69,12 @@ public final class TourController {
     private static final List<String> VERSION_THREE_CARDS = Collections.unmodifiableList(
         Arrays.asList(TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEYBOARD,
             TourRun.FIND_ACTION, TourRun.HOME_CHOICE, TourRun.CLOSING));
+
+    /** The nine cards of the run before the border lessons, in the order it showed them. */
+    private static final List<String> VERSION_FIVE_CARDS = Collections.unmodifiableList(
+        Arrays.asList(TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEY_ROW,
+            TourRun.KEYBOARD, TourRun.FIND_ACTION, TourRun.USAGE_MODE, TourRun.HOME_CHOICE,
+            TourRun.CLOSING));
 
     /** The eight cards of the run before the usage card, in the order it showed them. */
     private static final List<String> VERSION_FOUR_CARDS = Collections.unmodifiableList(
@@ -146,6 +160,16 @@ public final class TourController {
             default:
                 return null;
         }
+    }
+
+    /**
+     * The card {@code stepIndex} meant in the run before the border lessons, or null when that run
+     * had no such card. Mapped by name: the usage question moved to the front and the lessons
+     * after the first one were rearranged around the three new ones.
+     */
+    public static String versionFiveCardFor(int stepIndex) {
+        return stepIndex >= 0 && stepIndex < VERSION_FIVE_CARDS.size()
+            ? VERSION_FIVE_CARDS.get(stepIndex) : null;
     }
 
     /**
@@ -447,7 +471,7 @@ public final class TourController {
     public boolean startPractice(String stepId) {
         if (mRunning && !mPracticing) return false;
         int index = indexOf(stepId);
-        if (index < 0) return false;
+        if (index < 0 || mDropped.contains(stepId)) return false;
         mPracticing = true;
         mAwaitingResumeChoice = false;
         mShowingWelcome = false;
@@ -483,6 +507,12 @@ public final class TourController {
     }
 
     private boolean resumeOlderRun(int storedStepIndex) {
+        if (mPrefs.getTourRunVersion() >= VERSION_BEFORE_THE_BORDER_LESSONS) {
+            // The run the border lessons were added to: every card is still here under its name,
+            // though the numbers moved, and its keyboard card is this run's keyboard swipe.
+            int index = indexOf(versionFiveCardFor(storedStepIndex));
+            return index >= 0 && resumeAt(index, mPrefs.getTourStepStage());
+        }
         if (mPrefs.getTourRunVersion() >= VERSION_BEFORE_THE_USAGE_CARD) {
             // The run the usage card was added to: every card is still here under its name, and
             // the two after the new one are one number along.
@@ -624,9 +654,10 @@ public final class TourController {
 
     /**
      * The End tour button: the lessons are not wanted and the run counts as skipped, but the way
-     * out still passes the usage question, the home-screen question and the closing card, so
-     * leaving early never costs the cards an experienced user came for. A run with no choice
-     * card left ahead ends.
+     * out still passes the questions that are left ahead — the key-row question and the
+     * home-screen one — and the closing card, so leaving early never costs the cards an
+     * experienced user came for. The usage question is asked first, so it is behind every lesson
+     * by then. A run with neither left ahead ends.
      */
     public void endTour() {
         if (!mRunning || mShowingWelcome) return;
@@ -635,10 +666,11 @@ public final class TourController {
             return;
         }
         mPrefs.setTourSkipped(true);
-        int choice = indexOf(TourRun.USAGE_MODE);
-        if (choice < 0) choice = indexOf(TourRun.HOME_CHOICE);
-        int target = choice >= 0 ? shownFrom(choice) : mSteps.size();
-        if (target > mStepIndex && target < mSteps.size()) {
+        int target = shownFrom(mStepIndex + 1);
+        while (target < mSteps.size() && !mSteps.get(target).isChoiceCard()
+                && !mSteps.get(target).isClosingCard())
+            target = shownFrom(target + 1);
+        if (target < mSteps.size()) {
             moveTo(target);
             return;
         }

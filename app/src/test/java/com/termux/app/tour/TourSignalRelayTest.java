@@ -529,4 +529,50 @@ public class TourSignalRelayTest {
         relay.onPinEditorClosed(false, 0);
         assertTrue(signals.isEmpty());
     }
+
+    // The three border lessons: the border drag, the keyboard swipe and the status swipe.
+
+    @Test
+    public void theBorderDragIsAChangeOfPlaceAndAReturnToTheOneTheRunIsTaughtOn() {
+        relay.setHomePlace("TERMINAL");
+        relay.onPlaceSettled("TERMINAL");
+        assertTrue(relay.isOnHomePlace());
+        // Any other place is a change, whichever border the user dragged towards.
+        relay.onPlaceSettled("WIDGETS");
+        assertFalse(relay.isOnHomePlace());
+        relay.onPlaceSettled("DISPLAY");
+        relay.onPlaceSettled("TERMINAL");
+        assertTrue(relay.isOnHomePlace());
+        assertEquals(java.util.Arrays.asList(TourSignals.PLACE_CHANGED, TourSignals.PLACE_CHANGED,
+            TourSignals.PLACE_RETURNED), signals);
+    }
+
+    @Test
+    public void theStatusBarIsReadAsCompactUntilItHasSaidOtherwise() {
+        assertFalse(relay.isStatusBarExpanded());
+        relay.onStatusBarCollapsedSettled(true);
+        assertFalse(relay.isStatusBarExpanded());
+        relay.onStatusBarCollapsedSettled(false);
+        assertTrue(relay.isStatusBarExpanded());
+        relay.onStatusBarCollapsedSettled(true);
+        assertFalse(relay.isStatusBarExpanded());
+    }
+
+    @Test
+    public void theStatusSwipeLessonSeesTheFoldBothWays() {
+        relay.onStatusBarCollapsedSettled(true);
+        relay.onStatusBarCollapsedSettled(false);
+        relay.onStatusBarCollapsedSettled(true);
+        assertEquals(java.util.Arrays.asList(TourSignals.STATUS_BAR_EXPANDED,
+            TourSignals.STATUS_BAR_COLLAPSED), signals);
+    }
+
+    @Test
+    public void theKeyboardSwipeLessonSeesTheKeyboardGoAndComeBack() {
+        relay.onKeyboardShownSettled(true);
+        relay.onKeyboardShownSettled(false);
+        relay.onKeyboardShownSettled(true);
+        assertEquals(java.util.Arrays.asList(TourSignals.KEYBOARD_HIDDEN,
+            TourSignals.KEYBOARD_SHOWN), signals);
+    }
 }

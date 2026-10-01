@@ -2521,10 +2521,6 @@
     <string name="tour_card_find_apps_open">Tap an app to open it.</string>
     <string name="tour_card_find_apps_back_home">Press Home to come back.</string>
     <string name="tour_card_find_apps_back_switch">Switch back to Termux to continue.</string>
-    <string name="tour_card_keyboard_hide">Tap the keyboard button to hide the keyboard.</string>
-    <string name="tour_card_keyboard_show_again">Tap it again to bring the keyboard back.</string>
-    <string name="tour_card_keyboard_show">Tap the keyboard button to show the keyboard.</string>
-    <string name="tour_card_keyboard_hide_again">Tap it again to hide the keyboard.</string>
     <string name="tour_card_border_hold">Hold the page\'s border until it sinks, then drag sideways to the next place.</string>
     <string name="tour_card_border_back">Now drag back to the terminal.</string>
     <string name="tour_card_kswipe_open">Swipe up from the bottom border to open the keyboard.</string>
@@ -2556,8 +2552,6 @@
     <string name="tour_closing_shortcuts_copy">Tap Ctrl, then Alt. While both are latched, a strip in the top-right corner shows what every other key does.</string>
     <string name="tour_closing_customize_heading">Make it yours</string>
     <string name="tour_closing_customize_copy">Hold a page\'s corner: Appearance picks a Look, Layout moves the bars, Wallpaper picks a picture and ? opens help. A split pane\'s corner holds Close, Move and Maximise.</string>
-    <string name="tour_closing_pictures_heading">Pictures</string>
-    <string name="tour_closing_pictures_copy">Programs can draw pictures straight into a pane; if an older Neovim will not, Help has the one line it needs.</string>
     <string name="tour_closing_minimal_heading">Minimal mode</string>
     <string name="tour_closing_minimal_copy">The four-corners button on a corner tab gives every place the whole screen.</string>
     <string name="tour_closing_voice_heading">Speak instead of typing</string>
