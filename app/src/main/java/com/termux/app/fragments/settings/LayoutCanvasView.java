@@ -8,12 +8,13 @@ import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
-import android.provider.Settings;
+import android.os.SystemClock;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewParent;
 
 import androidx.annotation.AttrRes;
@@ -24,12 +25,20 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
-import androidx.core.graphics.PathParser;
 import androidx.core.graphics.drawable.DrawableCompat;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.ReducedMotion;
 import com.termux.app.Spring;
+import com.termux.app.place.ChromeShape;
+import com.termux.app.place.ChromeShape.Box;
+import com.termux.app.place.ChromeShape.Card;
+import com.termux.app.place.ChromeShape.Corners;
+import com.termux.app.place.ChromeShape.Pane;
+import com.termux.app.place.ChromeShape.Piece;
+import com.termux.app.place.ChromeShape.PieceId;
+import com.termux.app.place.ChromeShapeModel;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
@@ -38,11 +47,11 @@ import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -53,18 +62,25 @@ import java.util.Map;
  * height scale, the chin in dp), times the one scale that fits the screen's width to the canvas,
  * so what the canvas shows is the arrangement at its real proportions, not a sketch.
  *
- * <p>The artwork is the layout element pack's (status bar collapsed or expanded, terminal, dock
- * floating or docked, A-Z strip, extra-keys toolbar, keyboard docked, floating or split), ported
- * as drawing rules: each element paints its content inside the bounds the layout gave it, glyphs
- * keep their size, and nothing is stretched. Colours come from the live Material scheme.
+ * <p>Every shape on it is the shape model's ({@link ChromeShapeModel}, ADR 0007), asked of the
+ * arrangement, the Style and the user's Corners and Margin scaled to the canvas: the fill, the
+ * selection outline, the lifted copy and its dashed placeholder are read off the model's pieces and
+ * cards, and nothing here decides a corner. Under Docked the pieces are one frame, composed under
+ * one outer clip with the pane's opening cut out of it; under Floating they are cards with
+ * Margin's air between. Flipping Style morphs one shape into the other ({@link LayoutCanvasMorph}).
  *
- * <p>Every band with a placement carries a six-dot grip at its trailing end, centred across it (a
- * column's at its top); a touch-down on one lifts that bar at once, and for the rest of the
- * gesture the view keeps the preference list from stealing the touch. While a bar is lifted every
- * edge it may legally stand on is outlined, the tray under the canvas offers to put it away, and
- * a release over either reports the new placement. A release anywhere else springs the bar back
- * and reports nothing. {@link MiniatureDragPolicy} owns which targets exist and which one the
- * finger is over. A tap selects an element: one outline, and the handles that resize it.
+ * <p>The artwork is the layout assets pack's ({@link LayoutCanvasArtwork}): status bar collapsed or
+ * expanded, terminal, dock circles, A-Z letters, extra-keys glyphs, keyboard docked, floating or
+ * split. Each element paints its content inside the bounds the model gave it, glyphs keep their
+ * size, and nothing is stretched. Colours come from the live Material scheme.
+ *
+ * <p>A bar is lifted by pressing it anywhere and moving past the touch slop; a tap selects it.
+ * While a bar is lifted every edge it may legally stand on is outlined, the tray under the canvas
+ * offers to put it away, and a release over either reports the new placement. The lifted copy keeps
+ * its shape until it hovers a target, then takes the shape it would have there, which is the
+ * shape of the dashed placeholder. A release anywhere else springs the bar back and reports
+ * nothing. {@link MiniatureDragPolicy} owns which targets exist and which one the finger is over.
+ * A selected element wears one outline, and the handle that resizes it.
  */
 public final class LayoutCanvasView extends View {
 
@@ -77,7 +93,7 @@ public final class LayoutCanvasView extends View {
     /**
      * A resize handle on the selected element (spec §3.5): the dock's inner edge for its height,
      * the keyboard's top edge for its height and its bottom edge for the chin under the last key
-     * row, and on Home a corner handle for the widget grid's cells. Each is one grip drawn on the
+     * row, and on Home a corner handle for the widget grid's cells. Each is one pill drawn on the
      * edge it moves, with the platform's 48dp target around it.
      */
     public enum Handle { DOCK_HEIGHT, KEYBOARD_HEIGHT, KEYBOARD_CHIN, WIDGET_GRID }
@@ -144,6 +160,7 @@ public final class LayoutCanvasView extends View {
         }
     }
 
+
     /** Legend order, top to bottom: the way the rows stack on a default portrait screen. */
     private static final Block[] LEGEND_ORDER = {
         Block.STATUS_BAR, Block.CANVAS, Block.APPS_ROW, Block.ALPHABETS_ROW, Block.EXTRA_KEYS,
@@ -153,35 +170,10 @@ public final class LayoutCanvasView extends View {
     private static final Block[] BARS = {
         Block.STATUS_BAR, Block.APPS_ROW, Block.ALPHABETS_ROW, Block.EXTRA_KEYS};
 
-    /** The order the edges claim their strips in; see {@link #computeBlocks}. */
-    private static final Edge[] CLAIM_ORDER = {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT};
-
     /** Portrait: narrow and tall; landscape: wide and short — a phone silhouette either way. */
     private static final float PORTRAIT_ASPECT = 9f / 19.5f;
     private static final float LANDSCAPE_ASPECT = 19.5f / 9f;
     private static final float DEFAULT_HEIGHT_DP = 188f;
-
-    /** The A-Z strip's sample letters, with the one the strip is on lit. */
-    private static final String[] ALPHABETS_SAMPLE = {"A", "D", "G", "J", "M", "P", "S", "V", "Z"};
-    private static final int ALPHABETS_LIT_INDEX = 4;
-    /** The dock's seven simplified app symbols; the ones lit wear the accent or the secondary. */
-    private static final String[] DOCK_GLYPHS =
-        {"phone", "chat", "globe", "terminal", "play", "monitor", "grid"};
-    /** The toolbar's seven glyphs; the terminal's (index 3) is the one highlighted. */
-    private static final String[] TOOLBAR_GLYPHS =
-        {"keyboard", "mouse", "home", "terminal", "monitor", "grid", "list"};
-    private static final int TOOLBAR_LIT_INDEX = 3;
-    /** The element pack's design heights, in its own units (one unit is about one dp). */
-    private static final float PACK_STATUS_COMPACT_H = 40f;
-    private static final float PACK_STATUS_EXPANDED_H = 96f;
-    private static final float PACK_DOCK_H = 64f;
-    private static final float PACK_AZ_H = 28f;
-    private static final float PACK_TOOLBAR_H = 52f;
-    /** The pack's keyboard: side margin, top margin (floating is taller for its grabber). */
-    private static final float PACK_KEY_MARGIN = 12f;
-    private static final float PACK_KEY_TOP = 12f;
-    private static final float PACK_KEY_TOP_FLOATING = 20f;
-    private static final float PACK_KEY_GAP = 4f;
     /** The shape of a real phone, which the canvas stands for: long side over short. */
     private static final float SCREEN_LONG_OVER_SHORT = 19.5f / 9f;
 
@@ -201,66 +193,30 @@ public final class LayoutCanvasView extends View {
     /** The phone's own edge: a rounded card with a hairline rim. */
     private static final float FRAME_RADIUS_U = 24f;
     private static final float FRAME_STROKE_U = 1.5f;
-    /** What the phone keeps between its rim and the elements: sides, top, and the chin. */
-    private static final float FRAME_INSET_SIDE_U = 12f;
-    private static final float FRAME_INSET_TOP_U = 8f;
-    private static final float FRAME_INSET_BOTTOM_U = 16f;
-    /** Half the gap between two elements, taken off every block on every side. */
-    private static final float CARD_PAD_U = 3f;
-    /**
-     * The one corner every element block wears, in real dp scaled by the canvas like the other
-     * metrics: bands, keyboard, pane, grid, drop outlines and the selection all share it. Small, so
-     * nothing reads as a pill; a block thinner than twice this stops at a half-capsule of its own.
-     */
-    private static final float CANVAS_CORNER_DP = 6f;
-    /** A key cap's corner, in the keyboard pack's dp: proportionally under the block's own. */
-    private static final float KEY_CORNER_DP = 4f;
-    /**
-     * The dock's corner until the editor says otherwise: the follow-the-style radius a Floating
-     * dock ships with. It only says floating or docked now (the dock band's height); the corner
-     * drawn is {@link #CANVAS_CORNER_DP} for every block.
-     */
-    public static final float DEFAULT_DOCK_RADIUS_DP =
-        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
-            .resolveAutoCornerRadiusDp(com.termux.shared.termux.settings.preferences
-                .TermuxAppSharedPreferences.SurfaceSlot.DOCK, true);
-    /** The short side a phone is taken to have when the view has no screen to ask: 411dp. */
-    private static final float REFERENCE_SHORT_SIDE_DP = 411f;
-    /** The hairline every resting card wears, and the heavier one a lifted card does. */
+    /** The hairline every Floating card wears, and the heavier one a lifted card does. */
     private static final float CARD_STROKE_U = 1f;
     private static final float LIFTED_STROKE_U = 1.5f;
     /** How far the lifted card's solid underlay sits below it: the tonal raise. */
     private static final float LIFT_OFFSET_U = 4f;
     /**
-     * The six-dot grip: two columns of three, from its centre. Big enough to find before a finger
-     * goes looking for it — the dots were 1.6 units and read as dust on a thin band.
+     * A widget tile's and the display window's corner, in real dp scaled by the canvas like the
+     * other metrics. These are content on the pane, not chrome: the chrome's corners are the shape
+     * model's, from the user's Corners.
      */
-    private static final float GRIP_DOT_RADIUS_U = 2.2f;
-    private static final float GRIP_PITCH_X_U = 6.5f;
-    private static final float GRIP_PITCH_Y_U = 5.5f;
-    /** How far apart two dots of a squeezed column stay, in dot radii, so they never merge. */
-    private static final float GRIP_MIN_PITCH_RADII = 2.4f;
-    /** The grip's centre from the card's trailing edge; across a row it is always the middle. */
-    private static final float GRIP_INSET_END_U = 13f;
-    /** A column's grip: its centre down from the column's top. */
-    private static final float GRIP_INSET_TOP_U = 16f;
-    /** What a band's own content keeps clear of the grip at its trailing end. */
-    private static final float GRIP_CLEARANCE_U = 22f;
+    private static final float TILE_CORNER_DP = 6f;
+    /** The corner a drop-target outline and the tray's drop zone wear. */
+    private static final float SLOT_CORNER_DP = 4f;
+    /** The short side a phone is taken to have when the view has no screen to ask: 411dp. */
+    private static final float REFERENCE_SHORT_SIDE_DP = 411f;
 
     // ---- The theme's roles, as the design maps them ---------------------------------------------
     /** Outlines and text lines: the on-surface-variant at the design's 45%. */
     private static final int DIM_ALPHA = 115;
-    /** A resting grip: the on-surface-variant at 85%, so it reads on the thinnest band. */
-    private static final int GRIP_ALPHA = 217;
-    /** Text and glyphs that have to read at the real size: the same ink, less faded. */
-    private static final int TEXT_ALPHA = 205;
     /** The tonal layer a lifted card or an active tray wears: the accent at 9%. */
     private static final int ACCENT_WASH_ALPHA = 23;
     /** A widget tile: the container tone laid thinly over the pane. */
     private static final int TILE_ALPHA = 140;
-    /** The keyboard's tinted glass over its own card. */
-    private static final int KEYBOARD_TINT_ALPHA = 153;
-    /** The placeholder a lifted bar leaves where it stood. */
+    /** The dashed placeholder a lifted bar leaves where it would land. */
     private static final int PLACEHOLDER_ALPHA = 60;
     private static final int SLOT_HOVER_ALPHA = 60;
     /** The gaps of the hovered edge that the finger is not on; enough to read, not to compete. */
@@ -277,8 +233,8 @@ public final class LayoutCanvasView extends View {
     private static final float TRAY_STROKE_DP = 1.25f;
     private static final float TRAY_DASH_DP = 4f;
     private static final float TRAY_TEXT_SP = 11f;
-    /** Half the platform's minimum target: what a grip is hit-tested with around its centre. */
-    private static final float GRIP_TOUCH_HALF_DP = 24f;
+    /** Half the platform's minimum target: what a handle is hit-tested with around its centre. */
+    private static final float HANDLE_TOUCH_HALF_DP = 24f;
     /** The one outline a selected element wears: 2dp of the theme's primary. */
     private static final float SELECTION_STROKE_DP = 2f;
     /** A resize handle's pill: its length along the edge it moves and its thickness across it. */
@@ -291,15 +247,14 @@ public final class LayoutCanvasView extends View {
     private static final float READOUT_GAP_DP = 10f;
     /** The most of a keyboard card the chin may take, so a huge chin never eats the keys. */
     private static final float CHIN_MAX_SHARE = 0.5f;
-    /**
-     * How far a finger has to move off the keyboard before it is lifted rather than tapped. The
-     * keyboard has no grip — its card is the thing held — so a lift is told from a tap by travel.
-     */
-    private static final float KEYBOARD_LIFT_SLOP_DP = 8f;
+    /** The most of the frame's height the keyboard's block may take. */
+    private static final float KEYBOARD_MAX_SHARE = 0.5f;
     private static final float GHOST_SCALE = 1.06f;
     /** The dock plank's press constants: a lift and a spring-back are the same kind of motion. */
     private static final float SPRING_STIFFNESS = 320f;
     private static final float SPRING_DAMPING = 22f;
+    /** The lifted copy's change of shape over a target: critically damped, so it never overshoots. */
+    private static final float MORPH_DAMPING = 2f * (float) Math.sqrt(SPRING_STIFFNESS);
 
     @Nullable private PlaceLayout mLayout;
     @NonNull private PlaceOrientation mOrientation = PlaceOrientation.PORTRAIT;
@@ -316,35 +271,60 @@ public final class LayoutCanvasView extends View {
     private final Paint mLinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mTextPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final TextPaint mLegendPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    /** The pack's artwork, and the theme's roles it is painted in; the roles are read every draw. */
+    private final LayoutCanvasArtwork mArtwork = new LayoutCanvasArtwork();
+    private final LayoutCanvasArtwork.Palette mPalette = new LayoutCanvasArtwork.Palette();
     private final RectF mFrameRect = new RectF();
-    /** The phone inside its rim and its chin: what the elements are laid out in. */
-    private final RectF mContentRect = new RectF();
     /** One design unit on this frame, in pixels. */
     private float mUnit = 1f;
     private final Path mClipPath = new Path();
-    /** The floating keyboard's card, or a split keyboard's halves and the whole they cut. */
-    private final RectF mKeyboardPartA = new RectF();
-    private final RectF mKeyboardPartB = new RectF();
-    private final RectF mKeyboardWhole = new RectF();
+    /** Scratch paths: the shape being filled, clipped or stroked, and the lifted copy's raise. */
+    private final Path mShapePath = new Path();
+    private final Path mRaisePath = new Path();
     /** Reused scratch rects for whatever a draw call is computing right now; never read across
      *  two different shapes, only within one draw-then-move-on sequence. */
     private final RectF mScratchRectA = new RectF();
     private final RectF mScratchRectB = new RectF();
     private final RectF mScratchRectC = new RectF();
-    /** The hit rectangle {@link #gripTouchInto} builds for whichever grip is being tested. */
-    private final RectF mScratchGripTouch = new RectF();
     private final Map<Block, RectF> mBlockRects = new EnumMap<>(Block.class);
     private final Map<Block, RectF> mLegendRects = new EnumMap<>(Block.class);
-    /** The keyboard's block along the bottom while the place shows it; empty otherwise. */
+    /**
+     * The keyboard's block along the bottom while the place shows it; empty otherwise. Docked it
+     * is the keyboard's rect, split the one the two halves cut, floating the card over the pane.
+     */
     private final RectF mKeyboardRect = new RectF();
-    private RectF mRemaining = new RectF();
     private boolean mGridCollapsed;
     private float mLegendLabelWidth;
 
+    // ---- The shape: what the model said, and the Style it was asked under ----------------------
+    /** The Style of the whole chrome, and Corners and Margin in dp as Floating spends them. */
+    @NonNull private LayoutStyle mStyle = LayoutStyle.DOCKED;
+    private float mCornersDp = TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS;
+    private float mMarginDp = TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP;
+    /** What the model was asked and what it said, in the frame's own coordinates; null before a layout. */
+    @Nullable private ChromeShapeModel.Input mInput;
+    @Nullable private ChromeShape mShape;
+    /** The keyboard's pieces: one when docked or floating, two halves when split. */
+    private final List<Piece> mKeyboardPieces = new ArrayList<>(2);
+    /** Whether the keyboard takes a band of the bottom stack, as docked and split do. */
+    private boolean mKeyboardInStack;
+    /** The shape the canvas stood in before Style flipped, while the change is under way. */
+    @Nullable private ChromeShape mMorphFrom;
+    private long mMorphStartMs;
+    /** A progress a test holds the change at; negative follows the clock. */
+    private float mMorphHeld = -1f;
+    /** How many pinned apps and extra keys the bars draw; negative draws the pack's seven. */
+    private int mPinnedAppCount = -1;
+    private int mExtraKeyCount = -1;
+
     // ---- The drag: one gesture's worth of state, all of it cleared when it ends ----------------
     @Nullable private OnBarDroppedListener mDropListener;
-    /** The grip a finger is on, and the bar it lifted; null while nothing is lifted. */
+    /** The bar a finger has lifted; null while nothing is lifted. */
     @Nullable private Block mDraggedBar;
+    /** The bar a finger is down on that has not yet travelled far enough to lift it, or null. */
+    @Nullable private Block mPressedBar;
+    /** How far a finger has to travel before the bar under it is lifted rather than tapped. */
+    private final float mTouchSlop;
     /** Where the finger went down, so the copy travels with it from where the bar stood. */
     private float mDownX;
     private float mDownY;
@@ -353,15 +333,19 @@ public final class LayoutCanvasView extends View {
     /** Where the lifted copy is drawn this frame; its own rect, since the card drawing scribbles
      *  on the shared scratch rects. */
     private final RectF mGhostRect = new RectF();
-    private final RectF mGhostGripRect = new RectF();
     private final List<MiniatureDragPolicy.Slot> mSlots = new ArrayList<>();
     @Nullable private MiniatureDragPolicy.Slot mHoverSlot;
+    /** The shape the hovered target would give the lifted bar, which the placeholder wears too. */
+    @Nullable private Piece mDropShape;
+    @Nullable private MiniatureDragPolicy.Slot mDropShapeFor;
+    @Nullable private Edge mDropEdge;
     private final RectF mTrayRect = new RectF();
-    private final Map<Block, RectF> mGripRects = new EnumMap<>(Block.class);
     /** The lifted copy's offset from where it started, sprung back to zero on a release. */
     private final Spring mGhostX = new Spring(0f, SPRING_STIFFNESS, SPRING_DAMPING);
     private final Spring mGhostY = new Spring(0f, SPRING_STIFFNESS, SPRING_DAMPING);
     private final Spring mGhostScale = new Spring(1f, SPRING_STIFFNESS, SPRING_DAMPING);
+    /** How far the lifted copy has changed from its own shape to the hovered target's: 0 to 1. */
+    private final Spring mGhostMorph = new Spring(0f, SPRING_STIFFNESS, MORPH_DAMPING);
     private boolean mSpringingBack;
     private long mLastFrameNanos;
     private final Runnable mMotionTick = this::advanceMotion;
@@ -383,8 +367,6 @@ public final class LayoutCanvasView extends View {
     private int mHandleLastRows;
     /** The readout the editor gave the held handle, drawn beside it; null when there is none. */
     @Nullable private String mReadout;
-    /** A finger down on the keyboard's card that has not yet travelled far enough to lift it. */
-    private boolean mKeyboardPressed;
     /**
      * The three sizes the canvas draws with. They are not in {@link PlaceLayout} — the store keeps
      * them apart so a dragging finger does not retire the cached arrangement — so the editor hands
@@ -393,8 +375,6 @@ public final class LayoutCanvasView extends View {
     private float mDockScale = TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
     private float mKeyboardScale = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE;
     private int mKeyboardChinDp = TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING;
-    /** The dock's corner radius in dp: zero is the square docked dock, above it the floating one. */
-    private float mDockRadiusDp = DEFAULT_DOCK_RADIUS_DP;
     /** The status bar's stored state for the orientation shown; null leaves the launcher's rest. */
     @Nullable private Boolean mStatusCompact;
     /** Canvas pixels per real dp: what every dp figure is multiplied by to stand on the canvas. */
@@ -420,6 +400,7 @@ public final class LayoutCanvasView extends View {
 
     public LayoutCanvasView(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
+        mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         mFramePaint.setStyle(Paint.Style.STROKE);
         mFillPaint.setStyle(Paint.Style.FILL);
         mDashPaint.setStyle(Paint.Style.STROKE);
@@ -442,14 +423,48 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * The dock's corner radius, in dp. Zero is the docked dock and above it the floating one; the
-     * picture tells them apart by the band's height, not by the corner, which every block shares.
+     * The Style of the whole chrome, and the Corners and Margin the user set, in dp. Floating
+     * spends both; Docked spends neither, and rounds only the frame's exposed outer corners at the
+     * screen's radius. A change of Style morphs the canvas from the shape it stood in to the new one
+     * over {@value LayoutCanvasMorph#DURATION_MS} ms, or jumps with reduced motion; a new Corners
+     * or Margin under Floating redraws at once, so a slider is followed live.
      */
-    public void setDockCornerRadiusDp(float radiusDp) {
-        if (Float.compare(radiusDp, mDockRadiusDp) == 0) return;
-        mDockRadiusDp = radiusDp;
-        // A square dock and a floating one differ in height too, so the bands are laid again.
+    public void setShape(@NonNull LayoutStyle style, float cornersDp, float marginDp) {
+        float corners = Math.max(0f, cornersDp);
+        float margin = Math.max(0f, marginDp);
+        boolean flipped = style != mStyle;
+        if (!flipped && Float.compare(corners, mCornersDp) == 0
+            && Float.compare(margin, mMarginDp) == 0) return;
+        ChromeShape before = mShape;
+        mStyle = style;
+        mCornersDp = corners;
+        mMarginDp = margin;
         if (getWidth() > 0 && getHeight() > 0) layoutFrame(getWidth(), getHeight());
+        if (flipped) {
+            boolean animate = before != null && mShape != null
+                && !ReducedMotion.isEnabled(getContext());
+            mMorphFrom = animate ? before : null;
+            mMorphStartMs = SystemClock.uptimeMillis();
+            mMorphHeld = -1f;
+        }
+        invalidate();
+    }
+
+    /** The Style the canvas is drawn in. */
+    @NonNull
+    public LayoutStyle style() {
+        return mStyle;
+    }
+
+    /**
+     * How many pinned apps and extra keys the dock and the extra-keys bar draw, so the symbols
+     * follow what the launcher really has. A negative count draws the pack's own seven, and a
+     * count that does not fit the bar's length draws as many as do.
+     */
+    public void setSlotCounts(int pinnedApps, int extraKeys) {
+        if (pinnedApps == mPinnedAppCount && extraKeys == mExtraKeyCount) return;
+        mPinnedAppCount = pinnedApps;
+        mExtraKeyCount = extraKeys;
         invalidate();
     }
 
@@ -472,42 +487,70 @@ public final class LayoutCanvasView extends View {
             : mOrientation == PlaceOrientation.LANDSCAPE;
     }
 
-    /** Whether the dock is the floating, rounded one rather than the square docked one. */
-    private boolean isDockFloating() {
-        return mDockRadiusDp > 0f;
-    }
-
     /** Canvas pixels per real dp, for a test to check the to-scale mapping against. */
     @VisibleForTesting
     public float canvasScalePx() {
         return mCanvasScale;
     }
 
-    /**
-     * The radius a card of this size is drawn at: the shared radius, no more than a true
-     * half-capsule of its shorter side. A thin band is then a capsule and a tall one — the
-     * keyboard — keeps the whole radius, which is what the real surfaces do.
-     */
-    @VisibleForTesting
-    public static float cardRadiusPx(float surfaceRadiusPx, float cardWidthPx, float cardHeightPx) {
-        float half = Math.max(0f, Math.min(cardWidthPx, cardHeightPx)) / 2f;
-        return Math.max(0f, Math.min(surfaceRadiusPx, half));
-    }
-
-    /** The shared block corner in view pixels: {@value #CANVAS_CORNER_DP}dp at the canvas scale. */
-    @VisibleForTesting
-    public float surfaceRadiusPx() {
-        return CANVAS_CORNER_DP * mCanvasScale;
-    }
-
-    private float cardRadius(@NonNull RectF card) {
-        return cardRadiusPx(surfaceRadiusPx(), card.width(), card.height());
-    }
-
     private float screenShortSideDp() {
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
         if (metrics.density <= 0f) return REFERENCE_SHORT_SIDE_DP;
         return Math.min(metrics.widthPixels, metrics.heightPixels) / metrics.density;
+    }
+
+    /** What the shape model was asked for the arrangement on the canvas; null before a layout. */
+    @Nullable
+    @VisibleForTesting
+    ChromeShapeModel.Input shapeInput() {
+        return mInput;
+    }
+
+    /** What the shape model said, in the frame's own coordinates; null before a layout. */
+    @Nullable
+    @VisibleForTesting
+    ChromeShape shape() {
+        return mShape;
+    }
+
+    /** How far a change of Style has come: 0 where it started, 1 at rest. */
+    @VisibleForTesting
+    float morphProgress() {
+        if (mMorphFrom == null) return 1f;
+        if (mMorphHeld >= 0f) return mMorphHeld;
+        long elapsed = SystemClock.uptimeMillis() - mMorphStartMs;
+        return LayoutCanvasMorph.clamp01(elapsed / (float) LayoutCanvasMorph.DURATION_MS);
+    }
+
+    /** Whether the canvas is part-way between the two Styles. */
+    @VisibleForTesting
+    boolean isStyleMorphing() {
+        return mMorphFrom != null && morphProgress() < 1f;
+    }
+
+    /** Holds a change of Style at {@code progress}, which the clock would otherwise decide. */
+    @VisibleForTesting
+    void holdMorphAt(float progress) {
+        if (mMorphFrom != null) mMorphHeld = LayoutCanvasMorph.clamp01(progress);
+    }
+
+    /**
+     * One piece's rect as it is drawn right now, in view pixels: the model's own at rest, and part
+     * of the way from the old Style's while Style changes. Null for a piece that is not shown.
+     */
+    @Nullable
+    @VisibleForTesting
+    RectF drawnPieceRect(@NonNull PieceId id) {
+        ChromeShape shape = mShape;
+        if (shape == null) return null;
+        float t = morphProgress();
+        if (mMorphFrom != null && t < 1f) {
+            LayoutCanvasMorph.Part part = LayoutCanvasMorph.blend(mMorphFrom, shape,
+                LayoutCanvasMorph.ease(t)).piece(id);
+            return part == null ? null : viewRect(part.box);
+        }
+        Piece piece = shape.piece(id);
+        return piece == null ? null : viewRect(piece.box);
     }
 
     public LayoutCanvasView(@NonNull Context context) {
@@ -619,13 +662,6 @@ public final class LayoutCanvasView extends View {
         return new RectF(mFrameRect);
     }
 
-    /** The grip a finger lifts this bar by, in view pixels, or null while the bar has none. */
-    @Nullable
-    @VisibleForTesting
-    public RectF gripRect(@NonNull Block bar) {
-        RectF rect = mGripRects.get(bar);
-        return rect == null ? null : new RectF(rect);
-    }
 
     /**
      * The strip under the phone, in view pixels: where the editor's chips for the hidden elements
@@ -880,16 +916,9 @@ public final class LayoutCanvasView extends View {
         mFrameRect.set(frameLeft, frameTop, frameLeft + frameWidth, frameTop + frameHeight);
         // One design unit: the phone's short side is 240 of them, whichever way it stands.
         mUnit = Math.max(0.01f, Math.min(frameWidth, frameHeight) / PHONE_SHORT_SIDE_UNITS);
-        // The elements stand inside the rim and above the chin, the way the artwork lays them.
-        boolean landscape = mOrientation == PlaceOrientation.LANDSCAPE;
-        mContentRect.set(mFrameRect.left + u(FRAME_INSET_SIDE_U),
-            mFrameRect.top + u(FRAME_INSET_TOP_U),
-            mFrameRect.right - u(FRAME_INSET_SIDE_U),
-            mFrameRect.bottom - u(landscape ? FRAME_INSET_TOP_U : FRAME_INSET_BOTTOM_U));
-        if (mContentRect.width() < 0f || mContentRect.height() < 0f) mContentRect.set(mFrameRect);
-        // The canvas stands for a real screen of the same shape: its content width is the
+        // The canvas stands for a real screen of the same shape: the frame's width is the
         // screen's width in this orientation, so one dp of the launcher is this many pixels.
-        mCanvasScale = LayoutCanvasGeometry.canvasScale(mContentRect.width(), screenWidthDp());
+        mCanvasScale = LayoutCanvasGeometry.canvasScale(mFrameRect.width(), screenWidthDp());
         // The tray stands on the view's bottom edge and takes the view's width, not the phone's:
         // a portrait phone is too narrow for "Drop here to hide" or for two chips to keep their
         // names, and the editor stands its chips over this strip with a bottom gravity.
@@ -928,12 +957,7 @@ public final class LayoutCanvasView extends View {
         }
         mUnit = Math.max(0.01f,
             Math.min(mFrameRect.width(), mFrameRect.height()) / PHONE_SHORT_SIDE_UNITS);
-        mContentRect.set(mFrameRect.left + u(FRAME_INSET_SIDE_U),
-            mFrameRect.top + u(FRAME_INSET_TOP_U),
-            mFrameRect.right - u(FRAME_INSET_SIDE_U),
-            mFrameRect.bottom - u(landscape ? FRAME_INSET_TOP_U : FRAME_INSET_BOTTOM_U));
-        if (mContentRect.width() < 0f || mContentRect.height() < 0f) mContentRect.set(mFrameRect);
-        mCanvasScale = LayoutCanvasGeometry.canvasScale(mContentRect.width(), screenWidthDp());
+        mCanvasScale = LayoutCanvasGeometry.canvasScale(mFrameRect.width(), screenWidthDp());
         mTrayRect.set(mExternalTray);
         computeBlocks();
     }
@@ -981,6 +1005,8 @@ public final class LayoutCanvasView extends View {
     public void setFrameCornerRadiusPx(float radiusPx) {
         if (Float.compare(radiusPx, mFrameRadiusOverridePx) == 0) return;
         mFrameRadiusOverridePx = radiusPx;
+        // Under Docked the frame's exposed corners are this radius, so the shapes are asked again.
+        if (getWidth() > 0 && getHeight() > 0) layoutFrame(getWidth(), getHeight());
         invalidate();
     }
 
@@ -1007,43 +1033,46 @@ public final class LayoutCanvasView extends View {
         }
     }
 
+    /**
+     * Asks the shape model for every chrome shape of the arrangement under the Style, and reads
+     * the blocks off the answer: a bar's block is its piece's rect, the canvas block is the pane's
+     * opening, the keyboard's block is its piece or the two halves. The slots, handles and hit
+     * targets are all laid against these.
+     */
     private void computeBlocks() {
         mBlockRects.clear();
-        mGripRects.clear();
         mKeyboardRect.setEmpty();
-        mRemaining = new RectF(mContentRect);
-        if (mLayout == null) {
+        mKeyboardPieces.clear();
+        mKeyboardInStack = false;
+        mInput = null;
+        mShape = null;
+        if (mLayout == null || mFrameRect.isEmpty()) {
             mGridCollapsed = false;
             mSlots.clear();
             return;
         }
-        // The bands under the keyboard are the bottom's outermost, so they claim first; with no
-        // keyboard drawn they are simply the bottom stack's outer end, as on the screen.
-        List<Element> underKeyboard = EdgeStackPolicy.underKeyboard(mLayout);
-        for (Element element : underKeyboard) {
-            takeEdgeStrip(blockOf(element), Edge.BOTTOM, bandPx(element, Edge.BOTTOM));
-        }
-        // The keyboard has no edge and no order: when the place shows it, it is the block along
-        // the bottom that everything else — the dock's rows included, lifted above it the way the
-        // real dock is — stands above.
-        if (showsKeyboard()) takeKeyboardStrip();
-        // One loop over the model instead of a hand-written running order: each edge is a stack,
-        // outermost first, and a band claims its share of whatever the bands outside it left.
-        // The edges are claimed in the order the screen itself does: the rows take the whole width
-        // first — top, then bottom, which is what puts a bottom status bar above the dock rather
-        // than under it — and the side columns then stand in what is left between them, flanking
-        // the canvas and nothing else, the way P4 made the screen do it. Claimed the other way a
-        // column ran the height of the phone, past the dock and into its corner, and took the
-        // grip that lifts it down there with it.
-        for (Edge edge : CLAIM_ORDER) {
-            for (Element element : EdgeStackPolicy.stack(mLayout, edge)) {
-                if (underKeyboard.contains(element)) continue;
-                takeEdgeStrip(blockOf(element), edge, bandPx(element, edge));
+        mInput = shapeInput(mStyle);
+        mShape = ChromeShapeModel.shape(mInput);
+        for (Piece piece : mShape.pieces()) {
+            Element element = piece.id.element();
+            if (element == null) {
+                mKeyboardPieces.add(piece);
+            } else if (piece.box.width() > 0f && piece.box.height() > 0f) {
+                mBlockRects.put(blockOf(element), viewRect(piece.box));
             }
         }
-        mBlockRects.put(Block.CANVAS, new RectF(mRemaining));
+        if (showsKeyboard() && !mKeyboardPieces.isEmpty()) {
+            boolean first = true;
+            for (Piece piece : mKeyboardPieces) {
+                RectF rect = viewRect(piece.box);
+                if (first) mKeyboardRect.set(rect);
+                else mKeyboardRect.union(rect);
+                first = false;
+            }
+            mKeyboardInStack = mLayout.keyboardForm != KeyboardForm.FLOATING;
+        }
+        mBlockRects.put(Block.CANVAS, viewRect(mShape.opening().box));
         computeContent();
-        computeGrips();
         computeSlots();
         // A selection whose element has left the canvas — hidden, or the keyboard on a place that
         // shows none — goes with it.
@@ -1053,6 +1082,13 @@ public final class LayoutCanvasView extends View {
         }
         computeHandles();
         updateContentDescription();
+    }
+
+    /** A rect of the model's, which stands in the frame's own coordinates, in view pixels. */
+    @NonNull
+    private RectF viewRect(@NonNull Box box) {
+        return new RectF(box.left + mFrameRect.left, box.top + mFrameRect.top,
+            box.right + mFrameRect.left, box.bottom + mFrameRect.top);
     }
 
     /** The screen's width in dp in the orientation on the canvas, at the shape of a real phone. */
@@ -1073,17 +1109,18 @@ public final class LayoutCanvasView extends View {
      * A band's thickness on the canvas, in pixels: the launcher's own figure in dp for this
      * element on this edge (the dock from {@code DockLayoutPolicy} at its height scale and style,
      * the status bar from its edge geometry collapsed or expanded, the toolbar and the A-Z strip
-     * from their policies) times the canvas scale.
+     * from their policies) times the canvas scale. {@code floating} is the Style the figure is for,
+     * since the dock and the status bar stand thicker in the Floating card.
      */
-    private float bandPx(@NonNull Element element, @NonNull Edge edge) {
+    private float bandPx(@NonNull Element element, @NonNull Edge edge, boolean floating) {
         float dp;
         switch (element) {
             case STATUS:
-                dp = LayoutCanvasGeometry.statusBandDp(edge, isStatusCompact(), isDockFloating());
+                dp = LayoutCanvasGeometry.statusBandDp(edge, isStatusCompact(), floating);
                 break;
             case APPS:
                 dp = edge.isOnSide() ? LayoutCanvasGeometry.dockRailWidthDp()
-                    : LayoutCanvasGeometry.dockBandHeightDp(mDockScale, isDockFloating());
+                    : LayoutCanvasGeometry.dockBandHeightDp(mDockScale, floating);
                 break;
             case AZ:
                 dp = LayoutCanvasGeometry.azBandHeightDp();
@@ -1094,6 +1131,109 @@ public final class LayoutCanvasView extends View {
                 break;
         }
         return LayoutCanvasGeometry.toCanvasPx(dp, mCanvasScale);
+    }
+
+    /**
+     * The arrangement the model is asked about: what the place shows of it. Home opens the
+     * keyboard over its page, so it has none; the display with a keyboard that floats over it has
+     * a floating card; the terminal and a display the keyboard resizes show it as the form says.
+     */
+    @NonNull
+    private PlaceLayout shapeLayout() {
+        PlaceLayout layout = mLayout;
+        if (layout == null) throw new IllegalStateException("no arrangement");
+        if (!layout.keyboardShown) return layout;
+        switch (mPlace) {
+            case WIDGETS:
+                return layout.withKeyboardShown(false);
+            case DISPLAY:
+                if (layout.keyboardMode == KeyboardMode.OVERLAY
+                    && layout.keyboardForm != KeyboardForm.FLOATING) {
+                    return new PlaceLayout(layout.slots(), layout.keyboardMode,
+                        KeyboardForm.FLOATING, true, layout.widgetColumns, layout.widgetRows);
+                }
+                return layout;
+            case TERMINAL:
+            default:
+                return layout;
+        }
+    }
+
+    /**
+     * What the shape model is asked under one Style: the arrangement, the frame, every band's
+     * thickness at the launcher's own dp times the canvas scale, and the user's Corners and Margin
+     * and the device's screen radius at the same scale. The model caps nothing, so the bands are
+     * squeezed here first when they would leave the pane's opening no room
+     * ({@link LayoutCanvasGeometry#fitFactor}).
+     */
+    @NonNull
+    private ChromeShapeModel.Input shapeInput(@NonNull LayoutStyle style) {
+        PlaceLayout layout = shapeLayout();
+        boolean floating = style == LayoutStyle.FLOATING;
+        float scale = mCanvasScale;
+        float width = mFrameRect.width();
+        float height = mFrameRect.height();
+        float margin = mMarginDp * scale;
+        float[] row = new float[Element.values().length];
+        float[] column = new float[Element.values().length];
+        for (Element element : Element.values()) {
+            row[element.ordinal()] = bandPx(element, Edge.BOTTOM, floating);
+            column[element.ordinal()] = bandPx(element, Edge.LEFT, floating);
+        }
+        boolean stacked = layout.keyboardShown && layout.keyboardForm != KeyboardForm.FLOATING;
+        float keyboard = keyboardBandPx(layout, height);
+        // What the arrangement spends along each axis, and the air its cards would need.
+        float rowsTotal = 0f;
+        float columnsTotal = 0f;
+        int rowBands = 0;
+        int columnBands = 0;
+        for (Edge edge : Edge.values()) {
+            for (Element element : EdgeStackPolicy.stack(layout, edge)) {
+                if (edge.isOnSide()) {
+                    columnsTotal += column[element.ordinal()];
+                    columnBands++;
+                } else {
+                    rowsTotal += row[element.ordinal()];
+                    rowBands++;
+                }
+            }
+        }
+        if (stacked) {
+            rowsTotal += keyboard;
+            rowBands++;
+        }
+        float air = floating ? margin : 0f;
+        float rowFit = LayoutCanvasGeometry.fitFactor(height, rowsTotal, air * (rowBands + 1));
+        float columnFit = LayoutCanvasGeometry.fitFactor(width, columnsTotal,
+            air * (columnBands + 1));
+        ChromeShapeModel.Thickness thickness = ChromeShapeModel.Thickness.of(
+            row[Element.STATUS.ordinal()] * rowFit, column[Element.STATUS.ordinal()] * columnFit,
+            row[Element.APPS.ordinal()] * rowFit, column[Element.APPS.ordinal()] * columnFit,
+            row[Element.AZ.ordinal()] * rowFit, column[Element.AZ.ordinal()] * columnFit,
+            row[Element.EXTRA_KEYS.ordinal()] * rowFit,
+            column[Element.EXTRA_KEYS.ordinal()] * columnFit, keyboard * rowFit);
+        return ChromeShapeModel.input(layout, style, width, height, thickness)
+            .corners(mCornersDp * scale)
+            .margin(margin)
+            .screenRadius(frameRadiusPx())
+            .paneGapCap(TERMUX_APP.MAX_TERMINAL_PANE_GAP * scale)
+            .dividerThickness(scale)
+            .panes(1, ChromeShapeModel.SplitAxis.SIDE_BY_SIDE)
+            .build();
+    }
+
+    /**
+     * The keyboard's thickness on the canvas, in pixels: its real height for its scale (the rows
+     * times the scale, capped at the keyboard's share of the screen) plus the chin under its last
+     * row, in dp, times the canvas scale. A floating keyboard is a card with no chin of its own.
+     */
+    private float keyboardBandPx(@NonNull PlaceLayout layout, float frameHeight) {
+        float dp = LayoutCanvasGeometry.keyboardHeightDp(mKeyboardScale,
+            mOrientation == PlaceOrientation.LANDSCAPE, screenHeightDp());
+        if (layout.keyboardForm != KeyboardForm.FLOATING)
+            dp += LayoutCanvasGeometry.chinDp(mKeyboardChinDp);
+        return Math.min(frameHeight * KEYBOARD_MAX_SHARE,
+            LayoutCanvasGeometry.toCanvasPx(dp, mCanvasScale));
     }
 
     /**
@@ -1111,23 +1251,6 @@ public final class LayoutCanvasView extends View {
             default: return false;
         }
     }
-
-    /**
-     * The keyboard's block, off the bottom before any edge: its real height for its scale (the
-     * rows times the scale, capped at the keyboard's share of the screen) plus the chin under its
-     * last row, in dp, times the canvas scale.
-     */
-    private void takeKeyboardStrip() {
-        float dp = LayoutCanvasGeometry.keyboardHeightDp(mKeyboardScale,
-                mOrientation == PlaceOrientation.LANDSCAPE, screenHeightDp())
-            + LayoutCanvasGeometry.chinDp(mKeyboardChinDp);
-        float h = Math.min(mRemaining.height() * 0.5f,
-            LayoutCanvasGeometry.toCanvasPx(dp, mCanvasScale));
-        mKeyboardRect.set(mRemaining.left, mRemaining.bottom - h, mRemaining.right,
-            mRemaining.bottom);
-        mRemaining.bottom -= h;
-    }
-
 
     /** The model's name for one of the layout canvas's bands, or null for a band with no placement. */
     @Nullable
@@ -1165,50 +1288,7 @@ public final class LayoutCanvasView extends View {
         return EdgeStackPolicy.edgeOf(mLayout, element);
     }
 
-    // ---- Grips, tray and slots -----------------------------------------------------------------
-
-    /** A grip at the trailing end of every band the user may move; the canvas gets none. */
-    private void computeGrips() {
-        for (Block bar : BARS) {
-            RectF band = mBlockRects.get(bar);
-            if (band == null || band.isEmpty()) continue;
-            mGripRects.put(bar, gripFor(band, isBarVertical(bar)));
-        }
-    }
-
-    /**
-     * The grip glyph's own rectangle: the six dots' extent, in the one spot every row carries it —
-     * {@value #GRIP_INSET_END_U} units in from the card's trailing edge, centred across the row —
-     * squeezed to the card on a band too thin for the whole column of dots. A column is too
-     * narrow for a trailing end, so its grip stands centred across it,
-     * {@value #GRIP_INSET_TOP_U} down from its top.
-     */
-    @NonNull
-    private RectF gripFor(@NonNull RectF band, boolean vertical) {
-        RectF grip = new RectF();
-        gripInto(band, vertical, grip);
-        return grip;
-    }
-
-    private void gripInto(@NonNull RectF band, boolean vertical, @NonNull RectF out) {
-        float pad = u(CARD_PAD_U);
-        float halfWidth = u(GRIP_PITCH_X_U) / 2f + u(GRIP_DOT_RADIUS_U);
-        float innerHeight = Math.max(0f, band.height() - 2f * pad);
-        // The card's own rim and a hair of air stay clear of the dots.
-        float halfHeight = gripHalfHeightPx(u(GRIP_PITCH_Y_U) + u(GRIP_DOT_RADIUS_U),
-            innerHeight, u(CARD_STROKE_U) + u(1f));
-        float cy;
-        float cx;
-        if (vertical) {
-            cy = band.top + pad + Math.min(u(GRIP_INSET_TOP_U), innerHeight / 2f);
-            cx = band.centerX();
-        } else {
-            cy = band.centerY();
-            float end = Math.min(u(GRIP_INSET_END_U), Math.max(0f, band.width() - 2f * pad) / 2f);
-            cx = isRtl() ? band.left + pad + end : band.right - pad - end;
-        }
-        out.set(cx - halfWidth, cy - halfHeight, cx + halfWidth, cy + halfHeight);
-    }
+    // ---- The tray and the slots ----------------------------------------------------------------
 
     /** Whether a bar stands as a column rather than a row, which turns its content with it. */
     private boolean isBarVertical(@NonNull Block bar) {
@@ -1235,8 +1315,9 @@ public final class LayoutCanvasView extends View {
 
     /**
      * The handles the selection carries: the dock's on the pinned apps band's inner edge, the
-     * keyboard's two on its top edge and on the bottom of its keys (above the chin), and Home's on
-     * the corner of its first cell. Every other element is selected with its outline alone; it moves by its grip.
+     * keyboard's two on its top edge and on the bottom of its keys (above the chin; a floating
+     * keyboard has no chin), and Home's on the corner of its first cell. Every other element is
+     * selected with its outline alone; it moves by being lifted.
      */
     private void computeHandles() {
         mHandleRects.clear();
@@ -1251,9 +1332,10 @@ public final class LayoutCanvasView extends View {
             }
             case KEYBOARD: {
                 if (mKeyboardRect.isEmpty()) return;
-                cardOf(mKeyboardRect, mScratchRectA);
+                mScratchRectA.set(mKeyboardRect);
                 mHandleRects.put(Handle.KEYBOARD_HEIGHT, edgeHandle(mScratchRectA, Edge.TOP,
                     mScratchRectA.centerX(), 0f));
+                if (mLayout.keyboardForm == KeyboardForm.FLOATING) return;
                 // The chin's handle rides the bottom of the keys, a quarter in from the leading
                 // end, so its target and the height handle's are never the same spot.
                 float x = isRtl() ? mScratchRectA.right - mScratchRectA.width() / 4f
@@ -1329,17 +1411,17 @@ public final class LayoutCanvasView extends View {
         return Math.min(card.height() * CHIN_MAX_SHARE, px);
     }
 
-    /** Home's widget area inside the canvas card, as {@link #drawHomeGrid} lays it; or null. */
+    /** Home's widget area inside the pane's opening, as {@link #drawHomeGrid} lays it; or null. */
     @Nullable
     private RectF gridArea() {
         RectF rect = mBlockRects.get(Block.CANVAS);
         if (rect == null || rect.isEmpty()) return null;
-        RectF pane = new RectF();
-        cardOf(rect, pane);
+        RectF pane = new RectF(rect);
         float pad = 10f * mUnit;
         pane.inset(pad, pad);
         return pane.width() > 0f && pane.height() > 0f ? pane : null;
     }
+
 
     private float gridCellWidth(@NonNull RectF area, int columns) {
         int n = Math.max(1, columns);
@@ -1373,7 +1455,7 @@ public final class LayoutCanvasView extends View {
     private Handle handleAt(float x, float y) {
         Handle best = null;
         float bestDistance = Float.MAX_VALUE;
-        float half = dp(GRIP_TOUCH_HALF_DP);
+        float half = dp(HANDLE_TOUCH_HALF_DP);
         for (Map.Entry<Handle, RectF> entry : mHandleRects.entrySet()) {
             RectF rect = entry.getValue();
             float dx = rect.centerX() - x;
@@ -1541,7 +1623,7 @@ public final class LayoutCanvasView extends View {
             for (Edge edge : Edge.values())
                 addEdgeSlots(edge, targets.gapsOn(edge), free, bar.element());
             // The gaps under the keyboard, only while there is a keyboard drawn to be under.
-            if (!mKeyboardRect.isEmpty())
+            if (keyboardInStack())
                 addUnderKeyboardSlots(targets.gapsUnderKeyboard(), free, bar.element());
         }
         if (targets.tray && !mTrayRect.isEmpty()) {
@@ -1556,7 +1638,7 @@ public final class LayoutCanvasView extends View {
         if (gaps <= 0 || mLayout == null) return;
         // Along the bottom these are the gaps over the keyboard: they start from its middle, and
         // the half under that is the far side's (addUnderKeyboardSlots).
-        boolean overKeyboard = edge == Edge.BOTTOM && !mKeyboardRect.isEmpty();
+        boolean overKeyboard = edge == Edge.BOTTOM && keyboardInStack();
         List<Element> bands = edge == Edge.BOTTOM
             ? EdgeStackPolicy.overKeyboard(mLayout) : EdgeStackPolicy.stack(mLayout, edge);
         float[] gapDepths = gapDepths(edge, bands, gaps, depthOf(edge, free, true), dragged);
@@ -1574,6 +1656,15 @@ public final class LayoutCanvasView extends View {
         float[] gapDepths = gapDepths(Edge.BOTTOM, EdgeStackPolicy.underKeyboard(mLayout), gaps,
             depthOf(Edge.BOTTOM, mKeyboardRect, true), dragged);
         addSlots(Edge.BOTTOM, gapDepths, 0f, keyboardMiddleDepth(), free, dragged, true);
+    }
+
+    /**
+     * Whether the keyboard takes a band of the bottom stack, with gaps on either side of it: it
+     * does docked and split, but a floating keyboard is a card over the pane, which no band stands
+     * under.
+     */
+    private boolean keyboardInStack() {
+        return mKeyboardInStack && !mKeyboardRect.isEmpty();
     }
 
     /** How far up from the phone's bottom the keyboard block's middle stands. */
@@ -1699,6 +1790,7 @@ public final class LayoutCanvasView extends View {
         }
     }
 
+
     /**
      * The picture read aloud: every bar and where it stands, hidden ones included. The grips are
      * decorative — a screen reader changes these values in the page's own rows, which is why
@@ -1810,44 +1902,6 @@ public final class LayoutCanvasView extends View {
         return LEGEND_TEXT_SP * getResources().getDisplayMetrics().density * clamped;
     }
 
-    /** The most of what is left one band may take, so the canvas is never squeezed out. */
-    private static final float MAX_BAND_SHARE = 0.45f;
-
-    /**
-     * Claims a strip of {@code thicknessPx} off the current remaining rect for one edge, shrinking
-     * it in place; a band never takes more than {@value #MAX_BAND_SHARE} of what is left.
-     */
-    private void takeEdgeStrip(@NonNull Block block, @NonNull Edge edge, float thicknessPx) {
-        RectF rect = new RectF(mRemaining);
-        switch (edge) {
-            case TOP: {
-                float h = Math.min(thicknessPx, mRemaining.height() * MAX_BAND_SHARE);
-                rect.bottom = mRemaining.top + h;
-                mRemaining.top += h;
-                break;
-            }
-            case BOTTOM: {
-                float h = Math.min(thicknessPx, mRemaining.height() * MAX_BAND_SHARE);
-                rect.top = mRemaining.bottom - h;
-                mRemaining.bottom -= h;
-                break;
-            }
-            case LEFT: {
-                float w = Math.min(thicknessPx, mRemaining.width() * MAX_BAND_SHARE);
-                rect.right = mRemaining.left + w;
-                mRemaining.left += w;
-                break;
-            }
-            case RIGHT: {
-                float w = Math.min(thicknessPx, mRemaining.width() * MAX_BAND_SHARE);
-                rect.left = mRemaining.right - w;
-                mRemaining.right -= w;
-                break;
-            }
-        }
-        mBlockRects.put(block, rect);
-    }
-
     // ---- Colours -------------------------------------------------------------------------------
     // The element pack's palette roles, resolved on the live Material scheme (spec 5):
     //   canvas -> colorSurface                  surface -> colorSurfaceContainerHigh
@@ -1931,12 +1985,6 @@ public final class LayoutCanvasView extends View {
         return ColorUtils.setAlphaComponent(onVariant(), DIM_ALPHA);
     }
 
-    /** A resting grip: the muted ink at readable emphasis, over any band, light or dark. */
-    @ColorInt
-    private int gripInk() {
-        return ColorUtils.setAlphaComponent(onVariant(), GRIP_ALPHA);
-    }
-
     /** The pack's text. */
     @ColorInt
     private int text() {
@@ -2007,6 +2055,35 @@ public final class LayoutCanvasView extends View {
 
     // ---- Drawing -------------------------------------------------------------------------------
 
+    /** The docked key rows, and the split ones, which never change; laid out once. */
+    private static final List<List<LayoutCanvasGeometry.KeyCell>> DOCKED_KEY_ROWS =
+        LayoutCanvasGeometry.dockedKeyRows();
+    private static final LayoutCanvasGeometry.SplitRows SPLIT_KEY_ROWS =
+        LayoutCanvasGeometry.splitKeyRows();
+
+    /**
+     * One shape the canvas draws, as the model gave it: a rect in view pixels and four corner radii
+     * (the Docked frame's carries the opening cut out of it too). What the fill, the outline, the
+     * lifted copy and the placeholder are painted from, and what a test compares to the model's.
+     */
+    static final class ShapeSpec {
+        @NonNull final RectF box;
+        /** Eight values, clockwise from the top left, as {@code Path.addRoundRect} takes them. */
+        @NonNull final float[] radii;
+        @Nullable final RectF hole;
+
+        ShapeSpec(@NonNull RectF box, @NonNull float[] radii, @Nullable RectF hole) {
+            this.box = box;
+            this.radii = radii;
+            this.hole = hole;
+        }
+    }
+
+    @NonNull
+    private ShapeSpec specOf(@NonNull Box box, @NonNull Corners corners) {
+        return new ShapeSpec(viewRect(box), corners.toRadii(), null);
+    }
+
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
@@ -2015,18 +2092,14 @@ public final class LayoutCanvasView extends View {
         mFillPaint.setColor(surface());
         canvas.drawRoundRect(mFrameRect, radius, radius, mFillPaint);
 
-        // The elements are clipped to the phone's rounded outline, so a lifted card's underlay
-        // that reaches the rim follows the curve instead of poking a square corner past it.
+        // Everything is clipped to the phone's rounded outline, so a lifted card's underlay that
+        // reaches the rim follows the curve instead of poking a square corner past it.
         mClipPath.reset();
         mClipPath.addRoundRect(mFrameRect, radius, radius, Path.Direction.CW);
         int saved = canvas.save();
         canvas.clipPath(mClipPath);
-        drawCanvasBlock(canvas);
-        drawKeyboardBlock(canvas);
-        drawBandBlock(canvas, Block.EXTRA_KEYS);
-        drawBandBlock(canvas, Block.APPS_ROW);
-        drawBandBlock(canvas, Block.ALPHABETS_ROW);
-        drawBandBlock(canvas, Block.STATUS_BAR);
+        drawChrome(canvas);
+        drawPlaceholder(canvas);
         drawSlots(canvas);
         drawSelection(canvas);
         canvas.restoreToCount(saved);
@@ -2042,19 +2115,403 @@ public final class LayoutCanvasView extends View {
         drawReadout(canvas);
     }
 
+    /** The pack's roles on the live Material scheme, read for this frame. */
+    @NonNull
+    private LayoutCanvasArtwork.Palette palette() {
+        LayoutCanvasArtwork.Palette p = mPalette;
+        p.canvas = surface();
+        p.surface = container();
+        p.terminal = terminalFill();
+        p.key = keyFill();
+        p.line = lineColor();
+        p.text = text();
+        p.muted = onVariant();
+        p.accent = accent();
+        p.accentBg = accentBg();
+        p.secondary = secondary();
+        p.secondaryBg = secondaryBg();
+        return p;
+    }
+
+    /**
+     * The chrome as the model shaped it: at rest the Docked frame or the Floating cards, and
+     * while Style changes each piece part-way between the shape it stood in and the one it is
+     * going to.
+     */
+    private void drawChrome(@NonNull Canvas canvas) {
+        ChromeShape shape = mShape;
+        if (shape == null) return;
+        LayoutCanvasArtwork.Palette p = palette();
+        float k = Math.max(0.01f, mCanvasScale);
+        ChromeShape from = mMorphFrom;
+        if (from != null && morphProgress() >= 1f) {
+            mMorphFrom = null;
+            mMorphHeld = -1f;
+            from = null;
+        }
+        if (from != null) {
+            drawMorphing(canvas, LayoutCanvasMorph.blend(from, shape,
+                LayoutCanvasMorph.ease(morphProgress())), p, k);
+            postInvalidateOnAnimation();
+        } else if (mStyle == LayoutStyle.DOCKED) {
+            drawDocked(canvas, shape, p, k);
+        } else {
+            drawFloating(canvas, shape, p, k);
+        }
+    }
+
+    /**
+     * Docked: one frame composed under one outer clip — its box and corners with the pane's
+     * opening cut out — so no bar rounds, outlines or joins on its own; then the opening, which has
+     * no outline, and anything that floats over it.
+     */
+    private void drawDocked(@NonNull Canvas canvas, @NonNull ChromeShape shape,
+                            @NonNull LayoutCanvasArtwork.Palette p, float k) {
+        for (Card card : shape.cards()) {
+            if (!card.frame) continue;
+            framePath(card, mShapePath);
+            int saved = canvas.save();
+            canvas.clipPath(mShapePath);
+            mFillPaint.setColor(p.surface);
+            canvas.drawPath(mShapePath, mFillPaint);
+            for (Piece piece : shape.pieces()) {
+                if (piece.overlay || isLiftedPiece(piece.id)) continue;
+                drawPieceArt(canvas, piece.id, viewRect(piece.box), isPieceVertical(piece.id),
+                    false, p, k);
+            }
+            canvas.restoreToCount(saved);
+        }
+        drawPane(canvas, shape, false, p, k);
+        drawOverlays(canvas, shape, p, k);
+    }
+
+    /**
+     * Floating: each card one shape, filled and outlined with the pack's line, its pieces' artwork
+     * inside it; then the pane, and the card a floating keyboard is, over it.
+     */
+    private void drawFloating(@NonNull Canvas canvas, @NonNull ChromeShape shape,
+                              @NonNull LayoutCanvasArtwork.Palette p, float k) {
+        for (Card card : shape.cards()) {
+            if (isOverlayCard(shape, card) || isLiftedCard(shape, card)) continue;
+            RectF box = viewRect(card.box);
+            roundPath(mShapePath, box, card.corners);
+            mFillPaint.setColor(p.surface);
+            canvas.drawPath(mShapePath, mFillPaint);
+            int saved = canvas.save();
+            canvas.clipPath(mShapePath);
+            for (PieceId id : card.members) {
+                Piece piece = shape.piece(id);
+                if (piece == null || isLiftedPiece(id)) continue;
+                drawPieceArt(canvas, id, viewRect(piece.box), isPieceVertical(id), false, p, k);
+            }
+            canvas.restoreToCount(saved);
+            strokeRim(canvas, box, card.corners, p);
+        }
+        drawPane(canvas, shape, true, p, k);
+        drawOverlays(canvas, shape, p, k);
+    }
+
+    /** The pane: the opening under Docked, which has no outline, or the card it is under Floating. */
+    private void drawPane(@NonNull Canvas canvas, @NonNull ChromeShape shape, boolean rim,
+                          @NonNull LayoutCanvasArtwork.Palette p, float k) {
+        if (shape.panes().isEmpty()) return;
+        Pane pane = shape.panes().get(0);
+        RectF box = viewRect(pane.box);
+        if (box.isEmpty()) return;
+        drawSurface(canvas, null, box, pane.corners, p.terminal, rim, false, p, k);
+    }
+
+    /** What floats over the pane: the keyboard, when its form is the floating one. */
+    private void drawOverlays(@NonNull Canvas canvas, @NonNull ChromeShape shape,
+                              @NonNull LayoutCanvasArtwork.Palette p, float k) {
+        for (Piece piece : shape.pieces()) {
+            if (!piece.overlay || isLiftedPiece(piece.id)) continue;
+            drawSurface(canvas, piece.id, viewRect(piece.box), piece.corners, p.surface, true,
+                true, p, k);
+        }
+    }
+
+    /** Style changing: every piece and the pane at the shape the change has reached. */
+    private void drawMorphing(@NonNull Canvas canvas, @NonNull LayoutCanvasMorph.Blend blend,
+                              @NonNull LayoutCanvasArtwork.Palette p, float k) {
+        for (LayoutCanvasMorph.Part part : blend.pieces) {
+            if (part.overlay || part.id == null || isLiftedPiece(part.id)) continue;
+            drawSurface(canvas, part.id, viewRect(part.box), part.corners, p.surface, false,
+                false, p, k);
+        }
+        LayoutCanvasMorph.Part pane = blend.pane;
+        if (pane != null && !viewRect(pane.box).isEmpty()) {
+            drawSurface(canvas, null, viewRect(pane.box), pane.corners, p.terminal, false, false,
+                p, k);
+        }
+        for (LayoutCanvasMorph.Part part : blend.pieces) {
+            if (!part.overlay || part.id == null || isLiftedPiece(part.id)) continue;
+            drawSurface(canvas, part.id, viewRect(part.box), part.corners, p.surface, true, true,
+                p, k);
+        }
+    }
+
+    /**
+     * One shape filled, with the artwork of the piece it is (or the pane's, for a null id) inside
+     * it, and outlined with the pack's line where {@code rim}.
+     */
+    private void drawSurface(@NonNull Canvas canvas, @Nullable PieceId id, @NonNull RectF box,
+                             @NonNull Corners corners, @ColorInt int fill, boolean rim,
+                             boolean overlay, @NonNull LayoutCanvasArtwork.Palette p, float k) {
+        roundPath(mShapePath, box, corners);
+        mFillPaint.setColor(fill);
+        canvas.drawPath(mShapePath, mFillPaint);
+        int saved = canvas.save();
+        canvas.clipPath(mShapePath);
+        if (id == null) drawPaneArt(canvas, box, p, k);
+        else drawPieceArt(canvas, id, box, isPieceVertical(id), overlay, p, k);
+        canvas.restoreToCount(saved);
+        if (rim) strokeRim(canvas, box, corners, p);
+    }
+
+    /** The pack's hairline around a Floating card. */
+    private void strokeRim(@NonNull Canvas canvas, @NonNull RectF box, @NonNull Corners corners,
+                           @NonNull LayoutCanvasArtwork.Palette p) {
+        roundPath(mShapePath, box, corners);
+        mLinePaint.setColor(p.line);
+        mLinePaint.setStrokeWidth(u(CARD_STROKE_U));
+        canvas.drawPath(mShapePath, mLinePaint);
+    }
+
+    /** A rounded rect with its own four radii: every shape the model gives is drawn through this. */
+    private static void roundPath(@NonNull Path out, @NonNull RectF box, @NonNull Corners corners) {
+        out.reset();
+        out.setFillType(Path.FillType.WINDING);
+        out.addRoundRect(box, corners.toRadii(), Path.Direction.CW);
+    }
+
+    /** The Docked frame: its box and corners, with the opening cut out (even-odd). */
+    private void framePath(@NonNull Card frame, @NonNull Path out) {
+        out.reset();
+        out.setFillType(Path.FillType.EVEN_ODD);
+        out.addRoundRect(viewRect(frame.box), frame.corners.toRadii(), Path.Direction.CW);
+        if (frame.hole != null) out.addRect(viewRect(frame.hole), Path.Direction.CW);
+    }
+
+    /** Whether this card is a floating keyboard's: one piece, over the pane. */
+    private static boolean isOverlayCard(@NonNull ChromeShape shape, @NonNull Card card) {
+        for (PieceId id : card.members) {
+            Piece piece = shape.piece(id);
+            if (piece != null && piece.overlay) return true;
+        }
+        return false;
+    }
+
+    /** Whether every piece of this card is in the air, so it leaves only a placeholder behind. */
+    private boolean isLiftedCard(@NonNull ChromeShape shape, @NonNull Card card) {
+        if (card.members.isEmpty()) return false;
+        for (PieceId id : card.members) {
+            if (!isLiftedPiece(id)) return false;
+        }
+        return true;
+    }
+
+    /** Whether the bar in the air is this piece: the keyboard's pieces are the keyboard's. */
+    private boolean isLiftedPiece(@NonNull PieceId id) {
+        Block bar = mDraggedBar;
+        if (bar == null) return false;
+        if (bar == Block.KEYBOARD) return id.element() == null;
+        return id.element() != null && id.element() == elementOf(bar);
+    }
+
+    private boolean isElementVertical(@NonNull Element element) {
+        return mLayout != null && EdgeStackPolicy.edgeOf(mLayout, element).isOnSide();
+    }
+
+    private boolean isPieceVertical(@NonNull PieceId id) {
+        Element element = id.element();
+        return element != null && isElementVertical(element);
+    }
+
+    /**
+     * One piece's artwork in the bounds the model gave it. A bar standing in a column keeps its
+     * symbols upright; a keyboard's keys are the real rows, parted into two halves when split.
+     */
+    private void drawPieceArt(@NonNull Canvas canvas, @NonNull PieceId id, @NonNull RectF box,
+                              boolean vertical, boolean overlay,
+                              @NonNull LayoutCanvasArtwork.Palette p, float k) {
+        switch (id) {
+            case STATUS:
+                if (vertical) mArtwork.statusColumn(canvas, box, p, k);
+                else mArtwork.status(canvas, box, isStatusCompact(), p, k);
+                break;
+            case APPS:
+                mArtwork.dock(canvas, box, vertical, mPinnedAppCount, p, k);
+                break;
+            case AZ:
+                mArtwork.alphabet(canvas, box, vertical, p, k);
+                break;
+            case EXTRA_KEYS:
+                mArtwork.extraKeys(canvas, box, vertical, mExtraKeyCount, p, k);
+                break;
+            case KEYBOARD_LEFT:
+                mArtwork.keyboard(canvas, box, overlay ? 0f : chinPx(box), SPLIT_KEY_ROWS.left,
+                    LayoutCanvasGeometry.HALF_UNITS, p, k);
+                break;
+            case KEYBOARD_RIGHT:
+                mArtwork.keyboard(canvas, box, overlay ? 0f : chinPx(box), SPLIT_KEY_ROWS.right,
+                    LayoutCanvasGeometry.HALF_UNITS, p, k);
+                break;
+            case KEYBOARD:
+            default:
+                mArtwork.keyboard(canvas, box, overlay ? 0f : chinPx(box), DOCKED_KEY_ROWS,
+                    LayoutCanvasGeometry.ROW_UNITS, p, k);
+                break;
+        }
+    }
+
+    /** The place's own content on the pane: terminal lines, Home's widget grid, the display. */
+    private void drawPaneArt(@NonNull Canvas canvas, @NonNull RectF pane,
+                             @NonNull LayoutCanvasArtwork.Palette p, float k) {
+        switch (canvasKind()) {
+            case HOME_GRID:
+                drawHomeGrid(canvas, pane);
+                break;
+            case DISPLAY:
+                drawDisplayCanvas(canvas, pane);
+                break;
+            case TERMINAL:
+            default:
+                mArtwork.terminal(canvas, pane, p, k);
+                break;
+        }
+    }
+
+    // ---- What the shapes are, for the outline, the placeholder and the tests --------------------
+
+    /**
+     * The shape a block's fill is painted with: under Docked the frame (its box, its corners and
+     * the opening cut out of it) for every bar and the opening itself for the pane; under Floating
+     * the card the bar stands in, or the pane's card.
+     */
+    @Nullable
+    @VisibleForTesting
+    ShapeSpec fillShape(@NonNull Block block) {
+        ChromeShape shape = mShape;
+        if (shape == null) return null;
+        if (block == Block.CANVAS) {
+            if (shape.panes().isEmpty()) return null;
+            Pane pane = shape.panes().get(0);
+            return specOf(pane.box, pane.corners);
+        }
+        Piece piece = null;
+        if (block == Block.KEYBOARD) {
+            if (!mKeyboardPieces.isEmpty()) piece = mKeyboardPieces.get(0);
+        } else {
+            Element element = elementOf(block);
+            if (element != null) piece = shape.piece(PieceId.of(element));
+        }
+        if (piece == null) return null;
+        Card card = shape.cardOf(piece);
+        if (card == null) return specOf(piece.box, piece.corners);
+        return new ShapeSpec(viewRect(card.box), card.corners.toRadii(),
+            card.hole == null ? null : viewRect(card.hole));
+    }
+
+    /**
+     * The shapes the one outline is stroked along: the element's own piece (the keyboard's pieces,
+     * or the pane's opening) at the corners the model gave it.
+     */
+    @NonNull
+    @VisibleForTesting
+    List<ShapeSpec> selectionShapes(@NonNull Block block) {
+        List<ShapeSpec> out = new ArrayList<>(2);
+        ChromeShape shape = mShape;
+        if (shape == null) return out;
+        if (block == Block.KEYBOARD) {
+            if (mKeyboardRect.isEmpty()) return out;
+            for (Piece piece : mKeyboardPieces) out.add(specOf(piece.box, piece.corners));
+            return out;
+        }
+        if (block == Block.CANVAS) {
+            if (!shape.panes().isEmpty()) {
+                Pane pane = shape.panes().get(0);
+                out.add(specOf(pane.box, pane.corners));
+            }
+            return out;
+        }
+        Element element = elementOf(block);
+        Piece piece = element == null ? null : shape.piece(PieceId.of(element));
+        if (piece != null) out.add(specOf(piece.box, piece.corners));
+        return out;
+    }
+
+    /**
+     * The shapes of the dashed placeholder a lifted bar leaves: where it would land and the shape
+     * it would have there while it hovers a target, otherwise where it stood.
+     */
+    @NonNull
+    @VisibleForTesting
+    List<ShapeSpec> placeholderShapes() {
+        List<ShapeSpec> out = new ArrayList<>(2);
+        Block bar = mDraggedBar;
+        ChromeShape shape = mShape;
+        if (bar == null || shape == null) return out;
+        if (bar == Block.KEYBOARD) {
+            for (Piece piece : mKeyboardPieces) out.add(specOf(piece.box, piece.corners));
+            return out;
+        }
+        Piece drop = hoveredDropShape();
+        if (drop != null) {
+            out.add(specOf(drop.box, drop.corners));
+            return out;
+        }
+        Element element = elementOf(bar);
+        Piece piece = element == null ? null : shape.piece(PieceId.of(element));
+        if (piece != null) out.add(specOf(piece.box, piece.corners));
+        return out;
+    }
+
+    /** The shape the target the finger is over would give the lifted bar, or null over none. */
+    @Nullable
+    private Piece hoveredDropShape() {
+        MiniatureDragPolicy.Slot slot = mHoverSlot;
+        return slot != null && !slot.isTray() && slot == mDropShapeFor ? mDropShape : null;
+    }
+
     /**
      * The one outline the selected element wears: {@value #SELECTION_STROKE_DP}dp of the theme's
-     * primary around its card. Nothing else glows. A lifted element wears the lift instead.
+     * primary along its shape. Nothing else glows. A lifted element wears the lift instead.
      */
     private void drawSelection(@NonNull Canvas canvas) {
         if (mSelected == null || mSelected == mDraggedBar) return;
-        RectF block = mSelected == Block.KEYBOARD ? mKeyboardRect : mBlockRects.get(mSelected);
-        if (block == null || block.isEmpty()) return;
-        cardOf(block, mScratchRectA);
-        float radius = mSelected == Block.CANVAS ? surfaceRadiusPx() : cardRadius(mScratchRectA);
+        float stroke = dp(SELECTION_STROKE_DP);
         mLinePaint.setColor(accent());
-        mLinePaint.setStrokeWidth(dp(SELECTION_STROKE_DP));
-        canvas.drawRoundRect(mScratchRectA, radius, radius, mLinePaint);
+        mLinePaint.setStrokeWidth(stroke);
+        for (ShapeSpec shape : selectionShapes(mSelected)) {
+            strokeInside(canvas, shape, stroke / 2f, mLinePaint);
+        }
+    }
+
+    /** A shape stroked just inside its own edge, so the line reads in full at the frame's edge. */
+    private void strokeInside(@NonNull Canvas canvas, @NonNull ShapeSpec shape, float inset,
+                              @NonNull Paint paint) {
+        mScratchRectB.set(shape.box);
+        mScratchRectB.inset(inset, inset);
+        if (mScratchRectB.isEmpty()) return;
+        float[] radii = new float[8];
+        for (int i = 0; i < 8; i++) radii[i] = Math.max(0f, shape.radii[i] - inset);
+        mShapePath.reset();
+        mShapePath.setFillType(Path.FillType.WINDING);
+        mShapePath.addRoundRect(mScratchRectB, radii, Path.Direction.CW);
+        canvas.drawPath(mShapePath, paint);
+    }
+
+    /** The dashed outline a lifted bar leaves where it would land. */
+    private void drawPlaceholder(@NonNull Canvas canvas) {
+        if (mDraggedBar == null) return;
+        mDashPaint.setPathEffect(mSlotDash);
+        mDashPaint.setStrokeWidth(dp(1f));
+        mDashPaint.setColor(dim());
+        mDashPaint.setAlpha(PLACEHOLDER_ALPHA);
+        for (ShapeSpec shape : placeholderShapes()) {
+            strokeInside(canvas, shape, dp(0.5f), mDashPaint);
+        }
     }
 
     /** The selection's handles: a pill on each edge it moves, a dot on the grid's corner. */
@@ -2119,499 +2576,6 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * The card an element is drawn as, inside the block it claims: the block less half the gap
-     * between neighbours on every side, so two adjacent bands read as two cards with air between
-     * them rather than one strip with a line across it.
-     */
-    private void cardOf(@NonNull RectF block, @NonNull RectF out) {
-        float pad = Math.min(u(CARD_PAD_U), Math.min(block.width(), block.height()) / 4f);
-        out.set(block.left + pad, block.top + pad, block.right - pad, block.bottom - pad);
-    }
-
-    /**
-     * One band on the phone: its card and its content, or — while it is the bar in the air — the
-     * faint placeholder that keeps its place until the drop lands.
-     */
-    private void drawBandBlock(@NonNull Canvas canvas, @NonNull Block block) {
-        RectF rect = mBlockRects.get(block);
-        if (rect == null || rect.isEmpty() || mLayout == null) return;
-        if (mDraggedBar == block) {
-            cardOf(rect, mScratchRectA);
-            float radius = cardRadius(mScratchRectA);
-            mDashPaint.setPathEffect(mSlotDash);
-            mDashPaint.setStrokeWidth(dp(1f));
-            mDashPaint.setColor(dim());
-            mDashPaint.setAlpha(PLACEHOLDER_ALPHA);
-            canvas.drawRoundRect(mScratchRectA, radius, radius, mDashPaint);
-            return;
-        }
-        drawBandCard(canvas, block, rect, isBarVertical(block), false);
-        RectF grip = mGripRects.get(block);
-        if (grip != null) drawGrip(canvas, grip, gripInk());
-    }
-
-    /**
-     * A band's card at any rectangle — its own block on the phone, or the copy under the finger:
-     * the container, the hairline and the content, and the tonal raise around a lifted one.
-     *
-     * @param lifted whether this is the copy in the air, which wears the accent
-     */
-    private void drawBandCard(@NonNull Canvas canvas, @NonNull Block block, @NonNull RectF rect,
-                              boolean vertical, boolean lifted) {
-        RectF card = mScratchRectC;
-        cardOf(rect, card);
-        float radius = cardRadius(card);
-        if (lifted) {
-            // The raise: a solid underlay a little below, then the card with a wash of accent.
-            mScratchRectB.set(card);
-            mScratchRectB.offset(0f, u(LIFT_OFFSET_U));
-            mFillPaint.setColor(surface());
-            canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
-        }
-        mFillPaint.setColor(bandFill(block));
-        canvas.drawRoundRect(card, radius, radius, mFillPaint);
-        if (lifted) {
-            mFillPaint.setColor(accentWash());
-            canvas.drawRoundRect(card, radius, radius, mFillPaint);
-        }
-        mLinePaint.setColor(lifted ? accent() : lineColor());
-        mLinePaint.setStrokeWidth(u(lifted ? LIFTED_STROKE_U : CARD_STROKE_U));
-        canvas.drawRoundRect(card, radius, radius, mLinePaint);
-
-        if (block == Block.STATUS_BAR && vertical) {
-            // The column keeps its digits upright: the hour over the minutes, as the real one.
-            drawStatusColumnContent(canvas, card);
-            return;
-        }
-
-        int saved = beginBandOrientation(canvas, card, vertical, mScratchRectA);
-        shrinkForGrip(mScratchRectA, vertical);
-        switch (block) {
-            case STATUS_BAR: drawStatusContent(canvas, mScratchRectA); break;
-            case APPS_ROW: drawAppsContent(canvas, mScratchRectA); break;
-            case ALPHABETS_ROW: drawAlphabetsContent(canvas, mScratchRectA); break;
-            case EXTRA_KEYS:
-            default: drawExtraKeysContent(canvas, mScratchRectA); break;
-        }
-        endBandOrientation(canvas, saved);
-    }
-
-    // ---- The element pack, ported -------------------------------------------------------------
-    // The pack's geometry functions (renderer.py) draw in units of about one dp inside a shell of
-    // the element's own bounds. The painters below do the same: they open a scaled frame on the
-    // rectangle the layout gave the element ({@link #beginPack}), then place every shape in pack
-    // units by that rectangle's real size — pitch from the width, prompt from the bottom edge —
-    // so a glyph keeps its size whatever the bounds are, and nothing is ever stretched.
-
-    private static final Typeface PACK_MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
-    private static final Map<String, Path> PACK_PATHS = new HashMap<>();
-
-    /** The scale a band's content is drawn at: the canvas's, or less where the band is thinner. */
-    private float packScale(@NonNull RectF local, float designHeight) {
-        return Math.max(0.01f, Math.min(mCanvasScale, local.height() / designHeight));
-    }
-
-    /** Opens a frame whose origin is the rectangle's corner and whose unit is {@code k} pixels. */
-    private int beginPack(@NonNull Canvas canvas, @NonNull RectF area, float k) {
-        int saved = canvas.save();
-        canvas.translate(area.left, area.top);
-        canvas.scale(k, k);
-        return saved;
-    }
-
-    private void pkRect(@NonNull Canvas canvas, float x, float y, float w, float h, float r,
-                        @ColorInt int color) {
-        if (w <= 0f || h <= 0f) return;
-        mFillPaint.setColor(color);
-        mScratchRectB.set(x, y, x + w, y + h);
-        float radius = Math.min(r, Math.min(w, h) / 2f);
-        canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
-    }
-
-    private void pkStrokeRect(@NonNull Canvas canvas, float x, float y, float w, float h,
-                              float r, @ColorInt int color, float stroke) {
-        if (w <= 0f || h <= 0f) return;
-        mLinePaint.setColor(color);
-        mLinePaint.setStrokeWidth(stroke);
-        mScratchRectB.set(x, y, x + w, y + h);
-        float radius = Math.min(r, Math.min(w, h) / 2f);
-        canvas.drawRoundRect(mScratchRectB, radius, radius, mLinePaint);
-    }
-
-    private void pkBar(@NonNull Canvas canvas, float x, float y, float w, @ColorInt int color,
-                       float h) {
-        pkRect(canvas, x, y, w, h, h / 2f, color);
-    }
-
-    private void pkCircle(@NonNull Canvas canvas, float cx, float cy, float r,
-                          @ColorInt int color) {
-        if (r <= 0f) return;
-        mFillPaint.setColor(color);
-        canvas.drawCircle(cx, cy, r, mFillPaint);
-    }
-
-    private void pkText(@NonNull Canvas canvas, @NonNull String text, float x, float baseline,
-                        float size, @ColorInt int color, boolean medium) {
-        mTextPaint.setColor(color);
-        mTextPaint.setTypeface(medium ? PACK_MEDIUM : Typeface.DEFAULT);
-        mTextPaint.setTextAlign(Paint.Align.LEFT);
-        mTextPaint.setTextSize(size);
-        canvas.drawText(text, x, baseline, mTextPaint);
-    }
-
-    @Nullable
-    private static Path packPath(@NonNull String data) {
-        if (PACK_PATHS.containsKey(data)) return PACK_PATHS.get(data);
-        Path path;
-        try {
-            path = PathParser.createPathFromPathData(data);
-        } catch (RuntimeException e) {
-            path = null;
-        }
-        PACK_PATHS.put(data, path);
-        return path;
-    }
-
-    /** An SVG path drawn as a round-capped stroke (or filled), its origin moved to (x, y). */
-    private void pkPath(@NonNull Canvas canvas, @NonNull String data, float x, float y,
-                        @ColorInt int color, float stroke, boolean fill) {
-        Path path = packPath(data);
-        if (path == null) return;
-        int saved = canvas.save();
-        canvas.translate(x, y);
-        if (fill) {
-            mFillPaint.setColor(color);
-            canvas.drawPath(path, mFillPaint);
-        } else {
-            mLinePaint.setColor(color);
-            mLinePaint.setStrokeWidth(stroke);
-            mLinePaint.setStrokeCap(Paint.Cap.ROUND);
-            mLinePaint.setStrokeJoin(Paint.Join.ROUND);
-            canvas.drawPath(path, mLinePaint);
-            mLinePaint.setStrokeCap(Paint.Cap.BUTT);
-            mLinePaint.setStrokeJoin(Paint.Join.MITER);
-        }
-        canvas.restoreToCount(saved);
-    }
-
-    private void pkPath(@NonNull Canvas canvas, @NonNull String data, float x, float y,
-                        @ColorInt int color, float stroke) {
-        pkPath(canvas, data, x, y, color, stroke, false);
-    }
-
-    /**
-     * One of the pack's 24-unit glyphs with its top-left at (x, y), drawn at {@code scale}. The
-     * size a glyph has is its own: callers pass a scale from the pack's 20/24, never one derived
-     * from the bounds it stands in.
-     */
-    private void pkGlyph(@NonNull Canvas canvas, @NonNull String kind, float x, float y,
-                         float scale, @ColorInt int c) {
-        int saved = canvas.save();
-        canvas.translate(x, y);
-        canvas.scale(scale, scale);
-        switch (kind) {
-            case "terminal": pkPath(canvas, "M5 7l5 5-5 5M13 17h6", 0, 0, c, 2f); break;
-            case "phone":
-                pkPath(canvas, "M7 4l3 5-2 2c1.5 3 2.5 4 5 5l2-2 5 3c-1 4-4 4-7 2C7 16 4 12 4 8c0-2 1-3 3-4Z",
-                    0, 0, c, 2f);
-                break;
-            case "chat": pkPath(canvas, "M5 5h14v11H10l-5 4V5ZM9 9h6M9 12h4", 0, 0, c, 1.8f); break;
-            case "play": pkPath(canvas, "M9 6l10 6-10 6Z", 0, 0, c, 0f, true); break;
-            case "globe":
-                pkPath(canvas, "M3 12h18M12 3c-5 5-5 13 0 18M12 3c5 5 5 13 0 18", 0, 0, c, 1.6f);
-                mLinePaint.setColor(c);
-                mLinePaint.setStrokeWidth(1.8f);
-                canvas.drawCircle(12f, 12f, 9f, mLinePaint);
-                break;
-            case "grid":
-                pkRect(canvas, 5, 5, 5, 5, 1, c);
-                pkRect(canvas, 14, 5, 5, 5, 1, c);
-                pkRect(canvas, 5, 14, 5, 5, 1, c);
-                pkRect(canvas, 14, 14, 5, 5, 1, c);
-                break;
-            case "home":
-                pkPath(canvas, "M3 11l9-8 9 8M6 9v11h4v-6h4v6h4V9", 0, 0, c, 1.8f);
-                break;
-            case "monitor": pkPath(canvas, "M3 5h18v12H3ZM9 21h6M12 17v4", 0, 0, c, 1.8f); break;
-            case "list":
-                pkPath(canvas, "M9 6h11M9 12h11M9 18h11", 0, 0, c, 1.8f);
-                pkCircle(canvas, 4, 6, 1.3f, c);
-                pkCircle(canvas, 4, 12, 1.3f, c);
-                pkCircle(canvas, 4, 18, 1.3f, c);
-                break;
-            case "mouse":
-                pkStrokeRect(canvas, 6, 3, 12, 18, 6, c, 1.8f);
-                pkPath(canvas, "M6 10h12M12 3v7", 0, 0, c, 1.8f);
-                break;
-            case "keyboard":
-                pkStrokeRect(canvas, 2, 5, 20, 14, 3, c, 1.8f);
-                for (int col = 0; col < 4; col++) {
-                    pkCircle(canvas, 6 + 4 * col, 9, 0.8f, c);
-                    pkCircle(canvas, 6 + 4 * col, 12, 0.8f, c);
-                }
-                pkBar(canvas, 7, 15, 10, c, 1.5f);
-                break;
-            case "moon": pkPath(canvas, "M17 3a9 9 0 1 0 4 14A9 9 0 0 1 17 3Z", 0, 0, c, 0f, true); break;
-            default: break;
-        }
-        canvas.restoreToCount(saved);
-    }
-
-    // ---- Status bar --------------------------------------------------------------------------
-
-    /**
-     * The status bar, collapsed or expanded from {@code status_compact}. Collapsed is one row of
-     * tabs (the workspace count, the current tab, a plus), the two readings and the moon. Expanded
-     * puts that row under a 07:34 clock, a media tile and two lines of text. Positions come from
-     * the bar's own width: what does not fit its bounds is left out, never squeezed.
-     */
-    private void drawStatusContent(@NonNull Canvas canvas, @NonNull RectF local) {
-        boolean compact = isStatusCompact();
-        float design = compact ? PACK_STATUS_COMPACT_H : PACK_STATUS_EXPANDED_H;
-        float k = packScale(local, design);
-        float w = local.width() / k;
-        float h = local.height() / k;
-        float oy = Math.max(0f, (h - design) / 2f);
-        int saved = beginPack(canvas, local, k);
-        float y = oy + (compact ? 8f : 66f);
-        int key = keyFill();
-        pkRect(canvas, 12, y, 25, 24, 10, key);
-        pkText(canvas, "2", 20, y + 17, 12, text(), true);
-        pkRect(canvas, 43, y, 56, 24, 10, accentBg());
-        pkText(canvas, "home", 53, y + 17, 11, accent(), true);
-        if (w >= 140f) pkPath(canvas, "M0 -5v10M-5 0h10", 111, y + 12, onVariant(), 1.6f);
-        if (w >= 250f) {
-            pkBar(canvas, w - 119, y + 8, 27, accent(), 3);
-            pkBar(canvas, w - 119, y + 15, 18, key, 3);
-            pkBar(canvas, w - 80, y + 8, 23, secondary(), 3);
-            pkBar(canvas, w - 80, y + 15, 15, key, 3);
-        }
-        if (w >= 175f) {
-            pkGlyph(canvas, "moon", w - 44, y + 3, 0.7f, secondary());
-            pkCircle(canvas, w - 17, y + 12, 2, onVariant());
-        }
-        if (!compact) {
-            pkText(canvas, "07:34", 16, oy + 42, 27, text(), true);
-            if (w >= 230f) {
-                pkRect(canvas, 126, oy + 14, 37, 37, 12, accentBg());
-                pkCircle(canvas, 144.5f, oy + 32.5f, 11, accent());
-                pkCircle(canvas, 144.5f, oy + 32.5f, 4, accentBg());
-                pkBar(canvas, 174, oy + 18, w - 218, text(), 4);
-                pkBar(canvas, 174, oy + 29, w - 239, onVariant(), 3);
-                pkBar(canvas, 174, oy + 43, w - 210, key, 3);
-                pkBar(canvas, 174, oy + 43, Math.min(38f, w - 210), accent(), 3);
-            }
-            if (w >= 260f) {
-                pkCircle(canvas, w - 22, oy + 30, 12, key);
-                pkGlyph(canvas, "play", w - 31, oy + 21, 0.75f, text());
-            }
-        }
-        canvas.restoreToCount(saved);
-    }
-
-    /**
-     * The signal's three rising bars and the battery, laid out leftward from {@code endX} — or
-     * stacked upward from {@code cy} when the bar stands as a column.
-     */
-    private void drawStatusReadings(@NonNull Canvas canvas, float endX, float cy, float k,
-                                    boolean stacked) {
-        mFillPaint.setColor(dim());
-        float barW = 1.4f * k;
-        float barGap = 1.1f * k;
-        float batteryW = 7f * k;
-        float batteryH = 4f * k;
-        if (stacked) {
-            // Column: the battery on top, the signal bars under it, both centred on endX.
-            mScratchRectB.set(endX - batteryW / 2f, cy - batteryH - 2.5f * k, endX + batteryW / 2f,
-                cy - 2.5f * k);
-            canvas.drawRoundRect(mScratchRectB, k, k, mFillPaint);
-            float x = endX - (3f * barW + 2f * barGap) / 2f;
-            float base = cy + 2.5f * k + 5.5f * k;
-            for (int i = 0; i < 3; i++) {
-                float h = (2.5f + 1.5f * i) * k;
-                mScratchRectB.set(x, base - h, x + barW, base);
-                canvas.drawRoundRect(mScratchRectB, barW / 2f, barW / 2f, mFillPaint);
-                x += barW + barGap;
-            }
-            return;
-        }
-        // Row: the battery at the end, its nub outward, and the bars just before it.
-        float batteryLeft = endX - batteryW;
-        mScratchRectB.set(batteryLeft, cy - batteryH / 2f, endX, cy + batteryH / 2f);
-        canvas.drawRoundRect(mScratchRectB, k, k, mFillPaint);
-        mScratchRectB.set(endX, cy - k, endX + k, cy + k);
-        canvas.drawRect(mScratchRectB, mFillPaint);
-        float x = batteryLeft - 4f * k - barW;
-        float base = cy + batteryH / 2f + 0.5f * k;
-        for (int i = 2; i >= 0; i--) {
-            float h = (2.5f + 1.5f * i) * k;
-            mScratchRectB.set(x, base - h, x + barW, base);
-            canvas.drawRoundRect(mScratchRectB, barW / 2f, barW / 2f, mFillPaint);
-            x -= barW + barGap;
-        }
-    }
-
-    /** A status column: the hour over the minutes at its top, the readings at its foot. */
-    private void drawStatusColumnContent(@NonNull Canvas canvas, @NonNull RectF card) {
-        float k = Math.max(0.01f, Math.min(mUnit, card.width() / 40f));
-        float cx = card.centerX();
-        float top = card.top + u(GRIP_CLEARANCE_U) + 4f * k;
-        mTextPaint.setColor(text());
-        mTextPaint.setTypeface(Typeface.DEFAULT);
-        mTextPaint.setTextAlign(Paint.Align.CENTER);
-        mTextPaint.setTextSize(9f * k);
-        float lineH = 10f * k;
-        if (top + 2f * lineH < card.bottom - 24f * k) {
-            canvas.drawText("07", cx, top + lineH - 2f * k, mTextPaint);
-            canvas.drawText("34", cx, top + 2f * lineH - 2f * k, mTextPaint);
-        }
-        if (card.height() > 40f * k)
-            drawStatusReadings(canvas, cx, card.bottom - 12f * k, k, true);
-    }
-
-    // ---- Dock ---------------------------------------------------------------------------------
-
-    /**
-     * The dock: seven simplified app symbols in discs, at a pitch taken from the dock's width. The
-     * docked dock is square-cornered and the floating one rounded — that is the card's radius, set
-     * from the dock's corner — and the symbols are the same in both.
-     */
-    private void drawAppsContent(@NonNull Canvas canvas, @NonNull RectF local) {
-        float k = packScale(local, PACK_DOCK_H);
-        float w = local.width() / k;
-        float h = local.height() / k;
-        float pitch = (w - 24f) / DOCK_GLYPHS.length;
-        float size = Math.min(36f, Math.min(pitch - 6f, h - 20f));
-        if (size < 8f) return;
-        int saved = beginPack(canvas, local, k);
-        float cy = h / 2f;
-        float glyphScale = Math.min(20f, size * 0.56f) / 24f;
-        for (int i = 0; i < DOCK_GLYPHS.length; i++) {
-            float cx = 12f + (i + 0.5f) * pitch;
-            boolean primary = i == 0 || i == 3 || i == 4;
-            boolean tertiary = i == 1 || i == 2;
-            pkCircle(canvas, cx, cy, size / 2f,
-                primary ? accentBg() : tertiary ? secondaryBg() : keyFill());
-            pkGlyph(canvas, DOCK_GLYPHS[i], cx - 12f * glyphScale, cy - 12f * glyphScale,
-                glyphScale, primary ? accent() : tertiary ? secondary() : text());
-        }
-        canvas.restoreToCount(saved);
-    }
-
-    // ---- A-Z strip ----------------------------------------------------------------------------
-
-    /** Nine letters spread along the strip, A D G J M P S V Z, with M in its highlight. */
-    private void drawAlphabetsContent(@NonNull Canvas canvas, @NonNull RectF local) {
-        float k = packScale(local, PACK_AZ_H);
-        float w = local.width() / k;
-        float h = local.height() / k;
-        float oy = Math.max(0f, (h - PACK_AZ_H) / 2f);
-        int n = ALPHABETS_SAMPLE.length;
-        float pitch = (w - 38f) / (n - 1);
-        if (pitch <= 0f) return;
-        int stride = pitch < 12f ? 2 : 1;
-        int saved = beginPack(canvas, local, k);
-        for (int i = 0; i < n; i += stride) {
-            float x = 16f + i * pitch;
-            boolean lit = i == ALPHABETS_LIT_INDEX;
-            if (lit) pkRect(canvas, x - 6, oy + 4, 22, 20, 8, accentBg());
-            pkText(canvas, ALPHABETS_SAMPLE[i], x, oy + 18, 10, lit ? accent() : onVariant(), true);
-        }
-        canvas.restoreToCount(saved);
-    }
-
-    // ---- Toolbar (the extra keys) -------------------------------------------------------------
-
-    /** Seven glyphs at a pitch from the width, the terminal's in its highlight. */
-    private void drawExtraKeysContent(@NonNull Canvas canvas, @NonNull RectF local) {
-        float k = packScale(local, PACK_TOOLBAR_H);
-        float w = local.width() / k;
-        float h = local.height() / k;
-        float oy = Math.max(0f, (h - PACK_TOOLBAR_H) / 2f);
-        float pitch = (w - 24f) / TOOLBAR_GLYPHS.length;
-        if (pitch < 8f) return;
-        int saved = beginPack(canvas, local, k);
-        float glyphScale = 20f / 24f;
-        for (int i = 0; i < TOOLBAR_GLYPHS.length; i++) {
-            float cx = 12f + (i + 0.5f) * pitch;
-            boolean lit = i == TOOLBAR_LIT_INDEX;
-            if (lit) pkRect(canvas, cx - 17, oy + 9, 34, 34, 12, accentBg());
-            pkGlyph(canvas, TOOLBAR_GLYPHS[i], cx - 10f, oy + 16f, glyphScale,
-                lit ? accent() : onVariant());
-        }
-        canvas.restoreToCount(saved);
-    }
-
-    // ---- Canvas: Terminal / Home / Display ----------------------------------------------------
-
-    /** The pane: an outlined card on the surface, with the place's own content on it. */
-    private void drawCanvasBlock(@NonNull Canvas canvas) {
-        RectF rect = mBlockRects.get(Block.CANVAS);
-        if (rect == null || rect.isEmpty() || mLayout == null) return;
-        RectF pane = mScratchRectC;
-        cardOf(rect, pane);
-        float radius = surfaceRadiusPx();
-        mFillPaint.setColor(terminalFill());
-        canvas.drawRoundRect(pane, radius, radius, mFillPaint);
-        mLinePaint.setColor(lineColor());
-        mLinePaint.setStrokeWidth(u(CARD_STROKE_U));
-        canvas.drawRoundRect(pane, radius, radius, mLinePaint);
-
-        int saved = canvas.save();
-        mClipPath.reset();
-        mClipPath.addRoundRect(pane, radius, radius, Path.Direction.CW);
-        canvas.clipPath(mClipPath);
-        switch (canvasKind()) {
-            case HOME_GRID:
-                drawHomeGrid(canvas, pane);
-                break;
-            case DISPLAY:
-                drawDisplayCanvas(canvas, pane);
-                break;
-            case TERMINAL:
-            default:
-                drawTerminalLines(canvas, pane);
-                break;
-        }
-        canvas.restoreToCount(saved);
-    }
-
-    /**
-     * The terminal, one surface with no header of its own. A prompt and its command sit at the
-     * top and a few lines of output under them, each line drawn only while the pane is tall enough
-     * for it (they stop first when the pane gets short); the live prompt with its cursor is
-     * anchored near the pane's bottom edge, wherever that is.
-     */
-    private void drawTerminalLines(@NonNull Canvas canvas, @NonNull RectF pane) {
-        float k = Math.max(0.01f, mCanvasScale);
-        float w = pane.width() / k;
-        float h = pane.height() / k;
-        if (h < 46f || w < 60f) return;
-        int saved = beginPack(canvas, pane, k);
-        int secondary = secondary();
-        int accent = accent();
-        int key = keyFill();
-        if (h >= 96f) {
-            pkPath(canvas, "M17 28l5 4-5 4", 0, 0, secondary, 1.8f);
-            pkBar(canvas, 32, 30, 36, secondary, 3);
-            pkBar(canvas, 76, 30, Math.min(55f, w - 93f), accent, 3);
-            float[][][] lines = {
-                {{17, 100}, {125, 34}}, {{17, 56}, {81, 85}}, {{17, 83}}};
-            float[] ys = {53f, 70f, 87f};
-            for (int line = 0; line < lines.length; line++) {
-                if (ys[line] >= h - 64f) break;
-                for (float[] segment : lines[line]) {
-                    pkBar(canvas, segment[0], ys[line], Math.min(segment[1], w - segment[0] - 17f),
-                        key, 3);
-                }
-            }
-        }
-        pkPath(canvas, "M17 0l5 4-5 4", 0, h - 34f, secondary, 1.8f);
-        pkRect(canvas, 32, h - 36f, 5, 13, 1.5f, accent);
-        canvas.restoreToCount(saved);
-    }
-
-    /**
      * Home's widget grid, as the layout counts it: one faint tile per cell, and on the first two
      * a clock face and a few lines, so the tiles read as widgets rather than as a grid.
      */
@@ -2623,7 +2587,7 @@ public final class LayoutCanvasView extends View {
         int tile = ColorUtils.setAlphaComponent(container(), TILE_ALPHA);
         if (mGridCollapsed) {
             mFillPaint.setColor(tile);
-            canvas.drawRoundRect(area, surfaceRadiusPx(), surfaceRadiusPx(), mFillPaint);
+            canvas.drawRoundRect(area, tileRadiusPx(), tileRadiusPx(), mFillPaint);
             return; // the "n×m" figure is in the legend, so nothing else is written here
         }
         int columns = Math.max(1, mLayout.widgetColumns);
@@ -2631,7 +2595,7 @@ public final class LayoutCanvasView extends View {
         float cellGap = 6f * mUnit;
         float cellW = (area.width() - cellGap * (columns - 1)) / columns;
         float cellH = (area.height() - cellGap * (rows - 1)) / rows;
-        float radius = Math.min(surfaceRadiusPx(), Math.min(cellW, cellH) * 0.3f);
+        float radius = Math.min(tileRadiusPx(), Math.min(cellW, cellH) * 0.3f);
         boolean decorated = Math.min(cellW, cellH) >= u(22f);
         float areaLeft = area.left;
         float areaTop = area.top;
@@ -2677,7 +2641,20 @@ public final class LayoutCanvasView extends View {
         }
     }
 
-    /** The display: a window on the desk, and the floating keyboard over it when it floats. */
+    /** A widget tile's and the display window's corner, in pixels at the canvas scale. */
+    private float tileRadiusPx() {
+        return TILE_CORNER_DP * mCanvasScale;
+    }
+
+    /** The corner a drop-target outline and the tray's drop zone wear, in pixels. */
+    private float slotRadiusPx() {
+        return SLOT_CORNER_DP * mCanvasScale;
+    }
+
+    /**
+     * The display: a window on the desk. A keyboard that floats over it is a card of the chrome,
+     * drawn over the pane by {@link #drawOverlays}, not here.
+     */
     private void drawDisplayCanvas(@NonNull Canvas canvas, @NonNull RectF pane) {
         if (mLayout == null) return;
         float pad = 10f * mUnit;
@@ -2691,7 +2668,7 @@ public final class LayoutCanvasView extends View {
         window.set(desk.left + winInsetX, winTop, desk.right - winInsetX, winBottom);
         // A window on the display is a raised surface, the same tone the tiles wear.
         mFillPaint.setColor(ColorUtils.setAlphaComponent(container(), TILE_ALPHA));
-        float radius = surfaceRadiusPx();
+        float radius = tileRadiusPx();
         canvas.drawRoundRect(window, radius, radius, mFillPaint);
         mLinePaint.setColor(lineColor());
         mLinePaint.setStrokeWidth(u(CARD_STROKE_U));
@@ -2700,176 +2677,6 @@ public final class LayoutCanvasView extends View {
         mFillPaint.setColor(dim());
         mScratchRectA.set(window.left, window.top, window.right, window.top + barH);
         canvas.drawRoundRect(mScratchRectA, radius, radius, mFillPaint);
-
-        if (mLayout.keyboardMode == KeyboardMode.OVERLAY) {
-            float inset = 8f * mUnit;
-            float height = Math.min(pane.height() * 0.36f, u(60f));
-            mScratchRectA.set(pane.left + inset, pane.bottom - height - inset,
-                pane.right - inset, pane.bottom - inset);
-            drawKeyboardCard(canvas, mScratchRectA, 0f, true);
-        }
-    }
-
-    // ---- Keyboard -----------------------------------------------------------------------------
-
-    /**
-     * The keyboard's block along the bottom of the phone, while the place shows one, drawn in the
-     * form the place types with: docked across the block, floating as a smaller card lifted off
-     * it, split as two halves with the parting between them. The block itself is the same in all
-     * three, so the drop targets around it do not move with the form. The block's bottom is the
-     * chin, real dp to scale, which every form leaves bare of keys.
-     */
-    private void drawKeyboardBlock(@NonNull Canvas canvas) {
-        if (mKeyboardRect.isEmpty()) return;
-        cardOf(mKeyboardRect, mScratchRectC);
-        if (mDraggedBar == Block.KEYBOARD) {
-            // In the air: the faint placeholder a lifted bar leaves, until the drop lands.
-            float radius = cardRadius(mScratchRectC);
-            mDashPaint.setPathEffect(mSlotDash);
-            mDashPaint.setStrokeWidth(dp(1f));
-            mDashPaint.setColor(dim());
-            mDashPaint.setAlpha(PLACEHOLDER_ALPHA);
-            canvas.drawRoundRect(mScratchRectC, radius, radius, mDashPaint);
-            return;
-        }
-        KeyboardForm form = mLayout == null ? KeyboardForm.DOCKED : mLayout.keyboardForm;
-        switch (form) {
-            case FLOATING: {
-                RectF card = mKeyboardPartA;
-                floatingKeyboardCardInto(mScratchRectC, card);
-                // The raise a lifted card wears, so it reads as over the place, not in it.
-                mScratchRectB.set(card);
-                mScratchRectB.offset(0f, u(LIFT_OFFSET_U) / 2f);
-                float radius = cardRadius(card);
-                mFillPaint.setColor(ColorUtils.setAlphaComponent(onVariant(), PLACEHOLDER_ALPHA));
-                canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
-                drawKeyboardCard(canvas, card, 0f, true);
-                break;
-            }
-            case SPLIT: {
-                RectF left = mKeyboardPartA;
-                RectF right = mKeyboardPartB;
-                splitKeyboardHalvesInto(mScratchRectC, left, right);
-                float chin = chinPx(mScratchRectC);
-                LayoutCanvasGeometry.SplitRows rows = LayoutCanvasGeometry.splitKeyRows();
-                drawKeyboardShell(canvas, left, chin, rows.left, LayoutCanvasGeometry.HALF_UNITS,
-                    false);
-                drawKeyboardShell(canvas, right, chin, rows.right, LayoutCanvasGeometry.HALF_UNITS,
-                    false);
-                break;
-            }
-            case DOCKED:
-            default:
-                drawKeyboardCard(canvas, mScratchRectC, chinPx(mScratchRectC), false);
-                break;
-        }
-    }
-
-    /** The floating keyboard's card: 72% of the block's width and 82% of its height, centred. */
-    @VisibleForTesting
-    static void floatingKeyboardCardInto(@NonNull RectF block, @NonNull RectF out) {
-        float width = block.width() * 0.72f;
-        float height = block.height() * 0.82f;
-        out.set(block.centerX() - width / 2f, block.centerY() - height / 2f,
-            block.centerX() + width / 2f, block.centerY() + height / 2f);
-    }
-
-    /** The split keyboard's two halves: 40% of the block's width each, at its two ends. */
-    @VisibleForTesting
-    static void splitKeyboardHalvesInto(@NonNull RectF block, @NonNull RectF left,
-                                        @NonNull RectF right) {
-        float half = block.width() * 0.4f;
-        left.set(block.left, block.top, block.left + half, block.bottom);
-        right.set(block.right - half, block.top, block.right, block.bottom);
-    }
-
-    /**
-     * A whole keyboard card: its shell and the docked key rows across it. {@code chinPx} is the
-     * bare air under the last row; a floating card carries a grabber at its top and no chin.
-     */
-    private void drawKeyboardCard(@NonNull Canvas canvas, @NonNull RectF card, float chinPx,
-                                  boolean floating) {
-        drawKeyboardShell(canvas, card, chinPx, LayoutCanvasGeometry.dockedKeyRows(),
-            LayoutCanvasGeometry.ROW_UNITS, floating);
-    }
-
-    /**
-     * The keyboard's surface and its keys: the card in the pack's surface tone with its hairline,
-     * then the given rows laid across {@code units} key units with the pitch taken from the card's
-     * width and the row pitch from its height less the chin. The space bar wears the accent, the
-     * enter key the secondary, and shift, backspace and enter carry their glyphs.
-     *
-     * @param grabber whether the card is the floating one, which draws its grabber and starts its
-     *                keys lower
-     */
-    private void drawKeyboardShell(@NonNull Canvas canvas, @NonNull RectF card, float chinPx,
-                                   @NonNull List<List<LayoutCanvasGeometry.KeyCell>> rows,
-                                   float units, boolean grabber) {
-        float radius = cardRadius(card);
-        mFillPaint.setColor(container());
-        canvas.drawRoundRect(card, radius, radius, mFillPaint);
-        mLinePaint.setColor(lineColor());
-        mLinePaint.setStrokeWidth(u(CARD_STROKE_U));
-        canvas.drawRoundRect(card, radius, radius, mLinePaint);
-
-        float k = Math.max(0.01f, mCanvasScale);
-        float w = card.width() / k;
-        float h = (card.height() - chinPx) / k;
-        float top = grabber ? PACK_KEY_TOP_FLOATING : PACK_KEY_TOP;
-        float pitch = (w - 2f * PACK_KEY_MARGIN) / units;
-        float rowPitch = (h - top - PACK_KEY_MARGIN) / rows.size();
-        float keyH = rowPitch - PACK_KEY_GAP;
-        if (keyH < 3f || pitch < 4f) return;
-        int saved = beginPack(canvas, card, k);
-        if (grabber && h > 30f) pkBar(canvas, w / 2f - 14f, 8f, 28f, onVariant(), 3f);
-        for (int r = 0; r < rows.size(); r++) {
-            float y = top + r * rowPitch;
-            float keyRadius = Math.min(KEY_CORNER_DP, keyH / 3f);
-            for (LayoutCanvasGeometry.KeyCell cell : rows.get(r)) {
-                drawKeyCell(canvas, cell, PACK_KEY_MARGIN + cell.x * pitch, y,
-                    cell.w * pitch - PACK_KEY_GAP, keyH, keyRadius);
-            }
-        }
-        canvas.restoreToCount(saved);
-    }
-
-    /** One key in pack units: its tone by role, and the glyph the role carries if it fits. */
-    private void drawKeyCell(@NonNull Canvas canvas, @NonNull LayoutCanvasGeometry.KeyCell cell,
-                             float x, float y, float w, float h, float radius) {
-        int fill;
-        switch (cell.role) {
-            case SPACE: fill = accentBg(); break;
-            case ENTER: fill = secondaryBg(); break;
-            default: fill = keyFill(); break;
-        }
-        pkRect(canvas, x, y, w, h, radius, fill);
-        boolean roomy = w >= 18f && h >= 12f;
-        float cx = x + w / 2f;
-        float cy = y + h / 2f;
-        switch (cell.role) {
-            case SHIFT:
-                if (roomy) pkPath(canvas, "M-4 3v-5h-3l7-5 7 5h-3v5", cx, cy, onVariant(), 1.4f);
-                break;
-            case BACKSPACE:
-                if (roomy) pkPath(canvas, "M3 -4l-5 4 5 4", cx, cy, onVariant(), 1.6f);
-                break;
-            case SYMBOLS:
-                if (roomy) pkText(canvas, "···", x + 8f, cy + 4f, 12f, onVariant(), false);
-                break;
-            case SPACE: {
-                float bar = Math.min(w * 0.3f, 30f);
-                pkBar(canvas, cx - bar / 2f, cy - 1f, bar, accent(), 2f);
-                break;
-            }
-            case ENTER:
-                if (roomy) {
-                    float gx = w >= 40f ? x + w - 22f : cx;
-                    pkPath(canvas, "M7 -4v5h-14m4-4-4 4 4 4", gx, cy, secondary(), 1.8f);
-                }
-                break;
-            default:
-                break;
-        }
     }
 
     // ---- Legend ----------------------------------------------------------------------------------
@@ -2961,60 +2768,6 @@ public final class LayoutCanvasView extends View {
         icon.draw(canvas);
     }
 
-    // ---- Grips, slots, tray and the lifted copy ------------------------------------------------
-
-    /**
-     * Keeps a band's own content clear of the grip at its trailing end. In a row the grip is at
-     * the trailing corner; in a column it is at the top, which the rotation maps to the local
-     * end for LTR and the local start for RTL — the same side a row's trailing corner lands on.
-     */
-    private void shrinkForGrip(@NonNull RectF local, boolean vertical) {
-        float room = Math.min(u(GRIP_CLEARANCE_U), local.width() / 2f);
-        if (isRtl()) local.left += room;
-        else local.right -= room;
-    }
-
-    /**
-     * Half the grip's height on a card with {@code innerHeightPx} of room: the whole column of
-     * dots where it fits, and no taller than the card less {@code clearancePx} on each side where
-     * it does not — the A–Z band is the one this is for.
-     */
-    @VisibleForTesting
-    static float gripHalfHeightPx(float wantedHalfPx, float innerHeightPx, float clearancePx) {
-        float room = Math.max(0f, innerHeightPx / 2f - Math.max(0f, clearancePx));
-        return Math.max(0f, Math.min(wantedHalfPx, room));
-    }
-
-    /**
-     * The dots' radius for a grip {@code halfHeightPx} tall: the design's, or — where the column
-     * has been squeezed — small enough that three rows still stand
-     * {@value #GRIP_MIN_PITCH_RADII} radii apart. Never under half a pixel.
-     */
-    @VisibleForTesting
-    static float gripDotRadiusPx(float designRadiusPx, float halfHeightPx) {
-        float fit = Math.max(0f, halfHeightPx) / (1f + GRIP_MIN_PITCH_RADII);
-        return Math.max(0.5f, Math.min(designRadiusPx, fit));
-    }
-
-    /**
-     * The six dots, filling their rectangle: two columns at its sides, three rows from its top to
-     * its bottom. The colour says whether the bar is held.
-     */
-    private void drawGrip(@NonNull Canvas canvas, @NonNull RectF grip, int color) {
-        float cx = grip.centerX();
-        float cy = grip.centerY();
-        float radius = gripDotRadiusPx(Math.min(u(GRIP_DOT_RADIUS_U), grip.width() / 4f),
-            grip.height() / 2f);
-        float pitchX = Math.max(0f, grip.width() - 2f * radius);
-        float pitchY = Math.max(0f, grip.height() / 2f - radius);
-        mFillPaint.setColor(color);
-        for (int c = -1; c <= 1; c += 2) {
-            for (int r = -1; r <= 1; r++) {
-                canvas.drawCircle(cx + c * pitchX / 2f, cy + r * pitchY, radius, mFillPaint);
-            }
-        }
-    }
-
     /**
      * Every edge the lifted bar may stand on, outlined as one region the way it always has been,
      * and — on the edge under the finger — the gaps inside it: a thin line where each would put the
@@ -3024,7 +2777,7 @@ public final class LayoutCanvasView extends View {
     private void drawSlots(@NonNull Canvas canvas) {
         if (mSlots.isEmpty()) return;
         int accent = accent();
-        float radius = surfaceRadiusPx();
+        float radius = slotRadiusPx();
         MiniatureDragPolicy.Slot hoveredSlot = mHoverSlot;
         Edge hovered = hoveredSlot == null ? null : hoveredSlot.edge;
         mDashPaint.setPathEffect(mSlotDash);
@@ -3107,7 +2860,7 @@ public final class LayoutCanvasView extends View {
      */
     private void drawTray(@NonNull Canvas canvas) {
         if (trayState() != TrayState.OFFERING) return;
-        float radius = surfaceRadiusPx();
+        float radius = slotRadiusPx();
         boolean active = mHoverSlot != null && mHoverSlot.isTray();
         mFillPaint.setColor(surface());
         canvas.drawRoundRect(mTrayRect, radius, radius, mFillPaint);
@@ -3146,90 +2899,174 @@ public final class LayoutCanvasView extends View {
             * Math.min(fontScale, LEGEND_MAX_FONT_SCALE);
     }
 
+    // ---- The lifted copy -----------------------------------------------------------------------
+
     /**
-     * The lifted bar wherever the finger has taken it: the same card, drawn raised — a solid
-     * underlay a little below it, a wash of accent over it, an accent rim and an accent grip.
+     * Where the lifted copy is this frame, before its swell: its box, the corners it wears and
+     * which way it stands. It keeps the shape of the bar it came from until it hovers a target, and
+     * then changes into the shape the model says the bar would have there.
+     */
+    private static final class Ghost {
+        final RectF box = new RectF();
+        @NonNull Corners corners = Corners.SQUARE;
+        boolean vertical;
+    }
+
+    private final Ghost mGhost = new Ghost();
+
+    /**
+     * Works out {@link #mGhost} for a lifted bar: its own piece's size and corners while the
+     * finger is over no target, and over one the size and corners of the piece the model gives it
+     * there ({@link ChromeShapeModel#shapeIfDropped}), by however far the change has come. The
+     * copy follows the finger and, as it changes shape, comes to be centred on it. False while no
+     * bar is lifted; the keyboard, which only goes to the tray, never changes shape.
+     */
+    private boolean computeGhost() {
+        Block bar = mDraggedBar;
+        ChromeShape shape = mShape;
+        if (bar == null || bar == Block.KEYBOARD || shape == null || mLiftOrigin.isEmpty())
+            return false;
+        Element element = elementOf(bar);
+        if (element == null) return false;
+        Piece base = shape.piece(PieceId.of(element));
+        if (base == null) return false;
+        float morph = LayoutCanvasMorph.clamp01(mGhostMorph.value);
+        float cx = mLiftOrigin.centerX() + mGhostX.value
+            + (mDownX - mLiftOrigin.centerX()) * morph;
+        float cy = mLiftOrigin.centerY() + mGhostY.value
+            + (mDownY - mLiftOrigin.centerY()) * morph;
+        float w = mLiftOrigin.width();
+        float h = mLiftOrigin.height();
+        Corners corners = base.corners;
+        boolean vertical = isElementVertical(element);
+        Piece drop = mDropShape;
+        if (drop != null && morph > 0f) {
+            w = LayoutCanvasMorph.lerp(w, drop.box.width(), morph);
+            h = LayoutCanvasMorph.lerp(h, drop.box.height(), morph);
+            corners = LayoutCanvasMorph.lerp(base.corners, drop.corners, morph);
+            if (morph >= 0.5f && mDropEdge != null) vertical = mDropEdge.isOnSide();
+        }
+        mGhost.box.set(cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f);
+        if (morph > 0f) {
+            // Changing into a bar the length of an edge, the copy is not let off the phone.
+            float shiftX = 0f;
+            float shiftY = 0f;
+            if (mGhost.box.left < mFrameRect.left) shiftX = mFrameRect.left - mGhost.box.left;
+            else if (mGhost.box.right > mFrameRect.right)
+                shiftX = mFrameRect.right - mGhost.box.right;
+            if (mGhost.box.top < mFrameRect.top) shiftY = mFrameRect.top - mGhost.box.top;
+            else if (mGhost.box.bottom > mFrameRect.bottom)
+                shiftY = mFrameRect.bottom - mGhost.box.bottom;
+            mGhost.box.offset(shiftX * morph, shiftY * morph);
+        }
+        mGhost.corners = corners;
+        mGhost.vertical = vertical;
+        return true;
+    }
+
+    /** The lifted bar's shape this frame, before its swell; null while nothing is lifted. */
+    @Nullable
+    @VisibleForTesting
+    ShapeSpec ghostShape() {
+        if (!computeGhost()) return null;
+        return new ShapeSpec(new RectF(mGhost.box), mGhost.corners.toRadii(), null);
+    }
+
+    /** How far the lifted copy has changed to the hovered target's shape: 0 to 1. */
+    @VisibleForTesting
+    float ghostMorph() {
+        return mGhostMorph.value;
+    }
+
+    /** Takes every spring of the lift to where it is going, as the frames after a gesture would. */
+    @VisibleForTesting
+    void settleMotion() {
+        mGhostMorph.reset(mGhostMorph.target);
+        mGhostScale.reset(mGhostScale.target);
+        if (mSpringingBack) {
+            mGhostX.reset(mGhostX.target);
+            mGhostY.reset(mGhostY.target);
+        }
+        invalidate();
+    }
+
+    /**
+     * The lifted bar wherever the finger has taken it: its shape raised — a solid underlay a
+     * little below it, a wash of accent over it and an accent rim, along the same corners.
      */
     private void drawGhost(@NonNull Canvas canvas) {
-        if (mDraggedBar == null || mLiftOrigin.isEmpty()) return;
+        Block bar = mDraggedBar;
+        if (bar == null || mLiftOrigin.isEmpty() || mShape == null) return;
+        LayoutCanvasArtwork.Palette p = palette();
+        float k = Math.max(0.01f, mCanvasScale);
         float scale = mGhostScale.value;
-        float cx = mLiftOrigin.centerX() + mGhostX.value;
-        float cy = mLiftOrigin.centerY() + mGhostY.value;
-        float halfWidth = mLiftOrigin.width() / 2f * scale;
-        float halfHeight = mLiftOrigin.height() / 2f * scale;
-        mGhostRect.set(cx - halfWidth, cy - halfHeight, cx + halfWidth, cy + halfHeight);
-        if (mDraggedBar == Block.KEYBOARD) {
-            // The keyboard in the air: its card, raised, with the accent rim a lifted bar wears.
-            cardOf(mGhostRect, mKeyboardWhole);
-            float radius = cardRadius(mKeyboardWhole);
-            mScratchRectB.set(mKeyboardWhole);
-            mScratchRectB.offset(0f, u(LIFT_OFFSET_U));
-            mFillPaint.setColor(surface());
-            canvas.drawRoundRect(mScratchRectB, radius, radius, mFillPaint);
-            mKeyboardPartA.set(mKeyboardWhole);
-            drawKeyboardCard(canvas, mKeyboardWhole, chinPx(mKeyboardWhole), false);
-            mLinePaint.setColor(accent());
-            mLinePaint.setStrokeWidth(u(LIFTED_STROKE_U));
-            canvas.drawRoundRect(mKeyboardPartA, radius, radius, mLinePaint);
+        if (bar == Block.KEYBOARD) {
+            for (Piece piece : mKeyboardPieces) {
+                mGhostRect.set(viewRect(piece.box));
+                mGhostRect.offset(mGhostX.value, mGhostY.value);
+                scaleAboutCentre(mGhostRect, scale);
+                drawLifted(canvas, mGhostRect, piece.corners, piece.id, false, piece.overlay, p, k);
+            }
             return;
         }
-        boolean vertical = mBlockRects.containsKey(mDraggedBar) && isBarVertical(mDraggedBar);
-        drawBandCard(canvas, mDraggedBar, mGhostRect, vertical, true);
-        gripInto(mGhostRect, vertical, mGhostGripRect);
-        drawGrip(canvas, mGhostGripRect, accent());
+        Element element = elementOf(bar);
+        if (element == null || !computeGhost()) return;
+        mGhostRect.set(mGhost.box);
+        scaleAboutCentre(mGhostRect, scale);
+        drawLifted(canvas, mGhostRect, mGhost.corners, PieceId.of(element), mGhost.vertical,
+            false, p, k);
+    }
+
+    private static void scaleAboutCentre(@NonNull RectF rect, float scale) {
+        float halfWidth = rect.width() / 2f * scale;
+        float halfHeight = rect.height() / 2f * scale;
+        float cx = rect.centerX();
+        float cy = rect.centerY();
+        rect.set(cx - halfWidth, cy - halfHeight, cx + halfWidth, cy + halfHeight);
+    }
+
+    /** One lifted shape: the raise, the card with its artwork, the wash and the accent rim. */
+    private void drawLifted(@NonNull Canvas canvas, @NonNull RectF box, @NonNull Corners corners,
+                            @NonNull PieceId id, boolean vertical, boolean overlay,
+                            @NonNull LayoutCanvasArtwork.Palette p, float k) {
+        mScratchRectC.set(box);
+        mScratchRectC.offset(0f, u(LIFT_OFFSET_U));
+        roundPath(mRaisePath, mScratchRectC, corners);
+        mFillPaint.setColor(surface());
+        canvas.drawPath(mRaisePath, mFillPaint);
+        roundPath(mShapePath, box, corners);
+        mFillPaint.setColor(p.surface);
+        canvas.drawPath(mShapePath, mFillPaint);
+        int saved = canvas.save();
+        canvas.clipPath(mShapePath);
+        drawPieceArt(canvas, id, box, vertical, overlay, p, k);
+        canvas.restoreToCount(saved);
+        mFillPaint.setColor(accentWash());
+        canvas.drawPath(mShapePath, mFillPaint);
+        mLinePaint.setColor(accent());
+        mLinePaint.setStrokeWidth(u(LIFTED_STROKE_U));
+        canvas.drawPath(mShapePath, mLinePaint);
     }
 
     // ---- The drag ------------------------------------------------------------------------------
 
     /**
-     * The grip a finger is on, within its target, or null. The nearest wins so two grips that
-     * end up close together on a small picture — three stacked rows are closer than a fingertip
-     * — still resolve to one.
+     * The bar under a finger, which a press may go on to lift: the keyboard (its card first, since
+     * a floating one stands over the pane) or one of the bars. Anywhere on it will do; there is no
+     * handle to find.
      */
     @Nullable
-    private Block gripAt(float x, float y) {
-        Block best = null;
-        float bestDistance = Float.MAX_VALUE;
-        for (Map.Entry<Block, RectF> entry : mGripRects.entrySet()) {
-            RectF grip = entry.getValue();
-            gripTouchInto(entry.getKey(), grip, mScratchGripTouch);
-            if (!mScratchGripTouch.contains(x, y)) continue;
-            float dx = grip.centerX() - x;
-            float dy = grip.centerY() - y;
-            float distance = dx * dx + dy * dy;
-            if (distance < bestDistance) {
-                bestDistance = distance;
-                best = entry.getKey();
-            }
+    private Block barAt(float x, float y) {
+        if (!mKeyboardRect.isEmpty() && mKeyboardRect.contains(x, y)) return Block.KEYBOARD;
+        for (Block bar : BARS) {
+            RectF rect = mBlockRects.get(bar);
+            if (rect != null && rect.contains(x, y)) return bar;
         }
-        return best;
+        return null;
     }
 
     /**
-     * What a finger has to land on to lift this bar: the platform's 48dp target centred on the
-     * grip, never scaled down with the artwork. Along the band it stops at the band's own ends,
-     * or the target would reach into the band standing next to it and take its taps; across the
-     * band it may reach past it — a column the picture draws is a few dp wide, and a grip drawn
-     * to fit inside it is far narrower than a fingertip.
-     */
-    private void gripTouchInto(@NonNull Block bar, @NonNull RectF grip, @NonNull RectF out) {
-        float half = dp(GRIP_TOUCH_HALF_DP);
-        float cx = grip.centerX();
-        float cy = grip.centerY();
-        out.set(cx - half, cy - half, cx + half, cy + half);
-        RectF band = mBlockRects.get(bar);
-        if (band == null || band.isEmpty()) return;
-        if (mBlockRects.containsKey(bar) && isBarVertical(bar)) {
-            out.top = Math.max(out.top, band.top);
-            out.bottom = Math.min(out.bottom, band.bottom);
-            return;
-        }
-        out.left = Math.max(out.left, band.left);
-        out.right = Math.min(out.right, band.right);
-    }
-
-    /**
-     * Lifts a bar with the finger already down on its grip. Refuses a bar the arrangement leaves
+     * Lifts a bar with the finger already down on it. Refuses a bar the arrangement leaves
      * nowhere to go, so a lift never starts a gesture that cannot end anywhere.
      */
     private boolean beginDrag(@NonNull Block bar, float x, float y) {
@@ -3249,12 +3086,17 @@ public final class LayoutCanvasView extends View {
         mGhostY.reset(0f);
         mGhostScale.reset(1f);
         mGhostScale.target = GHOST_SCALE;
+        mGhostMorph.reset(0f);
+        mDropShape = null;
+        mDropShapeFor = null;
+        mDropEdge = null;
         mSpringingBack = false;
         // The preference list must not take the touch for the rest of the gesture, however far
         // the finger travels off the picture.
         ViewParent parent = getParent();
         if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
         mHoverSlot = MiniatureDragPolicy.slotUnder(mSlots, x, y);
+        refreshDropShape();
         startMotion();
         invalidate();
         notifyTrayOffer();
@@ -3265,8 +3107,35 @@ public final class LayoutCanvasView extends View {
         mGhostX.reset(x - mDownX);
         mGhostY.reset(y - mDownY);
         mHoverSlot = MiniatureDragPolicy.slotUnder(mSlots, x, y);
+        refreshDropShape();
         invalidate();
         notifyTrayOffer();
+    }
+
+    /**
+     * Asks the model for the shape the hovered target would give the lifted bar — the same
+     * question the placeholder is drawn from — and sets the copy changing into it; over no target
+     * the copy changes back to the shape it was lifted with.
+     */
+    private void refreshDropShape() {
+        MiniatureDragPolicy.Slot slot = mHoverSlot;
+        Block bar = mDraggedBar;
+        Element element = bar == null ? null : elementOf(bar);
+        boolean over = element != null && slot != null && !slot.isTray() && slot.edge != null
+            && mInput != null && !mSpringingBack;
+        if (!over) {
+            mGhostMorph.target = 0f;
+            startMotion();
+            return;
+        }
+        if (slot != mDropShapeFor) {
+            mDropShape = ChromeShapeModel.shapeIfDropped(mInput, element, slot.edge, slot.index,
+                slot.underKeyboard);
+            mDropEdge = slot.edge;
+            mDropShapeFor = slot;
+        }
+        mGhostMorph.target = 1f;
+        startMotion();
     }
 
     /** Over a target, the new placement is reported at once; anywhere else the bar goes back. */
@@ -3298,6 +3167,7 @@ public final class LayoutCanvasView extends View {
         mGhostX.target = 0f;
         mGhostY.target = 0f;
         mGhostScale.target = 1f;
+        mGhostMorph.target = 0f;
         startMotion();
         invalidate();
         notifyTrayOffer();
@@ -3306,13 +3176,18 @@ public final class LayoutCanvasView extends View {
     private void endDrag() {
         boolean lifted = mDraggedBar != null;
         mDraggedBar = null;
+        mPressedBar = null;
         mSpringingBack = false;
         mSlots.clear();
         mHoverSlot = null;
+        mDropShape = null;
+        mDropShapeFor = null;
+        mDropEdge = null;
         mLiftOrigin.setEmpty();
         mGhostX.reset(0f);
         mGhostY.reset(0f);
         mGhostScale.reset(1f);
+        mGhostMorph.reset(0f);
         mLastFrameNanos = 0L;
         removeCallbacks(mMotionTick);
         if (lifted) invalidate();
@@ -3326,16 +3201,18 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * The lift's swell and a release's spring-back, on the shared integrator. Reduced motion snaps
-     * both, which ends the gesture on the next frame instead of animating it home.
+     * The lift's swell, its change of shape over a target and a release's spring-back, on the
+     * shared integrator. Reduced motion snaps all of them, which ends the gesture on the next
+     * frame instead of animating it home.
      */
     private void advanceMotion() {
         if (mDraggedBar == null) return;
         long now = System.nanoTime();
         float dt = Spring.clampDelta((now - mLastFrameNanos) / 1_000_000_000f);
         mLastFrameNanos = now;
-        boolean reduced = isReducedMotion();
+        boolean reduced = ReducedMotion.isEnabled(getContext());
         boolean moving = mGhostScale.tick(reduced, dt);
+        moving |= mGhostMorph.tick(reduced, dt);
         if (mSpringingBack) {
             moving |= mGhostX.tick(reduced, dt);
             moving |= mGhostY.tick(reduced, dt);
@@ -3349,51 +3226,18 @@ public final class LayoutCanvasView extends View {
         if (mSpringingBack) endDrag();
     }
 
-    private boolean isReducedMotion() {
-        return Settings.Global.getFloat(getContext().getContentResolver(),
-            Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f;
-    }
-
     // ---- Shared drawing helpers --------------------------------------------------------------
-
-    /**
-     * Rotates the canvas so a vertical band can be drawn with the same horizontal-strip code as a
-     * bottom/top one, and writes the equivalent horizontal rect (centered on the band, in the
-     * rotated space) into {@code outLocal}. Returns the canvas save count to restore with
-     * {@link #endBandOrientation}, or -1 when the band is already horizontal (no rotation done).
-     */
-    private int beginBandOrientation(@NonNull Canvas canvas, @NonNull RectF rect, boolean vertical,
-                                     @NonNull RectF outLocal) {
-        if (!vertical) {
-            outLocal.set(rect);
-            return -1;
-        }
-        float cx = rect.centerX();
-        float cy = rect.centerY();
-        int saved = canvas.save();
-        // RTL flips which end of the physical (screen-relative) edge reads as "first", so the
-        // rotated content still reads start-to-end for the current layout direction.
-        canvas.rotate(isRtl() ? 90f : -90f, cx, cy);
-        float halfLength = rect.height() / 2f;
-        float halfThickness = rect.width() / 2f;
-        outLocal.set(cx - halfLength, cy - halfThickness, cx + halfLength, cy + halfThickness);
-        return saved;
-    }
-
-    private void endBandOrientation(@NonNull Canvas canvas, int saved) {
-        if (saved != -1) canvas.restoreToCount(saved);
-    }
 
     private boolean isRtl() {
         return getLayoutDirection() == LAYOUT_DIRECTION_RTL;
     }
 
     /**
-     * A touch-down on the selection's handle takes the handle; on a grip it lifts that bar at
-     * once; on the keyboard's card it waits to see whether the finger travels, which lifts the
-     * keyboard, or comes up, which is a tap. Anything else is a tap, decided on the way up, which
-     * selects what it landed on — or clears the selection off the phone. A touch-down on the tray
-     * at rest is not this view's: the editor's chips stand there, under it.
+     * A touch-down on the selection's handle takes the handle. On a bar — the keyboard's card
+     * included, anywhere on it — it waits to see whether the finger travels past the touch slop,
+     * which lifts the bar, or comes up, which is a tap. Anything else is a tap, decided on the way
+     * up, which selects what it landed on — or clears the selection off the phone. A touch-down on
+     * the tray at rest is not this view's: the editor's chips stand there, under it.
      */
     @Override
     public boolean onTouchEvent(@NonNull MotionEvent event) {
@@ -3401,18 +3245,18 @@ public final class LayoutCanvasView extends View {
         float y = event.getY();
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
-                mKeyboardPressed = false;
+                mPressedBar = null;
                 mDownX = x;
                 mDownY = y;
                 Handle handle = handleAt(x, y);
                 if (handle != null && beginHandle(handle, x, y)) return true;
-                Block grip = gripAt(x, y);
-                if (grip != null) {
-                    beginDrag(grip, x, y);
-                    return true;
-                }
-                if (!mKeyboardRect.isEmpty() && mKeyboardRect.contains(x, y)) {
-                    mKeyboardPressed = true;
+                Block pressed = barAt(x, y);
+                if (pressed != null) {
+                    mPressedBar = pressed;
+                    // Until it is known whether this is a tap or a lift, nothing between here
+                    // and the sheet may take the finger.
+                    ViewParent parent = getParent();
+                    if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
                     return true;
                 }
                 // The chips over the tray are the editor's; the touch goes on to them.
@@ -3425,12 +3269,13 @@ public final class LayoutCanvasView extends View {
                     moveHandle(x, y);
                     return true;
                 }
-                if (mKeyboardPressed && mDraggedBar == null
-                    && Math.hypot(x - mDownX, y - mDownY) > dp(KEYBOARD_LIFT_SLOP_DP)) {
-                    mKeyboardPressed = false;
+                if (mPressedBar != null && mDraggedBar == null
+                    && Math.hypot(x - mDownX, y - mDownY) > mTouchSlop) {
+                    Block bar = mPressedBar;
+                    mPressedBar = null;
                     float downX = mDownX;
                     float downY = mDownY;
-                    if (beginDrag(Block.KEYBOARD, downX, downY)) moveDrag(x, y);
+                    if (beginDrag(bar, downX, downY)) moveDrag(x, y);
                     return true;
                 }
                 if (mDraggedBar != null && !mSpringingBack) {
@@ -3452,14 +3297,14 @@ public final class LayoutCanvasView extends View {
                     releaseDrag();
                     return true;
                 }
-                mKeyboardPressed = false;
+                mPressedBar = null;
                 Block tapped = blockAt(x, y);
                 setSelectedBlock(tapped);
                 if (tapped != null && mListener != null) mListener.onBlockTapped(tapped);
                 performClick();
                 return true;
             case MotionEvent.ACTION_CANCEL:
-                mKeyboardPressed = false;
+                mPressedBar = null;
                 if (mDraggedHandle != null) releaseHandle();
                 if (mDraggedBar != null) springBack();
                 return true;

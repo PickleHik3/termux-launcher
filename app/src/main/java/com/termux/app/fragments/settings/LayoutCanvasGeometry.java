@@ -106,6 +106,29 @@ final class LayoutCanvasGeometry {
             Math.min(TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING, chinDp));
     }
 
+    // ---- Fit -----------------------------------------------------------------------------------
+
+    /** The most of one axis the bands and the air between cards may take, so the opening keeps the rest. */
+    static final float MAX_BANDS_SHARE = 0.8f;
+    /** How far a stack of bands is squeezed at the most to keep it. */
+    static final float MIN_FIT = 0.25f;
+
+    /**
+     * The factor to scale one axis's bands by so the pane's opening keeps a share of the frame. The
+     * shape model caps nothing, and a short landscape screen with every bar and the keyboard on it
+     * would leave the opening no height at all, so the canvas squeezes the bands before it asks.
+     * One for any stack that already fits.
+     *
+     * @param frameExtent the frame's size along the axis
+     * @param bandsTotal  every band's thickness along it, added
+     * @param airTotal    the air between and around the cards along it, added
+     */
+    static float fitFactor(float frameExtent, float bandsTotal, float airTotal) {
+        if (bandsTotal <= 0f || frameExtent <= 0f) return 1f;
+        float room = MAX_BANDS_SHARE * frameExtent - Math.max(0f, airTotal);
+        return Math.max(MIN_FIT, Math.min(1f, room / bandsTotal));
+    }
+
     // ---- Scale ---------------------------------------------------------------------------------
 
     /**
