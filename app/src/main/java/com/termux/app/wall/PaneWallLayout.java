@@ -155,6 +155,13 @@ public final class PaneWallLayout extends ViewGroup {
          */
         default boolean isBorderStatusSwipeEnabled() { return false; }
         /**
+         * How far in from the page's own edge the border the drag grips stands, as left, top,
+         * right and bottom in px. Docked the page is the opening and its edge is the line (the
+         * bars' inner edges, the screen's where none stands), so none; Floating the pane is a
+         * card standing Margin in, and its rim is the line.
+         */
+        @Nullable default int[] borderInsetsPx() { return null; }
+        /**
          * A swipe off the top border asked for the status bar unfolded ({@code expand}, down) or
          * folded (up): the release-only path, for a swipe the bar did not follow
          * ({@link #onStatusFoldBegin} answered 0, or motion is reduced).
@@ -793,10 +800,15 @@ public final class PaneWallLayout extends ViewGroup {
         if (!canPage && keyboardReach <= 0f && statusReach <= 0f) return;
         View page = mPageViews.get(mCurrent);
         if (page == null || page.getWidth() <= 0 || page.getHeight() <= 0) return;
-        float left = page.getLeft() + page.getTranslationX();
-        float top = page.getTop();
+        int[] in = mListener != null ? mListener.borderInsetsPx() : null;
+        boolean inset = in != null && in.length == 4;
+        float left = page.getLeft() + page.getTranslationX() + (inset ? Math.max(0, in[0]) : 0);
+        float top = page.getTop() + (inset ? Math.max(0, in[1]) : 0);
+        float right = page.getLeft() + page.getTranslationX() + page.getWidth()
+            - (inset ? Math.max(0, in[2]) : 0);
+        float bottom = page.getTop() + page.getHeight() - (inset ? Math.max(0, in[3]) : 0);
         boolean armed = mBorderDrag.down(event.getX(), event.getY(),
-            left, top, left + page.getWidth(), top + page.getHeight(),
+            left, top, right, bottom,
             BorderDrag.BAND_DP * density,
             CornerZones.clampSize(CornerZones.paneSizePx(density), page.getWidth(), page.getHeight()),
             ViewConfiguration.get(getContext()).getScaledTouchSlop(), canPage, keyboardReach,

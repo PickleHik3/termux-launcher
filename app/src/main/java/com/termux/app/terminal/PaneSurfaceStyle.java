@@ -61,6 +61,13 @@ public interface PaneSurfaceStyle {
      * split, draw as their border. Null lets {@link PaneRim} fall back to its own hairline.
      */
     @Nullable default android.graphics.drawable.Drawable paneRimDrawable(float radiusPx) { return null; }
+    /**
+     * Whether the Style is Docked: the panes tile the opening with no gap, wear no rim of their
+     * own, and the line between two of them is drawn from each pane's own edge of it
+     * ({@link PaneDividerEdges}).
+     */
+    default boolean paneDocked() { return false; }
+
     /** Whether an attention border may pulse: false under Lazy mode and reduced motion (a static glow). */
     default boolean paneAttentionPulses() { return true; }
     /** True while {@link #paneGlassRim} would answer, so a re-dress asks for a drawable only then. */

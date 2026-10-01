@@ -70,6 +70,7 @@ public final class PaneRim {
     private int mColour;
     private boolean mGlass;
     private boolean mGradientRim;
+    private boolean mDocked;
     private float mRadiusPx;
     private ValueAnimator mAnimator;
     /** The alpha the kind asks for, before the wall's travel takes its share. */
@@ -109,10 +110,11 @@ public final class PaneRim {
         float radius = Math.max(0f, radiusPx);
         boolean gradientRim = style != null && style.paneGlassRimWanted();
         boolean pulses = animationsEnabled() && (style == null || style.paneAttentionPulses());
+        boolean docked = style != null && style.paneDocked();
 
         boolean reusable = mDrawable != null && frame.getForeground() == mDrawable
             && mKind == decision.kind && mColour == decision.colour && mGlass == glass
-            && mRadiusPx == radius && mGradientRim == gradientRim;
+            && mRadiusPx == radius && mGradientRim == gradientRim && mDocked == docked;
         if (reusable) {
             if (mDrawable instanceof PaneAttentionGlow)
                 ((PaneAttentionGlow) mDrawable).setPulsing(pulses);
@@ -126,6 +128,7 @@ public final class PaneRim {
         mColour = decision.colour;
         mGlass = glass;
         mGradientRim = gradientRim;
+        mDocked = docked;
         mRadiusPx = radius;
         float density = frame.getResources().getDisplayMetrics().density;
         switch (decision.kind) {
@@ -136,18 +139,33 @@ public final class PaneRim {
                 break;
             }
             case FOCUS:
+                // Docked, the focused pane wears the active colour along its own edges of the
+                // divider and nowhere else; the opening has no border of its own.
+                if (docked) {
+                    mDrawable = new PaneDividerEdges(frame, decision.colour, density);
+                    break;
+                }
                 mDrawable = glass
                     ? new com.termux.app.GlassRimDrawable(density, radius, decision.colour)
                     : stroke(radius, decision.colour, density);
                 break;
             default:
-                mDrawable = new SharedRim(frame.getContext(), style, radius, density);
+                mDrawable = docked
+                    ? new PaneDividerEdges(frame, lineColour(frame.getContext()), density)
+                    : new SharedRim(frame.getContext(), style, radius, density);
                 break;
         }
         frame.setForeground(mDrawable);
         setBaseAlpha(255);
         if (kindChanged && animationsEnabled()) fadeIn();
         return true;
+    }
+
+    /** The plain line's colour: the outline role at the shared rim's hairline strength. */
+    private static int lineColour(@NonNull Context context) {
+        return ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOutline,
+            ContextCompat.getColor(context, R.color.termux_outline_variant)), 150);
     }
 
     private static Drawable stroke(float radius, int colour, float density) {
@@ -234,9 +252,7 @@ public final class PaneRim {
             mStyle = style;
             mRequestedRadiusPx = radiusPx;
             mDensity = density;
-            mFallbackColour = ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
-                com.google.android.material.R.attr.colorOutline,
-                ContextCompat.getColor(context, R.color.termux_outline_variant)), 150);
+            mFallbackColour = lineColour(context);
         }
 
         @Override
