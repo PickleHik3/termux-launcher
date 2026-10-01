@@ -18,14 +18,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * One Layout editor session, as decisions rather than views: which orientation the miniature is
+ * One Layout editor session, as decisions rather than views: which orientation the layout canvas is
  * showing, which one a drop writes, whether the live place behind the editor follows it, whether
  * anything has moved since the editor opened, and how to put it all back.
  *
- * <p>The miniature draws either orientation whatever the phone is in, so "shown" and "the phone's"
+ * <p>The layout canvas draws either orientation whatever the phone is in, so "shown" and "the phone's"
  * are two different questions. A drop always writes the shown one — that is the orientation the
  * user is looking at a picture of — and the place behind the editor can only follow while the two
- * agree. Editing the other orientation therefore changes the miniature and nothing else until the
+ * agree. Editing the other orientation therefore changes the layout canvas and nothing else until the
  * phone is turned.
  *
  * <p>There are no rows under the canvas (spec §3.5): what used to be a row is a handle on the
@@ -42,15 +42,15 @@ import java.util.List;
  * <p>Pure: a store in, an answer out, no views, so every case above is testable without a window.
  * {@link LayoutEditorController} is the wiring that draws it, in Layout mode of the one editor.
  * The canvas stands in the editor's frame at its full size (spec §3.5), so there is no sheet or
- * miniature to size here any more.
+ * layout canvas to size here any more.
  */
 public final class LayoutEditorPlan {
 
-    /** What one drop on the miniature did. */
+    /** What one drop on the layout canvas did. */
     public enum Drop {
         /** The bar cannot stand there: nothing was written and nothing moved. */
         NONE,
-        /** Written for an orientation the phone is not in: the miniature moves, the place does not. */
+        /** Written for an orientation the phone is not in: the layout canvas moves, the place does not. */
         MINIATURE,
         /** Written for the orientation on screen: the live place follows it. */
         LIVE
@@ -59,7 +59,7 @@ public final class LayoutEditorPlan {
     /** The store pinned to the variant being edited, so nothing here can reach the other one. */
     @NonNull private final PlaceLayoutStore mPlaces;
     @NonNull private final LayoutVariant mVariant;
-    /** The place the miniature draws and the live place behind the card; never a write target. */
+    /** The place the layout canvas draws and the live place behind the card; never a write target. */
     @NonNull private PaneWallPage mPlace;
     /** The arrangement as the editor found it; what Discard and ↺ put back. */
     @NonNull private final PlaceArrangeSnapshot mEntry;
@@ -111,7 +111,7 @@ public final class LayoutEditorPlan {
         return mPlace;
     }
 
-    /** The orientation on the miniature, which is also the one every drop writes. */
+    /** The orientation on the layout canvas, which is also the one every drop writes. */
     @NonNull
     public PlaceOrientation shownOrientation() {
         return mShownOrientation;
@@ -128,7 +128,7 @@ public final class LayoutEditorPlan {
         return mShownOrientation == mDeviceOrientation;
     }
 
-    /** The arrangement the miniature draws: the shown orientation's, resolved. */
+    /** The arrangement the layout canvas draws: the shown orientation's, resolved. */
     @NonNull
     public PlaceLayout shownLayout() {
         return mPlaces.resolve(mShownOrientation);
@@ -270,7 +270,7 @@ public final class LayoutEditorPlan {
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
     }
     /**
-     * The place on the miniature. A second door opened while the editor is up moves it rather than
+     * The place on the layout canvas. A second door opened while the editor is up moves it rather than
      * starting a session over, so what Discard puts back is still the arrangement the user first
      * opened the editor on. It changes the picture and the rows offered, never what is written.
      */
@@ -284,7 +284,7 @@ public final class LayoutEditorPlan {
     }
 
     /**
-     * The phone turned mid-session. The miniature goes with it: the editor is a picture of the
+     * The phone turned mid-session. The layout canvas goes with it: the editor is a picture of the
      * place behind it, and leaving it on the orientation the user can no longer see would make the
      * next drop land somewhere they are not looking.
      */
