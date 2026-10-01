@@ -2417,6 +2417,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // it, so the arrival back from one is an onResume on its own.
         refreshWallpaperPictureOnArrival();
         if (mLiveWallpaperHost != null) mLiveWallpaperHost.onResume();
+        redressChromeAfterFirstLayout();
         // A row whose button opened the system settings page comes back here, so the card reads
         // what was granted there rather than what it said before we left.
         refreshFirstRunPermissionsCard();
@@ -2769,6 +2770,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the panes' applied style (the veil is not part of its key) and the crops — so a change that
      * moves every surface at once, the Style, cannot leave an answer from before it standing.
      */
+    /**
+     * The first dress runs before the chrome has been laid out, so glass recorded then is aimed at
+     * where nothing stands yet and keeps that aim until something re-records it. Dress once more
+     * after the first layout, the same way leaving an editor does, so a cold start and a session
+     * that has been through an editor wear the same chrome.
+     */
+    private void redressChromeAfterFirstLayout() {
+        if (mFirstLayoutRedressed) return;
+        View root = findViewById(R.id.activity_termux_root_view);
+        if (root == null) return;
+        mFirstLayoutRedressed = true;
+        root.getViewTreeObserver().addOnGlobalLayoutListener(
+            new android.view.ViewTreeObserver.OnGlobalLayoutListener() {
+                @Override public void onGlobalLayout() {
+                    root.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                    root.post(TermuxActivity.this::redressChromeFromState);
+                }
+            });
+    }
+
+    private boolean mFirstLayoutRedressed;
+
     private void redressChromeFromState() {
         if (mPreferences == null || mChrome == null) return;
         mAppliedPaneStyleKey = null;
