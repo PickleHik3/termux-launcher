@@ -1303,8 +1303,7 @@ public class LayoutCanvasViewTest {
             assertRadii(name + " pane", pane.corners, paneFill.radii);
             assertBox(name + " opening", shape.opening().box, frame,
                 view.blockRect(LayoutCanvasView.Block.CANVAS));
-            assertEquals(name + " only a Floating pane wears a rim", style == LayoutStyle.FLOATING,
-                pane.drawsRim);
+            assertTrue(name + " the pane wears the rim under both Styles", pane.drawsRim);
 
             // The keyboard is the model's piece, whole.
             Piece keyboard = shape.piece(PieceId.KEYBOARD);
@@ -1315,7 +1314,7 @@ public class LayoutCanvasViewTest {
     }
 
     @Test
-    public void floatingSpendsMarginsAirAndTheUsersCornersWhileDockedSpendsNeither() {
+    public void floatingSpendsMarginAsAirAndDockedAsTheGutterOfTheRoundedInsert() {
         LayoutCanvasView floating = styled(LayoutStyle.FLOATING, bottomBars());
         float scale = floating.canvasScalePx();
         RectF status = floating.blockRect(LayoutCanvasView.Block.STATUS_BAR);
@@ -1333,9 +1332,16 @@ public class LayoutCanvasViewTest {
         LayoutCanvasView docked = styled(LayoutStyle.DOCKED, bottomBars());
         RectF dockedStatus = docked.blockRect(LayoutCanvasView.Block.STATUS_BAR);
         RectF dockedPane = docked.blockRect(LayoutCanvasView.Block.CANVAS);
-        assertEquals("no air between the pieces", dockedStatus.bottom, dockedPane.top, 0.01f);
-        assertEquals("flush with the screen's edge", docked.frameRect().left, dockedStatus.left,
-            0.01f);
+        assertEquals("the insert stands a gutter of Margin below the bar", MARGIN_DP * scale,
+            dockedPane.top - dockedStatus.bottom, 0.01f);
+        assertEquals("and the same gutter from the screen's side", MARGIN_DP * scale,
+            dockedPane.left - docked.frameRect().left, 0.01f);
+        assertEquals("the bars themselves stay flush with the screen's edge",
+            docked.frameRect().left, dockedStatus.left, 0.01f);
+        Pane insert = docked.shape().panes().get(0);
+        assertEquals("the insert wears Corners, not the screen's radius",
+            Math.min(CORNERS_DP * scale, Math.min(insert.box.width(), insert.box.height()) / 2f),
+            insert.corners.topLeft, 0.01f);
         // Only the frame's exposed outer corners round, at the screen's radius; every join is square.
         float screen = docked.frameRadiusPx();
         for (Piece piece : docked.shape().pieces()) {

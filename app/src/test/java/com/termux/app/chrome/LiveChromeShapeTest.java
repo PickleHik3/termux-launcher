@@ -145,17 +145,20 @@ public class LiveChromeShapeTest {
     }
 
     @Test
-    public void dockedRimIsOnlyTheEdgeFacingTheOpening() {
+    public void dockedBarsDrawNoRimBecauseTheInsertsOwnEdgeCarriesIt() {
         ChromeShape shape = shape(bottomStack(), LayoutStyle.DOCKED);
-        assertEquals("the status bar's inner edge", ChromeEdgeRule.BOTTOM,
+        assertEquals("the status bar's edge faces the gutter, which is plain", ChromeEdgeRule.NONE,
             LiveChromeShape.rimEdges(shape, Collections.singletonList(PieceId.STATUS)));
-        assertEquals("the dock rows' top, which is the outermost piece's", ChromeEdgeRule.TOP,
+        assertEquals("so is the dock rows' top", ChromeEdgeRule.NONE,
             LiveChromeShape.rimEdges(shape, java.util.Arrays.asList(PieceId.APPS, PieceId.AZ,
                 PieceId.EXTRA_KEYS)));
         assertEquals("a joined keyboard under the rows has none", ChromeEdgeRule.NONE,
             LiveChromeShape.rimEdges(shape, Collections.singletonList(PieceId.KEYBOARD)));
-        assertEquals(ChromeEdgeRule.ALL & ~ChromeEdgeRule.BOTTOM,
+        assertEquals(ChromeEdgeRule.ALL,
             LiveChromeShape.seamEdges(shape, Collections.singletonList(PieceId.STATUS)));
+        // The rim is the insert's: it owns it, and every side of it is a rim edge.
+        assertTrue(shape.opening().ownsRim);
+        assertTrue(shape.panes().get(0).drawsRim);
     }
 
     @Test
@@ -183,11 +186,11 @@ public class LiveChromeShapeTest {
     }
 
     @Test
-    public void dockedOpeningKeepsNoAirFromAnythingAroundIt() {
+    public void dockedInsertKeepsAGutterOfMarginFromEveryBarAndScreenEdge() {
         for (PlaceLayout layout : new PlaceLayout[] {bottomStack(), sideBars()}) {
             ChromeShape shape = shape(layout, LayoutStyle.DOCKED);
             for (Edge edge : new Edge[] {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT})
-                assertEquals(edge.toString(), 0f,
+                assertEquals(edge.toString(), MARGIN,
                     LiveChromeShape.openingInsetPx(shape, edge, 400, 800), D);
         }
     }
@@ -214,16 +217,15 @@ public class LiveChromeShapeTest {
         boolean[] cut = cutCorners(clip);
         assertTrue("the screen's bottom corners are the keyboard's", cut[2] && cut[3]);
         assertFalse("its top corners are joins", cut[0] || cut[1]);
-        assertEquals("only the dock's top faces the opening", ChromeEdgeRule.TOP,
+        assertEquals("the dock's top faces the gutter, which is plain", ChromeEdgeRule.NONE,
             LiveChromeShape.rimEdges(shape, sheet));
-        assertEquals(ChromeEdgeRule.ALL & ~ChromeEdgeRule.TOP,
-            LiveChromeShape.seamEdges(shape, sheet));
+        assertEquals(ChromeEdgeRule.ALL, LiveChromeShape.seamEdges(shape, sheet));
     }
 
     @Test
     public void aStatusBarJoinedToTheRowUnderItHasNoRimAtAll() {
         // Status and the apps row share the top edge: whichever stands outer joins the other, so
-        // its inner edge is a join and not the opening, and only the inner piece faces the pane.
+        // its inner edge is a join; the inner one faces the gutter. Neither draws a rim.
         ChromeShape shape = shape(layout(Slot.on(Edge.TOP, Element.STATUS),
             Slot.on(Edge.TOP, Element.APPS), Slot.on(Edge.BOTTOM, Element.AZ),
             Slot.on(Edge.BOTTOM, Element.EXTRA_KEYS)), LayoutStyle.DOCKED);
@@ -235,7 +237,7 @@ public class LiveChromeShapeTest {
             LiveChromeShape.rimEdges(shape, Collections.singletonList(outer.id)));
         assertEquals(ChromeEdgeRule.ALL,
             LiveChromeShape.seamEdges(shape, Collections.singletonList(outer.id)));
-        assertEquals("the inner bar faces the opening", ChromeEdgeRule.BOTTOM,
+        assertEquals("the inner bar faces the gutter, plain", ChromeEdgeRule.NONE,
             LiveChromeShape.rimEdges(shape, Collections.singletonList(inner.id)));
     }
 
@@ -248,8 +250,7 @@ public class LiveChromeShapeTest {
                 for (Edge edge : new Edge[] {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT}) {
                     boolean carries = (rim & ChromeEdgeRule.edgeBit(edge)) != 0;
                     assertEquals(piece.id + " " + edge, piece.drawsRim(edge), carries);
-                    if (carries) assertEquals(piece.id + " " + edge,
-                        ChromeShape.EdgeKind.OPENING, piece.kind(edge));
+                    assertFalse(piece.id + " " + edge, carries);
                 }
             }
         }

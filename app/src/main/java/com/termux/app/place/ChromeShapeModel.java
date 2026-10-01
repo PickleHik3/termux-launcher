@@ -30,8 +30,9 @@ import java.util.List;
  * <p>Pure: no view, no context, and no unit. The caller supplies the frame's size and each piece's
  * thickness in whatever space it works in (pixels live, canvas units in the editor) and gets rects
  * back in the same space. Corners, Margin, the screen radius, the pane-gap cap and the divider's
- * thickness are numbers in that space too. Floating spends Corners and Margin; Docked spends the
- * screen radius and no gap at all.
+ * thickness are numbers in that space too. Floating spends Corners and Margin on its cards; Docked
+ * spends the screen radius on the frame's outer corners, and Corners and Margin (the gutter) on the
+ * rounded insert the pane stands in (SPEC 3.7, amended 2026-10-01).
  *
  * <p>The keyboard is part of the arrangement while {@link PlaceLayout#keyboardShown}; a caller
  * drawing the closed-keyboard frame passes {@code layout.withKeyboardShown(false)}.
@@ -52,9 +53,11 @@ import java.util.List;
  *       rect the user moved it to.</li>
  *   <li>Split halves are as wide as {@link Input.Builder#splitHalfWidth}, each against its screen
  *       edge (a Margin in under Floating); between them the frame is open.</li>
- *   <li>Panes divide the opening equally along one axis. Under Docked they tile it exactly and
- *       the divider is a segment on each seam; under Floating they are cards with
- *       {@code min(Margin, paneGapCap)} between.</li>
+ *   <li>Panes divide the opening equally along one axis, each with {@code min(Margin,
+ *       paneGapCap)} between. Under Floating each is a card over the wallpaper; under Docked each is
+ *       its own rounded insert over the frame glass, and there is no divider line.</li>
+ *   <li>Under Docked the frame is always a card, even with every bar put away (fullscreen): it
+ *       keeps a gutter of Margin around the insert, and the insert is {@link Card#hole}.</li>
  * </ul>
  */
 public final class ChromeShapeModel {
@@ -328,6 +331,8 @@ public final class ChromeShapeModel {
         final float h = Math.max(0f, in.height);
         final float eps = 1e-4f * Math.max(1f, Math.max(w, h));
         final float m = floating ? Math.max(0f, in.margin) : 0f;
+        // The gutter: Margin as the Docked insert's air from the bars and the screen's edge.
+        final float gutter = Math.max(0f, in.margin);
         final PlaceLayout layout = in.layout;
         final boolean keyboardOverlay = layout.keyboardShown
             && layout.keyboardForm == KeyboardForm.FLOATING;
@@ -376,13 +381,16 @@ public final class ChromeShapeModel {
             cands);
         float xRight = xr;
 
-        Box openingBox = new Box(xLeft, yTop, Math.max(xLeft, xRight), Math.max(yTop, yBottom));
+        // Between the bars. Floating's panes fill it (the cards' Margin is already around it);
+        // Docked's inserts stand a gutter inside it, on the frame glass.
+        Box barsBox = new Box(xLeft, yTop, Math.max(xLeft, xRight), Math.max(yTop, yBottom));
+        Box openingBox = floating ? barsBox : insetBy(barsBox, gutter);
         List<Cand> framePieces = new ArrayList<>(cands);
 
         // The floating keyboard, a card over the content.
         if (keyboardOverlay) {
             Box kb = in.floatingKeyboardBox != null ? in.floatingKeyboardBox
-                : defaultOverlayBox(openingBox, in, m);
+                : defaultOverlayBox(barsBox, in, m);
             cands.add(new Cand(PieceId.KEYBOARD, kb, nextGroup[0]++, true));
         }
 
@@ -426,13 +434,6 @@ public final class ChromeShapeModel {
                     runsOf(c, cands, true, w, h, eps)));
             }
         } else {
-            if (!framePieces.isEmpty()) {
-                List<PieceId> members = new ArrayList<>(framePieces.size());
-                for (Cand c : framePieces) members.add(c.id);
-                cards.add(new Card(frameGroup, new Box(0f, 0f, w, h), screenCorners,
-                    openingBox.width() > 0f && openingBox.height() > 0f ? openingBox : null, true,
-                    members));
-            }
             for (Cand c : cands) {
                 if (c.overlay) {
                     float radius = clampRadius(in.corners, c.box);
@@ -448,35 +449,34 @@ public final class ChromeShapeModel {
             }
         }
 
-        Opening opening = openingOf(openingBox, framePieces, floating, in, w, h, eps,
-            screenCorners);
+        Opening opening = openingOf(openingBox, in);
 
-        // The panes.
+        // The panes. Each is its own card-sized shape with min(Margin, cap) between: over the
+        // wallpaper under Floating, over the frame glass under Docked. No divider line either way.
         List<Pane> panes = new ArrayList<>(in.paneCount);
-        List<Divider> dividers = new ArrayList<>(Math.max(0, in.paneCount - 1));
-        float gap = floating ? Math.min(m, Math.max(0f, in.paneGapCap)) : 0f;
+        List<Divider> dividers = Collections.emptyList();
+        float gap = Math.min(floating ? m : gutter, Math.max(0f, in.paneGapCap));
         boolean across = in.axis == SplitAxis.SIDE_BY_SIDE;
         float span = across ? openingBox.width() : openingBox.height();
         float each = Math.max(0f, (span - gap * (in.paneCount - 1)) / in.paneCount);
+        List<Box> holes = new ArrayList<>(in.paneCount);
         for (int i = 0; i < in.paneCount; i++) {
             float start = (across ? openingBox.left : openingBox.top) + i * (each + gap);
             Box box = across
                 ? new Box(start, openingBox.top, start + each, openingBox.bottom)
                 : new Box(openingBox.left, start, openingBox.right, start + each);
-            if (floating) {
-                panes.add(new Pane(i, box, uniform(clampRadius(in.corners, box)), nextGroup[0]++,
-                    true));
-            } else {
-                panes.add(new Pane(i, box, cornersAgainst(box, new Box(0f, 0f, w, h),
-                    screenCorners.topLeft, eps), frameGroup, false));
-                if (i > 0) {
-                    dividers.add(across
-                        ? new Divider(start, openingBox.top, start, openingBox.bottom,
-                            in.dividerThickness)
-                        : new Divider(openingBox.left, start, openingBox.right, start,
-                            in.dividerThickness));
-                }
-            }
+            panes.add(new Pane(i, box, uniform(clampRadius(in.corners, box)), nextGroup[0]++,
+                true));
+            if (box.width() > 0f && box.height() > 0f) holes.add(box);
+        }
+        if (!floating) {
+            // The frame is a card even with every bar put away: fullscreen keeps its gutter. The
+            // inserts are cut out of it, and the glass between and around them is the gutter.
+            List<PieceId> members = new ArrayList<>(framePieces.size());
+            for (Cand c : framePieces) members.add(c.id);
+            cards.add(0, new Card(frameGroup, new Box(0f, 0f, w, h), screenCorners,
+                holes.isEmpty() ? null : openingBox, true, members,
+                uniform(clampRadius(in.corners, openingBox)), holes));
         }
         return new ChromeShape(pieces, cards, opening, panes, dividers);
     }
@@ -672,7 +672,7 @@ public final class ChromeShapeModel {
             if (e - s > eps) joins.add(new float[] {s, e});
         }
         Collections.sort(joins, (a, b) -> Float.compare(a[0], b[0]));
-        EdgeKind rest = floating ? EdgeKind.RIM : EdgeKind.OPENING;
+        EdgeKind rest = floating ? EdgeKind.RIM : EdgeKind.GUTTER;
         float cursor = from;
         for (float[] join : joins) {
             if (join[1] <= cursor + eps) continue;
@@ -697,35 +697,24 @@ public final class ChromeShapeModel {
         runs.add(new EdgeRun(edge, from, to, kind));
     }
 
+    /** The opening is the pane area: the insert under Docked, the space the cards leave under Floating. */
     @NonNull
-    private static Opening openingOf(@NonNull Box box, @NonNull List<Cand> frame,
-                                     boolean floating, @NonNull Input in, float w, float h,
-                                     float eps, @NonNull Corners screenCorners) {
-        if (floating) {
-            return new Opening(box, uniform(clampRadius(in.corners, box)), true, EdgeKind.RIM,
-                EdgeKind.RIM, EdgeKind.RIM, EdgeKind.RIM);
-        }
-        return new Opening(box, cornersAgainst(box, new Box(0f, 0f, w, h), screenCorners.topLeft,
-            eps), false,
-            openingEdge(box, Edge.TOP, frame, eps),
-            openingEdge(box, Edge.BOTTOM, frame, eps),
-            openingEdge(box, Edge.LEFT, frame, eps),
-            openingEdge(box, Edge.RIGHT, frame, eps));
+    private static Opening openingOf(@NonNull Box box, @NonNull Input in) {
+        return new Opening(box, uniform(clampRadius(in.corners, box)), true, EdgeKind.RIM,
+            EdgeKind.RIM, EdgeKind.RIM, EdgeKind.RIM);
     }
 
-    /** A bar's inner edge runs along this side of the opening, or else the screen's does. */
+    /** {@code box} pulled in by {@code by} on every side; collapsed to its centre if it runs out. */
     @NonNull
-    private static EdgeKind openingEdge(@NonNull Box box, @NonNull Edge edge,
-                                        @NonNull List<Cand> frame, float eps) {
-        float line = coord(box, edge);
-        float from = spanStart(box, edge);
-        float to = spanEnd(box, edge);
-        for (Cand o : frame) {
-            if (Math.abs(coord(o.box, opposite(edge)) - line) > eps) continue;
-            if (Math.min(to, spanEnd(o.box, edge)) - Math.max(from, spanStart(o.box, edge)) > eps)
-                return EdgeKind.JOIN;
-        }
-        return EdgeKind.SCREEN;
+    private static Box insetBy(@NonNull Box box, float by) {
+        if (by <= 0f) return box;
+        float cx = (box.left + box.right) / 2f;
+        float cy = (box.top + box.bottom) / 2f;
+        float l = Math.min(box.left + by, cx);
+        float t = Math.min(box.top + by, cy);
+        float r = Math.max(box.right - by, cx);
+        float b = Math.max(box.bottom - by, cy);
+        return new Box(l, t, r, b);
     }
 
     private static boolean onScreenBoundary(@NonNull Edge edge, float line, float w, float h,

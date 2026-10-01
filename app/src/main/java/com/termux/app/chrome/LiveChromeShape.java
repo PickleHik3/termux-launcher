@@ -47,8 +47,8 @@ public final class LiveChromeShape {
      * The shape of the whole chrome for one frame, in pixels.
      *
      * @param layout    already {@code withKeyboardShown} the way the keyboard really stands
-     * @param cornersPx Corners (Floating only; Docked spends the screen radius)
-     * @param marginPx  Margin (Floating only; Docked spends none)
+     * @param cornersPx Corners: every Floating card's radius, and the Docked insert's
+     * @param marginPx  Margin: the air round Floating cards, the gutter round the Docked insert
      */
     @NonNull
     public static ChromeShape of(@NonNull PlaceLayout layout, @NonNull LayoutStyle style,
@@ -123,8 +123,9 @@ public final class LiveChromeShape {
 
     /**
      * The edges of the views standing where {@code ids} stand that draw rim light, the bend and
-     * the containing stroke, as {@link ChromeEdgeRule} bits. Under Docked only the edge facing the
-     * opening does; joins and screen edges are plain. Under Floating it is every edge a card shows.
+     * the containing stroke, as {@link ChromeEdgeRule} bits. Under Docked none does: joins, screen
+     * edges and the edges facing the gutter are plain, and the insert's own rounded edge wears the
+     * rim. Under Floating it is every edge a card shows.
      * Each edge is the outermost piece's own answer, so a join inside the set never counts.
      */
     public static int rimEdges(@NonNull ChromeShape shape, @NonNull List<PieceId> ids) {
@@ -143,10 +144,9 @@ public final class LiveChromeShape {
 
     /**
      * How much air the opening keeps from whatever lies across {@code edge} of it: the nearest
-     * piece's edge facing it, or the screen's edge where none stands. Docked the opening has no
-     * air (the pane is the opening, the bars' inner edges and the screen are its border); under
-     * Floating it is the pane card's inset, Margin. {@code widthPx} and {@code heightPx} are the
-     * frame the shape was made for.
+     * piece's edge facing it, or the screen's edge where none stands. Under both Styles it is
+     * Margin: the Floating pane card's inset, the Docked insert's gutter. {@code widthPx} and
+     * {@code heightPx} are the frame the shape was made for.
      */
     public static float openingInsetPx(@NonNull ChromeShape shape, @NonNull Edge edge,
                                        float widthPx, float heightPx) {

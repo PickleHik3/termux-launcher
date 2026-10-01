@@ -423,11 +423,13 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * The Style of the whole chrome, and the Corners and Margin the user set, in dp. Floating
-     * spends both; Docked spends neither, and rounds only the frame's exposed outer corners at the
-     * screen's radius. A change of Style morphs the canvas from the shape it stood in to the new one
-     * over {@value LayoutCanvasMorph#DURATION_MS} ms, or jumps with reduced motion; a new Corners
-     * or Margin under Floating redraws at once, so a slider is followed live.
+     * The Style of the whole chrome, and the Corners and Margin the user set, in dp. Both Styles
+     * spend both: Floating's cards wear Corners with Margin of air round them; Docked's frame
+     * rounds only its exposed outer corners at the screen's radius, and its pane is an insert with
+     * Corners as its radius, a gutter of Margin inside the bars. A change of Style morphs the
+     * canvas from the shape it stood in to the new one over {@value LayoutCanvasMorph#DURATION_MS}
+     * ms, or jumps with reduced motion; a new Corners or Margin redraws at once, so a slider is
+     * followed live.
      */
     public void setShape(@NonNull LayoutStyle style, float cornersDp, float marginDp) {
         float corners = Math.max(0f, cornersDp);
@@ -1202,10 +1204,12 @@ public final class LayoutCanvasView extends View {
             rowsTotal += keyboard;
             rowBands++;
         }
-        float air = floating ? margin : 0f;
-        float rowFit = LayoutCanvasGeometry.fitFactor(height, rowsTotal, air * (rowBands + 1));
-        float columnFit = LayoutCanvasGeometry.fitFactor(width, columnsTotal,
-            air * (columnBands + 1));
+        // Floating's cards each leave Margin round them; Docked's bars are flush and only the
+        // insert keeps a gutter of Margin on each side.
+        float rowAir = floating ? margin * (rowBands + 1) : 2f * margin;
+        float columnAir = floating ? margin * (columnBands + 1) : 2f * margin;
+        float rowFit = LayoutCanvasGeometry.fitFactor(height, rowsTotal, rowAir);
+        float columnFit = LayoutCanvasGeometry.fitFactor(width, columnsTotal, columnAir);
         ChromeShapeModel.Thickness thickness = ChromeShapeModel.Thickness.of(
             row[Element.STATUS.ordinal()] * rowFit, column[Element.STATUS.ordinal()] * columnFit,
             row[Element.APPS.ordinal()] * rowFit, column[Element.APPS.ordinal()] * columnFit,
@@ -2162,8 +2166,8 @@ public final class LayoutCanvasView extends View {
 
     /**
      * Docked: one frame composed under one outer clip — its box and corners with the pane's
-     * opening cut out — so no bar rounds, outlines or joins on its own; then the opening, which has
-     * no outline, and anything that floats over it.
+     * rounded insert cut out — so no bar rounds, outlines or joins on its own; then the insert, on
+     * the frame's glass, wearing the one rim; and anything that floats over it.
      */
     private void drawDocked(@NonNull Canvas canvas, @NonNull ChromeShape shape,
                             @NonNull LayoutCanvasArtwork.Palette p, float k) {
@@ -2181,7 +2185,7 @@ public final class LayoutCanvasView extends View {
             }
             canvas.restoreToCount(saved);
         }
-        drawPane(canvas, shape, false, p, k);
+        drawPane(canvas, shape, true, p, k);
         drawOverlays(canvas, shape, p, k);
     }
 
@@ -2211,7 +2215,7 @@ public final class LayoutCanvasView extends View {
         drawOverlays(canvas, shape, p, k);
     }
 
-    /** The pane: the opening under Docked, which has no outline, or the card it is under Floating. */
+    /** The pane: the card it is under Floating, the rounded insert on the frame under Docked. */
     private void drawPane(@NonNull Canvas canvas, @NonNull ChromeShape shape, boolean rim,
                           @NonNull LayoutCanvasArtwork.Palette p, float k) {
         if (shape.panes().isEmpty()) return;
@@ -2285,12 +2289,13 @@ public final class LayoutCanvasView extends View {
         out.addRoundRect(box, corners.toRadii(), Path.Direction.CW);
     }
 
-    /** The Docked frame: its box and corners, with the opening cut out (even-odd). */
+    /** The Docked frame: its box and corners, with each rounded insert cut out (even-odd). */
     private void framePath(@NonNull Card frame, @NonNull Path out) {
         out.reset();
         out.setFillType(Path.FillType.EVEN_ODD);
         out.addRoundRect(viewRect(frame.box), frame.corners.toRadii(), Path.Direction.CW);
-        if (frame.hole != null) out.addRect(viewRect(frame.hole), Path.Direction.CW);
+        for (Box hole : frame.holes)
+            out.addRoundRect(viewRect(hole), frame.holeCorners.toRadii(), Path.Direction.CW);
     }
 
     /** Whether this card is a floating keyboard's: one piece, over the pane. */

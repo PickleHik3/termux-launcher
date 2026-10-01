@@ -20,8 +20,8 @@ import java.util.List;
  *
  * <p>A <em>card</em> is one shape drawn and rimmed as a whole. Under Floating that is a run of
  * neighbouring pieces on one edge, a lone piece, the keyboard or a pane. Under Docked it is the
- * single frame all the pieces share, clipped once with the opening cut out of it
- * ({@link Card#hole}).
+ * single frame all the pieces share, clipped once with the rounded insert cut out of it
+ * ({@link Card#hole}); it exists even when every bar is put away.
  */
 public final class ChromeShape {
 
@@ -31,14 +31,14 @@ public final class ChromeShape {
         JOIN,
         /** The edge of the screen. Docked only; plain, and the strip behind the system bars. */
         SCREEN,
-        /** The opening. Docked only; the one edge that carries rim light and refraction. */
-        OPENING,
-        /** A free card edge. Floating only; carries rim light and refraction. */
+        /** A bar's edge facing the gutter of frame glass around the insert. Docked only; plain. */
+        GUTTER,
+        /** A free card edge: Floating's cards. The insert's rim is the pane's, not a piece's. */
         RIM;
 
         /** Whether an edge of this kind draws rim light or refraction. */
         public boolean drawsRim() {
-            return this == OPENING || this == RIM;
+            return this == RIM;
         }
     }
 
@@ -221,8 +221,7 @@ public final class ChromeShape {
 
         /**
          * The one answer for an edge. Where it has several runs the one that matters most wins:
-         * a free edge, then the opening, then the screen, then a join, so an edge reads
-         * {@link EdgeKind#OPENING} as soon as any of it faces the opening.
+         * a free edge, then the screen or gutter, then a join.
          */
         @NonNull
         public EdgeKind kind(@NonNull Edge edge) {
@@ -243,8 +242,8 @@ public final class ChromeShape {
         private static int rank(@NonNull EdgeKind kind) {
             switch (kind) {
                 case RIM: return 3;
-                case OPENING: return 2;
-                case SCREEN: return 1;
+                case SCREEN:
+                case GUTTER: return 1;
                 default: return 0;
             }
         }
@@ -263,14 +262,30 @@ public final class ChromeShape {
         /** The card's outline rect: the screen for the frame, the members' union for a card. */
         @NonNull public final Box box;
         @NonNull public final Corners corners;
-        /** The opening cut out of the frame, or null for a card that has none. */
+        /**
+         * The opening cut out of the frame, or null for a card that has none: the bounding box of
+         * the rounded inserts, so the gutter is the frame glass between it and the bars.
+         */
         @Nullable public final Box hole;
+        /** The radius every insert is cut with; square for a card with no hole. */
+        @NonNull public final Corners holeCorners;
+        /** Each insert cut out: one per pane under Docked, so the gutter between panes is glass. */
+        @NonNull public final List<Box> holes;
         /** The Docked frame rather than a Floating card. */
         public final boolean frame;
         @NonNull public final List<PieceId> members;
 
         Card(int id, @NonNull Box box, @NonNull Corners corners, @Nullable Box hole,
              boolean frame, @NonNull List<PieceId> members) {
+            this(id, box, corners, hole, frame, members, Corners.SQUARE,
+                hole == null ? Collections.<Box>emptyList() : Collections.singletonList(hole));
+        }
+
+        Card(int id, @NonNull Box box, @NonNull Corners corners, @Nullable Box hole,
+             boolean frame, @NonNull List<PieceId> members, @NonNull Corners holeCorners,
+             @NonNull List<Box> holes) {
+            this.holeCorners = holeCorners;
+            this.holes = Collections.unmodifiableList(new ArrayList<>(holes));
             this.id = id;
             this.box = box;
             this.corners = corners;
@@ -281,15 +296,15 @@ public final class ChromeShape {
     }
 
     /**
-     * Where the pane lives. Under Docked it has no rim or slab of its own, and each side says
-     * whether a bar's inner edge runs there ({@link EdgeKind#JOIN}, the line the border drag
-     * follows) or the screen's edge ({@link EdgeKind#SCREEN}). Under Floating the opening is the
-     * space the pane cards fill, and every side is {@link EdgeKind#RIM}: the pane card's.
+     * Where the pane lives: the space the pane shapes fill. Under Docked it is the rounded insert,
+     * a gutter inside the bars, standing on the frame glass; under Floating the space the pane
+     * cards fill, a Margin inside the cards. Either way it owns its rim, and every side is
+     * {@link EdgeKind#RIM}: the pane's own edge, which is the border the border drag follows.
      */
     public static final class Opening {
         @NonNull public final Box box;
         @NonNull public final Corners corners;
-        /** True under Floating, where the panes are cards with a rim; false under Docked. */
+        /** Whether the panes wear a rim of their own: true under both Styles. */
         public final boolean ownsRim;
         @NonNull private final EdgeKind[] mEdges;
 
@@ -313,9 +328,9 @@ public final class ChromeShape {
         public final int index;
         @NonNull public final Box box;
         @NonNull public final Corners corners;
-        /** Its card under Floating; the opening's group under Docked, where panes share it. */
+        /** The pane's own group, under either Style: each pane is its own shape. */
         public final int groupId;
-        /** Whether the pane wears rim light itself: a Floating card does, a Docked pane does not. */
+        /** Whether the pane wears rim light itself: a Floating card and a Docked insert both do. */
         public final boolean drawsRim;
 
         Pane(int index, @NonNull Box box, @NonNull Corners corners, int groupId,
@@ -328,7 +343,7 @@ public final class ChromeShape {
         }
     }
 
-    /** The line dividing two panes under Docked: a segment and how thick it draws. */
+    /** A line dividing two panes: a segment and how thick it draws. Retired; the model gives none. */
     public static final class Divider {
         public final float x1;
         public final float y1;
@@ -397,7 +412,7 @@ public final class ChromeShape {
         return mPanes;
     }
 
-    /** The lines between panes under Docked; none under Floating, where Margin separates them. */
+    /** Always empty since the rounded insert: a gutter of Margin separates panes under both Styles. */
     @NonNull
     public List<Divider> dividers() {
         return mDividers;
