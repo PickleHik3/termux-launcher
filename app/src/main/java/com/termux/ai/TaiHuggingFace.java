@@ -121,12 +121,34 @@ public final class TaiHuggingFace {
         // A directory whose config.json sits next to eagle.mnn: an EAGLE-3 draft head shipped
         // alongside the plain model (taobao-mnn/…-Eagle3-MNN), decoded faster for the same answers.
         LinkedHashSet<String> eagleDirectories = new LinkedHashSet<>();
+        // A text-to-image package (Stable Diffusion, Sana) is one candidate named by its main graph. Its
+        // own config.json (Sana's diffusion config, and the llm/ one beside its prompt model) must not
+        // be mistaken for a chat model.
+        List<String> diffusionDirectories = TaiDiffusionImport.packageDirectories(files);
+        java.util.Map<String, Integer> diffusionEntries = new java.util.LinkedHashMap<>();
+        java.util.Map<String, String> diffusionRoots = new java.util.HashMap<>();
+        for (String directory : diffusionDirectories) {
+            List<String> inside = new ArrayList<>();
+            for (String name : files) {
+                if (name.startsWith(directory) && name.indexOf('/', directory.length()) < 0) inside.add(name.substring(directory.length()));
+            }
+            int type = TaiDiffusionImport.typeFor(TaiDiffusionImport.detectLayout(inside), repository);
+            String entry = TaiDiffusionImport.entryFile(files, directory);
+            if (entry.isEmpty()) continue;
+            String primary = directory + entry;
+            if (file ? !primary.equals(path) : !path.isEmpty() && !primary.startsWith(path.replaceAll("/$", "") + "/")) continue;
+            diffusionEntries.put(primary, type);
+            diffusionRoots.put(primary, directory);
+            entries.add(primary);
+        }
         for (String name : files) {
             if (file ? !name.equals(path) : !path.isEmpty() && !name.startsWith(path.replaceAll("/$", "") + "/")) continue;
             String lower = name.toLowerCase(Locale.ROOT);
+            if (diffusionEntries.containsKey(name)) continue;
             if (lower.endsWith(".litertlm") || lower.endsWith(".task") || lower.endsWith(".tflite")) entries.add(name);
             else if (name.equals("config.json") || name.endsWith("/config.json")) {
                 String directory = name.substring(0, name.length() - "config.json".length());
+                if (TaiDiffusionImport.insidePackage(diffusionDirectories, directory)) continue;
                 for (String other : files) {
                     if (other.startsWith(directory) && other.endsWith(".mnn")) { entries.add(name); break; }
                 }
@@ -148,7 +170,15 @@ public final class TaiHuggingFace {
                 candidate.put("sizeBytes", sibling.optLong("size", lfs == null ? -1 : lfs.optLong("size", -1)));
                 if (lfs != null) candidate.put("sha256", lfs.optString("sha256", ""));
             }
-            if (name.equals("config.json") || name.endsWith("/config.json")) {
+            Integer diffusionType = diffusionEntries.get(name);
+            if (diffusionType != null) {
+                // The package the user downloads is every runnable file under its directory, nested
+                // folders included (Sana's llm/), not the main graph alone.
+                String directory = diffusionRoots.get(name);
+                candidate.put("diffusion", TaiDiffusionPackage.typeName(diffusionType));
+                long packageSize = diffusionSizeBytes(siblings, directory);
+                if (packageSize > 0L) candidate.put("sizeBytes", packageSize);
+            } else if (name.equals("config.json") || name.endsWith("/config.json")) {
                 // The listing's own size for a config.json is a few bytes; the package the user
                 // actually downloads is every file beside it (model, weight, tokenizer, and, for
                 // an Eagle repo, the draft head), already in hand from the same metadata call.
@@ -190,6 +220,21 @@ public final class TaiHuggingFace {
             }
         }
         return any ? total : -1L;
+    }
+
+    /** The combined size of the runnable files under {@code directory}, nested folders included, or -1. */
+    private static long diffusionSizeBytes(@Nullable JSONArray siblings, @NonNull String directory) {
+        if (siblings == null) return -1L;
+        long total = 0L;
+        for (int i = 0; i < siblings.length(); i++) {
+            JSONObject sibling = siblings.optJSONObject(i);
+            String rfile = sibling == null ? "" : sibling.optString("rfilename", "");
+            if (!rfile.startsWith(directory) || !TaiDiffusionImport.isPackageFile(rfile.substring(directory.length()))) continue;
+            JSONObject lfs = sibling.optJSONObject("lfs");
+            long size = sibling.optLong("size", lfs == null ? -1L : lfs.optLong("size", -1L));
+            if (size > 0L) total += size;
+        }
+        return total > 0L ? total : -1L;
     }
 
     static boolean safePath(String path) {

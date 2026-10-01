@@ -492,9 +492,32 @@ Supported models:
 | Sana | `connector.mnn`, `projector.mnn`, `transformer.mnn`, `vae_decoder.mnn`, `vae_encoder.mnn` (only for editing a picture) and `llm/` (`config.json`, `meta_queries.mnn`, the prompt LLM and its tokenizer) | multiples of 32, 256-2048 |
 
 Not supported yet: Wan video and Stable Diffusion 3.5 (the 3.6.1 build does not wire them into the model
-type the bridge uses). The published `taobao-mnn` Stable Diffusion packages ship `vocab.json` and `merges.txt`
-rather than `tokenizer.mtok`; MNN 3.6.1 only loads the latter, so such a package is refused with
-`tokenizer_mtok_missing` until it is re-exported with MNN's diffusion export tool. Nothing is converted on the phone.
+type the bridge uses).
+
+**Importing.** Model Centre imports an image package like any model: paste a Hugging Face repository link
+(for example `https://huggingface.co/taobao-mnn/stable-diffusion-v1-5-mnn-opencl` or
+`https://huggingface.co/taobao-mnn/MNN-Sana-Edit-V2`), or pick the package folder from the link bar's overflow
+menu, or run `tai import <folder or any file in it> [model-id]`. The importer recognises the package by its
+files before it tries the chat path (Sana's root `config.json` is a diffusion configuration, not an LLM one),
+downloads or copies every runnable file including Sana's `llm/` folder, leaves `.DS_Store`, `.gitattributes`
+and the model card behind, and keeps what the chat downloader keeps: a staging directory, progress, resume,
+complete files kept on a retry, cancel and a storage check. Small files come first, so a tokenizer the app
+cannot use is refused before the graphs are fetched. The model is registered with backend `mnn-diffusion` and
+its type (`sd15`, `taiyi` or `sana`) in `architecture`, so `tai image --model <id>` and
+`/v1/ai/images/generations {"model": "<id>"}` need no type hint. Taiyi shares Stable Diffusion's files, so it is
+told apart by the repository or folder name containing "taiyi". It appears under Installed, in its own
+Image generation group with a Delete menu; it is never offered for chat. A direct `.../resolve/...` file link is
+not accepted for an image package; use the repository link. `tai import` registers the folder where it is (it
+may write `tokenizer.mtok` into it, see below).
+
+**Tokenizer.** The published `taobao-mnn` Stable Diffusion packages ship `vocab.json` and `merges.txt` rather
+than `tokenizer.mtok`, which MNN 3.6.1 needs, and nothing can convert it on the phone. The app bundles one
+verified `tokenizer.mtok` (asset `tai-diffusion/clip-vit-l14.tokenizer.mtok.gz`) for the standard CLIP ViT-L/14
+tokenizer. When an imported Stable Diffusion package has no `tokenizer.mtok` and its `vocab.json` and
+`merges.txt` have exactly the standard SHA-256 values, the importer installs the bundled one; otherwise the
+import is refused with a message that the package needs converting with MNN's tools. A package that already has
+its own `tokenizer.mtok` is left untouched. A package that is neither (no raw tokenizer files) fails the usual
+package check (`tokenizer_mtok_missing` or `missing_file`).
 
 Runtime behaviour:
 

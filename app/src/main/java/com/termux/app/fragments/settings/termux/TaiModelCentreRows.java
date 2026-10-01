@@ -7,10 +7,14 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.ai.TaiDownloadHub;
+import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -343,6 +347,27 @@ final class TaiModelCentreRows {
         if (first.isEmpty()) return second;
         if (second.isEmpty()) return first;
         return first + " · " + second;
+    }
+
+    /**
+     * The installed text-to-image models, by name: the Model centre's "Image generation" group. They
+     * are the same models the chat list leaves out ({@link TaiModelSpec#isImageGeneration}), so a
+     * model is in exactly one of the two.
+     */
+    @NonNull
+    static List<TaiModelSpec> imageModels(@NonNull Collection<TaiModelSpec> installed) {
+        List<TaiModelSpec> images = new ArrayList<>();
+        for (TaiModelSpec spec : installed) if (spec.isImageGeneration()) images.add(spec);
+        Collections.sort(images, (a, b) -> a.displayName.compareToIgnoreCase(b.displayName));
+        return images;
+    }
+
+    /** The family an image model's recorded type names: "Stable Diffusion 1.5", "Taiyi" or "Sana". */
+    @NonNull
+    static String imageFamily(@Nullable String architecture) {
+        if ("sana".equals(architecture)) return "Sana";
+        if ("taiyi".equals(architecture)) return "Taiyi";
+        return "Stable Diffusion 1.5";
     }
 
     /** Sizes the way every TAI screen writes them: binary units, one decimal from KB up. */

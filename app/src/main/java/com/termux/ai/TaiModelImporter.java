@@ -222,6 +222,15 @@ public final class TaiModelImporter {
                 return error(409, "model_exists", "Choose a different model name; this one is already in use.");
             java.util.LinkedHashMap<String, Uri> documents = new java.util.LinkedHashMap<>();
             collectDocuments(tree, rootId, "", documents, 0);
+            // A text-to-image folder is decided first: Sana's root config.json is a diffusion
+            // configuration, not an LLM one, and Stable Diffusion's folder has none.
+            int layout = TaiDiffusionImport.detectLayout(documents.keySet());
+            if (layout != TaiDiffusionPackage.TYPE_AUTO) {
+                String folderName = readMetadata(root).displayName;
+                return importDiffusionDirectory(documents, id, destination,
+                    TaiDiffusionImport.typeFor(layout, folderName.isEmpty() ? id : folderName),
+                    requestedDisplayName, listener);
+            }
             if (!documents.containsKey("config.json")) return error(400, "missing_config", "Choose the folder containing config.json.");
             staging = new File(store.getModelsDirectory(), ".import-" + java.util.UUID.randomUUID());
             if (!staging.mkdirs()) throw new java.io.IOException("Could not create the import directory.");
@@ -276,6 +285,83 @@ public final class TaiModelImporter {
         } finally {
             if (staging != null) deleteImportDirectory(staging);
         }
+    }
+
+    /**
+     * Copies a text-to-image folder (Stable Diffusion, Taiyi, Sana) into a private staging directory,
+     * checks it and registers it. Small files go first so a tokenizer the app cannot use is refused
+     * before the graphs are copied; nothing becomes visible unless the whole package checks out.
+     */
+    @NonNull
+    private JSONObject importDiffusionDirectory(@NonNull java.util.Map<String, Uri> documents, @NonNull String id,
+                                                @NonNull File destination, int type,
+                                                @Nullable String requestedDisplayName,
+                                                @Nullable ProgressListener listener) throws JSONException {
+        File staging = new File(store.getModelsDirectory(), ".import-" + java.util.UUID.randomUUID());
+        try {
+            if (!staging.mkdirs()) throw new java.io.IOException("Could not create the import directory.");
+            java.util.List<String> names = TaiDiffusionImport.packageFiles(documents.keySet(), "");
+            long[] progress = {0L, 0L};
+            for (String name : names) progress[1] += Math.max(0L, sizeOf(documents.get(name)));
+            long size = 0L;
+            boolean tokenizerChecked = false;
+            for (String name : names) {
+                if (!tokenizerChecked && TaiDiffusionImport.isHeavy(name)) {
+                    checkDiffusionTokenizer(staging, type);
+                    tokenizerChecked = true;
+                }
+                File output = new File(staging, name);
+                if (!output.getParentFile().isDirectory() && !output.getParentFile().mkdirs())
+                    throw new java.io.IOException("Could not create the package directory.");
+                long bytes = readMetadata(documents.get(name)).sizeBytes;
+                if (bytes > 0 && staging.getUsableSpace() < bytes) throw new java.io.IOException("Not enough storage to import this model.");
+                copyDocument(documents.get(name), output, bytes, listener, progress);
+                size += output.length();
+            }
+            if (!tokenizerChecked) checkDiffusionTokenizer(staging, type);
+            TaiDiffusionPackage.Result checked = TaiDiffusionPackage.inspect(staging, type);
+            if (!checked.ok()) throw new java.io.IOException(checked.message);
+            if (!staging.renameTo(destination)) throw new java.io.IOException("Could not finish importing the model.");
+            staging = null;
+            String displayName = requestedDisplayName == null || requestedDisplayName.trim().isEmpty()
+                ? id : requestedDisplayName.trim();
+            TaiModelSpec spec = TaiDiffusionImport.spec(id, displayName, "imported",
+                "User-provided model; license accepted externally", destination.getAbsolutePath(), checked.type, size);
+            store.upsertUserModel(spec);
+            return new JSONObject().put("ok", true).put("imported", true).put("model", spec.toJson());
+        } catch (Exception e) {
+            JSONObject result = failed(e);
+            result.put("_statusCode", 400);
+            return result;
+        } finally {
+            if (staging != null) deleteImportDirectory(staging);
+        }
+    }
+
+    /**
+     * The model type name ({@code sd15}, {@code taiyi}, {@code sana}) when the chosen folder holds a
+     * text-to-image package, else "". Lists the folder only; nothing is copied.
+     */
+    @NonNull
+    public String diffusionTypeOfFolder(@NonNull Uri tree) {
+        try {
+            String rootId = android.provider.DocumentsContract.getTreeDocumentId(tree);
+            java.util.LinkedHashMap<String, Uri> documents = new java.util.LinkedHashMap<>();
+            collectDocuments(tree, rootId, "", documents, 0);
+            int layout = TaiDiffusionImport.detectLayout(documents.keySet());
+            if (layout == TaiDiffusionPackage.TYPE_AUTO) return "";
+            String folderName = readMetadata(android.provider.DocumentsContract.buildDocumentUriUsingTree(tree, rootId)).displayName;
+            return TaiDiffusionPackage.typeName(TaiDiffusionImport.typeFor(layout, folderName));
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    /** Installs the bundled Stable Diffusion tokenizer into {@code directory} when it needs and matches it. */
+    private void checkDiffusionTokenizer(@NonNull File directory, int type) throws java.io.IOException {
+        if (type == TaiDiffusionPackage.TYPE_SANA) return;
+        TaiDiffusionTokenizer.Result result = TaiDiffusionTokenizer.ensure(directory, appContext);
+        if (!result.proceed()) throw new java.io.IOException(result.message);
     }
 
     /** The {@code model_import_failed} result for an exception, with the reason when the importer knows it. */

@@ -123,6 +123,8 @@ public class TaiModelCentreFragment extends Fragment
     @NonNull private Map<String, TaiModelSpec> installedAll = Collections.emptyMap();
     @NonNull private List<TaiModelSpec> installedChat = Collections.emptyList();
     @NonNull private List<TaiModelSpec> installedSpeech = Collections.emptyList();
+    /** Installed text-to-image models; their own "Image generation" group under Installed, never in a chat list. */
+    @NonNull private List<TaiModelSpec> installedImage = Collections.emptyList();
     /** Installed speech-output (voice) models; shown under Installed and never as chat or speech-to-text. */
     @NonNull private List<TaiModelSpec> installedVoice = Collections.emptyList();
     @Nullable private String defaultId;
@@ -276,6 +278,7 @@ public class TaiModelCentreFragment extends Fragment
             if (!TaiSpeechModels.isSpeechModel(spec) && !TaiTtsModels.isTtsModel(spec) && !spec.isImageGeneration()) chat.add(spec);
         }
         installedChat = chat;
+        installedImage = TaiModelCentreRows.imageModels(installedAll.values());
         installedSpeech = TaiSpeechModels.installed(store);
         installedVoice = TaiTtsModels.installed(store);
         // Read aloud is offered only with a voice installed; an install or delete here changes that.
@@ -500,7 +503,22 @@ public class TaiModelCentreFragment extends Fragment
             row.subtitle = voiceKindLine(context, spec.sizeBytes) + " · " + new TaiSettings(context).getTtsVoice();
             addModelRow(items, row);
         }
-        if (chat.isEmpty() && speech.isEmpty() && installedVoice.isEmpty()) {
+        if (!installedImage.isEmpty()) {
+            String header = getString(R.string.tai_centre_image_header);
+            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SECTION, "image-models", "image-models|" + header,
+                new TaiModelCentreAdapter.Section(header, "", getString(R.string.tai_centre_image_sub)), false));
+            for (TaiModelSpec spec : installedImage) {
+                TaiModelCentreAdapter.ModelRow row = new TaiModelCentreAdapter.ModelRow(spec.id, false, spec, null);
+                row.image = true;
+                row.title = spec.displayName;
+                StringBuilder subtitle = new StringBuilder(getString(R.string.tai_centre_kind_image))
+                    .append(" · ").append(TaiModelCentreRows.imageFamily(spec.architecture));
+                if (spec.sizeBytes > 0L) subtitle.append(" · ").append(TaiModelCentreRows.formatBytes(spec.sizeBytes));
+                row.subtitle = subtitle.toString();
+                addModelRow(items, row);
+            }
+        }
+        if (chat.isEmpty() && speech.isEmpty() && installedVoice.isEmpty() && installedImage.isEmpty()) {
             items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_EMPTY, "empty-installed", "empty-installed",
                 new TaiModelCentreAdapter.Empty(getString(R.string.tai_centre_empty_installed_title),
                     getString(R.string.tai_centre_empty_installed_summary)), false));
@@ -935,7 +953,14 @@ public class TaiModelCentreFragment extends Fragment
         if (context == null || spec == null) return;
         PopupMenu menu = new PopupMenu(context, anchor);
         Menu items = menu.getMenu();
-        if (row.voiceOutput) {
+        if (row.image) {
+            // Served on demand by the image routes: nothing to load, make default, tune or bench.
+            items.add(Menu.NONE, 4, Menu.NONE, R.string.termux_ai_model_delete_action);
+            menu.setOnMenuItemClickListener(item -> {
+                confirmDeleteChat(context, spec);
+                return true;
+            });
+        } else if (row.voiceOutput) {
             items.add(Menu.NONE, 1, Menu.NONE, R.string.tai_centre_voice_settings);
             items.add(Menu.NONE, 2, Menu.NONE, R.string.speech_model_action_delete);
             menu.setOnMenuItemClickListener(item -> {

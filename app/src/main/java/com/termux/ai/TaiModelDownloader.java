@@ -164,8 +164,19 @@ public final class TaiModelDownloader {
     public JSONObject startDownload(String modelId, String url, String displayName, String license,
             LinkedHashSet<String> capabilities, String authToken, TaiModelProfile runtimeProfile,
             JSONObject artifact) throws JSONException {
-        boolean packageDownload = TaiModelSpec.BACKEND_MNN_LLM.equals(TaiModelSpec.inferBackend(url));
         String artifactLicense = artifact == null ? "" : artifact.optString("license", "");
+        String diffusionType = artifact == null ? "" : artifact.optString("diffusion", "");
+        if (!diffusionType.isEmpty()) {
+            // A text-to-image package: the candidate's size is the whole package, and the record keeps
+            // the model type so the image routes need no hint.
+            LinkedHashSet<String> imageCapabilities = new LinkedHashSet<>();
+            imageCapabilities.add(TaiModelSpec.CAPABILITY_IMAGE_GENERATION);
+            return startDownload(modelId, url, displayName, artifactLicense.isEmpty() ? license : artifactLicense,
+                imageCapabilities, TaiModelSpec.BACKEND_MNN_DIFFUSION, TaiModelSpec.FORMAT_MNN, diffusionType, "", 4096, 0,
+                artifact.optString("sha256", ""), Math.max(0L, artifact.optLong("sizeBytes", 0)), authToken, null,
+                Collections.<TaiModelCatalog.CatalogEntry.Sidecar>emptyList());
+        }
+        boolean packageDownload = TaiModelSpec.BACKEND_MNN_LLM.equals(TaiModelSpec.inferBackend(url));
         return startDownload(modelId, url, displayName, artifactLicense.isEmpty() ? license : artifactLicense, capabilities,
             TaiModelSpec.inferBackend(url), TaiModelSpec.inferFormat(url), "", "", 4096, 0,
             artifact == null ? "" : artifact.optString("sha256", ""),
@@ -379,12 +390,32 @@ public final class TaiModelDownloader {
             // Fold the existing file into the .part slot so everything below (hash check, the
             // MNN-package expansion, the final rename) runs exactly as it would after a real
             // transfer.
-            boolean keptExisting = !partial.exists() && isFileAlreadyComplete(output, expectedSizeBytes)
+            // An image package's record carries the size of the whole package; the file this first
+            // transfer fetches is one of them, sized by the repository listing.
+            boolean diffusion = TaiModelSpec.BACKEND_MNN_DIFFUSION.equals(backend);
+            HfPackageListing diffusionListing = null;
+            long primaryExpectedBytes = expectedSizeBytes;
+            long shownTotalBytes = expectedSizeBytes;
+            if (diffusion) {
+                diffusionListing = diffusionPackageListingFromHuggingFace(url, authToken);
+                if (diffusionListing.files.isEmpty()) {
+                    throw new IllegalStateException("The file list of this image model could not be read from Hugging Face.");
+                }
+                Long primarySize = diffusionListing.sizes.get(output.getName());
+                primaryExpectedBytes = primarySize == null ? 0L : primarySize;
+                long listed = 0L;
+                for (String name : diffusionListing.files) {
+                    Long size = diffusionListing.sizes.get(name);
+                    if (size != null) listed += size;
+                }
+                if (listed > 0L) shownTotalBytes = listed;
+            }
+            boolean keptExisting = !partial.exists() && isFileAlreadyComplete(output, primaryExpectedBytes)
                 && output.renameTo(partial);
             if (keptExisting) {
                 bytesRead = partial.length();
                 startBytes = bytesRead;
-                contentLength = expectedSizeBytes;
+                contentLength = shownTotalBytes;
                 run.persist(run.record(TaiModelStore.STATE_VERIFYING, bytesRead, contentLength, ""));
             } else {
                 long existing = resumeOffset(partial, url);
@@ -410,7 +441,7 @@ public final class TaiModelDownloader {
                 // to the user) may be raised to the catalogue's size when the server says less.
                 long promised = responseLength > 0 ? existing + responseLength : -1L;
                 contentLength = promised;
-                if (expectedSizeBytes > 0L) contentLength = Math.max(contentLength, expectedSizeBytes);
+                if (shownTotalBytes > 0L) contentLength = Math.max(contentLength, shownTotalBytes);
                 bytesRead = existing;
                 startBytes = existing;
                 run.persist(run.record(TaiModelStore.STATE_DOWNLOADING, bytesRead, contentLength, ""));
@@ -457,6 +488,48 @@ public final class TaiModelDownloader {
                 }
             }
 
+            if (diffusion) {
+                if (output.exists() && !output.delete()) throw new IllegalStateException("Could not replace model file.");
+                if (!partial.renameTo(output)) throw new IllegalStateException("Could not finalize model download.");
+                clearResumeMarker(partial);
+
+                File modelDir = output.getParentFile();
+                String baseUrl = baseUrlFromUrl(url);
+                int type = TaiDiffusionPackage.parseType(architecture);
+                long currentBytes = output.length();
+                bytesRead = currentBytes;
+                long packageTotalBytes = shownTotalBytes > 0L ? shownTotalBytes : -1L;
+                run.persist(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""));
+                // The listing is ordered small files first: the tokenizer is known to fit (or not)
+                // before the first graph is fetched, so a package that cannot run is refused early.
+                boolean tokenizerChecked = false;
+                for (String fileName : diffusionListing.files) {
+                    if (output.getName().equals(fileName)) continue;
+                    if (!tokenizerChecked && TaiDiffusionImport.isHeavy(fileName)) {
+                        checkDiffusionTokenizer(modelDir, type);
+                        tokenizerChecked = true;
+                    }
+                    long[] counted = {currentBytes};
+                    try {
+                        fetchPackageFile(run, control, baseUrl, modelDir, fileName,
+                            diffusionListing.sizes.get(fileName), authToken, counted, packageTotalBytes);
+                    } finally {
+                        currentBytes = counted[0];
+                        bytesRead = currentBytes;
+                    }
+                }
+                if (!tokenizerChecked) checkDiffusionTokenizer(modelDir, type);
+
+                run.persist(run.record(TaiModelStore.STATE_VERIFYING, currentBytes, packageTotalBytes, ""));
+                TaiDiffusionPackage.Result installed = TaiDiffusionPackage.inspect(modelDir, type);
+                if (!installed.ok()) throw new IllegalStateException(installed.message);
+                store.upsertUserModel(TaiDiffusionImport.spec(modelId, displayName.isEmpty() ? modelId : displayName,
+                    "downloaded", license.isEmpty() ? "User accepted provider terms externally" : license,
+                    modelDir.getAbsolutePath(), installed.type, currentBytes));
+                run.persist(run.record(TaiModelStore.STATE_INSTALLED, currentBytes, currentBytes, ""));
+                return;
+            }
+
             if (isMnnPackage(url, backend, format)) {
                 if (!looksLikeSmallJson(partial, output.getName())) {
                     throw new IllegalStateException("Downloaded MNN config does not look like JSON. It may be an HTML login or error page.");
@@ -483,77 +556,20 @@ public final class TaiModelDownloader {
                     if (pendingFiles.size() > 10000) throw new IllegalStateException("Model package has too many files.");
                     String fileName = pendingFiles.get(packageIndex);
                     if (output.getName().equals(fileName)) continue;
-                    String fileUrl = baseUrl + encodeHuggingFacePath(fileName);
-                    File fileOutput = new File(modelDir, fileName);
-                    // A file already complete on disk (a re-download of an installed package, or
-                    // one this same run already fetched under an earlier name) is kept rather than
-                    // re-fetched: the revision is pinned in the URL, so a matching length is enough
-                    // to trust it. Its bytes still count toward progress so the total lands right.
-                    Long expectedFileSize = packageListing.sizes.get(fileName);
-                    if (isFileAlreadyComplete(fileOutput, expectedFileSize == null ? -1L : expectedFileSize)) {
-                        currentBytes += fileOutput.length();
+                    long[] counted = {currentBytes};
+                    try {
+                        fetchPackageFile(run, control, baseUrl, modelDir, fileName,
+                            packageListing.sizes.get(fileName), authToken, counted, packageTotalBytes);
+                    } finally {
+                        currentBytes = counted[0];
                         bytesRead = currentBytes;
-                        run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
-                        if (fileName.endsWith(".json")) {
-                            TaiMnnPackage.references(TaiMnnPackage.readConfig(fileOutput), packageFiles);
-                            for (String dependency : packageFiles)
-                                if (!pendingFiles.contains(dependency)) pendingFiles.add(dependency);
-                        }
-                        continue;
                     }
-                    File fileParent = fileOutput.getParentFile();
-                    if (fileParent != null && !fileParent.exists() && !fileParent.mkdirs()) {
-                        throw new IllegalStateException("Could not create MNN package directory.");
-                    }
-                    File filePartial = new File(fileOutput.getAbsolutePath() + ".part");
-                    long offset = resumeOffset(filePartial, fileUrl);
-                    HttpURLConnection fileConn = open(fileUrl, authToken, offset);
-                    int fileStatus = fileConn.getResponseCode();
-                    if (fileStatus == 416 && offset > 0) {
-                        fileConn.disconnect();
-                        fileConn = open(fileUrl, authToken, 0);
-                        fileStatus = fileConn.getResponseCode();
-                        offset = 0;
-                    }
-                    boolean resume = offset > 0 && fileStatus == 206
-                        && validContentRange(fileConn.getHeaderField("Content-Range"), offset);
-                    if (fileStatus == 206 && !resume) {
-                        fileConn.disconnect();
-                        throw new IllegalStateException("Invalid partial response for " + fileName);
-                    }
-                    if (!resume) offset = 0;
-                    currentBytes += offset;
-                    if (fileStatus < 200 || fileStatus >= 300) {
-                        fileConn.disconnect();
-                        throw new IllegalStateException("MNN package file missing: " + fileName);
-                    }
-                    run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
-                    try (InputStream fileInput = new BufferedInputStream(fileConn.getInputStream());
-                         FileOutputStream fileOut = new FileOutputStream(filePartial, resume)) {
-                        byte[] buffer = new byte[1024 * 64];
-                        int read;
-                        while ((read = fileInput.read(buffer)) != -1) {
-                            control.checkpoint();
-                            fileOut.write(buffer, 0, read);
-                            currentBytes += read;
-                            bytesRead = currentBytes;
-                            if (currentBytes % PERSIST_EVERY_BYTES < read) {
-                                run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
-                            } else {
-                                run.report(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
-                            }
-                        }
-                    }
-                    fileConn.disconnect();
-                    if (fileOutput.exists() && !fileOutput.delete()) throw new IllegalStateException("Could not replace file.");
-                    if (!filePartial.renameTo(fileOutput)) throw new IllegalStateException("Could not finalize file download.");
-                    clearResumeMarker(filePartial);
+                    File fileOutput = new File(modelDir, fileName);
                     if (fileName.endsWith(".json")) {
                         TaiMnnPackage.references(TaiMnnPackage.readConfig(fileOutput), packageFiles);
                         for (String dependency : packageFiles)
                             if (!pendingFiles.contains(dependency)) pendingFiles.add(dependency);
                     }
-                    run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, currentBytes, packageTotalBytes, ""), fileName));
                 }
 
                 run.persist(run.record(TaiModelStore.STATE_VERIFYING, currentBytes, packageTotalBytes, ""));
@@ -666,6 +682,74 @@ public final class TaiModelDownloader {
             } catch (JSONException ignored) {
             }
         }
+    }
+
+    /**
+     * Fetches one file of a multi-file package into {@code modelDir}, keeping a file that is already
+     * complete and resuming a {@code .part}. {@code counted[0]} is the running byte total across the
+     * package and is advanced as bytes arrive, so a caller that sees an exception still knows how far it got.
+     */
+    private void fetchPackageFile(@NonNull Run run, @NonNull Control control, @NonNull String baseUrl,
+                                  @NonNull File modelDir, @NonNull String fileName, @Nullable Long expectedFileSize,
+                                  @Nullable String authToken, @NonNull long[] counted, long totalBytes) throws Exception {
+        String fileUrl = baseUrl + encodeHuggingFacePath(fileName);
+        File fileOutput = new File(modelDir, fileName);
+        // A file already complete on disk (a re-download of an installed package, or
+        // one this same run already fetched under an earlier name) is kept rather than
+        // re-fetched: the revision is pinned in the URL, so a matching length is enough
+        // to trust it. Its bytes still count toward progress so the total lands right.
+        if (isFileAlreadyComplete(fileOutput, expectedFileSize == null ? -1L : expectedFileSize)) {
+            counted[0] += fileOutput.length();
+            run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, counted[0], totalBytes, ""), fileName));
+            return;
+        }
+        File fileParent = fileOutput.getParentFile();
+        if (fileParent != null && !fileParent.exists() && !fileParent.mkdirs()) {
+            throw new IllegalStateException("Could not create MNN package directory.");
+        }
+        File filePartial = new File(fileOutput.getAbsolutePath() + ".part");
+        long offset = resumeOffset(filePartial, fileUrl);
+        HttpURLConnection fileConn = open(fileUrl, authToken, offset);
+        int fileStatus = fileConn.getResponseCode();
+        if (fileStatus == 416 && offset > 0) {
+            fileConn.disconnect();
+            fileConn = open(fileUrl, authToken, 0);
+            fileStatus = fileConn.getResponseCode();
+            offset = 0;
+        }
+        boolean resume = offset > 0 && fileStatus == 206
+            && validContentRange(fileConn.getHeaderField("Content-Range"), offset);
+        if (fileStatus == 206 && !resume) {
+            fileConn.disconnect();
+            throw new IllegalStateException("Invalid partial response for " + fileName);
+        }
+        if (!resume) offset = 0;
+        counted[0] += offset;
+        if (fileStatus < 200 || fileStatus >= 300) {
+            fileConn.disconnect();
+            throw new IllegalStateException("MNN package file missing: " + fileName);
+        }
+        run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, counted[0], totalBytes, ""), fileName));
+        try (InputStream fileInput = new BufferedInputStream(fileConn.getInputStream());
+             FileOutputStream fileOut = new FileOutputStream(filePartial, resume)) {
+            byte[] buffer = new byte[1024 * 64];
+            int read;
+            while ((read = fileInput.read(buffer)) != -1) {
+                control.checkpoint();
+                fileOut.write(buffer, 0, read);
+                counted[0] += read;
+                if (counted[0] % PERSIST_EVERY_BYTES < read) {
+                    run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, counted[0], totalBytes, ""), fileName));
+                } else {
+                    run.report(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, counted[0], totalBytes, ""), fileName));
+                }
+            }
+        }
+        fileConn.disconnect();
+        if (fileOutput.exists() && !fileOutput.delete()) throw new IllegalStateException("Could not replace file.");
+        if (!filePartial.renameTo(fileOutput)) throw new IllegalStateException("Could not finalize file download.");
+        clearResumeMarker(filePartial);
+        run.persist(withCurrentFile(run.record(TaiModelStore.STATE_DOWNLOADING, counted[0], totalBytes, ""), fileName));
     }
 
     /** One attempt's bookkeeping: the base record every progress write is derived from. */
@@ -1260,6 +1344,66 @@ public final class TaiModelDownloader {
         } catch (Exception ignored) {
         }
         return listing;
+    }
+
+    /**
+     * The runnable files of the image package the link's directory holds, nested folders (Sana's
+     * {@code llm/}) included, small files first; hidden files and the model card are left out.
+     * Empty when the repository could not be read.
+     */
+    @NonNull
+    private HfPackageListing diffusionPackageListingFromHuggingFace(@NonNull String url, @Nullable String authToken) {
+        HfPackageListing listing = new HfPackageListing();
+        try {
+            TaiHuggingFace source = TaiHuggingFace.parse(url);
+            if (source == null) return listing;
+            HttpURLConnection connection = open(source.metadataUrl(), authToken, 0);
+            int status = connection.getResponseCode();
+            if (status < 200 || status >= 300) return listing;
+            JSONObject json = new JSONObject(readSmallUtf8(connection.getInputStream(), 2L * 1024L * 1024L));
+            JSONArray siblings = json.optJSONArray("siblings");
+            if (siblings == null) return listing;
+            String directory = source.path.substring(0, source.path.lastIndexOf('/') + 1);
+            List<String> names = new ArrayList<>();
+            for (int i = 0; i < siblings.length(); i++) {
+                JSONObject sibling = siblings.optJSONObject(i);
+                if (sibling == null) continue;
+                String fileName = sibling.optString("rfilename", "");
+                if (!fileName.startsWith(directory)) continue;
+                String relative = fileName.substring(directory.length());
+                if (!TaiHuggingFace.safePath(relative)) continue;
+                JSONObject lfs = sibling.optJSONObject("lfs");
+                long size = sibling.optLong("size", lfs == null ? -1L : lfs.optLong("size", -1L));
+                if (size > 0L) listing.sizes.put(relative, size);
+                if (lfs != null) {
+                    String sha256 = lfs.optString("sha256", "");
+                    if (!sha256.isEmpty()) listing.sha256s.put(relative, sha256);
+                }
+                names.add(relative);
+            }
+            listing.files.addAll(TaiDiffusionImport.packageFiles(names, ""));
+        } catch (Exception ignored) {
+        }
+        return listing;
+    }
+
+    /**
+     * Makes a Stable Diffusion package loadable: installs the app's bundled tokenizer when its raw
+     * files are the standard CLIP ones. A package that needs a different tokenizer is refused, and
+     * what was fetched for it is removed.
+     */
+    private void checkDiffusionTokenizer(@NonNull File modelDir, int type) {
+        if (type == TaiDiffusionPackage.TYPE_SANA) return;
+        TaiDiffusionTokenizer.Result result = TaiDiffusionTokenizer.ensure(modelDir, appContext);
+        if (result.proceed()) return;
+        if (result.outcome == TaiDiffusionTokenizer.Outcome.INCOMPATIBLE) deleteTree(modelDir);
+        throw new IllegalStateException(result.message);
+    }
+
+    private static void deleteTree(@NonNull File file) {
+        File[] children = file.listFiles();
+        if (children != null) for (File child : children) deleteTree(child);
+        file.delete();
     }
 
     public static final class HfResolve {
