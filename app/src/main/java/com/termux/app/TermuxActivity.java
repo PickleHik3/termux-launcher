@@ -3267,9 +3267,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mFrameGutterDrawable =
             com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop);
         body.setBackground(mFrameGutterDrawable);
+        growFrameGlassUnderSystemBars(body);
         body.setVisibility(View.VISIBLE);
         mFrameGutterShown = true;
         syncFrameStandDown();
+    }
+
+    /**
+     * The frame glass reaches under the transparent system bars. The root fits the system windows,
+     * so its children stop at the status bar's inset and the gesture strip's; the status sheet used
+     * to continue up by translating itself, and now that it stands down the frame has to, or the
+     * strip under the system status bar shows bare wallpaper above the glass.
+     */
+    private void growFrameGlassUnderSystemBars(@NonNull View body) {
+        ViewGroup.LayoutParams params = body.getLayoutParams();
+        if (!(params instanceof ViewGroup.MarginLayoutParams)) return;
+        View root = findViewById(R.id.activity_termux_root_view);
+        int top = Math.max(mLastStatusBarInsetTop, root == null ? 0 : root.getPaddingTop());
+        int bottom = root == null ? 0 : root.getPaddingBottom();
+        ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) params;
+        if (margins.topMargin == -top && margins.bottomMargin == -bottom) return;
+        margins.topMargin = -top;
+        margins.bottomMargin = -bottom;
+        body.setLayoutParams(margins);
     }
 
     /** The shared frame the Docked gutter glass is drawing, for the blur cache's in-use scan. */
@@ -7566,6 +7586,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void applyTerminalOverlayInsets(@NonNull WindowInsetsCompat insetsCompat) {
         int statusBarInsetTop = insetsCompat.getInsets(Type.statusBars()).top;
         mLastStatusBarInsetTop = statusBarInsetTop;
+        // The frame glass follows the inset it reaches under, on the pass that changes it.
+        View frameGlass = findViewById(R.id.docked_frame_glass);
+        if (frameGlass != null && mFrameGutterShown) growFrameGlassUnderSystemBars(frameGlass);
 
         View statusBarSurface = findViewById(R.id.terminal_status_bar_background);
         if (statusBarSurface != null) {
