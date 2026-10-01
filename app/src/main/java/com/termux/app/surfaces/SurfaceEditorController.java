@@ -113,6 +113,8 @@ public final class SurfaceEditorController {
         /** Hold the pane wall's gestures while the editor is up, or hand them back. */
         void holdPaneWall(boolean held);
         void applyTerminalSurfaceAppearance();
+        /** Dresses all the chrome again from the current state, the way a launch does. */
+        void redressChrome();
         void refreshTerminalWindowBar();
         /** Rebuilds the terminal palette if the contrast level moved (Legibility drives both). */
         void refreshTerminalPalette();
@@ -854,6 +856,8 @@ public final class SurfaceEditorController {
                 return;
             // Style belongs to no Look: it never moves the slider.
             prefs.setAppLauncherDockStyle(style);
+            // The same dress a launch gives: nothing decided under the old Style is carried over.
+            mHost.redressChrome();
             applyStructuralPreview();
             // Corners and Margin show under both Styles and read the same keys.
             if (mPanel != null)
@@ -1949,6 +1953,8 @@ public final class SurfaceEditorController {
         }
         restoreExpandedStatusAfterSurfaceEditor();
         mHasEntryStatusCollapsed = false;
+        // Whatever the session did to the Style, the chrome leaves it dressed as a launch would.
+        mHost.redressChrome();
     }
 
     /** Hands the status pane back the shape it had before the editor borrowed it. */

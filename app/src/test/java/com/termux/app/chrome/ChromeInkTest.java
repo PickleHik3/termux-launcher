@@ -183,6 +183,36 @@ public class ChromeInkTest {
     }
 
     /**
+     * A live Style change must dress what a launch dresses. The polarity survives an invalidate on
+     * purpose, so a chrome that stood in the pale ink before the change kept it after, where a
+     * launch decides afresh; the redress drops it, and the next pass decides from what is there.
+     */
+    @Test
+    public void aRedressDecidesThePolarityAsAFreshChromeWould() {
+        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT, LIGHT_INK, NIGHT_INK,
+            OnGlass.TARGET_BODY_TEXT);
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.polarity());
+
+        ink.invalidate();
+        assertEquals("an invalidate alone keeps the decision",
+            ChromeInk.Polarity.PALE_INK, ink.polarity());
+
+        ink.resetForRedress();
+        ChromeInk fresh = new ChromeInk(surfaces, blurCache, null);
+        assertEquals("nothing is remembered, as at launch", fresh.polarity(), ink.polarity());
+
+        wallpaper.status = 0xFFDDDDDD;
+        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT, LIGHT_INK, NIGHT_INK,
+            OnGlass.TARGET_BODY_TEXT);
+        fresh.backdrops().setSampler(wallpaper);
+        fresh.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT, LIGHT_INK, NIGHT_INK,
+            OnGlass.TARGET_BODY_TEXT);
+        assertEquals(fresh.polarity(), ink.polarity());
+        assertEquals(fresh.resolution(GlassBackdropCache.Band.STATUS_BAR).veil,
+            ink.resolution(GlassBackdropCache.Band.STATUS_BAR).veil);
+    }
+
+    /**
      * Nothing about the rule freezes the chrome into one answer: a genuinely light wallpaper still
      * gets the dark ink, and the flip is a whole-chrome flip.
      */
