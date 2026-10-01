@@ -1050,7 +1050,12 @@ final class TaiImportFlow {
                     // A failed row stays in Downloads with Retry; the dialog says why, once.
                     hub.removeListener(this);
                     host.modelsChanged();
-                    showError(TaiImportMessages.forDownloadError(transfer.error));
+                    if (TaiModelCentreRows.needsToken(transfer.error)) {
+                        // Same question the link step asks, and Add my token downloads again.
+                        showGatedForDownload();
+                    } else {
+                        showError(TaiImportMessages.forDownloadError(transfer.error));
+                    }
                 } else if (TaiModelStore.STATE_CANCELLED.equals(status) || transfer == null) {
                     hub.removeListener(this);
                     host.modelsChanged();

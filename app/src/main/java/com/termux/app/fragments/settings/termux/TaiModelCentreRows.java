@@ -173,6 +173,19 @@ final class TaiModelCentreRows {
         return Failure.GENERIC;
     }
 
+    /** True when a download or catalogue error is Hugging Face asking for a (better) token. */
+    static boolean needsToken(@Nullable String error) {
+        return failureOf(error) == Failure.TOKEN;
+    }
+
+    /**
+     * Whether a Model Centre row offers "Add token": a gated entry with no token saved, a failed
+     * transfer or catalogue download whose error is an auth failure.
+     */
+    static boolean showsTokenAction(boolean gatedNoteShown, @Nullable String error) {
+        return gatedNoteShown || needsToken(error);
+    }
+
     /** 1st, 2nd, 3rd, 4th … 11th, 12th, 13th, 21st: the English ordinal the "in line" pill uses. */
     @NonNull
     static String ordinal(int value) {
