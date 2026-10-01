@@ -3406,6 +3406,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override @Nullable public com.termux.app.chrome.GlassRefraction.Look paneGlassRefraction() {
+                // Inside a joined Docked frame the insert is a hole in one sheet, not a lens over
+                // the wallpaper: a bend at its rim pulls the blurred wallpaper inward where the
+                // frame glass a pixel outside shows it unbent, which read as colour smeared along
+                // the inner border. The rim's light stays; only the pull goes.
+                if (mFancierGlassLook != null && frameStandsDown())
+                    return new com.termux.app.chrome.GlassRefraction.Look(0,
+                        mFancierGlassLook.edgeWidthDp, mFancierGlassLook.edgeLightPercent);
                 return mFancierGlassLook;
             }
 
