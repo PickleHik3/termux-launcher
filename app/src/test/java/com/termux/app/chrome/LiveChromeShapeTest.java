@@ -221,6 +221,25 @@ public class LiveChromeShapeTest {
     }
 
     @Test
+    public void aStatusBarJoinedToTheRowUnderItHasNoRimAtAll() {
+        // Status and the apps row share the top edge: whichever stands outer joins the other, so
+        // its inner edge is a join and not the opening, and only the inner piece faces the pane.
+        ChromeShape shape = shape(layout(Slot.on(Edge.TOP, Element.STATUS),
+            Slot.on(Edge.TOP, Element.APPS), Slot.on(Edge.BOTTOM, Element.AZ),
+            Slot.on(Edge.BOTTOM, Element.EXTRA_KEYS)), LayoutStyle.DOCKED);
+        Piece status = shape.piece(PieceId.STATUS);
+        Piece apps = shape.piece(PieceId.APPS);
+        Piece outer = status.box.top < apps.box.top ? status : apps;
+        Piece inner = outer == status ? apps : status;
+        assertEquals("the outer bar's every edge is a join or the screen", ChromeEdgeRule.NONE,
+            LiveChromeShape.rimEdges(shape, Collections.singletonList(outer.id)));
+        assertEquals(ChromeEdgeRule.ALL,
+            LiveChromeShape.seamEdges(shape, Collections.singletonList(outer.id)));
+        assertEquals("the inner bar faces the opening", ChromeEdgeRule.BOTTOM,
+            LiveChromeShape.rimEdges(shape, Collections.singletonList(inner.id)));
+    }
+
+    @Test
     public void everyJoinAndScreenEdgeIsAPlainSeamUnderDocked() {
         for (PlaceLayout layout : new PlaceLayout[] {bottomStack(), sideBars()}) {
             ChromeShape shape = shape(layout, LayoutStyle.DOCKED);

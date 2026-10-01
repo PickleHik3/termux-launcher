@@ -94,18 +94,15 @@ public final class WallpaperFrostPainter {
         // and with no wash over it — the bar wears no glass on the plank.
         boolean onPlank = mSurfaces.statusBarOnDockPlank();
         // Docked, the bar's screen edges are seams, and so is its top while the strip continues
-        // it — whether or not the strip's own frost is up this pass. Only the edge facing the
-        // terminal keeps its rim. The capsule keeps its rim all round.
-        com.termux.app.place.PlaceLayout.Edge barEdge = mSurfaces.statusBarEdge();
-        int paneOuter = barEdge == com.termux.app.place.PlaceLayout.Edge.TOP
-            ? ChromeEdgeRule.LEFT | ChromeEdgeRule.RIGHT
-            : ChromeEdgeRule.edgeBit(barEdge);
-        int paneJoined = lead == ChromeEdgeRule.TopLead.WINDOW_BAR ? ChromeEdgeRule.TOP : 0;
+        // it — whether or not the strip's own frost is up this pass. Only the edge the shape model
+        // says faces the opening keeps its rim: a bar joined to the dock under it keeps none. The
+        // capsule keeps its rim all round.
+        int paneSeams = mSurfaces.statusBarSeamEdges();
         boolean paneApplied = !onPlank && applyFrost(paneFrost,
             mSurfaces.findChromeView(R.id.terminal_window_bar_host), blurRadiusDp,
             SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR, SurfaceDirtyLedger.FrostRadius.TOP_PANE,
             capsule ? mSurfaces.statusBarRimCornerRadiusPx() : 0f,
-            ChromeEdgeRule.seams(capsule, paneOuter, paneJoined));
+            paneSeams);
         if (onPlank) hide(paneFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
         View statusBlur = mSurfaces.findChromeView(R.id.terminal_status_bar_glass_blur);
         View paneBlur = mSurfaces.findChromeView(R.id.terminal_window_bar_blur);

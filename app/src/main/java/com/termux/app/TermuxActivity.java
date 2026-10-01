@@ -1411,6 +1411,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mStatusBarEdge;
         }
 
+        @Override public int statusBarSeamEdges() {
+            return com.termux.app.chrome.LiveChromeShape.seamEdges(chromeShape(),
+                Collections.singletonList(com.termux.app.place.ChromeShape.PieceId.STATUS));
+        }
+
         @Override public float statusBarRimCornerRadiusPx() {
             return resolveStatusBarCapsuleCornerRadiusPx(targetStatusBarHeightPx(true,
                 isStatusBarCompact()));
