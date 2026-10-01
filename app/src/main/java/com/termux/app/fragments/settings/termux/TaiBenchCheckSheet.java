@@ -55,7 +55,8 @@ final class TaiBenchCheckSheet {
         int pad = TaiBenchViews.dp(context, 20);
         content.setPadding(pad, TaiBenchViews.dp(context, 18), pad, pad);
 
-        TextView title = TaiBenchViews.figure(context, context.getString(R.string.tai_bench_check_title), 18f);
+        TextView title = TaiBenchViews.figure(context, context.getString(R.string.tai_bench_check_title),
+            com.google.android.material.R.attr.textAppearanceTitleLarge);
         content.addView(title);
         content.addView(TaiBenchViews.body(context, context.getString(R.string.tai_bench_check_summary,
             models.size(), TaiBenchViews.presetLabel(context, preset))), TaiBenchViews.block(context, 4));

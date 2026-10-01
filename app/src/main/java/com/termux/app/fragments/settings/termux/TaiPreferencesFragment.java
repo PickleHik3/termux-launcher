@@ -15,7 +15,6 @@ import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
-import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -29,6 +28,7 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
 
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
@@ -448,18 +448,18 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
                 () -> copyToClipboard(context, url[0], R.string.termux_ai_base_url_copied))));
 
         TextView tokenView = endpointValueView(context, TaiSettings.redactToken(token[0]));
-        Button revealButton = endpointButton(context, R.string.termux_ai_dialog_reveal, null);
+        MaterialButton revealButton = endpointButton(context, R.string.termux_ai_dialog_reveal, null);
         revealButton.setOnClickListener(v -> {
             revealed[0] = !revealed[0];
             tokenView.setText(revealed[0] ? token[0] : TaiSettings.redactToken(token[0]));
             revealButton.setText(revealed[0] ? R.string.termux_ai_dialog_hide : R.string.termux_ai_dialog_reveal);
         });
-        Button tokenCopy = endpointButton(context, R.string.termux_ai_dialog_copy,
+        MaterialButton tokenCopy = endpointButton(context, R.string.termux_ai_dialog_copy,
             () -> copyToClipboard(context, token[0], R.string.termux_ai_api_token_copied));
         layout.addView(endpointRow(context, getString(R.string.termux_ai_endpoint_field_token), tokenView,
             revealButton, tokenCopy));
 
-        Button randomizePort = endpointButton(context, R.string.termux_ai_endpoint_randomize_port, () -> {
+        MaterialButton randomizePort = endpointButton(context, R.string.termux_ai_endpoint_randomize_port, () -> {
             try {
                 LauncherCtlApiServer.getInstance().randomizeApiPortFromSettings(context);
                 JSONObject ep = LauncherCtlApiServer.getInstance().endpointSettings(context);
@@ -472,7 +472,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
                 AppNotice.show(context, R.string.termux_ai_endpoint_update_failed, true);
             }
         });
-        Button recreateToken = endpointButton(context, R.string.termux_ai_endpoint_recreate_token, () -> {
+        MaterialButton recreateToken = endpointButton(context, R.string.termux_ai_endpoint_recreate_token, () -> {
             try {
                 JSONObject ep = LauncherCtlApiServer.getInstance().rotateAuthTokenFromSettings(context)
                     .optJSONObject("endpoint");
@@ -491,7 +491,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         TextView files = new TextView(context);
         files.setText(getString(R.string.termux_ai_endpoint_files_footnote, endpointFile, tokenFile));
         files.setTextIsSelectable(true);
-        files.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
+        files.setTextAppearance(textAppearance(context, com.google.android.material.R.attr.textAppearanceBodySmall));
         files.setPadding(0, Math.round(10 * density), 0, Math.round(4 * density));
         layout.addView(files);
 
@@ -506,39 +506,40 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         TextView view = new TextView(context);
         view.setText(text);
         view.setTextIsSelectable(true);
+        // The endpoint and token are exact values, so they stay monospace.
+        view.setTextAppearance(textAppearance(context, com.google.android.material.R.attr.textAppearanceBodyMedium));
         view.setTypeface(Typeface.MONOSPACE);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
         return view;
     }
 
-    private Button endpointButton(Context context, int textRes, @Nullable Runnable action) {
-        Button button = new Button(context, null, android.R.attr.borderlessButtonStyle);
+    private int textAppearance(Context context, int attr) {
+        TypedValue value = new TypedValue();
+        context.getTheme().resolveAttribute(attr, value, true);
+        return value.resourceId;
+    }
+
+    private MaterialButton endpointButton(Context context, int textRes, @Nullable Runnable action) {
+        MaterialButton button = new MaterialButton(context, null, androidx.appcompat.R.attr.borderlessButtonStyle);
         button.setText(textRes);
-        button.setAllCaps(false);
-        button.setMinWidth(0);
-        button.setMinimumWidth(0);
-        int padH = Math.round(8 * context.getResources().getDisplayMetrics().density);
-        button.setPadding(padH, 0, padH, 0);
-        button.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorPrimary));
         if (action != null) button.setOnClickListener(v -> action.run());
         return button;
     }
 
-    private LinearLayout endpointRow(Context context, String label, @Nullable TextView valueView, Button... buttons) {
+    private LinearLayout endpointRow(Context context, String label, @Nullable TextView valueView, MaterialButton... buttons) {
         float density = context.getResources().getDisplayMetrics().density;
         LinearLayout column = new LinearLayout(context);
         column.setOrientation(LinearLayout.VERTICAL);
         column.setPadding(0, Math.round(8 * density), 0, 0);
         TextView labelView = new TextView(context);
         labelView.setText(label);
-        labelView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-        labelView.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
+        labelView.setTextAppearance(textAppearance(context, com.google.android.material.R.attr.textAppearanceLabelMedium));
+        labelView.setTextColor(resolveAttrColor(com.google.android.material.R.attr.colorOnSurfaceVariant));
         column.addView(labelView);
         if (valueView != null) column.addView(valueView);
         LinearLayout actions = new LinearLayout(context);
         actions.setOrientation(LinearLayout.HORIZONTAL);
         actions.setGravity(Gravity.END);
-        for (Button button : buttons) actions.addView(button);
+        for (MaterialButton button : buttons) actions.addView(button);
         column.addView(actions);
         return column;
     }
@@ -594,8 +595,8 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
             TextView headerView = new TextView(context);
             headerView.setText(header);
             headerView.setTextIsSelectable(true);
+            headerView.setTextAppearance(textAppearance(context, com.google.android.material.R.attr.textAppearanceBodyMedium));
             headerView.setTypeface(Typeface.MONOSPACE);
-            headerView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
             headerView.setPadding(0, 0, 0, Math.round(12 * density));
             layout.addView(headerView);
         }

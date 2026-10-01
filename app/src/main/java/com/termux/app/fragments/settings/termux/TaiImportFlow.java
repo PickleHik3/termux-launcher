@@ -14,10 +14,8 @@ import android.util.TypedValue;
 import android.view.View;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
-import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -26,7 +24,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.termux.R;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiDownloadHub;
@@ -653,7 +654,7 @@ final class TaiImportFlow {
         layout.addView(label(context, R.string.termux_ai_import_can_do_label));
         TextView chips = new TextView(context);
         TextView unverified = new TextView(context);
-        unverified.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        appearance(unverified, com.google.android.material.R.attr.textAppearanceBodySmall);
         unverified.setTextColor(resolveAttrColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
         showCapabilities(context, chips, unverified);
         layout.addView(chips);
@@ -689,11 +690,8 @@ final class TaiImportFlow {
         layout.addView(fitView);
 
         // Advanced: what the old dialog asked up front, now collapsed and pre-filled.
-        TextView advancedToggle = new TextView(context);
+        MaterialButton advancedToggle = new MaterialButton(context, null, androidx.appcompat.R.attr.borderlessButtonStyle);
         advancedToggle.setText(R.string.termux_ai_import_advanced_show);
-        advancedToggle.setTextColor(resolveAttrColor(context, com.termux.shared.R.attr.termuxColorPrimary));
-        advancedToggle.setTypeface(Typeface.DEFAULT_BOLD);
-        advancedToggle.setPadding(0, Math.round(20 * density), 0, Math.round(8 * density));
         layout.addView(advancedToggle);
         LinearLayout advanced = new LinearLayout(context);
         advanced.setOrientation(LinearLayout.VERTICAL);
@@ -707,7 +705,7 @@ final class TaiImportFlow {
 
         boolean rawTflite = draft.metadata != null && isEmbeddingFile(draft.metadata.displayName)
             || isEmbeddingFile(draft.fileName);
-        List<CheckBox> boxes = new ArrayList<>();
+        List<MaterialCheckBox> boxes = new ArrayList<>();
         String[] keys = capabilityKeys();
         int[] titles = capabilityTitles();
         for (int i = 0; i < keys.length; i++) {
@@ -716,7 +714,7 @@ final class TaiImportFlow {
             if (TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING.equals(keys[i])) continue;
             // Image generation is what an image package is, never a box; such a package has no chat boxes.
             if (TaiModelSpec.CAPABILITY_IMAGE_GENERATION.equals(keys[i]) || draft.imageOnly()) continue;
-            CheckBox box = new CheckBox(context);
+            MaterialCheckBox box = new MaterialCheckBox(context);
             box.setText(titles[i]);
             box.setTag(keys[i]);
             box.setChecked(draft.capabilities.contains(keys[i]));
@@ -749,7 +747,7 @@ final class TaiImportFlow {
         processor.setSelection(draft.processor.ordinal());
         if (chatSettings) advanced.addView(processor);
 
-        Button profileButton = new Button(context);
+        MaterialButton profileButton = new MaterialButton(context, null, androidx.appcompat.R.attr.borderlessButtonStyle);
         profileButton.setText(R.string.termux_ai_import_profile);
         profileButton.setOnClickListener(v -> TaiImportProfileDialog.show(context, runtimeProfile(),
             profile -> draft.customProfile = profile));
@@ -837,13 +835,13 @@ final class TaiImportFlow {
             .show();
     }
 
-    private void captureCapabilities(@NonNull List<CheckBox> boxes) {
+    private void captureCapabilities(@NonNull List<MaterialCheckBox> boxes) {
         draft.capabilities.clear();
         if (draft.imageOnly()) {
             draft.capabilities.add(TaiModelSpec.CAPABILITY_IMAGE_GENERATION);
             return;
         }
-        for (CheckBox box : boxes) {
+        for (MaterialCheckBox box : boxes) {
             if (box.isChecked()) draft.capabilities.add((String) box.getTag());
         }
         if (TaiImportGuess.qwenThinking(draft.identity() + " " + modelId())) {
@@ -1222,8 +1220,9 @@ final class TaiImportFlow {
         TextView text = new TextView(context);
         text.setText(detail);
         text.setTextIsSelectable(true);
+        // The details are a log of exact values, so they stay monospace; the size is the theme's.
+        appearance(text, com.google.android.material.R.attr.textAppearanceBodyMedium);
         text.setTypeface(Typeface.MONOSPACE);
-        text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         LinearLayout layout = column(context);
         layout.addView(text);
         new MaterialAlertDialogBuilder(context)
@@ -1245,10 +1244,10 @@ final class TaiImportFlow {
     /** A progress dialog: a line of text over a bar, with whatever buttons the step adds before showing it. */
     private static final class Progress {
         final AlertDialog dialog;
-        final ProgressBar bar;
+        final LinearProgressIndicator bar;
         final TextView text;
 
-        Progress(AlertDialog dialog, ProgressBar bar, TextView text) {
+        Progress(AlertDialog dialog, LinearProgressIndicator bar, TextView text) {
             this.dialog = dialog;
             this.bar = bar;
             this.text = text;
@@ -1278,7 +1277,7 @@ final class TaiImportFlow {
         status.setText(text);
         status.setPadding(0, 0, 0, Math.round(12 * density));
         layout.addView(status);
-        ProgressBar bar = new ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal);
+        LinearProgressIndicator bar = new LinearProgressIndicator(context);
         bar.setMax(10000);
         bar.setIndeterminate(true);
         layout.addView(bar);
@@ -1363,7 +1362,8 @@ final class TaiImportFlow {
     private static TextView label(@NonNull Context context, int textRes) {
         TextView label = new TextView(context);
         label.setText(textRes);
-        label.setTypeface(Typeface.DEFAULT_BOLD);
+        appearance(label, com.google.android.material.R.attr.textAppearanceTitleSmall);
+        label.setTextColor(resolveAttrColor(context, com.google.android.material.R.attr.colorPrimary));
         float density = context.getResources().getDisplayMetrics().density;
         label.setPadding(0, Math.round(12 * density), 0, Math.round(4 * density));
         return label;
@@ -1374,10 +1374,16 @@ final class TaiImportFlow {
         float density = context.getResources().getDisplayMetrics().density;
         TextView hint = new TextView(context);
         hint.setText(textRes);
-        hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        appearance(hint, com.google.android.material.R.attr.textAppearanceBodySmall);
         hint.setTextColor(resolveAttrColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
         hint.setPadding(0, Math.round(10 * density), 0, 0);
         return hint;
+    }
+
+    /** Sets a text appearance from the theme's type scale (textAppearanceBodySmall, ...). */
+    private static void appearance(@NonNull TextView view, int attr) {
+        TypedValue value = new TypedValue();
+        if (view.getContext().getTheme().resolveAttribute(attr, value, true)) view.setTextAppearance(value.resourceId);
     }
 
     @NonNull

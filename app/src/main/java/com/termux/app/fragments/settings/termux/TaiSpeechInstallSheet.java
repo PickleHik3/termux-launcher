@@ -1,8 +1,6 @@
 package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
-import android.content.res.ColorStateList;
-import android.graphics.Typeface;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
@@ -44,9 +42,8 @@ final class TaiSpeechInstallSheet {
         int[] window = {storedWindowSeconds == 5 ? 5 : 10};
 
         TextView title = new TextView(context);
-        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
-        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        title.setTextColor(color(context, com.termux.shared.R.attr.termuxColorOnSurface));
+        appearance(title, com.google.android.material.R.attr.textAppearanceTitleLarge);
+        title.setTextColor(color(context, com.google.android.material.R.attr.colorOnSurface));
         title.setText(context.getString(R.string.tai_centre_sheet_title, context.getString(R.string.speech_model_engine_whisper)));
         content.addView(title);
 
@@ -101,12 +98,9 @@ final class TaiSpeechInstallSheet {
         content.addView(windows, tabParams(density));
         content.addView(windowHint);
 
-        install.setAllCaps(false);
-        install.setCornerRadius(Math.round(999 * density));
-        install.setBackgroundTintList(ColorStateList.valueOf(color(context, com.termux.shared.R.attr.termuxColorPrimary)));
-        install.setTextColor(color(context, com.termux.shared.R.attr.termuxColorOnPrimary));
+        // A stock filled button: its shape, colour and text style are the theme's.
         LinearLayout.LayoutParams installParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, Math.round(48 * density));
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         installParams.topMargin = Math.round(20 * density);
         content.addView(install, installParams);
         install.setOnClickListener(view -> {
@@ -136,8 +130,8 @@ final class TaiSpeechInstallSheet {
     @NonNull
     private static LinearLayout.LayoutParams tabParams(float density) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, Math.round(40 * density));
-        params.topMargin = Math.round(6 * density);
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = Math.round(8 * density);
         return params;
     }
 
@@ -145,11 +139,8 @@ final class TaiSpeechInstallSheet {
     private static TextView label(@NonNull Context context, int textRes) {
         TextView label = new TextView(context);
         label.setText(textRes);
-        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        label.setAllCaps(true);
-        label.setLetterSpacing(0.12f);
-        label.setTypeface(Typeface.DEFAULT_BOLD);
-        label.setTextColor(color(context, com.termux.shared.R.attr.termuxColorPrimary));
+        appearance(label, com.google.android.material.R.attr.textAppearanceTitleSmall);
+        label.setTextColor(color(context, com.google.android.material.R.attr.colorPrimary));
         label.setPadding(0, Math.round(18 * context.getResources().getDisplayMetrics().density), 0, 0);
         return label;
     }
@@ -157,11 +148,16 @@ final class TaiSpeechInstallSheet {
     @NonNull
     private static TextView hint(@NonNull Context context) {
         TextView hint = new TextView(context);
-        hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        hint.setTextColor(color(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
+        appearance(hint, com.google.android.material.R.attr.textAppearanceBodySmall);
+        hint.setTextColor(color(context, com.google.android.material.R.attr.colorOnSurfaceVariant));
         hint.setPadding(0, Math.round(6 * context.getResources().getDisplayMetrics().density), 0, 0);
         hint.setVisibility(View.VISIBLE);
         return hint;
+    }
+
+    private static void appearance(@NonNull TextView view, int attr) {
+        TypedValue value = new TypedValue();
+        if (view.getContext().getTheme().resolveAttribute(attr, value, true)) view.setTextAppearance(value.resourceId);
     }
 
     private static int color(@NonNull Context context, int attr) {

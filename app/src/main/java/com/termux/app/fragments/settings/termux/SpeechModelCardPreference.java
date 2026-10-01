@@ -1,7 +1,6 @@
 package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.text.TextUtils;
 import android.view.View;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -13,6 +12,7 @@ import androidx.annotation.Nullable;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
+import com.google.android.material.card.MaterialCardView;
 import com.termux.R;
 
 /**
@@ -71,16 +71,14 @@ public final class SpeechModelCardPreference extends Preference {
     @Override
     public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
-        Context context = getContext();
         View shell = holder.findViewById(R.id.speech_card_shell);
-        if (shell != null) shell.setBackgroundResource(chosen ? R.drawable.tai_centre_shell_selected : R.drawable.tai_centre_shell);
+        // The chosen card is the card's checked state: the theme outlines it in the primary role.
+        if (shell instanceof MaterialCardView) ((MaterialCardView) shell).setChecked(chosen);
 
         View radioView = holder.findViewById(R.id.speech_card_radio);
         if (radioView instanceof RadioButton) {
             RadioButton radio = (RadioButton) radioView;
             radio.setChecked(chosen);
-            radio.setButtonTintList(ColorStateList.valueOf(TaiModelCentreAdapter.color(context, chosen
-                ? com.termux.shared.R.attr.termuxColorPrimary : com.termux.shared.R.attr.termuxColorOnSurfaceVariant)));
         }
 
         View pillView = holder.findViewById(R.id.speech_card_pill);
@@ -101,7 +99,6 @@ public final class SpeechModelCardPreference extends Preference {
             TextView window = (TextView) windowView;
             window.setText(windowAction);
             window.setVisibility(windowAction.length() == 0 ? View.GONE : View.VISIBLE);
-            TaiModelCentreAdapter.ghostPill(window);
             // A stable trampoline: the listener in the field is read at tap time, so swapping it
             // on a refresh never needs a rebind.
             window.setOnClickListener(view -> {
