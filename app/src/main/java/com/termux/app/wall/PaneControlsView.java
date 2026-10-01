@@ -256,10 +256,10 @@ public final class PaneControlsView extends View {
         super(context);
         mGlyphPaint.setTypeface(NerdFontSpans.typeface(context));
         mGlyphPaint.setTextAlign(Paint.Align.CENTER);
-        mGlyphPaint.setTextSize(dp(14));
+        mGlyphPaint.setTextSize(sp(14));
         mLabelPaint.setTypeface(Typeface.DEFAULT_BOLD);
         mLabelPaint.setTextAlign(Paint.Align.CENTER);
-        mLabelPaint.setTextSize(dp(12));
+        mLabelPaint.setTextSize(sp(12));
         mMarkPaint.setStyle(Paint.Style.STROKE);
         mMarkPaint.setStrokeCap(Paint.Cap.ROUND);
         mMarkPaint.setStrokeWidth(dp(1.35f));
@@ -919,6 +919,12 @@ public final class PaneControlsView extends View {
             mProgress = 1f;
         }
         invalidate();
+    }
+
+    /** Font-scale-aware px for a size in sp. */
+    private float sp(float value) {
+        return android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, value,
+            getResources().getDisplayMetrics());
     }
 
     private float dp(float value) {

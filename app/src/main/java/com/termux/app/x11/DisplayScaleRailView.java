@@ -58,7 +58,7 @@ public final class DisplayScaleRailView extends View {
         super(context);
         mLabelPaint.setTypeface(Typeface.DEFAULT_BOLD);
         mLabelPaint.setTextAlign(Paint.Align.CENTER);
-        mLabelPaint.setTextSize(dp(12));
+        mLabelPaint.setTextSize(sp(12));
         setWillNotDraw(false);
         setClickable(false);
         setFocusable(false);
@@ -253,6 +253,12 @@ public final class DisplayScaleRailView extends View {
     protected void onDetachedFromWindow() {
         if (mAnimator != null) mAnimator.cancel();
         super.onDetachedFromWindow();
+    }
+
+    /** Font-scale-aware px for a size in sp. */
+    private float sp(float value) {
+        return android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, value,
+            getResources().getDisplayMetrics());
     }
 
     private float dp(float value) {

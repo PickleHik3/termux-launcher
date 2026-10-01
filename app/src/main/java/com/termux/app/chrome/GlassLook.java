@@ -22,12 +22,12 @@ public final class GlassLook {
 
     public static final GlassLook SCHEME = new GlassLook(false, false);
 
-    @ColorInt public static final int OBSIDIAN_DARK = 0xFF161822;
-    @ColorInt public static final int OBSIDIAN_LIGHT = 0xFFFFFFFF;
+    @ColorInt public static final int OBSIDIAN_DARK = GlassTokens.OBSIDIAN_DARK;
+    @ColorInt public static final int OBSIDIAN_LIGHT = GlassTokens.OBSIDIAN_LIGHT;
     /** White 0.05, out of 255. */
-    public static final int WASH_ALPHA = 13;
-    @ColorInt public static final int RIM_START = 0x40FFFFFF;   // white 0.25
-    @ColorInt public static final int RIM_END = 0x08FFFFFF;     // white 0.03
+    public static final int WASH_ALPHA = GlassTokens.WASH_ALPHA;
+    @ColorInt public static final int RIM_START = GlassTokens.RIM_START;
+    @ColorInt public static final int RIM_END = GlassTokens.RIM_END;
 
     public final boolean obsidianTint;
     public final boolean gradientRim;

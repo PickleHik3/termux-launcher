@@ -549,7 +549,7 @@ public final class TerminalClockWidget extends View {
     private float widestDigitsWidth(int count, Typeface typeface, float textDp) {
         mPaint.setTypeface(typeface);
         mPaint.setLetterSpacing(0f);
-        mPaint.setTextSize(dp(textDp));
+        mPaint.setTextSize(sp(textDp));
         float widest = 0f;
         for (char digit = '0'; digit <= '9'; digit++) {
             widest = Math.max(widest, mPaint.measureText(String.valueOf(digit)));
@@ -1028,7 +1028,7 @@ public final class TerminalClockWidget extends View {
         if (drawDigit) {
             mPaint.setTypeface(condensedBoldTypeface());
             mPaint.setLetterSpacing(0f);
-            mPaint.setTextSize(dp(30.5f));
+            mPaint.setTextSize(sp(30.5f));
             mPaint.setColor(mOnSurface);
             mPaint.setAlpha(255);
             mPaint.setTextAlign(Paint.Align.CENTER);
@@ -1081,7 +1081,7 @@ public final class TerminalClockWidget extends View {
         Typeface face = condensedBoldTypeface();
         mPaint.setTypeface(face);
         mPaint.setLetterSpacing(0f);
-        mPaint.setTextSize(dp(10.6f));
+        mPaint.setTextSize(sp(10.6f));
         mPaint.setTextAlign(Paint.Align.CENTER);
         float secondsAscent = mPaint.ascent();
         float secondsDescent = mPaint.descent();
@@ -1097,7 +1097,7 @@ public final class TerminalClockWidget extends View {
         if (mSnapshot.period.isEmpty()) return;
         mPaint.setTypeface(face);
         mPaint.setLetterSpacing(.1f);
-        mPaint.setTextSize(dp(7.8f));
+        mPaint.setTextSize(sp(7.8f));
         float periodBaseline = digitBaseline + secondsAscent - dp(2f) - mPaint.descent();
         mPaint.setColor(mPrimary);
         mPaint.setAlpha(255);
@@ -1133,7 +1133,7 @@ public final class TerminalClockWidget extends View {
             top ? split : cell.bottom);
         mPaint.setTypeface(condensedBoldTypeface());
         mPaint.setLetterSpacing(0f);
-        mPaint.setTextSize(dp(10.6f));
+        mPaint.setTextSize(sp(10.6f));
         mPaint.setColor(mFlipSecondsInk);
         mPaint.setTextAlign(Paint.Align.CENTER);
         canvas.drawText(String.valueOf(digit), cell.centerX(), baseline, mPaint);
@@ -1251,7 +1251,7 @@ public final class TerminalClockWidget extends View {
         if (drawDigit) {
             mPaint.setTypeface(condensedBoldTypeface());
             mPaint.setLetterSpacing(0f);
-            mPaint.setTextSize(dp(19f));
+            mPaint.setTextSize(sp(19f));
             mPaint.setColor(mOnSurface);
             mPaint.setAlpha(255);
             mPaint.setTextAlign(Paint.Align.CENTER);
@@ -1727,7 +1727,7 @@ public final class TerminalClockWidget extends View {
                                        boolean boxedPeriod, long now, long duration) {
         mPaint.setTypeface(secondsFace);
         mPaint.setLetterSpacing(0f);
-        mPaint.setTextSize(dp(secondsDp));
+        mPaint.setTextSize(sp(secondsDp));
         mPaint.setTextAlign(Paint.Align.LEFT);
         float secondsAscent = mPaint.ascent();
         float cursor = x;
@@ -1766,7 +1766,7 @@ public final class TerminalClockWidget extends View {
             periodDp, boxedPeriod);
         if (boxedPeriod) {
             mPaint.setTypeface(periodFace);
-            mPaint.setTextSize(dp(periodDp));
+            mPaint.setTextSize(sp(periodDp));
             mRect.set(x, periodBaseline + mPaint.ascent() - dp(1.5f),
                 x + width, periodBaseline + mPaint.descent() + dp(1.5f));
             mFillPaint.setShader(null);
@@ -1804,7 +1804,7 @@ public final class TerminalClockWidget extends View {
         String hm = timeText();
         mPaint.setTypeface(typeface);
         mPaint.setLetterSpacing(letterSpacing);
-        mPaint.setTextSize(dp(textDp));
+        mPaint.setTextSize(sp(textDp));
         mPaint.setTextAlign(Paint.Align.LEFT);
         float x = 0f;
         int digitIndex = 0;
@@ -1842,7 +1842,7 @@ public final class TerminalClockWidget extends View {
         if (text.isEmpty()) return;
         mPaint.setTypeface(typeface);
         mPaint.setLetterSpacing(letterSpacing);
-        mPaint.setTextSize(dp(textDp));
+        mPaint.setTextSize(sp(textDp));
         mPaint.setColor(color);
         mPaint.setTextAlign(Paint.Align.LEFT);
         canvas.drawText(text, x, baseline, mPaint);
@@ -1860,7 +1860,7 @@ public final class TerminalClockWidget extends View {
     private float baseline(float top, float height, Typeface typeface, float textDp) {
         mPaint.setTypeface(typeface);
         mPaint.setLetterSpacing(0f);
-        mPaint.setTextSize(dp(textDp));
+        mPaint.setTextSize(sp(textDp));
         return top + height / 2f - (mPaint.ascent() + mPaint.descent()) / 2f;
     }
 
@@ -1868,7 +1868,7 @@ public final class TerminalClockWidget extends View {
         if (text.isEmpty()) return 0f;
         mPaint.setTypeface(typeface);
         mPaint.setLetterSpacing(letterSpacing);
-        mPaint.setTextSize(dp(textDp));
+        mPaint.setTextSize(sp(textDp));
         float width = mPaint.measureText(text);
         mPaint.setLetterSpacing(0f);
         return width;
@@ -1939,7 +1939,7 @@ public final class TerminalClockWidget extends View {
     private float capHeight(Typeface typeface, float textDp) {
         mPaint.setTypeface(typeface);
         mPaint.setLetterSpacing(0f);
-        mPaint.setTextSize(dp(textDp));
+        mPaint.setTextSize(sp(textDp));
         mPaint.getTextBounds("H", 0, 1, mTextBounds);
         return Math.min(-mPaint.ascent(), mTextBounds.height());
     }
@@ -2100,6 +2100,12 @@ public final class TerminalClockWidget extends View {
             mChangedAt[i] = now + FLIP_LOAD_STAGGER_MS[i];
         }
         invalidate();
+    }
+
+    /** Font-scale-aware px for a size in sp. */
+    private float sp(float value) {
+        return android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, value,
+            getResources().getDisplayMetrics());
     }
 
     private float dp(float value) {

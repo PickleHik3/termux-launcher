@@ -433,7 +433,7 @@ public final class AppNoticeHostView extends LinearLayout {
         }
         int accent = mActive == null ? mAccentInfo : accentFor(mActive);
         GradientDrawable pill = new GradientDrawable();
-        pill.setCornerRadius(dp(7f));
+        pill.setCornerRadius(com.termux.app.chrome.ShapeTokens.cornerPxNearest(getContext(), 7f));
         pill.setColor(ColorUtils.setAlphaComponent(accent, 51));
         mCount.setBackground(pill);
         mCount.setTextColor(accent);

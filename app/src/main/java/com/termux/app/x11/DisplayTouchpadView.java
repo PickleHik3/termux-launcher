@@ -202,7 +202,7 @@ public final class DisplayTouchpadView extends View {
         mGlyphPaint.setColor(accentColor);
         mGlyphPaint.setTypeface(NerdFontSpans.typeface(context));
         mGlyphPaint.setTextAlign(Paint.Align.CENTER);
-        mGlyphPaint.setTextSize(dp(13f));
+        mGlyphPaint.setTextSize(sp(13f));
         mDotPaint.setColor(ColorUtils.setAlphaComponent(onSurfaceColor, 40));
         // The strip's own idiom: a faint track in on-surface, same low alpha as the dot grid,
         // and a grip pill in the full accent colour so a thumb can find it at a glance.
@@ -687,6 +687,12 @@ public final class DisplayTouchpadView extends View {
         stopFling();
         recycleVelocity();
         super.onDetachedFromWindow();
+    }
+
+    /** Font-scale-aware px for a size in sp. */
+    private float sp(float value) {
+        return android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, value,
+            getResources().getDisplayMetrics());
     }
 
     private float dp(float value) {
