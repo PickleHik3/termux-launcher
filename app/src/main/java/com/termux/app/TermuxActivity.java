@@ -4484,12 +4484,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private com.termux.app.place.ChromeShape chromeShape() {
+        return chromeShape(currentPlaceLayout());
+    }
+
+    /** The same, for a layout in hand: it may not be the stored one during a slide or a pre-roll. */
+    @NonNull
+    private com.termux.app.place.ChromeShape chromeShape(@NonNull PlaceLayout stored) {
         View root = findViewById(R.id.activity_termux_root_view);
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
         int width = root != null && root.getWidth() > 0 ? root.getWidth() : metrics.widthPixels;
         int height = root != null && root.getHeight() > 0 ? root.getHeight() : metrics.heightPixels;
         boolean keyboardUp = mKeyboardGeometry.lastImeVisible() || isImeVisible();
-        PlaceLayout layout = currentPlaceLayout().withKeyboardShown(keyboardUp);
+        PlaceLayout layout = stored.withKeyboardShown(keyboardUp);
         float status = chromeThicknessPx(Element.STATUS, layout);
         float apps = chromeThicknessPx(Element.APPS, layout);
         float az = chromeThicknessPx(Element.AZ, layout);
@@ -8821,6 +8827,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * wherever it is not on that plank.
      */
     private void refreshOffDockGlass() {
+        refreshOffDockGlass(currentPlaceLayout());
+    }
+
+    /** As above, against the layout in hand rather than the stored one. */
+    private void refreshOffDockGlass(@NonNull PlaceLayout layout) {
         refreshAzTabGlass();
         View plank = findViewById(R.id.place_off_dock_plank_host);
         if (plank != null && plank.getVisibility() == View.VISIBLE) {
@@ -8829,7 +8840,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 R.id.place_off_dock_plank_surface,
                 com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK,
                 mOffDockPlankOutline, mOffDockPlankEdge, offDockPlankGlassHeightPx(),
-                chromePieceIds(offDockPlankElements(currentPlaceLayout(), mOffDockPlankEdge)));
+                chromePieceIds(offDockPlankElements(layout, mOffDockPlankEdge)), layout);
         }
         View host = findViewById(R.id.place_az_bar_host);
         if (host != null && host.getVisibility() == View.VISIBLE && !mAzBarOnPlank) {
@@ -8837,7 +8848,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 R.id.place_az_bar_host_frost, R.id.place_az_bar_host_surface,
                 com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST,
                 mAzBarHostOutline, mAzBarEdge, azBarThicknessPx(),
-                Collections.singletonList(com.termux.app.place.ChromeShape.PieceId.AZ));
+                Collections.singletonList(com.termux.app.place.ChromeShape.PieceId.AZ), layout);
         }
         // The strip behind the status bar is these sheets' glass whenever one of them leads the
         // top edge, so it is re-glazed with them — and when the lead has just come or gone.
@@ -8955,7 +8966,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @NonNull com.termux.app.chrome.ChromeShapeOutlineProvider outline,
         @NonNull PlaceLayout.Edge edge,
         int heightPx,
-        @NonNull List<com.termux.app.place.ChromeShape.PieceId> pieces
+        @NonNull List<com.termux.app.place.ChromeShape.PieceId> pieces,
+        @NonNull PlaceLayout layout
     ) {
         float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity() / 100f;
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
@@ -8971,7 +8983,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // every join and screen edge is a seam; the one leading the top edge runs on into the
         // strip behind the status bar as well, and renders the lower slice of the light model the
         // strip renders the top of. Floating keeps a rim all round, as it always has.
-        com.termux.app.place.ChromeShape shape = chromeShape();
+        com.termux.app.place.ChromeShape shape = chromeShape(layout);
         boolean continuesStrip = !capsule && edge == PlaceLayout.Edge.TOP
             && continuesIntoStatusInsetStrip(sheetHost);
         int seams = capsule ? com.termux.app.chrome.ChromeEdgeRule.NONE
@@ -12233,7 +12245,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mOffDockPlankGlassHeightPx = glassHeightPx;
         host.setVisibility(want ? View.VISIBLE : View.GONE);
         if (changed) {
-            refreshOffDockGlass();
+            refreshOffDockGlass(layout);
             if (mTermuxActivityRootView != null)
                 ViewCompat.requestApplyInsets(mTermuxActivityRootView);
         }
