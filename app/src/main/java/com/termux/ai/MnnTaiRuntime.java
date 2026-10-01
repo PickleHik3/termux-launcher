@@ -2,6 +2,7 @@ package com.termux.ai;
 
 import android.content.Context;
 import android.net.Uri;
+import android.os.SystemClock;
 import android.util.Base64;
 import android.util.Pair;
 
@@ -140,6 +141,10 @@ public final class MnnTaiRuntime implements TaiRuntime {
         }
         String previous = loadedModelId;
         unloadAfterGeneration = false;
+        if (previous != null) {
+            TaiEventLog.log(appContext, TaiEventLog.UNLOAD, previous, TaiModelSpec.BACKEND_MNN_LLM,
+                loadedOptions == null ? null : backendName(loadedOptions), 0, 0L, 0L, null);
+        }
         releaseSessionLocked();
         runtimeState = "unloaded";
         statusMessage = "MNN runtime is unloaded.";
@@ -245,8 +250,14 @@ public final class MnnTaiRuntime implements TaiRuntime {
                     : deviceCapabilities.mnnUnsupportedReason);
         }
         TaiRuntimeCrashMarker.markLoad(appContext, modelSpec, options, TaiModelSpec.BACKEND_MNN_LLM);
+        final long loadStartedMs = SystemClock.elapsedRealtime();
+        final int eventContext = options.contextWindow != null ? options.contextWindow : 0;
+        TaiEventLog.log(appContext, TaiEventLog.LOAD_START, modelSpec.id, TaiModelSpec.BACKEND_MNN_LLM,
+            backendName(options), eventContext, 0L, 0L, null);
         if (!isNativeRuntimeAvailable()) {
             TaiRuntimeCrashMarker.clear(appContext);
+            TaiEventLog.log(appContext, TaiEventLog.LOAD_FAIL, modelSpec.id, TaiModelSpec.BACKEND_MNN_LLM,
+                backendName(options), eventContext, 0L, 0L, "mnn_native_unavailable");
             TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
                 TaiModelSpec.BACKEND_MNN_LLM, backendName(options), "Native MNN runtime libraries are not available for this APK/ABI.");
             return error(501, "mnn_native_unavailable", "Native MNN runtime libraries are not available for this APK/ABI.");
@@ -276,6 +287,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
             }
         } catch (Throwable t) {
             TaiRuntimeCrashMarker.clear(appContext);
+            TaiEventLog.log(appContext, TaiEventLog.LOAD_FAIL, modelSpec.id, TaiModelSpec.BACKEND_MNN_LLM,
+                backendName(options), eventContext, SystemClock.elapsedRealtime() - loadStartedMs, 0L, message(t));
             TaiRuntimeHistory.recordFailure(appContext, modelSpec, deviceCapabilities,
                 TaiModelSpec.BACKEND_MNN_LLM, backendName(options), message(t));
             synchronized (this) {
@@ -306,6 +319,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
                 .withMeasured(measured >= 0L ? measured : null));
             TaiRuntimeHistory.recordSuccess(appContext, modelSpec, deviceCapabilities,
                 TaiModelSpec.BACKEND_MNN_LLM, backendName(options));
+            TaiEventLog.log(appContext, TaiEventLog.LOAD_OK, modelSpec.id, TaiModelSpec.BACKEND_MNN_LLM,
+                accelerator, loadedContext, SystemClock.elapsedRealtime() - loadStartedMs, measured, null);
             runtimeState = "loaded";
             statusMessage = keepWarmUntilMs > 0L ? "MNN model loaded and warm." : "MNN model loaded.";
             maybeRefreshStateLocked();

@@ -415,6 +415,11 @@ public final class TaiRuntimeServiceClient {
         try {
             JSONObject marker = TaiRuntimeCrashMarker.read(appContext);
             if (marker != null) error.put("lastRuntimeCrash", marker);
+            TaiEventLog.log(appContext, TaiEventLog.CRASH_RECOVERED,
+                marker == null ? null : marker.optString("modelId", null),
+                marker == null ? null : marker.optString("backend", null),
+                marker == null ? null : marker.optString("accelerator", null),
+                marker == null ? 0 : marker.optInt("contextWindow", 0), 0L, 0L, code + ": " + message);
         } catch (JSONException ignored) {
         }
         return error;

@@ -36,6 +36,7 @@ import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.StatusCardPreference;
 import com.termux.ai.TaiDeviceCapabilities;
+import com.termux.ai.TaiDiagnostics;
 import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelSpec;
@@ -362,6 +363,13 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
     }
 
     private void configureAdvancedSection(Context context) {
+        Preference diagnostics = findPreference("tai_share_diagnostics");
+        if (diagnostics != null) {
+            diagnostics.setOnPreferenceClickListener(preference -> {
+                shareDiagnostics(context);
+                return true;
+            });
+        }
         Preference parameters = findPreference("tai_parameters_defaults");
         if (parameters != null) {
             parameters.setOnPreferenceClickListener(preference -> {
@@ -369,6 +377,40 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
                 return true;
             });
         }
+    }
+
+    /**
+     * Builds {@code files/tai/diagnostics.txt} off the UI thread and hands it to the share sheet
+     * through the FileProvider the app already declares (the cropper's, which covers {@code files/}).
+     */
+    private void shareDiagnostics(Context context) {
+        runtimeActionExecutor.execute(() -> {
+            Uri uri = null;
+            try {
+                java.io.File file = TaiDiagnostics.write(context);
+                uri = androidx.core.content.FileProvider.getUriForFile(context,
+                    context.getPackageName() + ".cropper.fileprovider", file);
+            } catch (java.io.IOException | IllegalArgumentException e) {
+                uri = null;
+            }
+            final Uri shared = uri;
+            handler.post(() -> {
+                if (!isAdded()) return;
+                if (shared == null) {
+                    AppNotice.show(context, R.string.termux_ai_share_diagnostics_failed, true);
+                    return;
+                }
+                Intent send = new Intent(Intent.ACTION_SEND);
+                send.setType("text/plain");
+                send.putExtra(Intent.EXTRA_STREAM, shared);
+                send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                try {
+                    startActivity(Intent.createChooser(send, getString(R.string.termux_ai_share_diagnostics_chooser)));
+                } catch (RuntimeException e) {
+                    AppNotice.show(context, R.string.termux_ai_share_diagnostics_failed, true);
+                }
+            });
+        });
     }
 
     /**

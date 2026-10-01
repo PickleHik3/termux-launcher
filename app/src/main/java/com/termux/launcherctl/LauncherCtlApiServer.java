@@ -8,6 +8,7 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import com.termux.ai.TaiApiCompatibility;
 import com.termux.ai.TaiCliFormatter;
+import com.termux.ai.TaiEventLog;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiSettings;
 import com.termux.app.launcher.LauncherAppLauncher;
@@ -320,6 +321,7 @@ public class LauncherCtlApiServer {
     }
 
     private void handleClient(Socket socket, Context context) {
+        String route = null;
         try (Socket client = socket;
              BufferedInputStream input = new BufferedInputStream(client.getInputStream());
              OutputStream output = client.getOutputStream()) {
@@ -332,6 +334,7 @@ public class LauncherCtlApiServer {
                 writeJsonResponse(output, e.statusCode, jsonError(e.errorCode, e.getMessage()).toString());
                 return;
             }
+            route = request.method + " " + request.path;
 
             if (lanSessionDeadlineMs > 0 && System.currentTimeMillis() > lanSessionDeadlineMs) {
                 beginLanSessionExpiry();
@@ -392,6 +395,12 @@ public class LauncherCtlApiServer {
 
         } catch (Exception e) {
             Logger.logErrorExtended(LOG_TAG, "Request handling failed: " + e.getMessage());
+            // Only the AI routes feed the AI event log; the line carries the path, never the body.
+            if (route != null && (route.contains(" /v1/ai/") || route.contains(" /v1/chat/")
+                    || route.contains(" /v1/audio/"))) {
+                TaiEventLog.log(context, TaiEventLog.API_ERROR,
+                    route + ": " + e.getClass().getSimpleName() + " " + e.getMessage());
+            }
         }
     }
 
@@ -642,6 +651,18 @@ public class LauncherCtlApiServer {
                 return maybeTextResponse(request, "benchmarks", TaiManager.getInstance(context).benchmarks());
             } else if ("DELETE".equals(request.method) && "/v1/ai/benchmarks".equals(request.path)) {
                 return maybeTextResponse(request, "benchmarks-clear", TaiManager.getInstance(context).clearBenchmarks(request.body));
+            } else if ("DELETE".equals(request.method) && "/v1/ai/runtime/history".equals(request.path)) {
+                return maybeTextResponse(request, "history-clear", TaiManager.getInstance(context).clearRuntimeHistory());
+            } else if ("GET".equals(request.method) && "/v1/ai/logs".equals(request.path)) {
+                int lines = TaiEventLog.DEFAULT_TAIL_LINES;
+                try {
+                    String requested = queryParameters(request.query).get("lines");
+                    if (requested != null) lines = Math.max(1, Math.min(5000, Integer.parseInt(requested.trim())));
+                } catch (NumberFormatException ignored) {
+                }
+                return maybeTextResponse(request, "logs", TaiManager.getInstance(context).eventLogs(lines));
+            } else if ("DELETE".equals(request.method) && "/v1/ai/logs".equals(request.path)) {
+                return maybeTextResponse(request, "logs-clear", TaiManager.getInstance(context).clearEventLogs());
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/cancel".equals(request.path)) {
                 return maybeTextResponse(request, "cancel", TaiManager.getInstance(context).cancelRuntime());
             } else if ("POST".equals(request.method) && "/v1/ai/benchmarks/skip-wait".equals(request.path)) {
@@ -1895,6 +1916,9 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/ai/benchmarks/run", new SimpleRateLimiter(6, 60_000));
         rateLimiters.put("GET:/v1/ai/benchmarks", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("DELETE:/v1/ai/benchmarks", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("GET:/v1/ai/logs", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("DELETE:/v1/ai/logs", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("DELETE:/v1/ai/runtime/history", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/ai/runtime/cancel", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/ai/benchmarks/skip-wait", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("GET:/v1/models", new SimpleRateLimiter(120, 60_000));
@@ -2073,7 +2097,8 @@ public class LauncherCtlApiServer {
             "Usage:\n" +
             "  tai --json <command>\n" +
             "  tai status\n" +
-            "  tai runtime\n" +
+            "  tai runtime [--clear-history]\n" +
+            "  tai logs [--lines N] [--clear]\n" +
             "  tai models\n" +
             "  tai import <path> [model-id]\n" +
             "  tai download <model-id> <https-url> --accept-terms\n" +
@@ -2235,7 +2260,33 @@ public class LauncherCtlApiServer {
             "    get_json /v1/ai/status\n" +
             "    ;;\n" +
             "  runtime)\n" +
-            "    get_json /v1/ai/runtime\n" +
+            "    case \"${1:-}\" in\n" +
+            "      --clear-history)\n" +
+            "        if [ \"$OUTPUT_MODE\" = \"text\" ]; then set -- -H \"X-TAI-Output: text\"; else set --; fi\n" +
+            "        curl $CURL_COMMON -X DELETE -H \"Authorization: Bearer $TOKEN\" \"$@\" \"$BASE/v1/ai/runtime/history\"\n" +
+            "        exit $?\n" +
+            "        ;;\n" +
+            "      '') get_json /v1/ai/runtime ;;\n" +
+            "      *) echo \"usage: tai runtime [--clear-history]\" >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    ;;\n" +
+            "  logs)\n" +
+            "    lines=''; clear=''\n" +
+            "    while [ \"$#\" -gt 0 ]; do\n" +
+            "      case \"$1\" in\n" +
+            "        --lines) shift; [ \"$#\" -gt 0 ] || { echo \"usage: tai logs [--lines N] [--clear]\" >&2; exit 2; }; lines=\"$1\" ;;\n" +
+            "        --clear) clear=1 ;;\n" +
+            "        *) echo \"usage: tai logs [--lines N] [--clear]\" >&2; exit 2 ;;\n" +
+            "      esac\n" +
+            "      shift\n" +
+            "    done\n" +
+            "    case \"$lines\" in *[!0-9]*) echo \"tai logs: --lines needs a number\" >&2; exit 2 ;; esac\n" +
+            "    if [ -n \"$clear\" ]; then\n" +
+            "      if [ \"$OUTPUT_MODE\" = \"text\" ]; then set -- -H \"X-TAI-Output: text\"; else set --; fi\n" +
+            "      curl $CURL_COMMON -X DELETE -H \"Authorization: Bearer $TOKEN\" \"$@\" \"$BASE/v1/ai/logs\"\n" +
+            "      exit $?\n" +
+            "    fi\n" +
+            "    get_json \"/v1/ai/logs?lines=${lines:-100}\"\n" +
             "    ;;\n" +
             "  models)\n" +
             "    get_json /v1/ai/models\n" +

@@ -569,11 +569,23 @@ public final class TaiManager {
         TaiModelStore.DeleteResult deleteResult = modelStore.deleteUserModel(modelId,
             activeModelLoaded, request.optBoolean("confirm", false));
         if (!deleteResult.ok) return error(409, deleteResult.errorCode, deleteResult.message);
+        // The model's runtime history and bench records go with it: they are keyed by its id and
+        // nothing prunes them otherwise. (Bench results used to be kept after a delete.)
+        pruneModelRecords(modelId);
         JSONObject data = new JSONObject();
         data.put("ok", true);
         data.put("deleted", deleteResult.deleted);
         data.put("modelId", modelId);
         return data;
+    }
+
+    /** Drops a deleted model's runtime-history entries and benchmark records; failures only cost disk. */
+    private void pruneModelRecords(@NonNull String modelId) {
+        TaiRuntimeHistory.removeModel(appContext, modelId);
+        try {
+            benchStore().removeModel(modelId);
+        } catch (IOException ignored) {
+        }
     }
 
     @NonNull
@@ -817,8 +829,8 @@ public final class TaiManager {
 
     /**
      * {@code GET /v1/ai/benchmarks}: every record and the leaderboard for the current bench
-     * version. Deleting a model keeps its results; each record says whether its model is still
-     * installed so a reader can mark it.
+     * version. Deleting a model removes its results (see {@link #pruneModelRecords}); each record
+     * still says whether its model is installed so a reader can mark it.
      */
     @NonNull
     public JSONObject benchmarks() throws JSONException {
@@ -830,6 +842,35 @@ public final class TaiManager {
                 if (record != null) record.put("installed", resolveModel(record.optString("modelId", "")) != null);
             }
         }
+        return data;
+    }
+
+    /** {@code GET /v1/ai/logs}: the last {@code lines} lines of the AI event log (both files), oldest first. */
+    @NonNull
+    public JSONObject eventLogs(int lines) throws JSONException {
+        List<String> tail = TaiEventLog.in(appContext.getFilesDir()).tail(lines > 0 ? lines : TaiEventLog.DEFAULT_TAIL_LINES);
+        JSONObject data = new JSONObject();
+        data.put("ok", true);
+        data.put("count", tail.size());
+        data.put("lines", new JSONArray(tail));
+        return data;
+    }
+
+    /** {@code DELETE /v1/ai/logs}: deletes the AI event log files. */
+    @NonNull
+    public JSONObject clearEventLogs() throws JSONException {
+        JSONObject data = new JSONObject();
+        data.put("ok", true);
+        data.put("cleared", TaiEventLog.in(appContext.getFilesDir()).clear());
+        return data;
+    }
+
+    /** {@code DELETE /v1/ai/runtime/history}: wipes the recorded load/failure/memory history. */
+    @NonNull
+    public JSONObject clearRuntimeHistory() throws JSONException {
+        JSONObject data = new JSONObject();
+        data.put("ok", true);
+        data.put("removed", TaiRuntimeHistory.clear(appContext));
         return data;
     }
 
@@ -905,11 +946,22 @@ public final class TaiManager {
      * the harness runs here, against the local router.
      */
     public void benchRun(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
-        if (shouldDelegateRuntime()) {
-            benchRunDelegated(body, sink);
-            return;
+        long startedMs = android.os.SystemClock.elapsedRealtime();
+        TaiEventLog.log(appContext, TaiEventLog.BENCH_START, "benchmark run");
+        String outcome = "finished";
+        try {
+            if (shouldDelegateRuntime()) {
+                benchRunDelegated(body, sink);
+            } else {
+                benchRunLocal(body, sink);
+            }
+        } catch (JSONException | IOException | RuntimeException e) {
+            outcome = "failed: " + e.getClass().getSimpleName();
+            throw e;
+        } finally {
+            TaiEventLog.log(appContext, TaiEventLog.BENCH_DONE, null, null, null, 0,
+                android.os.SystemClock.elapsedRealtime() - startedMs, 0L, outcome);
         }
-        benchRunLocal(body, sink);
     }
 
     private void benchRunDelegated(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
@@ -3000,7 +3052,13 @@ public final class TaiManager {
             device.physicalMemoryBytes, available, accelerators, cap,
             crashedAccelerator, crashedContext, options.contextWindow != null, device.memoryThresholdBytes,
             measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend)));
-        if (!plan.fits) return new LoadDecision(null, insufficientMemory(spec.displayName, plan), plan, Collections.<String>emptyList());
+        if (!plan.fits) {
+            TaiEventLog.log(appContext, TaiEventLog.OOM_GUARD, spec.id, spec.backend, plan.accelerator,
+                plan.contextWindow, 0L, plan.neededFreeBytes(),
+                "load refused: needs " + plan.neededFreeBytes() / (1024L * 1024L) + " MB free, "
+                    + plan.availableBytes / (1024L * 1024L) + " MB available");
+            return new LoadDecision(null, insufficientMemory(spec.displayName, plan), plan, Collections.<String>emptyList());
+        }
         List<String> evicted = evict(plan);
         TaiRuntimeOptions loadOptions = optionsForPreflight(spec, options, preflight);
         if (!TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) && plan.accelerator != null
@@ -3411,7 +3469,13 @@ public final class TaiManager {
         if (plan.evicted.isEmpty()) return Collections.emptyList();
         TaiRuntime local = localRuntime();
         if (!(local instanceof MultiBackendTaiRuntime)) return Collections.emptyList();
-        return ((MultiBackendTaiRuntime) local).evict(plan.evicted);
+        List<String> evicted = ((MultiBackendTaiRuntime) local).evict(plan.evicted);
+        for (TaiResidency.Entry victim : plan.evicted) {
+            if (!evicted.contains(victim.modelId)) continue;
+            TaiEventLog.log(appContext, TaiEventLog.EVICT, victim.modelId, victim.backend, victim.accelerator,
+                victim.window, 0L, victim.bytes(), "load plan, " + victim.kind.name().toLowerCase(java.util.Locale.ROOT));
+        }
+        return evicted;
     }
 
     /** The refusal every load path answers when the budget says no, chat and embedding alike. */

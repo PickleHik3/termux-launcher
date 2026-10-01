@@ -512,14 +512,19 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     @Override
     public void onTerminalCursorStateChange(boolean enabled) {
-        // Do not start cursor blinking thread if activity is not visible
-        if (enabled && !mHost.isVisible()) {
-            Logger.logVerbose(LOG_TAG, "Ignoring call to start cursor blinking since activity is not visible");
-            return;
-        }
+        // A program running in a hidden pane (a TUI spinner, an agent) can toggle the cursor twice a
+        // second, and each toggle used to log and stop/restart the blinker. While the activity is not
+        // visible there is nothing to blink and the blinker is already stopped (TermuxTerminalViewClient
+        // .onStop), and onStart starts it again from the emulator's current cursor state.
+        if (!shouldApplyCursorStateChange(mHost.isVisible())) return;
         // If cursor is to enabled now, then start cursor blinking if blinking is enabled
         // otherwise stop cursor blinking
         mHost.focusedView().setTerminalCursorBlinkerState(enabled, false);
+    }
+
+    /** Whether a cursor show/hide from the emulator should touch the blinker: only while the activity is visible. */
+    static boolean shouldApplyCursorStateChange(boolean activityVisible) {
+        return activityVisible;
     }
 
     @Override

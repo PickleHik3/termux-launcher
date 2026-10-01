@@ -58,6 +58,12 @@ public final class TaiCliFormatter {
                     return formatBenchmarks(data);
                 case "benchmarks-clear":
                     return formatBenchmarksCleared(data);
+                case "logs":
+                    return formatLogs(data);
+                case "logs-clear":
+                    return data.optBoolean("cleared", false) ? "AI event log cleared.\n" : "The AI event log was already empty.\n";
+                case "history-clear":
+                    return "Removed " + data.optInt("removed", 0) + " runtime history entries.\n";
                 case "benchmark-run":
                     return formatBenchRun(data);
                 default:
@@ -202,6 +208,16 @@ public final class TaiCliFormatter {
         JSONArray versions = data.optJSONArray("benchVersions");
         if (versions != null && versions.length() > 1) out.append(" across ").append(versions.length()).append(" bench versions");
         out.append(" in ").append(clean(data.optString("file", "benchmarks.json"))).append('\n');
+        return out.toString();
+    }
+
+    /** The event log's lines, one per row; a note when there are none. */
+    @NonNull
+    private static String formatLogs(@NonNull JSONObject data) {
+        JSONArray lines = data.optJSONArray("lines");
+        if (lines == null || lines.length() == 0) return "No AI events logged yet.\n";
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < lines.length(); i++) out.append(lines.optString(i, "")).append('\n');
         return out.toString();
     }
 
