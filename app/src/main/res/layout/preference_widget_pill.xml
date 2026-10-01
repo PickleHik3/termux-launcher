@@ -1,15 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- A read-only status chip; the tone colours are applied by PillPreference. -->
+<com.google.android.material.chip.Chip xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/settings_pill"
+    style="@style/Widget.Material3.Chip.Assist"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
-    android:background="@drawable/settings_pill_background"
-    android:fontFamily="monospace"
-    android:letterSpacing="0.05"
-    android:paddingStart="10dp"
-    android:paddingTop="4dp"
-    android:paddingEnd="10dp"
-    android:paddingBottom="4dp"
-    android:textAllCaps="true"
-    android:textSize="10sp"
-    android:textStyle="bold" />
+    android:clickable="false"
+    android:focusable="false"
+    android:textAppearance="?attr/textAppearanceLabelSmall"
+    app:chipStrokeWidth="0dp" />

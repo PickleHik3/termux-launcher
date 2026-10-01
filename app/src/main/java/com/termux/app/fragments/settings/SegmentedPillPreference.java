@@ -1,32 +1,28 @@
 package com.termux.app.fragments.settings;
 
-import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.util.AttributeSet;
-import android.util.TypedValue;
 import android.view.View;
-import android.view.animation.DecelerateInterpolator;
-import android.widget.FrameLayout;
-import android.widget.TextView;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-import androidx.core.content.ContextCompat;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.termux.R;
 
 /**
- * Inline segmented preference: a sliding indicator over two or three labelled segments. Defaults
- * to the global Default / Rounded surface-shape pair; {@link #setSegments} swaps in another value
+ * Inline segmented preference: a Material 3 segmented button over two to four labelled segments.
+ * Defaults to the global Default / Rounded surface-shape pair; {@link #setSegments} swaps in another value
  * set (the third segment stays hidden until a three-value set is configured).
  *
- * <p>{@link #VALUE_NONE} is the one value with no segment of its own: the indicator goes away and
- * no label is lit, which is how a row that stands for several stored values says they disagree.
+ * <p>{@link #VALUE_NONE} is the one value with no segment of its own: no segment is
+ * checked, which is how a row that stands for several stored values says they disagree.
  */
 @Keep
 public final class SegmentedPillPreference extends Preference {
@@ -35,14 +31,13 @@ public final class SegmentedPillPreference extends Preference {
     public static final String VALUE_ROUNDED = "rounded";
 
     /**
-     * The one value that is not a segment: nothing is lit and the indicator is away. A row whose
+     * The one value that is not a segment: no segment is checked. A row whose
      * store answers for several things at once — the Keyboard page's keyboard type, which stands
      * for every place — reads back as this when they disagree, so the pill says "these differ"
      * rather than picking one of them for the user. Tapping a segment still writes it to all.
      */
     public static final String VALUE_NONE = "";
     private static final String VALUE_LEGACY_VALARIE_CAPSULE = "valarie_capsule";
-    private static final long SLIDE_DURATION_MS = 190L;
 
     private String[] mValues = {VALUE_DEFAULT, VALUE_ROUNDED};
     /** 0 keeps the label text the layout declares (or {@link #mLabelText}); anything else
@@ -53,7 +48,6 @@ public final class SegmentedPillPreference extends Preference {
     private CharSequence[] mLabelText = {null, null};
     private static final int MAX_SEGMENTS = 4;
     private String mValue = VALUE_DEFAULT;
-    private ValueAnimator mIndicatorAnimator;
 
     public SegmentedPillPreference(@NonNull Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -161,103 +155,78 @@ public final class SegmentedPillPreference extends Preference {
     @Override
     public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
-        FrameLayout track = (FrameLayout) holder.findViewById(R.id.segmented_pill_track);
-        View indicator = holder.findViewById(R.id.segmented_pill_indicator);
-        TextView[] labels = findLabels(holder);
-        if (track == null || indicator == null || labels == null) return;
+        View trackView = holder.findViewById(R.id.segmented_pill_track);
+        MaterialButton[] buttons = findButtons(holder);
+        if (!(trackView instanceof MaterialButtonToggleGroup) || buttons == null) return;
+        MaterialButtonToggleGroup group = (MaterialButtonToggleGroup) trackView;
 
-        for (int i = 0; i < labels.length; i++) {
-            TextView label = labels[i];
+        // Rebinding must not echo the programmatic check back through the old listener.
+        Object old = group.getTag(R.id.segmented_pill_track);
+        if (old instanceof MaterialButtonToggleGroup.OnButtonCheckedListener) {
+            group.removeOnButtonCheckedListener((MaterialButtonToggleGroup.OnButtonCheckedListener) old);
+        }
+        for (int i = 0; i < buttons.length; i++) {
+            MaterialButton button = buttons[i];
             if (i >= mValues.length) {
-                label.setVisibility(View.GONE);
-                label.setOnClickListener(null);
+                button.setVisibility(View.GONE);
                 continue;
             }
-            label.setVisibility(View.VISIBLE);
-            if (mLabelText[i] != null) label.setText(mLabelText[i]);
-            else if (mLabelResIds[i] != 0) label.setText(mLabelResIds[i]);
-            final String value = mValues[i];
-            label.setOnClickListener(view -> setValue(value, track, indicator, true));
+            button.setVisibility(View.VISIBLE);
+            if (mLabelText[i] != null) button.setText(mLabelText[i]);
+            else if (mLabelResIds[i] != 0) button.setText(mLabelResIds[i]);
+            button.setEnabled(isEnabled());
         }
-        track.setContentDescription(getTitle());
-        // Labels are coloured by hand, so a disabled row would otherwise look live.
-        track.setAlpha(isEnabled() ? 1f : 0.38f);
-        track.post(() -> {
-            updateIndicatorWidth(track, indicator);
-            indicator.setVisibility(selectedIndex() < 0 ? View.INVISIBLE : View.VISIBLE);
-            indicator.setTranslationX(indicatorOffset(track));
-            updateLabelColors(labels);
-        });
+        group.setContentDescription(getTitle());
+        int selected = selectedIndex();
+        if (selected < 0) group.clearChecked();
+        else group.check(buttons[selected].getId());
+        updateCheckedIcons(buttons, selected);
+
+        MaterialButtonToggleGroup.OnButtonCheckedListener listener = (g, checkedId, isChecked) -> {
+            if (!isChecked) return;
+            int index = indexOfButton(buttons, checkedId);
+            if (index < 0 || index >= mValues.length) return;
+            String normalized = normalize(mValues[index]);
+            if (normalized.equals(mValue)) return;
+            if (!callChangeListener(normalized)) {
+                // Vetoed: put the group back on the stored value.
+                int previous = selectedIndex();
+                if (previous < 0) g.clearChecked();
+                else g.check(buttons[previous].getId());
+                return;
+            }
+            mValue = normalized;
+            persistString(normalized);
+            updateCheckedIcons(buttons, selectedIndex());
+        };
+        group.addOnButtonCheckedListener(listener);
+        group.setTag(R.id.segmented_pill_track, listener);
     }
 
-    private TextView[] findLabels(@NonNull PreferenceViewHolder holder) {
-        TextView first = (TextView) holder.findViewById(R.id.segmented_pill_default);
-        TextView second = (TextView) holder.findViewById(R.id.segmented_pill_capsule);
-        TextView third = (TextView) holder.findViewById(R.id.segmented_pill_third);
-        TextView fourth = (TextView) holder.findViewById(R.id.segmented_pill_fourth);
-        if (first == null || second == null || third == null || fourth == null) return null;
-        return new TextView[]{first, second, third, fourth};
+    private MaterialButton[] findButtons(@NonNull PreferenceViewHolder holder) {
+        View first = holder.findViewById(R.id.segmented_pill_default);
+        View second = holder.findViewById(R.id.segmented_pill_capsule);
+        View third = holder.findViewById(R.id.segmented_pill_third);
+        View fourth = holder.findViewById(R.id.segmented_pill_fourth);
+        if (!(first instanceof MaterialButton) || !(second instanceof MaterialButton)
+            || !(third instanceof MaterialButton) || !(fourth instanceof MaterialButton)) return null;
+        return new MaterialButton[]{(MaterialButton) first, (MaterialButton) second,
+            (MaterialButton) third, (MaterialButton) fourth};
     }
 
-    private void setValue(@NonNull String value, @NonNull FrameLayout track,
-                          @NonNull View indicator, boolean animate) {
-        String normalized = normalize(value);
-        if (normalized.equals(mValue)) return;
-        if (!callChangeListener(normalized)) return;
-        boolean wasHidden = indicator.getVisibility() != View.VISIBLE;
-        mValue = normalized;
-        persistString(normalized);
-        updateIndicatorWidth(track, indicator);
-        indicator.setVisibility(View.VISIBLE);
-        float target = indicatorOffset(track);
-        if (mIndicatorAnimator != null) mIndicatorAnimator.cancel();
-        // Nothing to slide from when the pill was showing no segment at all.
-        if (animate && track.isLaidOut() && !wasHidden) {
-            mIndicatorAnimator = ValueAnimator.ofFloat(indicator.getTranslationX(), target);
-            mIndicatorAnimator.setDuration(SLIDE_DURATION_MS);
-            mIndicatorAnimator.setInterpolator(new DecelerateInterpolator());
-            mIndicatorAnimator.addUpdateListener(animator ->
-                indicator.setTranslationX((Float) animator.getAnimatedValue()));
-            mIndicatorAnimator.start();
-        } else {
-            indicator.setTranslationX(target);
+    private static int indexOfButton(@NonNull MaterialButton[] buttons, int id) {
+        for (int i = 0; i < buttons.length; i++) {
+            if (buttons[i].getId() == id) return i;
         }
-        updateLabelColors(new TextView[]{
-            track.findViewById(R.id.segmented_pill_default),
-            track.findViewById(R.id.segmented_pill_capsule),
-            track.findViewById(R.id.segmented_pill_third),
-            track.findViewById(R.id.segmented_pill_fourth)});
+        return -1;
     }
 
-    private void updateIndicatorWidth(@NonNull FrameLayout track, @NonNull View indicator) {
-        int width = Math.round(segmentWidth(track));
-        if (width <= 0 || indicator.getLayoutParams().width == width) return;
-        indicator.getLayoutParams().width = width;
-        indicator.requestLayout();
-    }
-
-    private float segmentWidth(@NonNull FrameLayout track) {
-        return Math.max(0f, (track.getWidth() - track.getPaddingLeft() - track.getPaddingRight())
-            / (float) mValues.length);
-    }
-
-    private void updateLabelColors(TextView[] labels) {
-        if (labels == null) return;
-        int selected = resolveColor(com.termux.shared.R.attr.termuxColorOnPrimary,
-            R.color.termux_on_primary);
-        int idle = resolveColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-            R.color.termux_on_surface_variant);
-        int selectedIndex = selectedIndex();
-        for (int i = 0; i < labels.length && i < mValues.length; i++) {
-            if (labels[i] == null) continue;
-            labels[i].setTextColor(i == selectedIndex ? selected : idle);
+    /** The M3 segmented button shows a check on the selected segment. */
+    private void updateCheckedIcons(@NonNull MaterialButton[] buttons, int selected) {
+        for (int i = 0; i < buttons.length; i++) {
+            buttons[i].setIconResource(i == selected ? R.drawable.ic_symbol_check : 0);
+            buttons[i].setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
         }
-    }
-
-    private int resolveColor(int attr, int fallback) {
-        TypedValue value = new TypedValue();
-        if (getContext().getTheme().resolveAttribute(attr, value, true)) return value.data;
-        return ContextCompat.getColor(getContext(), fallback);
     }
 
     /** The lit segment, or -1 for {@link #VALUE_NONE}, where none of them is. */
@@ -268,9 +237,10 @@ public final class SegmentedPillPreference extends Preference {
         return VALUE_NONE.equals(mValue) ? -1 : 0;
     }
 
-    /** Where the indicator rests: the lit segment, or the first one while it is hidden. */
-    private float indicatorOffset(@NonNull FrameLayout track) {
-        return Math.max(0, selectedIndex()) * segmentWidth(track);
+    /** The index of the lit segment, or -1 for {@link #VALUE_NONE}. */
+    @VisibleForTesting
+    public int selectedSegment() {
+        return selectedIndex();
     }
 
     @NonNull

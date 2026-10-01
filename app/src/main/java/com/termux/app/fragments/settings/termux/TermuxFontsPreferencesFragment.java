@@ -6,7 +6,6 @@ import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.widget.LinearLayout;
-import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.annotation.Keep;
@@ -18,6 +17,7 @@ import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.slider.Slider;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fonts.FontCatalog;
@@ -442,29 +442,24 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
         FontInstaller.Options options = options(context, active);
         int current = options.weight > 0 ? axis.clamp(options.weight) : axis.regularWeight;
 
-        int padding = Math.round(24 * context.getResources().getDisplayMetrics().density);
+        int padding = Math.round(16 * context.getResources().getDisplayMetrics().density);
         LinearLayout layout = new LinearLayout(context);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(padding, padding / 2, padding, 0);
         TextView label = new TextView(context);
         label.setText(String.valueOf(current));
-        SeekBar seekBar = new SeekBar(context);
-        seekBar.setMax(axis.max - axis.min);
-        seekBar.setProgress(current - axis.min);
+        Slider slider = new Slider(context);
+        slider.setValueFrom(axis.min);
+        slider.setValueTo(Math.max(axis.max, axis.min + 1));
+        slider.setStepSize(1f);
+        slider.setValue(Math.max(axis.min, Math.min(axis.max, current)));
         final int[] picked = {current};
-        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
-                picked[0] = axis.clamp(axis.min + value);
-                label.setText(String.valueOf(picked[0]));
-            }
-
-            @Override public void onStartTrackingTouch(SeekBar bar) {}
-
-            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        slider.addOnChangeListener((changed, value, fromUser) -> {
+            picked[0] = axis.clamp(Math.round(value));
+            label.setText(String.valueOf(picked[0]));
         });
         layout.addView(label);
-        layout.addView(seekBar);
+        layout.addView(slider);
 
         new MaterialAlertDialogBuilder(context)
             .setTitle(getString(R.string.termux_fonts_weight_dialog_title, axis.min, axis.max))
