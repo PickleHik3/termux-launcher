@@ -544,6 +544,7 @@ public class TaiModelCentreFragment extends Fragment
             row.installable = entry.downloadAvailable;
             row.installing = installing.contains(entry.modelId);
             String error = errors.get(entry.modelId);
+            boolean gatedNote = false;
             if (error != null) {
                 row.note = error;
                 row.noteIsError = true;
@@ -555,7 +556,11 @@ public class TaiModelCentreFragment extends Fragment
                 row.note = getString(R.string.tai_centre_small_ram_note);
             } else if (!entry.downloadAvailable) {
                 row.note = entry.unavailableReason == null ? "" : entry.unavailableReason;
+            } else if (entry.gated && new TaiSettings(context).getHuggingFaceToken().trim().isEmpty()) {
+                row.note = getString(R.string.tai_centre_gated_note);
+                gatedNote = true;
             }
+            row.tokenAction = TaiModelCentreRows.showsTokenAction(gatedNote, error);
             addModelRow(items, row);
             added++;
         }
@@ -596,12 +601,15 @@ public class TaiModelCentreFragment extends Fragment
             row.installable = entry.downloadAvailable;
             row.installing = installing.contains(entry.modelId);
             String error = errors.get(entry.modelId);
+            boolean gatedNote = false;
             if (error != null) {
                 row.note = error;
                 row.noteIsError = true;
             } else if (entry.gated && new TaiSettings(context).getHuggingFaceToken().trim().isEmpty()) {
                 row.note = getString(R.string.tai_centre_gated_note);
+                gatedNote = true;
             }
+            row.tokenAction = TaiModelCentreRows.showsTokenAction(gatedNote, error);
             addModelRow(items, row);
             added++;
         }
@@ -651,6 +659,7 @@ public class TaiModelCentreFragment extends Fragment
                 row.note = error;
                 row.noteIsError = true;
             }
+            row.tokenAction = TaiModelCentreRows.showsTokenAction(false, error);
             addModelRow(items, row);
             added++;
         }
@@ -1016,6 +1025,28 @@ public class TaiModelCentreFragment extends Fragment
     @Override
     public void onModelBenchmark(@NonNull TaiModelCentreAdapter.ModelRow row) {
         TaiBenchHomeFragment.open(getActivity(), row.modelId);
+    }
+
+    /** Saving a token clears the row's refusal; the person taps Install again, nothing starts on its own. */
+    @Override
+    public void onAddToken(@NonNull TaiModelCentreAdapter.ModelRow row) {
+        Context context = getContext();
+        if (context == null) return;
+        TaiHuggingFaceTokenDialog.show(context, () -> {
+            errors.remove(row.modelId);
+            rebuild();
+        });
+    }
+
+    /** Saving a token starts the refused download again, as Retry would. */
+    @Override
+    public void onAddToken(@NonNull TaiDownloadHub.Snapshot snapshot) {
+        Context context = getContext();
+        if (context == null) return;
+        TaiHuggingFaceTokenDialog.show(context, () -> {
+            Context current = getContext();
+            if (current != null && isAdded()) runDownloadAction(current, snapshot, TaiModelCentreRows.Action.RETRY);
+        });
     }
 
     @Override

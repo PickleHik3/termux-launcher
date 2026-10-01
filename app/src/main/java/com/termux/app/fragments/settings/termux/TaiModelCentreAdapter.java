@@ -62,6 +62,10 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         void onModelMenu(@NonNull ModelRow row, @NonNull View anchor);
         /** The speed pill was tapped: open that model's benchmark result. */
         void onModelBenchmark(@NonNull ModelRow row);
+        /** "Add token" under a catalogue row's note: open the token dialog for that model. */
+        void onAddToken(@NonNull ModelRow row);
+        /** "Add token" on a failed download: open the token dialog, then retry that download. */
+        void onAddToken(@NonNull TaiDownloadHub.Snapshot snapshot);
         void onBannerAction(@NonNull Banner banner);
         void onBannerDismiss(@NonNull Banner banner);
         void onParallelSelected(int parallel);
@@ -143,6 +147,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         boolean installing;
         @NonNull String note = "";
         boolean noteIsError;
+        /** The note is Hugging Face asking for a token: offer "Add token" under it. */
+        boolean tokenAction;
         /** A speech-output (voice) model: its own menu and install path, the wave icon like speech. */
         boolean voiceOutput;
         /** A text-to-image model: the picture icon, and a menu with Delete only. */
@@ -159,7 +165,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         @NonNull
         String signature() {
             return title + '|' + subtitle + '|' + pillPrimary + '|' + tonePrimary + '|' + pillSecondary + '|'
-                + pillBackend + '|' + pillSpeed + '|' + installable + '|' + installing + '|' + note + '|' + noteIsError;
+                + pillBackend + '|' + pillSpeed + '|' + installable + '|' + installing + '|' + note + '|' + noteIsError + '|' + tokenAction;
         }
     }
 
@@ -427,6 +433,11 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         }
     }
 
+    private static boolean retryNeedsToken(@NonNull DownloadRow row) {
+        return row.state.actions.contains(TaiModelCentreRows.Action.RETRY)
+            && TaiModelCentreRows.needsToken(row.snapshot.error);
+    }
+
     private final class DownloadHolder extends RecyclerView.ViewHolder {
         final ImageView kind;
         final TextView title;
@@ -467,6 +478,10 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             });
             textAction.setOnClickListener(v -> {
                 if (row == null) return;
+                if (retryNeedsToken(row)) {
+                    callbacks.onAddToken(row.snapshot);
+                    return;
+                }
                 TaiModelCentreRows.Action action = row.state.actions.contains(TaiModelCentreRows.Action.RETRY)
                     ? TaiModelCentreRows.Action.RETRY : TaiModelCentreRows.Action.START_NOW;
                 callbacks.onDownloadAction(row.snapshot, action, v);
@@ -487,8 +502,10 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
 
             boolean startNow = state.actions.contains(TaiModelCentreRows.Action.START_NOW);
             boolean retry = state.actions.contains(TaiModelCentreRows.Action.RETRY);
+            // A download Hugging Face refused for want of a token swaps Retry for Add token.
             setText(textAction, startNow ? context.getString(R.string.tai_centre_action_start_now)
-                : retry ? context.getString(R.string.tai_centre_action_retry) : "");
+                : retry ? context.getString(retryNeedsToken(next) ? R.string.tai_centre_action_add_token
+                    : R.string.tai_centre_action_retry) : "");
             if (retry) goPill(textAction);
             else if (startNow) ghostPill(textAction);
 
@@ -611,6 +628,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         final CircularProgressIndicator ring;
         final ImageButton more;
         final TextView note;
+        final TextView noteAction;
         @Nullable ModelRow row;
 
         ModelHolder(@NonNull View view) {
@@ -627,7 +645,12 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             ring = view.findViewById(R.id.tai_centre_install_ring);
             more = view.findViewById(R.id.tai_centre_more);
             note = view.findViewById(R.id.tai_centre_note);
+            noteAction = view.findViewById(R.id.tai_centre_note_action);
             Context context = view.getContext();
+            noteAction.setTextColor(color(context, com.termux.shared.R.attr.termuxColorPrimary));
+            noteAction.setOnClickListener(v -> {
+                if (row != null) callbacks.onAddToken(row);
+            });
             kind.setImageTintList(ColorStateList.valueOf(color(context, com.termux.shared.R.attr.termuxColorOnSurface)));
             ring.setIndicatorColor(color(context, com.termux.shared.R.attr.termuxColorPrimary));
             goPill(install);
@@ -671,6 +694,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             setText(note, next.note);
             note.setTextColor(color(context, next.noteIsError ? com.termux.shared.R.attr.termuxColorError
                 : com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
+            setText(noteAction, next.tokenAction ? context.getString(R.string.tai_centre_action_add_token) : "");
         }
     }
 
