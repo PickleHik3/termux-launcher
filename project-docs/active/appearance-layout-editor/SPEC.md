@@ -207,6 +207,29 @@ Retired: the per-surface corner and side-gap overrides (DOCK, KEYBOARD, STATUS, 
 for the base values; `terminal_flush_dock`, which Docked covers; the hairline separators between
 joined bars; the six-dot grips. Old keys are read only by the migration.
 
+#### Amended 2026-10-01: the rounded insert (supersedes the Docked rows above where they differ)
+
+The developer ruled out square windows anywhere, after seeing Docked on Waydroid (Lavish
+`.lavish/docked-opening-wireframes.html`: O2, sliders shown, tone floor, F3).
+
+- **Docked pane = a rounded insert over the frame glass.** The frame glass runs behind all the bars
+  edge to edge, and the pane sits on it inset by Margin (the **gutter**, frame glass, not wallpaper)
+  with Corners as its radius. The frame still joins its bars flush and square, with outer corners at
+  the screen radius.
+- **Corners and Margin show in both Styles** and mean the same: Corners is every card's and the
+  insert's radius, Margin the air (Floating, wallpaper) or the gutter (Docked, glass).
+- **The insert keeps its glass.** In Docked the pane keeps its frost, tint (Darkness), grain and
+  the Legibility veil (§2). Docked changes shape, never legibility.
+- **Tone floor.** The insert always stands at least one tone step darker than the frame glass
+  around it; Darkness adds on top; the veil still guarantees the text contrast.
+- **Rim.** In Docked the insert's own rounded edge carries the 1dp rim, rim light and refraction,
+  and is the border the border drag finds. The bars' edges facing the gutter are plain.
+- **Split panes** in Docked: each pane is its own rounded insert, with Margin's gutter of frame glass
+  between them (no shared opening, no divider line).
+- **Fullscreen under Docked (F3).** The bars go away, a thin frame of glass (the gutter) stays,
+  the docked keyboard is that frame's bottom, and the pane is still the rounded insert above it.
+- Home's widget grid and the Display's picture are the insert in the same way.
+
 ## 4. Looks
 
 Names chosen by the developer: **Clear · Mist · Tint · Solid**. Mist is kept as rebuilt on

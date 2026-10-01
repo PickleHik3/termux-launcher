@@ -93,8 +93,7 @@ One terminal view inside a split. Panes have corner tabs but no appearance of th
 Their border is the shared rim; only the focused pane of a split wears the active colour, and a pane
 asking for the user (bell, blocked agent, progress error) glows in the attention colour until focused.
 Under the Floating **Style** each pane of a split is its own card with Margin's air between; under
-Docked the panes share the opening, divided by one line, and the focused pane wears the active
-colour along its own edges of that line.
+Docked each pane is its own rounded insert, with Margin's gutter of frame glass between them.
 
 **Pane wall**:
 The row of places the launcher slides between: Home (the widgets), Terminal, Display. In code it is
@@ -147,12 +146,16 @@ dock's elements, the keyboard and the pane's opening, and one shape decides the 
 selection outline and the lifted copy in the Layout editor. In **Floating** each piece is a
 rounded card with air around it: the status bar is always its own card, apps, A–Z index and extra
 keys that stand next to each other on one edge share one card, and the keyboard is its own card;
-Corners sets every card's radius and Margin the air. In **Docked** the pieces join flush into one
-frame with no air: top and bottom bars run the full width and side bars stand between them, joins
-stay square, and only the frame's exposed outer corners round, at the device's own screen radius;
-Corners and Margin do not apply. The pane is an opening in that frame with no rim of its own; the
-bars' inner edges are its border. Pieces that join draw no line between them, and in Docked only
-the edge around the opening carries rim light and refraction. One Style holds for both
+Corners sets every card's radius and Margin the air. In **Docked** the bars join flush into one
+frame of glass with no air between them: top and bottom bars run the full width and side bars stand
+between them, joins stay square, and the frame's outer corners round at the device's own screen
+radius. The pane is a rounded **insert** over that glass, never a square window: Corners sets its
+radius and Margin the gutter of frame glass around it, so both sliders mean the same in either
+Style (wallpaper shows in Floating's gaps, glass in Docked's). The insert keeps the pane's own glass,
+Darkness and Legibility veil, and always stands at least one tone step darker than the frame glass
+around it. Pieces that join draw no line between them, and in Docked only the insert's own edge
+carries rim light and refraction. Fullscreen under Docked keeps a thin frame of glass, the gutter,
+with the keyboard as its bottom and the pane still the rounded insert above it. One Style holds for both
 orientations and for the minimal layout. Style never changes the keyboard's form: a floating or split
 keyboard keeps its own shape, and only a docked keyboard joins the frame or becomes a card.
 _Avoid_: surface mode (a Surface is one region), dock style (it is no longer the dock's alone),
