@@ -781,7 +781,7 @@ public class TourControllerTest {
 
         TourController restarted = newController();
         assertTrue(restarted.resumeIfInProgress());
-        assertEquals(TourRun.PIN_APPS, restarted.currentStep().id);
+        assertEquals(TourRun.BORDER_DRAG, restarted.currentStep().id);
         assertTrue(restarted.wasSkipped());
     }
 

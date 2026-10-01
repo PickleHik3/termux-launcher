@@ -2970,13 +2970,13 @@
     <string name="help_term_editors_title">Layout and Appearance editors</string>
     <string name="help_term_editors_definition">One editor with two modes: Appearance changes how the launcher looks, Layout arranges its parts.</string>
     <string name="help_term_border_drag_title">Border drag</string>
-    <string name="help_term_border_drag_definition">Hold a page's border, then drag sideways to change place.</string>
+    <string name="help_term_border_drag_definition">Hold a page\'s border, then drag sideways to change place.</string>
     <string name="help_term_keyboard_swipe_title">Keyboard swipe</string>
-    <string name="help_term_keyboard_swipe_definition">Swipe up from a page's bottom border to open the keyboard, and down to close it.</string>
+    <string name="help_term_keyboard_swipe_definition">Swipe up from a page\'s bottom border to open the keyboard, and down to close it.</string>
     <string name="help_term_status_swipe_title">Status swipe</string>
-    <string name="help_term_status_swipe_definition">Swipe down from a page's top border to open the status bar, and up to fold it.</string>
+    <string name="help_term_status_swipe_definition">Swipe down from a page\'s top border to open the status bar, and up to fold it.</string>
     <string name="help_term_corner_tab_title">Corner tab</string>
-    <string name="help_term_corner_tab_definition">The set of controls a hold on a page's corner opens.</string>
+    <string name="help_term_corner_tab_definition">The set of controls a hold on a page\'s corner opens.</string>
     <string name="help_term_minimal_title">Minimal mode</string>
     <string name="help_term_minimal_definition">Every place shows only its content, with the bars and the keyboard put away.</string>
     <string name="help_term_look_title">Look</string>
