@@ -279,16 +279,16 @@ public class TermuxActivityBottomStackOrderTest {
     // ---------------------------------------------------------------- the seams
 
     @Test
-    public void theStackSeparatesItsBandsAndNeverItsOwnEdges() {
-        // Three bands on one sheet of glass: a hairline in each gap, and none at either end.
+    public void theStackDrawsNoLineBetweenItsBandsOrAtItsEdges() {
+        // No line between joined pieces in either Style: three bands on one sheet draw none.
         activity.applyEdgeStacks(bottom(Element.APPS, Element.AZ, Element.EXTRA_KEYS));
-        assertEquals(2, rows.getSeparatorCount());
+        assertEquals(0, rows.getSeparatorCount());
 
-        // Re-ordered, it is still one per gap — the line belongs to the gap, not to a row.
+        // Re-ordered, still none.
         activity.applyEdgeStacks(bottom(Element.AZ, Element.EXTRA_KEYS, Element.APPS));
-        assertEquals(2, rows.getSeparatorCount());
+        assertEquals(0, rows.getSeparatorCount());
 
-        // A lone band has nothing to be separated from, which is the defect: the extra keys drew
+        // A lone band has nothing to be joined to, which was the old defect: the extra keys drew
         // their divider across the dock's rim.
         activity.applyEdgeStacks(bottom(Element.EXTRA_KEYS)
             .withSlot(Element.APPS, new Slot(true, Edge.BOTTOM, 2))
@@ -336,8 +336,8 @@ public class TermuxActivityBottomStackOrderTest {
 
         assertTrue("on the plank it wears no glass of its own",
             activity.statusBarStandsOnTheDockPlank());
-        assertEquals("four bands on one sheet, so a hairline in each of the three gaps",
-            3, rows.getSeparatorCount());
+        assertEquals("four bands on one sheet, joined with no line between them",
+            0, rows.getSeparatorCount());
     }
 
     @Test
@@ -368,7 +368,7 @@ public class TermuxActivityBottomStackOrderTest {
 
         assertFalse("it is not on the dock's sheet, so it keeps its own",
             activity.statusBarStandsOnTheDockPlank());
-        assertEquals("and no hairline floats between the two sheets", 2, rows.getSeparatorCount());
+        assertEquals("and no line floats between the two sheets", 0, rows.getSeparatorCount());
     }
 
     @Test
@@ -400,41 +400,38 @@ public class TermuxActivityBottomStackOrderTest {
 
     /**
      * The developer's order — extra keys, apps row, letters reading up from the dock's rim — with
-     * the apps row carrying the air the dock gives its icons. The seam between the row and the keys
-     * used to be drawn on the child boundary, which is the keys' own rim: the line sat hard against
-     * them and a whole row padding away from the icons. It belongs to the gap, so it goes in the
-     * middle of it, for every adjacent pair.
+     * the apps row carrying the air the dock gives its icons. Joined bands draw no line between
+     * them, so what is left is the air: each band starts where the one before it ends, and the
+     * gap between two bands' content is that air alone, measured from the band edges.
      */
     @Test
-    public void everySeamSitsInTheMiddleOfTheGapBetweenTwoBandsContent() {
+    public void everyBandStartsWhereTheOneBeforeItEndsAndTheGapBetweenContentIsAir() {
         int airTop = 17;
         int airBottom = 8;
         activity.findViewById(R.id.apps_bar_viewpager).setPadding(0, airTop, 0, airBottom);
         activity.applyEdgeStacks(bottom(Element.EXTRA_KEYS, Element.APPS, Element.AZ));
         layoutContainer();
 
-        assertEquals(2, rows.getSeparatorCount());
-        int[] seams = rows.separatorCenters();
-        assertEquals(2, seams.length);
+        assertEquals(0, rows.getSeparatorCount());
 
         // Walking down the stack: the keys, then the apps row's host, then the letters.
         int keysBottom = topIn(rows, activity.findViewById(R.id.terminal_toolbar_view_pager))
             + KEYS_PX;
-        // Updated for Q8 with a reason: the ticks are the row's own air on that side rather than
-        // its content, so the gap the hairline splits reaches the icons, ticks and all.
+        View appsHost = activity.findViewById(R.id.apps_bar_row_host);
+        int hostTop = topIn(rows, appsHost);
+        int hostBottom = hostTop + appsHost.getHeight();
+        // The ticks are the row's own air on that side rather than its content, so the gap
+        // between the keys and the icons reaches the icons, ticks and all.
         int iconsTop = topIn(rows, activity.findViewById(R.id.apps_bar_viewpager)) + airTop;
         int iconsBottom = topIn(rows, activity.findViewById(R.id.apps_bar_viewpager))
             + APPS_PX - airBottom;
         int lettersTop = topIn(rows, activity.findViewById(R.id.apps_bar_az_row));
 
-        assertEquals("the keys and the row's icons split their gap",
-            (keysBottom + iconsTop) / 2, seams[0]);
-        assertEquals("the icons and the letters split theirs",
-            (iconsBottom + lettersTop) / 2, seams[1]);
-        // The defect, in the one gap this arrangement leaves: the line used to be drawn on the
-        // child boundary, which is the letters' own rim.
-        assertTrue("the seam is hard against neither band: " + seams[1],
-            seams[1] > iconsBottom && seams[1] < lettersTop);
+        assertTrue("the row stands under the keys: " + hostTop, hostTop >= keysBottom);
+        assertEquals("the letters stand directly under the row", hostBottom, lettersTop);
+        assertTrue("the icons keep their own air from the keys: " + iconsTop,
+            iconsTop >= keysBottom);
+        assertTrue("and from the letters: " + iconsBottom, iconsBottom <= lettersTop);
     }
 
     /**
@@ -448,7 +445,7 @@ public class TermuxActivityBottomStackOrderTest {
      * in, and they stand inside the centre-facing one rather than beside it.
      */
     @Test
-    public void theRowsIconStandsInTheMiddleOfWhatTheTwoHairlinesEnclose() {
+    public void theRowsIconStandsInTheMiddleOfItsBand() {
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(activity, false);
         assertNotNull(preferences);
         ReflectionHelpers.setField(activity, "mPreferences", preferences);
@@ -459,7 +456,7 @@ public class TermuxActivityBottomStackOrderTest {
             PageTickStrip.bandPx(density), airPx);
 
         // Reading down the dock: the extra keys, the apps row, the letters on the rim — the row
-        // with a band on each side of it, which is the pair of hairlines the complaint is about.
+        // with a band on each side of it, which is where the old pair of lines stood.
         // Updated for Q9 with a reason: the keys stand between the row and the terminal, so the
         // row is not the band next to the canvas and its ticks take its outer side — under the
         // icons rather than over them. The air on each side is unchanged.
@@ -469,9 +466,8 @@ public class TermuxActivityBottomStackOrderTest {
         activity.applyDockLayout(dock);
         lendBar(activity);
         activity.syncPinnedAppsHost(layout);
-        // Those two bands keep the same air of their own, so each hairline splits an equal gap and
-        // what is left to measure is the row's own symmetry. It is deeper than the ticks' band so
-        // that neither midpoint has to be clamped clear of them — that is its own test.
+        // Those two bands keep the same air of their own, deeper than the ticks' band, so what is
+        // left to measure is the row's own symmetry about its band.
         int neighbourAirPx = Math.round(density * 12f);
         activity.findViewById(R.id.terminal_toolbar_view_pager)
             .setPadding(0, 0, 0, neighbourAirPx);
@@ -510,33 +506,30 @@ public class TermuxActivityBottomStackOrderTest {
         assertEquals("and reach the band's own end", hostTop + host.getHeight(),
             ticksTop + ticks.getHeight());
 
-        // Three bands on one sheet: a hairline in each gap, and the row is between them.
-        int[] seams = rows.separatorCenters();
-        assertEquals(2, seams.length);
-        int above = seams[0];
-        int below = seams[1];
-        assertEquals("the icon's middle is the middle of what the hairlines enclose",
-            (above + below) / 2f, (iconTop + iconBottom) / 2f, 1f);
+        // Three bands on one sheet, joined with no line between them, and the row is between.
+        assertEquals(0, rows.getSeparatorCount());
+        int bandTop = hostTop;
+        int bandBottom = hostTop + host.getHeight();
+        assertEquals("the icon's middle is the middle of its band",
+            (bandTop + bandBottom) / 2f, (iconTop + iconBottom) / 2f, 1f);
 
-        // And the hairline stands clear of the ticks it now shares a gap with.
+        // And the ticks stand inside the band, clear of the icons.
         float thickness = PageTickStrip.THICKNESS_DP * density;
         float tickBottom = ticksTop + ((ticks.getHeight() + thickness) / 2f);
-        assertTrue("the hairline is below the ticks: " + below, below > tickBottom);
+        assertTrue("the ticks end inside the band: " + tickBottom, tickBottom <= bandBottom);
         assertTrue("and the ticks are clear of the icons", tickBottom - thickness > iconBottom);
     }
 
     /**
-     * The one arrangement tight enough to put the hairline on the ticks: a band hard against the
-     * side of the row the ticks stand on, so the whole gap is the ticks' own band and its middle
-     * is the middle of the tick glyphs — a line drawn there reads as a strike-through. It goes to
-     * the far side of them from the icons instead.
+     * The one arrangement tight enough to crowd the ticks: a band hard against the side of the
+     * row the ticks stand on, so the whole gap is the ticks' own band. They stay clear of the
+     * icons and inside the band, with no line to keep them off.
      *
      * <p>Updated for Q9 with a reason: the ticks take the row's outer side now, so the tight gap
-     * is the one under the icons rather than the one over them. The clamp reads the same either
-     * way, which is what this proves.
+     * is the one under the icons rather than the one over them.
      */
     @Test
-    public void theHairlineNeverCrossesTheTicksEvenWithTheLettersHardUnderThem() {
+    public void theTicksStayInsideTheRowsBandEvenWithTheLettersHardUnderThem() {
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(activity, false);
         assertNotNull(preferences);
         ReflectionHelpers.setField(activity, "mPreferences", preferences);
@@ -567,23 +560,18 @@ public class TermuxActivityBottomStackOrderTest {
         float thickness = PageTickStrip.THICKNESS_DP * density;
         float markTop = ticksTop + ((ticks.getHeight() - thickness) / 2f);
         float markBottom = markTop + thickness;
-        int clearancePx = Math.max(1, Math.round(density));
 
         assertEquals("the letters keep no air on this side, so the gap is the ticks' band",
             hostBottom, lettersTop);
         assertTrue("the row has to be on the dock for this to mean anything",
             dock.appsRowIconPx > 0);
-
-        int[] seams = rows.separatorCenters();
-        assertEquals(2, seams.length);
-        int seam = seams[1];
-        assertTrue("the hairline clears the tick glyphs: " + seam + " vs " + markBottom,
-            seam >= markBottom + clearancePx);
-        assertTrue("and stands between the ticks and the letters: " + seam,
-            seam <= lettersTop);
+        assertEquals(0, rows.getSeparatorCount());
+        assertTrue("the tick glyphs clear the icons: " + markTop + " vs " + iconBottom,
+            markTop >= iconBottom);
+        assertTrue("and stop inside the band, short of the letters: " + markBottom,
+            markBottom <= lettersTop);
         // The ticks are still the air under the icons and nothing else moved.
         assertEquals("the ticks start where the icons end", iconBottom, ticksTop);
-        assertTrue("and stop short of the letters", markBottom < lettersTop);
     }
 
     // ------------------------------------------------- which side of the row the ticks stand on
@@ -626,8 +614,8 @@ public class TermuxActivityBottomStackOrderTest {
 
     /**
      * The shipped arrangement, where the row is the band next to the terminal: nothing stands on
-     * its canvas side, so the ticks take that one and the gap under the row is plain air with a
-     * hairline through the middle of it.
+     * its canvas side, so the ticks take that one and the gap under the row is plain air with no
+     * line through it.
      */
     @Test
     public void theRowNextToTheCanvasKeepsItsTicksOverTheIcons() {
@@ -653,7 +641,7 @@ public class TermuxActivityBottomStackOrderTest {
         assertEquals("the whole of the air on the ticks' side is theirs", 0,
             pager.getPaddingTop());
 
-        // The gap under the row holds no ticks at all, so its hairline splits it plainly.
+        // The gap under the row holds no ticks at all, so it is plain air.
         // Updated for Q10 with a reason: with the letters under it the row keeps only their crown
         // on that side; the ticks' band there opened a hole between the icons and the letters.
         int airPx = DockLayoutPolicy.rowAirPx(false, true, true,
@@ -666,10 +654,9 @@ public class TermuxActivityBottomStackOrderTest {
         int lettersTop = topIn(rows, letters) + letters.getPaddingTop();
         assertEquals("the row keeps the whole of its air on this side",
             airPx, hostBottom - iconBottom);
-        int[] seams = rows.separatorCenters();
-        assertEquals(2, seams.length);
-        assertEquals("nothing to clear, so the line is the middle of the gap",
-            (iconBottom + lettersTop) / 2, seams[0]);
+        assertEquals(0, rows.getSeparatorCount());
+        assertTrue("the letters begin at or below the row's band: " + lettersTop,
+            lettersTop >= hostBottom);
         assertTrue("the row has to be on the dock for this to mean anything",
             dock.appsRowIconPx > 0);
     }

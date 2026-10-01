@@ -141,6 +141,51 @@ public final class LiveChromeShape {
         return bits;
     }
 
+    /**
+     * How much air the opening keeps from whatever lies across {@code edge} of it: the nearest
+     * piece's edge facing it, or the screen's edge where none stands. Docked the opening has no
+     * air (the pane is the opening, the bars' inner edges and the screen are its border); under
+     * Floating it is the pane card's inset, Margin. {@code widthPx} and {@code heightPx} are the
+     * frame the shape was made for.
+     */
+    public static float openingInsetPx(@NonNull ChromeShape shape, @NonNull Edge edge,
+                                       float widthPx, float heightPx) {
+        if (!shape.opening().ownsRim) return 0f;
+        ChromeShape.Box open = shape.opening().box;
+        float eps = 1e-3f;
+        boolean vertical = !edge.isOnSide();
+        float neighbour = edge == Edge.TOP || edge == Edge.LEFT ? 0f
+            : (vertical ? heightPx : widthPx);
+        for (Piece piece : shape.pieces()) {
+            if (piece.overlay) continue;
+            ChromeShape.Box b = piece.box;
+            boolean along = vertical
+                ? b.right > open.left + eps && b.left < open.right - eps
+                : b.bottom > open.top + eps && b.top < open.bottom - eps;
+            if (!along) continue;
+            switch (edge) {
+                case TOP:
+                    if (b.bottom <= open.top + eps) neighbour = Math.max(neighbour, b.bottom);
+                    break;
+                case BOTTOM:
+                    if (b.top >= open.bottom - eps) neighbour = Math.min(neighbour, b.top);
+                    break;
+                case LEFT:
+                    if (b.right <= open.left + eps) neighbour = Math.max(neighbour, b.right);
+                    break;
+                default:
+                    if (b.left >= open.right - eps) neighbour = Math.min(neighbour, b.left);
+                    break;
+            }
+        }
+        switch (edge) {
+            case TOP: return Math.max(0f, open.top - neighbour);
+            case BOTTOM: return Math.max(0f, neighbour - open.bottom);
+            case LEFT: return Math.max(0f, open.left - neighbour);
+            default: return Math.max(0f, neighbour - open.right);
+        }
+    }
+
     /** The refraction seams of the same views: every edge that is not a rim. */
     public static int seamEdges(@NonNull ChromeShape shape, @NonNull List<PieceId> ids) {
         return ChromeEdgeRule.ALL & ~rimEdges(shape, ids);

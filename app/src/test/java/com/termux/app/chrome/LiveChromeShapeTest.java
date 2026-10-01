@@ -181,4 +181,77 @@ public class LiveChromeShapeTest {
         assertEquals(28f * 3f, LiveChromeShape.screenRadiusPx(0f, 3f), D);
         assertEquals(40f, LiveChromeShape.screenRadiusPx(40f, 3f), D);
     }
+
+    @Test
+    public void dockedOpeningKeepsNoAirFromAnythingAroundIt() {
+        for (PlaceLayout layout : new PlaceLayout[] {bottomStack(), sideBars()}) {
+            ChromeShape shape = shape(layout, LayoutStyle.DOCKED);
+            for (Edge edge : new Edge[] {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT})
+                assertEquals(edge.toString(), 0f,
+                    LiveChromeShape.openingInsetPx(shape, edge, 400, 800), D);
+        }
+    }
+
+    @Test
+    public void floatingOpeningKeepsMarginFromEveryBarAndScreenEdge() {
+        for (PlaceLayout layout : new PlaceLayout[] {bottomStack(), sideBars()}) {
+            ChromeShape shape = shape(layout, LayoutStyle.FLOATING);
+            for (Edge edge : new Edge[] {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT})
+                assertEquals(edge.toString(), MARGIN,
+                    LiveChromeShape.openingInsetPx(shape, edge, 400, 800), D);
+        }
+    }
+
+    @Test
+    public void theDockAndKeyboardOnOneGlassAreClippedAndRimmedAsOneSheet() {
+        ChromeShape shape = shape(bottomStack(), LayoutStyle.DOCKED);
+        java.util.List<PieceId> sheet = java.util.Arrays.asList(PieceId.APPS, PieceId.AZ,
+            PieceId.EXTRA_KEYS, PieceId.KEYBOARD);
+        LiveChromeShape.Clip clip = LiveChromeShape.outlineOf(shape, sheet);
+        assertEquals("the sheet reaches the screen's bottom, where the keyboard ends", 0,
+            clip.reachBottom);
+        assertEquals(SCREEN, clip.radius, D);
+        boolean[] cut = cutCorners(clip);
+        assertTrue("the screen's bottom corners are the keyboard's", cut[2] && cut[3]);
+        assertFalse("its top corners are joins", cut[0] || cut[1]);
+        assertEquals("only the dock's top faces the opening", ChromeEdgeRule.TOP,
+            LiveChromeShape.rimEdges(shape, sheet));
+        assertEquals(ChromeEdgeRule.ALL & ~ChromeEdgeRule.TOP,
+            LiveChromeShape.seamEdges(shape, sheet));
+    }
+
+    @Test
+    public void aStatusBarJoinedToTheRowUnderItHasNoRimAtAll() {
+        // Status and the apps row share the top edge: whichever stands outer joins the other, so
+        // its inner edge is a join and not the opening, and only the inner piece faces the pane.
+        ChromeShape shape = shape(layout(Slot.on(Edge.TOP, Element.STATUS),
+            Slot.on(Edge.TOP, Element.APPS), Slot.on(Edge.BOTTOM, Element.AZ),
+            Slot.on(Edge.BOTTOM, Element.EXTRA_KEYS)), LayoutStyle.DOCKED);
+        Piece status = shape.piece(PieceId.STATUS);
+        Piece apps = shape.piece(PieceId.APPS);
+        Piece outer = status.box.top < apps.box.top ? status : apps;
+        Piece inner = outer == status ? apps : status;
+        assertEquals("the outer bar's every edge is a join or the screen", ChromeEdgeRule.NONE,
+            LiveChromeShape.rimEdges(shape, Collections.singletonList(outer.id)));
+        assertEquals(ChromeEdgeRule.ALL,
+            LiveChromeShape.seamEdges(shape, Collections.singletonList(outer.id)));
+        assertEquals("the inner bar faces the opening", ChromeEdgeRule.BOTTOM,
+            LiveChromeShape.rimEdges(shape, Collections.singletonList(inner.id)));
+    }
+
+    @Test
+    public void everyJoinAndScreenEdgeIsAPlainSeamUnderDocked() {
+        for (PlaceLayout layout : new PlaceLayout[] {bottomStack(), sideBars()}) {
+            ChromeShape shape = shape(layout, LayoutStyle.DOCKED);
+            for (Piece piece : shape.pieces()) {
+                int rim = LiveChromeShape.rimEdges(shape, Collections.singletonList(piece.id));
+                for (Edge edge : new Edge[] {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT}) {
+                    boolean carries = (rim & ChromeEdgeRule.edgeBit(edge)) != 0;
+                    assertEquals(piece.id + " " + edge, piece.drawsRim(edge), carries);
+                    if (carries) assertEquals(piece.id + " " + edge,
+                        ChromeShape.EdgeKind.OPENING, piece.kind(edge));
+                }
+            }
+        }
+    }
 }

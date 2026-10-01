@@ -110,6 +110,17 @@ public final class ChromeRenderer {
             return com.termux.app.place.PlaceLayout.Edge.TOP;
         }
 
+        /**
+         * The status bar's edges that take no rim and no bend, as {@link ChromeEdgeRule} bits.
+         * The live chrome answers from the shape model: Docked, only an edge facing the opening
+         * is a rim and every join and screen edge is a seam; Floating has none. This default is
+         * the same rule for a bar alone on its edge.
+         */
+        default int statusBarSeamEdges() {
+            return roundedDockStyle() ? ChromeEdgeRule.NONE
+                : ChromeEdgeRule.ALL & ~ChromeEdgeRule.innerEdge(statusBarEdge());
+        }
+
         // ---- the wallpaper the blurred frames are captured from: WallpaperBlurCache.Source
 
         /** Blurs a captured frame with the shared renderer; a fake overrides this to skip the blur. */

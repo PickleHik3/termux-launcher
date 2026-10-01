@@ -1411,6 +1411,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mStatusBarEdge;
         }
 
+        @Override public int statusBarSeamEdges() {
+            return com.termux.app.chrome.LiveChromeShape.seamEdges(chromeShape(),
+                Collections.singletonList(com.termux.app.place.ChromeShape.PieceId.STATUS));
+        }
+
         @Override public float statusBarRimCornerRadiusPx() {
             return resolveStatusBarCapsuleCornerRadiusPx(targetStatusBarHeightPx(true,
                 isStatusBarCompact()));
@@ -2854,8 +2859,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * width plus a small gap so terminal content never renders under the line, and is clipped to
      * the same rounded outline so its corners don't poke past a rounded border.
      */
-    /** Gap the terminal border keeps from the status bar above it and the dock below it, in dp. */
-    private static final int TERMINAL_BORDER_VERTICAL_INSET_DP = 5;
     /**
      * Ceiling on the radius Floating lends the terminal's edge. The dock capsule is a pill; the
      * terminal it floats above is a tall slab, and a pill's radius on a slab reads as a lozenge, so
@@ -2936,12 +2939,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private int terminalFrameInsetPx(boolean vertical, boolean framed) {
         // Docked the pane is the opening: no margin of its own, the bars' inner edges and the
-        // screen's edge are its border.
+        // screen's edge are its border. Floating the model's opening keeps Margin from every bar
+        // and screen edge, and the pane card stands at exactly that.
         if (!isRoundedDockStyle())
             return 0;
-        return vertical
-            ? (framed ? Math.round(dpToPx(TERMINAL_BORDER_VERTICAL_INSET_DP)) : 0)
-            : getDockLayout().horizontalInsetPx;
+        return terminalFrameInsetPx(vertical);
     }
 
     /**
@@ -2966,9 +2968,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The same two numbers the frame is laid out with, for a surface that has to meet its edge. */
     private int terminalFrameInsetPx(boolean vertical) {
-        boolean framed = mPreferences != null
-            && (mPreferences.isTerminalBorderEnabled() || isTerminalPaneGlassActive());
-        return terminalFrameInsetPx(vertical, framed);
+        if (!isRoundedDockStyle()) return 0;
+        com.termux.app.place.ChromeShape shape = chromeShape();
+        View root = findViewById(R.id.activity_termux_root_view);
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        float width = root != null && root.getWidth() > 0 ? root.getWidth() : metrics.widthPixels;
+        float height = root != null && root.getHeight() > 0 ? root.getHeight() : metrics.heightPixels;
+        return Math.round(com.termux.app.chrome.LiveChromeShape.openingInsetPx(shape,
+            vertical ? PlaceLayout.Edge.TOP : PlaceLayout.Edge.LEFT, width, height));
     }
 
     private void applyTerminalBorderAppearance() {
@@ -3036,6 +3043,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // corner cells were still being nibbled — worse the larger the radius. That clearance is
         // padding inside the clip instead (see cornerArcPaddingPx below).
         int paneInsetPx = enabled ? strokePx + Math.round(dpToPx(2)) : 0;
+        // The other pages' cards stand at the frame itself, the model's opening, so the wall is
+        // told how much of the terminal's margin is its own border's air.
+        if (paneHost.getParent() instanceof com.termux.app.wall.PaneWallLayout)
+            ((com.termux.app.wall.PaneWallLayout) paneHost.getParent())
+                .setTerminalFrameAirPx(paneInsetPx);
         int paneHorizontalInsetPx = borderHorizontalInsetPx + paneInsetPx;
         int paneVerticalInsetPx = borderVerticalInsetPx + paneInsetPx;
         ViewGroup.LayoutParams paneParams = paneHost.getLayoutParams();
@@ -4484,12 +4496,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private com.termux.app.place.ChromeShape chromeShape() {
+        return chromeShape(currentPlaceLayout());
+    }
+
+    /** The same, for a layout in hand: it may not be the stored one during a slide or a pre-roll. */
+    @NonNull
+    private com.termux.app.place.ChromeShape chromeShape(@NonNull PlaceLayout stored) {
         View root = findViewById(R.id.activity_termux_root_view);
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
         int width = root != null && root.getWidth() > 0 ? root.getWidth() : metrics.widthPixels;
         int height = root != null && root.getHeight() > 0 ? root.getHeight() : metrics.heightPixels;
         boolean keyboardUp = mKeyboardGeometry.lastImeVisible() || isImeVisible();
-        PlaceLayout layout = currentPlaceLayout().withKeyboardShown(keyboardUp);
+        PlaceLayout layout = stored.withKeyboardShown(keyboardUp);
         float status = chromeThicknessPx(Element.STATUS, layout);
         float apps = chromeThicknessPx(Element.APPS, layout);
         float az = chromeThicknessPx(Element.AZ, layout);
@@ -4930,12 +4948,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.chrome.ChromeShapeOutlineProvider mDockOutline =
         new com.termux.app.chrome.ChromeShapeOutlineProvider();
 
-    /** The model's pieces of the dock's own rows, the ones standing over the keyboard. */
+    /**
+     * The model's pieces of the dock's own rows, the ones standing over the keyboard. Where the
+     * dock and the keyboard share one glass ({@code withKeyboard}) the keyboard's piece is part
+     * of the same sheet, so its clip, rim and seams are the model's for the whole of it.
+     */
     @NonNull
-    private List<com.termux.app.place.ChromeShape.PieceId> dockPieceIds() {
+    private List<com.termux.app.place.ChromeShape.PieceId> dockPieceIds(boolean withKeyboard) {
         List<Element> rows = new ArrayList<>(
             EdgeStackPolicy.overKeyboard(currentPlaceLayout()));
-        return chromePieceIds(rows);
+        List<com.termux.app.place.ChromeShape.PieceId> ids = chromePieceIds(rows);
+        if (withKeyboard) ids.add(com.termux.app.place.ChromeShape.PieceId.KEYBOARD);
+        return ids;
     }
 
     /**
@@ -4949,7 +4973,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Docked, the dock is a slice of the one frame. The model says which of its edges
             // face the opening (the only ones that wear the rim) and what its clip is; its
             // corners are square except a screen corner it stands on.
-            List<com.termux.app.place.ChromeShape.PieceId> ids = dockPieceIds();
+            List<com.termux.app.place.ChromeShape.PieceId> ids = dockPieceIds(
+                ownsInnerEdge && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec()));
             int strokeEdges = innerRim ? chromeRimEdges(
                 ids.toArray(new com.termux.app.place.ChromeShape.PieceId[0]))
                 : com.termux.app.chrome.ChromeEdgeRule.NONE;
@@ -5759,10 +5784,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** True when the keyboard renders as the floating Rounded surface. */
     private boolean isInAppKeyboardCapsule() {
-        // The keyboard's shape always follows the single global surface shape; the old dock-match
-        // mode that let it differ is gone. A floating keyboard is a card wherever it is parked,
-        // though: a square slab in the middle of the place reads as a rendering fault.
-        return isRoundedDockStyle() || isKeyboardFloating();
+        // The shape model says what the keyboard is: a card of its own with its own corners
+        // (Floating, or a floating keyboard under either Style, or a split half), or a slice of
+        // the Docked frame whose only round corners are the screen's. A floating keyboard is a
+        // card wherever it is parked: a square slab in the middle of the place reads as a
+        // rendering fault. With no keyboard piece in the shape yet, the Style and the form say it.
+        com.termux.app.place.ChromeShape shape = chromeShape();
+        com.termux.app.place.ChromeShape.Piece piece =
+            shape.piece(com.termux.app.place.ChromeShape.PieceId.KEYBOARD);
+        if (piece == null) piece = shape.piece(com.termux.app.place.ChromeShape.PieceId.KEYBOARD_LEFT);
+        com.termux.app.place.ChromeShape.Card card = piece == null ? null : shape.cardOf(piece);
+        if (card == null) return isRoundedDockStyle() || isKeyboardFloating();
+        return !card.frame;
     }
 
     /** True while the keyboard is hosted in its floating frame rather than in the dock. */
@@ -5833,7 +5866,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
         }
 
-        float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
+        // A card's radius is the model's for the keyboard's piece (Corners, held to its size).
+        com.termux.app.chrome.LiveChromeShape.Clip keyboardClip = capsule ? chromeClipOf(
+            com.termux.app.place.ChromeShape.PieceId.KEYBOARD) : null;
+        float cornerRadiusPx = !capsule ? 0f : keyboardClip != null ? keyboardClip.radius
+            : resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE);
         applyInAppKeyboardSurfaceClip(surfaceHost, capsule, cornerRadiusPx);
         // A split keyboard paints its own background under each half. The launcher's slab would
         // fill the parting the halves leave open, so it is dropped and the keys keep the shape
@@ -6862,7 +6899,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // are seams and the rim rect is pushed past them; only the edge facing the opening
             // keeps the rim and the bend. The capsule is unchanged.
             int dockSeams = capsuleDock ? 0 : com.termux.app.chrome.LiveChromeShape.seamEdges(
-                chromeShape(), dockPieceIds());
+                chromeShape(), dockPieceIds(shouldUseUnifiedDefaultKeyboardGlassSurface(state)));
             float[] capRect = new float[4];
             com.termux.app.chrome.GlassRefraction.rimRect(capRect, capLeft, 0f, capRight, capBottom,
                 com.termux.app.chrome.GlassRefraction.seamReachPx(
@@ -8821,6 +8858,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * wherever it is not on that plank.
      */
     private void refreshOffDockGlass() {
+        refreshOffDockGlass(currentPlaceLayout());
+    }
+
+    /** As above, against the layout in hand rather than the stored one. */
+    private void refreshOffDockGlass(@NonNull PlaceLayout layout) {
         refreshAzTabGlass();
         View plank = findViewById(R.id.place_off_dock_plank_host);
         if (plank != null && plank.getVisibility() == View.VISIBLE) {
@@ -8829,7 +8871,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 R.id.place_off_dock_plank_surface,
                 com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK,
                 mOffDockPlankOutline, mOffDockPlankEdge, offDockPlankGlassHeightPx(),
-                chromePieceIds(offDockPlankElements(currentPlaceLayout(), mOffDockPlankEdge)));
+                chromePieceIds(offDockPlankElements(layout, mOffDockPlankEdge)), layout);
         }
         View host = findViewById(R.id.place_az_bar_host);
         if (host != null && host.getVisibility() == View.VISIBLE && !mAzBarOnPlank) {
@@ -8837,7 +8879,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 R.id.place_az_bar_host_frost, R.id.place_az_bar_host_surface,
                 com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST,
                 mAzBarHostOutline, mAzBarEdge, azBarThicknessPx(),
-                Collections.singletonList(com.termux.app.place.ChromeShape.PieceId.AZ));
+                Collections.singletonList(com.termux.app.place.ChromeShape.PieceId.AZ), layout);
         }
         // The strip behind the status bar is these sheets' glass whenever one of them leads the
         // top edge, so it is re-glazed with them — and when the lead has just come or gone.
@@ -8955,7 +8997,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @NonNull com.termux.app.chrome.ChromeShapeOutlineProvider outline,
         @NonNull PlaceLayout.Edge edge,
         int heightPx,
-        @NonNull List<com.termux.app.place.ChromeShape.PieceId> pieces
+        @NonNull List<com.termux.app.place.ChromeShape.PieceId> pieces,
+        @NonNull PlaceLayout layout
     ) {
         float opacity = mPreferences == null ? 1f : mPreferences.getAppBarOpacity() / 100f;
         int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
@@ -8971,7 +9014,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // every join and screen edge is a seam; the one leading the top edge runs on into the
         // strip behind the status bar as well, and renders the lower slice of the light model the
         // strip renders the top of. Floating keeps a rim all round, as it always has.
-        com.termux.app.place.ChromeShape shape = chromeShape();
+        com.termux.app.place.ChromeShape shape = chromeShape(layout);
         boolean continuesStrip = !capsule && edge == PlaceLayout.Edge.TOP
             && continuesIntoStatusInsetStrip(sheetHost);
         int seams = capsule ? com.termux.app.chrome.ChromeEdgeRule.NONE
@@ -12233,7 +12276,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mOffDockPlankGlassHeightPx = glassHeightPx;
         host.setVisibility(want ? View.VISIBLE : View.GONE);
         if (changed) {
-            refreshOffDockGlass();
+            refreshOffDockGlass(layout);
             if (mTermuxActivityRootView != null)
                 ViewCompat.requestApplyInsets(mTermuxActivityRootView);
         }

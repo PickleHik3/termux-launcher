@@ -1792,20 +1792,43 @@ public final class PaneWallLayout extends ViewGroup {
         return new MarginLayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
     }
 
+    /**
+     * Air the terminal page keeps inside its own margins for the line drawn around it (the
+     * terminal border's stroke and gap). Every other page's card stands at the frame itself, which
+     * is the shape model's opening, so it sits that much further out than the terminal's content.
+     */
+    private int mTerminalFrameAirPx;
+
+    /** See {@link #mTerminalFrameAirPx}; the frame the other pages stand at is the margins less it. */
+    public void setTerminalFrameAirPx(int px) {
+        int air = Math.max(0, px);
+        if (air == mTerminalFrameAirPx) return;
+        mTerminalFrameAirPx = air;
+        requestLayout();
+    }
+
+    /** The air a page's frame keeps from the wall's edge on one side: the margin, less the terminal's own air. */
+    private int frameMarginPx(@NonNull View child, int marginPx) {
+        return child == mPageViews.get(PaneWallPage.TERMINAL)
+            ? marginPx : Math.max(0, marginPx - mTerminalFrameAirPx);
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         int width = MeasureSpec.getSize(widthMeasureSpec);
         int height = MeasureSpec.getSize(heightMeasureSpec);
         setMeasuredDimension(width, height);
         MarginLayoutParams margins = pageMargins();
-        int childWidth = MeasureSpec.makeMeasureSpec(Math.max(0, width - getPaddingLeft()
-            - getPaddingRight() - margins.leftMargin - margins.rightMargin), MeasureSpec.EXACTLY);
-        int childHeight = MeasureSpec.makeMeasureSpec(Math.max(0, height - getPaddingTop()
-            - getPaddingBottom() - margins.topMargin - margins.bottomMargin), MeasureSpec.EXACTLY);
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             // A page parked off screen (INVISIBLE, see applyPagePositions) keeps its layout.
             if (child.getVisibility() != VISIBLE) continue;
+            int childWidth = MeasureSpec.makeMeasureSpec(Math.max(0, width - getPaddingLeft()
+                - getPaddingRight() - frameMarginPx(child, margins.leftMargin)
+                - frameMarginPx(child, margins.rightMargin)), MeasureSpec.EXACTLY);
+            int childHeight = MeasureSpec.makeMeasureSpec(Math.max(0, height - getPaddingTop()
+                - getPaddingBottom() - frameMarginPx(child, margins.topMargin)
+                - frameMarginPx(child, margins.bottomMargin)), MeasureSpec.EXACTLY);
             child.measure(childWidth, childHeight);
         }
     }
@@ -1819,13 +1842,15 @@ public final class PaneWallLayout extends ViewGroup {
         if (isRestingOffPage()) settleImmediately();
         else applyPagePositions();
         MarginLayoutParams margins = pageMargins();
-        int left = getPaddingLeft() + margins.leftMargin;
-        int top = getPaddingTop() + margins.topMargin;
-        int right = Math.max(left, r - l - getPaddingRight() - margins.rightMargin);
-        int bottom = Math.max(top, b - t - getPaddingBottom() - margins.bottomMargin);
         for (int i = 0; i < getChildCount(); i++) {
             View child = getChildAt(i);
             if (child.getVisibility() != VISIBLE) continue;
+            int left = getPaddingLeft() + frameMarginPx(child, margins.leftMargin);
+            int top = getPaddingTop() + frameMarginPx(child, margins.topMargin);
+            int right = Math.max(left, r - l - getPaddingRight()
+                - frameMarginPx(child, margins.rightMargin));
+            int bottom = Math.max(top, b - t - getPaddingBottom()
+                - frameMarginPx(child, margins.bottomMargin));
             // A page that came on screen during this pass was not measured by it.
             if (child.getMeasuredWidth() != right - left || child.getMeasuredHeight() != bottom - top) {
                 child.measure(MeasureSpec.makeMeasureSpec(right - left, MeasureSpec.EXACTLY),
