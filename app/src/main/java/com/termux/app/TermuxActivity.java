@@ -5784,10 +5784,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** True when the keyboard renders as the floating Rounded surface. */
     private boolean isInAppKeyboardCapsule() {
-        // The keyboard's shape always follows the single global surface shape; the old dock-match
-        // mode that let it differ is gone. A floating keyboard is a card wherever it is parked,
-        // though: a square slab in the middle of the place reads as a rendering fault.
-        return isRoundedDockStyle() || isKeyboardFloating();
+        // The shape model says what the keyboard is: a card of its own with its own corners
+        // (Floating, or a floating keyboard under either Style, or a split half), or a slice of
+        // the Docked frame whose only round corners are the screen's. A floating keyboard is a
+        // card wherever it is parked: a square slab in the middle of the place reads as a
+        // rendering fault. With no keyboard piece in the shape yet, the Style and the form say it.
+        com.termux.app.place.ChromeShape shape = chromeShape();
+        com.termux.app.place.ChromeShape.Piece piece =
+            shape.piece(com.termux.app.place.ChromeShape.PieceId.KEYBOARD);
+        if (piece == null) piece = shape.piece(com.termux.app.place.ChromeShape.PieceId.KEYBOARD_LEFT);
+        com.termux.app.place.ChromeShape.Card card = piece == null ? null : shape.cardOf(piece);
+        if (card == null) return isRoundedDockStyle() || isKeyboardFloating();
+        return !card.frame;
     }
 
     /** True while the keyboard is hosted in its floating frame rather than in the dock. */
@@ -5858,7 +5866,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mChrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
         }
 
-        float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
+        // A card's radius is the model's for the keyboard's piece (Corners, held to its size).
+        com.termux.app.chrome.LiveChromeShape.Clip keyboardClip = capsule ? chromeClipOf(
+            com.termux.app.place.ChromeShape.PieceId.KEYBOARD) : null;
+        float cornerRadiusPx = !capsule ? 0f : keyboardClip != null ? keyboardClip.radius
+            : resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE);
         applyInAppKeyboardSurfaceClip(surfaceHost, capsule, cornerRadiusPx);
         // A split keyboard paints its own background under each half. The launcher's slab would
         // fill the parting the halves leave open, so it is dropped and the keys keep the shape
