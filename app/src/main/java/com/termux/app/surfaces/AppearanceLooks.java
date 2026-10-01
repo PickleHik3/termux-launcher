@@ -13,10 +13,13 @@ import java.util.List;
  * The Appearance editor's arithmetic (appearance-layout-editor SPEC §3.3–3.4), as pure functions.
  *
  * <p>The Look slider has five stops: the four Looks in {@link SurfacePresets#presets()} order —
- * Clear, Mist, Tint, Solid — and Custom last. Custom's row 2 folds each tapped element to at most
- * two controls, and each control writes one or two stored keys along a fixed rule: Darkness moves
- * the terminal's own opacity and the tint together, Keys moves key opacity and key radius along
- * one curve, and Soft wallpaper is a fixed dim plus a fixed blur that Dim then adds to.</p>
+ * Clear, Mist, Tint, Solid — and Custom last. Custom's row 2 folds each tapped element to a few
+ * controls, and each control writes one or two stored keys along a fixed rule: Darkness moves the
+ * terminal's own opacity and the tint together, Key corners is the key caps' radius alone, and
+ * Soft wallpaper is a fixed dim plus a fixed blur that Dim then adds to.</p>
+ *
+ * <p>Layout mode's Corners and Margin (SPEC §3.5) are here too: the global shape, which no Look
+ * sets (2026-10-01).</p>
  *
  * <p>No views and no {@code Context}, so the rules are held by JVM tests.</p>
  */
@@ -98,9 +101,20 @@ public final class AppearanceLooks {
             this.slot = slot;
         }
 
-        /** Whether the first control is Legibility (status bar and dock). */
-        public boolean firstControlIsLegibility() {
-            return this == STATUS || this == DOCK;
+        /**
+         * Whether row 2 has a first control: Darkness, Key corners or Soft wallpaper. The status
+         * bar and the dock have Blur alone.
+         */
+        public boolean hasFirstControl() {
+            return this != STATUS && this != DOCK;
+        }
+
+        /**
+         * Whether row 2 carries Legibility: the terminal only, since what it changes is the
+         * terminal palette's contrast (2026-10-01).
+         */
+        public boolean hasLegibility() {
+            return this == TERMINAL;
         }
 
         /** Whether the second control is the one shared Blur (every target but the wallpaper). */
@@ -144,31 +158,22 @@ public final class AppearanceLooks {
             ? TERMUX_APP.GLASS_TINT_OBSIDIAN : TERMUX_APP.GLASS_TINT_SCHEME;
     }
 
-    /** The key radius at Keys 0 and at Keys 100; the curve between is a straight line. */
-    public static final float KEYS_MIN_RADIUS_DP = 4f;
-    public static final float KEYS_MAX_RADIUS_DP = 16f;
-
-    /** The key opacity a Keys value writes. */
-    public static int keysOpacity(int keys) {
-        return clamp(keys, 0, 100);
-    }
-
-    /** The key radius a Keys value writes, in dp. */
-    public static float keysRadiusDp(int keys) {
-        return KEYS_MIN_RADIUS_DP
-            + (KEYS_MAX_RADIUS_DP - KEYS_MIN_RADIUS_DP) * clamp(keys, 0, 100) / 100f;
-    }
-
     /**
-     * Where the Keys slider stands for the stored pair: the key opacity when one is set, or, while
-     * the keyboard theme still owns its caps' translucency (-1), the point on the curve its radius
-     * is at.
+     * Key corners runs to the key cap radius's own ceiling. It writes the radius alone: the old
+     * Keys slider also moved key opacity along the same curve, and read as a radius control with
+     * the wrong name (2026-10-01). Key opacity is the Look's.
      */
-    public static int keysValueFor(int keyOpacity, float keyRadiusDp) {
-        if (keyOpacity >= 0)
-            return clamp(keyOpacity, 0, 100);
-        float t = (keyRadiusDp - KEYS_MIN_RADIUS_DP) / (KEYS_MAX_RADIUS_DP - KEYS_MIN_RADIUS_DP);
-        return clamp(Math.round(t * 100f), 0, 100);
+    public static final int KEY_CORNERS_MAX_DP =
+        Math.round(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP);
+
+    /** The key cap radius a Key corners value writes, in dp. */
+    public static int keyCornersDp(int value) {
+        return clamp(value, 0, KEY_CORNERS_MAX_DP);
+    }
+
+    /** Where the Key corners slider stands for a stored radius. */
+    public static int keyCornersValueFor(float radiusDp) {
+        return keyCornersDp(Math.round(radiusDp));
     }
 
     /** What Soft wallpaper adds: this much dim, and this much blur on the wallpaper itself. */
@@ -189,6 +194,39 @@ public final class AppearanceLooks {
     /** How far the Dim slider goes: what is left of 100 once Soft has taken its share. */
     public static int dimSliderMax(boolean soft) {
         return soft ? 100 - SOFT_DIM : 100;
+    }
+
+    // ------------------------------------------------------------------- Layout's global shape
+
+    /** Corners: one radius for every surface and the terminal, as "All surfaces" had it. */
+    public static final int CORNERS_MAX_DP = 40;
+
+    /** Margin: all the air on screen. */
+    public static final int MARGIN_MAX_DP = 48;
+
+    /** The terminal's own margin ceiling, which the shared Margin never writes past. */
+    public static final int TERMINAL_MARGIN_MAX_DP = 24;
+
+    public static int cornersDp(int value) {
+        return clamp(value, 0, CORNERS_MAX_DP);
+    }
+
+    public static int marginDp(int value) {
+        return clamp(value, 0, MARGIN_MAX_DP);
+    }
+
+    /** The terminal's margin (its pane gap) a Margin value writes. */
+    public static int terminalMarginDp(int margin) {
+        return Math.min(TERMINAL_MARGIN_MAX_DP, marginDp(margin));
+    }
+
+    /**
+     * Where Margin stands: Floating spends it on the surfaces' side gap, so that is its read;
+     * Docked surfaces are flush with the screen edges by definition, so there it is the
+     * terminal's own margin alone.
+     */
+    public static int marginValueFor(boolean floating, int sideGap, int paneGap) {
+        return marginDp(floating ? sideGap : paneGap);
     }
 
     /** Legibility's three segments, in order. */

@@ -867,6 +867,13 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             }
             TerminalColors.COLOR_SCHEME.updateWith(colorKeysOnly(props));
             resetAllSessionColors();
+            // A reset repaints nothing by itself: the emulator's onColorsChanged only reaches the
+            // window background. Every other door here (resume, a configuration change, a return
+            // from Settings) redraws the window anyway; the Appearance editor's Legibility does
+            // not, so without this the panes kept the old palette on screen until their next
+            // output. The row cache sees the palette move and re-records each row.
+            for (com.termux.view.TerminalView view : mHost.paneViews())
+                view.invalidate();
             updateBackgroundColor();
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalColors()", e);

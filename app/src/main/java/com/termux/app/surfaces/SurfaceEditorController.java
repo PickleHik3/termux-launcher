@@ -65,11 +65,15 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
  * the gesture overlay — one tap target per element, and the bare wallpaper under all of them — the
  * in-app keyboard is raised so it can be tapped, and the pane wall's paging is held.</p>
  *
- * <p>Row 1 is the Look slider — Clear · Mist · Tint · Solid · Custom — and the Style toggle. A
- * stop applies its Look live. At Custom a tap on an element opens row 2 with that element's two
- * controls ({@link AppearanceLooks}); a tap at a Look stop moves the slider to Custom first,
- * seeded from the Look it left. Sliding from Custom back to a Look applies it with an Undo-able
- * notice. Done at Custom saves the Custom look, so its stop comes back.</p>
+ * <p>Row 1 is the Look slider — Clear · Mist · Tint · Solid · Custom. A stop applies its Look
+ * live. At Custom a tap on an element opens row 2 with that element's controls
+ * ({@link AppearanceLooks}); a tap at a Look stop moves the slider to Custom first, seeded from
+ * the Look it left. Sliding from Custom back to a Look applies it with an Undo-able notice. Done
+ * at Custom saves the Custom look, so its stop comes back.</p>
+ *
+ * <p>Layout mode's bottom area carries what no Look sets: the Style toggle and the global Corners
+ * and Margin (SPEC §3.5). They write through like every other control, and the one Undo, dirty
+ * state and Discard cover them.</p>
  *
  * <p>Everything writes through to preferences live, so the frame is the real thing; Undo and
  * Discard put back the state at open ({@link AppearanceSnapshot}) and the arrangement at open
@@ -220,6 +224,8 @@ public final class SurfaceEditorController {
     private long mLayoutSignature = Long.MIN_VALUE;
     /** The panel's height at rest, and with row 2 up; recomputed with the frame. */
     private int mRestHeightPx;
+    /** The panel's height in Layout mode: at least the resting one; recomputed with the frame. */
+    private int mLayoutHeightPx;
     private int mNavInsetPx;
 
     /** The gap between the frame and the status inset above it, and the bottom area below it. */
@@ -633,17 +639,25 @@ public final class SurfaceEditorController {
             panelView.getPaddingRight(), dp(12) + mNavInsetPx);
         panel.setNarrow(content.getWidth() < dp(AppearanceEditorPanel.NARROW_DP));
         // The resting height is Appearance's at rest, whichever mode is showing: the frame does
-        // not move when the mode pill does.
+        // not move when the mode pill does. Layout mode's two rows may need a little more; that
+        // grows the card upward over the frame's foot, as row 2 does, and never moves the frame.
         boolean layoutMode = panel.isLayoutMode();
         if (layoutMode) panel.setMode(false);
         boolean row2 = panel.isRow2Shown();
         if (row2) panel.hideRow2();
-        panelView.measure(
-            View.MeasureSpec.makeMeasureSpec(content.getWidth(), View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int widthSpec = View.MeasureSpec.makeMeasureSpec(content.getWidth(),
+            View.MeasureSpec.EXACTLY);
+        int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        panelView.measure(widthSpec, heightSpec);
+        int restMeasured = panelView.getMeasuredHeight();
+        panel.setMode(true);
+        panelView.measure(widthSpec, heightSpec);
+        int layoutMeasured = panelView.getMeasuredHeight();
+        panel.setMode(false);
         if (row2) panel.showRow2(nameOf(mTarget));
         if (layoutMode) panel.setMode(true);
-        mRestHeightPx = Math.max(Math.round(windowHeight * 0.2f), panelView.getMeasuredHeight());
+        mRestHeightPx = Math.max(Math.round(windowHeight * 0.2f), restMeasured);
+        mLayoutHeightPx = Math.max(mRestHeightPx, layoutMeasured);
         applyPanelHeight();
 
         int[] parentOffset = new int[2];
@@ -668,14 +682,16 @@ public final class SurfaceEditorController {
             showEditorWallpaper(mEditorWallpaper);
     }
 
-    /** The bottom area's one fixed height at rest, and its one taller state with row 2 up. */
+    /**
+     * The bottom area's one fixed height at rest, its taller state with row 2 up, and Layout
+     * mode's own (its toggles and tray over Corners and Margin).
+     */
     private void applyPanelHeight() {
         AppearanceEditorPanel panel = mPanel;
         if (panel == null || mRestHeightPx <= 0)
             return;
-        // Layout mode has one row and no row 2: the resting height.
-        int height = mRestHeightPx + (!mLayoutMode && panel.isRow2Shown()
-            ? dp(panel.row2HeightDp()) : 0);
+        int height = mLayoutMode ? Math.max(mRestHeightPx, mLayoutHeightPx)
+            : mRestHeightPx + (panel.isRow2Shown() ? dp(panel.row2HeightDp()) : 0);
         ViewGroup.LayoutParams params = panel.view().getLayoutParams();
         if (params == null || params.height == height)
             return;
@@ -707,6 +723,7 @@ public final class SurfaceEditorController {
             return;
         panel.setStop(mStop);
         panel.setFloating(mHost.isFloatingDock());
+        syncLayoutControls();
         if (mTarget != null && AppearanceLooks.isCustomStop(mStop)) {
             showRow2(mTarget);
         } else {
@@ -741,7 +758,11 @@ public final class SurfaceEditorController {
         }
     }
 
-    /** Row 2 for one element: its name and its two controls, at the stored values. */
+    /**
+     * Row 2 for one element: its name and its controls, at the stored values. The terminal has
+     * three — Darkness, Legibility, Blur; the status bar and the dock Blur alone; the keyboard Key
+     * corners and Blur; the wallpaper Soft and Dim.
+     */
     private void showRow2(@NonNull Target target) {
         AppearanceEditorPanel panel = mPanel;
         TermuxAppSharedPreferences prefs = prefs();
@@ -756,9 +777,10 @@ public final class SurfaceEditorController {
                 break;
             }
             case KEYBOARD: {
-                int keys = AppearanceLooks.keysValueFor(prefs.getInAppKeyboardKeyOpacity(),
+                int corners = AppearanceLooks.keyCornersValueFor(
                     prefs.getInAppKeyboardKeyCornerRadiusDp());
-                panel.setFirstSlider(getString(R.string.appearance_editor_keys, keys), keys, 100);
+                panel.setFirstSlider(getString(R.string.appearance_editor_key_corners, corners),
+                    corners, AppearanceLooks.KEY_CORNERS_MAX_DP);
                 break;
             }
             case WALLPAPER:
@@ -766,9 +788,18 @@ public final class SurfaceEditorController {
                     SoftWallpaper.isOn(prefs));
                 break;
             default:
-                panel.setLegibility(getString(R.string.appearance_editor_legibility),
-                    AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel()));
+                panel.hideFirst();
                 break;
+        }
+        if (target.hasLegibility()) {
+            // The palette Legibility changes is the Material one; with wallpaper colours off the
+            // terminal wears a scheme file, which no contrast level moves (as in Settings).
+            boolean palette = prefs.isTerminalDynamicColorsEnabled();
+            panel.setLegibility(getString(palette ? R.string.appearance_editor_legibility
+                    : R.string.appearance_editor_legibility_unavailable),
+                AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel()), palette);
+        } else {
+            panel.hideLegibility();
         }
         if (target == Target.WALLPAPER) {
             boolean soft = SoftWallpaper.isOn(prefs);
@@ -813,18 +844,36 @@ public final class SurfaceEditorController {
             // Style belongs to no Look: it never moves the slider.
             prefs.setAppLauncherDockStyle(style);
             applyStructuralPreview();
+            // Margin reads the side gap Floating spends it on, or the terminal's own margin.
+            syncLayoutControls();
+            // The canvas learns docked or floating from the dock's corner, which the activity
+            // resolves from the stored style: written above, so it is current here.
+            syncLayoutCanvas();
             syncDirty();
+        }
+
+        @Override public void onCorners(int value, boolean dragging) {
+            beginDrag(dragging);
+            writeCorners(value);
+        }
+
+        @Override public void onMargin(int value, boolean dragging) {
+            beginDrag(dragging);
+            writeMargin(value);
         }
 
         @Override public void onFirstSlider(int value, boolean dragging) {
             beginDrag(dragging);
             if (mTarget == Target.TERMINAL) writeDarkness(value);
-            else if (mTarget == Target.KEYBOARD) writeKeys(value);
+            else if (mTarget == Target.KEYBOARD) writeKeyCorners(value);
         }
 
         @Override public void onFirstSegment(int index) {
             if (mTarget == Target.WALLPAPER) writeSoft(index == 1);
-            else if (mTarget != null && mTarget.firstControlIsLegibility()) writeLegibility(index);
+        }
+
+        @Override public void onLegibility(int index) {
+            if (mTarget != null && mTarget.hasLegibility()) writeLegibility(index);
         }
 
         @Override public void onSecondSlider(int value, boolean dragging) {
@@ -925,7 +974,11 @@ public final class SurfaceEditorController {
             | SurfaceEditorProperties.PREVIEW_SURFACES);
     }
 
-    /** Legibility: the one global multiplier, which is also the terminal palette's contrast. */
+    /**
+     * Legibility: the terminal palette's contrast, rebuilt and repainted at once so the panes'
+     * colours change on the tap. It is also the one global multiplier every chrome band's veil is
+     * bought against (SPEC §2), which the surfaces pass picks up.
+     */
     private void writeLegibility(int index) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -938,23 +991,93 @@ public final class SurfaceEditorController {
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
     }
 
-    /** Keys: key opacity and key radius along one curve. */
-    private void writeKeys(int value) {
+    /** Key corners: the key caps' radius, and nothing else. */
+    private void writeKeyCorners(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
-        int opacity = AppearanceLooks.keysOpacity(value);
-        float radius = AppearanceLooks.keysRadiusDp(value);
-        prefs.setInAppKeyboardKeyOpacity(opacity);
+        int radius = AppearanceLooks.keyCornersDp(value);
         prefs.setInAppKeyboardKeyCornerRadiusDp(radius);
         TermuxInAppKeyboard keyboard = keyboard();
-        if (keyboard != null) {
-            keyboard.previewSurfaceEditorKeyOpacity(opacity);
+        if (keyboard != null)
             keyboard.previewSurfaceEditorKeyCornerRadiusDp(radius);
-        }
         if (mPanel != null)
-            mPanel.setFirstLabel(getString(R.string.appearance_editor_keys, opacity));
+            mPanel.setFirstLabel(getString(R.string.appearance_editor_key_corners, radius));
         requestPreview(SurfaceEditorProperties.PREVIEW_KEYBOARD);
+    }
+
+    /**
+     * Corners: one radius for every surface and the terminal, as the old "All surfaces" Corners
+     * wrote it. The terminal rounds by its own knob in either style, so the shared radius carries
+     * it too — otherwise "round everything" leaves one square hole in the middle of the screen.
+     */
+    private void writeCorners(int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        int corners = AppearanceLooks.cornersDp(value);
+        prefs.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, corners);
+        prefs.setTerminalCornerRadius(corners);
+        if (mPanel != null)
+            mPanel.setCornersLabel(getString(R.string.appearance_editor_corners, corners));
+        requestGeometryPreview();
+        syncLayoutCanvas();
+    }
+
+    /**
+     * Margin: one number for all the air on screen, as the old shared Margin wrote it. Docked
+     * surfaces are flush with the screen edges by definition, so there it is the terminal's own
+     * margin alone; Floating spends it on the surfaces' side gap too.
+     */
+    private void writeMargin(int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        int margin = AppearanceLooks.marginDp(value);
+        if (mHost.isFloatingDock())
+            prefs.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, margin);
+        prefs.setTerminalPaneGap(AppearanceLooks.terminalMarginDp(margin));
+        if (mPanel != null)
+            mPanel.setMarginLabel(getString(R.string.appearance_editor_margin, margin));
+        requestGeometryPreview();
+        syncLayoutCanvas();
+    }
+
+    /**
+     * The shape pass for Corners and Margin: everything but a re-blur. Mid-drag the terminal is
+     * not resized (a SIGWINCH per tick); the release commits it once.
+     */
+    private void requestGeometryPreview() {
+        int scopes = SurfaceEditorProperties.PREVIEW_ALL & ~SurfaceEditorProperties.PREVIEW_BLUR;
+        if (mSliderDragActive) mDragTouchedGeometry = true;
+        else scopes |= SurfaceEditorProperties.PREVIEW_GEOMETRY_COMMIT;
+        requestPreview(scopes);
+    }
+
+    /** Layout mode's Corners and Margin, restated from preferences. */
+    private void syncLayoutControls() {
+        AppearanceEditorPanel panel = mPanel;
+        TermuxAppSharedPreferences prefs = prefs();
+        if (panel == null || prefs == null)
+            return;
+        int corners = AppearanceLooks.cornersDp(
+            prefs.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
+        panel.setCorners(getString(R.string.appearance_editor_corners, corners), corners,
+            AppearanceLooks.CORNERS_MAX_DP);
+        int margin = AppearanceLooks.marginValueFor(mHost.isFloatingDock(),
+            prefs.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP), prefs.getTerminalPaneGap());
+        panel.setMargin(getString(R.string.appearance_editor_margin, margin), margin,
+            AppearanceLooks.MARGIN_MAX_DP);
+    }
+
+    /**
+     * The layout canvas re-read, while it is showing: it draws the dock at the dock's own corner,
+     * which is how it tells docked from floating, and Corners moves that corner.
+     */
+    private void syncLayoutCanvas() {
+        LayoutEditorController layout = mHost.layoutEditor();
+        if (mOpen && mLayoutMode && layout != null)
+            layout.sync();
     }
 
     /** Soft wallpaper: its fixed dim under whatever Dim adds, and its fixed blur. */
@@ -1820,6 +1943,8 @@ public final class SurfaceEditorController {
     private boolean mSliderDragActive;
     private boolean mDragTouchedBlur;
     private boolean mDragTouchedKeyboard;
+    /** A Corners or Margin drag moved the shape; the release resizes the terminal once. */
+    private boolean mDragTouchedGeometry;
     private boolean mDirtyDeferred;
 
     private void beginDrag(boolean dragging) {
@@ -1828,6 +1953,11 @@ public final class SurfaceEditorController {
 
     private void endDrag() {
         mSliderDragActive = false;
+        if (mDragTouchedGeometry) {
+            mDragTouchedGeometry = false;
+            requestPreview(SurfaceEditorProperties.PREVIEW_GEOMETRY
+                | SurfaceEditorProperties.PREVIEW_GEOMETRY_COMMIT);
+        }
         if (mDragTouchedBlur) {
             mDragTouchedBlur = false;
             requestPreview(SurfaceEditorProperties.PREVIEW_BLUR);
@@ -1908,6 +2038,8 @@ public final class SurfaceEditorController {
             keyboard().onPreferencesReloaded();
         applyStructuralPreview();
         syncPanel();
+        // An Undo can move Style or Corners under a showing canvas.
+        syncLayoutCanvas();
         positionOutline();
         positionClockHandle();
     }

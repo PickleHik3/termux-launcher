@@ -36,9 +36,10 @@ import com.termux.R;
  * pushes in is never read back as the user's.</p>
  *
  * <p>Layout mode (SPEC §3.5) keeps the top row — the mode pill, Undo and Done, which are the whole
- * editor's — and swaps rows 1, 2 and the hint for the Layout row: the orientation toggle and the
- * restore tray. Those views are {@link com.termux.app.layouteditor.LayoutEditorController}'s to
- * drive; this class only shows and hides them.</p>
+ * editor's — and swaps rows 1, 2 and the hint for the Layout rows: the orientation toggle, the
+ * Style toggle and the restore tray, then the Corners and Margin sliders. The orientation toggle
+ * and the tray are {@link com.termux.app.layouteditor.LayoutEditorController}'s to drive; Style,
+ * Corners and Margin report here like every other control.</p>
  */
 final class AppearanceEditorPanel {
 
@@ -50,14 +51,21 @@ final class AppearanceEditorPanel {
         void onDone();
         /** The Look slider settled on a stop (a drag reports each stop it crosses). */
         void onLookStop(int stop);
+        /** Layout mode's Style toggle. */
         void onStyle(boolean floating);
-        /** Row 2's first slider (Darkness or Keys). */
+        /** Layout mode's Corners slider, in dp. */
+        void onCorners(int value, boolean dragging);
+        /** Layout mode's Margin slider, in dp. */
+        void onMargin(int value, boolean dragging);
+        /** Row 2's first slider (Darkness or Key corners). */
         void onFirstSlider(int value, boolean dragging);
-        /** Row 2's first segmented control (Legibility or Soft wallpaper), by segment index. */
+        /** Row 2's first segmented control (Soft wallpaper), by segment index. */
         void onFirstSegment(int index);
-        /** Row 2's second slider (Blur or Dim). */
+        /** The terminal's Legibility, by segment index: Softer, Default, Harder. */
+        void onLegibility(int index);
+        /** Row 2's last slider (Blur or Dim). */
         void onSecondSlider(int value, boolean dragging);
-        /** A row-2 slider was released; deferred work settles here. */
+        /** A slider was released; deferred work settles here. */
         void onSliderReleased();
     }
 
@@ -81,8 +89,10 @@ final class AppearanceEditorPanel {
     private final TextView mRow2Name;
     private final TextView mFirstLabel;
     private final Slider mFirstSlider;
-    private final MaterialButtonToggleGroup mLegibility;
     private final MaterialButtonToggleGroup mSoft;
+    private final View mLegibilityColumn;
+    private final TextView mLegibilityLabel;
+    private final MaterialButtonToggleGroup mLegibility;
     private final View mSecondColumn;
     private final TextView mSecondLabel;
     private final Slider mSecondSlider;
@@ -90,7 +100,12 @@ final class AppearanceEditorPanel {
     private final View mRow1;
     private final View mLayoutRow;
     private final LinearLayout mRow2Controls;
+    private final LinearLayout mRow2Line;
     private final View mFirstColumn;
+    private final TextView mCornersLabel;
+    private final Slider mCorners;
+    private final TextView mMarginLabel;
+    private final Slider mMargin;
     private final MaterialButtonToggleGroup mOrientation;
     private final View mTray;
     private final ChipGroup mTrayChips;
@@ -100,17 +115,19 @@ final class AppearanceEditorPanel {
     private boolean mLayoutMode;
     /** Whether row 2 was up when Layout mode took its place, so Appearance gets it back. */
     private boolean mRow2BeforeLayout;
-    /** Whether row 2 stacks its two controls (a panel under {@link #NARROW_DP}). */
+    /** Whether row 2 stacks its controls (a panel under {@link #NARROW_DP}). */
     private boolean mNarrow;
 
-    /** Row 2's height side by side, as appearance_editor_panel declares it. */
+    /** Row 2's height with every control on one line, as appearance_editor_panel declares it. */
     static final int ROW2_HEIGHT_DP = 88;
-    /** Row 2 with its second control on a line of its own. */
-    static final int ROW2_STACKED_HEIGHT_DP = 152;
+    /** What each further line of controls adds on a narrow panel. */
+    static final int ROW2_LINE_DP = 64;
+    /** Row 2 with two lines of controls: 152, as the stacked row has always been. */
+    static final int ROW2_STACKED_HEIGHT_DP = ROW2_HEIGHT_DP + ROW2_LINE_DP;
     /**
-     * Under this width row 2's two controls stack rather than share the row. Every phone in
-     * portrait is under it: three Legibility words beside a slider ellipsised at 533dp on the
-     * review device, so side by side is for tablets and landscape only.
+     * Under this width row 2's controls stack rather than share the row. Every phone in portrait
+     * is under it: three Legibility words beside a slider ellipsised at 533dp on the review
+     * device, so side by side is for tablets and landscape only.
      */
     static final int NARROW_DP = 600;
 
@@ -118,6 +135,8 @@ final class AppearanceEditorPanel {
     private boolean mRestating;
     private boolean mFirstDragging;
     private boolean mSecondDragging;
+    private boolean mCornersDragging;
+    private boolean mMarginDragging;
 
     private AppearanceEditorPanel(@NonNull Context context, @NonNull View root) {
         mContext = context;
@@ -132,8 +151,10 @@ final class AppearanceEditorPanel {
         mRow2Name = root.findViewById(R.id.appearance_editor_row2_name);
         mFirstLabel = root.findViewById(R.id.appearance_editor_c1_label);
         mFirstSlider = root.findViewById(R.id.appearance_editor_c1_slider);
-        mLegibility = root.findViewById(R.id.appearance_editor_c1_legibility);
         mSoft = root.findViewById(R.id.appearance_editor_c1_soft);
+        mLegibilityColumn = root.findViewById(R.id.appearance_editor_cl);
+        mLegibilityLabel = root.findViewById(R.id.appearance_editor_cl_label);
+        mLegibility = root.findViewById(R.id.appearance_editor_legibility);
         mSecondColumn = root.findViewById(R.id.appearance_editor_c2);
         mSecondLabel = root.findViewById(R.id.appearance_editor_c2_label);
         mSecondSlider = root.findViewById(R.id.appearance_editor_c2_slider);
@@ -141,7 +162,12 @@ final class AppearanceEditorPanel {
         mRow1 = root.findViewById(R.id.appearance_editor_row1);
         mLayoutRow = root.findViewById(R.id.appearance_editor_layout_row);
         mRow2Controls = root.findViewById(R.id.appearance_editor_row2_controls);
+        mRow2Line = root.findViewById(R.id.appearance_editor_row2_line);
         mFirstColumn = root.findViewById(R.id.appearance_editor_c1);
+        mCornersLabel = root.findViewById(R.id.appearance_editor_corners_label);
+        mCorners = root.findViewById(R.id.appearance_editor_corners);
+        mMarginLabel = root.findViewById(R.id.appearance_editor_margin_label);
+        mMargin = root.findViewById(R.id.appearance_editor_margin);
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
         mTray = root.findViewById(R.id.layout_editor_tray);
         mTrayChips = root.findViewById(R.id.layout_editor_tray_chips);
@@ -313,18 +339,50 @@ final class AppearanceEditorPanel {
                 if (mListener != null) mListener.onSliderReleased();
             }
         });
+        mCorners.addOnChangeListener((slider, value, fromUser) -> {
+            if (mRestating || !fromUser || mListener == null)
+                return;
+            mListener.onCorners(Math.round(value), mCornersDragging);
+        });
+        mCorners.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
+            @Override public void onStartTrackingTouch(@NonNull Slider slider) {
+                mCornersDragging = true;
+            }
+
+            @Override public void onStopTrackingTouch(@NonNull Slider slider) {
+                mCornersDragging = false;
+                if (mListener != null) mListener.onSliderReleased();
+            }
+        });
+        mMargin.addOnChangeListener((slider, value, fromUser) -> {
+            if (mRestating || !fromUser || mListener == null)
+                return;
+            mListener.onMargin(Math.round(value), mMarginDragging);
+        });
+        mMargin.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
+            @Override public void onStartTrackingTouch(@NonNull Slider slider) {
+                mMarginDragging = true;
+            }
+
+            @Override public void onStopTrackingTouch(@NonNull Slider slider) {
+                mMarginDragging = false;
+                if (mListener != null) mListener.onSliderReleased();
+            }
+        });
         syncCheckIcons(mOrientation);
         mOrientation.addOnButtonCheckedListener((group, checkedId, isChecked) ->
             syncCheckIcons(group));
-        MaterialButtonToggleGroup.OnButtonCheckedListener segments =
-            (group, checkedId, isChecked) -> {
-                syncCheckIcons(group);
-                if (mRestating || !isChecked || mListener == null)
-                    return;
-                mListener.onFirstSegment(group.indexOfChild(group.findViewById(checkedId)));
-            };
-        mLegibility.addOnButtonCheckedListener(segments);
-        mSoft.addOnButtonCheckedListener(segments);
+        mSoft.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            syncCheckIcons(group);
+            if (mRestating || !isChecked || mListener == null)
+                return;
+            mListener.onFirstSegment(group.indexOfChild(group.findViewById(checkedId)));
+        });
+        mLegibility.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (mRestating || !isChecked || mListener == null)
+                return;
+            mListener.onLegibility(group.indexOfChild(group.findViewById(checkedId)));
+        });
     }
 
     /**
@@ -333,10 +391,10 @@ final class AppearanceEditorPanel {
      */
     private void syncCheckIcons(@NonNull MaterialButtonToggleGroup group) {
         // Legibility's three words have no room for the icon on a narrow panel: its checked
-        // segment is told by the fill alone. The orientation toggle is glyphs already.
-        // The mode pill shares the top row with Undo and Done: its icon pushed Done off a
-        // narrow panel.
-        if (group == mLegibility || group == mOrientation || group == mMode)
+        // segment is told by the fill alone. The orientation and Style toggles are glyphs
+        // already. The mode pill shares the top row with Undo and Done: its icon pushed Done
+        // off a narrow panel.
+        if (group == mLegibility || group == mOrientation || group == mStyle || group == mMode)
             return;
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
@@ -390,37 +448,81 @@ final class AppearanceEditorPanel {
 
     /**
      * Row 2 side by side on a wide panel, stacked on a narrow one: three Legibility words and a
-     * Blur slider do not share half a 333dp row each.
+     * slider do not share half a 333dp row each.
      */
     void setNarrow(boolean narrow) {
         if (mNarrow == narrow)
             return;
         mNarrow = narrow;
-        mRow2Controls.setOrientation(narrow ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
-        mRow2Controls.setGravity(narrow ? Gravity.CENTER_HORIZONTAL : Gravity.CENTER_VERTICAL);
-        layoutColumn(mFirstColumn, narrow, 0);
-        layoutColumn(mSecondColumn, narrow, narrow ? 0 : Math.round(dp(16)));
+        layoutRow2();
+    }
+
+    /**
+     * Lays row 2's controls out for the width and for which of them the tapped element has. Wide:
+     * every shown control side by side on one line (the terminal's Darkness, Legibility, Blur).
+     * Narrow: Legibility takes a line of its own under the terminal's two sliders, which still
+     * share theirs; any other pair stacks, one control per line, as it always has.
+     */
+    private void layoutRow2() {
+        boolean legibilityLine = mNarrow && mLegibilityColumn.getVisibility() != View.GONE;
+        ViewGroup home = legibilityLine ? mRow2Controls : mRow2Line;
+        if (mLegibilityColumn.getParent() != home) {
+            if (mLegibilityColumn.getParent() instanceof ViewGroup)
+                ((ViewGroup) mLegibilityColumn.getParent()).removeView(mLegibilityColumn);
+            // Between the first control and the last on the line; after the line on its own.
+            if (home == mRow2Line)
+                mRow2Line.addView(mLegibilityColumn, mRow2Line.indexOfChild(mFirstColumn) + 1);
+            else
+                mRow2Controls.addView(mLegibilityColumn);
+        }
+        boolean stacked = mNarrow && !legibilityLine;
+        mRow2Line.setOrientation(stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        mRow2Line.setGravity(stacked ? Gravity.CENTER_HORIZONTAL : Gravity.CENTER_VERTICAL);
+        boolean first = true;
+        for (int i = 0; i < mRow2Line.getChildCount(); i++) {
+            View column = mRow2Line.getChildAt(i);
+            if (column.getVisibility() == View.GONE)
+                continue;
+            layoutColumn(column, stacked, stacked || first ? 0 : Math.round(dp(16)));
+            first = false;
+        }
+        if (legibilityLine)
+            layoutColumn(mLegibilityColumn, true, 0);
         ViewGroup.LayoutParams row2 = mRow2.getLayoutParams();
-        if (row2 != null) {
-            row2.height = Math.round(dp(row2HeightDp()));
+        int height = Math.round(dp(row2HeightDp()));
+        if (row2 != null && row2.height != height) {
+            row2.height = height;
             mRow2.setLayoutParams(row2);
         }
     }
 
-    private static void layoutColumn(@NonNull View column, boolean narrow, int startMarginPx) {
+    private static void layoutColumn(@NonNull View column, boolean ownLine, int startMarginPx) {
         ViewGroup.LayoutParams params = column.getLayoutParams();
         if (!(params instanceof LinearLayout.LayoutParams))
             return;
         LinearLayout.LayoutParams linear = (LinearLayout.LayoutParams) params;
-        linear.width = narrow ? ViewGroup.LayoutParams.MATCH_PARENT : 0;
-        linear.weight = narrow ? 0f : 1f;
+        linear.width = ownLine ? ViewGroup.LayoutParams.MATCH_PARENT : 0;
+        linear.weight = ownLine ? 0f : 1f;
         linear.setMarginStart(startMarginPx);
         column.setLayoutParams(linear);
     }
 
-    /** Row 2's one height for the width the panel has. */
+    /**
+     * Row 2's one height for the width the panel has and the controls it shows: one line on a
+     * wide panel; on a narrow one a line per stacked control, plus Legibility's own.
+     */
     int row2HeightDp() {
-        return mNarrow ? ROW2_STACKED_HEIGHT_DP : ROW2_HEIGHT_DP;
+        if (!mNarrow)
+            return ROW2_HEIGHT_DP;
+        boolean legibilityLine = mLegibilityColumn.getVisibility() != View.GONE;
+        int onLine = 0;
+        for (int i = 0; i < mRow2Line.getChildCount(); i++) {
+            View column = mRow2Line.getChildAt(i);
+            if (column != mLegibilityColumn && column.getVisibility() != View.GONE)
+                onLine++;
+        }
+        int lines = legibilityLine ? Math.min(1, onLine) + 1 : onLine;
+        return ROW2_HEIGHT_DP + ROW2_LINE_DP * Math.max(0, lines - 1);
     }
 
     // ------------------------------------------------------------- Layout mode's views, lent
@@ -501,42 +603,85 @@ final class AppearanceEditorPanel {
         mHint.setVisibility(View.GONE);
     }
 
-    /** The first control as a slider: Darkness or Keys. */
+    /** The first control as a slider: Darkness or Key corners. */
     void setFirstSlider(@NonNull CharSequence label, int value, int max) {
         mFirstLabel.setText(label);
         mFirstSlider.setVisibility(View.VISIBLE);
-        mLegibility.setVisibility(View.GONE);
         mSoft.setVisibility(View.GONE);
         restateSlider(mFirstSlider, value, max);
+        showColumn(mFirstColumn, true);
     }
 
     void setFirstLabel(@NonNull CharSequence label) {
         mFirstLabel.setText(label);
     }
 
-    /** The first control as Legibility's three segments. */
-    void setLegibility(@NonNull CharSequence label, int index) {
-        mFirstLabel.setText(label);
-        mFirstSlider.setVisibility(View.GONE);
-        mSoft.setVisibility(View.GONE);
-        mLegibility.setVisibility(View.VISIBLE);
-        checkSegment(mLegibility, index);
-    }
-
     /** The first control as Soft wallpaper's Off / On. */
     void setSoft(@NonNull CharSequence label, boolean on) {
         mFirstLabel.setText(label);
         mFirstSlider.setVisibility(View.GONE);
-        mLegibility.setVisibility(View.GONE);
         mSoft.setVisibility(View.VISIBLE);
         checkSegment(mSoft, on ? 1 : 0);
+        showColumn(mFirstColumn, true);
     }
 
-    /** The second control: Blur or Dim. */
+    /** No first control: the status bar and the dock have Blur alone. */
+    void hideFirst() {
+        showColumn(mFirstColumn, false);
+    }
+
+    /**
+     * The terminal's Legibility, its three segments at {@code index}. Not {@code enabled} where
+     * the terminal palette is not the Material one it changes; the label then says so.
+     */
+    void setLegibility(@NonNull CharSequence label, int index, boolean enabled) {
+        mLegibilityLabel.setText(label);
+        checkSegment(mLegibility, index);
+        mLegibility.setEnabled(enabled);
+        for (int i = 0; i < mLegibility.getChildCount(); i++)
+            mLegibility.getChildAt(i).setEnabled(enabled);
+        showColumn(mLegibilityColumn, true);
+    }
+
+    void hideLegibility() {
+        showColumn(mLegibilityColumn, false);
+    }
+
+    /** The last control: Blur or Dim. */
     void setSecondSlider(@NonNull CharSequence label, int value, int max) {
-        mSecondColumn.setVisibility(View.VISIBLE);
         mSecondLabel.setText(label);
         restateSlider(mSecondSlider, value, max);
+        showColumn(mSecondColumn, true);
+    }
+
+    private void showColumn(@NonNull View column, boolean shown) {
+        int visibility = shown ? View.VISIBLE : View.GONE;
+        if (column.getVisibility() == visibility)
+            return;
+        column.setVisibility(visibility);
+        layoutRow2();
+    }
+
+    // ------------------------------------------------------------ Layout mode's own controls
+
+    /** Layout mode's Corners, at {@code value} dp of {@code max}. */
+    void setCorners(@NonNull CharSequence label, int value, int max) {
+        mCornersLabel.setText(label);
+        restateSlider(mCorners, value, max);
+    }
+
+    void setCornersLabel(@NonNull CharSequence label) {
+        mCornersLabel.setText(label);
+    }
+
+    /** Layout mode's Margin, at {@code value} dp of {@code max}. */
+    void setMargin(@NonNull CharSequence label, int value, int max) {
+        mMarginLabel.setText(label);
+        restateSlider(mMargin, value, max);
+    }
+
+    void setMarginLabel(@NonNull CharSequence label) {
+        mMarginLabel.setText(label);
     }
 
     void setSecondLabel(@NonNull CharSequence label) {
