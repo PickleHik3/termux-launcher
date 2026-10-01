@@ -12,7 +12,6 @@ import java.io.InputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Locale;
-import java.util.zip.GZIPInputStream;
 
 /**
  * MNN 3.6.1 opens {@code tokenizer.mtok} for Stable Diffusion, but the published
@@ -23,7 +22,11 @@ import java.util.zip.GZIPInputStream;
  * would silently draw the wrong pictures.
  */
 final class TaiDiffusionTokenizer {
-    static final String ASSET = "tai-diffusion/clip-vit-l14.tokenizer.mtok.gz";
+    /**
+     * Stored raw: the Android build drops a ".gz" suffix from assets and packs them decompressed,
+     * so a gzipped asset would not be found under its own name. The APK deflates it anyway.
+     */
+    static final String ASSET = "tai-diffusion/clip-vit-l14.tokenizer.mtok";
     static final String VOCAB_SHA256 = "e089ad92ba36837a0d31433e555c8f45fe601ab5c221d4f607ded32d9f7a4349";
     static final String MERGES_SHA256 = "9fd691f7c8039210e0fced15865466c65820d09b63988b0174bfe25de299051a";
     static final String MTOK_SHA256 = "4c64995cf841c4182f5b05911888c8884cc20e29bb9716d83e1d8e7cdf19862e";
@@ -42,7 +45,7 @@ final class TaiDiffusionTokenizer {
         UNAVAILABLE
     }
 
-    /** Where the bundled gzip comes from: the app's assets, or a fixture in tests. */
+    /** Where the bundled tokenizer comes from: the app's assets, or a fixture in tests. */
     interface Source {
         InputStream open() throws IOException;
     }
@@ -113,7 +116,7 @@ final class TaiDiffusionTokenizer {
 
     @NonNull
     private static byte[] readAll(@NonNull Source source) throws IOException {
-        try (InputStream in = new GZIPInputStream(source.open())) {
+        try (InputStream in = source.open()) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             byte[] buffer = new byte[64 * 1024];
             int read;

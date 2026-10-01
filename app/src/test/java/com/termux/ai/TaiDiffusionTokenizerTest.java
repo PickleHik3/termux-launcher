@@ -12,8 +12,6 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.security.MessageDigest;
-import java.util.zip.GZIPInputStream;
-import java.util.zip.GZIPOutputStream;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -34,14 +32,8 @@ public class TaiDiffusionTokenizerTest {
         return out.toString();
     }
 
-    private static TaiDiffusionTokenizer.Source gzipped(byte[] payload) {
-        return () -> {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            try (GZIPOutputStream gzip = new GZIPOutputStream(bytes)) {
-                gzip.write(payload);
-            }
-            return new java.io.ByteArrayInputStream(bytes.toByteArray());
-        };
+    private static TaiDiffusionTokenizer.Source bundled(byte[] payload) {
+        return () -> new java.io.ByteArrayInputStream(payload);
     }
 
     private File folder(byte[] vocab, byte[] merges) throws IOException {
@@ -54,7 +46,7 @@ public class TaiDiffusionTokenizerTest {
     @Test
     public void matchingRawFilesGetTheBundledTokenizerInstalled() throws Exception {
         File dir = folder(VOCAB, MERGES);
-        TaiDiffusionTokenizer.Result result = TaiDiffusionTokenizer.ensure(dir, gzipped(MTOK), sha(VOCAB), sha(MERGES), sha(MTOK));
+        TaiDiffusionTokenizer.Result result = TaiDiffusionTokenizer.ensure(dir, bundled(MTOK), sha(VOCAB), sha(MERGES), sha(MTOK));
         assertEquals(TaiDiffusionTokenizer.Outcome.INSTALLED, result.outcome);
         assertTrue(result.proceed());
         assertArrayEquals(MTOK, Files.readAllBytes(new File(dir, "tokenizer.mtok").toPath()));
@@ -64,7 +56,7 @@ public class TaiDiffusionTokenizerTest {
     @Test
     public void otherVocabularyIsRefusedWithAProductMessageAndNothingIsWritten() throws Exception {
         File dir = folder("{\"other\":2}".getBytes(StandardCharsets.UTF_8), MERGES);
-        TaiDiffusionTokenizer.Result result = TaiDiffusionTokenizer.ensure(dir, gzipped(MTOK), sha(VOCAB), sha(MERGES), sha(MTOK));
+        TaiDiffusionTokenizer.Result result = TaiDiffusionTokenizer.ensure(dir, bundled(MTOK), sha(VOCAB), sha(MERGES), sha(MTOK));
         assertEquals(TaiDiffusionTokenizer.Outcome.INCOMPATIBLE, result.outcome);
         assertFalse(result.proceed());
         assertTrue(result.message, result.message.contains("converted"));
@@ -76,7 +68,7 @@ public class TaiDiffusionTokenizerTest {
     public void otherMergesAreRefusedToo() throws Exception {
         File dir = folder(VOCAB, "x y\n".getBytes(StandardCharsets.UTF_8));
         assertEquals(TaiDiffusionTokenizer.Outcome.INCOMPATIBLE,
-            TaiDiffusionTokenizer.ensure(dir, gzipped(MTOK), sha(VOCAB), sha(MERGES), sha(MTOK)).outcome);
+            TaiDiffusionTokenizer.ensure(dir, bundled(MTOK), sha(VOCAB), sha(MERGES), sha(MTOK)).outcome);
     }
 
     @Test
@@ -84,7 +76,7 @@ public class TaiDiffusionTokenizerTest {
         File dir = folder("{\"other\":2}".getBytes(StandardCharsets.UTF_8), MERGES);
         byte[] own = {9, 9, 9};
         Files.write(new File(dir, "tokenizer.mtok").toPath(), own);
-        TaiDiffusionTokenizer.Result result = TaiDiffusionTokenizer.ensure(dir, gzipped(MTOK), sha(VOCAB), sha(MERGES), sha(MTOK));
+        TaiDiffusionTokenizer.Result result = TaiDiffusionTokenizer.ensure(dir, bundled(MTOK), sha(VOCAB), sha(MERGES), sha(MTOK));
         assertEquals(TaiDiffusionTokenizer.Outcome.PRESENT, result.outcome);
         assertTrue(result.proceed());
         assertArrayEquals(own, Files.readAllBytes(new File(dir, "tokenizer.mtok").toPath()));
@@ -93,7 +85,7 @@ public class TaiDiffusionTokenizerTest {
     @Test
     public void withoutRawFilesThereIsNothingToDecideFrom() throws Exception {
         File dir = folder(VOCAB, null);
-        TaiDiffusionTokenizer.Result result = TaiDiffusionTokenizer.ensure(dir, gzipped(MTOK), sha(VOCAB), sha(MERGES), sha(MTOK));
+        TaiDiffusionTokenizer.Result result = TaiDiffusionTokenizer.ensure(dir, bundled(MTOK), sha(VOCAB), sha(MERGES), sha(MTOK));
         assertEquals(TaiDiffusionTokenizer.Outcome.NO_SOURCE, result.outcome);
         assertTrue(result.proceed());
         assertFalse(new File(dir, "tokenizer.mtok").exists());
@@ -102,22 +94,29 @@ public class TaiDiffusionTokenizerTest {
     @Test
     public void aBundledTokenizerThatFailsItsCheckIsNotInstalled() throws Exception {
         File dir = folder(VOCAB, MERGES);
-        TaiDiffusionTokenizer.Result result = TaiDiffusionTokenizer.ensure(dir, gzipped(new byte[]{7, 7}), sha(VOCAB), sha(MERGES), sha(MTOK));
+        TaiDiffusionTokenizer.Result result = TaiDiffusionTokenizer.ensure(dir, bundled(new byte[]{7, 7}), sha(VOCAB), sha(MERGES), sha(MTOK));
         assertEquals(TaiDiffusionTokenizer.Outcome.UNAVAILABLE, result.outcome);
         assertFalse(result.proceed());
         assertFalse(new File(dir, "tokenizer.mtok").exists());
     }
 
     @Test
-    public void theBundledAssetDecompressesToTheRecordedHash() throws Exception {
+    public void theBundledAssetHasTheRecordedHash() throws Exception {
         File asset = new File("src/main/assets/" + TaiDiffusionTokenizer.ASSET);
         assertTrue(asset.getAbsolutePath(), asset.isFile());
         ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try (InputStream in = new GZIPInputStream(new FileInputStream(asset))) {
+        try (InputStream in = new FileInputStream(asset)) {
             byte[] buffer = new byte[8192];
             int read;
             while ((read = in.read(buffer)) != -1) out.write(buffer, 0, read);
         }
         assertEquals(TaiDiffusionTokenizer.MTOK_SHA256, sha(out.toByteArray()));
+    }
+
+    @Test
+    public void theAssetNameSurvivesPackaging() {
+        // The Android build drops a ".gz" suffix and stores the asset decompressed, so a ".gz"
+        // name is never found on the phone even though this module's tests can read the file.
+        assertFalse(TaiDiffusionTokenizer.ASSET, TaiDiffusionTokenizer.ASSET.endsWith(".gz"));
     }
 }

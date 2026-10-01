@@ -512,7 +512,7 @@ may write `tokenizer.mtok` into it, see below).
 
 **Tokenizer.** The published `taobao-mnn` Stable Diffusion packages ship `vocab.json` and `merges.txt` rather
 than `tokenizer.mtok`, which MNN 3.6.1 needs, and nothing can convert it on the phone. The app bundles one
-verified `tokenizer.mtok` (asset `tai-diffusion/clip-vit-l14.tokenizer.mtok.gz`) for the standard CLIP ViT-L/14
+verified `tokenizer.mtok` (asset `tai-diffusion/clip-vit-l14.tokenizer.mtok`) for the standard CLIP ViT-L/14
 tokenizer. When an imported Stable Diffusion package has no `tokenizer.mtok` and its `vocab.json` and
 `merges.txt` have exactly the standard SHA-256 values, the importer installs the bundled one; otherwise the
 import is refused with a message that the package needs converting with MNN's tools. A package that already has
