@@ -25,7 +25,7 @@ import java.util.List;
  * per gap in that edge's stack, and the tray for every bar, the status bar included since the
  * wall's paging left its swipe for the border drag. The dock's rows are also offered the gaps under
  * the keyboard ({@link EdgeStackPolicy#underKeyboardTargets}). This class adds nothing to that but
- * the tray — which is the view's word for hidden — and the rectangles a finger is hit-tested
+ * the tray — which is the view's word for hidden, and which the trash icon under the phone now stands for — — and the rectangles a finger is hit-tested
  * against. How a bar is lifted — pressed anywhere and moved past the touch slop — is the view's.
  */
 public final class MiniatureDragPolicy {
@@ -229,6 +229,103 @@ public final class MiniatureDragPolicy {
             }
         }
         return best;
+    }
+
+    // ------------------------------------------------------------------- the trash and its popup
+
+    /** What the trash icon says: nothing is hidden (outline, muted), or something is (filled, counted). */
+    public enum TrashState { EMPTY, FILLED }
+
+    /** The icon's state for this many hidden elements. */
+    @NonNull
+    public static TrashState trashState(int hiddenCount) {
+        return hiddenCount > 0 ? TrashState.FILLED : TrashState.EMPTY;
+    }
+
+    /** The badge's text: the count, capped so it fits a small disc. */
+    @NonNull
+    public static String badgeText(int hiddenCount) {
+        return hiddenCount > 9 ? "9+" : String.valueOf(Math.max(0, hiddenCount));
+    }
+
+    /**
+     * The popup the trash opens: a panel standing on the icon with one chip per hidden element,
+     * stacked, all as wide as the widest. Pure geometry, so where a finger lands on it is
+     * testable without a view; the canvas only draws it and asks {@link #chipAt}.
+     */
+    public static final class HiddenPopup {
+        public final float left;
+        public final float top;
+        public final float right;
+        public final float bottom;
+        /** Left, top, right, bottom of each chip, four floats apiece, in the order given. */
+        @NonNull private final float[] mChips;
+
+        private HiddenPopup(float left, float top, float right, float bottom,
+                            @NonNull float[] chips) {
+            this.left = left;
+            this.top = top;
+            this.right = right;
+            this.bottom = bottom;
+            mChips = chips;
+        }
+
+        public int chipCount() {
+            return mChips.length / 4;
+        }
+
+        /** One chip's rectangle as {left, top, right, bottom}. */
+        @NonNull
+        public float[] chip(int index) {
+            return new float[] {mChips[index * 4], mChips[index * 4 + 1], mChips[index * 4 + 2],
+                mChips[index * 4 + 3]};
+        }
+
+        public boolean contains(float x, float y) {
+            return x >= left && x <= right && y >= top && y <= bottom;
+        }
+
+        /** The chip under a point, or -1 for the panel's padding or anywhere outside it. */
+        public int chipAt(float x, float y) {
+            for (int i = 0; i < chipCount(); i++) {
+                if (x >= mChips[i * 4] && x <= mChips[i * 4 + 2] && y >= mChips[i * 4 + 1]
+                    && y <= mChips[i * 4 + 3]) return i;
+            }
+            return -1;
+        }
+
+        /**
+         * Lays the panel out with its bottom at {@code anchorTop} and its trailing edge on
+         * {@code anchorRight} (the icon's), kept inside {@code [minLeft, maxRight]}. Chips take
+         * their widths from {@code chipWidths} but the panel shrinks to the bounds if need be.
+         */
+        @NonNull
+        public static HiddenPopup layout(@NonNull float[] chipWidths, float chipHeight, float gap,
+                                         float pad, float anchorRight, float anchorTop,
+                                         float minLeft, float maxRight) {
+            int n = chipWidths.length;
+            float inner = 0f;
+            for (float w : chipWidths) inner = Math.max(inner, w);
+            float width = Math.min(inner + 2 * pad, Math.max(0f, maxRight - minLeft));
+            float right = Math.min(anchorRight, maxRight);
+            float left = right - width;
+            if (left < minLeft) {
+                left = minLeft;
+                right = left + width;
+            }
+            float height = n == 0 ? 0f : n * chipHeight + (n - 1) * gap + 2 * pad;
+            float bottom = anchorTop;
+            float top = bottom - height;
+            float[] chips = new float[n * 4];
+            for (int i = 0; i < n; i++) {
+                float chipTop = top + pad + i * (chipHeight + gap);
+                chips[i * 4] = left + pad;
+                chips[i * 4 + 1] = chipTop;
+                chips[i * 4 + 2] = right - pad;
+                chips[i * 4 + 3] = chipTop + chipHeight;
+            }
+            return new HiddenPopup(left, top, right, bottom, chips);
+        }
     }
 
     // ---------------------------------------------------------------- how wide the canvas stays

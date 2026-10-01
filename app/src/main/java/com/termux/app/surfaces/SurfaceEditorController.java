@@ -431,8 +431,8 @@ public final class SurfaceEditorController {
                 return;
             // One set of views per process, like the panel: the controller binds them once.
             mLayoutViews = new LayoutEditorController.Views(frame, canvas, forms,
-                panel.orientationToggle(), panel.tray(), panel.trayChips(), panel.trayEmpty(),
-                panel.trayDrop());
+                panel.orientationToggle(), panel.tray(), panel.trayTrash(),
+                panel.trayBadge());
         }
         layout.attach(mLayoutViews);
         positionLayoutFrame();
