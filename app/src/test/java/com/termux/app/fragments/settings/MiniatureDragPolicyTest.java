@@ -277,4 +277,46 @@ public class MiniatureDragPolicyTest {
         assertEquals(88f, gap.line, 0.0001f);
         assertFalse(gap.isTray());
     }
+
+    // ---- The trash and its popup ---------------------------------------------------------------
+
+    @Test
+    public void theTrashIsOutlinedWhileNothingIsHiddenAndFilledOnceSomethingIs() {
+        assertSame(MiniatureDragPolicy.TrashState.EMPTY, MiniatureDragPolicy.trashState(0));
+        assertSame(MiniatureDragPolicy.TrashState.FILLED, MiniatureDragPolicy.trashState(1));
+        assertSame(MiniatureDragPolicy.TrashState.FILLED, MiniatureDragPolicy.trashState(5));
+        assertEquals("3", MiniatureDragPolicy.badgeText(3));
+        assertEquals("a count that outgrows the disc is capped", "9+",
+            MiniatureDragPolicy.badgeText(12));
+    }
+
+    @Test
+    public void thePopupStandsOnTheIconAndItsChipsAreHitTestedOneByOne() {
+        // Two chips, the widest 100 wide; the icon's right edge is at 300, its top at 200.
+        MiniatureDragPolicy.HiddenPopup popup = MiniatureDragPolicy.HiddenPopup.layout(
+            new float[] {80f, 100f}, 40f, 6f, 8f, 300f, 192f, 8f, 392f);
+        assertEquals(2, popup.chipCount());
+        assertEquals("it ends on the icon's trailing edge", 300f, popup.right, 0.001f);
+        assertEquals("and stands above it", 192f, popup.bottom, 0.001f);
+        assertEquals("two chips, a gap and the padding", 40f * 2 + 6f + 16f,
+            popup.bottom - popup.top, 0.001f);
+        float[] first = popup.chip(0);
+        float[] second = popup.chip(1);
+        assertEquals("every chip is as wide as the widest", first[2] - first[0],
+            second[2] - second[0], 0.001f);
+        assertEquals(0, popup.chipAt((first[0] + first[2]) / 2f, (first[1] + first[3]) / 2f));
+        assertEquals(1, popup.chipAt((second[0] + second[2]) / 2f, (second[1] + second[3]) / 2f));
+        assertEquals("the padding is the panel's, not a chip's", -1,
+            popup.chipAt(popup.left + 1f, popup.top + 1f));
+        assertTrue(popup.contains(popup.left + 1f, popup.top + 1f));
+        assertFalse("a tap beside it is outside", popup.contains(popup.left - 5f, popup.top + 5f));
+    }
+
+    @Test
+    public void aPopupWiderThanItsRoomShrinksToIt() {
+        MiniatureDragPolicy.HiddenPopup popup = MiniatureDragPolicy.HiddenPopup.layout(
+            new float[] {500f}, 40f, 6f, 8f, 300f, 100f, 20f, 280f);
+        assertTrue(popup.left >= 20f);
+        assertTrue(popup.right <= 280f);
+    }
 }

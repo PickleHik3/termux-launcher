@@ -8,6 +8,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -112,9 +113,8 @@ final class AppearanceEditorPanel {
     private final Slider mMargin;
     private final MaterialButtonToggleGroup mOrientation;
     private final View mTray;
-    private final ChipGroup mTrayChips;
-    private final TextView mTrayEmpty;
-    private final TextView mTrayDrop;
+    private final ImageView mTrayTrash;
+    private final TextView mTrayBadge;
     /** Whether Layout mode's row is showing in place of rows 1, 2 and the hint. */
     private boolean mLayoutMode;
     /** Whether row 2 was up when Layout mode took its place, so Appearance gets it back. */
@@ -175,9 +175,8 @@ final class AppearanceEditorPanel {
         mMargin = root.findViewById(R.id.appearance_editor_margin);
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
         mTray = root.findViewById(R.id.layout_editor_tray);
-        mTrayChips = root.findViewById(R.id.layout_editor_tray_chips);
-        mTrayEmpty = root.findViewById(R.id.layout_editor_tray_empty);
-        mTrayDrop = root.findViewById(R.id.layout_editor_tray_drop);
+        mTrayTrash = root.findViewById(R.id.layout_editor_tray_trash);
+        mTrayBadge = root.findViewById(R.id.layout_editor_tray_badge);
         paintSheet();
         buildLookLabels();
         bind();
@@ -545,16 +544,12 @@ final class AppearanceEditorPanel {
         return mTray;
     }
 
-    @NonNull ChipGroup trayChips() {
-        return mTrayChips;
+    @NonNull ImageView trayTrash() {
+        return mTrayTrash;
     }
 
-    @NonNull TextView trayEmpty() {
-        return mTrayEmpty;
-    }
-
-    @NonNull TextView trayDrop() {
-        return mTrayDrop;
+    @NonNull TextView trayBadge() {
+        return mTrayBadge;
     }
 
     void setDirty(boolean dirty) {

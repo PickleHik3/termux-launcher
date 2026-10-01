@@ -72,7 +72,6 @@
     <string name="settings_layout_miniature_display_overlay">Display, keyboard floats</string>
     <string name="settings_layout_miniature_hidden_format">%1$s, hidden</string>
     <string name="az_pull_tab_description">A–Z index. Slide along it to find and open apps.</string>
-    <string name="settings_layout_drop_to_hide">Drop here to hide</string>
     <string name="settings_destination_appearance">Look</string>
     <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons and keyboard look</string>
     <string name="settings_destination_terminal">Terminal</string>
@@ -1891,10 +1890,10 @@
                 <string name="corner_tab_layout_description">Layout editor</string>
                 <string name="settings_destination_layout_editor">Layout</string>
                 <string name="settings_destination_layout_editor_summary">Move, hide and size the bars, the dock and the keyboard</string>
-                <!-- The restore tray with nothing in it: one short line, not a box. -->
-                <string name="layout_editor_tray_empty">Drag a bar here to hide it</string>
-                <!-- A tray chip read aloud: what a tap on it does. -->
-                <string name="layout_editor_tray_chip_description">Show %1$s</string>
+                <!-- The trash under the phone, read aloud: nothing in it, or how many are hidden
+                     (a tap opens the list, a bar dropped on it is hidden). -->
+                <string name="layout_editor_trash_empty">Nothing hidden. Drop a bar here to hide it</string>
+                <string name="layout_editor_trash_filled">Hidden elements, %1$d. Tap to list them</string>
                 <string name="layout_editor_keyboard">Keyboard</string>
                 <string name="layout_editor_keyboard_forms">Keyboard type</string>
                 <!-- What a resize handle shows while it is dragged, in the store's real units. The

@@ -702,7 +702,7 @@ public class LayoutCanvasViewTest {
         assertEquals(LayoutCanvasView.TrayState.CHIPS, view.trayState());
     }
 
-    /** At rest a touch on the tray is not the canvas's: the editor's chips stand there. */
+    /** At rest a touch on the tray (off its trash) is not the canvas's: the editor's views stand there. */
     @Test
     public void aTouchOnTheTrayAtRestGoesOnToTheChipsUnderIt() {
         LayoutCanvasView view = inParent(parent(), 1000, 400);
@@ -1728,4 +1728,132 @@ public class LayoutCanvasViewTest {
     private static final float TERMUX_APP_DEFAULT_DOCK =
         com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
             .DEFAULT_APP_LAUNCHER_BAR_HEIGHT;
+
+    // ---- The trash and the hidden-elements popup -----------------------------------------------
+
+    @Test
+    public void theTrashIsEmptyUntilSomethingIsHiddenThenFilled() {
+        LayoutCanvasView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        assertEquals(MiniatureDragPolicy.TrashState.EMPTY, view.trashState());
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.HIDDEN),
+            PlaceOrientation.PORTRAIT);
+        assertEquals(MiniatureDragPolicy.TrashState.FILLED, view.trashState());
+        assertFalse(view.trashRect().isEmpty());
+        assertTrue("it sits on the tray's end", view.trashRect().right
+            <= view.trayRect().right + 0.01f);
+        assertTrue(view.trashDescription().contains("2"));
+    }
+
+    @Test
+    public void tappingTheTrashWithNothingHiddenOpensNothing() {
+        LayoutCanvasView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        RectF trash = view.trashRect();
+        touch(view, MotionEvent.ACTION_DOWN, trash.centerX(), trash.centerY());
+        touch(view, MotionEvent.ACTION_UP, trash.centerX(), trash.centerY());
+        assertFalse(view.isHiddenPopupOpen());
+        assertNull(view.hiddenPopup());
+    }
+
+    @Test
+    public void tappingTheTrashListsWhatIsHiddenAndATapOutsideClosesIt() {
+        LayoutCanvasView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        RectF trash = view.trashRect();
+        touch(view, MotionEvent.ACTION_DOWN, trash.centerX(), trash.centerY());
+        touch(view, MotionEvent.ACTION_UP, trash.centerX(), trash.centerY());
+        assertTrue(view.isHiddenPopupOpen());
+        MiniatureDragPolicy.HiddenPopup popup = view.hiddenPopup();
+        assertNotNull(popup);
+        assertEquals("one chip for the hidden pinned apps", 1, popup.chipCount());
+        assertTrue("it stands above the icon", popup.bottom <= trash.top);
+
+        touch(view, MotionEvent.ACTION_DOWN, popup.left - 20f, popup.top);
+        assertFalse("a touch outside closes it", view.isHiddenPopupOpen());
+    }
+
+    @Test
+    public void aTapOnAPopupChipRestoresThatElement() {
+        LayoutCanvasView view = sized();
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        final LayoutCanvasView.Block[] tapped = new LayoutCanvasView.Block[1];
+        view.setOnCanvasEditListener(new LayoutCanvasView.OnCanvasEditListener() {
+            @Override public void onHiddenChipTapped(@NonNull LayoutCanvasView.Block block) {
+                tapped[0] = block;
+            }
+        });
+        view.toggleHiddenPopup();
+        float[] chip = view.hiddenPopup().chip(0);
+        float x = (chip[0] + chip[2]) / 2f;
+        float y = (chip[1] + chip[3]) / 2f;
+        touch(view, MotionEvent.ACTION_DOWN, x, y);
+        touch(view, MotionEvent.ACTION_UP, x, y);
+        assertEquals(LayoutCanvasView.Block.APPS_ROW, tapped[0]);
+    }
+
+    @Test
+    public void aChipPulledOutOfThePopupIsLiftedAndDroppedOnAnEdgeRestoresIt() {
+        PlaceLayoutStore places = store();
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
+        view.toggleHiddenPopup();
+        assertTrue(view.isHiddenPopupOpen());
+        float[] chip = view.hiddenPopup().chip(0);
+        float x = (chip[0] + chip[2]) / 2f;
+        float y = (chip[1] + chip[3]) / 2f;
+        touch(view, MotionEvent.ACTION_DOWN, x, y);
+        touch(view, MotionEvent.ACTION_MOVE, x, y - 3f * slop(view));
+        assertFalse("lifting closes the popup", view.isHiddenPopupOpen());
+        assertEquals(LayoutCanvasView.Block.APPS_ROW, view.draggedBar());
+        for (MiniatureDragPolicy.Slot slot : view.slots())
+            assertFalse("a hidden element is not dropped in the trash again", slot.isTray());
+
+        MiniatureDragPolicy.Slot bottom = view.slotFor(Edge.BOTTOM);
+        assertNotNull(bottom);
+        float dx = (bottom.left + bottom.right) / 2f;
+        float dy = (bottom.top + bottom.bottom) / 2f;
+        touch(view, MotionEvent.ACTION_MOVE, dx, dy);
+        touch(view, MotionEvent.ACTION_UP, dx, dy);
+        assertEquals("bottom", prefs().getString("layout.landscape.apps_row", null));
+    }
+
+    @Test
+    public void theKeyboardChipDroppedOnThePhoneSwitchesItBackOn() {
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setFillsView(true);
+        view.setExternalTrayRect(new RectF(900f, 420f, 948f, 468f));
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM)
+            .withKeyboardShown(false), PlaceOrientation.LANDSCAPE);
+        final boolean[] restored = new boolean[1];
+        view.setOnCanvasEditListener(new LayoutCanvasView.OnCanvasEditListener() {
+            @Override public void onKeyboardRestored() {
+                restored[0] = true;
+            }
+        });
+        view.toggleHiddenPopup();
+        assertTrue(view.isHiddenPopupOpen());
+        float[] chip = view.hiddenPopup().chip(0);
+        float x = (chip[0] + chip[2]) / 2f;
+        float y = (chip[1] + chip[3]) / 2f;
+        touch(view, MotionEvent.ACTION_DOWN, x, y);
+        touch(view, MotionEvent.ACTION_MOVE, x, y - 3f * slop(view));
+        assertEquals(LayoutCanvasView.Block.KEYBOARD, view.draggedBar());
+        RectF frame = view.frameRect();
+        touch(view, MotionEvent.ACTION_MOVE, frame.centerX(), frame.centerY());
+        touch(view, MotionEvent.ACTION_UP, frame.centerX(), frame.centerY());
+        assertTrue(restored[0]);
+    }
 }

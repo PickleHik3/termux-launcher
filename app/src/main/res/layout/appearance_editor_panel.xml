@@ -189,38 +189,35 @@
                 android:layout_weight="1"
                 android:minHeight="48dp">
 
-                <!-- Wraps rather than scrolls: nothing in the bottom area scrolls (§3.1). -->
-                <com.google.android.material.chip.ChipGroup
-                    android:id="@+id/layout_editor_tray_chips"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center_vertical"
-                    app:chipSpacingHorizontal="6dp"
-                    app:chipSpacingVertical="0dp"
-                    app:singleLine="false" />
+                <!-- The trash: the drop target for hiding, and a tap lists what is hidden (the
+                     list itself is drawn by the canvas, above it). Outline while empty; filled and
+                     counted otherwise (LayoutEditorController). -->
+                <ImageView
+                    android:id="@+id/layout_editor_tray_trash"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:layout_gravity="end|center_vertical"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="@string/layout_editor_trash_empty"
+                    android:padding="12dp"
+                    android:scaleType="fitCenter"
+                    android:src="@drawable/ic_symbol_delete"
+                    android:tint="?attr/colorOnSurfaceVariant" />
 
                 <TextView
-                    android:id="@+id/layout_editor_tray_empty"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center_vertical"
-                    android:ellipsize="end"
-                    android:maxLines="2"
-                    android:text="@string/layout_editor_tray_empty"
-                    android:textAppearance="?attr/textAppearanceBodySmall"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
-
-                <!-- While a bar is lifted and may be put away: the whole tray is the drop zone. -->
-                <TextView
-                    android:id="@+id/layout_editor_tray_drop"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:id="@+id/layout_editor_tray_badge"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:layout_gravity="end|top"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginEnd="4dp"
+                    android:background="@drawable/layout_editor_trash_badge"
                     android:gravity="center"
-                    android:maxLines="1"
-                    android:ellipsize="end"
-                    android:text="@string/settings_layout_drop_to_hide"
-                    android:textAppearance="?attr/textAppearanceLabelLarge"
-                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:importantForAccessibility="no"
+                    android:includeFontPadding="false"
+                    android:textColor="?attr/colorOnPrimary"
+                    android:textSize="10sp"
+                    android:textStyle="bold"
                     android:visibility="gone" />
             </FrameLayout>
         </LinearLayout>

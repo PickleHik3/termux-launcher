@@ -9,6 +9,7 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -151,8 +152,9 @@ public final class LayoutEditorController {
 
     /**
      * The views the hosting editor lends Layout mode. The canvas and the keyboard's type chips
-     * stand in the frame; the toggle and the tray stand in the bottom area. The tray is also the
-     * drop target a lifted element is put away in, which the canvas is told the rect of.
+     * stand in the frame; the toggle and the tray stand in the bottom area. The tray holds the
+     * trash icon, which is the drop target a lifted element is put away in (the canvas is told its
+     * rect) and which, tapped, opens the canvas's list of what is hidden.
      */
     public static final class Views {
         /** What the canvas and the keyboard's chips stand in: the frame's own rect. */
@@ -161,23 +163,20 @@ public final class LayoutEditorController {
         @NonNull final ChipGroup keyboardForms;
         @NonNull final MaterialButtonToggleGroup orientation;
         @NonNull final View tray;
-        @NonNull final ChipGroup trayChips;
-        @NonNull final TextView trayEmpty;
-        @NonNull final TextView trayDrop;
+        @NonNull final ImageView trash;
+        @NonNull final TextView trashBadge;
 
         public Views(@NonNull ViewGroup canvasHost, @NonNull LayoutCanvasView canvas,
                      @NonNull ChipGroup keyboardForms,
                      @NonNull MaterialButtonToggleGroup orientation, @NonNull View tray,
-                     @NonNull ChipGroup trayChips, @NonNull TextView trayEmpty,
-                     @NonNull TextView trayDrop) {
+                     @NonNull ImageView trash, @NonNull TextView trashBadge) {
             this.canvasHost = canvasHost;
             this.canvas = canvas;
             this.keyboardForms = keyboardForms;
             this.orientation = orientation;
             this.tray = tray;
-            this.trayChips = trayChips;
-            this.trayEmpty = trayEmpty;
-            this.trayDrop = trayDrop;
+            this.trash = trash;
+            this.trashBadge = trashBadge;
         }
     }
 
@@ -197,8 +196,10 @@ public final class LayoutEditorController {
     private int mExtraKeyCount = -1;
     /** The handle a finger is on, whose readout a late measurement may restate; or null. */
     @Nullable private LayoutCanvasView.Handle mHeldHandle;
-    /** What the tray's chips were built for, so they are rebuilt only when that changes. */
-    @NonNull private List<LayoutEditorPlan.TrayItem> mTrayShown = Collections.emptyList();
+    /** What the trash was last restated for, so it is redrawn only when that changes. */
+    @Nullable private List<LayoutEditorPlan.TrayItem> mTrayShown;
+    /** The icon's resting background (its ripple), which the drop zone replaces while offered. */
+    @Nullable private android.graphics.drawable.Drawable mTrashRestBackground;
     /** Whether a lifted element may be dropped in the tray, and whether the finger is over it. */
     private boolean mTrayOffered;
     private boolean mTrayHovered;
@@ -255,7 +256,7 @@ public final class LayoutEditorController {
         if (mViews == views)
             return;
         mViews = views;
-        mTrayShown = Collections.emptyList();
+        mTrayShown = null;
         bind(views);
         if (mPlan != null)
             sync();
@@ -315,14 +316,14 @@ public final class LayoutEditorController {
         PaneWallPage place = mPlan.place();
         mPlan = null;
         mHeldHandle = null;
-        mTrayShown = Collections.emptyList();
+        mTrayShown = null;
         Views views = mViews;
         if (views != null) {
             // The next session opens with nothing selected and no chips over the keyboard.
             views.canvas.setSelectedBlock(null);
             views.canvas.setHandleReadout(null);
             views.keyboardForms.setVisibility(View.GONE);
-            views.trayChips.removeAllViews();
+            views.canvas.closeHiddenPopup();
             showTrayOffer(views, false, false);
         }
         mHost.holdPaneWallOnPlace(place, false);
@@ -411,6 +412,18 @@ public final class LayoutEditorController {
             @Override public void onTrayOfferChanged(boolean offered, boolean hovered) {
                 showTrayOffer(views, offered, hovered);
             }
+
+            @Override public void onHiddenChipTapped(@NonNull LayoutCanvasView.Block block) {
+                LayoutEditorPlan current = mPlan;
+                LayoutEditorPlan.TrayItem item = trayItemOf(block);
+                if (current != null && item != null)
+                    afterCanvasWrite(current.restore(item));
+            }
+
+            @Override public void onKeyboardRestored() {
+                if (mPlan != null)
+                    afterCanvasWrite(mPlan.setKeyboardShown(true));
+            }
         });
         views.keyboardForms.setOnCheckedStateChangeListener((group, checkedIds) -> {
             if (!checkedIds.isEmpty())
@@ -429,12 +442,17 @@ public final class LayoutEditorController {
                     syncTrayTarget(views);
                 }
             }));
-        // The tray is the drop target, and it stands in the bottom area: wherever either of the
-        // two moves, the canvas is told where the tray now is in its own coordinates.
-        views.tray.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft,
-                                              oldTop, oldRight, oldBottom) -> {
+        // The trash is the drop target, and it stands in the bottom area: wherever either of the
+        // two moves, the canvas is told where it now is in its own coordinates.
+        views.trash.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft,
+                                               oldTop, oldRight, oldBottom) -> {
             if (mViews == views)
                 syncTrayTarget(views);
+        });
+        mTrashRestBackground = views.trash.getBackground();
+        views.trash.setOnClickListener(tapped -> {
+            // Nothing hidden: nothing to list, and the canvas ignores the toggle.
+            views.canvas.toggleHiddenPopup();
         });
         views.orientation.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (!isChecked || mRestatingToggle || mPlan == null)
@@ -587,78 +605,73 @@ public final class LayoutEditorController {
     // -------------------------------------------------------------------------------- the tray
 
     /**
-     * The restore tray (spec §3.6): a Material chip per hidden element, with the eye-off glyph,
-     * that brings the element back to the edge it left; one short line when nothing is hidden.
-     * Rebuilt only when what is hidden changes.
+     * The trash (replacing the restore tray's chips): an outline, muted, while nothing is hidden;
+     * a filled glyph in the accent with a count badge while something is. The list of what is
+     * hidden is the canvas's popup, opened by a tap on it. Restated only when what is hidden changes.
      */
     private void syncTray(@NonNull Views views, @NonNull LayoutEditorPlan plan) {
         List<LayoutEditorPlan.TrayItem> items = plan.trayItems();
-        showTrayOffer(views, mTrayOffered, mTrayHovered);
-        if (items.equals(mTrayShown))
+        if (items.equals(mTrayShown)) {
+            showTrayOffer(views, mTrayOffered, mTrayHovered);
             return;
-        mTrayShown = new ArrayList<>(items);
-        views.trayChips.removeAllViews();
-        LayoutInflater inflater = LayoutInflater.from(mHost.context());
-        for (LayoutEditorPlan.TrayItem item : items) {
-            View view = inflater.inflate(R.layout.layout_editor_tray_chip, views.trayChips, false);
-            if (!(view instanceof Chip))
-                continue;
-            Chip chip = (Chip) view;
-            String name = mHost.context().getString(trayItemName(item));
-            chip.setText(name);
-            chip.setContentDescription(mHost.context().getString(
-                R.string.layout_editor_tray_chip_description, name));
-            chip.setOnClickListener(tapped -> {
-                LayoutEditorPlan current = mPlan;
-                if (current != null)
-                    afterCanvasWrite(current.restore(item));
-            });
-            views.trayChips.addView(chip);
         }
+        mTrayShown = new ArrayList<>(items);
+        int count = items.size();
+        boolean filled = MiniatureDragPolicy.trashState(count) == MiniatureDragPolicy.TrashState.FILLED;
+        views.trash.setImageResource(filled ? R.drawable.ic_trash_filled : R.drawable.ic_symbol_delete);
+        views.trashBadge.setVisibility(filled ? View.VISIBLE : View.GONE);
+        views.trashBadge.setText(MiniatureDragPolicy.badgeText(count));
+        views.trash.setContentDescription(views.canvas.trashDescription());
+        // Nothing left to list closes the popup; the canvas does this itself on a new layout, but
+        // the count can change without one (a host write).
+        if (!filled)
+            views.canvas.closeHiddenPopup();
         showTrayOffer(views, mTrayOffered, mTrayHovered);
     }
 
     /**
-     * The tray at rest shows its chips, or its one line when there are none; while a lifted
-     * element may be put away it reads "Drop here to hide" instead, outlined, and filled once the
+     * The trash at rest wears the muted ink (outline) or the accent (filled); while a lifted
+     * element may be put away it is outlined as the drop zone, and filled with a wash once the
      * finger is over it.
      */
     private void showTrayOffer(@NonNull Views views, boolean offered, boolean hovered) {
         mTrayOffered = offered;
         mTrayHovered = offered && hovered;
-        boolean empty = views.trayChips.getChildCount() == 0;
-        views.trayDrop.setVisibility(offered ? View.VISIBLE : View.GONE);
-        views.trayChips.setVisibility(!offered && !empty ? View.VISIBLE : View.INVISIBLE);
-        views.trayEmpty.setVisibility(!offered && empty ? View.VISIBLE : View.GONE);
+        boolean filled = mTrayShown != null && !mTrayShown.isEmpty();
+        int primary = MaterialColors.getColor(views.trash,
+            com.google.android.material.R.attr.colorPrimary,
+            mHost.themeColor(com.google.android.material.R.attr.colorPrimary,
+                R.color.termux_primary));
+        int muted = MaterialColors.getColor(views.trash,
+            com.google.android.material.R.attr.colorOnSurfaceVariant,
+            mHost.themeColor(com.google.android.material.R.attr.colorOnSurfaceVariant,
+                R.color.termux_on_surface_variant));
+        views.trash.setImageTintList(ColorStateList.valueOf(filled || offered ? primary : muted));
         if (!offered) {
-            views.tray.setBackground(null);
+            views.trash.setBackground(mTrashRestBackground);
             return;
         }
         float density = mHost.context().getResources().getDisplayMetrics().density;
         MaterialShapeDrawable zone = new MaterialShapeDrawable(ShapeAppearanceModel.builder()
             .setAllCornerSizes(12f * density).build());
-        int outline = MaterialColors.getColor(views.tray,
+        int outline = MaterialColors.getColor(views.trash,
             com.google.android.material.R.attr.colorOutline,
             mHost.themeColor(com.google.android.material.R.attr.colorOutline,
                 R.color.termux_on_surface));
-        int primary = MaterialColors.getColor(views.tray,
-            com.google.android.material.R.attr.colorPrimary,
-            mHost.themeColor(com.google.android.material.R.attr.colorPrimary,
-                R.color.termux_primary));
-        int container = MaterialColors.getColor(views.tray,
+        int container = MaterialColors.getColor(views.trash,
             com.google.android.material.R.attr.colorSecondaryContainer, 0);
         zone.setFillColor(ColorStateList.valueOf(mTrayHovered ? container : 0));
         zone.setStroke(mTrayHovered ? 2f * density : density, mTrayHovered ? primary : outline);
-        views.tray.setBackground(zone);
+        views.trash.setBackground(zone);
     }
 
     /**
-     * Tells the canvas where the tray stands, in the canvas's own coordinates. The two are in
+     * Tells the canvas where the trash stands, in the canvas's own coordinates. The two are in
      * different parents — the frame and the bottom area — so the rect is taken from their places
      * in the window; neither is under the frame's scale.
      */
     private void syncTrayTarget(@NonNull Views views) {
-        View tray = views.tray;
+        View tray = views.trash;
         LayoutCanvasView canvas = views.canvas;
         if (tray.getWidth() <= 0 || tray.getHeight() <= 0 || !tray.isShown()) {
             canvas.setExternalTrayRect(null);
@@ -674,20 +687,16 @@ public final class LayoutEditorController {
             top + tray.getHeight()));
     }
 
-    @StringRes
-    private static int trayItemName(@NonNull LayoutEditorPlan.TrayItem item) {
-        switch (item) {
-            case STATUS_BAR:
-                return R.string.settings_layout_miniature_status;
-            case PINNED_APPS:
-                return R.string.settings_layout_miniature_apps;
-            case AZ_INDEX:
-                return R.string.settings_layout_miniature_alphabets;
-            case EXTRA_KEYS:
-                return R.string.settings_layout_miniature_keys;
-            case KEYBOARD:
-            default:
-                return R.string.layout_editor_keyboard;
+    /** The tray item the canvas's popup chip for this block stands for. */
+    @Nullable
+    private static LayoutEditorPlan.TrayItem trayItemOf(@NonNull LayoutCanvasView.Block block) {
+        switch (block) {
+            case STATUS_BAR: return LayoutEditorPlan.TrayItem.STATUS_BAR;
+            case APPS_ROW: return LayoutEditorPlan.TrayItem.PINNED_APPS;
+            case ALPHABETS_ROW: return LayoutEditorPlan.TrayItem.AZ_INDEX;
+            case EXTRA_KEYS: return LayoutEditorPlan.TrayItem.EXTRA_KEYS;
+            case KEYBOARD: return LayoutEditorPlan.TrayItem.KEYBOARD;
+            default: return null;
         }
     }
 
