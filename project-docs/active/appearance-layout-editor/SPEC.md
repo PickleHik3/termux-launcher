@@ -163,6 +163,50 @@ The "Hidden" box becomes a row of M3 chips with an eye-off icon, one per hidden 
 a chip returns the element to its last edge. Empty state is one short line, not a bar-height box.
 While a bar is lifted the tray reads "Drop here to hide".
 
+### 3.7 Style (2026-10-01)
+
+Settled by the developer in three Lavish rounds on 2026-10-01 from the `termux-layout-assets` pack
+(§5); the decision to share one shape model is ADR 0007, and the words are the glossary's **Style**.
+Style is no longer the dock's: it shapes the status bar, the dock's elements, the keyboard and the
+pane's opening. One value for both orientations and both layout variants, stored as `docked` /
+`floating` (migrated once from `default` / `rounded`).
+
+**One shape model.** A pure policy takes the layout (edges, order, hidden, under-keyboard, keyboard
+form and shown) and the Style and yields every chrome shape: which pieces share a card, which edges
+join, which corners round, where the opening's edge runs, the line between split panes. The live
+chrome's outline providers, glass and rim, and the layout canvas's fill, selection outline, lifted
+copy and placeholder all read it. Nothing else decides a chrome corner.
+
+| | Floating | Docked |
+|---|---|---|
+| Pieces | Rounded cards with Margin's air between and around | One flush frame, no air |
+| Grouping | Status bar alone; neighbouring apps / A–Z / extra keys on one edge share a card; an element alone on an edge is its own card | Top and bottom bars run full width; side bars stand between them |
+| Corners | Corners slider, every card | Only the frame's exposed outer corners, at the device's screen radius (28dp fallback); joins square |
+| Pane | A card; split panes are separate cards with Margin between (pane gap capped at 24) | An opening with no rim or slab of its own; split panes share it, divided by one 1dp line; the focused pane wears the active colour along its edges of that line |
+| Border drag line | The pane card's rim | The bars' inner edges around the opening; the screen edge where no bar stands |
+| Lines inside a join | None | None |
+| Rim light, refraction | Each card's edges | Only the edge around the opening; joins and screen edges plain |
+| Corners / Margin sliders | Shown | Hidden |
+
+Keyboard form stays its own choice. Docked form: joins the frame flush under Docked, its own card
+under Floating. Floating form: a rounded card over the content under either Style. Split: under
+Docked two halves joined to their screen edges, under Floating two cards. Under-keyboard dock rows
+join flush below the keyboard under Docked and form a card below it under Floating. Home's widget
+grid and the Display's picture are the opening exactly as the terminal is.
+
+Layout canvas:
+- No grips. Press anywhere on a bar and move to lift it, as the keyboard already lifts; a tap
+  selects; the selected element keeps its one resize handle.
+- The lifted copy keeps its shape until it hovers a drop target, then takes the exact shape it
+  would have there; the dashed placeholder uses the same shape.
+- Flipping Style morphs the canvas's corners, gaps and joins over about 250 ms; with reduced motion
+  it jumps.
+- Bars show the pack's glyphs; the slot count follows the real pinned-app and extra-key counts.
+
+Retired: the per-surface corner and side-gap overrides (DOCK, KEYBOARD, STATUS, CANVAS), dropped
+for the base values; `terminal_flush_dock`, which Docked covers; the hairline separators between
+joined bars; the six-dot grips. Old keys are read only by the migration.
+
 ## 4. Looks
 
 Names chosen by the developer: **Clear · Mist · Tint · Solid**. Mist is kept as rebuilt on
@@ -194,16 +238,20 @@ replace Bare, Classic and Slate.
 
 ## 5. Layout canvas artwork
 
-The canvas is drawn from `termux-layout-elements-v2` (developer's pack, 2026-09-30: eight
-element states, four palettes, `tokens.json`, `renderer.py`). As its README says: derive every
-bound from the real layout, paint content inside those bounds, keep selection and handles in the
-editor layer, map palette roles onto the live scheme. The SVGs are design sources; the renderer's
-geometry functions port to `LayoutCanvasView`'s block painters (which already paint from bounds
-with Canvas and resolve colours through Material attributes). No stretched PNGs.
+The canvas is drawn from `termux-layout-assets` (developer's pack, 2026-10-01, committed at
+`project-docs/reference/layout-assets/`: 24 surface SVGs for Docked and Floating, 11 glyphs,
+`tokens.json`, `generate.py`, `preview.png`). It supersedes `termux-layout-elements-v2`. As its README
+says: derive every bound at runtime, compose Docked pieces under one outer clip, use runtime theme
+roles, no dot-matrix grab handles; the shapes come from the one shape model (§3.7). The SVGs are
+design sources; the generator's painters port to `LayoutCanvasView`'s block painters. No stretched
+PNGs.
 
-States from real keys: status bar collapsed or expanded from `status_compact`; keyboard docked,
-floating or split from `keyboard_form` (split halves generated from the real key rows); docked dock
-square; terminal prompt anchored to the pane's bottom, lines that stop when the pane gets short.
+States from real keys: status bar compact or expanded from `status_compact`; keyboard docked,
+floating or split from `keyboard_form` (split halves generated from the real key rows); dock, A–Z
+and extra keys horizontal or vertical by edge; terminal prompt anchored to the pane's bottom, lines
+that stop when the pane gets short. Tokens: `outer_radius 10`, `floating_gap 8`, `docked_gap 0`
+are the pack's preview values; at runtime Corners and Margin (Floating) and the screen radius
+(Docked) replace them.
 
 | Pack role | Material attribute |
 |---|---|

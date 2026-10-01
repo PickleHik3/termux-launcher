@@ -50,13 +50,9 @@ _Avoid_: X11 page, Termux:X11 (the server is our fork of it, but the place is th
 
 **Dock**:
 The band of chrome that carries the pinned-apps row, the A–Z index and the extra keys, along the
-bottom by default. It is one Surface. It comes in two styles: **Docked** (flush and square at rest)
-and **Floating** (a card already rounded at rest); the stored values are still the old Default and
-Rounded. Its rows may stand under the keyboard instead of over it. Not the same as the Layout
-editor's "Hidden tray", which holds elements that are put away.
-In Docked the top and bottom chrome are two cards peeking in from the screen's edges: an edge that
-touches the screen or the strip behind a system bar draws no rim or line, so the glass under the
-status bar and the navigation pill reads as the card beside it; only the inner edge keeps one.
+bottom by default. It is one Surface. Its shape follows the **Style**. Its rows may stand under the
+keyboard instead of over it. Not the same as the Layout editor's "Hidden tray", which holds
+elements that are put away.
 _Avoid_: taskbar, nav bar, hotseat
 
 **Keyboard swipe**:
@@ -96,6 +92,9 @@ see Minimal mode); appearance is never per orientation.
 One terminal view inside a split. Panes have corner tabs but no appearance of their own.
 Their border is the shared rim; only the focused pane of a split wears the active colour, and a pane
 asking for the user (bell, blocked agent, progress error) glows in the attention colour until focused.
+Under the Floating **Style** each pane of a split is its own card with Margin's air between; under
+Docked the panes share the opening, divided by one line, and the focused pane wears the active
+colour along its own edges of that line.
 
 **Pane wall**:
 The row of places the launcher slides between: Home (the widgets), Terminal, Display. In code it is
@@ -141,6 +140,23 @@ _Avoid_: status bar swipe (the retired page swipe on the bar), pull-down
 One themable chrome region: Dock, Keyboard, Status, Canvas. Appearance properties (blur, opacity,
 grain, corner radius, side gap) attach to a surface, not to a pane.
 _Avoid_: slot, region
+
+**Style**:
+How the chrome is shaped as a whole: **Docked** or **Floating**. It covers the status bar, the
+dock's elements, the keyboard and the pane's opening, and one shape decides the fill, the
+selection outline and the lifted copy in the Layout editor. In **Floating** each piece is a
+rounded card with air around it: the status bar is always its own card, apps, A–Z index and extra
+keys that stand next to each other on one edge share one card, and the keyboard is its own card;
+Corners sets every card's radius and Margin the air. In **Docked** the pieces join flush into one
+frame with no air: top and bottom bars run the full width and side bars stand between them, joins
+stay square, and only the frame's exposed outer corners round, at the device's own screen radius;
+Corners and Margin do not apply. The pane is an opening in that frame with no rim of its own; the
+bars' inner edges are its border. Pieces that join draw no line between them, and in Docked only
+the edge around the opening carries rim light and refraction. One Style holds for both
+orientations and for the minimal layout. Style never changes the keyboard's form: a floating or split
+keyboard keeps its own shape, and only a docked keyboard joins the frame or becomes a card.
+_Avoid_: surface mode (a Surface is one region), dock style (it is no longer the dock's alone),
+capsule, rounded
 
 ### Look and motion
 
