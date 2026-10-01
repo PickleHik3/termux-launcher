@@ -23,9 +23,7 @@ public final class CornerHold {
         PENDING,
         /** The hold fired on a still finger: the corner owns the gesture now. */
         HELD,
-        /** Held at a corner a seam ends at, then dragged: the split is being resized. */
-        RESIZING,
-        /** Held at a corner no seam ends at, then dragged: the tab is being carried out. */
+        /** Held, then dragged: the tab is being carried out. A hold never resizes a split. */
         CARRYING,
         /** The terminal kept the gesture. Events still go to it; nothing here will claim them. */
         ABANDONED
@@ -50,9 +48,7 @@ public final class CornerHold {
         /** Not ours. The terminal had this gesture all along and finishes it. */
         NOTHING,
         /** Open the tab on the corner the finger asked at, whether or not a drag carried it. */
-        OPEN_TAB,
-        /** Settle the split the drag resized. */
-        COMMIT_RESIZE
+        OPEN_TAB
     }
 
     private Phase mPhase = Phase.IDLE;
@@ -65,17 +61,13 @@ public final class CornerHold {
     /** How far a finger must travel after the hold before it is a drag rather than a lift. */
     private float mDragSlop;
 
-    /** Whether this corner is the end of a seam, which is what a drag after the hold resizes. */
-    private boolean mAtSeam;
-
     /** A finger landed in the square. The terminal keeps it unless it holds still. */
-    public void down(float x, float y, float holdSlopPx, float dragSlopPx, boolean atSeam) {
+    public void down(float x, float y, float holdSlopPx, float dragSlopPx) {
         mPhase = Phase.PENDING;
         mDownX = x;
         mDownY = y;
         mHoldSlop = holdSlopPx;
         mDragSlop = dragSlopPx;
-        mAtSeam = atSeam;
     }
 
     /**
@@ -106,9 +98,8 @@ public final class CornerHold {
             case HELD:
                 if (!travelled(x, y, mDragSlop))
                     return Move.NONE;
-                mPhase = mAtSeam ? Phase.RESIZING : Phase.CARRYING;
+                mPhase = Phase.CARRYING;
                 return Move.COMMITTED;
-            case RESIZING:
             case CARRYING:
                 return Move.DRAGGING;
             default:
@@ -134,7 +125,6 @@ public final class CornerHold {
         Phase phase = mPhase;
         mPhase = Phase.IDLE;
         if (phase == Phase.HELD || phase == Phase.CARRYING) return Lift.OPEN_TAB;
-        if (phase == Phase.RESIZING) return Lift.COMMIT_RESIZE;
         return Lift.NOTHING;
     }
 
@@ -150,7 +140,7 @@ public final class CornerHold {
 
     /** Whether the corner owns the gesture and the terminal has been told to forget it. */
     public boolean isClaimed() {
-        return mPhase == Phase.HELD || mPhase == Phase.RESIZING || mPhase == Phase.CARRYING;
+        return mPhase == Phase.HELD || mPhase == Phase.CARRYING;
     }
 
     /** Whether a finger is down in the square at all, claimed or not. */

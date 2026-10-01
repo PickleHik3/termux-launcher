@@ -35,6 +35,8 @@ public final class LiveChromeShape {
     public static final float FALLBACK_SCREEN_RADIUS_DP = 28f;
     /** The most air between Floating pane cards. */
     public static final float PANE_GAP_CAP_DP = 24f;
+    /** The least gap between split panes: the strip the divider is dragged by. */
+    public static final float PANE_GAP_FLOOR_DP = 10f;
     /** How thick a Docked divider line draws. */
     public static final float DIVIDER_DP = 1f;
 
@@ -61,7 +63,8 @@ public final class LiveChromeShape {
         return ChromeShapeModel.shape(ChromeShapeModel.input(layout, style, widthPx, heightPx,
                 thickness)
             .corners(cornersPx).margin(marginPx).screenRadius(screenRadiusPx)
-            .paneGapCap(PANE_GAP_CAP_DP * density).dividerThickness(DIVIDER_DP * density)
+            .paneGapCap(PANE_GAP_CAP_DP * density)
+            .paneGapFloor(PANE_GAP_FLOOR_DP * density).dividerThickness(DIVIDER_DP * density)
             .panes(paneCount, axis).splitHalfWidth(splitHalfWidthPx)
             .floatingKeyboardBox(floatingKeyboardBox).build());
     }

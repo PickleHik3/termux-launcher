@@ -89,7 +89,7 @@ Portrait or landscape. The shared layout has one version per orientation (and pe
 see Minimal mode); appearance is never per orientation.
 
 **Pane**:
-One terminal view inside a split. Panes have corner tabs but no appearance of their own.
+One terminal view inside a split. Panes have corner tabs but no appearance of their own. A split is resized by dragging the divider, the gap between its panes, and a corner hold only shows the pane's buttons.
 Their border is the shared rim; only the focused pane of a split wears the active colour, and a pane
 asking for the user (bell, blocked agent, progress error) glows in the attention colour until focused.
 Under the Floating **Style** each pane of a split is its own card with Margin's air between; under

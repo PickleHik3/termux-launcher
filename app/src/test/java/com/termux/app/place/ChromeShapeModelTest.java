@@ -616,6 +616,41 @@ public class ChromeShapeModelTest {
         assertBox(shape.panes().get(1).box, 40, 412, 360, 760);
     }
 
+    @Test
+    public void theGapBetweenSplitPanesHasAFloorUnderBothStyles() {
+        PlaceLayout layout = keyboardOnly(KeyboardForm.DOCKED, false);
+        for (LayoutStyle style : new LayoutStyle[] {LayoutStyle.FLOATING, LayoutStyle.DOCKED}) {
+            // Margin 4 is under the floor of 10: the panes still stand 10 apart.
+            ChromeShape small = ChromeShapeModel.shape(input(layout, style).margin(4f)
+                .paneGapFloor(10f).panes(2, SplitAxis.SIDE_BY_SIDE).build());
+            Box a = small.panes().get(0).box;
+            Box b = small.panes().get(1).box;
+            assertEquals(10f, b.left - a.right, D);
+
+            // Margin 16 is above it and applies as it did.
+            ChromeShape wide = ChromeShapeModel.shape(input(layout, style).margin(16f)
+                .paneGapFloor(10f).panes(2, SplitAxis.SIDE_BY_SIDE).build());
+            assertEquals(16f, wide.panes().get(1).box.left - wide.panes().get(0).box.right, D);
+
+            // Margin 40 still stops at the cap of 24.
+            ChromeShape capped = ChromeShapeModel.shape(input(layout, style).margin(40f)
+                .paneGapFloor(10f).panes(2, SplitAxis.SIDE_BY_SIDE).build());
+            assertEquals(24f, capped.panes().get(1).box.left - capped.panes().get(0).box.right,
+                D);
+        }
+    }
+
+    @Test
+    public void aSinglePaneIsNotShrunkByTheGapFloor() {
+        PlaceLayout layout = keyboardOnly(KeyboardForm.DOCKED, false);
+        ChromeShape plain = ChromeShapeModel.shape(input(layout, LayoutStyle.FLOATING).build());
+        ChromeShape floored = ChromeShapeModel.shape(input(layout, LayoutStyle.FLOATING)
+            .paneGapFloor(10f).build());
+        assertBox(floored.panes().get(0).box, plain.panes().get(0).box.left,
+            plain.panes().get(0).box.top, plain.panes().get(0).box.right,
+            plain.panes().get(0).box.bottom);
+    }
+
     // ---------------------------------------------------------------- the drop query
 
     @Test

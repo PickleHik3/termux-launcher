@@ -119,6 +119,7 @@ public final class ChromeShapeModel {
         final float margin;
         final float screenRadius;
         final float paneGapCap;
+        final float paneGapFloor;
         final float dividerThickness;
         final int paneCount;
         @NonNull final SplitAxis axis;
@@ -136,6 +137,7 @@ public final class ChromeShapeModel {
             margin = b.margin;
             screenRadius = b.screenRadius;
             paneGapCap = b.paneGapCap;
+            paneGapFloor = b.paneGapFloor;
             dividerThickness = b.dividerThickness;
             paneCount = Math.max(1, b.paneCount);
             axis = b.axis;
@@ -172,6 +174,7 @@ public final class ChromeShapeModel {
             private float margin;
             private float screenRadius;
             private float paneGapCap = Float.MAX_VALUE;
+            private float paneGapFloor;
             private float dividerThickness = 1f;
             private int paneCount = 1;
             @NonNull private SplitAxis axis = SplitAxis.SIDE_BY_SIDE;
@@ -222,6 +225,16 @@ public final class ChromeShapeModel {
                 return this;
             }
 
+            /**
+             * The least gap between split panes, 10dp in the caller's units: the strip the divider
+             * is grabbed by, so it holds even when Margin is smaller. Margin above it still wins,
+             * up to the cap.
+             */
+            @NonNull public Builder paneGapFloor(float value) {
+                paneGapFloor = value;
+                return this;
+            }
+
             /** How thick a Docked divider line draws: 1dp in the caller's units. */
             @NonNull public Builder dividerThickness(float value) {
                 dividerThickness = value;
@@ -265,6 +278,7 @@ public final class ChromeShapeModel {
             b.margin = margin;
             b.screenRadius = screenRadius;
             b.paneGapCap = paneGapCap;
+            b.paneGapFloor = paneGapFloor;
             b.dividerThickness = dividerThickness;
             b.paneCount = paneCount;
             b.axis = axis;
@@ -456,6 +470,8 @@ public final class ChromeShapeModel {
         List<Pane> panes = new ArrayList<>(in.paneCount);
         List<Divider> dividers = Collections.emptyList();
         float gap = Math.min(floating ? m : gutter, Math.max(0f, in.paneGapCap));
+        // Split panes keep a strip between them to drag the divider by, whatever Margin is.
+        if (in.paneCount > 1) gap = Math.max(gap, Math.max(0f, in.paneGapFloor));
         boolean across = in.axis == SplitAxis.SIDE_BY_SIDE;
         float span = across ? openingBox.width() : openingBox.height();
         float each = Math.max(0f, (span - gap * (in.paneCount - 1)) / in.paneCount);
