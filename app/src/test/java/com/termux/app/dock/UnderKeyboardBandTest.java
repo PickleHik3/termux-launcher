@@ -7,8 +7,9 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 
 /**
- * The card the bands under the keyboard stand on: the dock's radius and side inset, and always the
- * same clearance above the navigation area whichever style gives it.
+ * The bands under the keyboard. Floating they are a card: the Corners radius, the dock's side inset
+ * and a clearance above the navigation area. Docked they join the frame flush below the keyboard
+ * and every figure but the height is zero.
  */
 public class UnderKeyboardBandTest {
 
@@ -36,31 +37,32 @@ public class UnderKeyboardBandTest {
     }
 
     @Test
-    public void theCardStandsTheCapsuleGapClearOfTheNavigationAreaInBothStyles() {
-        for (boolean capsule : new boolean[]{false, true}) {
-            DockLayout dock = dock(capsule, -1);
-            int clearance = UnderKeyboardBand.bottomAirPx(dock, edgeGap(dock)) + edgeGap(dock);
-            assertEquals("capsule=" + capsule, dock.capsuleBottomGapPx, clearance);
-            assertEquals(Math.round(6f * DENSITY), clearance);
-        }
+    public void floatingTheCardStandsTheCapsuleGapClearOfTheNavigationArea() {
+        DockLayout dock = dock(true, -1);
+        int clearance = UnderKeyboardBand.bottomAirPx(dock, edgeGap(dock)) + edgeGap(dock);
+        assertEquals(dock.capsuleBottomGapPx, clearance);
+        assertEquals(Math.round(6f * DENSITY), clearance);
     }
 
     @Test
     public void floatingsStackAlreadyKeepsTheGapSoTheCardAddsNoneUnderItself() {
         DockLayout floating = dock(true, -1);
         assertEquals(0, UnderKeyboardBand.bottomAirPx(floating, edgeGap(floating)));
+    }
+
+    @Test
+    public void dockedTheBandJoinsTheFrameWithNoAirAboveOrUnder() {
         DockLayout docked = dock(false, -1);
-        assertEquals("a Docked stack stands flush on the edge, so the card carries it all",
-            docked.capsuleBottomGapPx, UnderKeyboardBand.bottomAirPx(docked, edgeGap(docked)));
+        assertEquals(0, UnderKeyboardBand.navClearancePx(docked));
+        assertEquals(0, UnderKeyboardBand.bottomAirPx(docked, edgeGap(docked)));
+        assertEquals(0, UnderKeyboardBand.topGapPx(docked));
+        assertEquals(0, UnderKeyboardBand.airPx(docked, edgeGap(docked), true));
     }
 
     @Test
     public void theAirIsCountedOnlyWhileABandStandsUnderTheKeyboard() {
-        DockLayout docked = dock(false, -1);
-        assertEquals(0, UnderKeyboardBand.airPx(docked, edgeGap(docked), false));
-        assertEquals(UnderKeyboardBand.keyboardGapPx(DENSITY) + docked.capsuleBottomGapPx,
-            UnderKeyboardBand.airPx(docked, edgeGap(docked), true));
         DockLayout floating = dock(true, -1);
+        assertEquals(0, UnderKeyboardBand.airPx(floating, edgeGap(floating), false));
         assertEquals(UnderKeyboardBand.keyboardGapPx(DENSITY),
             UnderKeyboardBand.airPx(floating, edgeGap(floating), true));
     }
@@ -69,19 +71,17 @@ public class UnderKeyboardBandTest {
     public void theGapUnderTheKeyboardIsTheFloatingKeyboardsGapOverIt() {
         assertEquals(11, UnderKeyboardBand.keyboardGapPx(DENSITY));
         assertEquals(UnderKeyboardBand.keyboardGapPx(DENSITY),
-            UnderKeyboardBand.topGapPx(dock(false, -1)));
+            UnderKeyboardBand.topGapPx(dock(true, -1)));
     }
 
     @Test
-    public void theCardTakesTheDocksCornersClampedToAHalfCapsule() {
+    public void theCardTakesTheCornersClampedToAHalfCapsule() {
         DockLayout configured = dock(true, 24);
         assertEquals(24f * DENSITY, UnderKeyboardBand.cornerRadiusPx(configured, 400), 0.001f);
         assertEquals("a one-row card is a true capsule, not a lozenge", 30f,
             UnderKeyboardBand.cornerRadiusPx(configured, 60), 0.001f);
-        DockLayout docked = dock(false, -1);
-        assertEquals("Docked's card still rounds, at the follow-the-style radius",
-            docked.capsuleCornerRadiusPx(400), UnderKeyboardBand.cornerRadiusPx(docked, 400),
-            0.001f);
+        assertEquals("Docked the band is square: the frame's clip owns the corners", 0f,
+            UnderKeyboardBand.cornerRadiusPx(dock(false, -1), 400), 0.001f);
     }
 
     @Test

@@ -2,15 +2,13 @@ package com.termux.app.dock;
 
 /**
  * The sheet the bands a place stands under the keyboard wear ({@code accessory_under_keyboard_stack}):
- * the dock's own material, cut as a card of its own below the keyboard, in both dock styles and
- * whether the keyboard is up, down or switched off.
+ * the dock's own material, whether the keyboard is up, down or switched off.
  *
- * <p>It is a card rather than a continuation of the flush slab because it no longer touches the
- * frame the Docked style is about: the keyboard, or the dock's rows, stand between it and the
- * canvas, and it stands on the screen's bottom edge the way a floating capsule does. So it takes
- * the dock's corner radius (the Appearance editor's Corners control), the dock's side inset, and
- * the air a capsule keeps above the navigation area — the gesture pill or the button bar, which the
- * root's own inset already lays the whole stack above.
+ * <p>Under Floating it is a card of its own below the keyboard: it takes the Corners radius, the
+ * dock's side inset, and the air a capsule keeps above the navigation area — the gesture pill or
+ * the button bar, which the root's own inset already lays the whole stack above. Under Docked it
+ * joins the frame flush below the keyboard (SPEC 3.7): no air above it, none under it, no side
+ * inset and square corners, so every figure but the height is zero.
  *
  * <p>Every figure here is added to the accessory stack's reserved height as well as drawn: the band
  * is exactly as tall as its rows, and the air is the stack's, so the dock's rows over the keyboard
@@ -34,16 +32,16 @@ public final class UnderKeyboardBand {
 
     /** The air above the card: between it and the keyboard, or the dock's rows with it down. */
     public static int topGapPx(DockLayout dock) {
-        return keyboardGapPx(dock.density);
+        return dock.capsule ? keyboardGapPx(dock.density) : 0;
     }
 
     /**
      * How far the card's bottom stands clear of the navigation area: the gap a floating capsule
-     * keeps under itself ({@link DockLayout#capsuleBottomGapPx}), in both styles. A Docked slab runs
-     * flush to the edge; a card on the edge does not.
+     * keeps under itself ({@link DockLayout#capsuleBottomGapPx}) under Floating. Docked it runs
+     * flush to the edge and keeps none.
      */
     public static int navClearancePx(DockLayout dock) {
-        return Math.max(0, dock.capsuleBottomGapPx);
+        return dock.capsule ? Math.max(0, dock.capsuleBottomGapPx) : 0;
     }
 
     /**
@@ -75,6 +73,6 @@ public final class UnderKeyboardBand {
      * follow-the-style radius — clamped to a true half-capsule of the card's own height.
      */
     public static float cornerRadiusPx(DockLayout dock, int sheetHeightPx) {
-        return dock.capsuleCornerRadiusPx(Math.max(0, sheetHeightPx));
+        return dock.capsule ? dock.capsuleCornerRadiusPx(Math.max(0, sheetHeightPx)) : 0f;
     }
 }

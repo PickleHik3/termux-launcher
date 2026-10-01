@@ -262,7 +262,7 @@ public class TermuxActivityEdgeStackLayoutTest {
     }
 
     @Test
-    public void thePlankIsGlazedAtTheDocksOwnCornerRadius() {
+    public void thePlankIsClippedToTheShapeModelsRadius() {
         TermuxActivity activity = inflate();
         PlaceLayout layout = layoutWith(Element.APPS, Element.AZ, Edge.TOP);
         activity.applyEdgeStacks(layout);
@@ -272,19 +272,24 @@ public class TermuxActivityEdgeStackLayoutTest {
         assertEquals(View.VISIBLE, plank.getVisibility());
         View glass = activity.findViewById(R.id.place_off_dock_plank_glass);
         assertTrue(glass.getOutlineProvider()
-            instanceof com.termux.app.statusbar.StatusBarSurfaceOutlineProvider);
-        com.termux.app.statusbar.StatusBarSurfaceOutlineProvider outline =
-            (com.termux.app.statusbar.StatusBarSurfaceOutlineProvider) glass.getOutlineProvider();
+            instanceof com.termux.app.chrome.ChromeShapeOutlineProvider);
+        com.termux.app.chrome.ChromeShapeOutlineProvider outline =
+            (com.termux.app.chrome.ChromeShapeOutlineProvider) glass.getOutlineProvider();
 
         int glassHeightPx = activity.offDockPlankGlassHeightPx();
         assertTrue("both bands are on the sheet", glassHeightPx > 0);
-        assertEquals("the Appearance editor's dock radius, clamped to the whole plank",
-            activity.resolveDockCapsuleCornerRadiusPx(glassHeightPx), outline.radiusPx(), 0.01f);
-        // The defect: clamped to the index's own 19dp band the plank could never be rounder than
-        // half of it, whatever the slider said.
-        assertTrue("rounder than a half-capsule of one bar",
-            outline.radiusPx() > activity.resolveDockCapsuleCornerRadiusPx(
-                Math.round(activity.getResources().getDisplayMetrics().density * 19f)));
+        float density = activity.getResources().getDisplayMetrics().density;
+        if (activity.isRoundedDockStyle()) {
+            assertEquals("Floating: the plank is a card at Corners, clamped to the whole plank",
+                activity.resolveDockCapsuleCornerRadiusPx(glassHeightPx), outline.radiusPx(), 0.01f);
+            assertTrue("rounder than a half-capsule of one bar",
+                outline.radiusPx() > activity.resolveDockCapsuleCornerRadiusPx(
+                    Math.round(density * 19f)));
+        } else {
+            assertEquals("Docked: the frame's outer corners, the screen's 28dp fallback",
+                com.termux.app.chrome.LiveChromeShape.FALLBACK_SCREEN_RADIUS_DP * density,
+                outline.radiusPx(), 0.01f);
+        }
     }
 
     @Test
@@ -524,21 +529,19 @@ public class TermuxActivityEdgeStackLayoutTest {
     // ------------------------------------------------------------------ the seams on the plank
 
     @Test
-    public void thePlankSeparatesTwoBarsAndNeverOne() {
+    public void joinedBarsDrawNoLineBetweenThem() {
         TermuxActivity activity = inflate();
         EdgeStackView plankBars = activity.findViewById(R.id.place_off_dock_plank_bars);
 
         activity.applyEdgeStacks(layoutWith(Element.APPS, Element.AZ, Edge.TOP));
-        assertEquals("one gap between the two bars on the sheet", 1,
+        assertEquals("two bars on one sheet, and no hairline between them", 0,
             plankBars.getSeparatorCount());
 
         activity.applyEdgeStacks(layoutWith(Element.APPS, Edge.TOP));
-        assertEquals("a lone bar has nothing to be separated from", 0,
-            plankBars.getSeparatorCount());
+        assertEquals(0, plankBars.getSeparatorCount());
 
-        // Every band in a screen edge's stack carries its own glass, so none of those are seamed.
-        // The bottom edge's stack is the dock's own sheet and is covered by the dock-stack test.
-        for (int id : new int[] {R.id.place_edge_stack_top,
+        for (int id : new int[] {R.id.place_edge_stack_top, R.id.accessory_row_stack,
+            R.id.accessory_under_keyboard_stack,
             R.id.place_edge_stack_left, R.id.place_edge_stack_right}) {
             assertEquals(0, ((EdgeStackView) activity.findViewById(id)).getSeparatorCount());
         }
