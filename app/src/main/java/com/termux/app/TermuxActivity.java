@@ -4624,6 +4624,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (element == Element.STATUS)
             return targetStatusBarHeightPx(isRoundedDockStyle(), isStatusBarCompact());
+        // Not laid out yet: a side column's band is the shared frame width, the same the host
+        // is given, so the insert's gutter lines up with the glass from the first frame.
+        if (edge.isOnSide()) {
+            int shared = dockedFrameSharedBandPx();
+            if (shared > 0 && (element == Element.EXTRA_KEYS && extraKeysColumnOnSide(layout)
+                || element == Element.AZ && azHostOnSide(layout))) return shared;
+        }
         return 0f;
     }
 
@@ -8899,6 +8906,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The band the bar claims wherever it stands off the dock: itself, and its air either side. */
     private int azBarHostBandPx() {
+        int shared = dockedFrameSharedBandPx();
+        if (shared > 0 && azHostOnSide(currentPlaceLayout())) return shared;
         return AzBarHostGeometry.footprintPx(0, azBarHostMarginPx(), azBarThicknessPx());
     }
 
@@ -9159,7 +9168,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // own inset. Nothing else crosses it — a status bar, a rail or an extra-keys column on
         // this side stands *beside* the bar, on the same stack — and compensating for the chrome
         // above and below the canvas, as this used to, cost the bar two thirds of its length.
-        updateViewPadding(host, marginPx, 0, marginPx, 0);
+        // Inside a joined Docked frame the band is the shared width and the bar centres in it.
+        int framedPadPx = dockedFrameSharedBandPx() > 0
+            ? com.termux.app.place.DockedFrameBands.centringPadPx(azBarHostBandPx(),
+                azBarThicknessPx())
+            : marginPx;
+        updateViewPadding(host, framedPadPx, 0, framedPadPx, 0);
     }
 
     /**
@@ -11989,8 +12003,62 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mProperties == null ? 1f : mProperties.getTerminalToolbarHeightScaleFactor());
     }
 
+    private boolean extraKeysColumnOnSide(@NonNull PlaceLayout layout) {
+        return PlaceChromePolicy.extraKeysColumnShown(layout)
+            && layout.slot(Element.EXTRA_KEYS).edge.isOnSide();
+    }
+
+    private boolean azHostOnSide(@NonNull PlaceLayout layout) {
+        return mPreferences != null && PlaceChromePolicy.azRowShown(layout)
+            && PlaceChromePolicy.azBarEdge(layout).isOnSide();
+    }
+
+    /** The air a side column keeps round its content inside a joined Docked frame. */
+    private int dockedFrameSideAirPx() {
+        return Math.round(dpToPx(com.termux.app.place.DockedFrameBands.FRAME_SIDE_AIR_DP));
+    }
+
+    /**
+     * The one width both side bands take under a joined Docked frame, or 0 when this is not that
+     * case (Floating, or no side bar). Read from the layout and the preferences alone, never from
+     * the shape model, which is fed this very answer through {@link #chromeThicknessPx}.
+     */
+    private int dockedFrameSharedBandPx() {
+        if (mPreferences == null
+            || mPreferences.getLayoutStyle() != TermuxAppSharedPreferences.LayoutStyle.DOCKED) {
+            return 0;
+        }
+        PlaceLayout layout = currentPlaceLayout();
+        int railBand = 0;
+        if (isDockRailShown() && layout.slot(Element.APPS).edge.isOnSide()) {
+            railBand = getDockLayout().railBandPx
+                + PageTickStrip.bandPx(getResources().getDisplayMetrics().density);
+        }
+        int air = dockedFrameSideAirPx();
+        int left = 0;
+        int right = 0;
+        if (extraKeysColumnOnSide(layout)) {
+            int thin = com.termux.app.place.DockedFrameBands.thinBandPx(
+                extraKeysColumnKeysWidthPx(), air);
+            if (layout.slot(Element.EXTRA_KEYS).edge == PlaceLayout.Edge.LEFT) left = thin;
+            else right = thin;
+        }
+        if (azHostOnSide(layout)) {
+            int thin = com.termux.app.place.DockedFrameBands.thinBandPx(azBarThicknessPx(), air);
+            if (PlaceChromePolicy.azBarEdge(layout) == PlaceLayout.Edge.LEFT) {
+                left = Math.max(left, thin);
+            } else {
+                right = Math.max(right, thin);
+            }
+        }
+        if (left == 0 && right == 0) return 0;
+        return com.termux.app.place.DockedFrameBands.sharedBandPx(railBand, left, right);
+    }
+
     /** The band the column claims: the keys, and their air either side. */
     private int extraKeysColumnBandPx() {
+        int shared = dockedFrameSharedBandPx();
+        if (shared > 0 && extraKeysColumnOnSide(currentPlaceLayout())) return shared;
         return ExtraKeysColumnGeometry.footprintPx(0,
             Math.round(dpToPx(DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP)),
             extraKeysColumnKeysWidthPx());
@@ -12072,7 +12140,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // neither again; adding them here left a bar's height of dead space at each end and
             // squeezed the keys well under the height they ask for.
             int verticalPadPx = Math.round(dpToPx(10));
-            host.setPadding(marginPx, verticalPadPx, marginPx, verticalPadPx);
+            int horizontalPadPx = marginPx;
+            if (dockedFrameSharedBandPx() > 0) {
+                // A joined Docked frame: the air is a token and the keys centre in the shared band.
+                verticalPadPx = dockedFrameSideAirPx();
+                horizontalPadPx = com.termux.app.place.DockedFrameBands.centringPadPx(
+                    extraKeysColumnBandPx(), keysThicknessPx);
+            }
+            host.setPadding(horizontalPadPx, verticalPadPx, horizontalPadPx, verticalPadPx);
             if (hostParams != null && (hostParams.width != extraKeysColumnBandPx()
                     || hostParams.height != ViewGroup.LayoutParams.MATCH_PARENT)) {
                 hostParams.width = extraKeysColumnBandPx();
@@ -12296,6 +12371,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (stack != null) moved |= stack.setStack(bars);
         }
         moved |= applyUnderKeyboardStack(layout);
+        // A joined Docked frame is one continuous sheet of glass: no hairline between its bands.
+        if (hasDockedFrameCard()) {
+            for (PlaceLayout.Edge edge : PlaceLayout.Edge.values()) {
+                com.termux.app.place.EdgeStackView stack = edgeStack(edge);
+                if (stack == null) continue;
+                stack.setSeparatorCount(0);
+                stack.setSeparatorAppearance(android.graphics.Color.TRANSPARENT, 0, 0);
+            }
+        }
         // Joined bars draw no line between them in either Style (SPEC 3.7). Whether the status
         // bar rides the dock's plank is still the arrangement's answer.
         List<Element> bottom = EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM);
