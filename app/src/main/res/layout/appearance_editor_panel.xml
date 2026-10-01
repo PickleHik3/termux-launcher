@@ -5,11 +5,13 @@
      its height: fixed at rest, one taller state while row 2 is up. Nothing in it scrolls.
 
      Top: the mode pill, Undo (while dirty) and Done. Row 1: the Look slider with a label under
-     each tick, and the Style toggle beside it. Row 2 (Custom only, after a tap in the frame): the
-     tapped element's name and at most two controls. The hint line closes the stack.
+     each tick. Row 2 (Custom only, after a tap in the frame): the tapped element's name and its
+     controls (three for the terminal, otherwise at most two). The hint line closes the stack.
 
-     Layout mode (SPEC §3.5) swaps rows 1, 2 and the hint for one row: the Portrait / Landscape
-     glyph toggle and the restore tray (§3.6). The top row stays; so does the height. -->
+     Layout mode (SPEC §3.5) swaps rows 1, 2 and the hint for its own rows: the Portrait /
+     Landscape glyph toggle, the Docked / Floating Style toggle and the restore tray (§3.6), then
+     the global Corners and Margin sliders. The top row stays; the card grows a little upward for
+     the sliders. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/appearance_editor_panel"
@@ -86,95 +88,198 @@
             android:text="@string/appearance_editor_done" />
     </LinearLayout>
 
-    <!-- Layout mode's one row: the orientation the canvas in the frame shows, and the tray. The
-         tray is also the drop target a lifted bar is put away in: LayoutEditorController hands the
-         canvas this view's rect, and swaps the chips for "Drop here to hide" while a bar is up. -->
+    <!-- Layout mode's rows. First: the orientation the canvas in the frame shows, the Style
+         toggle (docked / floating, which belongs to no Look) and the tray. The tray is also the
+         drop target a lifted bar is put away in: LayoutEditorController hands the canvas this
+         view's rect, and swaps the chips for "Drop here to hide" while a bar is up. Second: the
+         global Corners and Margin, which no Look sets either (SPEC §3.5). -->
     <LinearLayout
         android:id="@+id/appearance_editor_layout_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
+        android:orientation="vertical"
         android:visibility="gone">
 
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/layout_editor_orientation"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:id="@+id/appearance_editor_layout_toggles"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:contentDescription="@string/termux_layout_editor_orientation"
-            app:selectionRequired="true"
-            app:singleSelection="true">
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/layout_editor_orientation_portrait"
-                style="?attr/materialButtonOutlinedStyle"
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/layout_editor_orientation"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="@string/settings_layout_orientation_portrait"
-                android:minWidth="48dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:icon="@drawable/ic_symbol_phone_portrait"
-                app:iconGravity="textStart"
-                app:iconPadding="0dp" />
+                android:contentDescription="@string/termux_layout_editor_orientation"
+                app:selectionRequired="true"
+                app:singleSelection="true">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/layout_editor_orientation_landscape"
-                style="?attr/materialButtonOutlinedStyle"
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/layout_editor_orientation_portrait"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/settings_layout_orientation_portrait"
+                    android:minWidth="48dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    app:icon="@drawable/ic_symbol_phone_portrait"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/layout_editor_orientation_landscape"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/settings_layout_orientation_landscape"
+                    android:minWidth="48dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    app:icon="@drawable/ic_symbol_phone_landscape"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/appearance_editor_style"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:contentDescription="@string/settings_layout_orientation_landscape"
-                android:minWidth="48dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:icon="@drawable/ic_symbol_phone_landscape"
-                app:iconGravity="textStart"
-                app:iconPadding="0dp" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+                android:layout_marginStart="8dp"
+                android:contentDescription="@string/appearance_editor_style_description"
+                app:selectionRequired="true"
+                app:singleSelection="true">
 
-        <FrameLayout
-            android:id="@+id/layout_editor_tray"
-            android:layout_width="0dp"
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/appearance_editor_style_docked"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/appearance_editor_style_docked"
+                    android:minWidth="48dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    app:icon="@drawable/ic_style_docked"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/appearance_editor_style_floating"
+                    style="?attr/materialButtonOutlinedStyle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/appearance_editor_style_floating"
+                    android:minWidth="48dp"
+                    android:paddingStart="12dp"
+                    android:paddingEnd="12dp"
+                    app:icon="@drawable/ic_style_floating"
+                    app:iconGravity="textStart"
+                    app:iconPadding="0dp" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+            <FrameLayout
+                android:id="@+id/layout_editor_tray"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:minHeight="48dp">
+
+                <!-- Wraps rather than scrolls: nothing in the bottom area scrolls (§3.1). -->
+                <com.google.android.material.chip.ChipGroup
+                    android:id="@+id/layout_editor_tray_chips"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    app:chipSpacingHorizontal="6dp"
+                    app:chipSpacingVertical="0dp"
+                    app:singleLine="false" />
+
+                <TextView
+                    android:id="@+id/layout_editor_tray_empty"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:ellipsize="end"
+                    android:maxLines="2"
+                    android:text="@string/layout_editor_tray_empty"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <!-- While a bar is lifted and may be put away: the whole tray is the drop zone. -->
+                <TextView
+                    android:id="@+id/layout_editor_tray_drop"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:gravity="center"
+                    android:maxLines="1"
+                    android:ellipsize="end"
+                    android:text="@string/settings_layout_drop_to_hide"
+                    android:textAppearance="?attr/textAppearanceLabelLarge"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:visibility="gone" />
+            </FrameLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/appearance_editor_layout_sliders"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="12dp"
-            android:layout_weight="1"
-            android:minHeight="48dp">
+            android:layout_marginTop="4dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
 
-            <!-- Wraps rather than scrolls: nothing in the bottom area scrolls (§3.1). -->
-            <com.google.android.material.chip.ChipGroup
-                android:id="@+id/layout_editor_tray_chips"
-                android:layout_width="match_parent"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_vertical"
-                app:chipSpacingHorizontal="6dp"
-                app:chipSpacingVertical="0dp"
-                app:singleLine="false" />
+                android:layout_weight="1"
+                android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/layout_editor_tray_empty"
-                android:layout_width="match_parent"
+                <TextView
+                    android:id="@+id/appearance_editor_corners_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textAppearance="?attr/textAppearanceLabelMedium"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/appearance_editor_corners"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/appearance_editor_corners_description"
+                    android:stepSize="1"
+                    android:valueFrom="0"
+                    android:valueTo="40"
+                    app:labelBehavior="gone" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_vertical"
-                android:ellipsize="end"
-                android:maxLines="2"
-                android:text="@string/layout_editor_tray_empty"
-                android:textAppearance="?attr/textAppearanceBodySmall"
-                android:textColor="?attr/colorOnSurfaceVariant" />
+                android:layout_marginStart="16dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
 
-            <!-- While a bar is lifted and may be put away: the whole tray is the drop zone. -->
-            <TextView
-                android:id="@+id/layout_editor_tray_drop"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:gravity="center"
-                android:maxLines="1"
-                android:ellipsize="end"
-                android:text="@string/settings_layout_drop_to_hide"
-                android:textAppearance="?attr/textAppearanceLabelLarge"
-                android:textColor="?attr/colorOnSurfaceVariant"
-                android:visibility="gone" />
-        </FrameLayout>
+                <TextView
+                    android:id="@+id/appearance_editor_margin_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textAppearance="?attr/textAppearanceLabelMedium"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/appearance_editor_margin"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:contentDescription="@string/appearance_editor_margin_description"
+                    android:stepSize="1"
+                    android:valueFrom="0"
+                    android:valueTo="48"
+                    app:labelBehavior="gone" />
+            </LinearLayout>
+        </LinearLayout>
     </LinearLayout>
 
     <LinearLayout
@@ -211,42 +316,6 @@
                 android:layout_marginTop="-10dp"
                 android:importantForAccessibility="no" />
         </LinearLayout>
-
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/appearance_editor_style"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:contentDescription="@string/appearance_editor_style_description"
-            app:selectionRequired="true"
-            app:singleSelection="true">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/appearance_editor_style_docked"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="@string/appearance_editor_style_docked"
-                android:minWidth="48dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:icon="@drawable/ic_style_docked"
-                app:iconGravity="textStart"
-                app:iconPadding="0dp" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/appearance_editor_style_floating"
-                style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="@string/appearance_editor_style_floating"
-                android:minWidth="48dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                app:icon="@drawable/ic_style_floating"
-                app:iconGravity="textStart"
-                app:iconPadding="0dp" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
     </LinearLayout>
 
     <!-- Row 2: one fixed height, whichever element is tapped. -->
@@ -265,157 +334,184 @@
             android:textAppearance="?attr/textAppearanceLabelMedium"
             android:textColor="?attr/colorPrimary" />
 
-        <!-- Side by side on a wide panel; on a narrow one (under ~400dp) the second control
-             stands on its own line under the first (AppearanceEditorPanel.setNarrow). -->
+        <!-- One line of controls side by side. On a narrow panel (AppearanceEditorPanel.setNarrow)
+             the first two stack, or, for the terminal, its two sliders share the line and
+             Legibility takes a line of its own under them. -->
         <LinearLayout
             android:id="@+id/appearance_editor_row2_controls"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
             android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="vertical">
 
             <LinearLayout
-                android:id="@+id/appearance_editor_c1"
-                android:layout_width="0dp"
+                android:id="@+id/appearance_editor_row2_line"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-                <TextView
-                    android:id="@+id/appearance_editor_c1_label"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:id="@+id/appearance_editor_c1"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:textAppearance="?attr/textAppearanceLabelMedium"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
+                    android:layout_weight="1"
+                    android:orientation="vertical">
 
-                <com.google.android.material.slider.Slider
-                    android:id="@+id/appearance_editor_c1_slider"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:stepSize="1"
-                    android:valueFrom="0"
-                    android:valueTo="100"
-                    app:labelBehavior="gone" />
-
-                <com.google.android.material.button.MaterialButtonToggleGroup
-                    android:id="@+id/appearance_editor_c1_legibility"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:visibility="gone"
-                    app:selectionRequired="true"
-                    app:singleSelection="true">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/appearance_editor_legibility_softer"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="0dp"
+                    <TextView
+                        android:id="@+id/appearance_editor_c1_label"
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:insetLeft="0dp"
-                        android:insetRight="0dp"
-                        android:maxLines="1"
-                        android:minWidth="0dp"
-                        android:paddingStart="2dp"
-                        android:paddingEnd="2dp"
-                        android:text="@string/appearance_editor_legibility_softer"
                         android:textAppearance="?attr/textAppearanceLabelMedium"
-                        app:backgroundTint="@color/appearance_editor_segment_fill"
-                        app:icon="@null"
-                        app:iconPadding="0dp" />
+                        android:textColor="?attr/colorOnSurfaceVariant" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/appearance_editor_legibility_default"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="0dp"
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/appearance_editor_c1_slider"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:insetLeft="0dp"
-                        android:insetRight="0dp"
-                        android:maxLines="1"
-                        android:minWidth="0dp"
-                        android:paddingStart="2dp"
-                        android:paddingEnd="2dp"
-                        android:text="@string/appearance_editor_legibility_default"
+                        android:stepSize="1"
+                        android:valueFrom="0"
+                        android:valueTo="100"
+                        app:labelBehavior="gone" />
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/appearance_editor_c1_soft"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:visibility="gone"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/appearance_editor_soft_off"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:maxLines="1"
+                            android:text="@string/appearance_editor_soft_off"
+                            app:iconPadding="4dp"
+                            app:iconSize="16dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/appearance_editor_soft_on"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:maxLines="1"
+                            android:text="@string/appearance_editor_soft_on"
+                            app:iconPadding="4dp"
+                            app:iconSize="16dp" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+                </LinearLayout>
+
+                <!-- The terminal's Legibility: its palette's contrast (SPEC §2, §3.4). -->
+                <LinearLayout
+                    android:id="@+id/appearance_editor_cl"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:id="@+id/appearance_editor_cl_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/appearance_editor_legibility"
                         android:textAppearance="?attr/textAppearanceLabelMedium"
-                        app:backgroundTint="@color/appearance_editor_segment_fill"
-                        app:icon="@null"
-                        app:iconPadding="0dp" />
+                        android:textColor="?attr/colorOnSurfaceVariant" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/appearance_editor_legibility_harder"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="0dp"
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/appearance_editor_legibility"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:insetLeft="0dp"
-                        android:insetRight="0dp"
-                        android:maxLines="1"
-                        android:minWidth="0dp"
-                        android:paddingStart="2dp"
-                        android:paddingEnd="2dp"
-                        android:text="@string/appearance_editor_legibility_harder"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/appearance_editor_legibility_softer"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:insetLeft="0dp"
+                            android:insetRight="0dp"
+                            android:maxLines="1"
+                            android:minWidth="0dp"
+                            android:paddingStart="2dp"
+                            android:paddingEnd="2dp"
+                            android:text="@string/appearance_editor_legibility_softer"
+                            android:textAppearance="?attr/textAppearanceLabelMedium"
+                            app:backgroundTint="@color/appearance_editor_segment_fill"
+                            app:icon="@null"
+                            app:iconPadding="0dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/appearance_editor_legibility_default"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:insetLeft="0dp"
+                            android:insetRight="0dp"
+                            android:maxLines="1"
+                            android:minWidth="0dp"
+                            android:paddingStart="2dp"
+                            android:paddingEnd="2dp"
+                            android:text="@string/appearance_editor_legibility_default"
+                            android:textAppearance="?attr/textAppearanceLabelMedium"
+                            app:backgroundTint="@color/appearance_editor_segment_fill"
+                            app:icon="@null"
+                            app:iconPadding="0dp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/appearance_editor_legibility_harder"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:insetLeft="0dp"
+                            android:insetRight="0dp"
+                            android:maxLines="1"
+                            android:minWidth="0dp"
+                            android:paddingStart="2dp"
+                            android:paddingEnd="2dp"
+                            android:text="@string/appearance_editor_legibility_harder"
+                            android:textAppearance="?attr/textAppearanceLabelMedium"
+                            app:backgroundTint="@color/appearance_editor_segment_fill"
+                            app:icon="@null"
+                            app:iconPadding="0dp" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/appearance_editor_c2"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/appearance_editor_c2_label"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
                         android:textAppearance="?attr/textAppearanceLabelMedium"
-                        app:backgroundTint="@color/appearance_editor_segment_fill"
-                        app:icon="@null"
-                        app:iconPadding="0dp" />
-                </com.google.android.material.button.MaterialButtonToggleGroup>
+                        android:textColor="?attr/colorOnSurfaceVariant" />
 
-                <com.google.android.material.button.MaterialButtonToggleGroup
-                    android:id="@+id/appearance_editor_c1_soft"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:visibility="gone"
-                    app:selectionRequired="true"
-                    app:singleSelection="true">
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/appearance_editor_soft_off"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="0dp"
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/appearance_editor_c2_slider"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:maxLines="1"
-                        android:text="@string/appearance_editor_soft_off"
-                        app:iconPadding="4dp"
-                        app:iconSize="16dp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/appearance_editor_soft_on"
-                        style="?attr/materialButtonOutlinedStyle"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:maxLines="1"
-                        android:text="@string/appearance_editor_soft_on"
-                        app:iconPadding="4dp"
-                        app:iconSize="16dp" />
-                </com.google.android.material.button.MaterialButtonToggleGroup>
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/appearance_editor_c2"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/appearance_editor_c2_label"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textAppearance="?attr/textAppearanceLabelMedium"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
-
-                <com.google.android.material.slider.Slider
-                    android:id="@+id/appearance_editor_c2_slider"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:stepSize="1"
-                    android:valueFrom="0"
-                    android:valueTo="100"
-                    app:labelBehavior="gone" />
+                        android:stepSize="1"
+                        android:valueFrom="0"
+                        android:valueTo="100"
+                        app:labelBehavior="gone" />
+                </LinearLayout>
             </LinearLayout>
         </LinearLayout>
     </LinearLayout>

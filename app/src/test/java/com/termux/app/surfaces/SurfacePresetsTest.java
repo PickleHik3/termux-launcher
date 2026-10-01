@@ -69,9 +69,6 @@ public class SurfacePresetsTest {
         assertEquals(6, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertEquals(46, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
         assertEquals(14, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
-        assertEquals(22, preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
-        assertEquals(22, preferences.getTerminalCornerRadius());
-        assertEquals(4, preferences.getTerminalPaneGap());
         // A Look never detaches a surface and never touches Style.
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows())
             assertTrue(row.slot + "/" + row.property,
@@ -184,18 +181,104 @@ public class SurfacePresetsTest {
     }
 
     @Test
-    public void everyPresetCarriesTheKeysItsCardRenders() {
-        // The device-mock cards read these five directly; a preset omitting one would silently
-        // fall back to a hardcoded number and the card would lie about the look it applies.
-        String[] rendered = {
+    public void everyPresetCarriesItsGlass() {
+        String[] glass = {
+            TERMUX_APP.KEY_SURFACE_BASE_BLUR,
             TERMUX_APP.KEY_SURFACE_BASE_OPACITY,
             TERMUX_APP.KEY_SURFACE_BASE_GRAIN,
-            TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS,
-            TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP,
         };
         for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
-            for (String key : rendered)
+            for (String key : glass)
                 assertTrue(preset.id + " misses " + key, preset.values.containsKey(key));
         }
+    }
+
+    // ------------------------------------------------------------- corners and margins (Layout)
+
+    /** Corners and margins are Layout's (2026-10-01): no Look names any of them. */
+    @Test
+    public void aLookNamesNoCornerOrMargin() {
+        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
+            for (String key : preset.values.keySet())
+                assertFalse(preset.id + " names " + key, SurfacePresets.isLayoutOwned(key));
+            assertFalse(preset.values.containsKey(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS));
+            assertFalse(preset.values.containsKey(TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP));
+            assertFalse(preset.values.containsKey(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS));
+            assertFalse(preset.values.containsKey(TERMUX_APP.KEY_TERMINAL_PANE_GAP));
+        }
+    }
+
+    @Test
+    public void theLayoutOwnedKeysAreCornersSideGapsAndTheTerminalsMargin() {
+        assertTrue(SurfacePresets.isLayoutOwned(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS));
+        assertTrue(SurfacePresets.isLayoutOwned(TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP));
+        assertTrue(SurfacePresets.isLayoutOwned(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS));
+        assertTrue(SurfacePresets.isLayoutOwned(TERMUX_APP.KEY_TERMINAL_PANE_GAP));
+        assertTrue(SurfacePresets.isLayoutOwned(TermuxAppSharedPreferences.surfaceOverrideKey(
+            SurfaceSlot.DOCK, SurfaceProperty.CORNER_RADIUS)));
+        assertTrue(SurfacePresets.isLayoutOwned(TermuxAppSharedPreferences.surfaceOverrideKey(
+            SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP)));
+        assertFalse(SurfacePresets.isLayoutOwned(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
+        assertFalse(SurfacePresets.isLayoutOwned(TermuxAppSharedPreferences.surfaceOverrideKey(
+            SurfaceSlot.DOCK, SurfaceProperty.GRAIN)));
+        // The key caps' radius is the keyboard's Key corners, not the global shape.
+        assertFalse(SurfacePresets.isLayoutOwned(
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP));
+    }
+
+    /** Switching Looks keeps the user's Layout corners and margin, detached cells included. */
+    @Test
+    public void switchingLooksKeepsCornersAndMargins() {
+        preferences.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, 33);
+        preferences.setTerminalCornerRadius(33);
+        preferences.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, 21);
+        preferences.setTerminalPaneGap(9);
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP, 17);
+
+        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
+            SurfacePresets.apply(preferences, preset);
+            assertEquals(preset.id, 33,
+                preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
+            assertEquals(preset.id, 33, preferences.getTerminalCornerRadius());
+            assertEquals(preset.id, 21, preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP));
+            assertEquals(preset.id, 9, preferences.getTerminalPaneGap());
+            assertFalse(preset.id,
+                preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP));
+            assertEquals(preset.id, 17,
+                preferences.getSurfaceOverrideValue(SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP));
+            // The Look still reads as applied: its ring does not care about the shape.
+            assertTrue(preset.id, SurfacePresets.matches(preferences, preset));
+        }
+    }
+
+    /**
+     * A Custom saved before the rule still carries corners and margins: they stay in the blob for
+     * migration, but applying it obeys none of them, and a fresh save leaves them out.
+     */
+    @Test
+    public void aStoredCustomsCornersAndMarginsAreIgnored() {
+        preferences.setSurfaceCustomPreset("{\"format_version\":2,\"surface_base_blur\":21,"
+            + "\"" + TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS + "\":2,"
+            + "\"" + TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP + "\":3,"
+            + "\"" + TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS + "\":2,"
+            + "\"" + TERMUX_APP.KEY_TERMINAL_PANE_GAP + "\":1}");
+        preferences.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, 30);
+        preferences.setTerminalCornerRadius(30);
+        preferences.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, 16);
+        preferences.setTerminalPaneGap(6);
+
+        SurfacePresets.Preset custom = SurfacePresets.custom(preferences);
+        assertNotNull(custom);
+        SurfacePresets.apply(preferences, custom);
+        assertEquals(21, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(30, preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
+        assertEquals(30, preferences.getTerminalCornerRadius());
+        assertEquals(16, preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP));
+        assertEquals(6, preferences.getTerminalPaneGap());
+        assertTrue(SurfacePresets.matches(preferences, custom));
+
+        SurfacePresets.saveCustom(preferences);
+        for (String key : SurfacePresets.custom(preferences).values.keySet())
+            assertFalse(key, SurfacePresets.isLayoutOwned(key));
     }
 }

@@ -53,8 +53,6 @@ public class SurfacePresetsGlassTest {
         assertEquals(25, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertEquals(60, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
         assertEquals(8, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
-        assertEquals(28, preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
-        assertEquals(14, preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP));
         assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN, preferences.getSurfaceGlassTint());
         assertEquals(TERMUX_APP.GLASS_RIM_GRADIENT, preferences.getSurfaceGlassRim());
         assertEquals(TERMUX_APP.GLASS_MOTION_MIST, preferences.getSurfaceGlassMotion());
@@ -80,10 +78,10 @@ public class SurfacePresetsGlassTest {
 
     @Test
     public void clearTintAndSolidCarryTheRecipesOfTheSpec() {
-        assertRecipe(preset("minimal"), 3, 16, 4, 20, 4, 10, 18);
-        assertRecipe(preset("stock"), 6, 46, 14, 22, 4, 10, 18);
-        assertRecipe(preset("solid"), 0, 92, 0, 14, 0, 1, 0);
-        assertRecipe(preset("frost"), 25, 60, 8, 28, 9, 20, 18);
+        assertRecipe(preset("minimal"), 3, 16, 4, 4, 10, 18);
+        assertRecipe(preset("stock"), 6, 46, 14, 4, 10, 18);
+        assertRecipe(preset("solid"), 0, 92, 0, 0, 1, 0);
+        assertRecipe(preset("frost"), 25, 60, 8, 9, 20, 18);
         assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN,
             preset("stock").values.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
 
@@ -98,15 +96,15 @@ public class SurfacePresetsGlassTest {
     }
 
     private static void assertRecipe(SurfacePresets.Preset preset, int blur, int opacity,
-                                     int grain, int corners, int bend, int edgeWidth,
-                                     int edgeLight) {
+                                     int grain, int bend, int edgeWidth, int edgeLight) {
         assertEquals(preset.id, blur, preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_BLUR));
         assertEquals(preset.id, opacity, preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY));
         assertEquals(preset.id, grain, preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_GRAIN));
-        assertEquals(preset.id, corners,
-            preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS));
-        assertEquals(preset.id, corners, preset.values.get(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS));
-        assertEquals(preset.id, 4, preset.values.get(TERMUX_APP.KEY_TERMINAL_PANE_GAP));
+        // Corners and margins are Layout's (2026-10-01).
+        assertFalse(preset.id,
+            preset.values.containsKey(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS));
+        assertFalse(preset.id, preset.values.containsKey(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS));
+        assertFalse(preset.id, preset.values.containsKey(TERMUX_APP.KEY_TERMINAL_PANE_GAP));
         assertEquals(preset.id, bend, preset.values.get(TERMUX_APP.KEY_FANCIER_GLASS_BEND));
         assertEquals(preset.id, edgeWidth,
             preset.values.get(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH));

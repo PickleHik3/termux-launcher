@@ -1,6 +1,7 @@
 package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -8,10 +9,12 @@ import android.app.Activity;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewParent;
 import android.widget.FrameLayout;
 
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.slider.Slider;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.LayoutCanvasView;
@@ -72,9 +75,54 @@ public class LayoutModeViewsTest {
         assertNotNull(panel.findViewById(R.id.layout_editor_tray_empty));
         assertNotNull(panel.findViewById(R.id.layout_editor_tray_drop));
         assertNotNull(panel.findViewById(R.id.appearance_editor_row2_controls));
+        // Layout mode also carries what no Look sets (2026-10-01): Style, Corners and Margin.
+        View style = panel.findViewById(R.id.appearance_editor_style);
+        assertTrue(style instanceof MaterialButtonToggleGroup);
+        assertEquals("docked and floating",
+            2, ((MaterialButtonToggleGroup) style).getChildCount());
+        assertTrue("Style lives in the Layout row", isInside(style, row));
+        View corners = panel.findViewById(R.id.appearance_editor_corners);
+        View margin = panel.findViewById(R.id.appearance_editor_margin);
+        assertTrue(corners instanceof Slider);
+        assertTrue(margin instanceof Slider);
+        assertTrue(isInside(corners, row));
+        assertTrue(isInside(margin, row));
+        assertEquals(40f, ((Slider) corners).getValueTo(), 0f);
+        assertEquals(48f, ((Slider) margin).getValueTo(), 0f);
+        assertNotNull(panel.findViewById(R.id.appearance_editor_corners_label));
+        assertNotNull(panel.findViewById(R.id.appearance_editor_margin_label));
         // The mode pill, Undo and Done stay on the top row for both modes.
         assertNotNull(panel.findViewById(R.id.appearance_editor_mode_layout));
         assertNotNull(panel.findViewById(R.id.appearance_editor_undo));
         assertNotNull(panel.findViewById(R.id.appearance_editor_done));
+    }
+
+    /** Legibility is the terminal's now: its own column in row 2, out of the first control's. */
+    @Test
+    public void rowTwoCarriesLegibilityInAColumnOfItsOwn() {
+        View panel = inflate(R.layout.appearance_editor_panel);
+        View row2 = panel.findViewById(R.id.appearance_editor_row2);
+        View column = panel.findViewById(R.id.appearance_editor_cl);
+        View legibility = panel.findViewById(R.id.appearance_editor_legibility);
+        assertNotNull(column);
+        assertTrue(legibility instanceof MaterialButtonToggleGroup);
+        assertEquals("softer, default, harder",
+            3, ((MaterialButtonToggleGroup) legibility).getChildCount());
+        assertTrue(isInside(legibility, column));
+        assertTrue(isInside(column, row2));
+        assertFalse("not the first control's any more",
+            isInside(legibility, panel.findViewById(R.id.appearance_editor_c1)));
+        assertNotNull(panel.findViewById(R.id.appearance_editor_row2_line));
+        assertFalse("Style left Appearance's row 1", isInside(
+            panel.findViewById(R.id.appearance_editor_style),
+            panel.findViewById(R.id.appearance_editor_row1)));
+    }
+
+    private static boolean isInside(View view, View ancestor) {
+        for (ViewParent parent = view.getParent(); parent != null; parent = parent.getParent()) {
+            if (parent == ancestor)
+                return true;
+        }
+        return false;
     }
 }

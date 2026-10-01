@@ -19,8 +19,9 @@ Layout editor's control rows, and the Fancier Glass switch and its three sliders
    the user chose.
 2. **One editor.** Appearance and Layout are two modes of one screen: the launcher itself, live,
    scaled into a frame, with a bottom area that never scrolls.
-3. **Taste is a slider with stops.** Four Looks and Custom. A Look owns every value a slider used
-   to set. Custom is where a tap on an element reveals at most two combined controls.
+3. **Taste is a slider with stops.** Four Looks and Custom. A Look owns the glass a slider used
+   to set; the global shape (corners, margin) is Layout's (2026-10-01). Custom is where a tap on
+   an element reveals a few combined controls.
 4. **No knobs where a handle will do.** Layout is drag to move, drop to hide, handle to resize.
 5. **Nothing for the file-editing crowd in 1.0.** No look file, no `launcherctl appearance.set`.
    Removed keys stay in preferences for migration.
@@ -81,35 +82,42 @@ at `?attr/shapeCornerFamily` large). Chips are M3 `Chip`. Segmented controls are
 
 - **Look slider.** An M3 `Slider` with five discrete stops and labels under the ticks: Clear ·
   Mist · Tint · Solid · Custom. Sliding to a stop applies that Look live. Custom is the last stop.
-- **Style toggle.** Beside the slider, a two-segment M3 toggle with glyphs only (content
-  descriptions "Docked" and "Floating"): a phone outline with a bar flush at the bottom edge, and a
-  phone outline with an inset pill. Style belongs to no Look; it is the one permanent toggle in
-  Appearance mode. It writes `app_launcher_dock_style`.
+- **Style toggle:** moved to Layout mode (§3.5) on 2026-10-01. Row 1 is the Look slider alone.
 - A hint line under row 1: "Slide to try a Look. The last stop is yours." At Custom with nothing
   selected: "Tap anything in the frame to tune it."
 
 ### 3.4 Appearance mode, row 2 (Custom only)
 
 Row 2 appears only at the Custom stop and only after a tap in the frame. It holds the tapped
-element's name and at most two controls. The tall state is one fixed height.
+element's name and its controls: three for the terminal, otherwise one or two. Its height is
+fixed per element: one line side by side on a wide panel; on a narrow one (under 600dp) the
+terminal's two sliders share a line with Legibility on its own line under them, and any other
+pair stacks one control per line, as before.
 
-| Tapped | Control 1 | Control 2 |
-|---|---|---|
-| Terminal | **Darkness** slider: pane opacity and tint depth together | **Blur** slider (shared) |
-| Status bar or dock | **Legibility** segmented Softer / Default / Harder (§2, global) | **Blur** slider (shared) |
-| Keyboard | **Keys** slider: key opacity and key radius together | **Blur** slider (shared) |
-| Wallpaper (any bare area) | **Soft wallpaper** on/off (wallpaper blur + mild dim) | **Dim** slider |
+| Tapped | Controls |
+|---|---|
+| Terminal | **Darkness** slider (pane opacity and tint depth together) · **Legibility** segmented Softer / Default / Harder (§2) · **Blur** slider (shared) |
+| Status bar or dock | **Blur** slider (shared) |
+| Keyboard | **Key corners** slider · **Blur** slider (shared) |
+| Wallpaper (any bare area) | **Soft wallpaper** on/off (wallpaper blur + mild dim) · **Dim** slider |
 
 Rules:
 - Blur is one value for every surface (`surface_base_blur`). Darkness writes the terminal's own
-  opacity and the tint mix; Keys writes `in_app_keyboard_key_opacity` and
-  `in_app_keyboard_key_corner_radius_dp` along one curve. Soft wallpaper writes a fixed blur + dim
-  pair; Dim writes `wallpaper_backdrop_dim`.
+  opacity and the tint mix. Key corners writes `in_app_keyboard_key_corner_radius_dp` alone,
+  0–24dp; key opacity is the Look's (the old Keys slider moved both on one curve and read as a
+  radius control with the wrong name). Soft wallpaper writes a fixed blur + dim pair; Dim writes
+  `wallpaper_backdrop_dim`.
+- Legibility writes `terminal_contrast_level`. Its point is the terminal text's Material palette
+  contrast: a tap rebuilds the palette and repaints every pane at once, so the terminal's colours
+  visibly change in the frame; it still sets every chrome band's target (§2). Undo and Discard
+  put it back. With wallpaper colours off the terminal wears a scheme file no contrast level
+  moves, so the segments are disabled and the label says it needs wallpaper colours (as the
+  Settings row does).
 - Moving any control at a Look stop jumps the slider to Custom, seeded from that Look. Sliding
   from Custom back to a Look applies the Look and discards the Custom values, with an Undo-able
   notice.
-- Corners, margins, side gap, pane gap, grain, rim style, tint, motion, chip radius, key spacing
-  and glass depth live inside the Look. They have no control anywhere.
+- Grain, rim style, tint, motion, chip radius, key spacing and glass depth live inside the Look.
+  They have no control anywhere. Corners and margins are Layout's (§3.5).
 - Custom is stored as today's `surface_custom_preset` JSON (format 2).
 
 ### 3.5 Layout mode
@@ -119,9 +127,21 @@ from the layout element pack (§5), because Layout must show arrangements the li
 (the other orientation, a hidden tray, a lifted bar). Switching to Layout mode cross-fades the
 frame from the live render to the layout canvas; the geometry is identical, so nothing jumps.
 
-Row 1 in Layout mode: the mode pill, a two-segment Portrait / Landscape toggle (glyphs, with
-content descriptions), and the restore tray (§3.6). No other rows. No sliders, no pills for
-elements.
+Layout mode's bottom area, under the top row (mode pill, Undo, Done), visible without a tap:
+- a two-segment Portrait / Landscape toggle (glyphs, with content descriptions);
+- the **Style** toggle beside it: two glyph segments (content descriptions "Docked" and
+  "Floating"), a phone outline with a bar flush at the bottom edge and one with an inset pill. It
+  writes `app_launcher_dock_style`; Style belongs to no Look. The layout canvas is re-read after a
+  change, so it draws the dock in the new style;
+- the restore tray (§3.6);
+- under them, two M3 sliders side by side: **Corners**, 0–40dp, one radius for everything
+  (`surface_base_corner_radius` and `terminal_corner_radius`, as the retired "All surfaces"
+  Corners wrote them), and **Margin**, 0–48dp, all the air on screen (`surface_base_side_gap`
+  while Floating, plus `terminal_pane_gap` capped at 24). No Look sets either.
+
+The card grows a little upward in Layout mode to fit the sliders; the frame does not move and
+nothing scrolls. Corners and Margin preview live (the terminal resize waits for the release) and
+are covered by the one Undo, Discard and dirty state. No pills for elements.
 
 Interactions in the frame:
 - **Move:** drag a bar to an edge, as today. Drop targets are the dotted outlines already drawn.
@@ -157,16 +177,19 @@ replace Bare, Classic and Slate.
 | Solid | Slate | Opaque; no blur cost; the "reduce transparency" answer | blur 0 · opacity 92 · grain 0 · corners 14 · scheme tint · hairline rim · classic motion · depth off |
 | Custom | Custom | Whatever the user tuned; seeded from the Look they left | `surface_custom_preset` |
 
-- A Look sets every key a slider used to set: material triple, corners, side gap, pane gap,
-  terminal corners, chip radius, key radius and spacing, tint, rim, motion, and the Fancier Glass
-  triple. Undo, Discard and the dirty signature cover all of them (today they omit tint, rim,
-  motion and the Fancier keys: SurfaceEditorController.java:571-663, 2728-2787, 3534-3583).
+- A Look sets the glass: material triple, tint, rim, motion, and the Fancier Glass triple. Undo,
+  Discard and the dirty signature cover all of them (today they omit tint, rim, motion and the
+  Fancier keys: SurfaceEditorController.java:571-663, 2728-2787, 3534-3583).
+- **A Look sets no corner or margin** (2026-10-01): not `surface_base_corner_radius`,
+  `surface_base_side_gap`, `terminal_corner_radius`, `terminal_pane_gap`, nor any per-surface
+  corner or side-gap override. Switching Looks keeps the user's Layout Corners and Margin, and they
+  never decide which stop the slider stands on. A saved Custom stops capturing them; one stored
+  before the rule may still carry them, and applying it ignores them. The corners column of the
+  recipes above is history. The key caps' radius is not part of this: it is Key corners (§3.4).
 - **Depth per Look** maps to the Fancier Glass keys bend / edge width / edge light: subtle
   4 / 10 / 18%, medium 9 / 20 / 18%, off 0 / 1 / 0. Fancier Glass is on wherever the device
   supports it (API 33, in-app wallpaper); Lazy mode turns it off with the other effects. The
   switch and its three sliders leave the UI.
-- Solid keeps rounded corners (14) where Slate used 0: square corners read as another app, not
-  another material.
 - Style (docked / floating) is never part of a Look.
 
 ## 5. Layout canvas artwork
@@ -201,17 +224,19 @@ The view is renamed from "miniature" to **layout canvas** in code and docs as it
 |---|---|
 | Preset tiles Classic · Mist · Slate · Bare · Custom | Look slider stops Clear · Mist · Tint · Solid · Custom |
 | Material Solid / Glass / Frost toggle | inside the Look |
-| Opacity · Blur · Grain, base and per surface (15 sliders) | Custom row 2: Darkness, Keys, one shared Blur; grain inside the Look |
+| Opacity · Blur · Grain, base and per surface (15 sliders) | Custom row 2: Darkness, Key corners, one shared Blur; grain inside the Look |
 | Fancier Glass switch · Bend · Edge width · Edge light | depth per Look; on where supported; Lazy mode off |
-| Shape Docked / Floating | style glyph toggle beside the Look slider |
-| Corners · Margin · side gap · pane gap · chip radius · key radius · key spacing | inside the Look |
+| Shape Docked / Floating | style glyph toggle in Layout mode, beside Portrait / Landscape |
+| Corners · Margin · side gap · pane gap | Layout mode: one Corners and one Margin slider |
+| Key radius | Custom · keyboard: Key corners |
+| Chip radius · key spacing | inside the Look |
 | Wallpaper dim slider | Custom · wallpaper: Soft wallpaper + Dim |
 | Tint · rim · motion (no UI today) | inside the Look |
 | Per-surface cards · ↺ chips · glowing outlines · "All surfaces" card | gone |
 | Dock Apps count | Layout mode, dock handle (count follows dock height and width) |
 | Clock face · position pop-up | stays on the live clock's ▾ handle |
 | Keyboard colours · theme · typeface · key colour picks | Keyboard settings page, unchanged |
-| Terminal contrast (Look page) | Legibility, Custom row 2 for status bar and dock |
+| Terminal contrast (Look page) | Legibility, Custom row 2 for the terminal |
 | Save look · Undo · Done · ✕ · Reset | Undo · Done |
 | Bottom padding (Look page) · Keyboard type (Keyboard page) | Layout mode only; the Settings rows are removed |
 | Layout editor rows: Dock height, A–Z mode and position, Keyboard on/off, type, mode, height, bottom padding, grid columns and rows | handles, tray, keyboard-type chips |
@@ -251,3 +276,8 @@ since 2026-09-30 20:59; device check owed).
 - 2026-09-30: keyboard type = glyph chips beside the handle; names Clear · Mist · Tint · Solid;
   Layout is not a miniature, it shares the big frame; a Material pill switches the two modes; the
   editor's pills and cards are rebuilt with real M3 components (final round).
+- 2026-10-01 (developer): Layout mode gets a global Corners slider and a shared Margin slider and
+  takes the Style toggle from Appearance row 1; Looks no longer set corners or margins, and
+  switching Looks keeps them; the keyboard's Keys slider becomes Key corners (radius only);
+  Legibility moves from the status bar and dock to the terminal's row 2, where its palette effect
+  is seen.

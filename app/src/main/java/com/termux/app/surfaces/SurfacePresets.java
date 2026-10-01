@@ -34,6 +34,11 @@ import java.util.Map;
  * <p>Beyond the numbers a preset carries three enum-like strings: the glass tint colour, its rim
  * and its motion profile. Every preset states them (the defaults unless it says otherwise), so
  * applying one always resets the others' choice.
+ *
+ * <p>Corners and margins are not a look's (developer, 2026-10-01): they are the global shape
+ * Layout mode's Corners and Margin set, and switching Looks keeps them. No preset names them, a
+ * saved Custom no longer captures them, and a stored look that still carries them (written before
+ * that rule) has them ignored on apply and in {@link #matches}. See {@link #isLayoutOwned}.
  */
 public final class SurfacePresets {
 
@@ -68,7 +73,7 @@ public final class SurfacePresets {
     private static final List<Preset> PRESETS = Collections.unmodifiableList(Arrays.asList(
         // Clear (id minimal): wallpaper forward, the thinnest glass that still reads as a surface.
         preset("minimal", R.string.termux_surface_preset_minimal,
-            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 3, 16, 4, 20, 12, 4, 4, 10, 18,
+            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 3, 16, 4, 4, 10, 18,
             look -> { }),
         // Mist: Obsidian-Music's glass and motion (Apache-2.0; see
         // project-docs/reference/launcher/mist-preset-obsidian-values.md). Blur 25
@@ -77,7 +82,7 @@ public final class SurfacePresets {
         // 60/255 of the percentage, so a literal match (about 68) would read as sand. 8 is the
         // same faint tooth.
         preset("frost", R.string.termux_surface_preset_frost,
-            TERMUX_APP.SURFACE_MATERIAL_FROST, 50, 25, 60, 8, 28, 14, 4, 9, 20, 18,
+            TERMUX_APP.SURFACE_MATERIAL_FROST, 50, 25, 60, 8, 9, 20, 18,
             look -> {
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_OBSIDIAN);
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.GLASS_RIM_GRADIENT);
@@ -85,11 +90,11 @@ public final class SurfacePresets {
             }),
         // Tint (id stock): tinted, low blur, denser; for loud wallpapers and a dark terminal.
         preset("stock", R.string.termux_surface_preset_stock,
-            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 6, 46, 14, 22, 12, 4, 4, 10, 18,
+            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 6, 46, 14, 4, 10, 18,
             look -> look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_OBSIDIAN)),
-        // Solid: opaque, no blur cost. Rounded (14), not square: square reads as another app.
+        // Solid: opaque, no blur cost.
         preset("solid", R.string.termux_surface_preset_solid,
-            TERMUX_APP.SURFACE_MATERIAL_SOLID, 78, 0, 92, 0, 14, 12, 4, 0, 1, 0,
+            TERMUX_APP.SURFACE_MATERIAL_SOLID, 78, 0, 92, 0, 0, 1, 0,
             look -> { })
     ));
 
@@ -98,14 +103,13 @@ public final class SurfacePresets {
     }
 
     /**
-     * Material point, the Base triple, corners (Base and terminal), side gap, pane gap and the
-     * three Fancier Glass depth keys; the default glass tint, rim and motion; then the extras,
-     * whose puts replace any of those in place. The dock style is deliberately absent: a Look
-     * never changes Style.
+     * Material point, the Base triple and the three Fancier Glass depth keys; the default glass
+     * tint, rim and motion; then the extras, whose puts replace any of those in place. The dock
+     * style is deliberately absent — a Look never changes Style — and so are corners and margins,
+     * which are Layout's ({@link #isLayoutOwned}).
      */
     private static Preset preset(String id, @StringRes int nameRes, String material,
                                  int intensity, int blur, int opacity, int grain,
-                                 int cornerRadius, int sideGap, int paneGap,
                                  int bend, int edgeWidth, int edgeLight, Extras extras) {
         LinkedHashMap<String, Object> look = new LinkedHashMap<>();
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL, material);
@@ -113,10 +117,6 @@ public final class SurfacePresets {
         look.put(TERMUX_APP.KEY_SURFACE_BASE_BLUR, blur);
         look.put(TERMUX_APP.KEY_SURFACE_BASE_OPACITY, opacity);
         look.put(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, grain);
-        look.put(TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS, cornerRadius);
-        look.put(TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP, sideGap);
-        look.put(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS, cornerRadius);
-        look.put(TERMUX_APP.KEY_TERMINAL_PANE_GAP, paneGap);
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_BEND, bend);
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, edgeWidth);
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, edgeLight);
@@ -134,6 +134,33 @@ public final class SurfacePresets {
     @NonNull
     public static List<Preset> presets() {
         return PRESETS;
+    }
+
+    // ------------------------------------------------------------------ Layout's global shape
+
+    /**
+     * Whether a property is Layout's rather than a look's: the corner radius and the side gap,
+     * at Base and on every surface.
+     */
+    public static boolean isLayoutOwned(@NonNull SurfaceProperty property) {
+        return property == SurfaceProperty.CORNER_RADIUS || property == SurfaceProperty.SIDE_GAP;
+    }
+
+    /**
+     * Whether a look key is Layout's: Base corners and side gap, the terminal's own corners and
+     * margin (its pane gap), and any per-surface corner or side-gap override (a dock's horizontal
+     * inset, say). A look never writes or tests these.
+     */
+    public static boolean isLayoutOwned(@NonNull String key) {
+        switch (key) {
+            case TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS:
+            case TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP:
+            case TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS:
+            case TERMUX_APP.KEY_TERMINAL_PANE_GAP:
+                return true;
+        }
+        SurfaceEditorRows.Row cell = overrideCellForKey(key);
+        return cell != null && isLayoutOwned(cell.property);
     }
 
     // ------------------------------------------------------------------------ the saved look
@@ -162,9 +189,10 @@ public final class SurfacePresets {
     }
 
     /**
-     * The live look in the preset format: the material point, the Base numbers, the
-     * terminal's own three, and every per-surface cell that is currently detached — named cells
-     * being exactly what {@link #apply} re-detaches, and what {@link #matches} tests against.
+     * The live look in the preset format: the material point, the Base numbers, the terminal's
+     * border, and every per-surface cell that is currently detached — named cells being exactly
+     * what {@link #apply} re-detaches, and what {@link #matches} tests against. Corners and margins
+     * are left out: they are Layout's ({@link #isLayoutOwned}).
      */
     @NonNull
     public static Map<String, Object> captureLook(@NonNull TermuxAppSharedPreferences prefs) {
@@ -173,20 +201,20 @@ public final class SurfacePresets {
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, prefs.getSurfaceMaterialIntensity());
         // After the material point, never before it: a hand-tuned triple no longer sits on any
         // point of any family's curve, and these three are the numbers that must win on apply.
-        for (SurfaceProperty property : SurfaceProperty.values())
-            look.put(property.baseKey, prefs.getSurfaceBaseValue(property));
+        for (SurfaceProperty property : SurfaceProperty.values()) {
+            if (!isLayoutOwned(property))
+                look.put(property.baseKey, prefs.getSurfaceBaseValue(property));
+        }
         look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, prefs.getSurfaceGlassTint());
         look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, prefs.getSurfaceGlassRim());
         look.put(TERMUX_APP.KEY_SURFACE_GLASS_MOTION, prefs.getSurfaceGlassMotion());
         look.put(TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED, prefs.isTerminalBorderEnabled());
-        look.put(TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS, prefs.getTerminalCornerRadius());
-        look.put(TERMUX_APP.KEY_TERMINAL_PANE_GAP, prefs.getTerminalPaneGap());
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_BEND, prefs.getFancierGlassBendDp());
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, prefs.getFancierGlassEdgeWidthDp());
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, prefs.getFancierGlassEdgeLightPercent());
         putCustomOnly(prefs, look);
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
-            if (prefs.isSurfaceInheriting(row.slot, row.property))
+            if (isLayoutOwned(row.property) || prefs.isSurfaceInheriting(row.slot, row.property))
                 continue;
             look.put(TermuxAppSharedPreferences.surfaceOverrideKey(row.slot, row.property),
                 prefs.getSurfaceOverrideValue(row.slot, row.property));
@@ -195,9 +223,9 @@ public final class SurfacePresets {
     }
 
     /**
-     * The values only Custom's row 2 sets (SPEC §3.4) and no Look names: the key caps (Keys), the
-     * wallpaper's dim and Soft wallpaper. Saved with Custom so its stop comes back whole; a Look
-     * leaves them where they are.
+     * The values only Custom saves and no Look names: the key caps (Key corners, and the opacity
+     * the old Keys slider moved with it), the wallpaper's dim and Soft wallpaper. Saved with
+     * Custom so its stop comes back whole; a Look leaves them where they are.
      */
     private static void putCustomOnly(@NonNull TermuxAppSharedPreferences prefs,
                                       @NonNull Map<String, Object> look) {
@@ -262,13 +290,21 @@ public final class SurfacePresets {
     /**
      * Applies a preset in full: every surface back on Base first — a preset is a complete look,
      * so it overwrites detached overrides rather than working around them — then each named value,
-     * with per-surface keys landing as fresh detaches. The caller owns offering the Undo.
+     * with per-surface keys landing as fresh detaches. Corners and margins are not touched, links
+     * included: they are Layout's, and a stored look that still names them is not obeyed. The
+     * caller owns offering the Undo.
      */
     public static void apply(@NonNull TermuxAppSharedPreferences prefs, @NonNull Preset preset) {
-        for (SurfaceSlot slot : SurfaceSlot.values())
-            prefs.reattachSurface(slot);
-        for (Map.Entry<String, Object> entry : preset.values.entrySet())
-            applyOne(prefs, entry.getKey(), entry.getValue());
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            for (SurfaceProperty property : SurfaceProperty.values()) {
+                if (!isLayoutOwned(property))
+                    prefs.setSurfaceInheriting(slot, property, true);
+            }
+        }
+        for (Map.Entry<String, Object> entry : preset.values.entrySet()) {
+            if (!isLayoutOwned(entry.getKey()))
+                applyOne(prefs, entry.getKey(), entry.getValue());
+        }
     }
 
     private static void applyOne(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key,
@@ -305,12 +341,6 @@ public final class SurfacePresets {
             case TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED:
                 prefs.setTerminalBorderEnabled((Boolean) value);
                 return;
-            case TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS:
-                prefs.setTerminalCornerRadius(intOf(value));
-                return;
-            case TERMUX_APP.KEY_TERMINAL_PANE_GAP:
-                prefs.setTerminalPaneGap(intOf(value));
-                return;
             case TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY:
                 prefs.setInAppKeyboardKeyOpacity(intOf(value));
                 return;
@@ -344,15 +374,20 @@ public final class SurfacePresets {
      * Whether the current preferences are exactly this preset: every named value in place, and
      * every per-surface cell detached if and only if the preset names it. That second half is what
      * keeps the ring honest — hand-detaching a row un-matches the preset even at the same numbers.
+     * Corners and margins are Layout's and never decide a match.
      */
     public static boolean matches(@NonNull TermuxAppSharedPreferences prefs,
                                   @NonNull Preset preset) {
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
+            if (isLayoutOwned(row.property))
+                continue;
             String key = TermuxAppSharedPreferences.surfaceOverrideKey(row.slot, row.property);
             if (prefs.isSurfaceInheriting(row.slot, row.property) == preset.values.containsKey(key))
                 return false;
         }
         for (Map.Entry<String, Object> entry : preset.values.entrySet()) {
+            if (isLayoutOwned(entry.getKey()))
+                continue;
             Object current = currentOne(prefs, entry.getKey());
             if (current != null && !current.equals(entry.getValue()))
                 return false;
@@ -385,10 +420,6 @@ public final class SurfacePresets {
                 return prefs.getSurfaceGlassMotion();
             case TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED:
                 return prefs.isTerminalBorderEnabled();
-            case TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS:
-                return prefs.getTerminalCornerRadius();
-            case TERMUX_APP.KEY_TERMINAL_PANE_GAP:
-                return prefs.getTerminalPaneGap();
             case TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_OPACITY:
                 return prefs.getInAppKeyboardKeyOpacity();
             case TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP:

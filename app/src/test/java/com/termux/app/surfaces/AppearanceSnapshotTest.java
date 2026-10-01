@@ -59,11 +59,24 @@ public class AppearanceSnapshotTest {
         preferences.setWallpaperBackdropDim(60);
         SoftWallpaper.set(preferences, true);
         preferences.setTerminalContrastLevel("harder");
+        // Layout mode's Corners and Margin.
+        int corners = preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS);
+        int sideGap = preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP);
+        int terminalCorners = preferences.getTerminalCornerRadius();
+        int paneGap = preferences.getTerminalPaneGap();
+        preferences.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, corners + 7);
+        preferences.setTerminalCornerRadius(terminalCorners + 7);
+        preferences.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, sideGap + 5);
+        preferences.setTerminalPaneGap(paneGap + 5);
         assertNotEquals(signature, AppearanceSnapshot.signatureOf(preferences));
 
         entry.restore(preferences);
 
         assertEquals(signature, AppearanceSnapshot.signatureOf(preferences));
+        assertEquals(corners, preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS));
+        assertEquals(sideGap, preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP));
+        assertEquals(terminalCorners, preferences.getTerminalCornerRadius());
+        assertEquals(paneGap, preferences.getTerminalPaneGap());
         assertTrue(SurfacePresets.matches(preferences, SurfacePresets.presets().get(1)));
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
         assertEquals(TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DEFAULT,

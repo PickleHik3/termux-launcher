@@ -17,7 +17,8 @@ import java.util.List;
 
 /**
  * The Appearance editor's rules (appearance-layout-editor SPEC §3.3–3.4), held as arithmetic:
- * which Look each slider stop is, and what Darkness, Keys, Soft wallpaper and Dim write.
+ * which Look each slider stop is, and what Darkness, Key corners, Soft wallpaper, Dim and Layout's
+ * Corners and Margin write.
  */
 public class AppearanceLooksTest {
 
@@ -74,15 +75,21 @@ public class AppearanceLooksTest {
 
     // ------------------------------------------------------------------------------ the targets
 
+    /**
+     * Terminal: Darkness, Legibility, Blur. Status bar and dock: Blur alone. Keyboard: Key
+     * corners and Blur. Wallpaper: Soft and Dim (2026-10-01).
+     */
     @Test
-    public void eachTargetHasItsTwoControls() {
-        assertTrue(Target.STATUS.firstControlIsLegibility());
-        assertTrue(Target.DOCK.firstControlIsLegibility());
-        assertFalse(Target.TERMINAL.firstControlIsLegibility());
-        assertFalse(Target.KEYBOARD.firstControlIsLegibility());
-        assertFalse(Target.WALLPAPER.firstControlIsLegibility());
-        for (Target target : Target.values())
+    public void eachTargetHasItsControls() {
+        assertFalse(Target.STATUS.hasFirstControl());
+        assertFalse(Target.DOCK.hasFirstControl());
+        assertTrue(Target.TERMINAL.hasFirstControl());
+        assertTrue(Target.KEYBOARD.hasFirstControl());
+        assertTrue(Target.WALLPAPER.hasFirstControl());
+        for (Target target : Target.values()) {
+            assertEquals(target == Target.TERMINAL, target.hasLegibility());
             assertEquals(target != Target.WALLPAPER, target.secondControlIsBlur());
+        }
     }
 
     @Test
@@ -114,29 +121,49 @@ public class AppearanceLooksTest {
         assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN, AppearanceLooks.darknessTint(100));
     }
 
-    // -------------------------------------------------------------------------------- Keys
+    // ------------------------------------------------------------------------- Key corners
 
     @Test
-    public void keysRunsOpacityAndRadiusAlongOneCurve() {
-        assertEquals(0, AppearanceLooks.keysOpacity(0));
-        assertEquals(4f, AppearanceLooks.keysRadiusDp(0), 0.001f);
-        assertEquals(50, AppearanceLooks.keysOpacity(50));
-        assertEquals(10f, AppearanceLooks.keysRadiusDp(50), 0.001f);
-        assertEquals(100, AppearanceLooks.keysOpacity(100));
-        assertEquals(16f, AppearanceLooks.keysRadiusDp(100), 0.001f);
-        assertEquals(16f, AppearanceLooks.keysRadiusDp(250), 0.001f);
-        assertEquals(4f, AppearanceLooks.keysRadiusDp(-20), 0.001f);
+    public void keyCornersIsTheKeyRadiusAloneUpToItsCeiling() {
+        assertEquals(24, AppearanceLooks.KEY_CORNERS_MAX_DP);
+        assertEquals(0, AppearanceLooks.keyCornersDp(0));
+        assertEquals(9, AppearanceLooks.keyCornersDp(9));
+        assertEquals(24, AppearanceLooks.keyCornersDp(24));
+        assertEquals(24, AppearanceLooks.keyCornersDp(60));
+        assertEquals(0, AppearanceLooks.keyCornersDp(-3));
+        for (int dp = 0; dp <= AppearanceLooks.KEY_CORNERS_MAX_DP; dp++)
+            assertEquals(dp, AppearanceLooks.keyCornersValueFor(dp));
+        assertEquals(10, AppearanceLooks.keyCornersValueFor(9.6f));
     }
 
+    // --------------------------------------------------------------- Layout's Corners, Margin
+
     @Test
-    public void theKeysSliderStandsAtTheStoredOpacityOrOnTheRadiusCurve() {
-        assertEquals(72, AppearanceLooks.keysValueFor(72, 5f));
-        // -1 is the keyboard theme's own translucency: the radius places the thumb.
-        assertEquals(50, AppearanceLooks.keysValueFor(-1, 10f));
-        assertEquals(0, AppearanceLooks.keysValueFor(-1, 2f));
-        assertEquals(100, AppearanceLooks.keysValueFor(-1, 30f));
-        for (int keys = 0; keys <= 100; keys += 5)
-            assertEquals(keys, AppearanceLooks.keysValueFor(-1, AppearanceLooks.keysRadiusDp(keys)));
+    public void cornersRunToFortyAndMarginToFortyEight() {
+        assertEquals(40, AppearanceLooks.CORNERS_MAX_DP);
+        assertEquals(0, AppearanceLooks.cornersDp(-1));
+        assertEquals(40, AppearanceLooks.cornersDp(55));
+        assertEquals(48, AppearanceLooks.MARGIN_MAX_DP);
+        assertEquals(0, AppearanceLooks.marginDp(-1));
+        assertEquals(48, AppearanceLooks.marginDp(90));
+    }
+
+    /** The terminal's own margin never goes past 24, however much air Margin asks for. */
+    @Test
+    public void marginCapsTheTerminalsShareAtTwentyFour() {
+        assertEquals(0, AppearanceLooks.terminalMarginDp(0));
+        assertEquals(12, AppearanceLooks.terminalMarginDp(12));
+        assertEquals(24, AppearanceLooks.terminalMarginDp(24));
+        assertEquals(24, AppearanceLooks.terminalMarginDp(40));
+        assertEquals(24, AppearanceLooks.terminalMarginDp(200));
+    }
+
+    /** Floating reads the side gap it spends Margin on; Docked the terminal's own margin. */
+    @Test
+    public void marginReadsTheSideGapFloatingAndThePaneGapDocked() {
+        assertEquals(30, AppearanceLooks.marginValueFor(true, 30, 6));
+        assertEquals(6, AppearanceLooks.marginValueFor(false, 30, 6));
+        assertEquals(48, AppearanceLooks.marginValueFor(true, 99, 6));
     }
 
     // --------------------------------------------------------------------------- Soft and Dim
