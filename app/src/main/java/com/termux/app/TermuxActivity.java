@@ -4938,12 +4938,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.chrome.ChromeShapeOutlineProvider mDockOutline =
         new com.termux.app.chrome.ChromeShapeOutlineProvider();
 
-    /** The model's pieces of the dock's own rows, the ones standing over the keyboard. */
+    /**
+     * The model's pieces of the dock's own rows, the ones standing over the keyboard. Where the
+     * dock and the keyboard share one glass ({@code withKeyboard}) the keyboard's piece is part
+     * of the same sheet, so its clip, rim and seams are the model's for the whole of it.
+     */
     @NonNull
-    private List<com.termux.app.place.ChromeShape.PieceId> dockPieceIds() {
+    private List<com.termux.app.place.ChromeShape.PieceId> dockPieceIds(boolean withKeyboard) {
         List<Element> rows = new ArrayList<>(
             EdgeStackPolicy.overKeyboard(currentPlaceLayout()));
-        return chromePieceIds(rows);
+        List<com.termux.app.place.ChromeShape.PieceId> ids = chromePieceIds(rows);
+        if (withKeyboard) ids.add(com.termux.app.place.ChromeShape.PieceId.KEYBOARD);
+        return ids;
     }
 
     /**
@@ -4957,7 +4963,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Docked, the dock is a slice of the one frame. The model says which of its edges
             // face the opening (the only ones that wear the rim) and what its clip is; its
             // corners are square except a screen corner it stands on.
-            List<com.termux.app.place.ChromeShape.PieceId> ids = dockPieceIds();
+            List<com.termux.app.place.ChromeShape.PieceId> ids = dockPieceIds(
+                ownsInnerEdge && shouldUseUnifiedDefaultKeyboardGlassSurface(buildChromeSpec()));
             int strokeEdges = innerRim ? chromeRimEdges(
                 ids.toArray(new com.termux.app.place.ChromeShape.PieceId[0]))
                 : com.termux.app.chrome.ChromeEdgeRule.NONE;
@@ -6870,7 +6877,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // are seams and the rim rect is pushed past them; only the edge facing the opening
             // keeps the rim and the bend. The capsule is unchanged.
             int dockSeams = capsuleDock ? 0 : com.termux.app.chrome.LiveChromeShape.seamEdges(
-                chromeShape(), dockPieceIds());
+                chromeShape(), dockPieceIds(shouldUseUnifiedDefaultKeyboardGlassSurface(state)));
             float[] capRect = new float[4];
             com.termux.app.chrome.GlassRefraction.rimRect(capRect, capLeft, 0f, capRight, capBottom,
                 com.termux.app.chrome.GlassRefraction.seamReachPx(
