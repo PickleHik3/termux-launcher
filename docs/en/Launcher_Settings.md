@@ -10,8 +10,8 @@ want but not where it lives. Search indexes the preferences inside every destina
 ## Mode
 
 The first row of Settings, above the pages, says what this install is: **Terminal** (just the
-terminal), **Terminal + Home screen** (apps, widgets and the app drawer) or **Terminal + Home
-screen + Linux display** (run Linux desktop apps too). Tap it to pick one. A mode is a preset, not a
+terminal), **Terminal + Home** (apps, widgets and the app drawer) or **Terminal + Home +
+Display** (run Linux desktop apps too). Tap it to pick one. A mode is a preset, not a
 lock: it sets the pinned apps row, alphabets row, app drawer, widget pane, Recents behaviour and
 the Linux display switch, and each of those stays editable on its own page afterwards. Once you
 have moved one of them off the preset the row reads **Custom**. Picking **Terminal** while Termux
@@ -101,14 +101,12 @@ that no longer fit a smaller grid move to free space or a new page rather than b
 
 Use this section for visible surfaces and colors:
 
-- **Appearance** (from a corner tab or the long-press menu): tune the dock, keyboard, status panel, and terminal while looking at the real
-  home screen. Tap the floating palette to style every surface at once, or tap a surface to style
-  it on its own. Home, Terminal and Display wear the same look, so what you change here changes all
-  three. The card is the same kind of sheet as the Layout card: it stands just above the dock and
-  keyboard with the header on top and one list under it, and pulling it up by the handle, the
-  header or the list grows it to the top of the free room — never over the status bar, the dock or
-  the keyboard — before the list scrolls. Pull it down firmly, or tap its ✕, to put it away; your
-  changes stay on screen until you tap Done.
+- **Appearance** (from a corner tab): the launcher scaled into a frame, with a Look slider under
+  it. Slide between **Clear**, **Mist**, **Tint** and **Solid**; the last stop, **Custom**, lets you
+  tap an element in the frame — the dock, the keyboard, the status bar, a pane — and tune its
+  Darkness, Legibility, Blur, Key corners, or Soft wallpaper with Dim. Home, Terminal and Display
+  wear the same look, so what you change here changes all three. **Undo** steps back and **Done**
+  keeps your changes.
   The keyboard's **BG opacity** applies to the keyboard docked under the terminal — a floating,
   split, or overlaying keyboard is a solid panel and ignores it — while its **Edges** apply to
   every keyboard.
@@ -238,9 +236,10 @@ needs is people running it on other devices and reporting anything that looks st
 wrong — a clock that stops updating, a status reading that freezes, a rim that never lights.
 [Open an issue](https://github.com/PickleHik3/termux-launcher/issues) if you find one.
 
-- **Fancier Glass:** every glass surface bends the wallpaper at its edge. It needs Android 13 and a
-  wallpaper set with the in-app wallpaper picker (or `launcherctl wallpaper set`); with any other
-  wallpaper the switch is greyed out and says so.
+- **Fancier Glass** has no switch any more: every glass surface bends the wallpaper at its edge, as
+  deep as the chosen Look says, wherever the device can. It needs Android 13 and a wallpaper set
+  with the in-app wallpaper picker (or `launcherctl wallpaper set`); with any other wallpaper the
+  glass stays flat. Lazy mode, battery saver and reduced motion switch the extra motion off.
 
 ## Terminal
 
@@ -281,7 +280,7 @@ A pinned card shows the sender, the message, how long ago it arrived, and a coun
 messages from one conversation are folded into it. Tap a card to open the notification. Swipe it
 left or right to dismiss it; **Undo** stays in its place for 4 seconds. Long-press a card to read
 the whole message and choose **Open**, **Dismiss**, or **Mute this rule**. With two cards or more,
-swipe up or down on them to see the rest.
+swipe up or down on them to see the rest. See [Pinned notifications](Pinned_Notifications.md).
 
 The expanded status panel's clock opens Android's clock app and its cog opens Settings. Window pills
 also show CPU-based working state and bell-based attention state; those indicators need no toggle.
@@ -368,10 +367,10 @@ from the long-press menu on that place.
 ## Linux display
 
 The Linux display has its own page: the **Display** switch runs a Linux desktop or X11 apps
-as the third place of the home screen — see [The Linux display](X11_Display.md). It takes effect
+as the third place — see [The Linux display](X11_Display.md). It takes effect
 as soon as you return to the launcher: on, the Display place appears; off, it goes, and a display
 that is running asks whether to stop first. The switch also moves **Mode** between Terminal +
-Home screen and the display mode. Under it sit touch
+Home and the display mode. Under it sit touch
 mode, **OSK auto-show** — the keyboard opens when you tap a text field on the
 display and closes when you tap elsewhere, on by default and available in Touchscreen touch mode —
 resolution, text size, clipboard sharing, whether Linux apps are listed in the app drawer,

@@ -21,7 +21,8 @@ different Android package name.
 5. [Troubleshoot common problems](Launcher_Troubleshooting.md).
 
 After a couple of permission prompts, the app's first-launch tour points out the launcher's
-gestures with nine short cards over the real home screen; skip any of them, and replay the whole
+gestures over the real home screen: first how you will use it, then lessons for the page border,
+the keyboard swipe, the status swipe and the apps row. Skip any of them, and replay the whole
 run later from **Settings → Apps → Play the tour again**. Two commands are worth running in your
 first terminal regardless:
 
@@ -46,6 +47,7 @@ access; skip it if command-line tools do not need your shared files.
 - [Kitty protocols and terminal compatibility](Terminal_Kitty_Protocols.md)
 - [Programs and agents inside the terminal](Programs_Inside_The_Terminal.md) — the delta from stock Termux for scripts and AI agents running in a pane
 - [Agent status](Agent_Status.md) — what an AI agent in a pane is doing, shown on the window chips
+- [Pinned notifications](Pinned_Notifications.md) — notification cards beside the clock, and the rules that pin them
 - [Install showcase tools](Building_Terminal_Showcase_Tools.md)
 - [Tlstore, the tool store](Tlstore.md)
 

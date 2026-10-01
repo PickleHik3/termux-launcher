@@ -40,9 +40,14 @@ After the Termux bootstrap finishes, Android may ask to let the launcher read yo
 the blurred status bar, dock and keyboard) and whether to turn on the Linux display. Answer either
 one or tap **Not now** — both stay changeable later in Settings.
 
-Then a short tour plays over the real home screen: nine cards, each glowing the control it wants
-you to try. Skip appears on every card if you would rather explore on your own, and the last card
-offers a **Copy commands** button for the extras it mentions. Play it again any time from
+Then a short tour plays over the real home screen. It opens by asking how you will use the launcher
+(Terminal, Terminal + Home, or Terminal + Home + Display), then walks through the gestures, each
+glowing the control it wants you to try: hold a corner for help, hold the page's border and drag
+to change place, swipe up from the bottom border for the keyboard and down from the top border
+for the status bar, hold an empty spot of the apps row to pin apps, pull the apps row away from
+its edge for the drawer, and swipe up on the space bar for the command palette. Skip appears on
+every card if you would rather explore on your own, and the last card offers a **Copy commands**
+button for the extras it mentions. Play it again any time from
 **Settings → Apps → Play the tour again**.
 
 Run these in your first terminal:
@@ -72,11 +77,12 @@ You can open the app settings in either of these ways:
 Keeping **Show in Recents when not the default launcher** enabled is useful while testing the app
 before making it the default Home app.
 
-## 5. Learn the three places and the four surfaces
+## 5. Learn the three places and the chrome
 
-The home screen is three places side by side: **Widgets** on the left, the **Terminal** in the
-middle and a Linux **Display** on the right. To move, hold a press on any pane's border until it
-ticks, then drag sideways. The launcher opens on the place you left it on.
+The launcher is up to three places side by side: **Home** (your widgets) on the left, the
+**Terminal** in the middle and a Linux **Display** on the right, as your Mode allows. To move, hold
+a press on the page's border until it ticks, then drag sideways. The launcher opens on the place
+you left it on.
 
 From top to bottom in portrait, on the terminal:
 
