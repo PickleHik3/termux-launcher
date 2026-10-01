@@ -99,7 +99,6 @@ final class AppearanceEditorPanel {
     private final View mSecondColumn;
     private final TextView mSecondLabel;
     private final Slider mSecondSlider;
-    private final TextView mHint;
     private final View mRow1;
     private final View mLayoutRow;
     /** Layout mode's Corners and Margin: shown under both Styles. */
@@ -162,7 +161,6 @@ final class AppearanceEditorPanel {
         mSecondColumn = root.findViewById(R.id.appearance_editor_c2);
         mSecondLabel = root.findViewById(R.id.appearance_editor_c2_label);
         mSecondSlider = root.findViewById(R.id.appearance_editor_c2_slider);
-        mHint = root.findViewById(R.id.appearance_editor_hint);
         mRow1 = root.findViewById(R.id.appearance_editor_row1);
         mLayoutRow = root.findViewById(R.id.appearance_editor_layout_row);
         mLayoutSliders = root.findViewById(R.id.appearance_editor_layout_sliders);
@@ -438,13 +436,11 @@ final class AppearanceEditorPanel {
             mRow2BeforeLayout = isRow2Shown();
             mRow1.setVisibility(View.GONE);
             mRow2.setVisibility(View.GONE);
-            mHint.setVisibility(View.GONE);
             mLayoutRow.setVisibility(View.VISIBLE);
         } else {
             mLayoutRow.setVisibility(View.GONE);
             mRow1.setVisibility(View.VISIBLE);
             mRow2.setVisibility(mRow2BeforeLayout ? View.VISIBLE : View.GONE);
-            mHint.setVisibility(mRow2BeforeLayout ? View.GONE : View.VISIBLE);
         }
     }
 
@@ -586,23 +582,18 @@ final class AppearanceEditorPanel {
         mRestating = false;
     }
 
-    void setHint(@StringRes int text) {
-        mHint.setText(text);
-    }
-
     /** Whether row 2 is up in Appearance mode (kept, though hidden, while Layout is shown). */
     boolean isRow2Shown() {
         return mLayoutMode ? mRow2BeforeLayout : mRow2.getVisibility() == View.VISIBLE;
     }
 
-    /** Row 2 down and the hint back in its place. */
+    /** Row 2 down. */
     void hideRow2() {
         if (mLayoutMode) {
             mRow2BeforeLayout = false;
             return;
         }
         mRow2.setVisibility(View.GONE);
-        mHint.setVisibility(View.VISIBLE);
     }
 
     /** Row 2 up, with the tapped element's name; the controls are set by the calls below. */
@@ -613,7 +604,6 @@ final class AppearanceEditorPanel {
             return;
         }
         mRow2.setVisibility(View.VISIBLE);
-        mHint.setVisibility(View.GONE);
     }
 
     /** The first control as a slider: Darkness or Key corners. */

@@ -14,8 +14,6 @@
     <string name="appearance_editor_style_docked">Docked</string>
     <string name="appearance_editor_style_floating">Floating</string>
 
-    <string name="appearance_editor_hint_look">Slide to try a look. The last stop is your own.</string>
-    <string name="appearance_editor_hint_custom">Tap a part of the preview to adjust it.</string>
     <string name="appearance_editor_custom_replaced">Your custom look was replaced</string>
 
     <!-- The elements a tap in the frame selects; row 2's heading and the targets' descriptions. -->
@@ -40,8 +38,8 @@
     <string name="appearance_editor_soft_on">On</string>
 
     <!-- Layout mode's global shape: no Look sets these. -->
-    <string name="appearance_editor_corners">Corners · %1$d dp</string>
-    <string name="appearance_editor_corners_description">Corners</string>
+    <string name="appearance_editor_corners">Corner radius · %1$d dp</string>
+    <string name="appearance_editor_corners_description">Corner radius</string>
     <string name="appearance_editor_margin">Margin · %1$d dp</string>
     <string name="appearance_editor_margin_description">Margin</string>
 
@@ -50,5 +48,5 @@
     <string name="settings_appearance_editor_title">Appearance</string>
     <string name="settings_appearance_editor_summary">Try a Look and tune it live, on the home screen</string>
     <string name="settings_look_appearance_editor_title">Appearance editor</string>
-    <string name="settings_look_appearance_editor_summary">Looks, glass and legibility, live on the home screen</string>
+    <string name="settings_look_appearance_editor_summary">Looks, glass, opacity and text contrast, previewed on the home screen</string>
 </resources>

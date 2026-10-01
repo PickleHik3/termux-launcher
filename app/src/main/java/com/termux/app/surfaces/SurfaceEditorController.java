@@ -741,8 +741,6 @@ public final class SurfaceEditorController {
             showRow2(mTarget);
         } else {
             panel.hideRow2();
-            panel.setHint(AppearanceLooks.isCustomStop(mStop)
-                ? R.string.appearance_editor_hint_custom : R.string.appearance_editor_hint_look);
         }
         applyPanelHeight();
         syncDirty();
