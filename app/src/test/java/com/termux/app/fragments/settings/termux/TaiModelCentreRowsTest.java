@@ -288,6 +288,28 @@ public class TaiModelCentreRowsTest {
     }
 
     @Test
+    public void needsTokenOnlyForSignInFailures() {
+        assertTrue(TaiModelCentreRows.needsToken("gated_model_requires_auth"));
+        assertTrue(TaiModelCentreRows.needsToken("This model is gated on Hugging Face. Save a Hugging Face token after accepting the model terms."));
+        assertTrue(TaiModelCentreRows.needsToken("HTTP 401"));
+        assertTrue(TaiModelCentreRows.needsToken("Unauthorized"));
+        assertFalse(TaiModelCentreRows.needsToken("HTTP 404"));
+        assertFalse(TaiModelCentreRows.needsToken("No space left on device"));
+        assertFalse(TaiModelCentreRows.needsToken("Unable to resolve host huggingface.co"));
+        assertFalse(TaiModelCentreRows.needsToken("checksum mismatch"));
+        assertFalse(TaiModelCentreRows.needsToken(""));
+        assertFalse(TaiModelCentreRows.needsToken(null));
+    }
+
+    @Test
+    public void tokenActionShowsForGatedNoteOrTokenError() {
+        assertTrue(TaiModelCentreRows.showsTokenAction(true, null));
+        assertTrue(TaiModelCentreRows.showsTokenAction(false, "gated_model_requires_auth"));
+        assertFalse(TaiModelCentreRows.showsTokenAction(false, null));
+        assertFalse(TaiModelCentreRows.showsTokenAction(false, "Not enough free space"));
+    }
+
+    @Test
     public void imageFamilyNamesTheRecordedType() {
         assertEquals("Sana", TaiModelCentreRows.imageFamily("sana"));
         assertEquals("Taiyi", TaiModelCentreRows.imageFamily("taiyi"));

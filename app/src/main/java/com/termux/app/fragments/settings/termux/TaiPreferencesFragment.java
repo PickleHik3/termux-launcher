@@ -561,16 +561,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         return layout;
     }
 
-    private TextView buildTokenHintView(Context context, int textRes) {
-        float density = context.getResources().getDisplayMetrics().density;
-        TextView hint = new TextView(context);
-        hint.setText(textRes);
-        hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        hint.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
-        hint.setPadding(0, Math.round(10 * density), 0, 0);
-        return hint;
-    }
-
     private void refreshEndpointPreferences(Context context) {
         try {
             JSONObject endpoint = LauncherCtlApiServer.getInstance().endpointSettings(context);
@@ -912,42 +902,10 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
     }
 
     private void showHuggingFaceTokenDialog(Context context, Preference preference) {
-        int padding = (int) (24 * getResources().getDisplayMetrics().density);
-        LinearLayout layout = new LinearLayout(context);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(padding, 0, padding, 0);
-
-        TextView message = new TextView(context);
-        message.setText(R.string.termux_ai_huggingface_token_dialog_message);
-        layout.addView(message);
-
-        EditText input = new EditText(context);
-        input.setSingleLine(true);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        input.setHint(R.string.termux_ai_huggingface_token_title);
-        input.setText(context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-            .getString(TaiSettings.KEY_HUGGINGFACE_TOKEN, ""));
-        input.setSelectAllOnFocus(true);
-        layout.addView(input);
-
-        layout.addView(buildTokenHintView(context, R.string.termux_ai_huggingface_token_permissions_hint));
-        layout.addView(buildTokenHintView(context, R.string.termux_ai_huggingface_token_gated_hint));
-
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.termux_ai_huggingface_token_title)
-            .setView(dialogScroll(context, layout))
-            .setPositiveButton(android.R.string.ok, (dialog, which) -> {
-                context.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE)
-                    .edit()
-                    .putString(TaiSettings.KEY_HUGGINGFACE_TOKEN, input.getText().toString().trim())
-                    .apply();
-                updateHuggingFaceTokenSummary(preference);
-                AppNotice.show(context, R.string.termux_ai_huggingface_token_saved, false);
-            })
-            .setNeutralButton(R.string.termux_ai_huggingface_token_get_action,
-                (dialog, which) -> openUrl(context, "https://huggingface.co/settings/tokens"))
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
+        TaiHuggingFaceTokenDialog.show(context, () -> {
+            updateHuggingFaceTokenSummary(preference);
+            AppNotice.show(context, R.string.termux_ai_huggingface_token_saved, false);
+        });
     }
 
     private String join(JSONArray values) {

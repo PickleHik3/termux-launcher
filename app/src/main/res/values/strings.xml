@@ -1427,7 +1427,8 @@
         <string name="tai_centre_embeddings_sub">Search and memory for apps on the phone</string>
         <string name="tai_centre_kind_embeddings">embeddings</string>
         <string name="tai_centre_empty_embeddings">The embedding model is installed or on its way.</string>
-        <string name="tai_centre_gated_note">Needs a Hugging Face token: accept the model terms, then save a token in TAI settings.</string>
+        <string name="tai_centre_gated_note">Needs a Hugging Face token. Accept the model terms on its page first.</string>
+        <string name="tai_centre_action_add_token">Add token</string>
         <string name="tai_centre_image_header">Image generation</string>
         <string name="tai_centre_image_sub">Draws pictures from a description</string>
         <string name="tai_centre_kind_image">image</string>

@@ -190,6 +190,20 @@
                 android:layout_marginTop="6dp"
                 android:textSize="11.5sp"
                 android:visibility="gone" />
+
+            <!-- "Add token" under a note that says Hugging Face wants one. -->
+            <TextView
+                android:id="@+id/tai_centre_note_action"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="44dp"
+                android:minHeight="36dp"
+                android:gravity="center_vertical"
+                android:clickable="true"
+                android:focusable="true"
+                android:fontFamily="sans-serif-medium"
+                android:textSize="12.5sp"
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>
