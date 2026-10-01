@@ -37,14 +37,12 @@ public class PaneWallControllerTest {
         boolean terminalOnly;
         boolean widgets = true;
         boolean display = true;
-        int interrupted;
         Boolean terminalOffScreen;
 
         @Override public boolean reducedMotion() { return true; }
         @Override public boolean isTerminalOnly() { return terminalOnly; }
         @Override public boolean isWidgetsEnabled() { return widgets; }
         @Override public boolean isDisplayEnabled() { return display; }
-        @Override public void onWallDragInterrupted() { interrupted++; }
         @Override public void onTerminalOffScreenChanged(boolean offScreen) {
             terminalOffScreen = offScreen;
         }
@@ -90,7 +88,6 @@ public class PaneWallControllerTest {
         host.terminalOnly = true;
         controller.refreshPages();
         assertEquals(Collections.singletonList(PaneWallPage.TERMINAL), controller.pages());
-        assertFalse("nowhere to go, so nothing to drag", controller.canDrag());
     }
 
     @Test public void aPlaceSwitchedOffWhileShowingHandsTheWallBackToTheTerminal() {
@@ -170,15 +167,6 @@ public class PaneWallControllerTest {
         assertFalse(controller.goTo("nowhere"));
         controller.returnToTerminal(false);
         assertEquals(PaneWallPage.TERMINAL, controller.currentPage());
-    }
-
-    @Test public void aNavigationUnderALiveDragReachesTheHost() {
-        assertTrue(controller.beginDrag());
-        controller.dragTo(-200f);
-
-        controller.goTo(PaneWallPage.DISPLAY, false);
-
-        assertEquals(1, host.interrupted);
     }
 
     @Test public void aTerminalLeftOnScreenByACutSlideCountsAsShowingWhateverTheRecordSays() {

@@ -49,7 +49,7 @@ import java.util.Map;
  * vertical swipe without the hold, which carries the keyboard up or down under the finger
  * ({@link KeyboardReveal}) and is marked by a small grabber ({@link BorderGrabber}); and on the
  * top border its mirror, which folds and unfolds the status bar under the finger by the same rule
- * and wears the same grabber. The window strip's overswipe drives the same drag from outside.
+ * and wears the same grabber.
  *
  * <p>Every page is laid out at the host's size and moved with {@code translationX}, so a page
  * change and a whole drag cost no layout work. Only the pages on screen are laid out at all: a
@@ -106,13 +106,6 @@ public final class PaneWallLayout extends ViewGroup {
          * the cursor blinker, focus, accessibility — across every pane the terminal page holds.
          */
         default void onTerminalOffScreenChanged(boolean offScreen) { }
-        /**
-         * A drag was under way and something else moved the wall — {@link #goTo}, or the
-         * gestures being switched off. Whoever was driving the drag has to let go of the finger:
-         * the wall will ignore it from here on, and a claimant that keeps streaming to it is
-         * holding a gesture nobody answers.
-         */
-        default void onWallDragInterrupted() { }
         /**
          * Whether {@code page} tips like a plank ({@link PlankTilt}) under a border drag — Fancier
          * Glass, with the phone animating. Asked as the drag claims the finger, for the page the
@@ -496,8 +489,7 @@ public final class PaneWallLayout extends ViewGroup {
         // And a status bar fold under way goes back to the form the bar had.
         if (!enabled) settleStatusFoldNow();
         if (enabled || !mDragging) return;
-        // The claimant is told to let go, and the wall goes back to rest on its own — nothing
-        // else is going to release this drag now.
+        // The wall goes back to rest on its own — nothing else is going to release this drag now.
         interruptDrag();
         if (mReducedMotion) settleImmediately();
         else startSlide(0f);
@@ -549,10 +541,11 @@ public final class PaneWallLayout extends ViewGroup {
         return goTo(PaneWallPolicy.neighbour(mPages, mCurrent, steps), animate);
     }
 
-    // ---- Dragging (the border drag, and the window strip's overswipe from outside) ----------
+    // ---- Dragging (the border drag) ----------------------------------------------------------
 
-    /** Take a drag from outside — the window strip's overswipe. The page slides flat. */
-    public void beginDrag() {
+    /** A flat drag with no plank, the border drag's motion without its press; for tests. */
+    @androidx.annotation.VisibleForTesting
+    void beginDrag() {
         beginDrag(false, 0f);
     }
 
@@ -627,7 +620,7 @@ public final class PaneWallLayout extends ViewGroup {
 
     /**
      * The wall is taking over from a live drag. Unlike {@link #cancelDrag}, the claimant did not
-     * ask for this, so it is told: the rest of that finger's motion is not the wall's to answer.
+     * ask for this: the rest of that finger's motion is not the wall's to answer.
      */
     private void interruptDrag() {
         if (!mDragging) return;
@@ -636,7 +629,6 @@ public final class PaneWallLayout extends ViewGroup {
         // The wall's own border drag is a claimant like the others: the rest of its finger's
         // travel is swallowed and moves nothing.
         mBorderDrag.abandon();
-        if (mListener != null) mListener.onWallDragInterrupted();
     }
 
     // ---- The border drag ---------------------------------------------------------------------
