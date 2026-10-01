@@ -1232,30 +1232,7 @@ final class TaiImportFlow {
     private void promptToken(@NonNull Runnable onSaved) {
         Context context = host.context();
         if (context == null) return;
-        EditText input = new EditText(context);
-        input.setSingleLine(true);
-        input.setHint(R.string.termux_ai_huggingface_token_title);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        input.setText(new TaiSettings(context).getHuggingFaceToken());
-        input.setSelectAllOnFocus(true);
-        LinearLayout layout = column(context);
-        TextView message = new TextView(context);
-        message.setText(R.string.termux_ai_huggingface_token_dialog_message);
-        layout.addView(message);
-        layout.addView(input);
-        layout.addView(hint(context, R.string.termux_ai_huggingface_token_permissions_hint));
-        layout.addView(hint(context, R.string.termux_ai_huggingface_token_gated_hint));
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.termux_ai_huggingface_token_title)
-            .setView(dialogScroll(context, layout))
-            .setPositiveButton(R.string.termux_ai_dialog_save, (d, w) -> {
-                new TaiSettings(context).setHuggingFaceToken(input.getText().toString().trim());
-                onSaved.run();
-            })
-            .setNeutralButton(R.string.termux_ai_huggingface_token_get_action,
-                (d, w) -> host.openUrl("https://huggingface.co/settings/tokens"))
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
+        TaiHuggingFaceTokenDialog.show(context, onSaved);
     }
 
     // ---- view helpers ----
