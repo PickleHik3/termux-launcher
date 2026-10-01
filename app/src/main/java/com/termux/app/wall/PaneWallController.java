@@ -75,6 +75,8 @@ public final class PaneWallController implements PaneWallLayout.Listener {
          * wall draws its grabbers; see {@link PaneWallLayout.Listener#isBorderStatusSwipeEnabled}.
          */
         default boolean isBorderStatusSwipeEnabled() { return false; }
+        /** The border's insets in px; see {@link PaneWallLayout.Listener#borderInsetsPx}. */
+        @Nullable default int[] borderInsetsPx() { return null; }
         /**
          * A swipe off the top border asked for the bar unfolded ({@code expand}) or folded, for a
          * swipe the fold did not follow ({@link #onStatusFoldBegin} answered 0, or reduced motion).
@@ -416,6 +418,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public boolean isBorderStatusSwipeEnabled() {
         return mHost.isBorderStatusSwipeEnabled();
+    }
+
+    @Override
+    @Nullable
+    public int[] borderInsetsPx() {
+        return mHost.borderInsetsPx();
     }
 
     @Override
