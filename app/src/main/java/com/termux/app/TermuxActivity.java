@@ -4506,14 +4506,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
         int width = root != null && root.getWidth() > 0 ? root.getWidth() : metrics.widthPixels;
         int height = root != null && root.getHeight() > 0 ? root.getHeight() : metrics.heightPixels;
-        boolean keyboardUp = mKeyboardGeometry.lastImeVisible() || isImeVisible();
+        // The keyboard the chrome stands around is the in-app one. The system IME never raises
+        // it, so asking that left the keyboard out of the shape: no piece, so no card, rim or
+        // radius of its own for the host to read.
+        boolean keyboardUp = isInAppKeyboardShown();
         PlaceLayout layout = stored.withKeyboardShown(keyboardUp);
         float status = chromeThicknessPx(Element.STATUS, layout);
         float apps = chromeThicknessPx(Element.APPS, layout);
         float az = chromeThicknessPx(Element.AZ, layout);
         float keys = chromeThicknessPx(Element.EXTRA_KEYS, layout);
         View keyboardHost = findViewById(R.id.inapp_keyboard_view_host);
-        float keyboard = keyboardUp && keyboardHost != null ? keyboardHost.getHeight() : 0f;
+        // Before its first layout the host has no height yet: the last measure stands in, so the
+        // piece is not a zero-height one whose radius clamps to nothing.
+        float keyboard = keyboardUp && keyboardHost != null
+            ? (keyboardHost.getHeight() > 0 ? keyboardHost.getHeight()
+                : mKeyboardGeometry.desiredHeightPx()) : 0f;
         return com.termux.app.chrome.LiveChromeShape.of(layout,
             mPreferences == null ? TermuxAppSharedPreferences.LayoutStyle.DOCKED
                 : mPreferences.getLayoutStyle(), width, height,
