@@ -1400,11 +1400,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean statusBarOnDockPlank() {
-            return mStatusBarOnDockPlank;
+            // Under a joined Docked frame the bar is on the frame's glass, which is as good as
+            // the plank's: it wears no frost of its own.
+            return mStatusBarOnDockPlank || frameStandsDown();
         }
 
         @NonNull @Override public com.termux.app.chrome.ChromeEdgeRule.TopLead topStackLead() {
-            return topEdgeStackLead();
+            // The strip behind the system status bar is the frame's glass there; no frost of its own.
+            return frameStandsDown() ? com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE
+                : topEdgeStackLead();
         }
 
         @NonNull @Override public PlaceLayout.Edge statusBarEdge() {
@@ -3161,6 +3165,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Whether the joined Docked frame's glass is the one sheet behind the whole screen, so that
+     * every sheet inside it (status bar, dock rows, off-dock planks, the keyboard's slab) stands
+     * down. The same gate {@link #applyFrameGutterGlass} paints under. Read live: the shape model
+     * is a handful of rects and the cheap tests come first, so no answer is held across a layout
+     * or Style change that could leave a sheet stale.
+     */
+    private boolean frameStandsDown() {
+        if (mPreferences == null || !shouldUseWallpaperPassthroughMode()
+            || !isTerminalPaneGlassActive()) return false;
+        return com.termux.app.chrome.FrameGlassPolicy.sheetsStandDown(true, true,
+            hasDockedFrameCard());
+    }
+
+    /** Whether the sheets were last dressed standing down; see {@link #syncFrameStandDown}. */
+    private boolean mFrameSheetsStoodDown;
+
+    /**
+     * Notes a flip of {@link #frameStandsDown} and, when it flips, asks every sheet it touches to
+     * dress again: a Style round trip must bring each one back (or take it away) without waiting
+     * for something else to move it.
+     */
+    private void syncFrameStandDown() {
+        boolean now = frameStandsDown();
+        if (now == mFrameSheetsStoodDown) return;
+        mFrameSheetsStoodDown = now;
+        View root = findViewById(R.id.activity_termux_root_view);
+        if (root == null) return;
+        root.post(() -> {
+            refreshTerminalWindowBar();
+            refreshOffDockGlass();
+            applyTerminalWindowBarBackdropInsets();
+            if (mChrome != null) mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS
+                | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP | ChromeRenderer.SCOPE_ACCESSORY_RENDER
+                | ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        });
+    }
+
+    /**
      * The Docked frame's glass behind the gutter: the dock's material (frost of the wallpaper, the
      * tint at the dock's opacity, its grain) filling the terminal's host, which the pane slabs then
      * sit on, inset by Margin. Under Floating and in opaque mode the view carries none, and
@@ -3168,15 +3210,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * behind.
      */
     /**
-     * The view the Docked frame's glass is painted on: the canvas band, which runs the full width
-     * under the left stack, the terminal and the right stack. Painted on the terminal's own
-     * backdrop (between the two side stacks) it stopped at the side bars, so the extra-keys column
-     * and the alphabets index stood on bare wallpaper instead of in the frame.
+     * The view the Docked frame's glass is painted on: a full-screen view just above the wallpaper
+     * backdrop and under every chrome sheet. Painted on the canvas band it stopped at the status
+     * bar and the dock, each of which wore its own glass and showed a seam where the tones met.
      */
     @Nullable
     private View frameGlassHost() {
-        View band = findViewById(R.id.terminal_canvas_band);
-        return band != null ? band : findViewById(R.id.terminal_background);
+        // The whole-screen view behind the status bar, the canvas band, the dock rows and the
+        // keyboard (the band alone stops at the status bar and the dock), so the frame is one sheet.
+        return findViewById(R.id.docked_frame_glass);
     }
 
     private void applyFrameGutterGlass(@Nullable View body, boolean on) {
@@ -3186,7 +3228,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mFrameGutterKey = null;
             mFrameGutterDrawable = null;
             if (mFrameGutterShown) body.setBackground(null);
+            body.setVisibility(View.GONE);
             mFrameGutterShown = false;
+            syncFrameStandDown();
             return;
         }
         if (mPreferences == null) return;
@@ -3208,6 +3252,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mFrameGutterShown && mFrameGutterDrawable != null
                 && body.getBackground() == mFrameGutterDrawable && key.equals(mFrameGutterKey)) {
             body.setVisibility(View.VISIBLE);
+            syncFrameStandDown();
             return;
         }
         mFrameGutterKey = key;
@@ -3224,6 +3269,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         body.setBackground(mFrameGutterDrawable);
         body.setVisibility(View.VISIBLE);
         mFrameGutterShown = true;
+        syncFrameStandDown();
     }
 
     /** The shared frame the Docked gutter glass is drawing, for the blur cache's in-use scan. */
@@ -5383,7 +5429,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private boolean shouldUseAccessoryRenderEffectBlur(@NonNull ChromeSpec state) {
         return state.toolbarShown
-            && state.blurEnabled;
+            && state.blurEnabled
+            && !frameStandsDown();
     }
 
     private void clearAccessoryRenderEffectBackdrop() {
@@ -6086,6 +6133,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             clearInAppKeyboardBackdrop();
             return;
         }
+        // Under a joined Docked frame the frame's glass is the sheet behind the keys; the keys keep
+        // their own glass.
+        if (frameStandsDown()) {
+            surfaceHost.setBackground(null);
+            clearInAppKeyboardBackdrop();
+            return;
+        }
         if (shouldUseUnifiedDefaultKeyboardGlassSurface(state)) {
             // Once accessory_surface_host has actually laid out at the expanded height — and, when
             // there is a frame to blur, its backdrop shows it — the transparent keyboard exposes
@@ -6125,7 +6179,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         GradientDrawable fill = buildInAppKeyboardSolidSurface(capsule ? cornerRadiusPx : 0f);
         fill.setAlpha(Math.round(255f * mKeyboardTravelSolidness));
         mKeyboardTravelSolidFill = fill;
-        Drawable glass = isUnifiedAccessoryBackdropReady(state) ? null
+        Drawable glass = isUnifiedAccessoryBackdropReady(state) || frameStandsDown() ? null
             : buildInAppKeyboardSurfaceBackground(state, surfaceHost, capsule, cornerRadiusPx);
         Drawable material = glass == null ? fill
             : new LayerDrawable(new Drawable[] {glass, fill});
@@ -6572,6 +6626,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (accessoryContainer == null || accessoryContainer.getVisibility() != View.VISIBLE) {
             return !state.toolbarShown;
         }
+        // Under a joined Docked frame the dock has no blur of its own to keep alive.
+        if (frameStandsDown()) return true;
         boolean useRenderEffectBlur = shouldUseAccessoryRenderEffectBlur(state);
         if (useRenderEffectBlur) {
             ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
@@ -7176,6 +7232,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Trace.beginSection("Chrome.applyChromeSpec");
         try {
             syncFancierGlassLook();
+            syncFrameStandDown();
             doApplyChromeSpec(state);
             // The bar's ink is measured from the wallpaper under it, so it is re-asked on the same
             // pass that re-cuts the glass — a wallpaper, palette, mode or geometry change reaches
@@ -7318,8 +7375,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Keyboard-off, the dock continues into the under-pill nav strip, so it renders the top
             // slice [0, f] of the shared model (strip renders [f, 1]) — one foot under the pill.
             // Keyboard-on, the dock is a distinct plank above the keyboard, so it keeps the full model.
-            extraKeysBackground.setBackground(mChrome.glass().dockSurface(state.barAlpha,
-                0f, state.keyboardShown ? 1f : defaultDockGlassFootFraction(), false));
+            // Under a joined Docked frame the frame's glass is this sheet.
+            extraKeysBackground.setBackground(frameStandsDown() ? null
+                : mChrome.glass().dockSurface(state.barAlpha,
+                    0f, state.keyboardShown ? 1f : defaultDockGlassFootFraction(), false));
             // Opacity is baked into the drawable (translucent base) so the glass light model survives.
             extraKeysBackground.setAlpha(1f);
         }
@@ -7615,6 +7674,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The lead the strip behind the system status bar continues, or NONE while it is not shown. */
     @NonNull
     private com.termux.app.chrome.ChromeEdgeRule.TopLead statusInsetStripLead() {
+        // Under a joined Docked frame the frame's glass runs up under the system bar: no strip.
+        if (frameStandsDown()) return com.termux.app.chrome.ChromeEdgeRule.TopLead.NONE;
         return com.termux.app.chrome.ChromeEdgeRule.statusInsetLead(isRoundedDockStyle(),
             !shouldEnableSeamlessStatusBackground(), mLastStatusBarInsetTop, topEdgeStackLead());
     }
@@ -9224,6 +9285,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : com.termux.app.chrome.LiveChromeShape.seamEdges(shape, pieces);
         float sliceStart = continuesStrip ? statusInsetSheetSliceStart(sheetHost) : 0f;
         View frostView = findViewById(frostId);
+        // Under a joined Docked frame the frame's glass is this sheet: frost, blur and wash go.
+        if (frameStandsDown()) {
+            if (frostView instanceof ImageView)
+                mChrome.frost().hideOffDockSheet((ImageView) frostView, frostKey);
+            View ownBlur = findViewById(blurId);
+            if (ownBlur != null) ownBlur.setVisibility(View.GONE);
+            View ownSurface = findViewById(surfaceId);
+            if (ownSurface != null) ownSurface.setBackground(null);
+            return;
+        }
         boolean frosted = frostView instanceof ImageView && mChrome.frost().applyOffDockSheet(
             (ImageView) frostView, frostKey, cornerRadiusPx, seams);
         View blur = findViewById(blurId);
@@ -20438,7 +20509,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // already under it, so a sheet here would be a second wash and a second blur over the
         // first. The bar keeps a sheet only as the band touching the canvas, where the dock's
         // glass is inset below it (dockGlassTopInsetPx) — which is where it has always stood.
-        boolean onPlank = joinsDock && mStatusBarOnDockPlank;
+        boolean onPlank = (joinsDock && mStatusBarOnDockPlank) || frameStandsDown();
         float opacity = mPreferences == null ? 1f
             : (joinsDock ? mPreferences.getAppBarOpacity() : mPreferences.getStatusBarOpacity())
                 / 100f;
