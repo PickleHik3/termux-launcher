@@ -64,7 +64,7 @@ final class AppearanceEditorPanel {
         void onFirstSlider(int value, boolean dragging);
         /** Row 2's first segmented control (Soft wallpaper), by segment index. */
         void onFirstSegment(int index);
-        /** The terminal's Legibility, by segment index: Softer, Default, Harder. */
+        /** The terminal's Text contrast, by stop: 0 Low (Softer), 1 Normal (Default), 2 High (Harder). */
         void onLegibility(int index);
         /** Row 2's last slider (Blur or Dim). */
         void onSecondSlider(int value, boolean dragging);
@@ -95,7 +95,7 @@ final class AppearanceEditorPanel {
     private final MaterialButtonToggleGroup mSoft;
     private final View mLegibilityColumn;
     private final TextView mLegibilityLabel;
-    private final MaterialButtonToggleGroup mLegibility;
+    private final Slider mLegibility;
     private final View mSecondColumn;
     private final TextView mSecondLabel;
     private final Slider mSecondSlider;
@@ -382,10 +382,12 @@ final class AppearanceEditorPanel {
                 return;
             mListener.onFirstSegment(group.indexOfChild(group.findViewById(checkedId)));
         });
-        mLegibility.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            if (mRestating || !isChecked || mListener == null)
+        mLegibility.addOnChangeListener((slider, value, fromUser) -> {
+            if (mRestating || !fromUser || mListener == null)
                 return;
-            mListener.onLegibility(group.indexOfChild(group.findViewById(checkedId)));
+            int index = Math.round(value);
+            mLegibilityLabel.setText(legibilityLabel(index));
+            mListener.onLegibility(index);
         });
     }
 
@@ -398,7 +400,7 @@ final class AppearanceEditorPanel {
         // segment is told by the fill alone. The orientation and Style toggles are glyphs
         // already. The mode pill shares the top row with Undo and Done: its icon pushed Done
         // off a narrow panel.
-        if (group == mLegibility || group == mOrientation || group == mStyle || group == mMode)
+        if (group == mOrientation || group == mStyle || group == mMode)
             return;
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
@@ -647,11 +649,17 @@ final class AppearanceEditorPanel {
      */
     void setLegibility(@NonNull CharSequence label, int index, boolean enabled) {
         mLegibilityLabel.setText(label);
-        checkSegment(mLegibility, index);
+        restateSlider(mLegibility, index, 2);
         mLegibility.setEnabled(enabled);
-        for (int i = 0; i < mLegibility.getChildCount(); i++)
-            mLegibility.getChildAt(i).setEnabled(enabled);
         showColumn(mLegibilityColumn, true);
+    }
+
+    /** The label for a Text contrast stop: Low, Normal or High. */
+    @NonNull
+    String legibilityLabel(int index) {
+        return mContext.getString(index <= 0 ? R.string.appearance_editor_legibility_low
+            : index == 1 ? R.string.appearance_editor_legibility_normal
+            : R.string.appearance_editor_legibility_high);
     }
 
     void hideLegibility() {

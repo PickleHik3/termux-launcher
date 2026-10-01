@@ -105,9 +105,8 @@ public class LayoutModeViewsTest {
         View column = panel.findViewById(R.id.appearance_editor_cl);
         View legibility = panel.findViewById(R.id.appearance_editor_legibility);
         assertNotNull(column);
-        assertTrue(legibility instanceof MaterialButtonToggleGroup);
-        assertEquals("softer, default, harder",
-            3, ((MaterialButtonToggleGroup) legibility).getChildCount());
+        assertTrue(legibility instanceof com.google.android.material.slider.Slider);
+        assertEquals(2f, ((com.google.android.material.slider.Slider) legibility).getValueTo(), 0f);
         assertTrue(isInside(legibility, column));
         assertTrue(isInside(column, row2));
         assertFalse("not the first control's any more",
