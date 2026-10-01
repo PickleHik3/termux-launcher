@@ -4814,6 +4814,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             chromeClipOf(com.termux.app.place.ChromeShape.PieceId.STATUS));
         if (host.getOutlineProvider() != mStatusBarSurfaceOutline)
             host.setOutlineProvider(mStatusBarSurfaceOutline);
+        // The host draws no background, so nothing else rebuilds its outline when the layout pass
+        // after a Style change resizes it: follow the size, or the card's width outlives the Style.
+        mStatusBarSurfaceOutline.follow(host);
         host.setClipToOutline(mStatusBarSurfaceOutline.clipsCorners());
         if (changed || host.getOutlineProvider() == mStatusBarSurfaceOutline)
             host.invalidateOutline();
@@ -4991,6 +4994,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.chrome.LiveChromeShape.outlineOf(chromeShape(), ids));
                 if (surface.getOutlineProvider() != mDockOutline)
                     surface.setOutlineProvider(mDockOutline);
+                mDockOutline.follow(surface);
                 else if (changed)
                     surface.invalidateOutline();
                 surface.setClipToOutline(mDockOutline.clipsCorners());
@@ -6001,6 +6005,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : chromeClipOf(com.termux.app.place.ChromeShape.PieceId.KEYBOARD));
         if (surfaceHost.getOutlineProvider() != mKeyboardOutline)
             surfaceHost.setOutlineProvider(mKeyboardOutline);
+        mKeyboardOutline.follow(surfaceHost);
         else if (changed)
             surfaceHost.invalidateOutline();
         surfaceHost.setClipToOutline(true);
@@ -9048,6 +9053,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (glass == null) return;
         outline.setClip(com.termux.app.chrome.LiveChromeShape.outlineOf(shape, pieces));
         if (glass.getOutlineProvider() != outline) glass.setOutlineProvider(outline);
+        outline.follow(glass);
         glass.setClipToOutline(outline.clipsCorners());
         glass.invalidateOutline();
     }
@@ -19822,6 +19828,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : chromeClipOf(com.termux.app.place.ChromeShape.PieceId.STATUS));
                 if (host.getOutlineProvider() != mStatusBarSurfaceOutline)
                     host.setOutlineProvider(mStatusBarSurfaceOutline);
+                mStatusBarSurfaceOutline.follow(host);
                 host.setClipToOutline(mStatusBarSurfaceOutline.clipsCorners());
             }
             host.invalidateOutline();
