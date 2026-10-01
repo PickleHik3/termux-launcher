@@ -378,18 +378,40 @@ public final class TermuxPreferenceConstants {
         public static final float MAX_APP_LAUNCHER_BAR_HEIGHT = 3.0f;
 
         /**
-         * Defines the visual surface style for the app launcher dock.
+         * Defines the Style of the whole chrome: {@code docked} or {@code floating}. The key keeps
+         * its old name; the values were {@code default} / {@code rounded} until the one-time
+         * migration of the Style rework ({@link #KEY_LAYOUT_STYLE_MIGRATED}).
          */
         public static final String KEY_APP_LAUNCHER_DOCK_STYLE = "app_launcher_dock_style";
 
-        public static final String APP_LAUNCHER_DOCK_STYLE_DEFAULT = "default";
+        public static final String APP_LAUNCHER_DOCK_STYLE_DOCKED = "docked";
 
-        public static final String APP_LAUNCHER_DOCK_STYLE_ROUNDED = "rounded";
+        public static final String APP_LAUNCHER_DOCK_STYLE_FLOATING = "floating";
+
+        /** Old name of {@link #APP_LAUNCHER_DOCK_STYLE_DOCKED}; same stored value. */
+        @Deprecated
+        public static final String APP_LAUNCHER_DOCK_STYLE_DEFAULT = APP_LAUNCHER_DOCK_STYLE_DOCKED;
+
+        /** Old name of {@link #APP_LAUNCHER_DOCK_STYLE_FLOATING}; same stored value. */
+        @Deprecated
+        public static final String APP_LAUNCHER_DOCK_STYLE_ROUNDED = APP_LAUNCHER_DOCK_STYLE_FLOATING;
+
+        /** Stored value of Docked before the Style rework. Read by the migration only. */
+        public static final String APP_LAUNCHER_DOCK_STYLE_LEGACY_DEFAULT = "default";
+
+        /** Stored value of Floating before the Style rework. Read by the migration only. */
+        public static final String APP_LAUNCHER_DOCK_STYLE_LEGACY_ROUNDED = "rounded";
 
         /** Pre-unification persisted value. Read for migration, but never write it again. */
         public static final String APP_LAUNCHER_DOCK_STYLE_LEGACY_VALARIE_CAPSULE = "valarie_capsule";
 
-        public static final String DEFAULT_APP_LAUNCHER_DOCK_STYLE = APP_LAUNCHER_DOCK_STYLE_DEFAULT;
+        public static final String DEFAULT_APP_LAUNCHER_DOCK_STYLE = APP_LAUNCHER_DOCK_STYLE_DOCKED;
+
+        /** Retired with the Style rework: Docked covers it. Removed by the migration, never read. */
+        public static final String KEY_LEGACY_TERMINAL_FLUSH_DOCK = "terminal_flush_dock";
+
+        /** Set once the Style migration has renamed the style values and dropped the retired keys. */
+        public static final String KEY_LAYOUT_STYLE_MIGRATED = "layout_style_migrated";
 
         /** Custom capsule corner radius in dp, or -1 to follow the selected dock style. */
         public static final String KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS =
@@ -1351,13 +1373,6 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_DOCK_GLASS_GRAIN = "dock_glass_grain";
 
         public static final int DEFAULT_VALUE_DOCK_GLASS_GRAIN = 18;
-
-        /**
-         * Defines whether the terminal's bottom cell remainder is absorbed by the dock glass.
-         */
-        public static final String KEY_TERMINAL_FLUSH_DOCK = "terminal_flush_dock";
-
-        public static final boolean DEFAULT_VALUE_TERMINAL_FLUSH_DOCK = false;
 
         /**
          * Defines whether a thin outline border is drawn around the terminal surface.

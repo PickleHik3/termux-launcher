@@ -837,8 +837,8 @@ public final class SurfaceEditorController {
             TermuxAppSharedPreferences prefs = prefs();
             if (prefs == null)
                 return;
-            String style = floating ? TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED
-                : TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DEFAULT;
+            String style = floating ? TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_FLOATING
+                : TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DOCKED;
             if (style.equals(prefs.getAppLauncherDockStyle()))
                 return;
             // Style belongs to no Look: it never moves the slider.

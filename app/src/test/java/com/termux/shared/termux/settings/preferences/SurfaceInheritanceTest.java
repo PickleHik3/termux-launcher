@@ -230,17 +230,19 @@ public class SurfaceInheritanceTest {
     }
 
     @Test
-    public void migration_keepsAKeyboardGapTheUserActuallyChose() {
-        // A value the user stored has to survive the upgrade, so migration sees that it differs
-        // from Base and starts that pair detached.
+    public void migration_dropsAKeyboardGapOverrideForBase() {
+        // Side gap is one Margin since the Style rework: a stored per-surface gap no longer
+        // survives, and every surface reads Base.
         putRaw(TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET, 17);
 
         preferences.migrateSurfaceInheritance();
 
-        assertFalse(preferences.isSurfaceInheriting(
+        assertTrue(preferences.isSurfaceInheriting(
             SurfaceSlot.KEYBOARD, SurfaceProperty.SIDE_GAP));
-        assertEquals(17, preferences.getInAppKeyboardHorizontalInset());
-        assertEquals("the dock keeps the gap it shipped with before the Docked theme",
+        assertFalse(store.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET));
+        assertEquals(preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP),
+            preferences.getInAppKeyboardHorizontalInset());
+        assertEquals("the dock's gap seeded Base before the override went",
             PRE_SHIPPED_SIDE_GAP, preferences.getDockHorizontalInset());
     }
 

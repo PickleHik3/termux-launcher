@@ -130,8 +130,8 @@
         <item>@string/termux_app_launcher_dock_style_rounded</item>
     </string-array>
     <string-array name="app_launcher_dock_style_values">
-        <item>default</item>
-        <item>rounded</item>
+        <item>docked</item>
+        <item>floating</item>
     </string-array>
     <string-array name="app_launcher_drawer_view_type_entries">
         <item>@string/settings_app_drawer_view_type_vertical</item>

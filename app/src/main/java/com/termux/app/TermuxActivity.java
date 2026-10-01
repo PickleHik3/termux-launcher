@@ -4457,9 +4457,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     public boolean isRoundedDockStyle() {
         return mPreferences != null
-            && TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED.equals(
-                mPreferences.getAppLauncherDockStyle()
-            );
+            && mPreferences.getLayoutStyle()
+                == com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle.FLOATING;
     }
 
     /**
