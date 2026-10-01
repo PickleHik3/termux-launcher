@@ -37,8 +37,9 @@ import com.termux.R;
  *
  * <p>Layout mode (SPEC §3.5) keeps the top row — the mode pill, Undo and Done, which are the whole
  * editor's — and swaps rows 1, 2 and the hint for the Layout rows: the orientation toggle, the
- * Style toggle and the restore tray, then the Corners and Margin sliders, which only Floating
- * spends and which are invisible (their room kept) under Docked. The orientation toggle and the
+ * Style toggle and the restore tray, then the Corners and Margin sliders, which both Styles spend:
+ * Corners is every card's and the Docked insert's radius, Margin the air round Floating cards or
+ * the gutter round the Docked insert. The orientation toggle and the
  * tray are {@link com.termux.app.layouteditor.LayoutEditorController}'s to drive; Style, Corners
  * and Margin report here like every other control.</p>
  */
@@ -100,7 +101,7 @@ final class AppearanceEditorPanel {
     private final TextView mHint;
     private final View mRow1;
     private final View mLayoutRow;
-    /** Layout mode's Corners and Margin: Floating's, so hidden under Docked. */
+    /** Layout mode's Corners and Margin: shown under both Styles. */
     private final View mLayoutSliders;
     private final LinearLayout mRow2Controls;
     private final LinearLayout mRow2Line;
@@ -450,7 +451,7 @@ final class AppearanceEditorPanel {
         return mLayoutMode;
     }
 
-    /** Whether Layout mode's Corners and Margin are showing: they are under Floating only. */
+    /** Whether Layout mode's Corners and Margin are showing: they are, under both Styles. */
     boolean shapeControlsShown() {
         return mLayoutSliders.getVisibility() == View.VISIBLE;
     }
@@ -573,13 +574,12 @@ final class AppearanceEditorPanel {
     }
 
     /**
-     * Checks the Style toggle's segment, without reporting it, and shows Corners and Margin under
-     * Floating or hides them under Docked, which spends neither (SPEC §3.7). They are made
-     * invisible rather than gone, so the bottom area keeps its height and the card does not jump
-     * when Style flips: it never scrolls, and nothing in it moves.
+     * Checks the Style toggle's segment, without reporting it. Corners and Margin stay up under
+     * both Styles (SPEC §3.7, 2026-10-01), so the bottom area keeps its height and the card does
+     * not jump when Style flips: it never scrolls, and nothing in it moves.
      */
     void setFloating(boolean floating) {
-        mLayoutSliders.setVisibility(floating ? View.VISIBLE : View.INVISIBLE);
+        mLayoutSliders.setVisibility(View.VISIBLE);
         int id = floating ? R.id.appearance_editor_style_floating
             : R.id.appearance_editor_style_docked;
         if (mStyle.getCheckedButtonId() == id)

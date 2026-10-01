@@ -25,4 +25,35 @@ public final class TerminalSurfacePolicy {
         if (!wallpaperMode) return true;
         return terminalOpacity > 0;
     }
+
+    /**
+     * The colour the window root is painted with in wallpaper mode: all the wallpaper dim when each
+     * pane carries the terminal tint on a glass slab of its own (both Styles, the Docked insert
+     * included), and the tint folded into the dim when the panes have no slab. It reads the
+     * glass switch and two colours and nothing else, so no Style change can leave a dim behind
+     * that a fresh start would not have painted.
+     *
+     * @param glassPane whether every pane is a glass slab
+     * @param terminalSurfaceColor the terminal tint, ARGB
+     * @param wallpaperDim the wallpaper's black dim, ARGB
+     */
+    public static int wallGround(boolean glassPane, int terminalSurfaceColor, int wallpaperDim) {
+        return glassPane ? wallpaperDim : over(terminalSurfaceColor, wallpaperDim);
+    }
+
+    /** {@code top} laid over {@code bottom}, both ARGB, straight alpha. */
+    static int over(int top, int bottom) {
+        int ta = top >>> 24;
+        int ba = bottom >>> 24;
+        int a = ta + ba * (255 - ta) / 255;
+        if (a == 0) return 0;
+        int out = a << 24;
+        for (int shift = 16; shift >= 0; shift -= 8) {
+            int t = (top >> shift) & 0xFF;
+            int b = (bottom >> shift) & 0xFF;
+            int c = (t * ta * 255 + b * ba * (255 - ta)) / (a * 255);
+            out |= Math.min(255, c) << shift;
+        }
+        return out;
+    }
 }
