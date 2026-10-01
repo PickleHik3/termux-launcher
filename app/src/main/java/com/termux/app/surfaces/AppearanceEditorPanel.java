@@ -334,7 +334,9 @@ final class AppearanceEditorPanel {
     private void syncCheckIcons(@NonNull MaterialButtonToggleGroup group) {
         // Legibility's three words have no room for the icon on a narrow panel: its checked
         // segment is told by the fill alone. The orientation toggle is glyphs already.
-        if (group == mLegibility || group == mOrientation)
+        // The mode pill shares the top row with Undo and Done: its icon pushed Done off a
+        // narrow panel.
+        if (group == mLegibility || group == mOrientation || group == mMode)
             return;
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);

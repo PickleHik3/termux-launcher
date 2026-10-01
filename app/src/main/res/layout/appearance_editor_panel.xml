@@ -32,7 +32,8 @@
 
         <com.google.android.material.button.MaterialButtonToggleGroup
             android:id="@+id/appearance_editor_mode"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="wrap_content"
             app:checkedButton="@+id/appearance_editor_mode_appearance"
             app:selectionRequired="true"
@@ -41,36 +42,47 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_editor_mode_appearance"
                 style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:maxLines="1"
+                android:minWidth="0dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
                 android:layout_height="wrap_content"
                 android:text="@string/action_appearance_editor" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_editor_mode_layout"
                 style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:maxLines="1"
+                android:minWidth="0dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
                 android:layout_height="wrap_content"
                 android:text="@string/action_layout_editor" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
 
-        <Space
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
-
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_undo"
-            style="?attr/borderlessButtonStyle"
+            style="?attr/materialIconButtonStyle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/appearance_editor_undo"
-            android:visibility="gone" />
+            android:contentDescription="@string/appearance_editor_undo"
+            android:tooltipText="@string/appearance_editor_undo"
+            android:visibility="gone"
+            app:icon="@drawable/ic_symbol_undo" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_done"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"
+            android:maxLines="1"
+            android:minWidth="0dp"
+            android:paddingStart="16dp"
+            android:paddingEnd="16dp"
             android:text="@string/appearance_editor_done" />
     </LinearLayout>
 
