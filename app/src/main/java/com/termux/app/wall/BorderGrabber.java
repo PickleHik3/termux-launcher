@@ -29,16 +29,17 @@ import com.google.android.material.color.MaterialColors;
  *
  * <p>Drawn by the wall ({@link PaneWallLayout#dispatchDraw}) over its pages, so it costs a rounded
  * rect in the wall's own display list and nothing in any page's. The geometry is pure and static
- * so it can be tested without a canvas.
+ * so it can be tested without a canvas, and so help and the tour can point at the pill where it
+ * stands: the constants and {@link #bounds} are public for that, and nothing else is.
  */
-final class BorderGrabber {
+public final class BorderGrabber {
 
-    static final float WIDTH_DP = 32f;
+    public static final float WIDTH_DP = 32f;
     /** How much wider it grows under a finger. */
-    static final float PRESSED_EXTRA_WIDTH_DP = 8f;
-    static final float THICKNESS_DP = 3f;
+    public static final float PRESSED_EXTRA_WIDTH_DP = 8f;
+    public static final float THICKNESS_DP = 3f;
     /** How far outside the page's edge its centre sits: on the frame line, outside the page. */
-    static final float DROP_DP = 2f;
+    public static final float DROP_DP = 2f;
     static final float REST_ALPHA = 0.3f;
     static final float PRESSED_ALPHA = 0.75f;
     /** How much of the swipe's travel it is drawn along by, and how far at most. */
@@ -178,8 +179,8 @@ final class BorderGrabber {
     // ---- Geometry ----------------------------------------------------------------------------
 
     /** The bottom border's pill, as the keyboard swipe has always drawn it. */
-    static void bounds(@NonNull RectF out, float centreX, float bottomY, float emphasis,
-                       float trackPx, float scale, float density) {
+    public static void bounds(@NonNull RectF out, float centreX, float bottomY, float emphasis,
+                              float trackPx, float scale, float density) {
         bounds(out, centreX, bottomY, emphasis, trackPx, scale, density, false);
     }
 
@@ -188,8 +189,8 @@ final class BorderGrabber {
      * {@link #DROP_DP} outside it — below a bottom edge, above a top one ({@code top}) — and
      * {@code trackPx} along the swipe, wider with {@code emphasis}, and scaled with its page.
      */
-    static void bounds(@NonNull RectF out, float centreX, float edgeY, float emphasis,
-                       float trackPx, float scale, float density, boolean top) {
+    public static void bounds(@NonNull RectF out, float centreX, float edgeY, float emphasis,
+                              float trackPx, float scale, float density, boolean top) {
         float s = Float.isNaN(scale) || scale <= 0f ? 1f : scale;
         float e = clamp01(emphasis);
         float halfWidth = (WIDTH_DP + PRESSED_EXTRA_WIDTH_DP * e) * density * s / 2f;

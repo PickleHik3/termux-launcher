@@ -29,7 +29,7 @@ public final class HelpPresentationModel {
      * <p>The extra keys row is not one of them: its keys carry their own labels, one per cap.
      */
     public static final List<String> OVERVIEW_TARGET_IDS = Collections.unmodifiableList(
-        Arrays.asList("dock", "status", "prefix", "settings"));
+        Arrays.asList("dock", "status", "border", "keyboard_grabber", "prefix", "settings"));
 
     private PaneWallPage place = PaneWallPage.TERMINAL;
     private String selectedTargetId;

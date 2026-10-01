@@ -31,13 +31,13 @@ public class HelpNavigationTest {
 
     @Test public void aLearnMoreLinkOpensItsTopicAndBackLeavesHelp() {
         HelpNavigation nav = new HelpNavigation();
-        nav.openTopic(PaneWallPage.DISPLAY, "start");
+        nav.openTopic(PaneWallPage.DISPLAY, "scale");
         assertEquals(HelpNavigation.Screen.TOPIC, nav.screen());
-        assertEquals("start", nav.id());
+        assertEquals("scale", nav.id());
         assertEquals(PaneWallPage.DISPLAY, nav.place());
         assertFalse("Close returns to the source", nav.back());
         // The Home control is the way to help home from a linked topic.
-        nav.openTopic(PaneWallPage.DISPLAY, "start");
+        nav.openTopic(PaneWallPage.DISPLAY, "scale");
         nav.home();
         assertEquals(HelpNavigation.Screen.HOME, nav.screen());
         assertEquals(1, nav.depth());
@@ -84,10 +84,10 @@ public class HelpNavigationTest {
 
     @Test public void backClosesADefinitionThenTextEntryThenOneScreen() {
         HelpNavigation nav = opened();
-        nav.topic("base_values");
+        nav.topic("layout_editor");
         nav.setTextEntryActive(true);
-        nav.openTerm("base");
-        assertEquals("base", nav.frame().openTermId);
+        nav.openTerm("style");
+        assertEquals("style", nav.frame().openTermId);
         assertTrue(nav.back());
         assertNull(nav.frame().openTermId);
         assertTrue(nav.textEntryActive());
@@ -102,7 +102,7 @@ public class HelpNavigationTest {
     @Test public void closingATermByHandIsTheSameAsBackingOutOfIt() {
         HelpNavigation nav = opened();
         nav.topic("appearance_editor");
-        nav.openTerm("surface");
+        nav.openTerm("look");
         nav.closeTerm();
         assertNull(nav.frame().openTermId);
         assertTrue(nav.back());
@@ -176,8 +176,8 @@ public class HelpNavigationTest {
         HelpNavigation nav = opened();
         nav.search();
         nav.setQuery("display");
-        nav.topic("start");
-        nav.explore("start");
+        nav.topic("scale");
+        nav.explore("scale");
         assertEquals(PaneWallPage.TERMINAL, nav.place());
     }
 }

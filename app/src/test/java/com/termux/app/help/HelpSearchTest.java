@@ -2,6 +2,7 @@ package com.termux.app.help;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -63,19 +64,27 @@ public class HelpSearchTest {
         assertEquals(HelpTopics.Group.MISSING, find("can't type", "fix_keyboard").group);
     }
 
-    @Test public void baseFindsTheTermAndTheAppearanceTopic() {
-        List<HelpSearch.Result> results = search("base");
+    @Test public void lookFindsTheTermAndTheAppearanceTopic() {
+        List<HelpSearch.Result> results = search("look");
         Set<String> terms = new HashSet<>();
         Set<String> topics = new HashSet<>();
         for (HelpSearch.Result result : results) {
             (result.kind == HelpSearch.Kind.TERM ? terms : topics).add(result.id);
         }
-        assertTrue(terms.contains("base"));
-        assertTrue(topics.toString(), topics.contains("base_values"));
+        assertTrue(terms.contains("look"));
         assertTrue(topics.toString(), topics.contains("appearance_editor"));
         // An exact term match is not buried under body matches.
         assertEquals(HelpSearch.Kind.TERM, results.get(0).kind);
-        assertEquals("base", results.get(0).id);
+        assertEquals("look", results.get(0).id);
+    }
+
+    @Test public void theRetiredWordsFindTheirReplacements() {
+        // "surface" and "base" left the editors; nobody is sent to a topic that no longer exists.
+        for (HelpSearch.Result result : search("surface")) assertNotEquals("base_values", result.id);
+        assertTrue(ids("store").contains("tlstore"));
+        assertTrue(ids("dictate").contains("voice"));
+        assertTrue(ids("clipboard").contains("clipboard"));
+        assertTrue(ids("notification").contains("pinned_notifications"));
     }
 
     @Test public void anExactTitleBeatsAnAliasWhichBeatsTheBody() {
@@ -92,7 +101,7 @@ public class HelpSearchTest {
     @Test public void theCurrentPlaceOnlyBreaksTiesAndHidesNothing() {
         // The display's own topics are found from the terminal, where their controls do not exist.
         assertTrue(ids("touchpad").contains("touchpad"));
-        assertTrue(ids("desktop").contains("start"));
+        assertTrue(ids("desktop").contains("gui_apps"));
         HelpSearch.Result fromTerminal = find("dock", "dock");
         List<HelpSearch.Result> fromWidgets =
             HelpSearch.search("dock", PaneWallPage.WIDGETS, text);
@@ -117,7 +126,7 @@ public class HelpSearchTest {
     }
 
     @Test public void resultsAreBestFirst() {
-        for (String query : new String[] {"keyboard", "split", "base", "display"}) {
+        for (String query : new String[] {"keyboard", "split", "look", "display"}) {
             List<HelpSearch.Result> results = search(query);
             for (int i = 1; i < results.size(); i++) {
                 assertTrue(query, results.get(i - 1).score >= results.get(i).score);
