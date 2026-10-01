@@ -142,8 +142,9 @@ public class InAppKeyboardExtraKeysTest {
         KeyboardData withDefaults = LayoutModifier.modify(bundled,
             options(InAppKeyboardExtraKeys.defaultStoredValue()), resources);
         KeyboardData.Row bottom = withDefaults.rows.get(withDefaults.rows.size() - 1);
-        // Slot 3 is the south-west corner; the Ctrl key is the row's first.
-        assertEquals(key, bottom.keys.get(0).getKeyValue(3));
+        // Slot 2 is the north-east corner, the easy swipe off a key at the left edge; the Ctrl
+        // key is the row's first.
+        assertEquals(key, bottom.keys.get(0).getKeyValue(2));
 
         // Off, the loc slot goes with it.
         KeyboardData without = LayoutModifier.modify(bundled, options("copy"), resources);
