@@ -78,5 +78,10 @@
             app:key="tai_runtime_overrides"
             app:persistent="false"
             app:selectable="false"/>
+        <Preference
+            app:key="tai_share_diagnostics"
+            app:title="@string/termux_ai_share_diagnostics_title"
+            app:summary="@string/termux_ai_share_diagnostics_summary"
+            app:persistent="false"/>
     </PreferenceCategory>
 </PreferenceScreen>

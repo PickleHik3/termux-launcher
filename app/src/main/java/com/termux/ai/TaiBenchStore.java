@@ -53,6 +53,8 @@ public final class TaiBenchStore {
     static final String FILE_NAME = "benchmarks.json";
     /** Runs kept per leaderboard entry; the oldest go first. */
     static final int KEEP_PER_KEY = 20;
+    /** Records kept overall, whatever their keys; the oldest across every entry go first. */
+    static final int KEEP_TOTAL = 400;
     public static final String STATUS_COMPLETE = "complete";
     /**
      * The runtime process died (or the app did) while this entry was loading or running. Like
@@ -92,6 +94,27 @@ public final class TaiBenchStore {
         List<JSONObject> records = readRecords();
         records.add(record);
         write(trim(records));
+    }
+
+    /** Drops every record of this model (variants included), for when it is deleted; returns how many went. */
+    synchronized int removeModel(@NonNull String modelId) throws IOException {
+        List<JSONObject> records = readRecords();
+        List<JSONObject> kept = withoutModel(records, modelId);
+        int removed = records.size() - kept.size();
+        if (removed > 0) write(kept);
+        return removed;
+    }
+
+    @NonNull
+    static List<JSONObject> withoutModel(@NonNull List<JSONObject> records, @NonNull String modelId) {
+        String base = TaiModelVariants.baseModelId(modelId);
+        List<JSONObject> kept = new ArrayList<>(records.size());
+        for (JSONObject record : records) {
+            String id = record.optString("modelId", "");
+            if (id.equals(modelId) || (!id.isEmpty() && TaiModelVariants.baseModelId(id).equals(base))) continue;
+            kept.add(record);
+        }
+        return kept;
     }
 
     /** Every record, oldest first. */
@@ -397,9 +420,13 @@ public final class TaiBenchStore {
         return row;
     }
 
-    /** Keeps the newest {@link #KEEP_PER_KEY} of each entry, in the file's order. */
+    /**
+     * Keeps the newest {@link #KEEP_PER_KEY} of each entry, in the file's order, then the newest
+     * {@link #KEEP_TOTAL} overall: the number of entries is unbounded, so the per-entry cap alone
+     * lets the file grow with every model, backend and accelerator ever benchmarked.
+     */
     @NonNull
-    private static List<JSONObject> trim(@NonNull List<JSONObject> records) {
+    static List<JSONObject> trim(@NonNull List<JSONObject> records) {
         Map<String, Integer> counts = new LinkedHashMap<>();
         for (JSONObject record : records) {
             String key = keyOf(record);
@@ -417,6 +444,7 @@ public final class TaiBenchStore {
             }
             kept.add(record);
         }
+        if (kept.size() > KEEP_TOTAL) kept = new ArrayList<>(kept.subList(kept.size() - KEEP_TOTAL, kept.size()));
         return kept;
     }
 

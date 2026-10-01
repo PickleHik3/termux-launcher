@@ -9,10 +9,15 @@ import androidx.annotation.Nullable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Locale;
 
 public final class TaiRuntimeHistory {
     private static final String KEY_HISTORY = "tai_runtime_history_json";
+    /** Entries are never otherwise pruned; past this many, the oldest {@code updatedAtMs} go first. */
+    static final int MAX_ENTRIES = 200;
 
     private TaiRuntimeHistory() {
     }
@@ -62,7 +67,7 @@ public final class TaiRuntimeHistory {
             entry.put("success", success);
             entry.put("updatedAtMs", System.currentTimeMillis());
             history.put("audio_input|" + modelId + "|" + deviceKey(device), entry);
-            prefs(context).edit().putString(KEY_HISTORY, history.toString()).apply();
+            save(context, history);
         } catch (JSONException ignored) {
         }
     }
@@ -100,7 +105,7 @@ public final class TaiRuntimeHistory {
             entry.put("success", false);
             entry.put("updatedAtMs", System.currentTimeMillis());
             history.put(systemRoleKey(modelId), entry);
-            prefs(context).edit().putString(KEY_HISTORY, history.toString()).apply();
+            save(context, history);
         } catch (JSONException ignored) {
         }
     }
@@ -187,7 +192,7 @@ public final class TaiRuntimeHistory {
             entry.put("samples", samples + 1);
             entry.put("updatedAtMs", System.currentTimeMillis());
             history.put(key, entry);
-            prefs(context).edit().putString(KEY_HISTORY, history.toString()).apply();
+            save(context, history);
         } catch (JSONException ignored) {
         }
     }
@@ -223,6 +228,61 @@ public final class TaiRuntimeHistory {
             + normalizeAccelerator(accelerator) + "|" + contextBucket(contextWindow);
     }
 
+    /** Wipes every entry (the {@code tai runtime --clear-history} path); returns how many were dropped. */
+    public static int clear(@NonNull Context context) {
+        int count = history(context).length();
+        prefs(context).edit().remove(KEY_HISTORY).apply();
+        return count;
+    }
+
+    /**
+     * Drops every entry recorded for this model (its load, failure, measured-load, audio-input and
+     * system-role records, variants included), for when the model is deleted. Returns the number dropped.
+     */
+    public static int removeModel(@NonNull Context context, @NonNull String modelId) {
+        JSONObject history = history(context);
+        int removed = removeModel(history, modelId);
+        if (removed > 0) save(context, history);
+        return removed;
+    }
+
+    static int removeModel(@NonNull JSONObject history, @NonNull String modelId) {
+        String base = TaiModelVariants.baseModelId(modelId);
+        List<String> doomed = new ArrayList<>();
+        Iterator<String> keys = history.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            JSONObject entry = history.optJSONObject(key);
+            String id = entry == null ? "" : entry.optString("modelId", "");
+            if (id.isEmpty() || !(id.equals(modelId) || TaiModelVariants.baseModelId(id).equals(base))) continue;
+            doomed.add(key);
+        }
+        for (String key : doomed) history.remove(key);
+        return doomed.size();
+    }
+
+    /** Drops the oldest entries (by {@code updatedAtMs}) until at most {@code max} remain; returns the count dropped. */
+    static int cap(@NonNull JSONObject history, int max) {
+        int excess = history.length() - max;
+        if (excess <= 0) return 0;
+        List<String> keys = new ArrayList<>();
+        Iterator<String> it = history.keys();
+        while (it.hasNext()) keys.add(it.next());
+        keys.sort((a, b) -> Long.compare(updatedAt(history, a), updatedAt(history, b)));
+        for (int i = 0; i < excess; i++) history.remove(keys.get(i));
+        return excess;
+    }
+
+    private static long updatedAt(@NonNull JSONObject history, @NonNull String key) {
+        JSONObject entry = history.optJSONObject(key);
+        return entry == null ? 0L : entry.optLong("updatedAtMs", 0L);
+    }
+
+    private static void save(@NonNull Context context, @NonNull JSONObject history) {
+        cap(history, MAX_ENTRIES);
+        prefs(context).edit().putString(KEY_HISTORY, history.toString()).apply();
+    }
+
     @NonNull
     public static JSONObject summary(@NonNull Context context) throws JSONException {
         JSONObject data = new JSONObject();
@@ -252,7 +312,7 @@ public final class TaiRuntimeHistory {
             entry.put("reason", reason);
             entry.put("updatedAtMs", System.currentTimeMillis());
             history.put(key(model, device, accelerator), entry);
-            prefs(context).edit().putString(KEY_HISTORY, history.toString()).apply();
+            save(context, history);
         } catch (JSONException ignored) {
         }
     }

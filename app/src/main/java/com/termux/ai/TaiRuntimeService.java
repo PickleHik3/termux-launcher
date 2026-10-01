@@ -664,6 +664,10 @@ public final class TaiRuntimeService extends Service {
             Log.i(LOG_TAG, String.format(Locale.US, "%s: %s %s %s (%d MB, last used %d s ago)", reason, outcome,
                 victim.kind.name().toLowerCase(Locale.ROOT), victim.modelId, victim.bytes() / MIB,
                 Math.max(0L, now - victim.lastUsedMs) / 1000L));
+            if (evicted.contains(victim.modelId)) {
+                TaiEventLog.log(this, TaiEventLog.EVICT, victim.modelId, victim.backend, victim.accelerator,
+                    victim.window, 0L, victim.bytes(), reason + ", " + victim.kind.name().toLowerCase(Locale.ROOT));
+            }
         }
     }
 
@@ -675,6 +679,7 @@ public final class TaiRuntimeService extends Service {
      */
     private void releaseAll(@NonNull String reason) throws JSONException {
         Log.i(LOG_TAG, reason + ": cancelling in-flight work and unloading everything");
+        TaiEventLog.log(this, TaiEventLog.OOM_GUARD, reason + ": cancelling in-flight work and unloading everything");
         TaiManager manager = TaiManager.getRuntimeProcessInstance(this);
         manager.cancelRuntime(TaiBenchHarness.STOP_MEMORY_PRESSURE);
         manager.unloadModel();
@@ -751,6 +756,8 @@ public final class TaiRuntimeService extends Service {
             "idle exit: nothing but the runtime baseline (%d MB) resident for %d min; asking the client to unbind",
             TaiResidency.RUNTIME_BASELINE_BYTES / MIB, TaiPressureWatch.IDLE_EXIT_MS / 60_000L));
         idleExitAnnounced = true;
+        TaiEventLog.log(this, TaiEventLog.IDLE_EXIT, "nothing but the runtime baseline resident for "
+            + TaiPressureWatch.IDLE_EXIT_MS / 60_000L + " min");
         try {
             client.send(Message.obtain(null, MSG_IDLE_EXIT));
         } catch (RemoteException e) {

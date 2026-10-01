@@ -1,6 +1,7 @@
 package com.termux.ai;
 
 import android.content.Context;
+import android.os.SystemClock;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -217,6 +218,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             return data;
         }
         String previous = loadedModelId;
+        if (previous != null) {
+            TaiEventLog.log(appContext, TaiEventLog.UNLOAD, previous, TaiModelSpec.BACKEND_LITERT_LM,
+                backendName, 0, 0L, 0L, null);
+        }
         closeEngineLocked("LiteRT-LM runtime is unloaded.", "unloaded");
         JSONObject data = new JSONObject();
         data.put("ok", true);
@@ -634,6 +639,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             statusMessage = "Loading " + modelSpec.id + ".";
         }
 
+        final long loadStartedMs = SystemClock.elapsedRealtime();
+        final int eventContext = options.contextWindow != null ? options.contextWindow : 0;
+        TaiEventLog.log(appContext, TaiEventLog.LOAD_START, modelSpec.id, TaiModelSpec.BACKEND_LITERT_LM,
+            requestedAccelerator == null ? "auto" : requestedAccelerator, eventContext, 0L, 0L, null);
         Engine initializedEngine = null;
         String initializedBackendName = "none";
         String initializedFallbackReason = "";
@@ -697,6 +706,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             }
         } catch (Exception e) {
             TaiRuntimeCrashMarker.clear(appContext);
+            TaiEventLog.log(appContext, TaiEventLog.LOAD_FAIL, modelSpec.id, TaiModelSpec.BACKEND_LITERT_LM,
+                acceleratorFromBackendName(initializedBackendName, requestedAccelerator), eventContext,
+                SystemClock.elapsedRealtime() - loadStartedMs, 0L,
+                e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
             // A cancelled load is not an accelerator or audio failure: recording it would lock the
             // model out of the GPU (known_failed_accelerator) after a user's cancel. Nor is a
             // budget refusal — free memory running short is a moment, not a verdict on the CPU.
@@ -754,6 +767,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                     .withMeasured(measured >= 0L ? measured : null));
                 TaiRuntimeHistory.recordSuccess(appContext, modelSpec, deviceCapabilities,
                     TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator);
+                TaiEventLog.log(appContext, TaiEventLog.LOAD_OK, modelSpec.id, TaiModelSpec.BACKEND_LITERT_LM,
+                    loadedAccelerator, loadedContext, SystemClock.elapsedRealtime() - loadStartedMs, measured, null);
                 if (modelSpec.sourceCapabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT)) {
                     TaiRuntimeHistory.recordAudioInputOutcome(appContext, modelSpec.id, deviceCapabilities, true);
                 }
@@ -1253,6 +1268,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 return;
             }
             if (target > 0L) {
+                TaiEventLog.log(appContext, TaiEventLog.UNLOAD, loadedModelId, TaiModelSpec.BACKEND_LITERT_LM,
+                    backendName, 0, 0L, 0L, "idle or keep-warm timeout");
                 closeEngineLocked("Model unloaded after idle or keep-warm timeout.", "unloaded");
             }
         }

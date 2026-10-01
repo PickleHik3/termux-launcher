@@ -3054,4 +3054,10 @@
     <string name="pane_corner_tab_close_description">Close pane</string>
     <string name="pane_corner_tab_move_description">Move pane</string>
     <string name="pane_corner_tab_maximise_description">Maximise pane</string>
+
+    <!-- On-device AI: the diagnostics share row. -->
+    <string name="termux_ai_share_diagnostics_title">Share diagnostics log</string>
+    <string name="termux_ai_share_diagnostics_summary">Loads, evictions and failures, the runtime history and the last crash, as one text file. No prompts or replies.</string>
+    <string name="termux_ai_share_diagnostics_chooser">Share AI diagnostics</string>
+    <string name="termux_ai_share_diagnostics_failed">Could not prepare the diagnostics log</string>
 </resources>
