@@ -137,10 +137,10 @@ public class SurfacePresetsTest {
         String stored = "{\"format_version\":2,\"app_launcher_dock_style\":\"rounded\","
             + "\"surface_base_blur\":21}";
         preferences.setSurfaceCustomPreset(stored);
-        preferences.setAppLauncherDockStyle("default");
+        preferences.setAppLauncherDockStyle("docked");
         SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
         assertEquals(21, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
-        assertEquals("default", preferences.getAppLauncherDockStyle());
+        assertEquals("docked", preferences.getAppLauncherDockStyle());
         assertTrue(SurfacePresets.matches(preferences, SurfacePresets.custom(preferences)));
     }
 
@@ -226,14 +226,13 @@ public class SurfacePresetsTest {
             TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP));
     }
 
-    /** Switching Looks keeps the user's Layout corners and margin, detached cells included. */
+    /** Switching Looks keeps the user's Layout corners and margin, one value each. */
     @Test
     public void switchingLooksKeepsCornersAndMargins() {
         preferences.setSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS, 33);
         preferences.setTerminalCornerRadius(33);
         preferences.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, 21);
         preferences.setTerminalPaneGap(9);
-        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP, 17);
 
         for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
             SurfacePresets.apply(preferences, preset);
@@ -242,10 +241,6 @@ public class SurfacePresetsTest {
             assertEquals(preset.id, 33, preferences.getTerminalCornerRadius());
             assertEquals(preset.id, 21, preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP));
             assertEquals(preset.id, 9, preferences.getTerminalPaneGap());
-            assertFalse(preset.id,
-                preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP));
-            assertEquals(preset.id, 17,
-                preferences.getSurfaceOverrideValue(SurfaceSlot.DOCK, SurfaceProperty.SIDE_GAP));
             // The Look still reads as applied: its ring does not care about the shape.
             assertTrue(preset.id, SurfacePresets.matches(preferences, preset));
         }

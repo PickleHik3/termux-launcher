@@ -322,7 +322,6 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         preferences.setAppLauncherExtraKeysRowEnabled(true);
         preferences.setAppLauncherAppsRowEnabled(true);
         preferences.setAppLauncherAzRowEnabled(false);
-        preferences.setTerminalFlushDockEnabled(false);
 
         ReflectionHelpers.callInstanceMethod(mActivity, "initializeInAppKeyboard",
             ReflectionHelpers.ClassParameter.from(Bundle.class, null));
@@ -359,7 +358,6 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         preferences.setAppLauncherExtraKeysRowEnabled(true);
         preferences.setAppLauncherAppsRowEnabled(true);
         preferences.setAppLauncherAzRowEnabled(false);
-        preferences.setTerminalFlushDockEnabled(true);
         TerminalView terminalView = mActivity.findViewById(R.id.terminal_view);
 
         ReflectionHelpers.callInstanceMethod(mActivity, "initializeInAppKeyboard",
@@ -594,7 +592,6 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         preferences.setAppLauncherAppsRowEnabled(false);
         preferences.setAppLauncherAzRowEnabled(false);
         preferences.setAppLauncherExtraKeysRowEnabled(false);
-        preferences.setTerminalFlushDockEnabled(false);
 
         // Production creates this dynamically through TerminalPaneController during onCreate.
         FrameLayout paneHost = mActivity.findViewById(R.id.terminal_pane_host);

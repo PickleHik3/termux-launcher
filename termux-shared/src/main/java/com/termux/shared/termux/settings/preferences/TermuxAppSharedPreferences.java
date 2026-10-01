@@ -188,6 +188,42 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         return normalizeAppLauncherDockStyle(value);
     }
 
+    /** The Style of the whole chrome, from the stored {@code docked} / {@code floating}. */
+    @NonNull
+    public LayoutStyle getLayoutStyle() {
+        return LayoutStyle.parse(getAppLauncherDockStyle());
+    }
+
+    public void setLayoutStyle(@NonNull LayoutStyle style) {
+        setAppLauncherDockStyle(style.storageValue());
+    }
+
+    /**
+     * The Style of the whole chrome: Docked joins every piece flush into one frame around the
+     * pane's opening; Floating sets each card apart with Margin's air between.
+     */
+    public enum LayoutStyle {
+        DOCKED(TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DOCKED),
+        FLOATING(TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_FLOATING);
+
+        private final String mStorageValue;
+
+        LayoutStyle(String storageValue) {
+            mStorageValue = storageValue;
+        }
+
+        public String storageValue() {
+            return mStorageValue;
+        }
+
+        /** The Style a stored value names; Docked for anything unknown. Old values still read. */
+        @NonNull
+        public static LayoutStyle parse(@Nullable String value) {
+            return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_FLOATING.equals(normalizeAppLauncherDockStyle(value))
+                ? FLOATING : DOCKED;
+        }
+    }
+
     public void setAppLauncherDockStyle(String value) {
         SharedPreferenceUtils.setString(
             mSharedPreferences,
@@ -1207,13 +1243,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (value == null) {
             return TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_STYLE;
         }
+        // The old values still read, so a value written by a stale caller or restored from an old
+        // backup lands on the right Style; they are never written.
         switch (value) {
             case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_LEGACY_VALARIE_CAPSULE:
-            case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED:
-                return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED;
-            case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DEFAULT:
+            case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_LEGACY_ROUNDED:
+            case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_FLOATING:
+                return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_FLOATING;
+            case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_LEGACY_DEFAULT:
+            case TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DOCKED:
             default:
-                return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DEFAULT;
+                return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_DOCKED;
         }
     }
 
@@ -1876,8 +1916,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     private boolean usesRoundedInAppKeyboardDefaults() {
-        return TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED.equals(
-            getAppLauncherDockStyle());
+        return getLayoutStyle() == LayoutStyle.FLOATING;
     }
 
     /** The keyboard height a place that has never been given one of its own opens at. */
@@ -2421,6 +2460,42 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * inheritance, which is exactly what is not established yet.
      */
     public synchronized void migrateSurfaceInheritance() {
+        foldSurfaceInheritance();
+        // After the fold: it still reads the dock's corner and side gap to seed Base.
+        migrateLayoutStyle();
+    }
+
+    /**
+     * One-time, idempotent migration of the Style rework: the stored style values become
+     * {@code docked} / {@code floating} ({@code default} and {@code rounded} until now), the
+     * per-surface corner and side-gap overrides are dropped so every surface reads the Base values,
+     * and {@code terminal_flush_dock} goes, which Docked covers. These old keys are read only here.
+     */
+    public synchronized void migrateLayoutStyle() {
+        if (SharedPreferenceUtils.getBoolean(mSharedPreferences,
+                TERMUX_APP.KEY_LAYOUT_STYLE_MIGRATED, false))
+            return;
+        String stored = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE, null, false);
+        SharedPreferences.Editor editor = mSharedPreferences.edit();
+        if (stored != null)
+            editor.putString(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE,
+                normalizeAppLauncherDockStyle(stored));
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            editor.remove(surfaceInheritKey(slot, SurfaceProperty.CORNER_RADIUS));
+            editor.remove(surfaceInheritKey(slot, SurfaceProperty.SIDE_GAP));
+        }
+        editor.remove(TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS);
+        editor.remove(TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS);
+        editor.remove(TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET);
+        editor.remove(TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET);
+        editor.remove(TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET);
+        editor.remove(TERMUX_APP.KEY_LEGACY_TERMINAL_FLUSH_DOCK);
+        editor.putBoolean(TERMUX_APP.KEY_LAYOUT_STYLE_MIGRATED, true);
+        editor.commit();
+    }
+
+    private void foldSurfaceInheritance() {
         adoptShippedSurfaceDefaults();
         if (SharedPreferenceUtils.getBoolean(mSharedPreferences,
                 TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED, false)) {
@@ -2623,7 +2698,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      */
     private void writeSurfaceValue(SurfaceSlot slot, SurfaceProperty property, String overrideKey,
                                    int value) {
-        if (hasSurfaceProperty(slot, property) && isSurfaceInheriting(slot, property))
+        if (isRetiredSurfaceProperty(property)
+            || (hasSurfaceProperty(slot, property) && isSurfaceInheriting(slot, property)))
             setSurfaceBaseValue(property, value);
         else
             SharedPreferenceUtils.setInt(mSharedPreferences, overrideKey, value, false);
@@ -2636,7 +2712,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * - where some surfaces agreed and some did not.
      */
     public void setSurfaceValueExact(SurfaceSlot slot, SurfaceProperty property, int value) {
-        if (!hasSurfaceProperty(slot, property))
+        if (!hasSurfaceProperty(slot, property) || isRetiredSurfaceProperty(property))
             return;
         writeSurfaceRaw(slot, property, value);
         setSurfaceInheriting(slot, property, getSurfaceBaseValue(property) == value);
@@ -2649,13 +2725,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     /** Detaches this one property from Base and gives it {@code value}. The editor's drag path. */
     public void detachSurfaceValue(SurfaceSlot slot, SurfaceProperty property, int value) {
-        if (!hasSurfaceProperty(slot, property))
+        if (!hasSurfaceProperty(slot, property) || isRetiredSurfaceProperty(property))
             return;
         setSurfaceInheriting(slot, property, false);
         writeSurfaceRaw(slot, property, value);
     }
 
     private void writeSurfaceRaw(SurfaceSlot slot, SurfaceProperty property, int value) {
+        if (isRetiredSurfaceProperty(property))
+            return;
         String key = surfaceOverrideKey(slot, property);
         if (key != null)
             SharedPreferenceUtils.setInt(mSharedPreferences, key, value, false);
@@ -2768,20 +2846,29 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         }
     }
 
+    /**
+     * Corners and side gap are one value each since the Style rework: the per-surface overrides
+     * (DOCK, KEYBOARD, STATUS, CANVAS) are retired, so every surface reads Base for them whatever
+     * a stale flag says. {@link #migrateLayoutStyle()} deletes the old keys.
+     */
+    private static boolean isRetiredSurfaceProperty(SurfaceProperty property) {
+        return property == SurfaceProperty.CORNER_RADIUS || property == SurfaceProperty.SIDE_GAP;
+    }
+
     private static String surfaceInheritKey(SurfaceSlot slot, SurfaceProperty property) {
         return TERMUX_APP.KEY_SURFACE_INHERIT_PREFIX + slot.key + "_" + property.key;
     }
 
     /** True while this surface still follows Base for this property. */
     public boolean isSurfaceInheriting(SurfaceSlot slot, SurfaceProperty property) {
-        if (!hasSurfaceProperty(slot, property))
+        if (!hasSurfaceProperty(slot, property) || isRetiredSurfaceProperty(property))
             return true;
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             surfaceInheritKey(slot, property), TERMUX_APP.DEFAULT_VALUE_SURFACE_INHERITS_BASE);
     }
 
     public void setSurfaceInheriting(SurfaceSlot slot, SurfaceProperty property, boolean inherit) {
-        if (!hasSurfaceProperty(slot, property))
+        if (!hasSurfaceProperty(slot, property) || isRetiredSurfaceProperty(property))
             return;
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             surfaceInheritKey(slot, property), inherit, false);
@@ -2985,15 +3072,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setDockGlassGrain(int value) {
         writeSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.GRAIN,
             TERMUX_APP.KEY_DOCK_GLASS_GRAIN, DataUtils.clamp(value, 0, 100));
-    }
-
-    public boolean isTerminalFlushDockEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_FLUSH_DOCK,
-            TERMUX_APP.DEFAULT_VALUE_TERMINAL_FLUSH_DOCK);
-    }
-
-    public void setTerminalFlushDockEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_FLUSH_DOCK, value, false);
     }
 
     /**
