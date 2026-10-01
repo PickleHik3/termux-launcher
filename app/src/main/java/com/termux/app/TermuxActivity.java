@@ -2840,7 +2840,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyTerminalBorderAppearance();
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
             applyTerminalBodySurface(terminalBodySurface, Color.TRANSPARENT, false);
-            applyFrameGutterGlass(terminalBodySurface, glassPane && hasDockedFrameCard());
+            applyFrameGutterGlass(frameGlassHost(), glassPane && hasDockedFrameCard());
             terminalStatusSurface.setBackgroundColor(Color.TRANSPARENT);
             terminalStatusSurface.setVisibility(View.GONE);
             if (terminalView != null) {
@@ -2856,7 +2856,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         // Opaque (non-wallpaper) mode keeps the bounded terminal surface; no full-screen dim needed.
-        applyFrameGutterGlass(terminalBodySurface, false);
+        applyFrameGutterGlass(frameGlassHost(), false);
         applyUnifiedBackgroundDim(Color.TRANSPARENT);
         boolean showSurface = true;
         int terminalSurfaceColor = resolveTerminalSurfaceColor();
@@ -3050,8 +3050,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int borderVerticalInsetPx = terminalFrameInsetPx(true, preferBorder || glass);
         int borderHorizontalInsetPx = terminalFrameInsetPx(false, preferBorder || glass);
         // The side stacks flank the canvas, so their bars start and end where the terminal's own
-        // frame does rather than at the raw edges of the band it sits in.
-        applySideStackFrameInset(borderVerticalInsetPx);
+        // frame does rather than at the raw edges of the band it sits in. Under a joined Docked
+        // frame the model stands the side bars flush between the top and bottom stacks, and the
+        // insert's gutter is frame glass, not air: padding them by it left a wallpaper gap at each
+        // end of the A-Z bar and the extra-keys column.
+        applySideStackFrameInset(hasDockedFrameCard() ? 0 : borderVerticalInsetPx);
 
         ViewGroup.LayoutParams borderParams = borderView.getLayoutParams();
         if (borderParams instanceof ViewGroup.MarginLayoutParams) {
@@ -3164,10 +3167,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * whatever a Docked pass left on it is cleared, so a Style round trip cannot leave a layer
      * behind.
      */
-    private void applyFrameGutterGlass(@NonNull View body, boolean on) {
+    /**
+     * The view the Docked frame's glass is painted on: the canvas band, which runs the full width
+     * under the left stack, the terminal and the right stack. Painted on the terminal's own
+     * backdrop (between the two side stacks) it stopped at the side bars, so the extra-keys column
+     * and the alphabets index stood on bare wallpaper instead of in the frame.
+     */
+    @Nullable
+    private View frameGlassHost() {
+        View band = findViewById(R.id.terminal_canvas_band);
+        return band != null ? band : findViewById(R.id.terminal_background);
+    }
+
+    private void applyFrameGutterGlass(@Nullable View body, boolean on) {
+        if (body == null) return;
         if (!on) {
             mFrameGutterBackdropBitmap = null;
             mFrameGutterKey = null;
+            mFrameGutterDrawable = null;
             if (mFrameGutterShown) body.setBackground(null);
             mFrameGutterShown = false;
             return;
@@ -3183,10 +3200,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (frame != null && frame.isRecycled()) frame = null;
         }
         // Rebuilt only when what it is dressed with has moved: this runs behind every chrome pass.
+        // The test is for the glass this method built, not for any background: the body-surface
+        // reset that runs just before leaves a transparent colour drawable and hides the view, and
+        // taking that for the glass left the gutter bare from the second pass on.
         List<Object> key = Arrays.asList(frame, blurRadiusDp, mPreferences.getAppBarOpacity(),
             mPreferences.getDockGlassGrain(), mFancierGlassLook);
-        if (mFrameGutterShown && body.getBackground() != null && key.equals(mFrameGutterKey))
+        if (mFrameGutterShown && mFrameGutterDrawable != null
+                && body.getBackground() == mFrameGutterDrawable && key.equals(mFrameGutterKey)) {
+            body.setVisibility(View.VISIBLE);
             return;
+        }
         mFrameGutterKey = key;
         mFrameGutterBackdropBitmap = frame;
         com.termux.app.chrome.SharedFrameDrawable backdrop = frame == null ? null
@@ -3196,8 +3219,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec.of(
             blurRadiusDp, mPreferences.getAppBarOpacity() / 100f,
             mPreferences.getDockGlassGrain(), 0f, mFancierGlassLook).withRim(false);
-        body.setBackground(
-            com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop));
+        mFrameGutterDrawable =
+            com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop);
+        body.setBackground(mFrameGutterDrawable);
         body.setVisibility(View.VISIBLE);
         mFrameGutterShown = true;
     }
@@ -3208,6 +3232,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private List<Object> mFrameGutterKey;
     /** Whether the terminal's backdrop view currently carries the Docked gutter glass. */
     private boolean mFrameGutterShown;
+    /** The glass drawable the gutter was last given, so a reset to a plain colour is told apart. */
+    @Nullable private android.graphics.drawable.Drawable mFrameGutterDrawable;
 
     /**
      * Paints the terminal's own field. Square and full-bleed by default, which is what makes the
@@ -3456,7 +3482,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // offset into it — whether or not the panes' own dress changed below.
         syncWallpaperParallax();
         // The Docked gutter's glass samples the same frame, so it follows it as it lands.
-        View gutterBody = findViewById(R.id.terminal_background);
+        View gutterBody = frameGlassHost();
         if (gutterBody != null && shouldUseWallpaperPassthroughMode())
             applyFrameGutterGlass(gutterBody, isTerminalPaneGlassActive() && hasDockedFrameCard());
         if (mPaneController == null) return;
@@ -8915,8 +8941,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAzBarHostRowView = installAzBarRow(host, mAzBarHostRowView);
             layoutAzBarHost(host, edge, onPlank);
         }
+        // On the plank its glass is the plank's; under a joined Docked frame it is the frame's
+        // (the canvas band's sheet), and a second sheet here drew a darker strip inset from it.
         View ownGlass = findViewById(R.id.place_az_bar_host_glass);
-        if (ownGlass != null) ownGlass.setVisibility(onPlank ? View.GONE : View.VISIBLE);
+        if (ownGlass != null)
+            ownGlass.setVisibility(onPlank || hasDockedFrameCard() ? View.GONE : View.VISIBLE);
         host.setVisibility(wantHost ? View.VISIBLE : View.GONE);
         syncAzTabLayer(tabShown, edge);
 
@@ -9033,7 +9062,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 chromePieceIds(offDockPlankElements(layout, mOffDockPlankEdge)), layout);
         }
         View host = findViewById(R.id.place_az_bar_host);
-        if (host != null && host.getVisibility() == View.VISIBLE && !mAzBarOnPlank) {
+        if (host != null && host.getVisibility() == View.VISIBLE && !mAzBarOnPlank
+                && !hasDockedFrameCard()) {
             applyOffDockPlankGlass(R.id.place_az_bar_host_glass, R.id.place_az_bar_host_blur,
                 R.id.place_az_bar_host_frost, R.id.place_az_bar_host_surface,
                 com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.AZ_BAR_HOST,
@@ -12559,7 +12589,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean stacksMoved = applyEdgeStacksAndInvalidate(layout);
         // A bar that has just arrived on a side has to meet the terminal frame straight away; the
         // appearance pass owns the same number but does not necessarily run on this one.
-        applySideStackFrameInset(terminalFrameInsetPx(true));
+        applySideStackFrameInset(hasDockedFrameCard() ? 0 : terminalFrameInsetPx(true));
         applyStatusBarEdge(layout);
         applyWidgetGridPreference();
         boolean columnChanged = syncPinnedAppsHost();
