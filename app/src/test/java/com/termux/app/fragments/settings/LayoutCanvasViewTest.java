@@ -1286,12 +1286,17 @@ public class LayoutCanvasViewTest {
                 assertNotNull(at, fill);
                 assertBox(at + " fill", card.box, frame, fill.box);
                 assertRadii(at + " fill", card.corners, fill.radii);
-                if (style == LayoutStyle.DOCKED) {
-                    assertTrue(at + " is the frame", card.frame);
+                if (style == LayoutStyle.DOCKED && card.frame) {
+                    // With side bars: the one joined frame, square, with the opening cut out.
                     assertBox(at + " frame", new Box(0f, 0f, frame.width(), frame.height()), frame,
                         fill.box);
+                    assertTrue(at + " square outer corners", card.corners.isSquare());
                     assertNotNull(at + " the opening is cut out", fill.hole);
                     assertBox(at + " hole", card.hole, frame, fill.hole);
+                } else if (style == LayoutStyle.DOCKED) {
+                    // Without: an edge card, square at the screen, rounded inside, no opening.
+                    assertTrue(at + " is an edge card", card.edge);
+                    assertNull(at + " no opening in an edge card", fill.hole);
                 } else {
                     assertNull(at + " no opening in a card", fill.hole);
                 }
@@ -1345,18 +1350,19 @@ public class LayoutCanvasViewTest {
         assertEquals("the insert wears Corners, not the screen's radius",
             Math.min(CORNERS_DP * scale, Math.min(insert.box.width(), insert.box.height()) / 2f),
             insert.corners.topLeft, 0.01f);
-        // Only the frame's exposed outer corners round, at the screen's radius; every join is square.
-        float screen = docked.frameRadiusPx();
-        for (Piece piece : docked.shape().pieces()) {
-            for (float radius : piece.corners.toRadii()) {
-                assertTrue(piece.id + " rounds at the screen's radius or not at all",
-                    radius == 0f || Math.abs(radius - screen) < 0.01f);
-            }
-        }
+        // The outer corners are square (the screen rounds them); only an edge card's inner corners
+        // round, at the Corners the user set, never at the screen's radius.
         Piece top = docked.shape().piece(PieceId.STATUS);
-        assertEquals("the status bar's top corners are the frame's", screen, top.corners.topLeft,
-            0.01f);
-        assertEquals("its bottom corners are a join", 0f, top.corners.bottomLeft, 0f);
+        assertEquals("the status bar's top corners are the screen's", 0f, top.corners.topLeft,
+            0f);
+        assertEquals(0f, top.corners.topRight, 0f);
+        assertTrue("its bottom corners round at Corners", top.corners.bottomLeft > 0f);
+        assertEquals(top.corners.bottomLeft, top.corners.bottomRight, 0f);
+        assertTrue(top.corners.bottomLeft <= CORNERS_DP * scale + 0.01f);
+        Piece keyboard = docked.shape().piece(PieceId.KEYBOARD);
+        assertEquals("the keyboard's bottom corners are the screen's", 0f,
+            keyboard.corners.bottomLeft, 0f);
+        assertEquals(0f, keyboard.corners.bottomRight, 0f);
     }
 
     @Test

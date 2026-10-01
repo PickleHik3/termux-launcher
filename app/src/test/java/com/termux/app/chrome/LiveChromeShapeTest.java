@@ -67,12 +67,11 @@ public class LiveChromeShapeTest {
      * where the clip's card reaches no further than the view on both sides meeting at it.
      */
     private static boolean[] cutCorners(LiveChromeShape.Clip clip) {
-        boolean round = clip.radius > 0f;
         return new boolean[] {
-            round && clip.reachLeft == 0 && clip.reachTop == 0,
-            round && clip.reachRight == 0 && clip.reachTop == 0,
-            round && clip.reachRight == 0 && clip.reachBottom == 0,
-            round && clip.reachLeft == 0 && clip.reachBottom == 0};
+            clip.topLeft > 0f && clip.reachLeft == 0 && clip.reachTop == 0,
+            clip.topRight > 0f && clip.reachRight == 0 && clip.reachTop == 0,
+            clip.bottomRight > 0f && clip.reachRight == 0 && clip.reachBottom == 0,
+            clip.bottomLeft > 0f && clip.reachLeft == 0 && clip.reachBottom == 0};
     }
 
     /** Every piece's live clip cuts exactly the corners, at exactly the radius, the model gives it. */
@@ -112,31 +111,48 @@ public class LiveChromeShapeTest {
     }
 
     @Test
-    public void dockedOutlinesAreSlicesOfTheOneFrame() {
+    public void dockedOutlinesAreSlicesOfTheTwoEdgeCards() {
         ChromeShape shape = shape(bottomStack(), LayoutStyle.DOCKED);
         assertClipsEqualTheModel(shape);
 
+        // The status bar is the whole top card: square at the top, Corners at the bottom, and
+        // never the screen's radius.
         LiveChromeShape.Clip status = LiveChromeShape.outlineOf(shape,
             Collections.singletonList(PieceId.STATUS));
-        assertEquals("the screen radius, not Corners", SCREEN, status.radius, D);
-        assertEquals("the frame goes on below the bar, to the screen's bottom", 760,
-            status.reachBottom);
-        // Joined rows are square: their clip's corners all lie past the frame's.
+        assertEquals(CORNERS, status.radius, D);
+        assertEquals(0f, status.topLeft, D);
+        assertEquals(0f, status.topRight, D);
+        assertEquals(CORNERS, status.bottomLeft, D);
+        assertEquals(CORNERS, status.bottomRight, D);
+        assertEquals("the card ends where the bar does", 0, status.reachBottom);
+        boolean[] statusCut = cutCorners(status);
+        assertTrue(statusCut[2] && statusCut[3]);
+        assertFalse(statusCut[0] || statusCut[1]);
+
+        // The apps row is the bottom card's top: its top corners cut, and the card runs on below.
         LiveChromeShape.Clip apps = LiveChromeShape.outlineOf(shape,
             Collections.singletonList(PieceId.APPS));
         boolean[] cut = cutCorners(apps);
-        for (boolean corner : cut) assertFalse(corner);
+        assertTrue(cut[0] && cut[1]);
+        assertFalse(cut[2] || cut[3]);
+        assertEquals(340 - 60, apps.reachBottom);
+        // The keyboard is the card's flush bottom: no corner of it is cut.
         LiveChromeShape.Clip keyboard = LiveChromeShape.outlineOf(shape,
             Collections.singletonList(PieceId.KEYBOARD));
-        boolean[] keyboardCut = cutCorners(keyboard);
-        assertTrue(keyboardCut[2] && keyboardCut[3]);
-        assertFalse(keyboardCut[0] || keyboardCut[1]);
+        for (boolean corner : cutCorners(keyboard)) assertFalse(corner);
+        assertEquals(0, keyboard.reachBottom);
     }
 
     @Test
     public void dockedSideBarsAreSlicesOfTheSameFrame() {
         ChromeShape shape = shape(sideBars(), LayoutStyle.DOCKED);
         assertClipsEqualTheModel(shape);
+        // One joined frame with square outer corners: no view's clip rounds anything.
+        for (Piece piece : shape.pieces()) {
+            LiveChromeShape.Clip clip = LiveChromeShape.outlineOf(shape,
+                Collections.singletonList(piece.id));
+            assertEquals(piece.id.toString(), 0f, clip.radius, D);
+        }
         // The side bars stand between the top and bottom bars and touch no screen corner.
         for (PieceId id : new PieceId[] {PieceId.APPS, PieceId.AZ}) {
             for (boolean corner : cutCorners(LiveChromeShape.outlineOf(shape,
@@ -145,20 +161,30 @@ public class LiveChromeShapeTest {
     }
 
     @Test
-    public void dockedBarsDrawNoRimBecauseTheInsertsOwnEdgeCarriesIt() {
+    public void dockedEdgeCardsRimTheEdgeFacingTheInsertAndNothingElse() {
         ChromeShape shape = shape(bottomStack(), LayoutStyle.DOCKED);
-        assertEquals("the status bar's edge faces the gutter, which is plain", ChromeEdgeRule.NONE,
+        assertEquals("the status bar's inner edge", ChromeEdgeRule.edgeBit(Edge.BOTTOM),
             LiveChromeShape.rimEdges(shape, Collections.singletonList(PieceId.STATUS)));
-        assertEquals("so is the dock rows' top", ChromeEdgeRule.NONE,
+        assertEquals("the dock rows' top, the bottom card's inner edge",
+            ChromeEdgeRule.edgeBit(Edge.TOP),
             LiveChromeShape.rimEdges(shape, java.util.Arrays.asList(PieceId.APPS, PieceId.AZ,
                 PieceId.EXTRA_KEYS)));
         assertEquals("a joined keyboard under the rows has none", ChromeEdgeRule.NONE,
             LiveChromeShape.rimEdges(shape, Collections.singletonList(PieceId.KEYBOARD)));
-        assertEquals(ChromeEdgeRule.ALL,
+        assertEquals(ChromeEdgeRule.ALL & ~ChromeEdgeRule.edgeBit(Edge.BOTTOM),
             LiveChromeShape.seamEdges(shape, Collections.singletonList(PieceId.STATUS)));
-        // The rim is the insert's: it owns it, and every side of it is a rim edge.
         assertTrue(shape.opening().ownsRim);
         assertTrue(shape.panes().get(0).drawsRim);
+    }
+
+    @Test
+    public void aJoinedDockedFrameDrawsNoRimBecauseTheInsertsOwnEdgeCarriesIt() {
+        ChromeShape shape = shape(sideBars(), LayoutStyle.DOCKED);
+        for (Piece piece : shape.pieces())
+            assertEquals(piece.id.toString(), ChromeEdgeRule.NONE,
+                LiveChromeShape.rimEdges(shape, Collections.singletonList(piece.id)));
+        assertEquals(ChromeEdgeRule.ALL,
+            LiveChromeShape.seamEdges(shape, Collections.singletonList(PieceId.STATUS)));
     }
 
     @Test
@@ -213,19 +239,21 @@ public class LiveChromeShapeTest {
         LiveChromeShape.Clip clip = LiveChromeShape.outlineOf(shape, sheet);
         assertEquals("the sheet reaches the screen's bottom, where the keyboard ends", 0,
             clip.reachBottom);
-        assertEquals(SCREEN, clip.radius, D);
+        assertEquals("the sheet is the whole bottom card", 0, clip.reachTop);
+        assertEquals(CORNERS, clip.radius, D);
         boolean[] cut = cutCorners(clip);
-        assertTrue("the screen's bottom corners are the keyboard's", cut[2] && cut[3]);
-        assertFalse("its top corners are joins", cut[0] || cut[1]);
-        assertEquals("the dock's top faces the gutter, which is plain", ChromeEdgeRule.NONE,
-            LiveChromeShape.rimEdges(shape, sheet));
-        assertEquals(ChromeEdgeRule.ALL, LiveChromeShape.seamEdges(shape, sheet));
+        assertTrue("its top corners are the card's inner ones", cut[0] && cut[1]);
+        assertFalse("the screen's bottom corners are the screen's to round", cut[2] || cut[3]);
+        assertEquals("the dock's top faces the insert and wears the rim",
+            ChromeEdgeRule.edgeBit(Edge.TOP), LiveChromeShape.rimEdges(shape, sheet));
+        assertEquals(ChromeEdgeRule.ALL & ~ChromeEdgeRule.edgeBit(Edge.TOP),
+            LiveChromeShape.seamEdges(shape, sheet));
     }
 
     @Test
-    public void aStatusBarJoinedToTheRowUnderItHasNoRimAtAll() {
-        // Status and the apps row share the top edge: whichever stands outer joins the other, so
-        // its inner edge is a join; the inner one faces the gutter. Neither draws a rim.
+    public void aStatusBarJoinedToTheRowUnderItRimsOnlyTheInnerRowsInnerEdge() {
+        // Status and the apps row share the top card: whichever stands outer joins the other, so
+        // its inner edge is a join; the inner one faces the insert and wears the rim.
         ChromeShape shape = shape(layout(Slot.on(Edge.TOP, Element.STATUS),
             Slot.on(Edge.TOP, Element.APPS), Slot.on(Edge.BOTTOM, Element.AZ),
             Slot.on(Edge.BOTTOM, Element.EXTRA_KEYS)), LayoutStyle.DOCKED);
@@ -237,24 +265,26 @@ public class LiveChromeShapeTest {
             LiveChromeShape.rimEdges(shape, Collections.singletonList(outer.id)));
         assertEquals(ChromeEdgeRule.ALL,
             LiveChromeShape.seamEdges(shape, Collections.singletonList(outer.id)));
-        assertEquals("the inner bar faces the gutter, plain", ChromeEdgeRule.NONE,
+        assertEquals("the inner bar faces the insert", ChromeEdgeRule.edgeBit(Edge.BOTTOM),
             LiveChromeShape.rimEdges(shape, Collections.singletonList(inner.id)));
     }
 
     @Test
     public void everyJoinAndScreenEdgeIsAPlainSeamUnderDocked() {
-        for (PlaceLayout layout : new PlaceLayout[] {bottomStack(), sideBars()}) {
-            ChromeShape shape = shape(layout, LayoutStyle.DOCKED);
+        for (boolean joined : new boolean[] {false, true}) {
+            ChromeShape shape = shape(joined ? sideBars() : bottomStack(), LayoutStyle.DOCKED);
             for (Piece piece : shape.pieces()) {
                 int rim = LiveChromeShape.rimEdges(shape, Collections.singletonList(piece.id));
                 for (Edge edge : new Edge[] {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT}) {
                     boolean carries = (rim & ChromeEdgeRule.edgeBit(edge)) != 0;
                     assertEquals(piece.id + " " + edge, piece.drawsRim(edge), carries);
-                    assertFalse(piece.id + " " + edge, carries);
+                    // A rim is only ever where the model says RIM, which a joined frame never has.
+                    if (joined) assertFalse(piece.id + " " + edge, carries);
                 }
             }
         }
     }
+
     @Test
     public void theStatusBarSpansTheWholeWidthAgainAfterAFloatingRoundTrip() {
         // Floating is inset by Margin and clipped at Corners; Docked is the whole width again,

@@ -230,6 +230,29 @@ The developer ruled out square windows anywhere, after seeing Docked on Waydroid
   the docked keyboard is that frame's bottom, and the pane is still the rounded insert above it.
 - Home's widget grid and the Display's picture are the insert in the same way.
 
+#### Amended 2026-10-01 (evening): flush square outer corners, edge cards when nothing is at a side
+
+Supersedes "outer corners at the screen radius" above, which cut a card-shaped notch at the top
+(the status bar's glass starts below the system status bar) and tapered the glass under the
+keyboard. Docked only; Floating is unchanged.
+
+- **Outer edges are flush and square.** Every Docked corner that touches a screen corner has radius
+  0: the physical screen rounds it. The screen radius no longer rounds the frame.
+- **No bar at a side: two edge cards.** The top card holds everything on the top edge (status bar
+  and any top bars): square top corners, bottom (inner) corners rounded at Corners. The bottom card
+  holds everything on the bottom edge (dock rows, A–Z, extra keys, keyboard, under-keyboard rows):
+  square bottom corners, top (inner) corners rounded at Corners. The rounded insert sits between
+  them, inset by Margin. The gutter is not glass here (no frame runs down the sides): it shows the
+  wallpaper, as Floating's air does. Each card's inner edge carries the rim; the screen edges do
+  not.
+- **A bar at a side: one joined frame**, as before: bars flush, square joins, the insert as its
+  rounded hole with the glass gutter. Its outer corners are square. Where a side bar meets the top
+  or bottom bar on the inside, that corner of the hole is the insert's business.
+- A card exists only where its edge has bars: a bar put away is simply absent, and an empty bottom
+  edge leaves only the top card, and the reverse.
+- **Fullscreen (F3):** with every bar away the thin glass frame stays, square outer corners; with
+  only the keyboard left it is a bottom card with rounded top corners and the insert above it.
+
 ## 4. Looks
 
 Names chosen by the developer: **Clear · Mist · Tint · Solid**. Mist is kept as rebuilt on

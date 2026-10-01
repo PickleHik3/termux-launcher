@@ -139,14 +139,19 @@ rounded card with air around it: the status bar is always its own card, apps, Aâ
 keys that stand next to each other on one edge share one card, and the keyboard is its own card;
 Corners sets every card's radius and Margin the air. In **Docked** the bars join flush into one
 frame of glass with no air between them: top and bottom bars run the full width and side bars stand
-between them, joins stay square, and the frame's outer corners round at the device's own screen
-radius. The pane is a rounded **insert** over that glass, never a square window: Corners sets its
+between them, and joins stay square. The frame is flush and square at the screen's edges (the
+device's own screen rounds those corners), with its inner corners rounded; with no side bars there
+is no frame, only two edge cards, the top stack square at the top with its bottom corners rounded
+and the bottom stack square at the bottom with its top corners rounded, and the gutter between them
+and the pane shows the wallpaper. The pane is a rounded **insert** over that glass, never a square window: Corners sets its
 radius and Margin the gutter of frame glass around it, so both sliders mean the same in either
-Style (wallpaper shows in Floating's gaps, glass in Docked's). The insert keeps the pane's own glass,
+Style (wallpaper shows in Floating's gaps, and in Docked's when no bar stands at a side; glass in
+Docked's gutter otherwise). The insert keeps the pane's own glass,
 Darkness and Legibility veil, and always stands at least one tone step darker than the frame glass
 around it. Pieces that join draw no line between them, and in Docked only the insert's own edge
 carries rim light and refraction. Fullscreen under Docked keeps a thin frame of glass, the gutter,
-with the keyboard as its bottom and the pane still the rounded insert above it. One Style holds for both
+and with only the keyboard left it is a bottom card with rounded top corners and the pane still the
+rounded insert above it. One Style holds for both
 orientations and for the minimal layout. Style never changes the keyboard's form: a floating or split
 keyboard keeps its own shape, and only a docked keyboard joins the frame or becomes a card.
 _Avoid_: surface mode, dock style (it is no longer the dock's alone),

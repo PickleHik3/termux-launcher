@@ -31,8 +31,9 @@ import java.util.List;
  * thickness in whatever space it works in (pixels live, canvas units in the editor) and gets rects
  * back in the same space. Corners, Margin, the screen radius, the pane-gap cap and the divider's
  * thickness are numbers in that space too. Floating spends Corners and Margin on its cards; Docked
- * spends the screen radius on the frame's outer corners, and Corners and Margin (the gutter) on the
- * rounded insert the pane stands in (SPEC 3.7, amended 2026-10-01).
+ * leaves every outer corner square (the screen rounds its own) and spends Corners and Margin (the
+ * gutter) on the rounded insert the pane stands in, and on the inner corners of the top and bottom
+ * edge cards when no bar stands at a side (SPEC 3.7, amended 2026-10-01 and that evening).
  *
  * <p>The keyboard is part of the arrangement while {@link PlaceLayout#keyboardShown}; a caller
  * drawing the closed-keyboard frame passes {@code layout.withKeyboardShown(false)}.
@@ -213,7 +214,7 @@ public final class ChromeShapeModel {
                 return this;
             }
 
-            /** The device's screen radius, with the caller's 28dp fallback already applied. */
+            /** The device's screen radius, with the caller's 28dp fallback; kept, but it rounds nothing here. */
             @NonNull public Builder screenRadius(float value) {
                 screenRadius = value;
                 return this;
@@ -372,10 +373,17 @@ public final class ChromeShapeModel {
         List<Run> rightRuns = cardsOf(right, floating);
         List<Run> bottomRuns = cardsOf(bottom, floating);
 
+        // Docked with nothing on the left or right: no frame runs down the sides, so the top
+        // stack and the bottom stack are two cards of their own, flush at the screen's edge with
+        // their inner corners rounded. With every bar put away the thin frame stays (fullscreen).
+        final boolean edgeCards = !floating && left.isEmpty() && right.isEmpty()
+            && !(top.isEmpty() && bottom.isEmpty());
+
         List<Cand> cands = new ArrayList<>(8);
         // Card ids: the Docked frame is 0; Floating cards and anything over the frame count on.
         int[] nextGroup = {1};
         final int frameGroup = 0;
+        final int bottomGroup = edgeCards ? nextGroup[0]++ : frameGroup;
 
         // Top stack, down from the top edge.
         float y = m;
@@ -383,7 +391,7 @@ public final class ChromeShapeModel {
         float yTop = y;
         // Bottom stack, up from the bottom edge.
         float yb = h - m;
-        yb = placeRows(bottomRuns, false, yb, w, m, floating, frameGroup, nextGroup, in, cands);
+        yb = placeRows(bottomRuns, false, yb, w, m, floating, bottomGroup, nextGroup, in, cands);
         float yBottom = yb;
         // Side columns stand between them.
         float x = m;
@@ -411,8 +419,13 @@ public final class ChromeShapeModel {
         // Corners, runs, cards.
         List<Piece> pieces = new ArrayList<>(cands.size());
         List<Card> cards = new ArrayList<>(4);
-        final Corners screenCorners = uniform(Math.max(0f,
-            Math.min(in.screenRadius, Math.min(w, h) / 2f)));
+        // The screen rounds its own corners, so no Docked outer corner is ever rounded here.
+        final Box topCardBox = new Box(0f, 0f, w, yTop);
+        final Box bottomCardBox = new Box(0f, yBottom, w, h);
+        final Corners topCardCorners = new Corners(0f, 0f,
+            clampRadius(in.corners, topCardBox), clampRadius(in.corners, topCardBox));
+        final Corners bottomCardCorners = new Corners(clampRadius(in.corners, bottomCardBox),
+            clampRadius(in.corners, bottomCardBox), 0f, 0f);
         if (floating) {
             // Each card's outline is the union of its members.
             List<Integer> seen = new ArrayList<>();
@@ -445,7 +458,7 @@ public final class ChromeShapeModel {
                 }
                 Corners corners = cornersAgainst(c.box, outline, radius, eps);
                 pieces.add(new Piece(c.id, c.box, c.group, corners, c.overlay,
-                    runsOf(c, cands, true, w, h, eps)));
+                    runsOf(c, cands, true, false, w, h, eps)));
             }
         } else {
             for (Cand c : cands) {
@@ -454,11 +467,15 @@ public final class ChromeShapeModel {
                     cards.add(new Card(c.group, c.box, uniform(radius), null, false,
                         Collections.singletonList(c.id)));
                     pieces.add(new Piece(c.id, c.box, c.group, uniform(radius), true,
-                        runsOf(c, cands, true, w, h, eps)));
+                        runsOf(c, cands, true, false, w, h, eps)));
                 } else {
-                    pieces.add(new Piece(c.id, c.box, c.group,
-                        cornersAgainst(c.box, new Box(0f, 0f, w, h), screenCorners.topLeft, eps),
-                        false, runsOf(c, framePieces, false, w, h, eps)));
+                    Corners corners = Corners.SQUARE;
+                    if (edgeCards && c.group == frameGroup)
+                        corners = cornersWithin(c.box, topCardBox, topCardCorners, eps);
+                    else if (edgeCards)
+                        corners = cornersWithin(c.box, bottomCardBox, bottomCardCorners, eps);
+                    pieces.add(new Piece(c.id, c.box, c.group, corners, false,
+                        runsOf(c, framePieces, false, edgeCards, w, h, eps)));
                 }
             }
         }
@@ -485,12 +502,26 @@ public final class ChromeShapeModel {
                 true));
             if (box.width() > 0f && box.height() > 0f) holes.add(box);
         }
-        if (!floating) {
+        if (edgeCards) {
+            // Two cards, each only where its edge has bars; the gutter between them and the
+            // insert is wallpaper, not glass. The edge each shows to the insert carries the rim.
+            List<PieceId> topMembers = new ArrayList<>(4);
+            List<PieceId> bottomMembers = new ArrayList<>(4);
+            for (Cand c : framePieces) (c.group == frameGroup ? topMembers : bottomMembers).add(c.id);
+            int at = 0;
+            if (!topMembers.isEmpty())
+                cards.add(at++, new Card(frameGroup, topCardBox, topCardCorners, null, false,
+                    topMembers, Corners.SQUARE, Collections.<Box>emptyList(), true));
+            if (!bottomMembers.isEmpty())
+                cards.add(at, new Card(bottomGroup, bottomCardBox, bottomCardCorners, null, false,
+                    bottomMembers, Corners.SQUARE, Collections.<Box>emptyList(), true));
+        } else if (!floating) {
             // The frame is a card even with every bar put away: fullscreen keeps its gutter. The
-            // inserts are cut out of it, and the glass between and around them is the gutter.
+            // inserts are cut out of it, and the glass between and around them is the gutter. Its
+            // outer corners are square: the screen rounds them.
             List<PieceId> members = new ArrayList<>(framePieces.size());
             for (Cand c : framePieces) members.add(c.id);
-            cards.add(0, new Card(frameGroup, new Box(0f, 0f, w, h), screenCorners,
+            cards.add(0, new Card(frameGroup, new Box(0f, 0f, w, h), Corners.SQUARE,
                 holes.isEmpty() ? null : openingBox, true, members,
                 uniform(clampRadius(in.corners, openingBox)), holes));
         }
@@ -630,20 +661,27 @@ public final class ChromeShapeModel {
         return new Corners(radius, radius, radius, radius);
     }
 
-    /**
-     * A box's corners given the outline it sits in: round where its corner is one of the
-     * outline's, square everywhere else. The radius is the outline's own, not the box's: a thin
-     * bar at a screen corner carries the frame's radius and is drawn under the frame's clip.
-     */
+    /** A box's corners given the outline it sits in: round at {@code r} where it is the outline's. */
     @NonNull
     private static Corners cornersAgainst(@NonNull Box box, @NonNull Box outline, float r,
                                           float eps) {
+        return cornersWithin(box, outline, uniform(r), eps);
+    }
+
+    /**
+     * A box's corners given the card it sits in: each corner takes the card's own radius where it
+     * is one of the card's corners, and is square everywhere else. A thin bar at a card corner
+     * carries the card's radius and is drawn under the card's clip.
+     */
+    @NonNull
+    private static Corners cornersWithin(@NonNull Box box, @NonNull Box outline,
+                                         @NonNull Corners card, float eps) {
         boolean left = Math.abs(box.left - outline.left) <= eps;
         boolean right = Math.abs(box.right - outline.right) <= eps;
         boolean top = Math.abs(box.top - outline.top) <= eps;
         boolean bottom = Math.abs(box.bottom - outline.bottom) <= eps;
-        return new Corners(left && top ? r : 0f, right && top ? r : 0f,
-            right && bottom ? r : 0f, left && bottom ? r : 0f);
+        return new Corners(left && top ? card.topLeft : 0f, right && top ? card.topRight : 0f,
+            right && bottom ? card.bottomRight : 0f, left && bottom ? card.bottomLeft : 0f);
     }
 
     // ---------------------------------------------------------------- edges
@@ -652,7 +690,7 @@ public final class ChromeShapeModel {
 
     @NonNull
     private static List<EdgeRun> runsOf(@NonNull Cand c, @NonNull List<Cand> others,
-                                        boolean floating, float w, float h, float eps) {
+                                        boolean floating, boolean edgeCards, float w, float h, float eps) {
         List<EdgeRun> runs = new ArrayList<>(6);
         for (Edge edge : EDGES) {
             if (c.overlay) {
@@ -660,15 +698,15 @@ public final class ChromeShapeModel {
                     EdgeKind.RIM));
                 continue;
             }
-            runs.addAll(edgeRuns(c, edge, others, floating, w, h, eps));
+            runs.addAll(edgeRuns(c, edge, others, floating, edgeCards, w, h, eps));
         }
         return runs;
     }
 
     @NonNull
     private static List<EdgeRun> edgeRuns(@NonNull Cand c, @NonNull Edge edge,
-                                          @NonNull List<Cand> others, boolean floating, float w,
-                                          float h, float eps) {
+                                          @NonNull List<Cand> others, boolean floating,
+                                          boolean edgeCards, float w, float h, float eps) {
         float line = coord(c.box, edge);
         float from = spanStart(c.box, edge);
         float to = spanEnd(c.box, edge);
@@ -681,14 +719,16 @@ public final class ChromeShapeModel {
         List<float[]> joins = new ArrayList<>(3);
         for (Cand o : others) {
             if (o == c || o.overlay) continue;
-            if (floating && o.group != c.group) continue;
+            if ((floating || edgeCards) && o.group != c.group) continue;
             if (Math.abs(coord(o.box, opposite(edge)) - line) > eps) continue;
             float s = Math.max(from, spanStart(o.box, edge));
             float e = Math.min(to, spanEnd(o.box, edge));
             if (e - s > eps) joins.add(new float[] {s, e});
         }
         Collections.sort(joins, (a, b) -> Float.compare(a[0], b[0]));
-        EdgeKind rest = floating ? EdgeKind.RIM : EdgeKind.GUTTER;
+        // Under an edge card the edge facing the insert wears the rim; its sides stay plain.
+        EdgeKind rest = floating ? EdgeKind.RIM
+            : edgeCards && !edge.isOnSide() ? EdgeKind.RIM : EdgeKind.GUTTER;
         float cursor = from;
         for (float[] join : joins) {
             if (join[1] <= cursor + eps) continue;
