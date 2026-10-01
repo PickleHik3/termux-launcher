@@ -1,8 +1,7 @@
 package com.termux.app.launcher.widget;
 
 import android.content.Context;
-import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
+import android.content.res.ColorStateList;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
@@ -12,53 +11,56 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
-import android.widget.FrameLayout;
-import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.coordinatorlayout.widget.CoordinatorLayout;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.bottomsheet.BottomSheetBehavior;
+import com.google.android.material.bottomsheet.BottomSheetDragHandleView;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.shape.MaterialShapeDrawable;
+import com.google.android.material.shape.ShapeAppearanceModel;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.termux.R;
-import com.termux.app.Spring;
-import com.termux.app.chrome.ChromeShade;
-import com.termux.app.chrome.OnGlass;
+import com.termux.app.material.M3;
 
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Modal child sheet that never creates a window of its own.
+ * Modal child sheet that never creates a window of its own: a {@link BottomSheetBehavior} sheet in
+ * a {@link CoordinatorLayout} that fills the widget pane, so the stock bottom-sheet drag, settle
+ * and nested scroll apply without the sheet taking a window (and with it, the keyboard).
  *
  * <p>It carries one text field, for searching the catalog, and it refuses to be the thing that
  * takes the keyboard: the field is not focusable until it is tapped, and when it is, the focus is
  * announced through {@link SearchFocusListener} so the activity can hand the system IME over the
  * way it does for a text input inside a widget. Closing the sheet gives that focus straight back.
  */
-public final class WidgetPickerSheetView extends FrameLayout {
+public final class WidgetPickerSheetView extends CoordinatorLayout {
     /** Told when the search field takes the keyboard, and told again — with null — when it lets go. */
     public interface SearchFocusListener { void onSearchFocusChanged(@Nullable View editor); }
 
     private final View scrim;
     private final LinearLayout sheet;
+    private final BottomSheetBehavior<LinearLayout> behavior;
     private final TextView title;
     private final EditText search;
     private final TextView notice;
     private final RecyclerView list;
     private final WidgetPickerAdapter adapter;
-    private final Spring spring = new Spring(1f, 420f, 41f);
     private final int slop;
-    private boolean reducedMotion;
     private boolean open;
     @Nullable private SearchFocusListener searchFocusListener;
     private boolean searchFocused;
     private boolean catalogEmpty;
     private boolean loading;
-    private boolean animating;
-    private long lastFrame;
     private float downX, downY;
     private boolean scrimCandidate;
 
@@ -67,59 +69,74 @@ public final class WidgetPickerSheetView extends FrameLayout {
         super(context);
         setClipChildren(true); setClipToPadding(true); setFocusable(false);
         slop = ViewConfiguration.get(context).getScaledTouchSlop();
-        scrim = new View(context); scrim.setBackgroundColor(0x66000000);
+        scrim = new View(context); scrim.setBackgroundColor(M3.scrim(context));
         scrim.setContentDescription("Close widget picker");
         scrim.setOnTouchListener(this::onScrimTouch);
-        addView(scrim, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        addView(scrim, new CoordinatorLayout.LayoutParams(
+            CoordinatorLayout.LayoutParams.MATCH_PARENT, CoordinatorLayout.LayoutParams.MATCH_PARENT));
         sheet = new LinearLayout(context); sheet.setOrientation(LinearLayout.VERTICAL);
         sheet.setFocusable(false); sheet.setClickable(true);
-        GradientDrawable background = new GradientDrawable(); background.setColor(sheetPlate());
-        background.setCornerRadii(new float[] {24,24,24,24,0,0,0,0}); sheet.setBackground(background);
+        ShapeAppearanceModel topCorners = M3.shape(context,
+            com.google.android.material.R.attr.shapeAppearanceCornerExtraLarge).toBuilder()
+            .setBottomLeftCornerSize(0f).setBottomRightCornerSize(0f).build();
+        MaterialShapeDrawable background = new MaterialShapeDrawable(topCorners);
+        background.initializeElevationOverlay(context);
+        background.setFillColor(ColorStateList.valueOf(M3.surfaceContainerLow(context)));
+        sheet.setBackground(background);
+        sheet.addView(new BottomSheetDragHandleView(context), new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         LinearLayout header = new LinearLayout(context); header.setGravity(Gravity.CENTER_VERTICAL);
-        int pad = dp(16); header.setPadding(pad, dp(8), dp(8), dp(4));
-        title = new TextView(context); title.setText("Add widget"); title.setTextColor(sheetInk());
-        header.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1));
-        ImageButton close = new ImageButton(context); close.setImageResource(android.R.drawable.ic_menu_close_clear_cancel);
-        close.setBackgroundColor(Color.TRANSPARENT); close.setContentDescription("Close widget picker");
-        close.setMinimumWidth(dp(48)); close.setMinimumHeight(dp(48)); close.setFocusable(false);
-        close.setOnClickListener(view -> close()); header.addView(close, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        int pad = dp(16); header.setPadding(pad, 0, dp(8), 0);
+        title = new TextView(context); title.setText("Add widget");
+        M3.textAppearance(title, com.google.android.material.R.attr.textAppearanceTitleLarge);
+        title.setTextColor(M3.onSurface(context));
+        header.addView(title, new LinearLayout.LayoutParams(0,
+            LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        MaterialButton close = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialIconButtonStyle);
+        close.setIconResource(android.R.drawable.ic_menu_close_clear_cancel);
+        close.setContentDescription("Close widget picker"); close.setFocusable(false);
+        close.setOnClickListener(view -> close());
+        header.addView(close, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         sheet.addView(header);
-        search = buildSearchField(context);
+        TextInputLayout searchLayout = new TextInputLayout(context, null,
+            com.google.android.material.R.attr.textInputFilledStyle);
+        search = buildSearchField(searchLayout);
+        searchLayout.addView(search, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams searchParams = new LinearLayout.LayoutParams(
-            LayoutParams.MATCH_PARENT, dp(44));
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         searchParams.setMargins(pad, dp(4), pad, dp(4));
-        sheet.addView(search, searchParams);
-        notice = new TextView(context); notice.setPadding(pad, dp(4), pad, dp(8)); notice.setTextColor(sheetInk());
+        sheet.addView(searchLayout, searchParams);
+        notice = new TextView(context); notice.setPadding(pad, dp(4), pad, dp(8));
+        M3.textAppearance(notice, com.google.android.material.R.attr.textAppearanceBodyMedium);
+        notice.setTextColor(M3.onSurfaceVariant(context));
         notice.setVisibility(GONE); sheet.addView(notice);
         list = new RecyclerView(context); list.setLayoutManager(new LinearLayoutManager(context));
         list.setNestedScrollingEnabled(true); list.setFocusable(false);
         adapter = new WidgetPickerAdapter(listener); list.setAdapter(adapter);
-        sheet.addView(list, new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT, 0, 1));
+        sheet.addView(list, new LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
         // Body-modal: the picker owns the pane's entire corrected body rectangle, including the
         // action strip beneath it. It never creates a focusable window or an InputConnection.
-        LayoutParams sheetParams = new LayoutParams(LayoutParams.MATCH_PARENT,
-            LayoutParams.MATCH_PARENT, Gravity.BOTTOM);
-        addView(sheet, sheetParams); setVisibility(GONE);
-    }
-
-    /**
-     * The sheet itself: a panel, not a wash, so it does not veil toward anything — it belongs to a
-     * dark chrome or to a light one and flips whole. The scrim over the pane behind it stays black
-     * in both, which is what a modal scrim is.
-     */
-    private static int sheetPlate() {
-        return ChromeShade.plate(0xee202124, 0xeeF8F9FA);
-    }
-
-    /** The opaque surface the sheet presents to its own title, notice, field and hint. */
-    private static int sheetSurface() {
-        return ChromeShade.plateSurface(sheetPlate(), ChromeShade.nominalGlass());
-    }
-
-    /** What the sheet's own text is drawn in, read off the sheet rather than off the chrome. */
-    private static int sheetInk() {
-        return ChromeShade.onPlate(sheetPlate(), ChromeShade.nominalGlass(),
-            OnGlass.TARGET_BODY_TEXT);
+        CoordinatorLayout.LayoutParams sheetParams = new CoordinatorLayout.LayoutParams(
+            CoordinatorLayout.LayoutParams.MATCH_PARENT, CoordinatorLayout.LayoutParams.MATCH_PARENT);
+        behavior = new BottomSheetBehavior<>();
+        behavior.setHideable(true); behavior.setSkipCollapsed(true);
+        behavior.setFitToContents(false); behavior.setDraggable(true);
+        behavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+        behavior.addBottomSheetCallback(new BottomSheetBehavior.BottomSheetCallback() {
+            @Override public void onStateChanged(@NonNull View bottomSheet, int newState) {
+                if (newState == BottomSheetBehavior.STATE_HIDDEN) finishClosing();
+            }
+            @Override public void onSlide(@NonNull View bottomSheet, float slideOffset) {
+                scrim.setAlpha(Math.max(0f, Math.min(1f, 1f + slideOffset)));
+            }
+        });
+        sheetParams.setBehavior(behavior);
+        addView(sheet, sheetParams);
+        scrim.setAlpha(0f); setVisibility(GONE);
     }
 
     /**
@@ -127,21 +144,15 @@ public final class WidgetPickerSheetView extends FrameLayout {
      * terminal by the picker merely being on screen. A tap makes it focusable and asks for focus,
      * and the focus change is what tells the host to hand over the system IME.
      */
-    @NonNull private EditText buildSearchField(@NonNull Context context) {
-        EditText field = new EditText(context);
+    @NonNull private EditText buildSearchField(@NonNull TextInputLayout layout) {
+        Context context = layout.getContext();
+        EditText field = new TextInputEditText(context);
         field.setTag("search");
         field.setHint(R.string.widget_picker_search_hint);
         field.setContentDescription(context.getString(R.string.widget_picker_search_hint));
         field.setSingleLine(true);
         field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         field.setImeOptions(EditorInfo.IME_ACTION_SEARCH | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
-        int ink = sheetInk();
-        field.setTextColor(ink); field.setHintTextColor((ink & 0x00FFFFFF) | (0x99 << 24));
-        field.setPadding(dp(12), 0, dp(12), 0);
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(ChromeShade.inPlate(0x1AFFFFFF, sheetSurface(), ChromeShade.TARGET_FILL));
-        background.setCornerRadius(dp(12));
-        field.setBackground(background);
         field.setFocusable(false); field.setFocusableInTouchMode(false);
         field.setOnClickListener(view -> {
             field.setFocusableInTouchMode(true); field.setFocusable(true); field.requestFocus();
@@ -174,7 +185,8 @@ public final class WidgetPickerSheetView extends FrameLayout {
     public void setSearchFocusListener(@Nullable SearchFocusListener value) {
         searchFocusListener = value;
     }
-    public void setReducedMotion(boolean value) { reducedMotion = value; }
+    /** Kept for callers; the stock sheet's settle follows the system animation scale. */
+    public void setReducedMotion(boolean value) { }
     public boolean isOpen() { return open; }
     @NonNull public WidgetPickerAdapter adapter() { return adapter; }
     @NonNull public RecyclerView list() { return list; }
@@ -220,19 +232,30 @@ public final class WidgetPickerSheetView extends FrameLayout {
 
     public void open() {
         if (open) return; open = true; setVisibility(VISIBLE); bringToFront();
-        spring.reset(1f); spring.target = 0f; applyProgress(1f); startSpring();
+        behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
     }
     public void close() {
-        if (!open) return; open = false; spring.value = Math.max(0f, spring.value);
+        if (!open) return; open = false;
         clearSearch();
         adapter.submit(Collections.emptyList());
-        spring.target = 1f; spring.vel = 0f; startSpring();
+        behavior.setState(BottomSheetBehavior.STATE_HIDDEN);
     }
     public void closeImmediate() {
-        open = false; animating = false; removeCallbacks(frame); spring.reset(1f);
+        open = false;
         clearSearch();
         adapter.submit(Collections.emptyList());
-        applyProgress(1f); setVisibility(GONE);
+        behavior.setState(BottomSheetBehavior.STATE_HIDDEN);
+        scrim.setAlpha(0f); setVisibility(GONE);
+    }
+
+    /** The sheet has settled hidden, whether by {@link #close()} or by being dragged down. */
+    private void finishClosing() {
+        if (open) {
+            open = false;
+            clearSearch();
+            adapter.submit(Collections.emptyList());
+        }
+        scrim.setAlpha(0f); setVisibility(GONE);
     }
 
     /** A closing picker keeps nothing: not the query, and not the keyboard it borrowed. */
@@ -257,28 +280,6 @@ public final class WidgetPickerSheetView extends FrameLayout {
                 scrimCandidate = false; return true;
             default: return true;
         }
-    }
-    private void startSpring() {
-        if (reducedMotion) {
-            spring.reset(spring.target); applyProgress(spring.value);
-            if (!open) setVisibility(GONE); return;
-        }
-        if (animating) return; animating = true; lastFrame = 0; postOnAnimation(frame);
-    }
-    private final Runnable frame = new Runnable() {
-        @Override public void run() {
-            if (!animating) return;
-            long now = System.nanoTime(); float dt = lastFrame == 0 ? Spring.MIN_DT
-                : Spring.clampDelta((now - lastFrame) / 1_000_000_000f); lastFrame = now;
-            boolean moving = spring.tick(false, dt); applyProgress(spring.value);
-            if (moving) postOnAnimation(this); else {
-                animating = false; if (!open) setVisibility(GONE);
-            }
-        }
-    };
-    private void applyProgress(float progress) {
-        float p = Math.max(0f, Math.min(1f, progress));
-        sheet.setTranslationY(p * Math.max(1, sheet.getHeight())); scrim.setAlpha(1f - p);
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 }

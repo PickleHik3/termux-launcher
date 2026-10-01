@@ -5,7 +5,6 @@ import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.graphics.Paint;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.text.Editable;
 import android.text.TextUtils;
@@ -15,7 +14,6 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -26,8 +24,13 @@ import androidx.core.widget.TextViewCompat;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.google.android.material.color.MaterialColors;
+import com.google.android.material.bottomsheet.BottomSheetDragHandleView;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.shape.MaterialShapeDrawable;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.termux.R;
+import com.termux.app.material.M3;
 import com.termux.shared.settings.preferences.SharedPreferenceUtils;
 import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -81,7 +84,6 @@ public final class ExtraKeyGlyphPicker {
     private final int colorSubtle;
     private final int colorOutline;
     private final int colorAccent;
-    private final int colorPanel;
 
     @NonNull private final ExtraKeyGlyphCatalogue catalogue;
     @Nullable private Runnable onClosed;
@@ -94,16 +96,10 @@ public final class ExtraKeyGlyphPicker {
     public ExtraKeyGlyphPicker(@NonNull Context context) {
         this.context = context;
         this.density = context.getResources().getDisplayMetrics().density;
-        this.colorText = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorOnSurface, 0xFFFFFFFF);
-        this.colorSubtle = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFFB0B0B0);
-        this.colorOutline = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorOutlineVariant, 0x33FFFFFF);
-        this.colorAccent = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorPrimary, 0xFF80DEEA);
-        this.colorPanel = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorSurfacePanelHigh, 0xFF202837);
+        this.colorText = M3.onSurface(context);
+        this.colorSubtle = M3.onSurfaceVariant(context);
+        this.colorOutline = M3.outlineVariant(context);
+        this.colorAccent = M3.primary(context);
         this.catalogue = drawableCatalogue(context);
     }
 
@@ -180,22 +176,15 @@ public final class ExtraKeyGlyphPicker {
     public void open(@NonNull OnPicked onPicked) {
         BottomSheetDialog dialog = new BottomSheetDialog(context);
         LinearLayout root = column();
-        root.setPadding(pad(20), pad(12), pad(20), 0);
-        GradientDrawable sheetBackground = new GradientDrawable();
-        sheetBackground.setCornerRadii(new float[] {
-            pad(20), pad(20), pad(20), pad(20), 0, 0, 0, 0});
-        sheetBackground.setColor(withAlpha(colorPanel, 0xF7));
-        root.setBackground(sheetBackground);
+        root.setPadding(pad(20), 0, pad(20), 0);
+        root.addView(new BottomSheetDragHandleView(context), new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         LinearLayout headerRow = row();
-        TextView back = new TextView(context);
-        back.setText("←");
+        MaterialButton back = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialIconButtonStyle);
+        back.setIconResource(androidx.appcompat.R.drawable.abc_ic_ab_back_material);
         back.setContentDescription(context.getString(R.string.settings_extra_keys_action_back));
-        back.setTextColor(colorText);
-        back.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
-        back.setGravity(Gravity.CENTER);
-        back.setMinimumWidth(pad(48));
-        back.setMinimumHeight(pad(48));
         back.setOnClickListener(v -> dialog.dismiss());
         headerRow.addView(back);
         TextView titleView = title(context.getString(
@@ -206,26 +195,16 @@ public final class ExtraKeyGlyphPicker {
         root.addView(buildPreview());
 
         LinearLayout searchRow = row();
-        EditText search = new EditText(context);
-        search.setHint(R.string.settings_extra_keys_glyph_search_hint);
+        TextInputLayout searchLayout = new TextInputLayout(context);
+        searchLayout.setEndIconMode(TextInputLayout.END_ICON_CLEAR_TEXT);
+        searchLayout.setHint(R.string.settings_extra_keys_glyph_search_hint);
+        TextInputEditText search = new TextInputEditText(searchLayout.getContext());
         search.setSingleLine(true);
-        search.setTextColor(colorText);
-        search.setHintTextColor(colorSubtle);
-        search.setLayoutParams(new LinearLayout.LayoutParams(0,
+        searchLayout.addView(search, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        searchLayout.setLayoutParams(new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        searchRow.addView(search);
-        TextView clear = new TextView(context);
-        clear.setText("×");
-        clear.setContentDescription(context.getString(
-            R.string.settings_extra_keys_action_clear_search));
-        clear.setTextColor(colorSubtle);
-        clear.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f);
-        clear.setGravity(Gravity.CENTER);
-        clear.setMinimumWidth(pad(48));
-        clear.setMinimumHeight(pad(48));
-        clear.setVisibility(View.GONE);
-        clear.setOnClickListener(v -> search.setText(""));
-        searchRow.addView(clear);
+        searchRow.addView(searchLayout);
         root.addView(searchRow);
 
         // Neither the catalogue nor this sheet is the only way in: any icon copied from a cheat
@@ -234,7 +213,8 @@ public final class ExtraKeyGlyphPicker {
         TextView pasteHint = new TextView(context);
         pasteHint.setText(context.getString(R.string.settings_extra_keys_glyph_paste_hint));
         pasteHint.setTextColor(colorSubtle);
-        pasteHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+        M3.textAppearance(pasteHint, com.google.android.material.R.attr.textAppearanceBodySmall);
+        pasteHint.setTextColor(colorSubtle);
         pasteHint.setPadding(pad(4), pad(6), pad(4), 0);
         root.addView(pasteHint);
 
@@ -266,7 +246,6 @@ public final class ExtraKeyGlyphPicker {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void afterTextChanged(Editable s) {
-                clear.setVisibility(s.length() == 0 ? View.GONE : View.VISIBLE);
                 renderResults(results, s.toString(), pick);
                 scroller.scrollTo(0, 0);
             }
@@ -275,7 +254,6 @@ public final class ExtraKeyGlyphPicker {
         dialog.setContentView(root);
         View sheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
         if (sheet != null) {
-            sheet.setBackgroundColor(0x00000000);
             ViewGroup.LayoutParams params = sheet.getLayoutParams();
             if (params != null) {
                 params.height = ViewGroup.LayoutParams.MATCH_PARENT;
@@ -309,7 +287,8 @@ public final class ExtraKeyGlyphPicker {
 
         TextView name = new TextView(context);
         name.setTextColor(colorSubtle);
-        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
+        M3.textAppearance(name, com.google.android.material.R.attr.textAppearanceBodySmall);
+        name.setTextColor(colorSubtle);
         name.setMaxLines(2);
         name.setEllipsize(TextUtils.TruncateAt.END);
         LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(0,
@@ -326,7 +305,6 @@ public final class ExtraKeyGlyphPicker {
         if (glyph != null) {
             previewCap.setText(capLabel(glyph.text));
             previewName.setText(glyph.name + " · U+" + glyph.hex());
-            previewCap.setAlpha(1f);
             return;
         }
         // Nothing to show is still worth saying: an outlined empty box reads as a broken cap, which
@@ -335,11 +313,9 @@ public final class ExtraKeyGlyphPicker {
         if (opening != null) {
             previewCap.setText(capLabel(opening.text));
             previewName.setText(opening.name + " · U+" + opening.hex());
-            previewCap.setAlpha(1f);
             return;
         }
         previewCap.setText("");
-        previewCap.setAlpha(0.4f);
         previewName.setText(context.getString(R.string.settings_extra_keys_glyph_preview_hint));
     }
 
@@ -414,7 +390,8 @@ public final class ExtraKeyGlyphPicker {
         note.setText(context.getString(R.string.settings_extra_keys_glyph_more_results,
             total - limit));
         note.setTextColor(colorSubtle);
-        note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
+        M3.textAppearance(note, com.google.android.material.R.attr.textAppearanceBodySmall);
+        note.setTextColor(colorSubtle);
         note.setPadding(pad(4), pad(4), pad(4), pad(8));
         results.addView(note);
     }
@@ -568,9 +545,8 @@ public final class ExtraKeyGlyphPicker {
     private TextView title(@NonNull String text) {
         TextView view = new TextView(context);
         view.setText(text);
+        M3.textAppearance(view, com.google.android.material.R.attr.textAppearanceTitleLarge);
         view.setTextColor(colorText);
-        view.setTypeface(Typeface.DEFAULT_BOLD);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f);
         view.setPadding(pad(4), 0, 0, 0);
         return view;
     }
@@ -579,30 +555,25 @@ public final class ExtraKeyGlyphPicker {
         TextView view = new TextView(context);
         view.setText(text);
         view.setAllCaps(true);
+        M3.textAppearance(view, com.google.android.material.R.attr.textAppearanceLabelMedium);
         view.setTextColor(colorSubtle);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
         view.setPadding(0, pad(12), 0, pad(4));
         return view;
     }
 
-    private GradientDrawable outline() {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(0x00000000);
+    private MaterialShapeDrawable outline() {
+        MaterialShapeDrawable drawable = M3.surface(context,
+            com.google.android.material.R.attr.shapeAppearanceCornerMedium, 0x00000000);
         drawable.setStroke(Math.max(1, pad(0.5f)), colorOutline);
-        drawable.setCornerRadius(pad(12));
         return drawable;
     }
 
-    private GradientDrawable accentOutline() {
-        GradientDrawable drawable = new GradientDrawable();
-        drawable.setColor(withAlpha(colorAccent, 0x22));
+    private MaterialShapeDrawable accentOutline() {
+        MaterialShapeDrawable drawable = M3.surface(context,
+            com.google.android.material.R.attr.shapeAppearanceCornerMedium,
+            M3.stateLayer(colorAccent, M3.STATE_PRESSED));
         drawable.setStroke(Math.max(1, pad(1.5f)), colorAccent);
-        drawable.setCornerRadius(pad(12));
         return drawable;
-    }
-
-    private static int withAlpha(int color, int alpha) {
-        return (color & 0x00FFFFFF) | (alpha << 24);
     }
 
     private int pad(float dp) {

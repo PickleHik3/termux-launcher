@@ -10,7 +10,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.LinearLayout;
-import android.widget.RadioButton;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -76,9 +75,8 @@ public final class SettingsMaterialDialogs {
     private static boolean showRichList(@NonNull Context context, @NonNull ListPreference preference,
                                         @NonNull CharSequence[] entries, @NonNull CharSequence[] values, int checked) {
         float d = context.getResources().getDisplayMetrics().density;
-        int titleColor = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface, 0xFFECEFF4);
-        int descColor = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFF9AA3B2);
-        int accent = MaterialColors.getColor(context, com.google.android.material.R.attr.colorPrimary, 0xFF8AB4F8);
+        int titleColor = com.termux.app.material.M3.onSurface(context);
+        int descColor = com.termux.app.material.M3.onSurfaceVariant(context);
 
         LinearLayout container = new LinearLayout(context);
         container.setOrientation(LinearLayout.VERTICAL);
@@ -118,19 +116,19 @@ public final class SettingsMaterialDialogs {
             // Fixed-width radio so the title and the description below share one left edge (the
             // description's indent below is set to this same width).
             int radioColumnW = Math.round(40 * d);
-            RadioButton radio = new RadioButton(context);
+            com.google.android.material.radiobutton.MaterialRadioButton radio =
+                new com.google.android.material.radiobutton.MaterialRadioButton(context);
             radio.setClickable(false);
             radio.setFocusable(false);
             radio.setChecked(idx == checked);
             radio.setPadding(0, 0, 0, 0);
-            radio.setButtonTintList(ColorStateList.valueOf(accent));
             header.addView(radio, new LinearLayout.LayoutParams(radioColumnW, ViewGroup.LayoutParams.WRAP_CONTENT));
 
             TextView titleView = new TextView(context);
             titleView.setText(title);
+            com.termux.app.material.M3.textAppearance(titleView,
+                com.google.android.material.R.attr.textAppearanceTitleMedium);
             titleView.setTextColor(titleColor);
-            titleView.setTextSize(16f);
-            titleView.setTypeface(Typeface.DEFAULT_BOLD);
             LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
             header.addView(titleView, titleParams);
@@ -141,9 +139,9 @@ public final class SettingsMaterialDialogs {
             if (!desc.isEmpty()) {
                 TextView descView = new TextView(context);
                 descView.setText(desc);
+                com.termux.app.material.M3.textAppearance(descView,
+                    com.google.android.material.R.attr.textAppearanceBodyMedium);
                 descView.setTextColor(descColor);
-                descView.setTextSize(13f);
-                descView.setLineSpacing(Math.round(2 * d), 1f);
                 LinearLayout.LayoutParams descParams = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
                 descParams.setMarginStart(Math.round(40 * d)); // align under the title (== radio column width)

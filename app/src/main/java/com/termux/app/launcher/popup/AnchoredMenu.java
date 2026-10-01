@@ -1,14 +1,11 @@
 package com.termux.app.launcher.popup;
 
 import android.graphics.Rect;
-import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.GradientDrawable;
-import android.os.Build;
+import android.content.res.ColorStateList;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.view.animation.DecelerateInterpolator;
 import android.widget.FrameLayout;
 import android.widget.PopupWindow;
 import android.widget.ScrollView;
@@ -17,7 +14,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.github.mmin18.widget.RealtimeBlurView;
+import com.google.android.material.shape.MaterialShapeDrawable;
 import com.termux.app.chrome.ChromeShade;
+import com.termux.app.material.M3;
 
 import java.util.Collections;
 import java.util.List;
@@ -25,7 +24,7 @@ import java.util.List;
 /**
  * One anchored glass panel: it builds the window from a {@link MenuSpec}, places it against an
  * anchor (or beside a sibling menu), tracks the rows it is showing, and takes it away again with the
- * house dismiss animation.
+ * theme's popup transitions.
  *
  * <p>An instance is a slot, not a window — it holds at most one live {@link PopupWindow} and a host
  * keeps one instance per menu it can show. All the sizing and placement arithmetic lives in
@@ -36,14 +35,6 @@ public final class AnchoredMenu {
 
     /** Shortest a panel may be, in dp: a one-row menu still reads as a panel. */
     private static final int MIN_PANEL_HEIGHT_DP = 36;
-    private static final int PANEL_CORNER_DP = 14;
-    /**
-     * The panel's containing edge, as authored. The panel's own opacity is a user preference, so
-     * the glass can be very thin; a white hairline round a thin panel over a light band is the
-     * boundary of the menu going missing, so {@link ChromeShade} restates it.
-     */
-    private static final int RIM_COLOR = 0x3DFFFFFF;
-    private static final float ELEVATION = 8f;
 
     @NonNull private final View host;
     @NonNull private final AnchoredMenuTheme theme;
@@ -113,17 +104,6 @@ public final class AnchoredMenu {
             rowLoc[1] + (rowAnchor.getHeight() / 2), popup.getWidth(), popup.getHeight(),
             screenW, screenH, dp(AnchoredMenuGeometry.GAP_DP), xy);
         popup.showAtLocation(host, Gravity.NO_GRAVITY, xy[0], xy[1]);
-        View root = popup.getContentView();
-        if (root != null) {
-            root.setAlpha(0f);
-            root.setTranslationX(xy[0] >= mainLoc[0] ? dp(6) : -dp(6));
-            root.animate()
-                .alpha(1f)
-                .translationX(0f)
-                .setDuration(140L)
-                .setInterpolator(new DecelerateInterpolator())
-                .start();
-        }
         return popup;
     }
 
@@ -139,7 +119,8 @@ public final class AnchoredMenu {
 
     /**
      * Places {@code popup} against {@code anchor}. Public so a detached owner can reuse the exact
-     * placement policy the tracked path uses.
+     * placement policy the tracked path uses. {@code animate} is kept for callers' signatures: the
+     * enter animation is the theme's popup transition, the same for every menu.
      */
     public void placeAtAnchor(@NonNull PopupWindow popup, @Nullable View anchor, boolean animate) {
         int screenW = host.getResources().getDisplayMetrics().widthPixels;
@@ -163,25 +144,13 @@ public final class AnchoredMenu {
             popup.showAtLocation(host, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM, 0,
                 host.getHeight() + gap);
         }
-        View root = popup.getContentView();
-        if (root != null && animate) {
-            root.setAlpha(0f);
-            root.setTranslationY(dp(8));
-            root.animate()
-                .alpha(1f)
-                .translationY(0f)
-                .setDuration(150)
-                .setInterpolator(new DecelerateInterpolator())
-                .start();
-        }
+    }
     }
 
     // ------------------------------------------------------------------ dismissing
 
     /**
-     * Takes the panel away with the house fade-and-drop, then releases the window. The menu keeps
-     * reporting itself as showing until the animation finishes, which is what makes a re-entrant
-     * dismiss a no-op rather than a second window teardown.
+     * Takes the panel away (the theme's popup exit transition), then releases the window.
      */
     public void dismiss() {
         rows = Collections.emptyList();
@@ -192,29 +161,13 @@ public final class AnchoredMenu {
         });
     }
 
-    /** Dismisses {@code popup} with the house animation. Static so a detached owner can share it. */
+    /** Dismisses {@code popup}; the exit is the theme's popup transition. Shared with detached owners. */
     public void dismissAnimated(@NonNull PopupWindow popup, @Nullable Runnable onDone) {
-        View content = popup.getContentView();
-        if (content != null && popup.isShowing()) {
-            content.animate()
-                .alpha(0f)
-                .translationY(dp(6))
-                .setDuration(110)
-                .withEndAction(() -> {
-                    try {
-                        popup.dismiss();
-                    } catch (Exception ignored) {
-                    }
-                    if (onDone != null) onDone.run();
-                })
-                .start();
-        } else {
-            try {
-                popup.dismiss();
-            } catch (Exception ignored) {
-            }
-            if (onDone != null) onDone.run();
+        try {
+            popup.dismiss();
+        } catch (Exception ignored) {
         }
+        if (onDone != null) onDone.run();
     }
 
     // ------------------------------------------------------------------ hit testing
@@ -284,36 +237,43 @@ public final class AnchoredMenu {
         scrollView.addView(content, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        FrameLayout popupRoot = new FrameLayout(host.getContext());
-        GradientDrawable panelBg = new GradientDrawable();
-        panelBg.setCornerRadius(dp(PANEL_CORNER_DP));
-        int alpha = AnchoredMenuGeometry.clamp(
-            Math.max(theme.opacityPercent(), spec.minimumOpacityPercent), 0, 100);
-        int overlayColor = (((int) (255f * (alpha / 100f))) << 24) | (spec.tintBase & 0x00FFFFFF);
-        panelBg.setColor(overlayColor);
-        // Glass rim: the same hairline the drawer plane and FULL pane draw, so every elevated
-        // surface reads as the one material family.
-        panelBg.setStroke(Math.max(1, Math.round(density * 1.25f)), ChromeShade.rim(RIM_COLOR));
-        popupRoot.setBackground(panelBg);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            popupRoot.setClipToOutline(true);
-        }
+        PopupWindow popup = new PopupWindow(host.getContext());
+        popup.setWidth(desiredWidth);
+        popup.setHeight(desiredHeight);
         if (theme.blurEnabled() && theme.blurRadiusDp() > 0) {
+            // The optional glass plate: a blur under a tinted medium-corner surface. The plain
+            // path below is the stock menu surface.
+            FrameLayout popupRoot = new FrameLayout(host.getContext());
+            int alpha = AnchoredMenuGeometry.clamp(
+                Math.max(theme.opacityPercent(), spec.minimumOpacityPercent), 0, 100);
+            int overlayColor = (((int) (255f * (alpha / 100f))) << 24)
+                | (spec.tintBase & 0x00FFFFFF);
+            MaterialShapeDrawable plate = M3.surface(host.getContext(),
+                com.google.android.material.R.attr.shapeAppearanceCornerMedium, overlayColor);
+            plate.setStroke(host.getResources().getDimension(
+                    com.google.android.material.R.dimen.m3_comp_outlined_card_outline_width),
+                ColorStateList.valueOf(ChromeShade.rim(M3.stateLayer(M3.onSurface(host.getContext()),
+                    M3.STATE_DRAGGED))));
+            popupRoot.setBackground(plate);
+            popupRoot.setClipToOutline(true);
             RealtimeBlurView blurView = new RealtimeBlurView(host.getContext());
             blurView.setBlurRadius(Math.max(0f, (float) dp(theme.blurRadiusDp())));
             blurView.setOverlayColor(overlayColor);
             popupRoot.addView(blurView, new FrameLayout.LayoutParams(desiredWidth, desiredHeight));
+            popupRoot.addView(scrollView, new FrameLayout.LayoutParams(desiredWidth, desiredHeight));
+            popup.setContentView(popupRoot);
+            popup.setBackgroundDrawable(null);
+            popup.setElevation(host.getResources().getDimension(
+                com.google.android.material.R.dimen.m3_comp_menu_container_elevation));
+        } else {
+            popup.setContentView(scrollView);
+            M3.styleMenuPopup(host.getContext(), popup);
         }
-        popupRoot.addView(scrollView, new FrameLayout.LayoutParams(desiredWidth, desiredHeight));
-
-        PopupWindow popup = new PopupWindow(popupRoot, desiredWidth, desiredHeight, false);
         popup.setFocusable(false);
         popup.setTouchable(true);
         popup.setOutsideTouchable(true);
         popup.setInputMethodMode(PopupWindow.INPUT_METHOD_NOT_NEEDED);
         popup.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED);
-        popup.setBackgroundDrawable(new ColorDrawable(0x00000000));
-        popup.setElevation(ELEVATION);
         Runnable onDismiss = spec.onDismiss;
         popup.setOnDismissListener(() -> {
             if (tracked && window == popup && !popup.isShowing()) {

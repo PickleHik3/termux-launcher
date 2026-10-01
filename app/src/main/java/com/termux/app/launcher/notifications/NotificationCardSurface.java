@@ -585,48 +585,39 @@ public final class NotificationCardSurface {
     @NonNull
     private Button actionButton(@NonNull String title) {
         Context context = host.context();
-        Button button = new Button(context);
+        com.google.android.material.button.MaterialButton button =
+            new com.google.android.material.button.MaterialButton(context, null,
+                androidx.appcompat.R.attr.borderlessButtonStyle);
         button.setText(title);
+        com.termux.app.material.M3.textAppearance(button,
+            com.google.android.material.R.attr.textAppearanceLabelMedium);
         button.setTextColor(host.textColor());
-        button.setTextSize(11.5f);
-        button.setAllCaps(false);
         button.setSingleLine(true);
         button.setEllipsize(TextUtils.TruncateAt.END);
-        button.setTypeface(Typeface.DEFAULT_BOLD);
         button.setMinHeight(0);
         button.setMinimumHeight(0);
         button.setMinWidth(0);
         button.setMinimumWidth(0);
         button.setPadding(dp(10), 0, dp(10), 0);
-        TypedValue selectableBackground = new TypedValue();
-        if (context.getTheme().resolveAttribute(
-            android.R.attr.selectableItemBackgroundBorderless, selectableBackground, true)
-            && selectableBackground.resourceId != 0) {
-            button.setBackgroundResource(selectableBackground.resourceId);
-        } else {
-            button.setBackgroundColor(0x00000000);
-        }
         return button;
     }
 
     @NonNull
     private Button sendButton() {
-        Button send = new Button(host.context());
+        com.google.android.material.button.MaterialButton send =
+            new com.google.android.material.button.MaterialButton(host.context());
         send.setText("Send");
-        send.setAllCaps(false);
         send.setSingleLine(true);
-        send.setTextSize(11.5f);
-        send.setTypeface(Typeface.DEFAULT_BOLD);
+        com.termux.app.material.M3.textAppearance(send,
+            com.google.android.material.R.attr.textAppearanceLabelMedium);
         send.setTextColor(host.sendButtonTextColor());
+        send.setBackgroundTintList(android.content.res.ColorStateList.valueOf(
+            host.sendButtonBackgroundColor()));
         send.setMinWidth(0);
         send.setMinimumWidth(0);
         send.setMinHeight(0);
         send.setMinimumHeight(0);
         send.setPadding(dp(8), 0, dp(8), 0);
-        GradientDrawable background = new GradientDrawable();
-        background.setCornerRadius(dp(9));
-        background.setColor(host.sendButtonBackgroundColor());
-        send.setBackground(background);
         return send;
     }
 

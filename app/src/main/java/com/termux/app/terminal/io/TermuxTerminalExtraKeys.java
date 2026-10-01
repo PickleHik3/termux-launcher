@@ -81,7 +81,7 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
             }
             mExtraKeysInfo = new ExtraKeysInfo(extrakeys, extraKeysStyle, ExtraKeysConstants.CONTROL_CHARS_ALIASES);
         } catch (JSONException e) {
-            Logger.showToast(mActivity, "Could not load and set the \"" + TermuxPropertyConstants.KEY_EXTRA_KEYS + "\" property from the properties file: " + e.toString(), true);
+            com.termux.app.notice.AppNotice.show(mActivity, "Could not load and set the \"" + TermuxPropertyConstants.KEY_EXTRA_KEYS + "\" property from the properties file: " + e.toString(), true);
             Logger.logStackTraceWithMessage(LOG_TAG, "Could not load and set the \"" + TermuxPropertyConstants.KEY_EXTRA_KEYS + "\" property from the properties file: ", e);
             try {
                 mExtraKeysInfo = new ExtraKeysInfo(
@@ -89,7 +89,7 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
                     TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE,
                     ExtraKeysConstants.CONTROL_CHARS_ALIASES);
             } catch (JSONException e2) {
-                Logger.showToast(mActivity, "Can't create default extra keys", true);
+                com.termux.app.notice.AppNotice.show(mActivity, "Can't create default extra keys", true);
                 Logger.logStackTraceWithMessage(LOG_TAG, "Could create default extra keys: ", e);
                 mExtraKeysInfo = null;
             }

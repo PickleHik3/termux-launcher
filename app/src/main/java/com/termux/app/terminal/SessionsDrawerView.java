@@ -848,9 +848,11 @@ public final class SessionsDrawerView extends LinearLayout
 
     @NonNull
     private View checkBox(int labelRes, boolean checked, @NonNull OnChecked onChecked) {
-        CheckBox box = new CheckBox(getContext());
+        com.google.android.material.checkbox.MaterialCheckBox box =
+            new com.google.android.material.checkbox.MaterialCheckBox(getContext());
         box.setText(labelRes);
-        box.setTextSize(TypedValue.COMPLEX_UNIT_SP, SUBTITLE_SP + 1f);
+        com.termux.app.material.M3.textAppearance(box,
+            com.google.android.material.R.attr.textAppearanceBodyMedium);
         box.setTextColor(mDress.textColor);
         box.setChecked(checked);
         box.setMinHeight(dp(36));

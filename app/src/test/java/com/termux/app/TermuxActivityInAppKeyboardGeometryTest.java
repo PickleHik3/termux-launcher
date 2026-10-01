@@ -12,7 +12,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
-import android.widget.SeekBar;
 
 import com.termux.R;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
@@ -270,16 +269,16 @@ public class TermuxActivityInAppKeyboardGeometryTest {
         assertTrue(mController.isHeightAdjusting());
         assertEquals(View.VISIBLE, mActivity.findViewById(
             R.id.inapp_keyboard_height_adjust_controls).getVisibility());
-        SeekBar spacingSlider = mActivity.findViewById(
+        com.google.android.material.slider.Slider spacingSlider = mActivity.findViewById(
             R.id.inapp_keyboard_key_spacing_slider);
-        SeekBar radiusSlider = mActivity.findViewById(
+        com.google.android.material.slider.Slider radiusSlider = mActivity.findViewById(
             R.id.inapp_keyboard_key_corner_radius_slider);
         assertEquals(View.VISIBLE, spacingSlider.getVisibility());
         assertEquals(View.VISIBLE, radiusSlider.getVisibility());
         assertEquals(Math.round(preferences.getInAppKeyboardKeyMarginScale() * 100f),
-            spacingSlider.getProgress());
+            Math.round(spacingSlider.getValue()));
         assertEquals(Math.round(preferences.getInAppKeyboardKeyCornerRadiusDp() * 10f),
-            radiusSlider.getProgress());
+            Math.round(radiusSlider.getValue()));
         assertFalse(intent.hasExtra(TermuxActivity.EXTRA_IN_APP_KEYBOARD_HEIGHT_ADJUST));
 
         mController.cancelHeightAdjustment();
