@@ -75,8 +75,8 @@ public final class HelpPanelView extends FrameLayout {
     /** Named views of the last render, so a reader's finger and a test find the same thing. */
     private final Map<String, View> named = new LinkedHashMap<>();
 
-    /** The clip playing on the topic page showing now, or null: only ever one at a time. */
-    private HelpClipView clip;
+    /** The diagram on the topic page showing now, or null: only ever one at a time. */
+    private HelpDiagramView diagram;
 
     private HelpStyle style;
     private HelpTopics.Text text;
@@ -122,9 +122,6 @@ public final class HelpPanelView extends FrameLayout {
         scroll.getViewTreeObserver().addOnScrollChangedListener(() -> {
             if (listener != null && isShowing()) listener.onScroll(scroll.getScrollY());
         });
-        // A couple of thousand lines of manifest, read now on a thread of its own: the first topic
-        // page a reader opens finds the clip it needs already looked up.
-        HelpClips.prime(context);
         setVisibility(GONE);
     }
 
@@ -141,8 +138,8 @@ public final class HelpPanelView extends FrameLayout {
     }
 
     public void hide() {
-        // Nothing decodes for a page nobody is reading; showing the page again starts it over.
-        releaseClip();
+        // Nothing animates for a page nobody is reading; showing the page again starts it over.
+        releaseDiagram();
         setVisibility(GONE);
     }
 
@@ -162,7 +159,7 @@ public final class HelpPanelView extends FrameLayout {
         text = HelpSearch.text(getContext());
         setBackgroundColor(style.pageColor());
         named.clear();
-        clearClip();
+        clearDiagram();
         body.removeAllViews();
         list.removeAllViews();
         detach(list);
@@ -392,8 +389,8 @@ public final class HelpPanelView extends FrameLayout {
         body.addView(style.body(text.get(entry.summaryRes)));
         body.addView(style.instruction(text.get(entry.actionRes)));
         // Under the instruction, so the two sentences the topic is about stay together at the top
-        // of the page and the gesture plays in sight of the words that name it.
-        addClip(entry.id);
+        // of the page and the drawing sits in sight of the words that name it.
+        addDiagram(entry.id, text.get(entry.actionRes));
         int step = 1;
         for (Integer stepRes : entry.stepsRes) {
             body.addView(style.body(getContext().getString(R.string.help_topic_step,
@@ -487,28 +484,26 @@ public final class HelpPanelView extends FrameLayout {
     }
 
     /**
-     * The recorded gesture for this topic, when the recording run captured one. A topic it could
-     * not capture gets no card and no apology for the missing card.
+     * The drawn diagram for this topic. A topic with no drawing gets no card and no apology for
+     * the missing card.
      */
-    private void addClip(String topicId) {
-        HelpClips.Clip recorded = HelpClips.of(getContext()).forTopic(topicId);
-        if (recorded == null) return;
-        clip = new HelpClipView(getContext(), style, recorded);
-        body.addView(clip, style.stacked(style.dp(10)));
+    private void addDiagram(String topicId, CharSequence description) {
+        if (HelpDiagrams.forTopic(topicId) == 0) return;
+        HelpDiagramView card = new HelpDiagramView(getContext(), style, topicId, description);
+        if (!card.hasDiagram()) return;
+        diagram = card;
+        body.addView(card, style.stacked(style.dp(10)));
     }
 
-    /**
-     * Stop decoding, but keep the card: the page is still the page, and showing it again puts a
-     * surface back under the card, which starts the clip over.
-     */
-    private void releaseClip() {
-        if (clip != null) clip.release();
+    /** Stop animating, but keep the card: the page is still the page. */
+    private void releaseDiagram() {
+        if (diagram != null) diagram.release();
     }
 
     /** The card itself is going: the body is being rebuilt, or the panel is leaving the window. */
-    private void clearClip() {
-        HelpClipView going = clip;
-        clip = null;
+    private void clearDiagram() {
+        HelpDiagramView going = diagram;
+        diagram = null;
         if (going != null) going.release();
     }
 
@@ -564,7 +559,7 @@ public final class HelpPanelView extends FrameLayout {
     }
 
     @Override protected void onDetachedFromWindow() {
-        clearClip();
+        clearDiagram();
         super.onDetachedFromWindow();
     }
 
@@ -589,10 +584,10 @@ public final class HelpPanelView extends FrameLayout {
         return named.get(name);
     }
 
-    /** The clip card of the page showing now, or null when the page has none. */
+    /** The diagram card of the page showing now, or null when the page has none. */
     @VisibleForTesting
-    HelpClipView clip() {
-        return clip;
+    HelpDiagramView diagram() {
+        return diagram;
     }
 
     @VisibleForTesting

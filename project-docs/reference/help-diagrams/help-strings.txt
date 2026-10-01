@@ -1,0 +1,66 @@
+help_topic_palette_title: Command palette
+help_topic_palette_action: Swipe up on the space bar to open it, then type what you want.
+help_topic_palette_back: Tap away from the palette to close it.
+help_topic_palette_aliases: palette, commands, actions, find action, run
+help_term_palette_title: Command palette
+help_term_palette_definition: A searchable list of everything the launcher can do.
+help_topic_hierarchy_title: Sessions, windows and panes
+help_topic_hierarchy_summary: A session holds windows, and a window holds panes.
+help_topic_hierarchy_aliases: session, window, pane, tab, hierarchy
+help_space_title: Space bar
+help_topic_space_purpose: The command palette finds any action by name.
+help_topic_space_action: Swipe up on the space bar for the command palette.
+help_topic_space_reveal: Show the keyboard to see the space bar.
+help_topic_space_summary: The space bar\'s swipes reach the palette, your windows and your sessions.
+help_topic_space_aliases: space bar, swipe, corner swipe, palette
+help_scale_title: Scale
+help_topic_scale_purpose: The scale rail sets how large the display is.
+help_topic_scale_action: Drag it to resize the display.
+help_topic_scale_reveal: Start the display to see the rail.
+help_topic_scale_aliases: scale, size, resolution, zoom, display size
+help_display_apps_title: Display apps
+help_topic_display_apps_purpose: These chips are the apps running on the display.
+help_topic_display_apps_action: Tap one to bring it forward, then tap × to close it.
+help_topic_display_apps_reveal: Start the display and open an app to see its chip.
+help_topic_display_apps_aliases: desktop app, open app, switch app, chip, linux app
+help_topic_display_keys_title: Keys and the display
+help_topic_display_keys_summary: While a desktop app has focus, your typing goes to Linux.
+help_topic_display_keys_action: Tap Terminal on the extra keys row to come back to the launcher.
+help_topic_display_keys_aliases: keyboard routing, focus, get back, stuck, shortcuts
+help_topic_distro_apps_title: Linux apps in the drawer
+help_topic_distro_apps_summary: Apps you install in Linux sit in the app drawer beside your Android ones.
+help_topic_distro_apps_action: Open the app drawer and look under Linux Apps.
+help_topic_distro_apps_back: Hide one you never open in Settings, under Display.
+help_topic_distro_apps_aliases: linux app, distro, debian, ubuntu, container, proot, drawer app, desktop app, install app
+help_topic_touchpad_purpose: The touchpad moves the pointer on the display.
+help_topic_touchpad_action: One finger moves and taps, two fingers scroll, three fingers switch windows.
+help_topic_touchpad_reveal: Turn Mouse mode on to see the touchpad.
+help_topic_touchpad_aliases: touchpad, trackpad, pointer, cursor, mouse, right-click
+help_fix_stats_title: CPU, memory or weather are missing
+help_fix_stats_summary: Status widgets stay off until you turn them on, and some need a permission.
+help_fix_stats_action: Turn the widget on in Settings, under Status bar.
+help_fix_stats_aliases: cpu missing, memory missing, weather missing, status widget
+help_fix_support_title: Still stuck?
+help_fix_support_summary: The full documentation and the support page go further than help does.
+help_fix_support_action: Open Settings, under About and support, for diagnostics and where to ask.
+help_fix_support_aliases: support, bug, report, diagnostics, logs, contact
+help_fix_display_title: The display will not start
+help_fix_display_summary: The display needs its packages installed and its server running.
+help_fix_display_action: Open Set up the display and follow what it lists.
+help_fix_display_aliases: display will not start, x11 fails, black screen, no display
+help_topic_prefix_action: Hold them both to see what every other key does.
+help_fix_action_title: An action is unavailable
+help_fix_action_summary: Some actions need a pane, a window or the display before they can run.
+help_fix_action_action: Open the command palette; an action that is greyed out says what it needs.
+help_fix_action_aliases: unavailable, greyed out, disabled, cannot run
+help_topic_shortcuts_purpose: Ctrl and Alt turn the other keys into launcher shortcuts.
+help_topic_shortcuts_action: Hold Ctrl and Alt, then press the key for the one you want.
+help_topic_shortcuts_title: Keyboard shortcuts
+help_topic_shortcuts_aliases: shortcut, shortcuts, chord, key chord, ctrl, alt, prefix, split
+help_fix_shortcuts_title: A shortcut does something unexpected
+help_fix_shortcuts_summary: The program in the pane can take a key combination before the launcher sees it.
+help_topic_windows_purpose: Windows are tabs for your terminals.
+help_topic_windows_action: Tap one to switch, or tap + for a new one.
+help_topic_windows_reveal: Show the status bar in the Layout editor to see your windows.
+help_topic_windows_title: Windows and sessions
+help_topic_windows_aliases: window, windows, tab, tabs, new window, session, rename

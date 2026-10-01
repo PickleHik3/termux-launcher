@@ -120,11 +120,10 @@ final class HelpStyle {
     }
 
     /**
-     * The card a recorded clip plays in: the same corner and the same faint fill as the note and
-     * the rows around it, so a moving picture sits in the page like everything else. The fill is
-     * only ever seen for the instant before the first frame arrives.
+     * The card a topic's diagram sits in: the same corner and the same faint fill as the note and
+     * the rows around it, so the drawing sits in the page like everything else.
      */
-    GradientDrawable clipCard() {
+    GradientDrawable diagramCard() {
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(ColorUtils.setAlphaComponent(dress.textColor, 20));
         shape.setCornerRadius(dp(10));
