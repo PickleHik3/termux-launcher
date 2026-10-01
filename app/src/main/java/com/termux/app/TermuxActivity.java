@@ -2814,6 +2814,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             applyTerminalStatusBarSurfaceColor(showSurface, terminalSurfaceColor);
             applyTerminalWindowBarBackdropInsets();
+            redressKeyboardForStyle();
             return;
         }
 
@@ -2841,6 +2842,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         applyTerminalStatusBarSurfaceColor(showSurface, terminalSurfaceColor);
         applyTerminalWindowBarBackdropInsets();
+        redressKeyboardForStyle();
+    }
+
+    /**
+     * A live Style change: the keyboard host is redressed in the pass that changes everything else,
+     * as a card or as a slice of the frame, rather than waiting for a chrome render that may not
+     * come.
+     */
+    private void redressKeyboardForStyle() {
+        if (isInAppKeyboardShown() && isInAppKeyboardCapsule() != mKeyboardSurfaceDressedAsCard)
+            applyInAppKeyboardSurfaceState(buildChromeSpec());
     }
 
     /**
@@ -5906,6 +5918,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         boolean capsule = isInAppKeyboardCapsule();
         boolean floating = isKeyboardFloating();
+        // Remembered, so a Style change that reaches the surfaces without a chrome render redresses
+        // the host at once instead of leaving the other Style's material on it.
+        mKeyboardSurfaceDressedAsCard = capsule;
         int horizontalMargin = resolveInAppKeyboardHorizontalInsetPx();
         // A floating keyboard already sits under its card's grab handle, so the capsule's top gap
         // would only push the keys further from it: the host runs straight up to the handle row
@@ -6068,6 +6083,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyInAppKeyboardSurfaceState(buildChromeSpec());
     }
 
+    /** Whether the keyboard host was last dressed as a card (Floating) rather than a frame slice. */
+    private boolean mKeyboardSurfaceDressedAsCard;
+
     /** The in-app keyboard host's clip, the model's: see {@link #chromeClipOf}. */
     private final com.termux.app.chrome.ChromeShapeOutlineProvider mKeyboardOutline =
         new com.termux.app.chrome.ChromeShapeOutlineProvider();
@@ -6130,6 +6148,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.keyboard(
                 mPreferences, state.barAlpha, capsule ? cornerRadiusPx : 0f, mFancierGlassLook)
             .withBlur(blurRadiusDp)
+            // A card is a card: its fill and rim are never faded out by the stack alpha a
+            // detached Keyboard Opacity may hold. That alpha belongs to a slice of the frame.
+            .withStackAlpha(capsule && !floating ? 100
+                : com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences))
             .withRim(capsule ? !floating : modelRim != com.termux.app.chrome.ChromeEdgeRule.NONE)
             .withSlice(defaultDockGlassFootFraction(), false)
             .withSeams(capsule ? com.termux.app.chrome.ChromeEdgeRule.NONE

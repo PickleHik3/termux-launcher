@@ -264,6 +264,26 @@ public class ChromeShapeModelTest {
             .cards().isEmpty());
     }
 
+    /** F3 as the launcher reaches it: minimal mode puts every bar away, status bar included. */
+    @Test
+    public void minimalModeUnderDockedKeepsAThinFrameWithTheKeyboardAsItsBottom() {
+        PlaceLayout minimal = MinimalMode.apply(bottomStack());
+        ChromeShape docked = shape(minimal, LayoutStyle.DOCKED);
+        assertEquals("only the keyboard stands", 1, docked.pieces().size());
+        assertBox(piece(docked, PieceId.KEYBOARD).box, 0, 600, 400, 800);
+        ChromeShape.Card frame = docked.cards().get(0);
+        assertTrue(frame.frame);
+        assertEquals(1, docked.cards().size());
+        // A gutter of Margin on the top and both sides, the keyboard below, and the rounded insert.
+        assertBox(frame.hole, 8, 8, 392, 592);
+        assertEquals(CORNERS, docked.panes().get(0).corners.topLeft, D);
+        assertEquals(CORNERS, docked.panes().get(0).corners.bottomRight, D);
+
+        // Floating keeps its cards and no frame.
+        assertTrue(shape(MinimalMode.apply(bottomStack()).withKeyboardShown(false),
+            LayoutStyle.FLOATING).cards().isEmpty());
+    }
+
     @Test
     public void dockedSideBarsStandBetweenTheTopAndBottomBars() {
         PlaceLayout layout = layout(Slot.on(Edge.TOP, Element.STATUS),
