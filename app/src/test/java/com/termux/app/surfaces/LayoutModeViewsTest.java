@@ -118,6 +118,40 @@ public class LayoutModeViewsTest {
             panel.findViewById(R.id.appearance_editor_row1)));
     }
 
+    /**
+     * Corners and Margin are Floating's (SPEC section 3.7): Docked spends neither, so the sliders are
+     * hidden under it. They are invisible rather than gone, so the bottom area keeps its height and
+     * the card does not jump when Style flips.
+     */
+    @Test
+    public void cornersAndMarginAreShownUnderFloatingAndHiddenUnderDockedWithoutTheCardJumping() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ContextThemeWrapper themed = new ContextThemeWrapper(activity,
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
+        View row = panel.view().findViewById(R.id.appearance_editor_layout_sliders);
+        View corners = panel.view().findViewById(R.id.appearance_editor_corners);
+        View margin = panel.view().findViewById(R.id.appearance_editor_margin);
+        assertNotNull(row);
+        assertTrue(isInside(corners, row));
+        assertTrue(isInside(margin, row));
+
+        panel.setFloating(true);
+        assertTrue(panel.shapeControlsShown());
+        assertEquals(View.VISIBLE, row.getVisibility());
+        MaterialButtonToggleGroup style = panel.view().findViewById(R.id.appearance_editor_style);
+        assertEquals(R.id.appearance_editor_style_floating, style.getCheckedButtonId());
+
+        panel.setFloating(false);
+        assertFalse("hidden under Docked", panel.shapeControlsShown());
+        assertEquals("invisible, not gone: the card keeps its height", View.INVISIBLE,
+            row.getVisibility());
+        assertEquals(R.id.appearance_editor_style_docked, style.getCheckedButtonId());
+
+        panel.setFloating(true);
+        assertTrue("and back under Floating", panel.shapeControlsShown());
+    }
+
     private static boolean isInside(View view, View ancestor) {
         for (ViewParent parent = view.getParent(); parent != null; parent = parent.getParent()) {
             if (parent == ancestor)

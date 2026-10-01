@@ -84,7 +84,7 @@ public class LayoutEditorPlanTest {
         assertEquals("the phone did not turn", PORTRAIT, plan.deviceOrientation());
         assertFalse("so the live place stays where it is", plan.liveFollows());
 
-        // The miniature draws the orientation on the toggle, whatever the phone is in.
+        // The layout canvas draws the orientation on the toggle, whatever the phone is in.
         assertEquals(places.resolve(LANDSCAPE), plan.shownLayout());
     }
 
@@ -98,7 +98,7 @@ public class LayoutEditorPlanTest {
             prefs.getString("layout.landscape.status_bar", null));
 
         plan.showOrientation(LANDSCAPE);
-        assertEquals("the phone is still in portrait, so only the miniature moves",
+        assertEquals("the phone is still in portrait, so only the layout canvas moves",
             LayoutEditorPlan.Drop.MINIATURE, plan.drop(Bar.APPS_ROW, Edge.RIGHT));
         assertEquals("right", prefs.getString("layout.landscape.apps_row", null));
         assertNull("portrait untouched", prefs.getString("layout.portrait.apps_row", null));
@@ -178,7 +178,7 @@ public class LayoutEditorPlanTest {
         plan.showOrientation(LANDSCAPE);
         assertFalse(plan.liveFollows());
 
-        // The editor shows what the user is looking at, so a rotation takes the miniature with it.
+        // The editor shows what the user is looking at, so a rotation takes the layout canvas with it.
         plan.onDeviceOrientationChanged(LANDSCAPE);
         assertEquals(LANDSCAPE, plan.deviceOrientation());
         assertEquals(LANDSCAPE, plan.shownOrientation());
@@ -419,7 +419,7 @@ public class LayoutEditorPlanTest {
         places.setMinimal(true);
         LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
         assertEquals(LayoutVariant.MINIMAL, plan.variant());
-        // The miniature draws the minimal layout: the seed, with everything put away.
+        // The layout canvas draws the minimal layout: the seed, with everything put away.
         assertTrue(plan.shownLayout().slot(com.termux.app.place.Element.APPS).hidden);
         assertFalse(plan.isDirty());
 

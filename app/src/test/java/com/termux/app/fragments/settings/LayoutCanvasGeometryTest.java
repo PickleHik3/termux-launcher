@@ -83,6 +83,18 @@ public class LayoutCanvasGeometryTest {
     }
 
     @Test
+    public void bandsThatFitAreLeftAloneAndThoseThatDoNotAreSqueezedToKeepTheOpening() {
+        assertEquals("a stack that fits is not touched", 1f,
+            LayoutCanvasGeometry.fitFactor(1000f, 700f, 50f), 0f);
+        assertEquals("an empty stack has nothing to squeeze", 1f,
+            LayoutCanvasGeometry.fitFactor(1000f, 0f, 50f), 0f);
+        // 80% of 1000 is 800, less 100 of air, for 1200 of bands.
+        assertEquals(700f / 1200f, LayoutCanvasGeometry.fitFactor(1000f, 1200f, 100f), 0.0001f);
+        assertEquals("never squeezed to nothing", LayoutCanvasGeometry.MIN_FIT,
+            LayoutCanvasGeometry.fitFactor(1000f, 1200f, 5000f), 0f);
+    }
+
+    @Test
     public void theStatusBarIsTallerExpandedThanCollapsed() {
         for (boolean floating : new boolean[] {false, true}) {
             assertTrue(LayoutCanvasGeometry.statusBandDp(Edge.TOP, false, floating)
