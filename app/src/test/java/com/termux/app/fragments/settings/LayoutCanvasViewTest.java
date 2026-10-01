@@ -1211,16 +1211,6 @@ public class LayoutCanvasViewTest {
     // ---- One radius system -----------------------------------------------------------------------
 
     @Test
-    public void theDocksRadiusIsScaledOntoThePictureByTheShortSides() {
-        // The picture's short side is 240 units, a 411dp phone's is 411dp: 24dp is 14 units.
-        assertEquals(24f * 240f / 411f, LayoutCanvasView.surfaceRadiusUnits(24f, 411f), 0.001f);
-        assertEquals("no screen to ask: the reference phone",
-            LayoutCanvasView.surfaceRadiusUnits(24f, 411f),
-            LayoutCanvasView.surfaceRadiusUnits(24f, 0f), 0.001f);
-        assertEquals(0f, LayoutCanvasView.surfaceRadiusUnits(-1f, 411f), 0.001f);
-    }
-
-    @Test
     public void everyCardSharesTheRadiusUpToAHalfCapsuleOfItsOwn() {
         assertEquals("a tall card keeps the whole radius", 14f,
             LayoutCanvasView.cardRadiusPx(14f, 200f, 80f), 0.001f);
@@ -1229,15 +1219,16 @@ public class LayoutCanvasViewTest {
     }
 
     @Test
-    public void theBandsAndTheKeyboardAreRoundedFromTheDocksOneRadius() {
+    public void everyBlockWearsOneSmallCornerThatFollowsTheCanvasScale() {
         LayoutCanvasView view = sized();
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
+        assertEquals("6dp at the canvas scale", 6f * view.canvasScalePx(),
+            view.surfaceRadiusPx(), 0.001f);
         float before = view.surfaceRadiusPx();
-        assertTrue(before > 0f);
         view.setDockCornerRadiusDp(LayoutCanvasView.DEFAULT_DOCK_RADIUS_DP * 2f);
-        assertEquals("the Corners control moves every card together", before * 2f,
-            view.surfaceRadiusPx(), 0.01f);
+        assertEquals("the dock's Corners control no longer changes the blocks", before,
+            view.surfaceRadiusPx(), 0.001f);
     }
 
     // ---- The grip ---------------------------------------------------------------------------------
@@ -1351,7 +1342,7 @@ public class LayoutCanvasViewTest {
     }
 
     @Test
-    public void theDocksBandFollowsItsScaleAndTheSquareDockHasNoRadius() {
+    public void theDocksBandFollowsItsScale() {
         LayoutCanvasView view = sized();
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.HIDDEN),
@@ -1368,7 +1359,8 @@ public class LayoutCanvasViewTest {
         assertTrue("a bigger dock scale is a taller band", tall.height() > shipped.height());
 
         view.setDockCornerRadiusDp(0f);
-        assertEquals("the docked dock is square", 0f, view.surfaceRadiusPx(), 0f);
+        assertTrue("the docked dock keeps the shared corner, not a square one",
+            view.surfaceRadiusPx() > 0f);
     }
 
     @Test
