@@ -46,6 +46,15 @@ public interface TourTargets {
     String TERMINAL_PANE = "terminal_pane";
     String DOCK = "dock";
     String AZ_ROW = "az_row";
+    /**
+     * The border of the page that is up, which is where a border drag is held. It is the page's
+     * own frame line, so it is on every place and never needs the terminal underneath it.
+     */
+    String PAGE_BORDER = "page_border";
+    /** The small pill on the page's bottom border that marks the keyboard swipe. */
+    String KEYBOARD_GRABBER = "keyboard_grabber";
+    /** The small pill on the page's top border that marks the status swipe. */
+    String STATUS_GRABBER = "status_grabber";
 
     /**
      * Keys of the in-app keyboard, each measured on the layout the user actually has in front of

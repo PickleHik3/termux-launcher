@@ -1,6 +1,6 @@
 # Glossary
 
-The language the code, the docs and the developer use. One file: the product model (places, surfaces,
+The language the code, the docs and the developer use. One file: the product model (places, chrome,
 editors, voice, local AI) and the words the project uses about itself (editions, releases, pong,
 the seams). AGENTS.md carries the rules; this carries the names. Terms are alphabetical within
 each section. `_Avoid_` lines list the words not to use for a term.
@@ -10,16 +10,13 @@ Related: [`CONTEXT.md`](../CONTEXT.md) (a pointer to this file), [`docs/adr/`](a
 
 ## Language
 
-### Places and surfaces
+### Places and chrome
 
 **A–Z index**:
 The row or column of letters along an edge that jumps the app list to the apps beginning with a
 letter: scrub across it and the matches show. One of the Layout editor's elements: on an edge, or
 put away in the tray. See `docs/en/Launcher_Usage.md`.
 _Avoid_: alphabet bar (the Layout editor's file names still say `alphabets`), fast scroller
-
-**Base**:
-The shared appearance values every surface inherits until a property is detached for one surface.
 
 **Border drag**:
 The one finger gesture that pages the wall, on every place and in every mode: a press held on the
@@ -31,8 +28,8 @@ is always drawn while the
 border preference is on (the slab's rim on glass, the plain stroke otherwise), on the terminal,
 the Widgets page and the Display page alike, so the gesture has a line to find. The hold sinks
 the page away from the user until the finger lets go, in every mode unless motion is reduced;
-under Fancier Glass the page held and the page arriving both tip like planks toward the finger,
-as if it pressed its weight into them, and lie flat as the settle lands; the Display place does
+where the extra glass is active (see **Fancier Glass**) the page held and the page arriving both tip
+like planks toward the finger, as if it pressed its weight into them, and lie flat as the settle lands; the Display place does
 too, on a still copy of its picture that stands in for the motion. The release's settle carries on at the finger's speed. The status bar does
 not page; its own drag is the fold across it.
 _Avoid_: edge swipe, status bar swipe, page swipe
@@ -50,9 +47,8 @@ _Avoid_: X11 page, Termux:X11 (the server is our fork of it, but the place is th
 
 **Dock**:
 The band of chrome that carries the pinned-apps row, the A–Z index and the extra keys, along the
-bottom by default. It is one Surface. Its shape follows the **Style**. Its rows may stand under the
-keyboard instead of over it. Not the same as the Layout editor's "Hidden tray", which holds
-elements that are put away.
+bottom by default. Its shape follows the **Style**. Its rows may stand under the keyboard instead of
+over it. Not the same as the Layout editor's restore tray, which holds elements that are put away.
 _Avoid_: taskbar, nav bar, hotseat
 
 **Keyboard swipe**:
@@ -135,11 +131,6 @@ mode, leave the top border to paging. A press in the phone's own strip at the to
 never taken, so the notification shade still pulls down.
 _Avoid_: status bar swipe (the retired page swipe on the bar), pull-down
 
-**Surface**:
-One themable chrome region: Dock, Keyboard, Status, Canvas. Appearance properties (blur, opacity,
-grain, corner radius, side gap) attach to a surface, not to a pane.
-_Avoid_: slot, region
-
 **Style**:
 How the chrome is shaped as a whole: **Docked** or **Floating**. It covers the status bar, the
 dock's elements, the keyboard and the pane's opening, and one shape decides the fill, the
@@ -158,17 +149,17 @@ carries rim light and refraction. Fullscreen under Docked keeps a thin frame of 
 with the keyboard as its bottom and the pane still the rounded insert above it. One Style holds for both
 orientations and for the minimal layout. Style never changes the keyboard's form: a floating or split
 keyboard keeps its own shape, and only a docked keyboard joins the frame or becomes a card.
-_Avoid_: surface mode (a Surface is one region), dock style (it is no longer the dock's alone),
+_Avoid_: surface mode, dock style (it is no longer the dock's alone),
 capsule, rounded
 
 ### Look and motion
 
 **Fancier Glass**:
-The one opt-in toggle in Settings › Look that turns on the extra glass: refraction at glass edges on
-every glass surface, video wallpapers, the refraction controls in the Appearance editor and the
-tilting page motions. Off by default, shown on Android 13 and later, and it needs a managed
-wallpaper. Lazy mode, battery saver and reduced motion override it. See ADR 0005 and
-`project-docs/active/fancier-glass/SPEC.md`.
+The extra glass: refraction at glass edges on every glass surface, animated backgrounds and the
+tilting page motions. It has no switch any more (it left Settings › Look with the Looks): it is on
+wherever the device supports it — Android 13 and later, with a managed wallpaper — and each Look
+sets how deep the bend is. Lazy mode, battery saver and reduced motion override it. See ADR 0005
+and `project-docs/active/fancier-glass/SPEC.md`.
 _Avoid_: glass mode, refraction mode
 
 **Lazy mode**:
@@ -214,14 +205,18 @@ _Avoid_: screenshot, freeze frame
 ### Editing
 
 **Appearance editor**:
-The editor for how the surfaces look: glass, opacity, blur, grain, corners, palette. Entered
-from the corner tab; exits straight back to the live place. There is one look, so what it edits
-lands on every place; it can style one surface or all surfaces at once.
+The editor for how the launcher looks: a **Look** slider with the stops Clear, Mist, Tint, Solid and
+Custom, over the launcher scaled into a frame. At Custom a tap on an element shows Darkness,
+Legibility, Blur, Key corners and Soft wallpaper with Dim. Entered from the corner tab; exits
+straight back to the live place. There is one look, so what it edits lands on every place. Undo
+steps back and Done keeps the changes.
 _Avoid_: surface editor (legacy umbrella name), look editor, style editor, full editor
 
 **Corner tab**:
-The small control strip revealed by pressing a pane or page corner. It carries the Appearance and
-Layout buttons on every place, alongside the place's own actions.
+The small control strip revealed by holding a page's corner. On a page of its own — Home,
+Terminal or Display — it carries Appearance, Layout, Wallpaper, Minimal mode and help, with
+Settings on Terminal and Display. On a split pane it carries Close, Move and Maximise instead: a
+split pane has no Appearance or Layout of its own, and a corner hold only shows the buttons.
 _Avoid_: corner menu, pane menu, controls view
 
 **Element**:
@@ -307,8 +302,8 @@ The one line we write about an item: what it is for, in plain words, under its n
 _Avoid_: tagline, summary (the catalog's `summary` column is the old one-line description)
 
 **tlstore**:
-The launcher's own package manager for the tools and configs it shows off but does not ship in the
-APK. It is a separate repository, [PickleHik3/tlstore](https://github.com/PickleHik3/tlstore); the
+A simple store where prebuilt binaries for termux-launcher are distributed: the tools and configs
+the launcher shows off but does not ship in the APK. It is a separate repository, [PickleHik3/tlstore](https://github.com/PickleHik3/tlstore); the
 launcher pins the release it ships (`app/tlstore.lock`) and installs `tlstore`, `tl` and `tls`,
 which are the same command. See `docs/en/Tlstore.md`.
 _Avoid_: the store (for the command), package manager (for the store's catalog)

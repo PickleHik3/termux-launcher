@@ -89,7 +89,6 @@ WhatsApp Video*
 # Reference-only handoff bundles (not part of app source)
 .artifacts/
 .gradle-codex-*/
-!app/src/main/assets/help-guide/*.mp4
 __pycache__/
 
 # Local notes, never committed
@@ -97,6 +96,7 @@ project-docs/plans/TODO-voice-command-words.md
 
 # voice-eval harness output and caches (segments, transcripts, alignments; never audio in git)
 scripts/voice-eval/out/
+project-docs/reference/help-diagrams/out/
 
 # tts-eval listening samples and report (models cached in ~/.cache/termux-launcher/tts, never in git)
 scripts/tts-eval/out/

@@ -1,0 +1,51 @@
+<animated-vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"><aapt:attr name="android:drawable">
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="360dp" android:height="240dp" android:viewportWidth="360" android:viewportHeight="240">
+<path android:pathData="M35 20H325Q340 20 340 35V205Q340 220 325 220H35Q20 220 20 205V35Q20 20 35 20Z" android:fillColor="?attr/colorSurfaceContainerHigh" android:fillAlpha="1" android:strokeColor="?attr/colorOutlineVariant" android:strokeAlpha="1" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M36 29H324Q331 29 331 36V46Q331 53 324 53H36Q29 53 29 46V36Q29 29 36 29Z" android:fillColor="?attr/colorSurfaceContainerHighest" android:fillAlpha="1"/>
+<path android:pathData="M40 41h92" android:strokeColor="?attr/colorSurfaceContainerHighest" android:strokeAlpha="1" android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M288 41h28" android:strokeColor="?attr/colorOutlineVariant" android:strokeAlpha="1" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M38 61H138Q147 61 147 70V201Q147 210 138 210H38Q29 210 29 201V70Q29 61 38 61Z" android:name="left_pane" android:fillColor="?attr/colorSurfaceContainerLow" android:fillAlpha="1" android:strokeColor="?attr/colorPrimary" android:strokeAlpha="1" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M168 61H322Q331 61 331 70V201Q331 210 322 210H168Q159 210 159 201V70Q159 61 168 61Z" android:name="right_pane" android:fillColor="?attr/colorSurfaceContainerLow" android:fillAlpha="1" android:strokeColor="?attr/colorOutlineVariant" android:strokeAlpha="1" android:strokeWidth="1.8" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M42 80h85" android:strokeColor="?attr/colorSurfaceContainerHighest" android:strokeAlpha="1" android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M42 97h61.199999999999996" android:strokeColor="?attr/colorSurfaceContainerHighest" android:strokeAlpha="1" android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M42 114h74.8" android:strokeColor="?attr/colorSurfaceContainerHighest" android:strokeAlpha="1" android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M42 131h46.75000000000001" android:strokeColor="?attr/colorSurfaceContainerHighest" android:strokeAlpha="1" android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M42 148h85" android:strokeColor="?attr/colorSurfaceContainerHighest" android:strokeAlpha="1" android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M42 165h61.199999999999996" android:strokeColor="?attr/colorSurfaceContainerHighest" android:strokeAlpha="1" android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M239 80h62" android:strokeColor="?attr/colorSurfaceContainerHighest" android:strokeAlpha="1" android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M239 97h44.64" android:strokeColor="?attr/colorSurfaceContainerHighest" android:strokeAlpha="1" android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M239 114h54.56" android:strokeColor="?attr/colorSurfaceContainerHighest" android:strokeAlpha="1" android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M239 131h34.1" android:strokeColor="?attr/colorSurfaceContainerHighest" android:strokeAlpha="1" android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M239 148h62" android:strokeColor="?attr/colorSurfaceContainerHighest" android:strokeAlpha="1" android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M239 165h44.64" android:strokeColor="?attr/colorSurfaceContainerHighest" android:strokeAlpha="1" android:strokeWidth="3" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M153 65V206" android:name="divider" android:strokeColor="?attr/colorPrimary" android:strokeAlpha="1" android:strokeWidth="2.4" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M146 133a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" android:name="finger" android:fillColor="?attr/colorPrimary" android:fillAlpha="0.85"/>
+<path android:pathData="M140 133a13 13 0 1 0 26 0a13 13 0 1 0 -26 0" android:name="pulse" android:strokeColor="?attr/colorPrimary" android:strokeAlpha="1" android:strokeWidth="2" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+<path android:pathData="M153 176L218 176M211.0 172.5L218 176L211.0 179.5" android:strokeColor="?attr/colorPrimary" android:strokeAlpha="1" android:strokeWidth="2.4" android:strokeLineCap="round" android:strokeLineJoin="round"/>
+</vector>
+
+</aapt:attr>
+<target android:name="left_pane"><aapt:attr name="android:animation"><set android:ordering="together">
+<objectAnimator android:propertyName="pathData" android:valueType="pathType" android:valueFrom="M38 61H138Q147 61 147 70V201Q147 210 138 210H38Q29 210 29 201V70Q29 61 38 61Z" android:valueTo="M38 61H203Q212 61 212 70V201Q212 210 203 210H38Q29 210 29 201V70Q29 61 38 61Z" android:duration="2500" android:repeatCount="-1" android:repeatMode="restart"><aapt:attr name="android:interpolator"><pathInterpolator android:pathData="M0 0L0.22 0L0.72 1L1 1"/></aapt:attr></objectAnimator>
+</set></aapt:attr></target>
+<target android:name="right_pane"><aapt:attr name="android:animation"><set android:ordering="together">
+<objectAnimator android:propertyName="pathData" android:valueType="pathType" android:valueFrom="M168 61H322Q331 61 331 70V201Q331 210 322 210H168Q159 210 159 201V70Q159 61 168 61Z" android:valueTo="M233 61H322Q331 61 331 70V201Q331 210 322 210H233Q224 210 224 201V70Q224 61 233 61Z" android:duration="2500" android:repeatCount="-1" android:repeatMode="restart"><aapt:attr name="android:interpolator"><pathInterpolator android:pathData="M0 0L0.22 0L0.72 1L1 1"/></aapt:attr></objectAnimator>
+</set></aapt:attr></target>
+<target android:name="divider"><aapt:attr name="android:animation"><set android:ordering="together">
+<objectAnimator android:propertyName="pathData" android:valueType="pathType" android:valueFrom="M153 65V206" android:valueTo="M218 65V206" android:duration="2500" android:repeatCount="-1" android:repeatMode="restart"><aapt:attr name="android:interpolator"><pathInterpolator android:pathData="M0 0L0.22 0L0.72 1L1 1"/></aapt:attr></objectAnimator>
+</set></aapt:attr></target>
+<target android:name="finger"><aapt:attr name="android:animation"><set android:ordering="together">
+<objectAnimator android:propertyName="pathData" android:valueType="pathType" android:valueFrom="M146 133a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" android:valueTo="M211 133a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" android:duration="2500" android:repeatCount="-1" android:repeatMode="restart"><aapt:attr name="android:interpolator"><pathInterpolator android:pathData="M0 0L0.22 0L0.72 1L1 1"/></aapt:attr></objectAnimator>
+</set></aapt:attr></target>
+<target android:name="pulse"><aapt:attr name="android:animation"><set android:ordering="together">
+<objectAnimator android:propertyName="pathData" android:valueType="pathType" android:valueFrom="M140 133a13 13 0 1 0 26 0a13 13 0 1 0 -26 0" android:valueTo="M205 133a13 13 0 1 0 26 0a13 13 0 1 0 -26 0" android:duration="2500" android:repeatCount="-1" android:repeatMode="restart"><aapt:attr name="android:interpolator"><pathInterpolator android:pathData="M0 0L0.22 0L0.72 1L1 1"/></aapt:attr></objectAnimator>
+<objectAnimator android:duration="2500" android:repeatCount="-1"><propertyValuesHolder android:propertyName="strokeAlpha" android:valueType="floatType">
+<keyframe android:fraction="0" android:value="1"/>
+<keyframe android:fraction="0.12" android:value="0.3"/>
+<keyframe android:fraction="0.22" android:value="1"/>
+<keyframe android:fraction="0.72" android:value="0.35"/>
+<keyframe android:fraction="0.9" android:value="0"/>
+<keyframe android:fraction="1" android:value="1"/>
+</propertyValuesHolder></objectAnimator>
+</set></aapt:attr></target>
+</animated-vector>

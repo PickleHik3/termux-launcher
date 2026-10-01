@@ -18,14 +18,28 @@ public class HelpGlossaryTest {
 
     private final HelpTopics.Text text = new HelpTestText();
 
-    @Test public void theFifteenTermsAreAllThereAndUnique() {
-        assertEquals(15, HelpGlossary.all().size());
+    @Test public void theTwentyTwoTermsAreAllThereAndUnique() {
+        assertEquals(22, HelpGlossary.all().size());
         List<String> ids = new ArrayList<>();
         for (HelpGlossary.Term term : HelpGlossary.all()) ids.add(term.id);
         assertEquals(ids.size(), new HashSet<>(ids).size());
         for (String id : ids) assertNotNull(id, HelpGlossary.term(id));
         assertNull(HelpGlossary.term("nothing_by_this_name"));
         assertNull(HelpGlossary.term(null));
+    }
+
+    /** Surfaces, Base and independent values are gone from the editors, and from the glossary. */
+    @Test public void theRetiredAppearanceWordsAreNotDefined() {
+        for (String gone : new String[] {"surface", "base", "independent_value", "docked_floating"}) {
+            assertNull(gone, HelpGlossary.term(gone));
+        }
+        for (String now : new String[] {"look", "style", "restore_tray", "corner_tab",
+            "border_drag", "keyboard_swipe", "status_swipe", "minimal_mode", "keyboard_form",
+            "pinned_notification", "dictation"}) {
+            assertNotNull(now, HelpGlossary.term(now));
+        }
+        assertEquals("Docked or Floating",
+            text.get(HelpGlossary.term("style").titleRes));
     }
 
     @Test public void everyTermHasATitleADefinitionAndOneRealTopic() {

@@ -84,7 +84,7 @@ as new attention.
 
 ## Move between the terminal and the widget grid
 
-The terminal is one of three places in a ring — Widgets, Terminal, Display — so from any of them
+The terminal is one of three places in a ring — Home, Terminal, Display — so from any of them
 the other two are one step away, one to each side. To move, hold the page's border — the frame
 line around the terminal, the widgets or the display, on any of its four sides — until you feel
 the tick and the page sinks back under your finger, then drag sideways: the places slide with your
@@ -92,8 +92,8 @@ finger, and the page rises again as you let go. A short drag returns to the plac
 while a longer one, or a quick flick, lands on the next place. The corners are not the border;
 they hold the corner tab. A tap, or a sideways swipe on the border without the hold, is the page's
 own — a program's mouse drag, a scroll, a text selection — so nothing under it changes. The same
-gesture works in every mode, minimal mode included, and with Fancier Glass on the page you hold and
-the page coming in both tip toward your finger, as if it were pressing into them, then lie flat as
+gesture works in every mode, minimal mode included, and where the extra glass is active the page you
+hold and the page coming in both tip toward your finger, as if it were pressing into them, then lie flat as
 the new place settles; the Display place slides without the tip. The slide after you let go keeps
 your finger's speed, so a flick carries through and a slow drag eases in.
 
@@ -120,11 +120,11 @@ bottom of the screen with the keyboard opening above them; with the keyboard dow
 bottom of the dock with the rest.
 
 The status bar shows where you are. The icon beside the clock names the place you are on — a
-house for Widgets, a prompt for Terminal, a screen for Display — and the other two peek in from
+house for Home, a prompt for Terminal, a screen for Display — and the other two peek in from
 the bar's edges on the side each place slides in from; the icons move with the places as you
 drag. Tap a peeking icon to go there. The Display icon reads quieter until a display is running.
 The row under the clock belongs to the place on screen: your session and windows on the terminal,
-the display's apps on Display, and nothing on Widgets, where the widgets speak for themselves.
+the display's apps on Display, and nothing on Home, where the widgets speak for themselves.
 Where the wall rests is where the home screen comes back to. **Go to Widgets**, **Go to
 Terminal** and **Go to Display** are also actions you can put on the extra-keys row, on the
 in-app keyboard, or on a key chord.
@@ -132,10 +132,9 @@ in-app keyboard, or on a key chord.
 Exactly one place is on screen at a time, and the terminal never changes size for the others, so
 nothing reflows in your shells when you move. Your session keeps running while you are away.
 
-A swipe that starts on the window pills scrolls those, and only those. When the pills fit the row,
-or the strip already rests at the end you pull past, the swipe moves the wall instead. Swiping
-the rest of the bar sideways does nothing; it folds and unfolds with a drag across it, or with a
-swipe off the top border of the page below it.
+A swipe along the window pills scrolls those, and only those, and never changes place: the border
+drag is the only way to page. Swiping the rest of the bar sideways does nothing; it folds and
+unfolds with a drag across it, or with a swipe off the top border of the page below it.
 
 The widget grid holds Android home-screen widgets. Long-press an empty spot to add one, long-press
 a widget to move or resize it, and swipe inside the grid to reach its other pages. Drop a widget on
@@ -245,6 +244,10 @@ Useful first searches:
 
 The shorter terminal action sheet also contains URL selection, transcript sharing, wallpaper tools,
 Glass Lab, Settings, reset terminal, and kill process.
+
+The space bar carries swipes of its own: sideways moves the text cursor, up opens the command
+palette, up-left and up-right switch to the window on that side, and down-right and down-left go
+to the next and the previous session.
 
 ## Work with panes and windows
 
@@ -387,7 +390,8 @@ of being offered as an empty box, which is why a phone without a Nerd Font shows
 section at all. Those glyphs still render inside the terminal itself whenever the terminal font
 provides them.
 
-When `Ctrl+Alt` is latched, keys with launcher bindings light up by action family. Pressing a lit cap
+Ctrl and Alt latch when you tap them. While `Ctrl+Alt` is latched, keys with launcher bindings light
+up by action family, and a narrow strip in the top-right corner lists what they do. Pressing a lit cap
 runs the same resolved binding used by a hardware keyboard. Uppercase letters mean Shift, so
 `Ctrl+Alt+r` and `Ctrl+Alt+R` are distinct shortcuts.
 
@@ -397,7 +401,7 @@ keeps usable rows.
 
 ### Clipboard history
 
-Swipe down-left on the Ctrl key (the clipboard corner) to open the keyboard's clipboard history
+Swipe up and to the right on the Ctrl key (its north-east corner, the clipboard corner) to open the keyboard's clipboard history
 in place of the keys. It lists the things you copied **in the launcher** — a selection copied in
 the terminal, the keyboard's copy and cut keys, a link or a hint copied from a sheet, a yank in
 find mode, and text a program copies with `launcherctl clipboard copy` or an OSC 52 escape. What

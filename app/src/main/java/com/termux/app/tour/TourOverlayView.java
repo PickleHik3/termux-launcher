@@ -626,8 +626,21 @@ public final class TourOverlayView extends FrameLayout {
             mAccent, 1f, 1f, mDensity);
     }
 
+    /**
+     * The movement the card asks for, turned toward the control as it is laid out: the drawer is
+     * pulled away from the apps row's edge, so a row that is a rail down a side is swiped inward
+     * rather than pulled down.
+     */
+    private TourGesture gestureAsLaidOut(@NonNull TourGesture gesture) {
+        if (gesture != TourGesture.DRAG_DOWN || mTargetRect == null
+            || !TourTargets.DOCK.equals(glowTargetId())) return gesture;
+        if (mTargetRect.height() < mTargetRect.width()) return gesture;
+        return mTargetRect.centerX() < getWidth() / 2 ? TourGesture.SWIPE_RIGHT
+            : TourGesture.SWIPE_LEFT;
+    }
+
     private void drawFinger(@NonNull Canvas canvas) {
-        TourGesture gesture = mStep.gestureAt(mStage);
+        TourGesture gesture = gestureAsLaidOut(mStep.gestureAt(mStage));
         if (gesture == TourGesture.NONE || mTraceProgress >= 1f) return;
         // The widest ring the cue ever draws is the hold's halo, at 1.9 times the finger's own
         // radius; the centre is kept in far enough that even that stays on the screen.

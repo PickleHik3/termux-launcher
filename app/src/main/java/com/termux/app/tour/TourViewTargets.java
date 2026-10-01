@@ -1,6 +1,7 @@
 package com.termux.app.tour;
 
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
@@ -9,13 +10,14 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.AzPullTabLayer;
 import com.termux.app.AzScrubRowView;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.app.terminal.io.TermuxTerminalExtraKeys;
+import com.termux.app.wall.BorderGrabber;
+import com.termux.app.wall.PaneWallLayout;
 import com.termux.shared.termux.extrakeys.ExtraKeysView;
 
 /**
@@ -48,6 +50,12 @@ public final class TourViewTargets implements TourTargets {
      * belong to the corners on either side of it, and so does the glow that teaches them.
      */
     private static final float PANE_CORNER_SLOP_DP = 6f;
+
+    /** How tall the border strip is that a border drag is shown on, in dp. */
+    private static final float BORDER_BAND_DP = 10f;
+
+    /** Room round a grabber's pill, so a glow drawn on it reads as a target and not a hairline. */
+    private static final float GRABBER_AIR_DP = 10f;
 
     /** The seams the tour needs into the activity's view tree. */
     public interface ViewFinder {
@@ -144,15 +152,14 @@ public final class TourViewTargets implements TourTargets {
                 return rectInOverlay(firstShown(R.id.apps_bar_viewpager, R.id.place_apps_bar_host),
                     "neither the dock nor the landscape rail is on screen");
             // The row lives in the dock, above the content or down a side column, one at a time.
-            // Minimised, its letters are tucked away and the tab on the screen's side is the index.
-            case AZ_ROW: {
-                View row = azRowView();
-                if (row == null) {
-                    Rect tab = azTabRect();
-                    if (tab != null) return tab;
-                }
-                return rectInOverlay(row, "the A-Z row is switched off or not on screen");
-            }
+            case AZ_ROW:
+                return rectInOverlay(azRowView(), "the A-Z index is put away or not on screen");
+            case PAGE_BORDER:
+                return pageBorderRect();
+            case KEYBOARD_GRABBER:
+                return grabberRect(false);
+            case STATUS_GRABBER:
+                return grabberRect(true);
             case NONE:
                 return miss("this card points at nothing");
             default:
@@ -316,20 +323,48 @@ public final class TourViewTargets implements TourTargets {
     }
 
     /**
-     * The minimised index's tab in the overlay's space, or null while the index is not minimised.
-     * The layer that draws it covers the whole screen, so its bounds say nothing: it measures the
-     * half-pill itself.
+     * A strip along the bottom of the page that is up, which is the page's border: the frame line
+     * a border drag is held on, less the corner squares, which are the corner tab's. The wall is
+     * the page at rest, so its bounds are the page's.
      */
     @Nullable
-    private Rect azTabRect() {
-        View layer = mFinder.findTourView(R.id.place_az_tab_layer);
-        if (!(layer instanceof AzPullTabLayer)) return null;
-        Rect onScreen = new Rect();
-        if (!((AzPullTabLayer) layer).tabRectOnScreen(onScreen) || onScreen.isEmpty())
-            return null;
-        mOverlay.getLocationOnScreen(mLocation);
-        onScreen.offset(-mLocation[0], -mLocation[1]);
-        return onScreen;
+    private Rect pageBorderRect() {
+        Rect wall = rectInOverlay(mFinder.findTourView(R.id.terminal_pane_wall),
+            "the pane wall is not on screen");
+        if (wall == null) return null;
+        float density = mOverlay.getResources().getDisplayMetrics().density;
+        int corner = Math.round(CornerZones.paneSizePx(density));
+        int band = Math.round(BORDER_BAND_DP * density);
+        Rect strip = new Rect(wall.left + corner, wall.bottom - band, wall.right - corner,
+            wall.bottom);
+        return strip.isEmpty() ? miss("the page is too narrow to have a border to hold") : strip;
+    }
+
+    /**
+     * One of the border grabbers, where the wall draws it: centred on the page's bottom or top
+     * edge. Null while that swipe is off, because the wall draws no pill then, and a card glowing
+     * a pill that is not there points at nothing.
+     */
+    @Nullable
+    private Rect grabberRect(boolean top) {
+        View wallView = mFinder.findTourView(R.id.terminal_pane_wall);
+        Rect wall = rectInOverlay(wallView, "the pane wall is not on screen");
+        if (wall == null) return null;
+        if (wallView instanceof PaneWallLayout) {
+            PaneWallLayout layout = (PaneWallLayout) wallView;
+            if (top ? !layout.isStatusGrabberShown() : !layout.isGrabberShown())
+                return miss(top ? "the status swipe is off on this layout"
+                    : "the keyboard swipe is off on this layout");
+        }
+        float density = mOverlay.getResources().getDisplayMetrics().density;
+        RectF pill = new RectF();
+        BorderGrabber.bounds(pill, wall.exactCenterX(), top ? wall.top : wall.bottom, 1f, 0f, 1f,
+            density, top);
+        float air = GRABBER_AIR_DP * density;
+        pill.inset(-air, -air);
+        Rect out = new Rect();
+        pill.roundOut(out);
+        return out;
     }
 
     @Nullable

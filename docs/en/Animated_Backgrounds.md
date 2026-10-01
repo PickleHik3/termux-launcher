@@ -10,12 +10,13 @@ wallpaper, and they are not a video.
 
 ## Requirements
 
-- **Fancier Glass** is on (**Settings → Look**).
+- The extra glass is active. It has no switch: it is on wherever the device supports it, so Lazy
+  mode, battery saver and reduced motion must be off.
 - Android 14 or later.
 
-The **Animated** row in the wallpaper picker shows only when both hold. On Android 13 Fancier Glass
-works but the row stays hidden. Turn Fancier Glass off and the background stops on its still; turn it
-back on and it carries on.
+The **Animated** row in the wallpaper picker shows only when both hold. On Android 13 the extra
+glass works but the row stays hidden. While Lazy mode, battery saver or reduced motion is on, the
+background stops on its still; when it ends, the background carries on.
 
 ## Pick one
 

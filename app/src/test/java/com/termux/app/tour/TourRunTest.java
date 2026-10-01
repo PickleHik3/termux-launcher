@@ -15,8 +15,8 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * The run as data: five lessons, three questions and a closing card, each naming its own stages,
- * copy, controls and clearing signals.
+ * The run as data: the usage question, seven lessons, two more questions and a closing card, each
+ * naming its own stages, copy, controls and clearing signals.
  *
  * <p>The rule the whole run is built on is asserted here rather than read: nothing in the basics
  * opens a shell, a window or a session, so no lesson may be cleared by a signal about one.
@@ -29,6 +29,9 @@ public class TourRunTest {
     private static final TourRun.RunContext HOME = new TourRun.RunContext(true, false);
     /** Someone updating who has a row of keys of their own and has not been asked about it. */
     private static final TourRun.RunContext OWN_ROW = new TourRun.RunContext(false, true, true);
+    /** A phone whose status bar happens to be unfolded as the run is built. */
+    private static final TourRun.RunContext OPEN_BAR =
+        new TourRun.RunContext(false, true, false, true, true);
     /** A build made without the display server. */
     private static final TourRun.RunContext NO_DISPLAY =
         new TourRun.RunContext(false, true, false, false);
@@ -56,19 +59,20 @@ public class TourRunTest {
     }
 
     @Test
-    public void theRunIsTheFiveLessonsTheThreeQuestionsAndTheClosingCardInOrder() {
-        assertEquals(9, TourRun.steps(GUEST).size());
-        String[] order = {TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.KEY_ROW,
-            TourRun.KEYBOARD, TourRun.FIND_ACTION, TourRun.USAGE_MODE, TourRun.HOME_CHOICE,
-            TourRun.CLOSING};
+    public void theRunIsTheUsageQuestionTheSevenLessonsTheTwoQuestionsAndTheClosingCardInOrder() {
+        assertEquals(11, TourRun.steps(GUEST).size());
+        String[] order = {TourRun.USAGE_MODE, TourRun.FIND_HELP, TourRun.BORDER_DRAG,
+            TourRun.KEYBOARD, TourRun.STATUS_SWIPE, TourRun.PIN_APPS, TourRun.FIND_APPS,
+            TourRun.FIND_ACTION, TourRun.KEY_ROW, TourRun.HOME_CHOICE, TourRun.CLOSING};
         for (int i = 0; i < order.length; i++)
             assertEquals("card " + i, order[i], TourRun.steps(GUEST).get(i).id);
     }
 
     @Test
-    public void theFiveLessonsAreTheFiveLessonsAndNothingElseIs() {
-        assertEquals(Arrays.asList(TourRun.FIND_HELP, TourRun.PIN_APPS, TourRun.FIND_APPS,
-            TourRun.KEYBOARD, TourRun.FIND_ACTION), TourRun.lessons());
+    public void theSevenLessonsAreTheSevenLessonsAndNothingElseIs() {
+        assertEquals(Arrays.asList(TourRun.FIND_HELP, TourRun.BORDER_DRAG, TourRun.KEYBOARD,
+            TourRun.STATUS_SWIPE, TourRun.PIN_APPS, TourRun.FIND_APPS, TourRun.FIND_ACTION),
+            TourRun.lessons());
         for (TourStep step : TourRun.steps(GUEST))
             assertEquals("kind of " + step.id, TourRun.lessons().contains(step.id),
                 step.kind == TourStep.Kind.LESSON);
@@ -122,13 +126,74 @@ public class TourRunTest {
     }
 
     @Test
-    public void findHelpIsTheFirstLessonBecauseItIsTheWayBackToEverythingElse() {
-        assertEquals(0, indexOf(TourRun.FIND_HELP));
+    public void theUsageQuestionIsAskedFirstBecauseItDecidesWhichPlacesExist() {
+        assertEquals(0, indexOf(TourRun.USAGE_MODE));
     }
 
     @Test
-    public void pinYourAppsIsSecondBecauseTheDockOfANewInstallIsEmpty() {
-        assertEquals(1, indexOf(TourRun.PIN_APPS));
+    public void findHelpIsTheFirstLessonBecauseItIsTheWayBackToEverythingElse() {
+        assertEquals(1, indexOf(TourRun.FIND_HELP));
+        // The corner is held, not tapped: the finger trace says so.
+        TourStep help = step(TourRun.FIND_HELP);
+        assertEquals(TourGesture.HOLD, help.gestureAt(0));
+        assertEquals(TourGesture.TAP, help.gestureAt(1));
+    }
+
+    @Test
+    public void theBorderDragHoldsThePagesBorderAndThenAsksForTheWayBack() {
+        TourStep border = step(TourRun.BORDER_DRAG);
+        assertEquals(2, border.signalCount());
+        assertEquals(TourTargets.PAGE_BORDER, border.targetIdAt(0));
+        assertEquals(TourGesture.HOLD_DRAG, border.gestureAt(0));
+        assertEquals(TourSignals.PLACE_CHANGED, border.signalAt(0));
+        assertEquals(TourTargets.NONE, border.targetIdAt(1));
+        assertEquals(TourSignals.PLACE_RETURNED, border.signalAt(1));
+        assertNotEquals(border.copyResAt(0), border.copyResAt(1));
+        // The border is on every place, so the card is not told to go back to the terminal.
+        assertFalse(border.taughtOnTheTerminal());
+    }
+
+    @Test
+    public void theKeyboardSwipeGoesOffTheBottomBorderBothWaysRound() {
+        TourStep shown = step(GUEST, TourRun.KEYBOARD);
+        assertEquals(TourTargets.KEYBOARD_GRABBER, shown.targetIdAt(0));
+        assertEquals(TourTargets.KEYBOARD_GRABBER, shown.targetIdAt(1));
+        // The keyboard is up, so it is put away first (a swipe down) and brought back (up).
+        assertEquals(TourSignals.KEYBOARD_HIDDEN, shown.signalAt(0));
+        assertEquals(TourGesture.DRAG_DOWN, shown.gestureAt(0));
+        assertEquals(TourSignals.KEYBOARD_SHOWN, shown.signalAt(1));
+        assertEquals(TourGesture.SWIPE_UP, shown.gestureAt(1));
+
+        TourStep hidden = step(HOME, TourRun.KEYBOARD);
+        assertEquals(TourSignals.KEYBOARD_SHOWN, hidden.signalAt(0));
+        assertEquals(TourGesture.SWIPE_UP, hidden.gestureAt(0));
+        assertEquals(TourSignals.KEYBOARD_HIDDEN, hidden.signalAt(1));
+        assertEquals(TourGesture.DRAG_DOWN, hidden.gestureAt(1));
+        assertNotEquals(shown.copyResAt(0), hidden.copyResAt(0));
+        assertNotEquals(shown.copyResAt(1), hidden.copyResAt(1));
+        assertFalse(shown.taughtOnTheTerminal());
+    }
+
+    @Test
+    public void theStatusSwipeGoesOffTheTopBorderBothWaysRound() {
+        TourStep compact = step(GUEST, TourRun.STATUS_SWIPE);
+        assertEquals(TourTargets.STATUS_GRABBER, compact.targetIdAt(0));
+        assertEquals(TourSignals.STATUS_BAR_EXPANDED, compact.signalAt(0));
+        assertEquals(TourGesture.DRAG_DOWN, compact.gestureAt(0));
+        assertEquals(TourSignals.STATUS_BAR_COLLAPSED, compact.signalAt(1));
+        assertEquals(TourGesture.SWIPE_UP, compact.gestureAt(1));
+
+        TourStep open = step(OPEN_BAR, TourRun.STATUS_SWIPE);
+        assertEquals(TourSignals.STATUS_BAR_COLLAPSED, open.signalAt(0));
+        assertEquals(TourGesture.SWIPE_UP, open.gestureAt(0));
+        assertEquals(TourSignals.STATUS_BAR_EXPANDED, open.signalAt(1));
+        assertNotEquals(compact.copyResAt(0), open.copyResAt(0));
+        assertFalse(compact.taughtOnTheTerminal());
+    }
+
+    @Test
+    public void pinYourAppsComesAfterTheBorderGesturesBecauseTheDockOfANewInstallIsEmpty() {
+        assertEquals(5, indexOf(TourRun.PIN_APPS));
     }
 
     @Test
@@ -185,26 +250,6 @@ public class TourRunTest {
     }
 
     @Test
-    public void theKeyboardLessonIsTheKeyboardButtonBothWaysRound() {
-        TourStep shown = step(GUEST, TourRun.KEYBOARD);
-        assertEquals(2, shown.signalCount());
-        assertEquals(TourTargets.KEYBOARD_TOGGLE_KEY, shown.targetIdAt(0));
-        assertEquals(TourTargets.KEYBOARD_TOGGLE_KEY, shown.targetIdAt(1));
-        assertEquals(TourGesture.TAP, shown.gestureAt(0));
-        // The keyboard is up, so it is hidden first and brought back second.
-        assertEquals(TourSignals.KEYBOARD_HIDDEN, shown.signalAt(0));
-        assertEquals(TourSignals.KEYBOARD_SHOWN, shown.signalAt(1));
-
-        TourStep hidden = step(HOME, TourRun.KEYBOARD);
-        // The keyboard is down, so the lesson is the same two taps the other way round.
-        assertEquals(TourSignals.KEYBOARD_SHOWN, hidden.signalAt(0));
-        assertEquals(TourSignals.KEYBOARD_HIDDEN, hidden.signalAt(1));
-        assertNotEquals(shown.copyResAt(0), hidden.copyResAt(0));
-        assertNotEquals(shown.copyResAt(1), hidden.copyResAt(1));
-        assertNotEquals(hidden.copyResAt(0), hidden.copyResAt(1));
-    }
-
-    @Test
     public void findActionOpensThePaletteAndAsksForTheWayOutOfIt() {
         TourStep action = step(TourRun.FIND_ACTION);
         assertEquals(2, action.signalCount());
@@ -227,14 +272,12 @@ public class TourRunTest {
     public void theKeyboardLessonNoLongerEndsOnTheTerminalsHold() {
         // The hold asked a fresh phone for something it cannot do: its mouse half needs a program
         // that follows the mouse, and a shell that has just been installed has none. The fact is
-        // on the closing card now, and the lesson is the two taps that work anywhere.
+        // on the closing card now, and the lesson is the two swipes that work anywhere.
         TourStep keyboard = step(GUEST, TourRun.KEYBOARD);
         assertFalse(keyboard.endsShown);
         assertEquals(2, keyboard.stageCount());
         assertEquals(2, keyboard.signalCount());
         assertFalse(keyboard.isShownOnlyStage(1));
-        assertEquals(TourGesture.TAP, keyboard.gestureAt(1));
-        assertEquals(TourTargets.KEYBOARD_TOGGLE_KEY, keyboard.targetIdAt(1));
     }
 
     @Test
@@ -267,7 +310,7 @@ public class TourRunTest {
 
     /** The usage question: three answers, or two in a build with no display to offer. */
     @Test
-    public void theUsageQuestionOffersTheThreeModesRightBeforeTheHomeQuestion() {
+    public void theUsageQuestionOffersTheThreeModes() {
         TourStep card = step(GUEST, TourRun.USAGE_MODE);
         assertEquals(TourStep.Kind.CHOICE, card.kind);
         assertTrue(card.isChoiceCard());
@@ -275,7 +318,6 @@ public class TourRunTest {
         assertEquals(TourTargets.NONE, card.targetIdAt(0));
         assertEquals(Arrays.asList(TourAction.USE_TERMINAL, TourAction.USE_HOME,
             TourAction.USE_DISPLAY), card.actions());
-        assertEquals(indexOf(GUEST, TourRun.HOME_CHOICE) - 1, indexOf(GUEST, TourRun.USAGE_MODE));
         assertFalse(TourRun.lessons().contains(TourRun.USAGE_MODE));
     }
 
@@ -295,7 +337,7 @@ public class TourRunTest {
     }
 
     @Test
-    public void theKeyRowQuestionIsAskedOfSomeoneWithARowOfTheirOwnRightBeforeTheKeyboardLesson() {
+    public void theKeyRowQuestionIsAskedOfSomeoneWithARowOfTheirOwnAfterTheLessons() {
         TourStep card = step(OWN_ROW, TourRun.KEY_ROW);
         assertEquals(TourStep.Kind.CHOICE, card.kind);
         assertTrue(card.isChoiceCard());
@@ -307,8 +349,8 @@ public class TourRunTest {
         assertTrue("the card carries the shell the run's read cards wear", card.hasTitle());
         List<TourStep> steps = TourRun.steps(OWN_ROW);
         int keyRow = indexOf(OWN_ROW, TourRun.KEY_ROW);
-        assertEquals(TourRun.FIND_APPS, steps.get(keyRow - 1).id);
-        assertEquals(TourRun.KEYBOARD, steps.get(keyRow + 1).id);
+        assertEquals(TourRun.FIND_ACTION, steps.get(keyRow - 1).id);
+        assertEquals(TourRun.HOME_CHOICE, steps.get(keyRow + 1).id);
     }
 
     @Test
@@ -385,9 +427,13 @@ public class TourRunTest {
     }
 
     @Test
-    public void everyLessonIsTaughtOnTheTerminalAndTheLastTwoCardsReadAnywhere() {
+    public void everyLessonButTheBorderOnesIsTaughtOnTheTerminalAndTheQuestionsReadAnywhere() {
+        // The border drag and the two swipes off the borders are made on any place the wall rests
+        // on, so a card about one of them is never sent back to the terminal.
+        java.util.Set<String> everywhere = new HashSet<>(Arrays.asList(TourRun.BORDER_DRAG,
+            TourRun.KEYBOARD, TourRun.STATUS_SWIPE));
         for (String id : TourRun.lessons())
-            assertTrue(id + " should be taught on the terminal", step(id).taughtOnTheTerminal());
+            assertEquals(id, !everywhere.contains(id), step(id).taughtOnTheTerminal());
         assertFalse(step(TourRun.KEY_ROW).taughtOnTheTerminal());
         assertFalse(step(TourRun.USAGE_MODE).taughtOnTheTerminal());
         assertFalse(step(TourRun.HOME_CHOICE).taughtOnTheTerminal());
@@ -401,7 +447,7 @@ public class TourRunTest {
             steps.remove(0);
             throw new AssertionError("the run should not be editable");
         } catch (UnsupportedOperationException expected) {
-            assertEquals(9, TourRun.steps(GUEST).size());
+            assertEquals(11, TourRun.steps(GUEST).size());
         }
     }
 }

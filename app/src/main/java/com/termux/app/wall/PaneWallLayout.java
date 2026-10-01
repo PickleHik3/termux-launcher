@@ -1188,12 +1188,12 @@ public final class PaneWallLayout extends ViewGroup {
      * Whether the grabber is drawn: while the keyboard swipe is on and the wall's gestures are
      * its own.
      */
-    boolean isGrabberShown() {
+    public boolean isGrabberShown() {
         return mGesturesEnabled && mListener != null && mListener.isBorderKeyboardSwipeEnabled();
     }
 
     /** Whether the top border's grabber is drawn: while the status bar's swipe is on. */
-    boolean isStatusGrabberShown() {
+    public boolean isStatusGrabberShown() {
         return mGesturesEnabled && mListener != null && mListener.isBorderStatusSwipeEnabled();
     }
 

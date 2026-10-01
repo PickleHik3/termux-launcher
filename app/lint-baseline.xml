@@ -4868,12 +4868,12 @@
 
     <issue
         id="ViewConstructor"
-        message="Custom view `HelpClipView` is missing constructor used by tools: `(Context)` or `(Context,AttributeSet)` or `(Context,AttributeSet,int)`"
-        errorLine1="final class HelpClipView extends FrameLayout {"
-        errorLine2="            ~~~~~~~~~~~~">
+        message="Custom view `HelpDiagramView` is missing constructor used by tools: `(Context)` or `(Context,AttributeSet)` or `(Context,AttributeSet,int)`"
+        errorLine1="final class HelpDiagramView extends FrameLayout {"
+        errorLine2="            ~~~~~~~~~~~~~~~">
         <location
-            file="src/main/java/com/termux/app/help/HelpClipView.java"
-            line="35"
+            file="src/main/java/com/termux/app/help/HelpDiagramView.java"
+            line="26"
             column="13"/>
     </issue>
 

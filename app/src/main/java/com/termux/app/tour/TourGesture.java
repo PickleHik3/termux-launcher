@@ -23,5 +23,7 @@ public enum TourGesture {
     DRAG_DOWN,
     DRAG_UP,
     /** Slide along a row, then lift away from it: the A–Z scrub. */
-    SCRUB
+    SCRUB,
+    /** Press and hold on a border until it gives, then drag sideways: the border drag. */
+    HOLD_DRAG
 }
