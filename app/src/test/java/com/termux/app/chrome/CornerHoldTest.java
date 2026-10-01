@@ -15,9 +15,9 @@ public class CornerHoldTest {
     private static final float HOLD_SLOP = 24f;
     private static final float DRAG_SLOP = 6f;
 
-    private CornerHold down(boolean atSeam) {
+    private CornerHold down() {
         CornerHold hold = new CornerHold();
-        hold.down(100f, 200f, HOLD_SLOP, DRAG_SLOP, atSeam);
+        hold.down(100f, 200f, HOLD_SLOP, DRAG_SLOP);
         return hold;
     }
 
@@ -25,7 +25,7 @@ public class CornerHoldTest {
 
     @Test
     public void aFingerDownGivesTheProgramEveryEvent() {
-        CornerHold hold = down(false);
+        CornerHold hold = down();
         assertEquals(CornerHold.Phase.PENDING, hold.phase());
         assertTrue(hold.forwardsToTerminal());
         assertFalse(hold.isClaimed());
@@ -33,7 +33,7 @@ public class CornerHoldTest {
 
     @Test
     public void aTapInTheSquareNeverClaimsAnything() {
-        CornerHold hold = down(false);
+        CornerHold hold = down();
         assertEquals(CornerHold.Move.FORWARD, hold.move(102f, 203f));
         assertEquals(CornerHold.Lift.NOTHING, hold.lift());
         assertEquals(CornerHold.Phase.IDLE, hold.phase());
@@ -43,7 +43,7 @@ public class CornerHoldTest {
 
     @Test
     public void aStillHoldClaimsTheGestureWhenTheTimeElapses() {
-        CornerHold hold = down(false);
+        CornerHold hold = down();
         hold.move(104f, 197f);
         assertTrue(hold.holdElapsed());
         assertEquals(CornerHold.Phase.HELD, hold.phase());
@@ -54,7 +54,7 @@ public class CornerHoldTest {
 
     @Test
     public void travellingBeforeTheHoldLeavesTheGestureWithTheProgram() {
-        CornerHold hold = down(false);
+        CornerHold hold = down();
         assertEquals(CornerHold.Move.ABANDONED, hold.move(100f, 260f));
         assertEquals(CornerHold.Phase.ABANDONED, hold.phase());
         assertFalse(hold.holdElapsed());
@@ -67,7 +67,7 @@ public class CornerHoldTest {
 
     @Test
     public void aSecondFingerBeforeTheHoldLeavesItWithTheProgramToo() {
-        CornerHold hold = down(false);
+        CornerHold hold = down();
         assertTrue(hold.secondFinger());
         assertEquals(CornerHold.Phase.ABANDONED, hold.phase());
         assertFalse(hold.holdElapsed());
@@ -77,7 +77,7 @@ public class CornerHoldTest {
 
     @Test
     public void aSecondFingerAfterTheHoldChangesNothing() {
-        CornerHold hold = down(false);
+        CornerHold hold = down();
         assertTrue(hold.holdElapsed());
         assertFalse(hold.secondFinger());
         assertEquals(CornerHold.Phase.HELD, hold.phase());
@@ -87,7 +87,7 @@ public class CornerHoldTest {
 
     @Test
     public void aLiftAfterTheHoldOpensTheTab() {
-        CornerHold hold = down(false);
+        CornerHold hold = down();
         hold.holdElapsed();
         assertEquals(CornerHold.Move.NONE, hold.move(102f, 202f));
         assertEquals(CornerHold.Lift.OPEN_TAB, hold.lift());
@@ -95,18 +95,19 @@ public class CornerHoldTest {
     }
 
     @Test
-    public void aDragAtASeamResizesTheSplitAndCommitsOnce() {
-        CornerHold hold = down(true);
+    public void aHoldThenDragNeverResizesASplit() {
+        CornerHold hold = down();
         hold.holdElapsed();
         assertEquals(CornerHold.Move.COMMITTED, hold.move(140f, 200f));
-        assertEquals(CornerHold.Phase.RESIZING, hold.phase());
+        assertEquals("a corner hold only carries the tab; the divider is dragged directly",
+            CornerHold.Phase.CARRYING, hold.phase());
         assertEquals("only the first move commits", CornerHold.Move.DRAGGING, hold.move(180f, 200f));
-        assertEquals(CornerHold.Lift.COMMIT_RESIZE, hold.lift());
+        assertEquals(CornerHold.Lift.OPEN_TAB, hold.lift());
     }
 
     @Test
-    public void aDragAwayFromASeamCarriesTheTabOutInstead() {
-        CornerHold hold = down(false);
+    public void aDragAfterTheHoldCarriesTheTabOut() {
+        CornerHold hold = down();
         hold.holdElapsed();
         assertEquals(CornerHold.Move.COMMITTED, hold.move(140f, 200f));
         assertEquals(CornerHold.Phase.CARRYING, hold.phase());
@@ -116,7 +117,7 @@ public class CornerHoldTest {
 
     @Test
     public void aHoldThatHasNotBeenDraggedFarEnoughIsStillJustHeld() {
-        CornerHold hold = down(true);
+        CornerHold hold = down();
         hold.holdElapsed();
         assertEquals(CornerHold.Move.NONE, hold.move(104f, 202f));
         assertEquals(CornerHold.Phase.HELD, hold.phase());
@@ -127,7 +128,7 @@ public class CornerHoldTest {
 
     @Test
     public void aResetForgetsTheGestureEntirely() {
-        CornerHold hold = down(true);
+        CornerHold hold = down();
         hold.holdElapsed();
         hold.move(200f, 200f);
         hold.reset();

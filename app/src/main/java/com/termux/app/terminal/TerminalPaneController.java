@@ -3487,25 +3487,6 @@ public class TerminalPaneController {
     }
 
     /**
-     * Whether a pane corner drags this seam: the corner's own point has to line up with the seam
-     * on the seam's axis, and to lie within the split's extent along the other one — a corner in
-     * another branch of the tree is not the end of this seam, however well it happens to line up.
-     *
-     * @param seam where the seam sits on its own axis
-     * @param extentStart the split layout's near edge on the other axis
-     * @param extentEnd its far edge on that axis
-     * @param cornerOnSeamAxis the corner's coordinate on the seam's axis
-     * @param cornerOnOtherAxis the corner's coordinate on the other one
-     */
-    static boolean cornerDragsSeam(float seam, float extentStart, float extentEnd,
-                                   float cornerOnSeamAxis, float cornerOnOtherAxis,
-                                   float threshold) {
-        return Math.abs(cornerOnSeamAxis - seam) <= threshold
-            && cornerOnOtherAxis >= extentStart - threshold
-            && cornerOnOtherAxis <= extentEnd + threshold;
-    }
-
-    /**
      * How wide the border a pane paints is — the line a corner tab lines up against, not the
      * bounding box behind it. Glass wears {@link com.termux.app.GlassRimRenderer}'s rim; a plain
      * pane that shares the wall wears {@code R.drawable.pane_active_border}, a 1dp stroke; a lone
@@ -3622,6 +3603,10 @@ public class TerminalPaneController {
         private float mYWeightA;
         private float mYWeightB;
         private boolean mDraggingDivider;
+        /** A finger went down in a divider's gap: the gesture is the divider's, not a corner's. */
+        private boolean mGapGesture;
+        /** The splits whose gap held that finger, until its first movement says which it drags. */
+        @Nullable private List<SplitDividerHit.Gap> mGapCandidates;
         private boolean mCornerPressed;
         private boolean mTouchMoved;
         private int mPressedControlAction = ACTION_NONE;
@@ -3831,6 +3816,15 @@ public class TerminalPaneController {
                     }
 
                     if (mControls.isControlsShown() && !isUserMaximized()) dismissControls();
+                    // The gap between two panes is the divider's: a finger down in it drags the
+                    // split at once, with no hold. It never reaches over a pane's content.
+                    List<SplitDividerHit.Gap> gaps = dividerGapsAt(x, y);
+                    if (!gaps.isEmpty()) {
+                        mGapGesture = true;
+                        mGapCandidates = gaps;
+                        getParent().requestDisallowInterceptTouchEvent(true);
+                        return true;
+                    }
                     // A pane is taken hold of by its corners, never by an edge: the edges are the
                     // terminal's own, down to the last column. Ownership is resolved from the
                     // corner the finger is actually in, which matters for the original pane —
@@ -3838,15 +3832,11 @@ public class TerminalPaneController {
                     // neighbour created after it.
                     mPressedCorner = findTouchedCorner(x, y);
                     if (mPressedCorner == CornerZones.NONE) return false;
-                    // Which seams that corner sits on: one at the end of a seam, both where two
-                    // cross, none at a corner the host's own edge makes. Read now, because the
-                    // seam the hold will resize is the one under the finger when it landed.
-                    findCornerDividerTargets();
                     // The corner claims nothing yet. Until the hold fires the program under the
                     // square gets every event, so a tap on tmux's clock or vim's ruler reaches
                     // the thing that drew it.
                     mHold.down(x, y, ViewConfiguration.get(getContext()).getScaledTouchSlop(),
-                        dp(3), mXSplit != null || mYSplit != null);
+                        dp(3));
                     // Armed before the terminal sees anything: the pane focuses itself off the
                     // forwarded down, and whatever that stirs up must not find half a gesture.
                     aimForwardingAtTerminal();
@@ -3866,6 +3856,23 @@ public class TerminalPaneController {
                     }
                     if (mPressedControlAction != ACTION_NONE) {
                         mTouchMoved |= distance(x, y, mDownX, mDownY) > dp(8);
+                        return true;
+                    }
+                    if (mGapGesture && !mDraggingDivider) {
+                        // A tap on the gap is not a drag: the seam is taken once the finger has
+                        // travelled the touch slop, and the drag counts from where it is then.
+                        if (distance(x, y, mDownX, mDownY)
+                            <= ViewConfiguration.get(getContext()).getScaledTouchSlop()) {
+                            return true;
+                        }
+                        beginDividerDrag(SplitDividerHit.pick(mGapCandidates,
+                            x - mDownX, y - mDownY));
+                        mDownX = x;
+                        mDownY = y;
+                        mHandleX = x;
+                        mHandleY = y;
+                        mTouchMoved = true;
+                        invalidate();
                         return true;
                     }
                     if (mDraggingDivider) {
@@ -3888,13 +3895,6 @@ public class TerminalPaneController {
                         mHandleY = y;
                         mTouchMoved |= moved == CornerHold.Move.COMMITTED
                             || moved == CornerHold.Move.DRAGGING;
-                        // The tick belongs to the drag starting, not to every pixel of it.
-                        if (moved == CornerHold.Move.COMMITTED && mDraggingDivider)
-                            Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
-                        if (mDraggingDivider) {
-                            applySplitDrag(mXSplit, x - mDownX, mXWeightA, mXWeightB);
-                            applySplitDrag(mYSplit, y - mDownY, mYWeightA, mYWeightB);
-                        }
                         invalidate();
                         return true;
                     }
@@ -3934,6 +3934,25 @@ public class TerminalPaneController {
                         }
                         return true;
                     }
+                    if (mGapGesture) {
+                        boolean resized = mDraggingDivider;
+                        if (resized) {
+                            Split first = mXSplit;
+                            Split second = mYSplit;
+                            snapSplitToCellGrid(first);
+                            snapSplitToCellGrid(second);
+                            Leaf focused = mActiveWindow == null ? null : mActiveWindow.active;
+                            Window window = windowOf(focused == null ? null : focused.session);
+                            learnFocusShare(window, first, focused);
+                            learnFocusShare(window, second, focused);
+                            finishHostSurfaceResizeKeepingBottom();
+                            Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
+                        }
+                        resetTouchState();
+                        invalidate();
+                        if (resized) mHost.onTreesChanged();
+                        return true;
+                    }
                     if (mHold.isTracking()) {
                         CornerHold.Lift lift = mHold.lift();
                         if (lift == CornerHold.Lift.NOTHING) {
@@ -3946,22 +3965,12 @@ public class TerminalPaneController {
                         // Read before the reset clears it: the tab comes out of the corner the
                         // finger actually asked at.
                         int corner = mPressedCorner;
-                        boolean resized = lift == CornerHold.Lift.COMMIT_RESIZE;
-                        if (resized) {
-                            snapSplitToCellGrid(mXSplit);
-                            snapSplitToCellGrid(mYSplit);
-                            Window window = windowOf(leaf == null ? null : leaf.session);
-                            learnFocusShare(window, mXSplit, leaf);
-                            learnFocusShare(window, mYSplit, leaf);
-                        }
-                        if (mDraggingDivider) finishHostSurfaceResizeKeepingBottom();
                         resetTouchState();
                         if (corner == CornerZones.NONE && leaf != null) {
                             RectF touched = paneRect(leaf, mHitPaneRect);
                             if (touched != null) corner = cornerNearestPoint(touched, x, y);
                         }
                         showControls(leaf, corner);
-                        if (resized) mHost.onTreesChanged();
                         return true;
                     }
                     return false;
@@ -3971,11 +3980,11 @@ public class TerminalPaneController {
                     // lets go and the program gets both of them.
                     if (mHold.secondFinger()) releaseHoldToTerminal();
                     if (mHold.forwardsToTerminal()) forwardToTerminal(event);
-                    return mHold.isTracking();
+                    return mHold.isTracking() || mGapGesture;
 
                 case MotionEvent.ACTION_POINTER_UP:
                     if (mHold.forwardsToTerminal()) forwardToTerminal(event);
-                    return mHold.isTracking();
+                    return mHold.isTracking() || mGapGesture;
 
                 case MotionEvent.ACTION_CANCEL:
                     if (mHold.forwardsToTerminal()) forwardToTerminal(event);
@@ -4053,30 +4062,16 @@ public class TerminalPaneController {
         /**
          * The hold time passed with the finger still where it landed. The corner takes the gesture
          * from here: the program is told its touch is over, the hand is told the hold was heard,
-         * and the rest of the stream stays in this overlay.
+         * and the rest of the stream stays in this overlay. What follows is the pane's tab: a
+         * hold never resizes a split.
          */
         private void onHoldElapsed() {
             if (!mHold.holdElapsed()) return;
             cancelTerminalGesture();
             Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
             focusLeaf(mCornerTapLeaf);
-            if (mXSplit != null || mYSplit != null) {
-                // Settle the focus growth first: left running, it would keep rewriting the very
-                // weights the drag starts from.
-                if (mFocusGrowAnimator != null) mFocusGrowAnimator.end();
-                mDraggingDivider = true;
-                beginHostSurfaceResize();
-                if (mXSplit != null) {
-                    mXWeightA = mXSplit.weightA;
-                    mXWeightB = mXSplit.weightB;
-                }
-                if (mYSplit != null) {
-                    mYWeightA = mYSplit.weightA;
-                    mYWeightB = mYSplit.weightB;
-                }
-            } else {
-                mCornerPressed = true;
-            }
+            // The hold shows the tab and nothing else: a split is resized by its divider.
+            mCornerPressed = true;
             invalidate();
         }
 
@@ -4145,57 +4140,54 @@ public class TerminalPaneController {
         }
 
         /**
-         * The seams the pane corner under the finger sits on. The corner's own point on the pane
-         * is what is matched against each seam, not the finger's — so the whole square drags
-         * whatever that corner is the end of, rather than only the part of it near the seam.
+         * The splits whose gap holds a point, in host coordinates. A gap is the divider view's own
+         * frame: the whole shared edge, as thick as the gutter between the two panes, so it stops
+         * where a pane's frame starts and {@link SplitDividerHit} drops any point on a pane.
          */
-        private void findCornerDividerTargets() {
-            mXSplit = null;
-            mYSplit = null;
-            if (mCornerTapLeaf == null || mPressedCorner == CornerZones.NONE) return;
-            RectF pane = paneRect(mCornerTapLeaf, mHitPaneRect);
-            if (pane == null) return;
-            findDividerTargets(
-                CornerZones.isLeft(mPressedCorner) ? pane.left : pane.right,
-                CornerZones.isTop(mPressedCorner) ? pane.top : pane.bottom);
-        }
-
-        private void findDividerTargets(float x, float y) {
-            mXSplit = null;
-            mYSplit = null;
-            float bestX = Float.MAX_VALUE;
-            float bestY = Float.MAX_VALUE;
-            float threshold = dp(14);
+        @NonNull
+        private List<SplitDividerHit.Gap> dividerGapsAt(float x, float y) {
+            List<SplitDividerHit.Gap> gaps = new ArrayList<>(mSplitLayouts.size());
             int[] host = location(mHostView);
             for (Map.Entry<Split, LinearLayout> entry : mSplitLayouts.entrySet()) {
-                Split split = entry.getKey();
                 LinearLayout layout = entry.getValue();
                 if (layout.getChildCount() < 3) continue;
                 View divider = layout.getChildAt(1);
-                int[] dividerLocation = location(divider);
-                int[] layoutLocation = location(layout);
-                float left = layoutLocation[0] - host[0];
-                float top = layoutLocation[1] - host[1];
-                float right = left + layout.getWidth();
-                float bottom = top + layout.getHeight();
-                if (split.orientation == LinearLayout.HORIZONTAL) {
-                    float boundary = dividerLocation[0] - host[0] + divider.getWidth() / 2f;
-                    float distance = Math.abs(x - boundary);
-                    if (cornerDragsSeam(boundary, top, bottom, x, y, threshold)
-                        && distance < bestX) {
-                        bestX = distance;
-                        mXSplit = split;
-                    }
-                } else {
-                    float boundary = dividerLocation[1] - host[1] + divider.getHeight() / 2f;
-                    float distance = Math.abs(y - boundary);
-                    if (cornerDragsSeam(boundary, left, right, y, x, threshold)
-                        && distance < bestY) {
-                        bestY = distance;
-                        mYSplit = split;
-                    }
+                if (!isOnHost(divider) || divider.getWidth() <= 0 || divider.getHeight() <= 0) {
+                    continue;
+                }
+                int[] at = location(divider);
+                float left = at[0] - host[0];
+                float top = at[1] - host[1];
+                gaps.add(new SplitDividerHit.Gap(entry.getKey(),
+                    entry.getKey().orientation == LinearLayout.HORIZONTAL,
+                    left, top, left + divider.getWidth(), top + divider.getHeight()));
+            }
+            if (gaps.isEmpty() || mActiveWindow == null) return gaps;
+            List<SplitDividerHit.Pane> panes = new ArrayList<>();
+            for (Leaf leaf : leavesOf(mActiveWindow.root)) {
+                RectF rect = paneRect(leaf, mHitPaneRect);
+                if (rect != null) {
+                    panes.add(new SplitDividerHit.Pane(rect.left, rect.top, rect.right, rect.bottom));
                 }
             }
+            return SplitDividerHit.gapsAt(gaps, panes, x, y);
+        }
+
+        /** The drag starts on the split whose gap the finger took, from the weights it has now. */
+        private void beginDividerDrag(@Nullable SplitDividerHit.Gap gap) {
+            if (gap == null || !(gap.token instanceof Split)) return;
+            Split split = (Split) gap.token;
+            // Settle the focus growth first: left running, it would keep rewriting the very
+            // weights the drag starts from.
+            if (mFocusGrowAnimator != null) mFocusGrowAnimator.end();
+            mXSplit = gap.dragsX ? split : null;
+            mYSplit = gap.dragsX ? null : split;
+            mXWeightA = split.weightA;
+            mXWeightB = split.weightB;
+            mYWeightA = split.weightA;
+            mYWeightB = split.weightB;
+            mDraggingDivider = true;
+            beginHostSurfaceResize();
         }
 
         private void applySplitDrag(@Nullable Split split, float delta,
@@ -4448,7 +4440,9 @@ public class TerminalPaneController {
                 // The edge being dragged glows on the focused pane instead of drawing a slab down
                 // the divider: a resize is a change to *this* pane's edge, and a 3dp accent line
                 // over the seam read as a second, thicker border appearing out of nowhere.
-                RectF focused = paneRect(mCornerTapLeaf, mDrawPaneRect);
+                Leaf glowLeaf = mCornerTapLeaf != null ? mCornerTapLeaf
+                    : mActiveWindow == null ? null : mActiveWindow.active;
+                RectF focused = glowLeaf == null ? null : paneRect(glowLeaf, mDrawPaneRect);
                 if (focused != null) {
                     drawEdgeGlow(canvas, focused, primary, edgeBandFor(focused, mXSplit, true));
                     drawEdgeGlow(canvas, focused, primary, edgeBandFor(focused, mYSplit, false));
@@ -4580,6 +4574,8 @@ public class TerminalPaneController {
             mMovingLeaf = null;
             mMoveTarget = null;
             mDraggingDivider = false;
+            mGapGesture = false;
+            mGapCandidates = null;
             mCornerPressed = false;
             mTouchMoved = false;
             mPressedControlAction = ACTION_NONE;

@@ -1221,6 +1221,7 @@ public final class LayoutCanvasView extends View {
             .margin(margin)
             .screenRadius(frameRadiusPx())
             .paneGapCap(TERMUX_APP.MAX_TERMINAL_PANE_GAP * scale)
+            .paneGapFloor(com.termux.app.chrome.LiveChromeShape.PANE_GAP_FLOOR_DP * scale)
             .dividerThickness(scale)
             .panes(1, ChromeShapeModel.SplitAxis.SIDE_BY_SIDE)
             .build();

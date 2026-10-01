@@ -67,7 +67,7 @@ public final class CornerHoldArbiter {
         mDown = true;
         mCorner = cornerFor(x, y, width, height, density, contentOwnsPoint);
         if (mCorner == CornerZones.NONE) return CornerZones.NONE;
-        mHold.down(x, y, holdSlopPx, holdSlopPx, false);
+        mHold.down(x, y, holdSlopPx, holdSlopPx);
         return mCorner;
     }
 

@@ -195,23 +195,6 @@ public class TerminalPaneControllerTest {
     }
 
     /**
-     * Which seams a pane corner drags: the one it is the end of, both where two cross, and none
-     * belonging to a split it is not part of.
-     */
-    @Test
-    public void cornerDragsSeam_takesTheSeamsItsOwnCornerSitsOn() {
-        // A vertical seam at x = 500, running the full height of a split from y = 0 to y = 500.
-        assertTrue("the corner is the seam's end",
-            TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 499f, 0f, 14f));
-        assertTrue("and its other end",
-            TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 501f, 500f, 14f));
-        assertFalse("the pane's far corner is not on it",
-            TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 0f, 0f, 14f));
-        assertFalse("a corner in another branch only lines up by accident",
-            TerminalPaneController.cornerDragsSeam(500f, 0f, 500f, 499f, 900f, 14f));
-    }
-
-    /**
      * A touch on the seam between two panes raises the tab out of the touched pane's own corner on
      * the side the finger is on — the tab hangs off the edge the user is touching, never across the
      * divider onto the neighbour and never at the pane's far edge.

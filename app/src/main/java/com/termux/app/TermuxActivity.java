@@ -3386,11 +3386,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public int paneGapDp() {
-                // Margin between panes, never past 24dp: air between Floating cards, the gutter
-                // of frame glass between Docked inserts.
-                return Math.min(Math.round(layoutMarginPx() / getResources()
-                    .getDisplayMetrics().density),
-                    Math.round(com.termux.app.chrome.LiveChromeShape.PANE_GAP_CAP_DP));
+                // Margin between panes, never past 24dp and never under 10dp: air between Floating
+                // cards, the gutter of frame glass between Docked inserts, and the strip the
+                // divider is dragged by.
+                return Math.max(Math.round(com.termux.app.chrome.LiveChromeShape.PANE_GAP_FLOOR_DP),
+                    Math.min(Math.round(layoutMarginPx() / getResources()
+                        .getDisplayMetrics().density),
+                        Math.round(com.termux.app.chrome.LiveChromeShape.PANE_GAP_CAP_DP)));
             }
         };
     }
