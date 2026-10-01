@@ -211,6 +211,32 @@ public class PaneWallLayoutTest {
     }
 
     @Test
+    public void theOtherPagesStandAtTheFrameWhileTheTerminalKeepsItsBordersAir() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        android.view.ViewGroup.MarginLayoutParams margins =
+            (android.view.ViewGroup.MarginLayoutParams) terminal.getLayoutParams();
+        // The frame is the model's opening (24, 10); the terminal's own margins carry 3 more.
+        margins.setMargins(27, 13, 27, 33);
+        terminal.setLayoutParams(margins);
+        wall.setTerminalFrameAirPx(3);
+        wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        wall.layout(0, 0, WIDTH, HEIGHT);
+
+        showAndLayOut(PaneWallPage.TERMINAL);
+        assertEquals(27, terminal.getLeft());
+        assertEquals(13, terminal.getTop());
+        showAndLayOut(PaneWallPage.WIDGETS);
+        assertEquals(24, widgets.getLeft());
+        assertEquals(10, widgets.getTop());
+        assertEquals(WIDTH - 24, widgets.getRight());
+        assertEquals(HEIGHT - 30, widgets.getBottom());
+        showAndLayOut(PaneWallPage.DISPLAY);
+        assertEquals(24, display.getLeft());
+        assertEquals(WIDTH - 24, display.getRight());
+    }
+
+    @Test
     public void aDragMovesTheWholeWallOneToOne() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         wall.beginDrag();

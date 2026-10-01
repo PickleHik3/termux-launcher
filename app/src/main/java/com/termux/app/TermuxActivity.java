@@ -3043,6 +3043,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // corner cells were still being nibbled — worse the larger the radius. That clearance is
         // padding inside the clip instead (see cornerArcPaddingPx below).
         int paneInsetPx = enabled ? strokePx + Math.round(dpToPx(2)) : 0;
+        // The other pages' cards stand at the frame itself, the model's opening, so the wall is
+        // told how much of the terminal's margin is its own border's air.
+        if (paneHost.getParent() instanceof com.termux.app.wall.PaneWallLayout)
+            ((com.termux.app.wall.PaneWallLayout) paneHost.getParent())
+                .setTerminalFrameAirPx(paneInsetPx);
         int paneHorizontalInsetPx = borderHorizontalInsetPx + paneInsetPx;
         int paneVerticalInsetPx = borderVerticalInsetPx + paneInsetPx;
         ViewGroup.LayoutParams paneParams = paneHost.getLayoutParams();
