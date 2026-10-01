@@ -51,6 +51,7 @@ public final class WallpaperBackdropView extends View {
     @NonNull private final Paint mFramePaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     @NonNull private final Paint mDimPaint = new Paint();
     @NonNull private final int[] mLocation = new int[2];
+    @NonNull private final int[] mRootScratch = new int[2];
     private int mDimColor = Color.TRANSPARENT;
     /**
      * The animated wallpaper's shader (animated-wallpaper SPEC §3.5), drawn full-screen in place of
@@ -204,9 +205,18 @@ public final class WallpaperBackdropView extends View {
             mDest.setEmpty();
             return;
         }
-        getLocationOnScreen(mLocation);
-        mDest.set(mFrameRect);
-        mDest.offset(-mLocation[0], -mLocation[1]);
+        // The laid-out origin, not getLocationOnScreen: the editor scales the root this view is in,
+        // the frame was captured with the root at identity, and a layout pass that lands mid-session
+        // would otherwise bake the scale into the rect, with nothing to redo it on exit.
+        GlassAnchor.layoutOriginOnScreen(this, mLocation, mRootScratch);
+        destFor(mFrameRect, mLocation[0], mLocation[1], mDest);
+    }
+
+    /** {@code frameRect} (screen) in a view whose laid-out origin on screen is {@code (x, y)}. */
+    @androidx.annotation.VisibleForTesting
+    static void destFor(@NonNull Rect frameRect, int originX, int originY, @NonNull Rect out) {
+        out.set(frameRect);
+        out.offset(-originX, -originY);
     }
 
     /**
