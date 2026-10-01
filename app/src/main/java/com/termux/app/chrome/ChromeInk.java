@@ -895,6 +895,19 @@ public final class ChromeInk {
         }
     }
 
+    /**
+     * Forgets everything that was decided from the chrome as it stood, so the next pass decides
+     * from the chrome as it stands now, exactly as the first pass after a launch does. A Style
+     * change moves every band, and {@link #invalidate} alone deliberately keeps the polarity: its
+     * hysteresis would carry the Floating-era answer back into Docked, and a launch in Docked
+     * would not have made it.
+     */
+    public void resetForRedress() {
+        invalidate();
+        mPolarity = null;
+        mInkAnswers.clear();
+    }
+
     /** The backing cache, for tests and for a caller that wants the raw backdrop. */
     @NonNull
     @VisibleForTesting

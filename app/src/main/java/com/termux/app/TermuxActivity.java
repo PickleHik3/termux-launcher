@@ -2763,6 +2763,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onPause();
     }
 
+    /**
+     * Dresses the whole chrome from the current state, the way the first pass after a launch does.
+     * Everything a pass decides and remembers is dropped first — the ink's polarity and samples,
+     * the panes' applied style (the veil is not part of its key) and the crops — so a change that
+     * moves every surface at once, the Style, cannot leave an answer from before it standing.
+     */
+    private void redressChromeFromState() {
+        if (mPreferences == null || mChrome == null) return;
+        mAppliedPaneStyleKey = null;
+        mChrome.redressFromState();
+        applyTerminalSurfaceAppearance();
+        updateTerminalGlassFrost();
+    }
+
     private void applyTerminalSurfaceAppearance() {
         if (mPreferences == null) {
             return;
@@ -10704,6 +10718,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void applyTerminalSurfaceAppearance() {
             TermuxActivity.this.applyTerminalSurfaceAppearance();
+        }
+
+        @Override public void redressChrome() {
+            TermuxActivity.this.redressChromeFromState();
         }
 
         @Override public void refreshTerminalWindowBar() {

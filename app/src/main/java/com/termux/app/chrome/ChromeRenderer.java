@@ -313,6 +313,20 @@ public final class ChromeRenderer {
     }
 
     /**
+     * Dresses every glass surface again from the current state, as a launch does: the ink's
+     * memory is dropped (polarity included), every crop is marked stale and one full pass is
+     * asked for. A change that moves the whole chrome at once, such as the Style, calls this
+     * instead of nudging the layers it thinks it touched.
+     */
+    public void redressFromState() {
+        mInk.resetForRedress();
+        mLedger.markAllBackdropsDirty();
+        mLedger.markFrostDirty();
+        requestSync(SCOPE_BACKDROPS | SCOPE_KEYBOARD_BACKDROP | SCOPE_TOP_PANE_FROST
+            | SCOPE_APPLY_THIS_FRAME | SCOPE_ACCESSORY_RENDER);
+    }
+
+    /**
      * The shared pre-blurred frames have gone. Every crop cut from one is stale, and so is every
      * wallpaper sample the chrome's ink was measured from — one callback for both, so no path can
      * drop the frames and leave the ink believing in a wallpaper that is no longer there.
