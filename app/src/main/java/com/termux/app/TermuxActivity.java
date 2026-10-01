@@ -3298,6 +3298,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private List<Object> mFrameGutterKey;
     /** Whether the terminal's backdrop view currently carries the Docked gutter glass. */
     private boolean mFrameGutterShown;
+    /**
+     * Whether the appearance editor holds the window opaque behind its scaled frame; the window
+     * background reset leaves the decor alone while it does.
+     */
+    private boolean mEditorWindowOpaque;
     /** The glass drawable the gutter was last given, so a reset to a plain colour is told apart. */
     @Nullable private android.graphics.drawable.Drawable mFrameGutterDrawable;
 
@@ -5510,6 +5515,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // pill runs down into it and the pill shows wallpaper too; Docked they join the frame
         // flush to the edge and the strip continues them.
         if (underKeyboardBandsShown() && isRoundedDockStyle()) return false;
+        // The editor's sheet already runs under the gesture pill; this strip is the decor's
+        // topmost child and painted the dock's glass foot over it, so the inset read untinted.
+        if (mSurfaceEditor.isActive()) return false;
         return shouldShowDecorNavBarSurface(state.toolbarShown, state.keyboardShown,
             mNavBarHeight, mKeyboardGeometry.lastImeVisible() || isImeVisible(), isRoundedDockStyle(),
             isInAppKeyboardCapsule());
@@ -11033,7 +11041,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Nullable private Drawable mEditorSavedWindowBackground;
-        private boolean mEditorWindowOpaque;
 
         @Override public void setEditorWindowOpaque(boolean opaque) {
             android.view.Window window = getWindow();
@@ -23260,7 +23267,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // app content frame begins below the status-bar inset on Android 16, so that drawable
             // gets center-cropped to a shorter frame while the native wallpaper remains visible in
             // the inset. Two different crops of the same image produce the hard y=inset seam.
-            decorView.setBackgroundColor(Color.TRANSPARENT);
+            //
+            // While the appearance editor has the window opaque (its scaled frame paints its own
+            // wallpaper and the fill around it is the editor's ground), the decor keeps that fill:
+            // clearing it here, which a Legibility change reaches through the palette refresh,
+            // showed the unscaled system wallpaper bright around the frame until the editor closed.
+            if (!mEditorWindowOpaque) decorView.setBackgroundColor(Color.TRANSPARENT);
             if (backgroundHost != decorView) {
                 backgroundHost.setBackgroundColor(Color.TRANSPARENT);
             }
