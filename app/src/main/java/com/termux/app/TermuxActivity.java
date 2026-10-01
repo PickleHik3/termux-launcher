@@ -17898,15 +17898,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // pages' so one edge shows while the wall moves.
                     if (mPaneController != null) mPaneController.setRimTravelAlpha(alpha);
                 }
-                @Override public void onWallDragInterrupted() {
-                    // A tile tap, wall.go or Home moved the wall under a finger that was dragging
-                    // it; the window strip, the one surface outside the wall that can drive a
-                    // drag, lets go of that finger (the wall's own border drag lets go itself).
-                    View bar = findViewById(R.id.terminal_window_bar);
-                    if (bar instanceof com.termux.app.terminal.TerminalWindowBar) {
-                        ((com.termux.app.terminal.TerminalWindowBar) bar).cancelOverswipe();
-                    }
-                }
                 @Override public void onWallPageChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page) {
                     // One window-bar refresh for the whole change, however many syncs ask.
@@ -19799,23 +19790,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // rests there instead of raising a terminal window under the display.
             if (!isDisplayPageShowing()) createNewWindow();
         });
-        // A strip with nothing to scroll, or one pulled past the edge it already rests at, hands
-        // the finger to the pane wall; a finger that scrolled the chips keeps them to the end.
-        bar.setOnEdgeOverswipeListener(
-            new com.termux.app.terminal.TerminalWindowBar.OnEdgeOverswipeListener() {
-                @Override public boolean onEdgeOverswipeBegin() {
-                    return mPaneWallController != null && mPaneWallController.beginDrag();
-                }
-                @Override public void onEdgeOverswipe(float dxPx) {
-                    if (mPaneWallController != null) mPaneWallController.dragTo(dxPx);
-                }
-                @Override public void onEdgeOverswipeEnd(float velocityPxPerSec) {
-                    if (mPaneWallController != null) mPaneWallController.endDrag(velocityPxPerSec);
-                }
-                @Override public void onEdgeOverswipeCancel() {
-                    if (mPaneWallController != null) mPaneWallController.cancelDrag();
-                }
-            });
         applyLazyMode();
 
         com.termux.app.statusbar.SessionsIndicatorView sessionsIndicator =

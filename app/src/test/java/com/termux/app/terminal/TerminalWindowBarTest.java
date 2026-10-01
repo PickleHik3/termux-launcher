@@ -622,54 +622,20 @@ public class TerminalWindowBarTest {
     }
 
     @Test
-    public void edgeOverswipeStreamsTheSurplusDistanceAndFollowsAReversal() {
+    public void aDragPastTheEndOfThePillsJustStopsThere() {
         TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
-        List<String> events = new ArrayList<>();
-        List<Float> offsets = new ArrayList<>();
-        bar.setOnEdgeOverswipeListener(new TerminalWindowBar.OnEdgeOverswipeListener() {
-            @Override public boolean onEdgeOverswipeBegin() { events.add("begin"); return true; }
-            @Override public void onEdgeOverswipe(float dxPx) { offsets.add(dxPx); }
-            @Override public void onEdgeOverswipeEnd(float velocityPxPerSec) { events.add("end"); }
-            @Override public void onEdgeOverswipeCancel() { events.add("cancel"); }
-        });
         bar.measure(exact(220), exact(30));
         bar.layout(0, 0, 220, 30);
 
-        // An empty strip cannot scroll at all, so every pixel of a horizontal drag is surplus.
-        int slop = android.view.ViewConfiguration.get(bar.getContext()).getScaledTouchSlop();
-        touch(bar, android.view.MotionEvent.ACTION_DOWN, 20, 15);
-        touch(bar, android.view.MotionEvent.ACTION_MOVE, 80, 15);
-        assertEquals(Collections.singletonList("begin"), events);
-        // The slop that proved the intent is not travel, but the distance beyond it is: a coarse
-        // first move must not be thrown away.
-        assertEquals(60f - slop, offsets.get(0), 0.01f);
-        touch(bar, android.view.MotionEvent.ACTION_MOVE, 120, 15);
-        assertEquals(100f - slop, offsets.get(offsets.size() - 1), 0.01f);
-        // A reversal walks the offset back rather than dropping the stream.
-        touch(bar, android.view.MotionEvent.ACTION_MOVE, 60, 15);
-        assertEquals(40f - slop, offsets.get(offsets.size() - 1), 0.01f);
-        touch(bar, android.view.MotionEvent.ACTION_UP, 60, 15);
-        assertEquals(Arrays.asList("begin", "end"), events);
-    }
-
-    @Test
-    public void aHostThatDeclinesTheSurplusLeavesTheStripScrolling() {
-        TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
-        List<String> events = new ArrayList<>();
-        bar.setOnEdgeOverswipeListener(new TerminalWindowBar.OnEdgeOverswipeListener() {
-            @Override public boolean onEdgeOverswipeBegin() { events.add("begin"); return false; }
-            @Override public void onEdgeOverswipe(float dxPx) { events.add("drag"); }
-            @Override public void onEdgeOverswipeEnd(float velocityPxPerSec) { events.add("end"); }
-            @Override public void onEdgeOverswipeCancel() { events.add("cancel"); }
-        });
-        bar.measure(exact(220), exact(30));
-        bar.layout(0, 0, 220, 30);
-
+        // An empty strip cannot scroll at all, so every pixel of a horizontal drag is past the end.
+        // Paging the wall belongs to the border drag alone: the strip keeps its place and the
+        // stream is its own from the DOWN to the UP.
         touch(bar, android.view.MotionEvent.ACTION_DOWN, 20, 15);
         touch(bar, android.view.MotionEvent.ACTION_MOVE, 120, 15);
-        touch(bar, android.view.MotionEvent.ACTION_UP, 120, 15);
-        assertFalse(events.contains("drag"));
-        assertFalse(events.contains("end"));
+        assertEquals(0, bar.getScrollX());
+        touch(bar, android.view.MotionEvent.ACTION_MOVE, 20, 15);
+        touch(bar, android.view.MotionEvent.ACTION_UP, 20, 15);
+        assertEquals(0, bar.getScrollX());
     }
 
     /**

@@ -1949,12 +1949,17 @@ public final class SurfaceEditorController {
                     return;
                 frame.hideWallpaper();
                 mHost.setEditorWindowOpaque(false);
+                // Whatever the session did, the chrome leaves it dressed as a launch would — and
+                // only now, with the root back at identity: a pass run while it was still scaled
+                // aimed every glass surface at the scaled frame, and nothing draws them again.
+                mHost.redressChrome();
+                frame.repaintAll();
             });
+        } else {
+            mHost.redressChrome();
         }
         restoreExpandedStatusAfterSurfaceEditor();
         mHasEntryStatusCollapsed = false;
-        // Whatever the session did to the Style, the chrome leaves it dressed as a launch would.
-        mHost.redressChrome();
     }
 
     /** Hands the status pane back the shape it had before the editor borrowed it. */

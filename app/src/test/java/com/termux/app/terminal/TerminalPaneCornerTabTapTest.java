@@ -134,18 +134,43 @@ public class TerminalPaneCornerTabTapTest {
     }
 
     /**
-     * Split, the same corner carries the move grip, maximise, close, the settings cog and
-     * help, in that order, and each slot hands its own action over.
+     * Split, the same corner carries close, move and maximise and nothing else: no editor doors,
+     * no minimal glyph, tiling switch, settings or help. Each slot hands its own action over.
      */
     @Test
-    public void aSplitPanesTabCarriesMoveMaximiseCloseAndHelp() {
+    public void aSplitPanesTabCarriesCloseMoveAndMaximiseOnly() {
         Fixture fixture = fixture();
         assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
         fixture.layout();
         fixture.showTab();
 
-        assertEquals("seven buttons in a split", 7, fixture.slots().length);
-        assertEquals(Arrays.asList(0, 1, 2, 9, 7, 6, 4), fixture.idsAtEverySlot());
+        assertEquals("three buttons in a split", 3, fixture.slots().length);
+        assertEquals(Arrays.asList(2, 0, 1), fixture.actionsAtEverySlot());
+    }
+
+    /** The three buttons, and what each is called, as the policy asks for them. */
+    @Test
+    public void theSplitTabPolicyIsCloseMoveMaximiseAndDropsWhatCannotApply() {
+        // Tiled: all three, close first.
+        assertEquals(Arrays.asList(2, 0, 1), ids(TerminalPaneController.splitTabActions(false, false)));
+        // Maximised: no neighbour to move onto.
+        assertEquals(Arrays.asList(2, 1), ids(TerminalPaneController.splitTabActions(true, false)));
+        // Minimal mode holds the split maximised: no maximise to undo, the glyph is the way back.
+        assertEquals(Arrays.asList(2, 9), ids(TerminalPaneController.splitTabActions(true, true)));
+        for (boolean maximised : new boolean[] {false, true}) {
+            for (boolean minimal : new boolean[] {false, true}) {
+                for (int id : TerminalPaneController.splitTabActions(maximised, minimal)) {
+                    assertTrue("never an editor door: " + id, id != 3 && id != 5 && id != 8);
+                }
+            }
+        }
+    }
+
+    @NonNull
+    private static List<Integer> ids(@NonNull int[] actions) {
+        List<Integer> out = new ArrayList<>();
+        for (int id : actions) out.add(id);
+        return out;
     }
 
     /**
@@ -164,7 +189,7 @@ public class TerminalPaneCornerTabTapTest {
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
         assertEquals(1, fixture.controller.tiledPaneCount());
         fixture.showTab();
-        assertEquals(Arrays.asList(2, 9, 7, 6, 4), fixture.idsAtEverySlot());
+        assertEquals(Arrays.asList(2, 9), fixture.actionsAtEverySlot());
 
         fixture.controller.setMinimalPresentation(false);
         fixture.layout();
@@ -263,7 +288,7 @@ public class TerminalPaneCornerTabTapTest {
         assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
         fixture.layout();
         fixture.showTab();
-        fixture.tapSlot(1);
+        fixture.tapSlot(2);
         fixture.layout();
         Object maximised = ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf");
         assertNotNull(maximised);
@@ -283,13 +308,13 @@ public class TerminalPaneCornerTabTapTest {
         fixture.layout();
         fixture.showTab();
 
-        // Slot 1 is maximise: the pane takes the whole wall, and its tab is re-asserted on it.
-        fixture.tapSlot(1);
+        // Slot 2 is maximise: the pane takes the whole wall, and its tab is re-asserted on it.
+        fixture.tapSlot(2);
         fixture.layout();
         assertNotNull("the pane is maximized",
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
-        assertEquals("six buttons maximized", 6, fixture.slots().length);
-        assertEquals(Arrays.asList(1, 2, 9, 7, 6, 4), fixture.idsAtEverySlot());
+        assertEquals("two buttons maximized", 2, fixture.slots().length);
+        assertEquals(Arrays.asList(2, 1), fixture.actionsAtEverySlot());
     }
 
     // ---------------------------------------------------------------- a fifth button
@@ -305,8 +330,7 @@ public class TerminalPaneCornerTabTapTest {
         assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
         fixture.layout();
         fixture.showTab();
-        // Four actions are the baseline the fifth is measured against; the split's own tab already
-        // carries five since the settings cog joined it.
+        // Four actions are the baseline the fifth is measured against.
         fixture.controls.setActions(
             PaneControlsView.Action.glyph(10, ""),
             PaneControlsView.Action.glyph(11, ""),
@@ -385,7 +409,7 @@ public class TerminalPaneCornerTabTapTest {
         TerminalSession bottom = ((TerminalPaneController.Leaf) root.b).session;
         fixture.showTab();
 
-        RectF grip = fixture.slots()[0];
+        RectF grip = fixture.slots()[1];
         fixture.touch(MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
         fixture.touch(MotionEvent.ACTION_MOVE, WIDTH / 2f, HEIGHT * 0.8f);
         fixture.touch(MotionEvent.ACTION_UP, WIDTH / 2f, HEIGHT * 0.8f);
@@ -629,6 +653,18 @@ public class TerminalPaneCornerTabTapTest {
         void tapSlot(int slot) {
             RectF button = slots()[slot];
             tap(button.centerX(), button.centerY());
+        }
+
+        /**
+         * The action each slot belongs to, read off the tab without tapping: a close button
+         * puts the tab away, so a list that starts with one cannot be read by running it.
+         */
+        @NonNull
+        List<Integer> actionsAtEverySlot() {
+            List<Integer> ids = new ArrayList<>();
+            for (RectF button : slots())
+                ids.add(controls.actionAt(button.centerX(), button.centerY()));
+            return ids;
         }
 
         /**

@@ -3456,6 +3456,26 @@ public class TerminalPaneController {
         return !maximized && paneCount == 1;
     }
 
+    /**
+     * The buttons of a split pane's corner tab, in the order they are drawn: close, move and
+     * maximise, and nothing else. The grip needs a neighbour to move onto, so a maximised pane
+     * has none. Minimal mode holds the split maximised for the user, so it offers no maximise to
+     * undo that; its glyph, the one other thing a split's tab may carry, is the way back.
+     *
+     * @return the overlay's action ids
+     */
+    @NonNull
+    static int[] splitTabActions(boolean maximised, boolean minimalPresentation) {
+        int count = 1 + (maximised ? 0 : 1) + 1;
+        int[] ids = new int[count];
+        int at = 0;
+        ids[at++] = PaneInteractionOverlay.ACTION_CLOSE;
+        if (!maximised) ids[at++] = PaneInteractionOverlay.ACTION_MOVE_PANE;
+        ids[at++] = minimalPresentation ? PaneInteractionOverlay.ACTION_MINIMAL
+            : PaneInteractionOverlay.ACTION_MAXIMIZE;
+        return ids;
+    }
+
     static float snapFirstWeightToCell(float total, float availablePixels,
                                        float currentWeight, float cellPixels) {
         if (total <= 0f || availablePixels <= 0f || cellPixels <= 0f) {
@@ -3662,41 +3682,51 @@ public class TerminalPaneController {
         /**
          * What the tab carries, for the pane it is out on. Alone, a pane has nothing to move,
          * maximise or close, so it offers the editor doors instead — Appearance, Layout and
-         * Wallpaper, the trio every place on the wall carries; maximised, it has no neighbour to
-         * swap with. Help closes every one of them.
+         * Wallpaper, the trio every place on the wall carries — with minimal mode, the tiling
+         * switch, settings and help. In a split it is the three things a pane can do to itself
+         * and nothing else ({@link #splitTabActions}); the editors are reached from a lone pane's
+         * corner, the other places and the terminal long-press menu, not from here.
          */
         private void applyControlActions() {
-            List<PaneControlsView.Action> actions = new ArrayList<>(4);
+            List<PaneControlsView.Action> actions = new ArrayList<>(7);
+            android.content.Context context = mHostView.getContext();
             if (isLonePane()) {
                 actions.add(PaneControlsView.Action.glyph(ACTION_SURFACE_EDITOR,
-                    CornerTabGlyphs.APPEARANCE, mHostView.getContext().getString(
+                    CornerTabGlyphs.APPEARANCE, context.getString(
                         R.string.appearance_editor_corner_tab_description)));
                 actions.add(PaneControlsView.Action.glyph(ACTION_LAYOUT_EDITOR,
-                    CornerTabGlyphs.LAYOUT, mHostView.getContext().getString(
+                    CornerTabGlyphs.LAYOUT, context.getString(
                         R.string.corner_tab_layout_description)));
                 actions.add(PaneControlsView.Action.glyph(ACTION_WALLPAPER,
                     CornerTabGlyphs.WALLPAPER));
+                actions.add(PaneControlsView.Action.drawn(ACTION_MINIMAL, mMinimalMark));
+                actions.add(PaneControlsView.Action.drawn(ACTION_AUTO_TILING,
+                    this::drawAutoTilingMark));
+                // The launcher's settings, one tap from the tab on every place, as the display's
+                // tab already offers them.
+                actions.add(PaneControlsView.Action.glyph(ACTION_SETTINGS,
+                    CornerTabGlyphs.SETTINGS));
+                actions.add(PaneControlsView.Action.label(ACTION_HELP,
+                    CornerTabGlyphs.help(getContext())));
             } else {
-                if (mMaximizedLeaf == null) {
-                    actions.add(PaneControlsView.Action.drawn(ACTION_MOVE_PANE, this::drawMoveMark,
-                        PaneControlsView.TINT_TERTIARY));
+                for (int id : splitTabActions(mMaximizedLeaf != null, mMinimalPresentation)) {
+                    if (id == ACTION_CLOSE) {
+                        actions.add(PaneControlsView.Action.drawn(ACTION_CLOSE,
+                            this::drawCloseMark, PaneControlsView.TINT_ERROR,
+                            context.getString(R.string.pane_corner_tab_close_description)));
+                    } else if (id == ACTION_MOVE_PANE) {
+                        actions.add(PaneControlsView.Action.drawn(ACTION_MOVE_PANE,
+                            this::drawMoveMark, PaneControlsView.TINT_TERTIARY,
+                            context.getString(R.string.pane_corner_tab_move_description)));
+                    } else if (id == ACTION_MAXIMIZE) {
+                        actions.add(PaneControlsView.Action.drawn(ACTION_MAXIMIZE,
+                            this::drawMaximizeMark, PaneControlsView.TINT_PRIMARY,
+                            context.getString(R.string.pane_corner_tab_maximise_description)));
+                    } else if (id == ACTION_MINIMAL) {
+                        actions.add(PaneControlsView.Action.drawn(ACTION_MINIMAL, mMinimalMark));
+                    }
                 }
-                // Minimal mode holds the split maximised, so the button that would un-maximise
-                // it is not offered there: the minimal glyph beside it is the way back.
-                if (!mMinimalPresentation) {
-                    actions.add(PaneControlsView.Action.drawn(ACTION_MAXIMIZE,
-                        this::drawMaximizeMark));
-                }
-                actions.add(PaneControlsView.Action.drawn(ACTION_CLOSE, this::drawCloseMark,
-                    PaneControlsView.TINT_ERROR));
             }
-            actions.add(PaneControlsView.Action.drawn(ACTION_MINIMAL, mMinimalMark));
-            actions.add(PaneControlsView.Action.drawn(ACTION_AUTO_TILING, this::drawAutoTilingMark));
-            // The launcher's settings, one tap from the tab on every place, as the display's tab
-            // already offers them.
-            actions.add(PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS));
-            actions.add(PaneControlsView.Action.label(ACTION_HELP,
-                CornerTabGlyphs.help(getContext())));
             mControls.setActions(actions);
         }
 

@@ -30,11 +30,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         default void onWallPageSettled(@NonNull PaneWallPage page) { }
         /** The wall committed to a different page, before the slide finishes. */
         default void onWallPageChanged(@NonNull PaneWallPage page) { }
-        /**
-         * The wall was moved by something other than the finger that was dragging it. Every
-         * surface that can drive a drag — the status bar, the window strip — must let go.
-         */
-        default void onWallDragInterrupted() { }
         /** The wall moved: signed distance from the current page's rest, for the place switch. */
         default void onWallOffsetChanged(float offsetPx) { }
         /** The Terminal page just went fully off screen, or just came back; see
@@ -290,32 +285,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mWall.goTo(PaneWallPolicy.homePage(), animate);
     }
 
-    // ---- Dragging, from the window strip's overswipe ----------------------------------------
-
-    /** True while a drag has anywhere to take the wall. */
-    public boolean canDrag() {
-        return mWall.areGesturesEnabled() && mWall.pages().size() > 1;
-    }
-
-    /** Take a drag. False when the wall has nowhere to go, leaving the gesture to its owner. */
-    public boolean beginDrag() {
-        if (!canDrag()) return false;
-        mWall.beginDrag();
-        return true;
-    }
-
-    public void dragTo(float dxPx) {
-        mWall.dragTo(dxPx);
-    }
-
-    public void endDrag(float velocityPxPerSec) {
-        mWall.endDrag(velocityPxPerSec);
-    }
-
-    public void cancelDrag() {
-        mWall.cancelDrag();
-    }
-
     /** Hold the wall still while another surface owns the gesture. */
     public void setGesturesEnabled(boolean enabled) {
         mWall.setGesturesEnabled(enabled);
@@ -352,11 +321,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     @Override
     public void onWallPageSettled(@NonNull PaneWallPage page) {
         mHost.onWallPageSettled(page);
-    }
-
-    @Override
-    public void onWallDragInterrupted() {
-        mHost.onWallDragInterrupted();
     }
 
     @Override

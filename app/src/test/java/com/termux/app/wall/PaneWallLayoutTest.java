@@ -332,19 +332,14 @@ public class PaneWallLayoutTest {
     }
 
     @Test
-    public void aPageChangeUnderALiveDragEndsTheDragAndSaysSo() {
+    public void aPageChangeUnderALiveDragEndsTheDrag() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
-        int[] interrupted = {0};
-        wall.setListener(new PaneWallLayout.Listener() {
-            @Override public void onWallDragInterrupted() { interrupted[0]++; }
-        });
         wall.beginDrag();
         wall.dragTo(-200f);
 
         // A tile tap, wall.go or Home lands mid-drag.
         wall.goTo(PaneWallPage.DISPLAY, false);
 
-        assertEquals("the claimant is told once", 1, interrupted[0]);
         assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
         assertEquals(0f, display.getTranslationX(), EPS);
         // The rest of that finger is nobody's: the wall neither moves for it nor settles on it.
@@ -352,38 +347,16 @@ public class PaneWallLayoutTest {
         assertEquals(0f, display.getTranslationX(), EPS);
         wall.endDrag(-10_000f);
         assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
-        assertEquals(1, interrupted[0]);
-    }
-
-    @Test
-    public void aPageChangeWithNoDragUnderWayInterruptsNothing() {
-        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
-        int[] interrupted = {0};
-        wall.setListener(new PaneWallLayout.Listener() {
-            @Override public void onWallDragInterrupted() { interrupted[0]++; }
-        });
-
-        wall.goTo(PaneWallPage.WIDGETS, false);
-        wall.beginDrag();
-        wall.endDrag(0f);
-        wall.goTo(PaneWallPage.TERMINAL, false);
-
-        assertEquals(0, interrupted[0]);
     }
 
     @Test
     public void switchingGesturesOffUnderALiveDragInterruptsIt() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
-        int[] interrupted = {0};
-        wall.setListener(new PaneWallLayout.Listener() {
-            @Override public void onWallDragInterrupted() { interrupted[0]++; }
-        });
         wall.beginDrag();
         wall.dragTo(-200f);
 
         wall.setGesturesEnabled(false);
 
-        assertEquals(1, interrupted[0]);
         assertFalse(wall.isMoving());
     }
 
@@ -523,8 +496,8 @@ public class PaneWallLayoutTest {
     /**
      * The planks (PlankTilt): a held border's drag tips the page the wall rests on when the
      * listener allows it, by the angle its position and the finger's weight say, on a hardware
-     * layer for the length of the motion; the settle lays it flat and drops the layer. A drag
-     * taken from outside (the window strip's overswipe) slides flat.
+     * layer for the length of the motion; the settle lays it flat and drops the layer. A flat
+     * drag with no press (the test harness's) slides flat.
      *
      * <p>Changed with the planks' lean (2026-09-28): the page used to lead with the side it moved
      * toward; it now dips toward the finger, and a finger on its centre line dips it toward the
@@ -537,7 +510,7 @@ public class PaneWallLayoutTest {
         wall.setListener(new PaneWallLayout.Listener() {
             @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
         });
-        // The window strip's overswipe: the same leave, but nothing tips.
+        // A flat drag with no press: the same leave, but nothing tips.
         wall.beginDrag();
         assertTrue(wall.tiltPages().isEmpty());
         assertTrue(wall.goTo(PaneWallPage.TERMINAL, false));
@@ -859,12 +832,12 @@ public class PaneWallLayoutTest {
     }
 
     @Test
-    public void theBorderDragEngagesThePlankAndAnOutsideDragDoesNot() {
+    public void theBorderDragEngagesThePlankAndAFlatDragDoesNot() {
         buildWithContent();
         wall.setListener(new PaneWallLayout.Listener() {
             @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
         });
-        // The window strip's overswipe: the page slides flat.
+        // A flat drag with no press: the page slides flat.
         wall.beginDrag();
         wall.dragTo(-300f);
         assertTrue(wall.tiltPages().isEmpty());

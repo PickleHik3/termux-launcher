@@ -177,4 +177,13 @@ public class WallpaperBackdropViewTest {
         backdrop.showFrame(frame(PORTRAIT), PORTRAIT, DIM, true);
         assertNull(backdrop.fadingFrame());
     }
+
+    @Test
+    public void destRectIsTheFrameRectMinusTheLaidOutOrigin() {
+        Rect dest = new Rect();
+        // The decor's rect reaches under the status bar; the view sits below it at (10, 30). The
+        // origin is the laid-out one, so a root the editor has scaled to 0.76 changes nothing.
+        WallpaperBackdropView.destFor(new Rect(0, 0, 100, 200), 10, 30, dest);
+        assertEquals(new Rect(-10, -30, 90, 170), dest);
+    }
 }

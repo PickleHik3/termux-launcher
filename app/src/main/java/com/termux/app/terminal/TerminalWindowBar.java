@@ -83,21 +83,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         void onWindowChipTapped(int index);
     }
 
-    /**
-     * The chip strip has run out of scroll and the finger keeps going. The surplus distance is
-     * streamed to the host so "scroll to the last chip, keep pulling, and the page beside the
-     * terminal slides in" is one continuous gesture.
-     */
-    public interface OnEdgeOverswipeListener {
-        /** @return true to take the stream; false leaves the strip's own scrolling alone */
-        boolean onEdgeOverswipeBegin();
-        /** @param dxPx surplus travel since the hand-over, positive to the right */
-        void onEdgeOverswipe(float dxPx);
-        /** @param velocityPxPerSec horizontal release velocity, positive to the right */
-        void onEdgeOverswipeEnd(float velocityPxPerSec);
-        void onEdgeOverswipeCancel();
-    }
-
     /** Visual label plus a spoken label that does not expose Nerd Font private-use glyphs. */
     public static final class WindowItem {
         @NonNull public final String label;
@@ -339,7 +324,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     @Nullable private OnChipTappedListener mChipTapListener;
     @Nullable private OnCreateWindowListener mCreateListener;
     @Nullable private OnWindowCloseRequestedListener mCloseListener;
-    @Nullable private OnEdgeOverswipeListener mEdgeOverswipeListener;
     /** Which chip is offering its ×, and for how much longer. */
     private final ChipRevealPolicy mReveal = new ChipRevealPolicy();
     /**
@@ -358,28 +342,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private boolean mGestureRejected;
     private float mTouchDownX;
     private float mTouchDownY;
-    private float mLastTouchX;
-    /** Signed travel the strip could not spend on its own scroll, since the DOWN. */
-    private float mOverswipePx;
-    /** One-way latch: once the surplus is the host's, the strip stops scrolling for this stream. */
-    private boolean mOverswipeOwned;
-    /**
-     * Where the strip stood at the DOWN. A finger that scrolled the chips at all keeps them for
-     * the rest of its stream: running into the last window is not a wish to change place. Only a
-     * strip with nothing to scroll, or one pulled past the edge it already rests at, hands the
-     * finger to the wall.
-     */
-    private int mScrollXAtDown;
-    private boolean mStripScrolled;
     /** The DOWN time of the stream being tracked, so a DOWN seen twice is set up once. */
     private long mStreamDownTime = -1L;
-    /**
-     * The host took the wall away mid-overswipe. The rest of this stream belongs to nobody: not
-     * streamed to the host, not spent on the chips either — a finger that was dragging the wall
-     * must not suddenly scroll the strip under itself.
-     */
-    private boolean mOverswipeInterrupted;
-    @Nullable private android.view.VelocityTracker mOverswipeVelocity;
     private int mSelectedIndex = -1;
     @NonNull private List<WindowItem> mItems = new ArrayList<>();
     private Typeface mTerminalTypeface = Typeface.MONOSPACE;
@@ -492,18 +456,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         return null;
     }
 
-    public void setOnEdgeOverswipeListener(@Nullable OnEdgeOverswipeListener listener) {
-        mEdgeOverswipeListener = listener;
-    }
-
-    /** The wall moved on without this finger; the overswipe ends here, with no end or cancel. */
-    public void cancelOverswipe() {
-        if (!mOverswipeOwned) return;
-        mOverswipeOwned = false;
-        mOverswipeInterrupted = true;
-        mOverswipePx = 0f;
-    }
-
     @Override
     public boolean onInterceptTouchEvent(MotionEvent event) {
         // A finger that lands on a pill gives the pill its DOWN; the strip only meets the stream
@@ -516,15 +468,10 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private void beginStream(MotionEvent event) {
         if (mStreamDownTime == event.getDownTime()) return;
         mStreamDownTime = event.getDownTime();
-        mTouchDownX = mLastTouchX = event.getX();
+        mTouchDownX = event.getX();
         mTouchDownY = event.getY();
-        mOverswipePx = 0f;
         mGestureHorizontal = false;
         mGestureRejected = false;
-        mOverswipeOwned = false;
-        mOverswipeInterrupted = false;
-        mScrollXAtDown = getScrollX();
-        mStripScrolled = false;
         mReveal.onTouchDown();
         // A finger that lands anywhere but on the chip offering its × puts it away — including the
         // one that is on its way to the plus, or to the bar's empty end. The × itself lives inside
@@ -533,11 +480,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             mReveal.onTouchElsewhere();
             applyReveal();
         }
-        if (mOverswipeVelocity == null) {
-            mOverswipeVelocity = android.view.VelocityTracker.obtain();
-        }
-        mOverswipeVelocity.clear();
-        mOverswipeVelocity.addMovement(event);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
     }
 
@@ -549,8 +491,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             return super.onTouchEvent(event);
         }
         if (action == MotionEvent.ACTION_MOVE) {
-            if (mOverswipeVelocity != null) mOverswipeVelocity.addMovement(event);
-            float dx = event.getX() - mLastTouchX;
             float totalX = event.getX() - mTouchDownX;
             float totalY = event.getY() - mTouchDownY;
             if (!mGestureHorizontal && !mGestureRejected) {
@@ -567,62 +507,15 @@ public final class TerminalWindowBar extends HorizontalScrollView {
                     applyReveal();
                 }
             }
-            mLastTouchX = event.getX();
-            if (mOverswipeInterrupted) return true;
-            if (mOverswipeOwned) {
-                // The surplus is the host's for the rest of this stream: the chips hold still
-                // rather than scrolling back under a finger that is now dragging the wall.
-                mOverswipePx += dx;
-                if (mEdgeOverswipeListener != null) mEdgeOverswipeListener.onEdgeOverswipe(mOverswipePx);
-                return true;
-            }
-            int before = getScrollX();
-            boolean handled = super.onTouchEvent(event);
-            if (getScrollX() != mScrollXAtDown) mStripScrolled = true;
-            // Signed: dragging left scrolls right, so what the strip spent cancels the travel out.
-            float surplus = dx + (getScrollX() - before);
-            if (mGestureHorizontal && !mGestureRejected && !mStripScrolled
-                && Math.abs(surplus) > 0f) {
-                mOverswipePx += surplus;
-                if (Math.abs(mOverswipePx) > mTouchSlop && mEdgeOverswipeListener != null
-                    && mEdgeOverswipeListener.onEdgeOverswipeBegin()) {
-                    mOverswipeOwned = true;
-                    // The slop that proved the intent is not travel, but whatever the finger moved
-                    // beyond it is: a coarse stream can cover much of the bar in its first move,
-                    // and starting the host from rest threw that distance away.
-                    mOverswipePx -= Math.copySign(mTouchSlop, mOverswipePx);
-                    mEdgeOverswipeListener.onEdgeOverswipe(mOverswipePx);
-                }
-            }
-            return handled;
+            // Past the last chip the strip just stops: paging the wall is the border drag's job.
+            return super.onTouchEvent(event);
         }
         if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-            boolean owned = mOverswipeOwned;
-            float velocity = 0f;
-            if (mOverswipeVelocity != null) {
-                mOverswipeVelocity.computeCurrentVelocity(1000);
-                velocity = mOverswipeVelocity.getXVelocity();
-                mOverswipeVelocity.recycle();
-                mOverswipeVelocity = null;
-            }
-            boolean interrupted = mOverswipeInterrupted;
-            boolean handled = !interrupted && super.onTouchEvent(event);
+            boolean handled = super.onTouchEvent(event);
             if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
             mStreamDownTime = -1L;
-            mOverswipePx = 0f;
             mGestureHorizontal = false;
             mGestureRejected = false;
-            mOverswipeOwned = false;
-            mOverswipeInterrupted = false;
-            if (interrupted) return true;
-            if (owned && mEdgeOverswipeListener != null) {
-                if (action == MotionEvent.ACTION_UP) {
-                    mEdgeOverswipeListener.onEdgeOverswipeEnd(velocity);
-                } else {
-                    mEdgeOverswipeListener.onEdgeOverswipeCancel();
-                }
-                return true;
-            }
             return handled;
         }
         return super.onTouchEvent(event);
@@ -1226,15 +1119,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             removeCallbacks(mSmoothTick);
             mSmoothTick = null;
         }
-        // A stream that was under way when the view left the window never gets its UP; the
-        // tracker goes back to the pool and the latch does not survive into the next attach.
-        if (mOverswipeVelocity != null) {
-            mOverswipeVelocity.recycle();
-            mOverswipeVelocity = null;
-        }
-        mOverswipeOwned = false;
-        mOverswipeInterrupted = false;
-        mOverswipePx = 0f;
         cancelCloseReveal();
         // A × is a four-second offer, not a state: a row that left the window comes back without it.
         mReveal.hide();

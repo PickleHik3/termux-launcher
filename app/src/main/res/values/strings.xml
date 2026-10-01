@@ -2998,4 +2998,9 @@
     <string name="wallpaper_picker_palette_own">Own</string>
     <string name="wallpaper_picker_applying">Applying background…</string>
     <string name="wallpaper_picker_apply_failed">Could not apply the background</string>
+
+    <!-- A split pane's corner tab: the three things a pane can do to itself, read by TalkBack. -->
+    <string name="pane_corner_tab_close_description">Close pane</string>
+    <string name="pane_corner_tab_move_description">Move pane</string>
+    <string name="pane_corner_tab_maximise_description">Maximise pane</string>
 </resources>

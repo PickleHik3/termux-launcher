@@ -247,6 +247,25 @@ final class AppearanceEditorFrame {
         }
     }
 
+    /**
+     * Marks every view under the container for re-recording. A draw that ran while the root was
+     * scaled aimed its glass at the scaled position (the top bars anchor on the framework's
+     * transform-inclusive location), and a transform alone never re-records a child, so once the
+     * root is back at identity nothing would draw those surfaces again.
+     */
+    void repaintAll() {
+        repaintTree(mRoot);
+    }
+
+    private static void repaintTree(@NonNull View view) {
+        view.invalidate();
+        if (!(view instanceof ViewGroup))
+            return;
+        ViewGroup group = (ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++)
+            repaintTree(group.getChildAt(i));
+    }
+
     boolean isScaled() {
         return mRoot.getScaleX() != 1f || mRoot.getScaleY() != 1f || mRoot.getTranslationY() != 0f;
     }

@@ -158,6 +158,13 @@ public final class PaneControlsView extends View {
         public static Action drawn(int id, @NonNull Mark mark, int tint) {
             return new Action(id, "", false, mark, tint, null);
         }
+
+        /** As above, named for TalkBack by {@code description}: a drawn mark has no words. */
+        @NonNull
+        public static Action drawn(int id, @NonNull Mark mark, int tint,
+                                   @Nullable CharSequence description) {
+            return new Action(id, "", false, mark, tint, description);
+        }
     }
 
     /**
