@@ -19,10 +19,11 @@ import java.util.List;
  * provider, a glass edge or a pane needs out. Nothing here decides a corner; it only asks
  * {@link ChromeShapeModel} and translates the answer into a view's own coordinates.
  *
- * <p>A Docked frame is clipped once, as a single sheet with only its exposed outer corners
- * rounded. The chrome is several views, so each view clips to its own intersection with that
- * frame: the frame's rounded rect laid over the view at the offset the model puts it at
- * ({@link #outlineOf}). A view's outline is convex and the frame's is too, so the intersection
+ * <p>A Docked card (the joined frame, or the top or bottom edge card) is clipped once, as a
+ * single sheet; its outer corners are square (the screen rounds them) and an edge card's inner
+ * corners round. The chrome is several views, so each view clips to its own intersection with
+ * that card: the card's rounded rect laid over the view at the offset the model puts it at
+ * ({@link #outlineOf}). A view's outline is convex and the card's is too, so the intersection
  * is exactly what one clip would have cut.
  *
  * <p>Pure: no view, no context.
@@ -31,7 +32,7 @@ public final class LiveChromeShape {
 
     private LiveChromeShape() {}
 
-    /** The radius the Docked frame's outer corners take when the device reports none. */
+    /** The radius assumed for the device's screen when it reports none (no longer rounds the frame). */
     public static final float FALLBACK_SCREEN_RADIUS_DP = 28f;
     /** The most air between Floating pane cards. */
     public static final float PANE_GAP_CAP_DP = 24f;
@@ -79,27 +80,39 @@ public final class LiveChromeShape {
         public final int reachTop;
         public final int reachRight;
         public final int reachBottom;
+        /** The largest of the four corner radii. */
         public final float radius;
+        public final float topLeft;
+        public final float topRight;
+        public final float bottomRight;
+        public final float bottomLeft;
 
-        Clip(int reachLeft, int reachTop, int reachRight, int reachBottom, float radius) {
+        Clip(int reachLeft, int reachTop, int reachRight, int reachBottom, float topLeft,
+             float topRight, float bottomRight, float bottomLeft) {
             this.reachLeft = reachLeft;
             this.reachTop = reachTop;
             this.reachRight = reachRight;
             this.reachBottom = reachBottom;
-            this.radius = radius;
+            this.topLeft = topLeft;
+            this.topRight = topRight;
+            this.bottomRight = bottomRight;
+            this.bottomLeft = bottomLeft;
+            this.radius = Math.max(Math.max(topLeft, topRight), Math.max(bottomRight, bottomLeft));
         }
     }
 
     /** A card that is the view's own bounds, rounded: what a Floating card's clip comes to. */
     @NonNull
     public static Clip cardClip(float radiusPx) {
-        return new Clip(0, 0, 0, 0, Math.max(0f, radiusPx));
+        float r = Math.max(0f, radiusPx);
+        return new Clip(0, 0, 0, 0, r, r, r, r);
     }
 
     /**
      * The clip for a view standing where {@code ids} stand in the model: its pieces' union, with
-     * their card's box and radius around it. Null when none of them is shown. Under Docked the
-     * card is the one frame, so every view's clip is its slice of the same rounded screen; under
+     * their card's box and corners around it. Null when none of them is shown. Under Docked the
+     * card is the joined frame (square) or an edge card (square at the screen, rounded inside),
+     * so every view's clip is its slice of that card; under
      * Floating it is the view's own card, and the clip is the view's bounds rounded.
      */
     @Nullable
@@ -118,17 +131,18 @@ public final class LiveChromeShape {
         if (first == null) return null;
         Card card = shape.cardOf(first);
         if (card == null) return null;
-        float radius = Math.max(Math.max(card.corners.topLeft, card.corners.topRight),
-            Math.max(card.corners.bottomRight, card.corners.bottomLeft));
         return new Clip(Math.round(l - card.box.left), Math.round(t - card.box.top),
-            Math.round(card.box.right - r), Math.round(card.box.bottom - b), radius);
+            Math.round(card.box.right - r), Math.round(card.box.bottom - b),
+            card.corners.topLeft, card.corners.topRight, card.corners.bottomRight,
+            card.corners.bottomLeft);
     }
 
     /**
      * The edges of the views standing where {@code ids} stand that draw rim light, the bend and
-     * the containing stroke, as {@link ChromeEdgeRule} bits. Under Docked none does: joins, screen
-     * edges and the edges facing the gutter are plain, and the insert's own rounded edge wears the
-     * rim. Under Floating it is every edge a card shows.
+     * the containing stroke, as {@link ChromeEdgeRule} bits. Under a joined Docked frame none does:
+     * joins, screen edges and the edges facing the gutter are plain, and the insert's own rounded
+     * edge wears the rim. Under Docked edge cards the edge facing the insert does, and under
+     * Floating every edge a card shows.
      * Each edge is the outermost piece's own answer, so a join inside the set never counts.
      */
     public static int rimEdges(@NonNull ChromeShape shape, @NonNull List<PieceId> ids) {

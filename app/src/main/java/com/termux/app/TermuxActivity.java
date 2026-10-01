@@ -2840,7 +2840,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyTerminalBorderAppearance();
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
             applyTerminalBodySurface(terminalBodySurface, Color.TRANSPARENT, false);
-            applyFrameGutterGlass(terminalBodySurface, glassPane && !isRoundedDockStyle());
+            applyFrameGutterGlass(terminalBodySurface, glassPane && hasDockedFrameCard());
             terminalStatusSurface.setBackgroundColor(Color.TRANSPARENT);
             terminalStatusSurface.setVisibility(View.GONE);
             if (terminalView != null) {
@@ -3147,6 +3147,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Whether the model has a joined Docked frame, and so a gutter of glass round the insert: with
+     * a bar at a side, or with every bar put away. With none at a side the top and bottom stacks
+     * are edge cards and the gutter is the wallpaper, as it is under Floating.
+     */
+    private boolean hasDockedFrameCard() {
+        for (com.termux.app.place.ChromeShape.Card card : chromeShape().cards())
+            if (card.frame) return true;
+        return false;
+    }
+
+    /**
      * The Docked frame's glass behind the gutter: the dock's material (frost of the wallpaper, the
      * tint at the dock's opacity, its grain) filling the terminal's host, which the pane slabs then
      * sit on, inset by Margin. Under Floating and in opaque mode the view carries none, and
@@ -3447,7 +3458,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Docked gutter's glass samples the same frame, so it follows it as it lands.
         View gutterBody = findViewById(R.id.terminal_background);
         if (gutterBody != null && shouldUseWallpaperPassthroughMode())
-            applyFrameGutterGlass(gutterBody, isTerminalPaneGlassActive() && !isRoundedDockStyle());
+            applyFrameGutterGlass(gutterBody, isTerminalPaneGlassActive() && hasDockedFrameCard());
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         // This runs behind every chrome apply, several times a page change, and the style is a
@@ -4913,9 +4924,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * One outline clips every status-pane layer, including live blur and wallpaper frost. The
-     * model says what it is: under Docked the status bar's slice of the one frame (only a corner
-     * on the screen's own corner rounds, at the screen radius); under Floating its own card at
-     * Corners.
+     * model says what it is: under Docked the status bar's slice of the joined frame (square) or
+     * of the top edge card (square at the screen, its bottom corners rounded at Corners); under
+     * Floating its own card at Corners.
      */
     private void applyStatusBarOutline(@NonNull View host) {
         boolean changed = mStatusBarSurfaceOutline.setClip(
@@ -4985,7 +4996,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getResources().getDisplayMetrics().density);
     }
 
-    /** The largest corner the model gives the status bar under Docked: the screen's, or none. */
+    /** The largest corner the model gives the status bar under Docked: Corners at its bottom, or none. */
     private float statusPieceCornerRadiusPx() {
         com.termux.app.place.ChromeShape.Piece piece =
             chromeShape().piece(com.termux.app.place.ChromeShape.PieceId.STATUS);
@@ -5928,7 +5939,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (piece == null) piece = shape.piece(com.termux.app.place.ChromeShape.PieceId.KEYBOARD_LEFT);
         com.termux.app.place.ChromeShape.Card card = piece == null ? null : shape.cardOf(piece);
         if (card == null) return isRoundedDockStyle() || isKeyboardFloating();
-        return !card.frame;
+        return !card.docked();
     }
 
     /** True while the keyboard is hosted in its floating frame rather than in the dock. */

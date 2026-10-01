@@ -21,7 +21,9 @@ import java.util.List;
  * <p>A <em>card</em> is one shape drawn and rimmed as a whole. Under Floating that is a run of
  * neighbouring pieces on one edge, a lone piece, the keyboard or a pane. Under Docked it is the
  * single frame all the pieces share, clipped once with the rounded insert cut out of it
- * ({@link Card#hole}); it exists even when every bar is put away.
+ * ({@link Card#hole}), which exists even when every bar is put away; or, with no bar at a side,
+ * two edge cards (the top stack's and the bottom stack's) with no frame glass in between. Every
+ * Docked outer corner is square: the screen rounds it.
  */
 public final class ChromeShape {
 
@@ -271,19 +273,34 @@ public final class ChromeShape {
         @NonNull public final Corners holeCorners;
         /** Each insert cut out: one per pane under Docked, so the gutter between panes is glass. */
         @NonNull public final List<Box> holes;
-        /** The Docked frame rather than a Floating card. */
+        /** The joined Docked frame (with side bars, or with every bar put away), not a card. */
         public final boolean frame;
+        /** A Docked edge card: the top stack's or the bottom stack's, when no bar is at a side. */
+        public final boolean edge;
         @NonNull public final List<PieceId> members;
+
+        /** Whether the card is part of the Docked chrome rather than a Floating card. */
+        public boolean docked() {
+            return frame || edge;
+        }
 
         Card(int id, @NonNull Box box, @NonNull Corners corners, @Nullable Box hole,
              boolean frame, @NonNull List<PieceId> members) {
             this(id, box, corners, hole, frame, members, Corners.SQUARE,
-                hole == null ? Collections.<Box>emptyList() : Collections.singletonList(hole));
+                hole == null ? Collections.<Box>emptyList() : Collections.singletonList(hole),
+                false);
         }
 
         Card(int id, @NonNull Box box, @NonNull Corners corners, @Nullable Box hole,
              boolean frame, @NonNull List<PieceId> members, @NonNull Corners holeCorners,
              @NonNull List<Box> holes) {
+            this(id, box, corners, hole, frame, members, holeCorners, holes, false);
+        }
+
+        Card(int id, @NonNull Box box, @NonNull Corners corners, @Nullable Box hole,
+             boolean frame, @NonNull List<PieceId> members, @NonNull Corners holeCorners,
+             @NonNull List<Box> holes, boolean edge) {
+            this.edge = edge;
             this.holeCorners = holeCorners;
             this.holes = Collections.unmodifiableList(new ArrayList<>(holes));
             this.id = id;

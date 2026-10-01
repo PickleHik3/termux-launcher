@@ -286,9 +286,12 @@ public class TermuxActivityEdgeStackLayoutTest {
                 outline.radiusPx() > activity.resolveDockCapsuleCornerRadiusPx(
                     Math.round(density * 19f)));
         } else {
-            assertEquals("Docked: the frame's outer corners, the screen's 28dp fallback",
-                com.termux.app.chrome.LiveChromeShape.FALLBACK_SCREEN_RADIUS_DP * density,
-                outline.radiusPx(), 0.01f);
+            // Docked: the top edge card rounds its inner (bottom) corners at Corners, and nothing
+            // at the screen's radius, which the screen rounds itself.
+            assertTrue("a square top and Corners at the bottom, never the screen's radius",
+                Math.abs(outline.radiusPx()
+                    - com.termux.app.chrome.LiveChromeShape.FALLBACK_SCREEN_RADIUS_DP * density)
+                    > 0.01f);
         }
     }
 

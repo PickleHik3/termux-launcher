@@ -425,8 +425,9 @@ public final class LayoutCanvasView extends View {
     /**
      * The Style of the whole chrome, and the Corners and Margin the user set, in dp. Both Styles
      * spend both: Floating's cards wear Corners with Margin of air round them; Docked's frame
-     * rounds only its exposed outer corners at the screen's radius, and its pane is an insert with
-     * Corners as its radius, a gutter of Margin inside the bars. A change of Style morphs the
+     * is flush and square at the screen's edges (with no side bar it is two edge cards with their
+     * inner corners rounded at Corners), and its pane is an insert with Corners as its radius, a
+     * gutter of Margin inside the bars. A change of Style morphs the
      * canvas from the shape it stood in to the new one over {@value LayoutCanvasMorph#DURATION_MS}
      * ms, or jumps with reduced motion; a new Corners or Margin redraws at once, so a slider is
      * followed live.
@@ -2166,14 +2167,17 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * Docked: one frame composed under one outer clip — its box and corners with the pane's
-     * rounded insert cut out — so no bar rounds, outlines or joins on its own; then the insert, on
-     * the frame's glass, wearing the one rim; and anything that floats over it.
+     * Docked: the joined frame composed under one outer clip — its square box with the pane's
+     * rounded insert cut out — or, with no bar at a side, the top and bottom edge cards, each
+     * under its own clip (square at the screen, rounded inside); so no bar rounds, outlines or
+     * joins on its own. Then the insert, wearing the one rim, and anything that floats over it.
      */
     private void drawDocked(@NonNull Canvas canvas, @NonNull ChromeShape shape,
                             @NonNull LayoutCanvasArtwork.Palette p, float k) {
         for (Card card : shape.cards()) {
-            if (!card.frame) continue;
+            if (!card.docked()) continue;
+            // An edge card whose every bar is in the air leaves only the placeholder behind.
+            if (card.edge && isLiftedCard(shape, card)) continue;
             framePath(card, mShapePath);
             int saved = canvas.save();
             canvas.clipPath(mShapePath);
@@ -2181,6 +2185,7 @@ public final class LayoutCanvasView extends View {
             canvas.drawPath(mShapePath, mFillPaint);
             for (Piece piece : shape.pieces()) {
                 if (piece.overlay || isLiftedPiece(piece.id)) continue;
+                if (!card.members.contains(piece.id)) continue;
                 drawPieceArt(canvas, piece.id, viewRect(piece.box), isPieceVertical(piece.id),
                     false, p, k);
             }
@@ -2290,7 +2295,7 @@ public final class LayoutCanvasView extends View {
         out.addRoundRect(box, corners.toRadii(), Path.Direction.CW);
     }
 
-    /** The Docked frame: its box and corners, with each rounded insert cut out (even-odd). */
+    /** A Docked card: its box and corners, with each rounded insert cut out (even-odd) if any. */
     private void framePath(@NonNull Card frame, @NonNull Path out) {
         out.reset();
         out.setFillType(Path.FillType.EVEN_ODD);

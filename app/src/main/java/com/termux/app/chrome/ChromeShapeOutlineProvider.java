@@ -12,7 +12,7 @@ import java.util.WeakHashMap;
 
 /**
  * The outline of one chrome view, taken from the shape model ({@link LiveChromeShape#outlineOf}):
- * the card's round rect in the view's coordinates, which the view's own bounds then cut. Allocation
+ * the card's rounded rect in the view's coordinates, which the view's own bounds then cut. Allocation
  * free, and a plain convex round rect, so {@code setClipToOutline} and the elevation shadow keep
  * working. A view that has no clip yet clips to its bounds.
  *
@@ -85,7 +85,17 @@ public final class ChromeShapeOutlineProvider extends ViewOutlineProvider {
             outline.setRect(rect[0], rect[1], rect[2], rect[3]);
             return;
         }
-        outline.setRoundRect(rect[0], rect[1], rect[2], rect[3], clip.radius);
+        // A round rect has one radius, so a card square on a side (an edge card's screen side) is
+        // grown by that radius past the square side: the view's bounds cut the excess off.
+        float r = clip.radius;
+        int grow = Math.round(r);
+        if (r > 0f) {
+            if (clip.topLeft == 0f && clip.topRight == 0f) rect[1] -= grow;
+            else if (clip.bottomLeft == 0f && clip.bottomRight == 0f) rect[3] += grow;
+            if (clip.topLeft == 0f && clip.bottomLeft == 0f) rect[0] -= grow;
+            else if (clip.topRight == 0f && clip.bottomRight == 0f) rect[2] += grow;
+        }
+        outline.setRoundRect(rect[0], rect[1], rect[2], rect[3], r);
     }
 
     private static boolean sameClip(@Nullable LiveChromeShape.Clip a,
@@ -94,6 +104,7 @@ public final class ChromeShapeOutlineProvider extends ViewOutlineProvider {
         if (a == null || b == null) return false;
         return a.reachLeft == b.reachLeft && a.reachTop == b.reachTop
             && a.reachRight == b.reachRight && a.reachBottom == b.reachBottom
-            && a.radius == b.radius;
+            && a.topLeft == b.topLeft && a.topRight == b.topRight
+            && a.bottomRight == b.bottomRight && a.bottomLeft == b.bottomLeft;
     }
 }
