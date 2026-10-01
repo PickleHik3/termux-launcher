@@ -254,4 +254,40 @@ public class LiveChromeShapeTest {
             }
         }
     }
+    @Test
+    public void theStatusBarSpansTheWholeWidthAgainAfterAFloatingRoundTrip() {
+        // Floating is inset by Margin and clipped at Corners; Docked is the whole width again,
+        // with nothing of the Floating card left in its clip.
+        PlaceLayout layout = bottomStack();
+        Piece floating = shape(layout, LayoutStyle.FLOATING).piece(PieceId.STATUS);
+        assertEquals(MARGIN, floating.box.left, D);
+        assertEquals(400f - MARGIN, floating.box.right, D);
+
+        ChromeShape docked = shape(layout, LayoutStyle.DOCKED);
+        Piece status = docked.piece(PieceId.STATUS);
+        assertEquals(0f, status.box.left, D);
+        assertEquals(400f, status.box.right, D);
+        LiveChromeShape.Clip clip = LiveChromeShape.outlineOf(docked,
+            Collections.singletonList(PieceId.STATUS));
+        int[] rect = new int[4];
+        ChromeShapeOutlineProvider.cardRect(clip, 400, 40, rect);
+        assertEquals(0, rect[0]);
+        assertEquals(400, rect[2]);
+    }
+
+    @Test
+    public void everyChromeViewReachesTheFullWidthUnderDockedWhateverStyleCameBefore() {
+        // The dock rows and the keyboard are the same slice of the frame: no side reach.
+        for (PlaceLayout layout : new PlaceLayout[] {bottomStack(), sideBars()}) {
+            shape(layout, LayoutStyle.FLOATING);
+            ChromeShape docked = shape(layout, LayoutStyle.DOCKED);
+            for (PieceId id : new PieceId[] {PieceId.STATUS, PieceId.EXTRA_KEYS}) {
+                LiveChromeShape.Clip clip = LiveChromeShape.outlineOf(docked,
+                    Collections.singletonList(id));
+                assertNotNull(id.toString(), clip);
+                assertEquals(id + " left", 0, clip.reachLeft);
+                assertEquals(id + " right", 0, clip.reachRight);
+            }
+        }
+    }
 }

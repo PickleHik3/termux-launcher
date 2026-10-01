@@ -4506,14 +4506,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
         int width = root != null && root.getWidth() > 0 ? root.getWidth() : metrics.widthPixels;
         int height = root != null && root.getHeight() > 0 ? root.getHeight() : metrics.heightPixels;
-        boolean keyboardUp = mKeyboardGeometry.lastImeVisible() || isImeVisible();
+        // The keyboard the chrome stands around is the in-app one. The system IME never raises
+        // it, so asking that left the keyboard out of the shape: no piece, so no card, rim or
+        // radius of its own for the host to read.
+        boolean keyboardUp = isInAppKeyboardShown();
         PlaceLayout layout = stored.withKeyboardShown(keyboardUp);
         float status = chromeThicknessPx(Element.STATUS, layout);
         float apps = chromeThicknessPx(Element.APPS, layout);
         float az = chromeThicknessPx(Element.AZ, layout);
         float keys = chromeThicknessPx(Element.EXTRA_KEYS, layout);
         View keyboardHost = findViewById(R.id.inapp_keyboard_view_host);
-        float keyboard = keyboardUp && keyboardHost != null ? keyboardHost.getHeight() : 0f;
+        // Before its first layout the host has no height yet: the last measure stands in, so the
+        // piece is not a zero-height one whose radius clamps to nothing.
+        float keyboard = keyboardUp && keyboardHost != null
+            ? (keyboardHost.getHeight() > 0 ? keyboardHost.getHeight()
+                : mKeyboardGeometry.desiredHeightPx()) : 0f;
         return com.termux.app.chrome.LiveChromeShape.of(layout,
             mPreferences == null ? TermuxAppSharedPreferences.LayoutStyle.DOCKED
                 : mPreferences.getLayoutStyle(), width, height,
@@ -4814,6 +4821,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             chromeClipOf(com.termux.app.place.ChromeShape.PieceId.STATUS));
         if (host.getOutlineProvider() != mStatusBarSurfaceOutline)
             host.setOutlineProvider(mStatusBarSurfaceOutline);
+        // The host draws no background, so nothing else rebuilds its outline when the layout pass
+        // after a Style change resizes it: follow the size, or the card's width outlives the Style.
+        mStatusBarSurfaceOutline.follow(host);
         host.setClipToOutline(mStatusBarSurfaceOutline.clipsCorners());
         if (changed || host.getOutlineProvider() == mStatusBarSurfaceOutline)
             host.invalidateOutline();
@@ -4991,6 +5001,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.chrome.LiveChromeShape.outlineOf(chromeShape(), ids));
                 if (surface.getOutlineProvider() != mDockOutline)
                     surface.setOutlineProvider(mDockOutline);
+                mDockOutline.follow(surface);
                 else if (changed)
                     surface.invalidateOutline();
                 surface.setClipToOutline(mDockOutline.clipsCorners());
@@ -6001,6 +6012,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : chromeClipOf(com.termux.app.place.ChromeShape.PieceId.KEYBOARD));
         if (surfaceHost.getOutlineProvider() != mKeyboardOutline)
             surfaceHost.setOutlineProvider(mKeyboardOutline);
+        mKeyboardOutline.follow(surfaceHost);
         else if (changed)
             surfaceHost.invalidateOutline();
         surfaceHost.setClipToOutline(true);
@@ -9048,6 +9060,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (glass == null) return;
         outline.setClip(com.termux.app.chrome.LiveChromeShape.outlineOf(shape, pieces));
         if (glass.getOutlineProvider() != outline) glass.setOutlineProvider(outline);
+        outline.follow(glass);
         glass.setClipToOutline(outline.clipsCorners());
         glass.invalidateOutline();
     }
@@ -19822,6 +19835,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : chromeClipOf(com.termux.app.place.ChromeShape.PieceId.STATUS));
                 if (host.getOutlineProvider() != mStatusBarSurfaceOutline)
                     host.setOutlineProvider(mStatusBarSurfaceOutline);
+                mStatusBarSurfaceOutline.follow(host);
                 host.setClipToOutline(mStatusBarSurfaceOutline.clipsCorners());
             }
             host.invalidateOutline();
