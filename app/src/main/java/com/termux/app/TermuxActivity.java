@@ -5001,9 +5001,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.chrome.LiveChromeShape.outlineOf(chromeShape(), ids));
                 if (surface.getOutlineProvider() != mDockOutline)
                     surface.setOutlineProvider(mDockOutline);
-                mDockOutline.follow(surface);
                 else if (changed)
                     surface.invalidateOutline();
+                mDockOutline.follow(surface);
                 surface.setClipToOutline(mDockOutline.clipsCorners());
             }
             return;
@@ -6012,9 +6012,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : chromeClipOf(com.termux.app.place.ChromeShape.PieceId.KEYBOARD));
         if (surfaceHost.getOutlineProvider() != mKeyboardOutline)
             surfaceHost.setOutlineProvider(mKeyboardOutline);
-        mKeyboardOutline.follow(surfaceHost);
         else if (changed)
             surfaceHost.invalidateOutline();
+        mKeyboardOutline.follow(surfaceHost);
         surfaceHost.setClipToOutline(true);
     }
 
