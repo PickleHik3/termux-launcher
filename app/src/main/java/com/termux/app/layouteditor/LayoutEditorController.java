@@ -26,10 +26,14 @@ import com.google.android.material.shape.ShapeAppearanceModel;
 import com.termux.R;
 import com.termux.app.fragments.settings.LayoutCanvasView;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
+import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -49,8 +53,10 @@ import java.util.Locale;
  * session when the editor opens ({@link #begin}), and asks it for its share of the editor's one
  * dirty state, one Undo and one Done ({@link #isDirty}, {@link #revert}, {@link #end}).
  *
- * <p>The canvas is the whole of Layout mode; there are no rows under it. A bar is dragged by its
- * grip to an edge, or into the tray in the bottom area to put it away. A tap selects an element:
+ * <p>The canvas is the whole of Layout mode; there are no rows under it. A bar is pressed anywhere
+ * and moved past the touch slop to lift it, and dropped on an edge, or into the tray in the bottom
+ * area to put it away; while it hovers a target it takes the shape the shape model says it would
+ * have there. A tap selects an element:
  * one outline, and on the dock, the keyboard and Home's grid a handle that resizes it — the dock's
  * height, the keyboard's height and its chin, the grid's cells — with a readout in real units
  * while it is held. The keyboard, selected, shows its three type chips beside it, and is dropped
@@ -94,11 +100,36 @@ public final class LayoutEditorController {
         int themeColor(int attr, int fallbackRes);
 
         /**
-         * The dock's corner radius in dp, as the dock draws it: what the canvas's cards are
-         * rounded from, scaled to the picture, so they read as the surfaces they stand for.
+         * Not read any more: the canvas's corners are the shape model's, from the user's Corners
+         * ({@link LayoutEditorController#setShape}), not the dock's own radius.
          */
         default float dockCornerRadiusDp() {
-            return LayoutCanvasView.DEFAULT_DOCK_RADIUS_DP;
+            return 0f;
+        }
+
+        /**
+         * How many pinned apps the dock holds, which is how many symbols the canvas's dock draws;
+         * or -1 where that cannot be read, which draws the pack's own seven. The default reads the
+         * launcher's pinned items; a host may answer from what it already has.
+         */
+        default int pinnedAppCount() {
+            try {
+                TermuxAppSharedPreferences preferences =
+                    TermuxAppSharedPreferences.build(context(), false);
+                return preferences == null ? -1
+                    : new LauncherConfigRepository(preferences).loadPinnedItems().size();
+            } catch (RuntimeException e) {
+                return -1;
+            }
+        }
+
+        /**
+         * How many keys the extra-keys bar holds in its first row, which is how many glyphs the
+         * canvas's extra-keys bar draws; or -1 where the host does not know, which draws the
+         * pack's seven. Only the activity has the parsed {@code extra-keys} property.
+         */
+        default int extraKeyCount() {
+            return -1;
         }
 
         /**
@@ -157,6 +188,13 @@ public final class LayoutEditorController {
     @Nullable private Runnable mOnChanged;
     /** True while a toggle or a chip group is being restated from the plan, so it writes nothing. */
     private boolean mRestatingToggle;
+    /** The Style of the whole chrome, and the user's Corners and Margin in dp, which the canvas draws. */
+    @NonNull private LayoutStyle mStyle = LayoutStyle.parse(TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_STYLE);
+    private float mCornersDp = TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS;
+    private float mMarginDp = TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP;
+    /** How many pinned apps and extra keys the canvas draws symbols for, read when a session opens. */
+    private int mPinnedAppCount = -1;
+    private int mExtraKeyCount = -1;
     /** The handle a finger is on, whose readout a late measurement may restate; or null. */
     @Nullable private LayoutCanvasView.Handle mHeldHandle;
     /** What the tray's chips were built for, so they are rebuilt only when that changes. */
@@ -186,6 +224,20 @@ public final class LayoutEditorController {
     @VisibleForTesting
     public PlaceOrientation shownOrientation() {
         return mPlan == null ? null : mPlan.shownOrientation();
+    }
+
+    /**
+     * The Style of the whole chrome and the user's Corners and Margin, in dp, which the layout
+     * canvas draws every shape from. The editor that owns those controls tells it on every change;
+     * a change of Style makes the canvas morph from one shape to the other.
+     */
+    public void setShape(@NonNull LayoutStyle style, float cornersDp, float marginDp) {
+        mStyle = style;
+        mCornersDp = cornersDp;
+        mMarginDp = marginDp;
+        Views views = mViews;
+        if (views != null)
+            views.canvas.setShape(style, cornersDp, marginDp);
     }
 
     /** The host's hook for "something may have moved": its Undo and its dirty state. */
@@ -221,8 +273,13 @@ public final class LayoutEditorController {
         if (places == null)
             return false;
         PaneWallPage target = place != null ? place : mHost.placeOnScreen();
-        if (mPlan == null) mPlan = LayoutEditorPlan.enter(places, target, mHost.placeOrientation());
-        else mPlan.showPlace(target);
+        if (mPlan == null) {
+            mPlan = LayoutEditorPlan.enter(places, target, mHost.placeOrientation());
+            mPinnedAppCount = mHost.pinnedAppCount();
+            mExtraKeyCount = mHost.extraKeyCount();
+        } else {
+            mPlan.showPlace(target);
+        }
         mHost.holdPaneWallOnPlace(target, true);
         sync();
         return true;
@@ -428,7 +485,8 @@ public final class LayoutEditorController {
         views.orientation.check(plan.shownOrientation() == PlaceOrientation.LANDSCAPE
             ? R.id.layout_editor_orientation_landscape : R.id.layout_editor_orientation_portrait);
         mRestatingToggle = false;
-        views.canvas.setDockCornerRadiusDp(mHost.dockCornerRadiusDp());
+        views.canvas.setShape(mStyle, mCornersDp, mMarginDp);
+        views.canvas.setSlotCounts(mPinnedAppCount, mExtraKeyCount);
         views.canvas.setSizes(plan.dockHeightScale(), plan.keyboardHeightScale(),
             plan.keyboardChinDp());
         // The status bar's collapsed/expanded state is a per-orientation key the status swipe

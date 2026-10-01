@@ -72,8 +72,10 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
  * at Custom saves the Custom look, so its stop comes back.</p>
  *
  * <p>Layout mode's bottom area carries what no Look sets: the Style toggle and the global Corners
- * and Margin (SPEC §3.5). They write through like every other control, and the one Undo, dirty
- * state and Discard cover them.</p>
+ * and Margin (SPEC §3.5). Corners and Margin are Floating's and are hidden under Docked, which
+ * spends neither (SPEC §3.7). They write through like every other control, and the one Undo, dirty
+ * state and Discard cover them. The layout canvas is told the Style, Corners and Margin and draws
+ * every shape from the shape model.</p>
  *
  * <p>Everything writes through to preferences live, so the frame is the real thing; Undo and
  * Discard put back the state at open ({@link AppearanceSnapshot}) and the arrangement at open
@@ -258,7 +260,10 @@ public final class SurfaceEditorController {
     public void enterLayout(@Nullable PaneWallPage place) {
         if (mOpen) {
             LayoutEditorController layout = mHost.layoutEditor();
-            if (layout != null) layout.begin(place);
+            if (layout != null) {
+                pushLayoutShape(layout);
+                layout.begin(place);
+            }
             if (mFramed) setLayoutMode(true, true);
             else mOpenInLayout = true;
             return;
@@ -334,6 +339,9 @@ public final class SurfaceEditorController {
         if (layout != null) {
             attachLayoutViews(content, layout);
             layout.setOnChangedListener(this::syncDirty);
+            // The canvas draws its first frame under the Style and the Corners and Margin the
+            // user already has.
+            pushLayoutShape(layout);
             layout.begin(place);
         }
 
@@ -474,7 +482,10 @@ public final class SurfaceEditorController {
         if (layout) {
             dismissClockDropdown();
             positionLayoutFrame();
-            if (editor != null) editor.sync();
+            if (editor != null) {
+                pushLayoutShape(editor);
+                editor.sync();
+            }
         } else {
             positionTargets();
         }
@@ -844,10 +855,13 @@ public final class SurfaceEditorController {
             // Style belongs to no Look: it never moves the slider.
             prefs.setAppLauncherDockStyle(style);
             applyStructuralPreview();
-            // Margin reads the side gap Floating spends it on, or the terminal's own margin.
+            // Corners and Margin are Floating's: shown under it, hidden (their room kept) under
+            // Docked. Margin reads the side gap Floating spends it on.
+            if (mPanel != null)
+                mPanel.setFloating(floating);
             syncLayoutControls();
-            // The canvas learns docked or floating from the dock's corner, which the activity
-            // resolves from the stored style: written above, so it is current here.
+            // The canvas is told the new Style and morphs from the shape it stood in to the new
+            // one (or jumps, with reduced motion).
             syncLayoutCanvas();
             syncDirty();
         }
@@ -1071,13 +1085,29 @@ public final class SurfaceEditorController {
     }
 
     /**
-     * The layout canvas re-read, while it is showing: it draws the dock at the dock's own corner,
-     * which is how it tells docked from floating, and Corners moves that corner.
+     * The layout canvas re-read, while it is showing: it draws every shape from the shape model,
+     * asked under the stored Style with the user's Corners and Margin ({@link #pushLayoutShape}).
      */
     private void syncLayoutCanvas() {
         LayoutEditorController layout = mHost.layoutEditor();
-        if (mOpen && mLayoutMode && layout != null)
+        if (mOpen && mLayoutMode && layout != null) {
+            pushLayoutShape(layout);
             layout.sync();
+        }
+    }
+
+    /**
+     * Tells Layout mode the Style, Corners and Margin it draws its shapes from, as preferences
+     * hold them now. Margin is the side gap Floating spends; Docked spends none, so the canvas
+     * reads it only under Floating.
+     */
+    private void pushLayoutShape(@NonNull LayoutEditorController layout) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        layout.setShape(prefs.getLayoutStyle(),
+            AppearanceLooks.cornersDp(prefs.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS)),
+            AppearanceLooks.marginDp(prefs.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP)));
     }
 
     /** Soft wallpaper: its fixed dim under whatever Dim adds, and its fixed blur. */

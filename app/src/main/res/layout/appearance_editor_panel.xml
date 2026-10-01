@@ -92,7 +92,9 @@
          toggle (docked / floating, which belongs to no Look) and the tray. The tray is also the
          drop target a lifted bar is put away in: LayoutEditorController hands the canvas this
          view's rect, and swaps the chips for "Drop here to hide" while a bar is up. Second: the
-         global Corners and Margin, which no Look sets either (SPEC §3.5). -->
+         global Corners and Margin, which no Look sets either (SPEC §3.5). They are Floating's:
+         AppearanceEditorPanel.setFloating makes them invisible, not gone, under Docked, so the
+         card keeps its height when Style flips. -->
     <LinearLayout
         android:id="@+id/appearance_editor_layout_row"
         android:layout_width="match_parent"

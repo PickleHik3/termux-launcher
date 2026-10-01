@@ -25,7 +25,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Where a bar lifted off the Layout editor's miniature may be dropped: every bar, both
+ * Where a bar lifted off the layout canvas may be dropped: every bar, both
  * orientations, and both states of the pinned apps row, which is what decides whether the
  * A&#8211;Z index has an edge of its own to be dragged to at all.
  *
@@ -146,7 +146,7 @@ public class MiniatureDragPolicyTest {
 
     @Test
     public void aHiddenAzIndexUnderThePinnedAppsComesBackToAnyEdge() {
-        // Its chip in the tray is lifted by the same grip as any other and lands wherever it is
+        // Its chip in the tray is lifted like any other bar and lands wherever it is
         // dropped; the bottom is simply where it rejoins the row.
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             Targets hidden = targets(Bar.AZ_INDEX, orientation, layout(RowPlacement.BOTTOM, false));
@@ -171,7 +171,7 @@ public class MiniatureDragPolicyTest {
 
     @Test
     public void anAlreadyHiddenAzIndexIsOfferedTheSameEdgesItWouldStandOn() {
-        // A chip in the tray is lifted by the same grip and dropped on the same slots; the stored
+        // A chip in the tray is lifted like any bar and dropped on the same slots; the stored
         // shown/hidden switch is not what decides where it may go.
         Targets hidden = targets(Bar.AZ_INDEX, PlaceOrientation.LANDSCAPE,
             layout(RowPlacement.HIDDEN, false));

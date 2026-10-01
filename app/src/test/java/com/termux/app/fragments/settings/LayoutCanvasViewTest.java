@@ -1,5 +1,6 @@
 package com.termux.app.fragments.settings;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -10,11 +11,15 @@ import static org.junit.Assert.assertTrue;
 import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.RectF;
 import android.os.Build;
+import android.provider.Settings;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -22,6 +27,14 @@ import androidx.core.content.ContextCompat;
 
 import com.termux.R;
 import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.place.ChromeShape;
+import com.termux.app.place.ChromeShape.Box;
+import com.termux.app.place.ChromeShape.Card;
+import com.termux.app.place.ChromeShape.Corners;
+import com.termux.app.place.ChromeShape.Pane;
+import com.termux.app.place.ChromeShape.Piece;
+import com.termux.app.place.ChromeShape.PieceId;
+import com.termux.app.place.ChromeShapeModel;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -33,6 +46,7 @@ import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.Slot;
 import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -40,7 +54,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
-/** The Layout page's miniature follows the rows: a new arrangement at the same size redraws. */
+/** The layout canvas follows the rows: a new arrangement at the same size redraws. */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class LayoutCanvasViewTest {
@@ -306,9 +320,7 @@ public class LayoutCanvasViewTest {
             RowPlacement.BOTTOM), PlaceOrientation.LANDSCAPE);
         view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
 
-        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
-        assertNotNull(grip);
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        lift(view, LayoutCanvasView.Block.APPS_ROW);
         MiniatureDragPolicy.Slot top = view.slotFor(Edge.TOP);
         assertNotNull("the top edge is offered", top);
         touch(view, MotionEvent.ACTION_MOVE, top.centerX(), top.centerY());
@@ -454,7 +466,7 @@ public class LayoutCanvasViewTest {
         assertTrue("and the index above those", az.bottom <= keys.top + 0.5f);
     }
 
-    // ---- Grips, slots and the drag -------------------------------------------------------------
+    // ---- Lifting, slots and the drag -----------------------------------------------------------
 
     private static LayoutCanvasView inParent(ScrollingParent parent, int width, int height) {
         LayoutCanvasView view = new LayoutCanvasView(parent.getContext());
@@ -475,7 +487,24 @@ public class LayoutCanvasViewTest {
         event.recycle();
     }
 
-    /** Writes a drop the way the Layout editor does, for one miniature's orientation. */
+    /** How far a finger has to travel before the bar under it is lifted rather than tapped. */
+    private static float slop(LayoutCanvasView view) {
+        return ViewConfiguration.get(view.getContext()).getScaledTouchSlop();
+    }
+
+    /**
+     * Lifts a bar the way a finger does now that bars carry no grip: pressed anywhere on it, in
+     * the middle here, and moved past the touch slop.
+     */
+    private static void lift(LayoutCanvasView view, LayoutCanvasView.Block bar) {
+        RectF rect = bar == LayoutCanvasView.Block.KEYBOARD ? view.keyboardRect()
+            : view.blockRect(bar);
+        assertNotNull("a bar to press: " + bar, rect);
+        touch(view, MotionEvent.ACTION_DOWN, rect.centerX(), rect.centerY());
+        touch(view, MotionEvent.ACTION_MOVE, rect.centerX(), rect.centerY() + 3f * slop(view));
+    }
+
+    /** Writes a drop the way the Layout editor does, for one canvas's orientation. */
     private static LayoutCanvasView.OnBarDroppedListener writer(
         PlaceLayoutStore places, PlaceOrientation orientation) {
         return (bar, edge, index) -> {
@@ -501,31 +530,39 @@ public class LayoutCanvasViewTest {
     }
 
     @Test
-    public void everyBarWithAPlacementCarriesAGripAndNothingElseDoes() {
-        LayoutCanvasView view = sized();
-        view.setLegendVisible(false);
-        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
-            PlaceOrientation.PORTRAIT);
+    public void everyBarWithAPlacementIsLiftedFromAnywhereOnItAndNothingElseIs() {
         for (LayoutCanvasView.Block bar : new LayoutCanvasView.Block[]{
             LayoutCanvasView.Block.STATUS_BAR, LayoutCanvasView.Block.APPS_ROW,
             LayoutCanvasView.Block.ALPHABETS_ROW, LayoutCanvasView.Block.EXTRA_KEYS}) {
-            RectF grip = view.gripRect(bar);
-            assertNotNull("grip for " + bar, grip);
+            LayoutCanvasView view = inParent(parent(), 1000, 400);
+            view.setLegendVisible(false);
+            view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+                PlaceOrientation.PORTRAIT);
             RectF band = view.blockRect(bar);
             assertNotNull(band);
-            assertTrue("the grip rides inside its own band",
-                band.contains(grip.centerX(), grip.centerY()));
+            // Any point of the band will do, its corner as much as its middle.
+            touch(view, MotionEvent.ACTION_DOWN, band.left + 1f, band.top + 1f);
+            touch(view, MotionEvent.ACTION_MOVE, band.left + 1f, band.top + 1f + 3f * slop(view));
+            assertEquals("lifted: " + bar, bar, view.draggedBar());
         }
-        assertNull("the terminal has no placement to drag",
-            view.gripRect(LayoutCanvasView.Block.CANVAS));
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.PORTRAIT);
+        RectF canvas = view.blockRect(LayoutCanvasView.Block.CANVAS);
+        assertNotNull(canvas);
+        touch(view, MotionEvent.ACTION_DOWN, canvas.centerX(), canvas.centerY());
+        touch(view, MotionEvent.ACTION_MOVE, canvas.centerX(),
+            canvas.centerY() + 3f * slop(view));
+        assertNull("the terminal has no placement to drag", view.draggedBar());
     }
 
     /**
      * A hidden bar is listed for the tray, where the editor stands a real chip for it that brings
-     * it back on a tap; the canvas itself draws nothing for it and gives it no grip.
+     * it back on a tap; the canvas itself draws nothing for it and there is nothing to lift.
      */
     @Test
-    public void aHiddenBarIsListedForTheTrayAndHasNoGripOnThePhone() {
+    public void aHiddenBarIsListedForTheTrayAndIsNotOnThePhone() {
         LayoutCanvasView view = sized();
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
@@ -536,32 +573,12 @@ public class LayoutCanvasViewTest {
             view.hiddenBlocks().contains(LayoutCanvasView.Block.APPS_ROW));
         assertFalse("a bar on the phone is not",
             view.hiddenBlocks().contains(LayoutCanvasView.Block.EXTRA_KEYS));
-        assertNull(view.gripRect(LayoutCanvasView.Block.APPS_ROW));
         RectF frame = view.frameRect();
         assertTrue("the tray stands under the phone", view.trayRect().top >= frame.bottom);
     }
 
     @Test
-    public void aTouchOnAGripLiftsTheBarAtOnceAndStopsTheListScrolling() {
-        ScrollingParent parent = parent();
-        LayoutCanvasView view = inParent(parent, 1000, 400);
-        view.setLegendVisible(false);
-        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
-            PlaceOrientation.LANDSCAPE);
-
-        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
-        assertNotNull(grip);
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
-        assertEquals("no long press: the bar is up on touch-down",
-            LayoutCanvasView.Block.APPS_ROW, view.draggedBar());
-        assertTrue("the preference list is told to keep out", parent.disallowedIntercept);
-        assertNotNull("landscape offers a column down the left", view.slotFor(Edge.LEFT));
-        assertNotNull(view.slotFor(Edge.RIGHT));
-        assertNotNull("every bar stands on every edge now", view.slotFor(Edge.TOP));
-    }
-
-    @Test
-    public void aTouchOffTheGripsLiftsNothingAndLeavesTheListAlone() {
+    public void aPressAndAMovePastTheSlopLiftsTheBarAndStopsTheListScrolling() {
         ScrollingParent parent = parent();
         LayoutCanvasView view = inParent(parent, 1000, 400);
         view.setLegendVisible(false);
@@ -570,9 +587,32 @@ public class LayoutCanvasViewTest {
 
         RectF band = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(band);
+        touch(view, MotionEvent.ACTION_DOWN, band.centerX(), band.centerY());
+        assertNull("a press alone lifts nothing", view.draggedBar());
+        touch(view, MotionEvent.ACTION_MOVE, band.centerX(), band.centerY() + slop(view) / 2f);
+        assertNull("nor does a move inside the slop", view.draggedBar());
+        touch(view, MotionEvent.ACTION_MOVE, band.centerX(), band.centerY() + 3f * slop(view));
+        assertEquals("past the slop the bar is up", LayoutCanvasView.Block.APPS_ROW,
+            view.draggedBar());
+        assertTrue("the preference list is told to keep out", parent.disallowedIntercept);
+        assertNotNull("landscape offers a column down the left", view.slotFor(Edge.LEFT));
+        assertNotNull(view.slotFor(Edge.RIGHT));
+        assertNotNull("every bar stands on every edge now", view.slotFor(Edge.TOP));
+    }
+
+    @Test
+    public void aTapOnABarLiftsNothingAndSelectsIt() {
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+
+        RectF band = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        assertNotNull(band);
         touch(view, MotionEvent.ACTION_DOWN, band.left + 2f, band.centerY());
-        assertNull("a tap on the band is still a tap", view.draggedBar());
-        assertFalse("so the list keeps its own scroll", parent.disallowedIntercept);
+        touch(view, MotionEvent.ACTION_UP, band.left + 2f, band.centerY());
+        assertNull("a tap on the band is a tap", view.draggedBar());
+        assertEquals("which selects it", LayoutCanvasView.Block.APPS_ROW, view.selectedBlock());
         assertTrue("and nothing is outlined", view.slots().isEmpty());
     }
 
@@ -585,9 +625,7 @@ public class LayoutCanvasViewTest {
             PlaceOrientation.LANDSCAPE);
         landscape.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
 
-        RectF grip = landscape.gripRect(LayoutCanvasView.Block.APPS_ROW);
-        assertNotNull(grip);
-        touch(landscape, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        lift(landscape, LayoutCanvasView.Block.APPS_ROW);
         MiniatureDragPolicy.Slot slot = landscape.slotFor(Edge.LEFT);
         assertNotNull(slot);
         touch(landscape, MotionEvent.ACTION_MOVE, slot.centerX(), slot.centerY());
@@ -598,15 +636,13 @@ public class LayoutCanvasViewTest {
         assertNull("portrait was not touched",
             prefs().getString("layout.portrait.apps_row", null));
 
-        // The same drag on the portrait miniature writes portrait's own key.
+        // The same drag on the portrait canvas writes portrait's own key.
         LayoutCanvasView portrait = inParent(parent(), 1000, 400);
         portrait.setLegendVisible(false);
         portrait.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
         portrait.setOnBarDroppedListener(writer(places, PlaceOrientation.PORTRAIT));
-        RectF portraitGrip = portrait.gripRect(LayoutCanvasView.Block.APPS_ROW);
-        assertNotNull(portraitGrip);
-        touch(portrait, MotionEvent.ACTION_DOWN, portraitGrip.centerX(), portraitGrip.centerY());
+        lift(portrait, LayoutCanvasView.Block.APPS_ROW);
         assertNotNull("portrait offers the side columns too", portrait.slotFor(Edge.LEFT));
         RectF tray = portrait.trayRect();
         touch(portrait, MotionEvent.ACTION_MOVE, tray.centerX(), tray.centerY());
@@ -625,9 +661,7 @@ public class LayoutCanvasViewTest {
             PlaceOrientation.LANDSCAPE);
         view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
 
-        RectF grip = view.gripRect(LayoutCanvasView.Block.EXTRA_KEYS);
-        assertNotNull(grip);
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        lift(view, LayoutCanvasView.Block.EXTRA_KEYS);
         // The middle of the canvas is inside no slot at all.
         RectF canvas = view.blockRect(LayoutCanvasView.Block.CANVAS);
         assertNotNull(canvas);
@@ -649,9 +683,7 @@ public class LayoutCanvasViewTest {
             PlaceOrientation.LANDSCAPE);
         view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
 
-        RectF grip = view.gripRect(LayoutCanvasView.Block.STATUS_BAR);
-        assertNotNull(grip);
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        lift(view, LayoutCanvasView.Block.STATUS_BAR);
         assertNotNull("it may stand on any edge", view.slotFor(Edge.TOP));
         assertNotNull(view.slotFor(Edge.LEFT));
         boolean tray = false;
@@ -807,9 +839,7 @@ public class LayoutCanvasViewTest {
             PlaceOrientation.LANDSCAPE);
         view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
 
-        RectF grip = view.gripRect(LayoutCanvasView.Block.ALPHABETS_ROW);
-        assertNotNull(grip);
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        lift(view, LayoutCanvasView.Block.ALPHABETS_ROW);
         // Riding is the two of them sharing an edge, so the index may be lifted off the row onto
         // any other — and the tray is still there for putting it away.
         assertNotNull("every edge is a target", view.slotFor(Edge.LEFT));
@@ -827,9 +857,7 @@ public class LayoutCanvasViewTest {
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
 
-        RectF grip = view.gripRect(LayoutCanvasView.Block.EXTRA_KEYS);
-        assertNotNull(grip);
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        lift(view, LayoutCanvasView.Block.EXTRA_KEYS);
         // The bottom keeps the A-Z index and the pinned apps while the keys are in the air: a gap
         // outside the index, one between it and the apps row, and one against the canvas.
         assertNotNull(view.slotFor(Edge.BOTTOM, 0));
@@ -863,9 +891,7 @@ public class LayoutCanvasViewTest {
 
         // The pinned apps lifted off the innermost band of the bottom and dropped against the
         // screen edge: every band down there is renumbered, not only the one that moved.
-        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
-        assertNotNull(grip);
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        lift(view, LayoutCanvasView.Block.APPS_ROW);
         MiniatureDragPolicy.Slot outermost = view.slotFor(Edge.BOTTOM, 0);
         assertNotNull(outermost);
         touch(view, MotionEvent.ACTION_MOVE, outermost.centerX(), outermost.centerY());
@@ -892,9 +918,8 @@ public class LayoutCanvasViewTest {
     @Test
     public void aSideColumnStandsBetweenTheRowsTheWayTheScreenDoes() {
         // The defect: the columns were claimed before the bottom rows, so a rail ran the whole
-        // height of the phone — past the dock and into its corner, taking the grip that lifts it
-        // down there — while the dock's rows were narrowed by it. The screen has done neither
-        // since the canvas band.
+        // height of the phone — past the dock and into its corner — while the dock's rows were
+        // narrowed by it. The screen has done neither since the canvas band.
         LayoutCanvasView view = sized();
         view.setLegendVisible(false);
         view.setLayout(appsOnTheLeft(), PlaceOrientation.PORTRAIT);
@@ -911,22 +936,18 @@ public class LayoutCanvasViewTest {
     }
 
     @Test
-    public void aSideColumnCarriesItsGripInsideItselfAndLiftsFromRightAcrossIt() {
+    public void aSideColumnIsLiftedFromAnywhereAcrossIt() {
         ScrollingParent parent = parent();
         LayoutCanvasView view = inParent(parent, 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(appsOnTheLeft(), PlaceOrientation.PORTRAIT);
 
         RectF column = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
-        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(column);
-        assertNotNull(grip);
-        assertTrue("the grip rides inside the column it lifts",
-            column.contains(grip.centerX(), grip.centerY()));
-
-        // A column the picture draws is a few dp wide; the grip has to be the width of the band
-        // rather than of the glyph, or no fingertip lands on it.
-        touch(view, MotionEvent.ACTION_DOWN, column.centerX(), grip.centerY());
+        // A column the picture draws is a few dp wide: pressed at its middle, moved along it.
+        touch(view, MotionEvent.ACTION_DOWN, column.centerX(), column.centerY());
+        touch(view, MotionEvent.ACTION_MOVE, column.centerX(),
+            column.centerY() + 3f * slop(view));
         assertEquals(LayoutCanvasView.Block.APPS_ROW, view.draggedBar());
         assertEquals(Element.APPS,
             LayoutCanvasView.barOf(view.draggedBar()).element());
@@ -1045,27 +1066,6 @@ public class LayoutCanvasViewTest {
     }
 
     @Test
-    public void theGripSitsAtTheUpperTrailingCornerAndTakesAFingertip() {
-        LayoutCanvasView view = inParent(parent(), 1000, 400);
-        view.setLegendVisible(false);
-        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
-            PlaceOrientation.LANDSCAPE);
-        RectF band = view.blockRect(LayoutCanvasView.Block.STATUS_BAR);
-        RectF grip = view.gripRect(LayoutCanvasView.Block.STATUS_BAR);
-        assertNotNull(band);
-        assertNotNull(grip);
-        assertTrue("at the trailing end", grip.centerX() > band.centerX() + band.width() * 0.3f);
-        assertTrue("and the upper half", grip.centerY() <= band.centerY() + 1f);
-
-        // The target is the platform's 48dp around the glyph, not the glyph itself: a touch a
-        // little off the dots, across the band, still lifts the bar.
-        float density = view.getResources().getDisplayMetrics().density;
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY() + 20f * density);
-        assertEquals(LayoutCanvasView.Block.STATUS_BAR, view.draggedBar());
-        touch(view, MotionEvent.ACTION_UP, grip.centerX(), grip.centerY() + 20f * density);
-    }
-
-    @Test
     public void theShelfIsUnderThePhoneBeforeAnythingIsPutAway() {
         LayoutCanvasView view = sized();
         view.setLegendVisible(false);
@@ -1087,13 +1087,12 @@ public class LayoutCanvasViewTest {
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
-        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
-        assertNotNull(grip);
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        lift(view, LayoutCanvasView.Block.APPS_ROW);
         assertEquals("the lifted bar may be dropped on the shelf",
             LayoutCanvasView.TrayState.OFFERING, view.trayState());
 
-        touch(view, MotionEvent.ACTION_UP, grip.centerX(), grip.centerY());
+        RectF shelf = view.trayRect();
+        touch(view, MotionEvent.ACTION_UP, shelf.centerX(), shelf.centerY());
         assertEquals("and the shelf goes back to resting",
             LayoutCanvasView.TrayState.EMPTY, view.trayState());
     }
@@ -1104,9 +1103,7 @@ public class LayoutCanvasViewTest {
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
-        RectF grip = view.gripRect(LayoutCanvasView.Block.STATUS_BAR);
-        assertNotNull(grip);
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        lift(view, LayoutCanvasView.Block.STATUS_BAR);
         assertEquals("the status bar hides like the rest now",
             LayoutCanvasView.TrayState.OFFERING, view.trayState());
     }
@@ -1160,9 +1157,7 @@ public class LayoutCanvasViewTest {
             }
         });
 
-        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
-        assertNotNull(grip);
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        lift(view, LayoutCanvasView.Block.APPS_ROW);
         RectF keyboard = view.keyboardRect();
         assertNotNull(keyboard);
         MiniatureDragPolicy.Slot under = view.underKeyboardSlotFor(0);
@@ -1190,9 +1185,7 @@ public class LayoutCanvasViewTest {
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT, PaneWallPage.WIDGETS);
         assertNull(view.keyboardRect());
-        RectF grip = view.gripRect(LayoutCanvasView.Block.APPS_ROW);
-        assertNotNull(grip);
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        lift(view, LayoutCanvasView.Block.APPS_ROW);
         assertNull(view.underKeyboardSlotFor(0));
     }
 
@@ -1202,95 +1195,425 @@ public class LayoutCanvasViewTest {
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        RectF grip = view.gripRect(LayoutCanvasView.Block.STATUS_BAR);
-        assertNotNull(grip);
-        touch(view, MotionEvent.ACTION_DOWN, grip.centerX(), grip.centerY());
+        lift(view, LayoutCanvasView.Block.STATUS_BAR);
         assertNull(view.underKeyboardSlotFor(0));
     }
 
-    // ---- One radius system -----------------------------------------------------------------------
+    // ---- Every shape is the model's ------------------------------------------------------------
 
-    @Test
-    public void everyCardSharesTheRadiusUpToAHalfCapsuleOfItsOwn() {
-        assertEquals("a tall card keeps the whole radius", 14f,
-            LayoutCanvasView.cardRadiusPx(14f, 200f, 80f), 0.001f);
-        assertEquals("a thin band is a capsule", 6f,
-            LayoutCanvasView.cardRadiusPx(14f, 200f, 12f), 0.001f);
+    private static final float CORNERS_DP = 20f;
+    private static final float MARGIN_DP = 12f;
+
+    /** The pack's bottom-bars preview: status over the pane, dock, A-Z and extra keys under it. */
+    private static PlaceLayout bottomBars() {
+        return layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM, RowPlacement.BOTTOM);
     }
 
-    @Test
-    public void everyBlockWearsOneSmallCornerThatFollowsTheCanvasScale() {
-        LayoutCanvasView view = sized();
-        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
-            PlaceOrientation.PORTRAIT);
-        assertEquals("6dp at the canvas scale", 6f * view.canvasScalePx(),
-            view.surfaceRadiusPx(), 0.001f);
-        float before = view.surfaceRadiusPx();
-        view.setDockCornerRadiusDp(LayoutCanvasView.DEFAULT_DOCK_RADIUS_DP * 2f);
-        assertEquals("the dock's Corners control no longer changes the blocks", before,
-            view.surfaceRadiusPx(), 0.001f);
+    /** The pack's side-bars preview: the dock as a rail, A-Z down the other side. */
+    private static PlaceLayout sideBars() {
+        return layout(Edge.TOP, RowPlacement.LEFT, true, Edge.RIGHT, RowPlacement.BOTTOM);
     }
 
-    // ---- The grip ---------------------------------------------------------------------------------
-
-    @Test
-    public void everyRowsGripStandsInTheSameSpotCentredAcrossIt() {
-        LayoutCanvasView view = sized();
+    private static LayoutCanvasView styled(LayoutStyle style, PlaceLayout arrangement) {
+        LayoutCanvasView view = sized(1000, 800);
         view.setLegendVisible(false);
-        view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
-            PlaceOrientation.PORTRAIT);
-        Float end = null;
-        for (LayoutCanvasView.Block bar : new LayoutCanvasView.Block[]{
-            LayoutCanvasView.Block.STATUS_BAR, LayoutCanvasView.Block.APPS_ROW,
-            LayoutCanvasView.Block.ALPHABETS_ROW, LayoutCanvasView.Block.EXTRA_KEYS}) {
-            RectF grip = view.gripRect(bar);
-            RectF band = view.blockRect(bar);
-            assertNotNull(grip);
-            assertNotNull(band);
-            assertEquals("centred across " + bar, band.centerY(), grip.centerY(), 0.01f);
-            assertTrue("the whole grip stays on " + bar,
-                grip.top >= band.top && grip.bottom <= band.bottom);
-            float fromEnd = band.right - grip.centerX();
-            if (end == null) end = fromEnd;
-            assertEquals("the same distance from the trailing end on " + bar, end, fromEnd, 0.01f);
+        view.setShape(style, CORNERS_DP, MARGIN_DP);
+        view.setLayout(arrangement, PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        return view;
+    }
+
+    private static LayoutCanvasView.Block blockOf(PieceId id) {
+        switch (id) {
+            case STATUS: return LayoutCanvasView.Block.STATUS_BAR;
+            case APPS: return LayoutCanvasView.Block.APPS_ROW;
+            case AZ: return LayoutCanvasView.Block.ALPHABETS_ROW;
+            case EXTRA_KEYS: return LayoutCanvasView.Block.EXTRA_KEYS;
+            default: return LayoutCanvasView.Block.KEYBOARD;
+        }
+    }
+
+    private static void assertBox(String what, Box expected, RectF frame, RectF actual) {
+        assertEquals(what + " left", expected.left + frame.left, actual.left, 0.01f);
+        assertEquals(what + " top", expected.top + frame.top, actual.top, 0.01f);
+        assertEquals(what + " right", expected.right + frame.left, actual.right, 0.01f);
+        assertEquals(what + " bottom", expected.bottom + frame.top, actual.bottom, 0.01f);
+    }
+
+    private static void assertRadii(String what, Corners expected, float[] actual) {
+        assertArrayEquals(what, expected.toRadii(), actual, 0.001f);
+    }
+
+    /**
+     * The fill, the one selection outline and the dashed placeholder are the shape model's
+     * pieces, cards and opening, for the pack's three previews: the Floating cards, and Docked
+     * with bottom bars and with side bars, composed under one frame.
+     */
+    @Test
+    public void theFillTheSelectionAndThePlaceholderAreTheModelsShapesForThePacksPreviews() {
+        Object[][] previews = {
+            {LayoutStyle.FLOATING, bottomBars()},
+            {LayoutStyle.DOCKED, bottomBars()},
+            {LayoutStyle.DOCKED, sideBars()}};
+        for (Object[] preview : previews) {
+            LayoutStyle style = (LayoutStyle) preview[0];
+            PlaceLayout arrangement = (PlaceLayout) preview[1];
+            String name = style + " " + arrangement;
+            LayoutCanvasView view = styled(style, arrangement);
+            ChromeShape shape = ChromeShapeModel.shape(view.shapeInput());
+            RectF frame = view.frameRect();
+            assertTrue(name, !shape.pieces().isEmpty());
+
+            for (Piece piece : shape.pieces()) {
+                LayoutCanvasView.Block block = blockOf(piece.id);
+                String at = name + " " + piece.id;
+                if (block != LayoutCanvasView.Block.KEYBOARD) {
+                    assertBox(at + " block", piece.box, frame, view.blockRect(block));
+                }
+                // The selection outline runs along the piece itself, at the model's corners.
+                java.util.List<LayoutCanvasView.ShapeSpec> outline = view.selectionShapes(block);
+                assertEquals(at, 1, outline.size());
+                assertBox(at + " outline", piece.box, frame, outline.get(0).box);
+                assertRadii(at + " outline", piece.corners, outline.get(0).radii);
+
+                // The fill is the card the piece is in: the Docked frame with the opening cut
+                // out of it, or the Floating card.
+                Card card = shape.cardOf(piece);
+                assertNotNull(at, card);
+                LayoutCanvasView.ShapeSpec fill = view.fillShape(block);
+                assertNotNull(at, fill);
+                assertBox(at + " fill", card.box, frame, fill.box);
+                assertRadii(at + " fill", card.corners, fill.radii);
+                if (style == LayoutStyle.DOCKED) {
+                    assertTrue(at + " is the frame", card.frame);
+                    assertBox(at + " frame", new Box(0f, 0f, frame.width(), frame.height()), frame,
+                        fill.box);
+                    assertNotNull(at + " the opening is cut out", fill.hole);
+                    assertBox(at + " hole", card.hole, frame, fill.hole);
+                } else {
+                    assertNull(at + " no opening in a card", fill.hole);
+                }
+            }
+
+            // The pane: the opening under Docked, which has no outline, or the card it is under
+            // Floating.
+            Pane pane = shape.panes().get(0);
+            LayoutCanvasView.ShapeSpec paneFill = view.fillShape(LayoutCanvasView.Block.CANVAS);
+            assertNotNull(name, paneFill);
+            assertBox(name + " pane", pane.box, frame, paneFill.box);
+            assertRadii(name + " pane", pane.corners, paneFill.radii);
+            assertBox(name + " opening", shape.opening().box, frame,
+                view.blockRect(LayoutCanvasView.Block.CANVAS));
+            assertEquals(name + " only a Floating pane wears a rim", style == LayoutStyle.FLOATING,
+                pane.drawsRim);
+
+            // The keyboard is the model's piece, whole.
+            Piece keyboard = shape.piece(PieceId.KEYBOARD);
+            assertNotNull(name, keyboard);
+            assertBox(name + " keyboard", keyboard.box, frame, view.keyboardRect());
+            assertEquals(name, 1, view.selectionShapes(LayoutCanvasView.Block.KEYBOARD).size());
         }
     }
 
     @Test
-    public void aThinBandSqueezesTheColumnOfDotsWithoutMergingThem() {
-        assertEquals("room to spare: the whole column", 7.7f,
-            LayoutCanvasView.gripHalfHeightPx(7.7f, 40f, 2f), 0.001f);
-        assertEquals("a thin band: the card less its rim", 4f,
-            LayoutCanvasView.gripHalfHeightPx(7.7f, 12f, 2f), 0.001f);
-        float radius = LayoutCanvasView.gripDotRadiusPx(2.2f, 4f);
-        assertTrue("squeezed dots shrink", radius < 2.2f);
-        assertTrue("and still stand apart", 4f - radius >= 2.4f * radius - 0.001f);
-        assertEquals("unsqueezed they keep the design's size", 2.2f,
-            LayoutCanvasView.gripDotRadiusPx(2.2f, 7.7f), 0.001f);
+    public void floatingSpendsMarginsAirAndTheUsersCornersWhileDockedSpendsNeither() {
+        LayoutCanvasView floating = styled(LayoutStyle.FLOATING, bottomBars());
+        float scale = floating.canvasScalePx();
+        RectF status = floating.blockRect(LayoutCanvasView.Block.STATUS_BAR);
+        RectF pane = floating.blockRect(LayoutCanvasView.Block.CANVAS);
+        assertEquals("Margin's air between the cards", MARGIN_DP * scale, pane.top - status.bottom,
+            0.01f);
+        assertEquals("and around them", MARGIN_DP * scale, status.left - floating.frameRect().left,
+            0.01f);
+        Pane card = floating.shape().panes().get(0);
+        assertEquals("every card wears the Corners the user set, scaled to the canvas",
+            Math.min(CORNERS_DP * scale, Math.min(card.box.width(), card.box.height()) / 2f),
+            card.corners.topLeft, 0.01f);
+        assertNotEquals("not the old fixed 6dp", 6f * scale, card.corners.topLeft, 0.01f);
+
+        LayoutCanvasView docked = styled(LayoutStyle.DOCKED, bottomBars());
+        RectF dockedStatus = docked.blockRect(LayoutCanvasView.Block.STATUS_BAR);
+        RectF dockedPane = docked.blockRect(LayoutCanvasView.Block.CANVAS);
+        assertEquals("no air between the pieces", dockedStatus.bottom, dockedPane.top, 0.01f);
+        assertEquals("flush with the screen's edge", docked.frameRect().left, dockedStatus.left,
+            0.01f);
+        // Only the frame's exposed outer corners round, at the screen's radius; every join is square.
+        float screen = docked.frameRadiusPx();
+        for (Piece piece : docked.shape().pieces()) {
+            for (float radius : piece.corners.toRadii()) {
+                assertTrue(piece.id + " rounds at the screen's radius or not at all",
+                    radius == 0f || Math.abs(radius - screen) < 0.01f);
+            }
+        }
+        Piece top = docked.shape().piece(PieceId.STATUS);
+        assertEquals("the status bar's top corners are the frame's", screen, top.corners.topLeft,
+            0.01f);
+        assertEquals("its bottom corners are a join", 0f, top.corners.bottomLeft, 0f);
     }
 
-    // ---- The keyboard's form ----------------------------------------------------------------------
-
     @Test
-    public void aFloatingKeyboardIsASmallerCardInsideItsBlock() {
-        RectF block = new RectF(0f, 300f, 200f, 380f);
-        RectF card = new RectF();
-        LayoutCanvasView.floatingKeyboardCardInto(block, card);
-        assertTrue(card.width() < block.width() && card.height() < block.height());
-        assertEquals(block.centerX(), card.centerX(), 0.001f);
-        assertEquals(block.centerY(), card.centerY(), 0.001f);
+    public void theUsersCornersAndMarginMoveTheFloatingShapesLive() {
+        LayoutCanvasView view = styled(LayoutStyle.FLOATING, bottomBars());
+        RectF before = view.blockRect(LayoutCanvasView.Block.CANVAS);
+        float scale = view.canvasScalePx();
+        view.setShape(LayoutStyle.FLOATING, 8f, 30f);
+        RectF after = view.blockRect(LayoutCanvasView.Block.CANVAS);
+        assertTrue("more Margin takes more air", after.width() < before.width());
+        assertEquals("Margin around the pane", 30f * scale, after.left - view.frameRect().left,
+            0.01f);
+        assertEquals("Corners follow the slider", 8f * scale,
+            view.shape().piece(PieceId.STATUS).corners.topLeft, 0.01f);
+        assertFalse("a slider drag is not a change of Style", view.isStyleMorphing());
+    }
+
+    // ---- A floating keyboard and a split one ------------------------------------------------------
+
+    private static PlaceLayout keyboardIn(KeyboardForm form) {
+        return new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM, KeyboardMode.RESIZE, form, 4, 5);
     }
 
     @Test
-    public void aSplitKeyboardIsTwoHalvesWithThePartingBetween() {
-        RectF block = new RectF(0f, 300f, 200f, 380f);
-        RectF left = new RectF();
-        RectF right = new RectF();
-        LayoutCanvasView.splitKeyboardHalvesInto(block, left, right);
-        assertEquals(block.left, left.left, 0.001f);
-        assertEquals(block.right, right.right, 0.001f);
-        assertTrue("a gap between the halves", right.left - left.right >= block.width() * 0.19f);
-        assertEquals(left.width(), right.width(), 0.001f);
+    public void aFloatingKeyboardIsACardOverThePaneWhichTakesNoBandOfTheBottom() {
+        LayoutCanvasView docked = styled(LayoutStyle.FLOATING, keyboardIn(KeyboardForm.DOCKED));
+        LayoutCanvasView floating =
+            styled(LayoutStyle.FLOATING, keyboardIn(KeyboardForm.FLOATING));
+        RectF dockedPane = docked.blockRect(LayoutCanvasView.Block.CANVAS);
+        RectF floatingPane = floating.blockRect(LayoutCanvasView.Block.CANVAS);
+        assertTrue("the pane keeps the room a docked keyboard would take",
+            floatingPane.height() > dockedPane.height());
+        RectF card = floating.keyboardRect();
+        assertNotNull(card);
+        assertTrue("it stands over the pane", floatingPane.contains(card));
+        assertTrue("a smaller card than the pane is wide", card.width() < floatingPane.width());
+        lift(docked, LayoutCanvasView.Block.APPS_ROW);
+        assertNotNull("a docked keyboard has a gap under it", docked.underKeyboardSlotFor(0));
+        lift(floating, LayoutCanvasView.Block.APPS_ROW);
+        assertNull("no gap stands under a keyboard that is not a band",
+            floating.underKeyboardSlotFor(0));
+        Piece piece = floating.shape().piece(PieceId.KEYBOARD);
+        assertTrue(piece.overlay);
+        assertEquals("a floating keyboard wears the user's Corners",
+            Math.min(CORNERS_DP * floating.canvasScalePx(),
+                Math.min(piece.box.width(), piece.box.height()) / 2f), piece.corners.topLeft,
+            0.01f);
+    }
+
+    @Test
+    public void aSplitKeyboardIsTwoHalvesOfTheModelWithThePartingBetween() {
+        LayoutCanvasView view = styled(LayoutStyle.FLOATING, keyboardIn(KeyboardForm.SPLIT));
+        Piece left = view.shape().piece(PieceId.KEYBOARD_LEFT);
+        Piece right = view.shape().piece(PieceId.KEYBOARD_RIGHT);
+        assertNotNull(left);
+        assertNotNull(right);
+        assertEquals("both halves are outlined", 2,
+            view.selectionShapes(LayoutCanvasView.Block.KEYBOARD).size());
+        assertTrue("a gap between the halves", right.box.left - left.box.right > 0f);
+        RectF block = view.keyboardRect();
+        assertNotNull(block);
+        assertEquals("the block is what the two halves cut", left.box.left + view.frameRect().left,
+            block.left, 0.01f);
+        assertEquals(right.box.right + view.frameRect().left, block.right, 0.01f);
+    }
+
+    // ---- The lifted copy and its placeholder -----------------------------------------------------
+
+    @Test
+    public void theLiftedCopyKeepsItsShapeUntilItHoversATargetThenTakesTheShapeItWouldHaveThere() {
+        for (LayoutStyle style : LayoutStyle.values()) {
+            LayoutCanvasView view = styled(style, bottomBars());
+            Piece own = view.shape().piece(PieceId.APPS);
+            RectF frame = view.frameRect();
+            RectF band = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+            touch(view, MotionEvent.ACTION_DOWN, band.centerX(), band.centerY());
+            touch(view, MotionEvent.ACTION_MOVE, band.centerX(), band.centerY() + 3f * slop(view));
+            // Over the middle of the pane, which is no target: the bar is as it was lifted.
+            RectF pane = view.blockRect(LayoutCanvasView.Block.CANVAS);
+            touch(view, MotionEvent.ACTION_MOVE, pane.centerX(), pane.centerY());
+            assertNull(style.toString(), view.hoveredSlot());
+            view.settleMotion();
+            LayoutCanvasView.ShapeSpec held = view.ghostShape();
+            assertNotNull(held);
+            assertEquals(style + " keeps its width", own.box.width(), held.box.width(), 0.01f);
+            assertEquals(style + " keeps its height", own.box.height(), held.box.height(), 0.01f);
+            assertRadii(style + " keeps its corners", own.corners, held.radii);
+            assertEquals(0f, view.ghostMorph(), 0f);
+
+            // Over the top edge it takes the shape the model gives a bar dropped there.
+            MiniatureDragPolicy.Slot top = view.slotFor(Edge.TOP);
+            assertNotNull(top);
+            touch(view, MotionEvent.ACTION_MOVE, top.centerX(), top.centerY());
+            MiniatureDragPolicy.Slot hovered = view.hoveredSlot();
+            assertNotNull(style.toString(), hovered);
+            assertEquals("the top edge it was moved onto", Edge.TOP, hovered.edge);
+            view.settleMotion();
+            Piece dropped = ChromeShapeModel.shapeIfDropped(view.shapeInput(), Element.APPS,
+                hovered.edge, hovered.index, hovered.underKeyboard);
+            LayoutCanvasView.ShapeSpec ghost = view.ghostShape();
+            assertNotNull(ghost);
+            assertEquals(1f, view.ghostMorph(), 0f);
+            assertEquals(style + " takes the dropped width", dropped.box.width(),
+                ghost.box.width(), 0.01f);
+            assertEquals(style + " takes the dropped height", dropped.box.height(),
+                ghost.box.height(), 0.01f);
+            assertRadii(style + " takes the dropped corners", dropped.corners, ghost.radii);
+
+            // The dashed placeholder is the same shape, where it would land.
+            java.util.List<LayoutCanvasView.ShapeSpec> placeholder = view.placeholderShapes();
+            assertEquals(1, placeholder.size());
+            assertBox(style + " placeholder", dropped.box, frame, placeholder.get(0).box);
+            assertRadii(style + " placeholder", dropped.corners, placeholder.get(0).radii);
+
+            // Off the target again, the copy changes back to the shape it was lifted with.
+            touch(view, MotionEvent.ACTION_MOVE, pane.centerX(), pane.centerY());
+            view.settleMotion();
+            assertEquals(0f, view.ghostMorph(), 0f);
+            LayoutCanvasView.ShapeSpec back = view.ghostShape();
+            assertEquals(own.box.width(), back.box.width(), 0.01f);
+            assertBox(style + " placeholder where it stood", own.box, frame,
+                view.placeholderShapes().get(0).box);
+        }
+    }
+
+    // ---- Style flips ------------------------------------------------------------------------------
+
+    @Test
+    public void flippingStyleMorphsTheCornersGapsAndJoinsOverAQuarterOfASecond() {
+        LayoutCanvasView view = styled(LayoutStyle.DOCKED, bottomBars());
+        ChromeShape docked = view.shape();
+        assertFalse("at rest", view.isStyleMorphing());
+
+        view.setShape(LayoutStyle.FLOATING, CORNERS_DP, MARGIN_DP);
+        ChromeShape floating = view.shape();
+        assertTrue("a flip morphs", view.isStyleMorphing());
+        assertEquals(250L, LayoutCanvasMorph.DURATION_MS);
+        RectF frame = view.frameRect();
+
+        view.holdMorphAt(0f);
+        assertBox("it starts as Docked", docked.piece(PieceId.STATUS).box, frame,
+            view.drawnPieceRect(PieceId.STATUS));
+        view.holdMorphAt(0.5f);
+        float eased = LayoutCanvasMorph.ease(0.5f);
+        Box from = docked.piece(PieceId.APPS).box;
+        Box to = floating.piece(PieceId.APPS).box;
+        assertBox("half way, a join has half closed", LayoutCanvasMorph.lerp(from, to, eased),
+            frame, view.drawnPieceRect(PieceId.APPS));
+        RectF mid = view.drawnPieceRect(PieceId.STATUS);
+        assertTrue("the gap around the cards is opening", mid.left > frame.left);
+        view.holdMorphAt(1f);
+        assertBox("and ends as Floating", floating.piece(PieceId.STATUS).box, frame,
+            view.drawnPieceRect(PieceId.STATUS));
+        assertFalse(view.isStyleMorphing());
+    }
+
+    @Test
+    public void withReducedMotionAFlipOfStyleJumps() {
+        Context app = RuntimeEnvironment.getApplication();
+        float was = Settings.Global.getFloat(app.getContentResolver(),
+            Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
+        Settings.Global.putFloat(app.getContentResolver(),
+            Settings.Global.ANIMATOR_DURATION_SCALE, 0f);
+        try {
+            LayoutCanvasView view = styled(LayoutStyle.DOCKED, bottomBars());
+            view.setShape(LayoutStyle.FLOATING, CORNERS_DP, MARGIN_DP);
+            assertFalse("no morph", view.isStyleMorphing());
+            assertBox("it is Floating at once", view.shape().piece(PieceId.STATUS).box,
+                view.frameRect(), view.drawnPieceRect(PieceId.STATUS));
+        } finally {
+            Settings.Global.putFloat(app.getContentResolver(),
+                Settings.Global.ANIMATOR_DURATION_SCALE, was);
+        }
+    }
+
+    @Test
+    public void theMorphBlendsPieceByPieceFromOneShapeToTheOther() {
+        LayoutCanvasView docked = styled(LayoutStyle.DOCKED, bottomBars());
+        LayoutCanvasView floating = styled(LayoutStyle.FLOATING, bottomBars());
+        ChromeShape from = docked.shape();
+        ChromeShape to = floating.shape();
+        LayoutCanvasMorph.Blend start = LayoutCanvasMorph.blend(from, to, 0f);
+        LayoutCanvasMorph.Blend end = LayoutCanvasMorph.blend(from, to, 1f);
+        LayoutCanvasMorph.Blend half = LayoutCanvasMorph.blend(from, to, 0.5f);
+        for (Piece piece : to.pieces()) {
+            assertEquals(from.piece(piece.id).box, start.piece(piece.id).box);
+            assertEquals(from.piece(piece.id).corners, start.piece(piece.id).corners);
+            assertEquals(piece.box, end.piece(piece.id).box);
+            assertEquals(piece.corners, end.piece(piece.id).corners);
+            Corners a = from.piece(piece.id).corners;
+            Corners b = piece.corners;
+            assertEquals((a.topLeft + b.topLeft) / 2f, half.piece(piece.id).corners.topLeft,
+                0.001f);
+        }
+        assertEquals(from.panes().get(0).box, start.pane.box);
+        assertEquals(to.panes().get(0).box, end.pane.box);
+        assertEquals("ease starts at nothing and ends at all", 0f, LayoutCanvasMorph.ease(0f), 0f);
+        assertEquals(1f, LayoutCanvasMorph.ease(1f), 0f);
+        assertTrue("and eases out", LayoutCanvasMorph.ease(0.5f) > 0.5f);
+    }
+
+    // ---- The pack's artwork ------------------------------------------------------------------------
+
+    @Test
+    public void theSymbolsFollowTheRealCountAndStopWhereTheyStopFitting() {
+        assertEquals("the pack's own seven when the count is unknown", 7,
+            LayoutCanvasArtwork.slotsFor(-1, 336f, 20f));
+        assertEquals("the real count", 4, LayoutCanvasArtwork.slotsFor(4, 336f, 20f));
+        assertEquals("as many as fit", 16, LayoutCanvasArtwork.slotsFor(40, 336f, 20f));
+        assertEquals("none when there are none", 0, LayoutCanvasArtwork.slotsFor(0, 336f, 20f));
+        assertEquals("one at the least in a short bar", 1,
+            LayoutCanvasArtwork.slotsFor(5, 30f, 20f));
+    }
+
+    @Test
+    public void everyStateOfTheCanvasDraws() {
+        Bitmap bitmap = Bitmap.createBitmap(1000, 800, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(bitmap);
+        for (LayoutStyle style : LayoutStyle.values()) {
+            for (PlaceLayout arrangement : new PlaceLayout[] {
+                bottomBars(), sideBars(), keyboardIn(KeyboardForm.FLOATING),
+                keyboardIn(KeyboardForm.SPLIT)}) {
+                LayoutCanvasView view = styled(style, arrangement);
+                view.setSlotCounts(5, 4);
+                view.draw(canvas);
+                view.setSelectedBlock(LayoutCanvasView.Block.APPS_ROW);
+                view.draw(canvas);
+                view.setSelectedBlock(LayoutCanvasView.Block.KEYBOARD);
+                view.draw(canvas);
+                view.setSelectedBlock(LayoutCanvasView.Block.CANVAS);
+                view.draw(canvas);
+            }
+        }
+        // Part-way through a flip, and with a bar in the air over a target.
+        LayoutCanvasView view = styled(LayoutStyle.DOCKED, bottomBars());
+        view.setShape(LayoutStyle.FLOATING, CORNERS_DP, MARGIN_DP);
+        view.holdMorphAt(0.4f);
+        view.draw(canvas);
+        view.holdMorphAt(1f);
+        for (PaneWallPage place : PaneWallPage.values()) {
+            view.setLayout(bottomBars(), PlaceOrientation.PORTRAIT, place);
+            view.draw(canvas);
+        }
+        view.setLayout(bottomBars(), PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        lift(view, LayoutCanvasView.Block.EXTRA_KEYS);
+        MiniatureDragPolicy.Slot top = view.slotFor(Edge.TOP);
+        assertNotNull(top);
+        touch(view, MotionEvent.ACTION_MOVE, top.centerX(), top.centerY());
+        view.settleMotion();
+        view.draw(canvas);
+        lift(styled(LayoutStyle.DOCKED, bottomBars()), LayoutCanvasView.Block.KEYBOARD);
+    }
+
+    @Test
+    public void theGlyphsAreThePacksElevenPathsInA24Box() {
+        assertEquals(11, LayoutCanvasGlyphs.IDS.length);
+        assertEquals("M5 7l5 5-5 5M13 17h6", LayoutCanvasGlyphs.pathData("terminal"));
+        assertEquals("M9 6l10 6-10 6Z", LayoutCanvasGlyphs.pathData("play"));
+        assertEquals(24f, LayoutCanvasGlyphs.VIEWBOX, 0f);
+        assertEquals(1.8f, LayoutCanvasGlyphs.STROKE, 0f);
+        for (String id : LayoutCanvasGlyphs.IDS) {
+            assertNotNull(id, LayoutCanvasGlyphs.pathData(id));
+            assertNotNull(id, LayoutCanvasGlyphs.path(id));
+        }
+        assertNull(LayoutCanvasGlyphs.pathData("capsule"));
     }
 
     // ---- The canvas is to scale ------------------------------------------------------------------
@@ -1336,7 +1659,7 @@ public class LayoutCanvasViewTest {
         assertNotNull(expanded);
         assertNotNull(compact);
         assertTrue("collapsed is thinner than expanded", compact.height() < expanded.height());
-        assertEquals(LayoutCanvasGeometry.statusBandDp(Edge.TOP, true, true) * scale,
+        assertEquals(LayoutCanvasGeometry.statusBandDp(Edge.TOP, true, false) * scale,
             compact.height(), 0.6f);
         assertTrue(view.isStatusCompact());
     }
@@ -1350,17 +1673,21 @@ public class LayoutCanvasViewTest {
         float scale = view.canvasScalePx();
         RectF shipped = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(shipped);
-        assertEquals(LayoutCanvasGeometry.dockBandHeightDp(TERMUX_APP_DEFAULT_DOCK, true) * scale,
+        assertEquals(LayoutCanvasGeometry.dockBandHeightDp(TERMUX_APP_DEFAULT_DOCK, false) * scale,
             shipped.height(), 0.6f);
+
+        // Floating stands the dock in its card, which is a little thicker than the docked one.
+        view.setShape(LayoutStyle.FLOATING, CORNERS_DP, 0f);
+        RectF card = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
+        assertNotNull(card);
+        assertEquals(LayoutCanvasGeometry.dockBandHeightDp(TERMUX_APP_DEFAULT_DOCK, true) * scale,
+            card.height(), 0.6f);
+        view.setShape(LayoutStyle.DOCKED, CORNERS_DP, 0f);
 
         view.setSizes(DockLayoutPolicy.maxSizePreset(), 1f, 0);
         RectF tall = view.blockRect(LayoutCanvasView.Block.APPS_ROW);
         assertNotNull(tall);
         assertTrue("a bigger dock scale is a taller band", tall.height() > shipped.height());
-
-        view.setDockCornerRadiusDp(0f);
-        assertTrue("the docked dock keeps the shared corner, not a square one",
-            view.surfaceRadiusPx() > 0f);
     }
 
     @Test

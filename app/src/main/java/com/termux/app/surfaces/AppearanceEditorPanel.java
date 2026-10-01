@@ -37,9 +37,10 @@ import com.termux.R;
  *
  * <p>Layout mode (SPEC §3.5) keeps the top row — the mode pill, Undo and Done, which are the whole
  * editor's — and swaps rows 1, 2 and the hint for the Layout rows: the orientation toggle, the
- * Style toggle and the restore tray, then the Corners and Margin sliders. The orientation toggle
- * and the tray are {@link com.termux.app.layouteditor.LayoutEditorController}'s to drive; Style,
- * Corners and Margin report here like every other control.</p>
+ * Style toggle and the restore tray, then the Corners and Margin sliders, which only Floating
+ * spends and which are invisible (their room kept) under Docked. The orientation toggle and the
+ * tray are {@link com.termux.app.layouteditor.LayoutEditorController}'s to drive; Style, Corners
+ * and Margin report here like every other control.</p>
  */
 final class AppearanceEditorPanel {
 
@@ -99,6 +100,8 @@ final class AppearanceEditorPanel {
     private final TextView mHint;
     private final View mRow1;
     private final View mLayoutRow;
+    /** Layout mode's Corners and Margin: Floating's, so hidden under Docked. */
+    private final View mLayoutSliders;
     private final LinearLayout mRow2Controls;
     private final LinearLayout mRow2Line;
     private final View mFirstColumn;
@@ -161,6 +164,7 @@ final class AppearanceEditorPanel {
         mHint = root.findViewById(R.id.appearance_editor_hint);
         mRow1 = root.findViewById(R.id.appearance_editor_row1);
         mLayoutRow = root.findViewById(R.id.appearance_editor_layout_row);
+        mLayoutSliders = root.findViewById(R.id.appearance_editor_layout_sliders);
         mRow2Controls = root.findViewById(R.id.appearance_editor_row2_controls);
         mRow2Line = root.findViewById(R.id.appearance_editor_row2_line);
         mFirstColumn = root.findViewById(R.id.appearance_editor_c1);
@@ -446,6 +450,11 @@ final class AppearanceEditorPanel {
         return mLayoutMode;
     }
 
+    /** Whether Layout mode's Corners and Margin are showing: they are under Floating only. */
+    boolean shapeControlsShown() {
+        return mLayoutSliders.getVisibility() == View.VISIBLE;
+    }
+
     /**
      * Row 2 side by side on a wide panel, stacked on a narrow one: three Legibility words and a
      * slider do not share half a 333dp row each.
@@ -563,7 +572,14 @@ final class AppearanceEditorPanel {
         styleLookLabels(stop);
     }
 
+    /**
+     * Checks the Style toggle's segment, without reporting it, and shows Corners and Margin under
+     * Floating or hides them under Docked, which spends neither (SPEC §3.7). They are made
+     * invisible rather than gone, so the bottom area keeps its height and the card does not jump
+     * when Style flips: it never scrolls, and nothing in it moves.
+     */
     void setFloating(boolean floating) {
+        mLayoutSliders.setVisibility(floating ? View.VISIBLE : View.INVISIBLE);
         int id = floating ? R.id.appearance_editor_style_floating
             : R.id.appearance_editor_style_docked;
         if (mStyle.getCheckedButtonId() == id)

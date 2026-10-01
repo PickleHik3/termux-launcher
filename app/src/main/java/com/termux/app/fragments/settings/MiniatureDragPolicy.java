@@ -15,24 +15,24 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Where a bar lifted off the Layout editor's miniature may be dropped, which of those targets the
+ * Where a bar lifted off the layout canvas may be dropped, which of those targets the
  * finger is over, and how much of the picture the canvas keeps once the side columns have taken
  * theirs. Pure and view-free — the same relationship {@code DockLayoutPolicy} has with the dock —
- * so the rules can be read and tested in one place while the miniature stays dumb enough to just
- * draw the answer.
+ * so the rules can be read and tested in one place while the layout canvas stays dumb enough to
+ * just draw the answer.
  *
  * <p>The legal set is {@link EdgeStackPolicy#targets}: every edge in both orientations, one drop
  * per gap in that edge's stack, and the tray for every bar, the status bar included since the
  * wall's paging left its swipe for the border drag. The dock's rows are also offered the gaps under
  * the keyboard ({@link EdgeStackPolicy#underKeyboardTargets}). This class adds nothing to that but
  * the tray — which is the view's word for hidden — and the rectangles a finger is hit-tested
- * against.
+ * against. How a bar is lifted — pressed anywhere and moved past the touch slop — is the view's.
  */
 public final class MiniatureDragPolicy {
 
     private MiniatureDragPolicy() {}
 
-    /** A bar the user may lift. Everything else the miniature draws has no placement to change. */
+    /** A bar the user may lift. Everything else the layout canvas draws has no placement to change. */
     public enum Bar {
         STATUS_BAR(Element.STATUS),
         APPS_ROW(Element.APPS),
@@ -246,7 +246,7 @@ public final class MiniatureDragPolicy {
      */
     public static final float NARROW_CANVAS_FRACTION = 0.60f;
 
-    /** The share of its edge one band claims, which is what the miniature draws it at. */
+    /** The share of its edge one band claims, which is what the layout canvas draws it at. */
     public static float bandFraction(@NonNull Element element) {
         switch (element) {
             case STATUS: return STATUS_FRACTION;
@@ -259,8 +259,9 @@ public final class MiniatureDragPolicy {
 
     /**
      * What is left of the picture's width for the canvas once both side stacks have claimed their
-     * columns. Each band takes its share of what the bands outside it left, which is how the
-     * miniature claims them, so this is the width the user is looking at rather than an estimate.
+     * columns. Each band takes its share of what the bands outside it left, a rough stand-in for
+     * the thicknesses the layout canvas draws them at, so this is an estimate of the width the
+     * user is looking at.
      */
     public static float canvasWidthFraction(@NonNull PlaceLayout layout) {
         float remaining = 1f;
