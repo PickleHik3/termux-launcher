@@ -160,14 +160,18 @@ public class ChromeShapeModelTest {
         assertBox(keys.box, 0, 550, 400, 600);
         assertBox(az.box, 0, 520, 400, 550);
         assertBox(apps.box, 0, 460, 400, 520);
-        assertBox(shape.opening().box, 0, 40, 400, 460);
+        // The insert stands a gutter of Margin inside the bars.
+        assertBox(shape.opening().box, 8, 48, 392, 452);
 
         // One frame, clipped once, with the opening cut out of it.
         assertEquals(1, shape.cards().size());
         ChromeShape.Card frame = shape.cards().get(0);
         assertTrue(frame.frame);
         assertBox(frame.box, 0, 0, 400, 800);
-        assertBox(frame.hole, 0, 40, 400, 460);
+        assertBox(frame.hole, 8, 48, 392, 452);
+        assertEquals(1, frame.holes.size());
+        assertEquals(CORNERS, frame.holeCorners.topLeft, D);
+        assertEquals(CORNERS, frame.holeCorners.bottomRight, D);
         assertEquals(SCREEN, frame.corners.topLeft, D);
         for (Piece piece : shape.pieces()) assertEquals(frame.id, piece.groupId);
 
@@ -177,27 +181,107 @@ public class ChromeShapeModelTest {
         assertCorners(keys, 0, 0, 0, 0);
         assertCorners(apps, 0, 0, 0, 0);
 
-        // Joins are plain, the screen is plain, only the opening's edge carries rim.
+        // Joins, the screen and the bars' edges facing the gutter are all plain.
         assertEquals(EdgeKind.SCREEN, status.kind(Edge.TOP));
         assertEquals(EdgeKind.SCREEN, status.kind(Edge.LEFT));
-        assertEquals(EdgeKind.OPENING, status.kind(Edge.BOTTOM));
-        assertEquals(EdgeKind.OPENING, apps.kind(Edge.TOP));
+        assertEquals(EdgeKind.GUTTER, status.kind(Edge.BOTTOM));
+        assertEquals(EdgeKind.GUTTER, apps.kind(Edge.TOP));
         assertEquals(EdgeKind.JOIN, apps.kind(Edge.BOTTOM));
         assertEquals(EdgeKind.JOIN, keyboard.kind(Edge.TOP));
         assertEquals(EdgeKind.SCREEN, keyboard.kind(Edge.BOTTOM));
-        assertTrue(status.drawsRim(Edge.BOTTOM));
-        assertTrue(apps.drawsRim(Edge.TOP));
+        assertFalse(status.drawsRim(Edge.BOTTOM));
+        assertFalse(apps.drawsRim(Edge.TOP));
         assertFalse(apps.drawsRim(Edge.BOTTOM));
         assertFalse(status.drawsRim(Edge.TOP));
         assertFalse(keyboard.drawsRim(Edge.TOP));
 
-        // The pane is an opening with no rim or slab of its own.
-        assertFalse(shape.opening().ownsRim);
-        assertFalse(shape.panes().get(0).drawsRim);
-        assertEquals(EdgeKind.JOIN, shape.opening().kind(Edge.TOP));
-        assertEquals(EdgeKind.JOIN, shape.opening().kind(Edge.BOTTOM));
-        assertEquals(EdgeKind.SCREEN, shape.opening().kind(Edge.LEFT));
-        assertEquals(EdgeKind.SCREEN, shape.opening().kind(Edge.RIGHT));
+        // The pane is a rounded insert: its own rounded edge carries the rim.
+        assertTrue(shape.opening().ownsRim);
+        assertTrue(shape.panes().get(0).drawsRim);
+        assertBox(shape.panes().get(0).box, 8, 48, 392, 452);
+        assertEquals(CORNERS, shape.panes().get(0).corners.topLeft, D);
+        assertEquals(CORNERS, shape.panes().get(0).corners.bottomLeft, D);
+        for (Edge edge : Edge.values()) assertEquals(EdgeKind.RIM, shape.opening().kind(edge));
+        assertTrue(shape.dividers().isEmpty());
+    }
+
+    /** O2: with side bars the insert is the area between all four bars, a gutter inside them. */
+    @Test
+    public void theInsertIsTheAreaBetweenTheBarsInsetByMarginWithAndWithoutSideBars() {
+        PlaceLayout sides = layout(Slot.on(Edge.TOP, Element.STATUS),
+            Slot.on(Edge.LEFT, Element.APPS), Slot.on(Edge.RIGHT, Element.AZ),
+            Slot.on(Edge.BOTTOM, Element.EXTRA_KEYS), KeyboardForm.DOCKED, true);
+        ChromeShape with = shape(sides, LayoutStyle.DOCKED);
+        // Bars: top 0-40, bottom 550-600 (keyboard under it), left 0-70, right 376-400.
+        assertBox(with.opening().box, 78, 48, 368, 542);
+        assertBox(with.cards().get(0).hole, 78, 48, 368, 542);
+        assertEquals(CORNERS, with.opening().corners.topLeft, D);
+        assertEquals(CORNERS, with.panes().get(0).corners.bottomRight, D);
+        assertBox(with.panes().get(0).box, 78, 48, 368, 542);
+        // The side bars' edges facing the gutter are plain; so are the bars' joins.
+        assertEquals(EdgeKind.GUTTER, piece(with, PieceId.APPS).kind(Edge.RIGHT));
+        assertFalse(piece(with, PieceId.APPS).drawsRim(Edge.RIGHT));
+        assertEquals(EdgeKind.GUTTER, piece(with, PieceId.AZ).kind(Edge.LEFT));
+
+        PlaceLayout bars = layout(Slot.on(Edge.TOP, Element.STATUS), GONE, GONE,
+            Slot.on(Edge.BOTTOM, Element.EXTRA_KEYS), KeyboardForm.DOCKED, false);
+        ChromeShape without = shape(bars, LayoutStyle.DOCKED);
+        // Without side bars the gutter is also Margin from the screen's own left and right edge.
+        assertBox(without.opening().box, 8, 48, 392, 742);
+        assertBox(without.cards().get(0).hole, 8, 48, 392, 742);
+        assertEquals(CORNERS, without.cards().get(0).holeCorners.topLeft, D);
+
+        // The gutter follows Margin; Margin 0 leaves the insert filling the opening.
+        ChromeShape flush = ChromeShapeModel.shape(input(bars, LayoutStyle.DOCKED).margin(0f)
+            .build());
+        assertBox(flush.opening().box, 0, 40, 400, 750);
+        assertEquals(CORNERS, flush.opening().corners.topLeft, D);
+    }
+
+    /** F3: with every bar put away the frame stays, as a gutter of glass around the insert. */
+    @Test
+    public void aDockedLayoutWithTheBarsPutAwayStillHasAFrameAroundTheInsert() {
+        ChromeShape shape = shape(keyboardOnly(KeyboardForm.DOCKED, false), LayoutStyle.DOCKED);
+        assertTrue(shape.pieces().isEmpty());
+        assertEquals(1, shape.cards().size());
+        ChromeShape.Card frame = shape.cards().get(0);
+        assertTrue(frame.frame);
+        assertBox(frame.box, 0, 0, 400, 800);
+        assertBox(frame.hole, 8, 8, 392, 792);
+        assertEquals(CORNERS, frame.holeCorners.topLeft, D);
+        assertEquals(SCREEN, frame.corners.topLeft, D);
+        assertBox(shape.panes().get(0).box, 8, 8, 392, 792);
+
+        // The docked keyboard is that frame's bottom, and the pane is still the insert above it.
+        ChromeShape withKeyboard = shape(keyboardOnly(KeyboardForm.DOCKED, true),
+            LayoutStyle.DOCKED);
+        assertBox(piece(withKeyboard, PieceId.KEYBOARD).box, 0, 600, 400, 800);
+        assertBox(withKeyboard.cards().get(0).hole, 8, 8, 392, 592);
+        assertBox(withKeyboard.panes().get(0).box, 8, 8, 392, 592);
+
+        // Floating has no frame to keep.
+        assertTrue(shape(keyboardOnly(KeyboardForm.DOCKED, false), LayoutStyle.FLOATING)
+            .cards().isEmpty());
+    }
+
+    /** F3 as the launcher reaches it: minimal mode puts every bar away, status bar included. */
+    @Test
+    public void minimalModeUnderDockedKeepsAThinFrameWithTheKeyboardAsItsBottom() {
+        PlaceLayout minimal = MinimalMode.apply(bottomStack());
+        ChromeShape docked = shape(minimal, LayoutStyle.DOCKED);
+        assertEquals("only the keyboard stands", 1, docked.pieces().size());
+        assertBox(piece(docked, PieceId.KEYBOARD).box, 0, 600, 400, 800);
+        ChromeShape.Card frame = docked.cards().get(0);
+        assertTrue(frame.frame);
+        assertEquals(1, docked.cards().size());
+        // A gutter of Margin on the top and both sides, the keyboard below, and the rounded insert.
+        assertBox(frame.hole, 8, 8, 392, 592);
+        assertEquals(CORNERS, docked.panes().get(0).corners.topLeft, D);
+        assertEquals(CORNERS, docked.panes().get(0).corners.bottomRight, D);
+
+        // Floating keeps its cards and no frame.
+        assertTrue(shape(MinimalMode.apply(bottomStack()).withKeyboardShown(false),
+            LayoutStyle.FLOATING).cards().isEmpty());
     }
 
     @Test
@@ -216,7 +300,7 @@ public class ChromeShapeModelTest {
         assertBox(keys.box, 0, 550, 400, 600);
         assertBox(apps.box, 0, 40, 70, 550);
         assertBox(az.box, 376, 40, 400, 550);
-        assertBox(shape.opening().box, 70, 40, 376, 550);
+        assertBox(shape.opening().box, 78, 48, 368, 542);
 
         // The side bars touch the bars above and below: no corner of theirs is a screen corner.
         assertCorners(apps, 0, 0, 0, 0);
@@ -224,21 +308,22 @@ public class ChromeShapeModelTest {
         assertEquals(EdgeKind.SCREEN, apps.kind(Edge.LEFT));
         assertEquals(EdgeKind.JOIN, apps.kind(Edge.TOP));
         assertEquals(EdgeKind.JOIN, apps.kind(Edge.BOTTOM));
-        assertEquals(EdgeKind.OPENING, apps.kind(Edge.RIGHT));
-        assertEquals(EdgeKind.OPENING, az.kind(Edge.LEFT));
+        assertEquals(EdgeKind.GUTTER, apps.kind(Edge.RIGHT));
+        assertEquals(EdgeKind.GUTTER, az.kind(Edge.LEFT));
 
-        // The status bar's inner edge runs over the left bar, the opening and the right bar.
+        // The status bar's inner edge runs over the left bar, the gap between the bars and the
+        // right bar: joins and a plain edge facing the gutter.
         assertEquals(3, status.runs(Edge.BOTTOM).size());
         assertEquals(EdgeKind.JOIN, status.runs(Edge.BOTTOM).get(0).kind);
-        assertEquals(EdgeKind.OPENING, status.runs(Edge.BOTTOM).get(1).kind);
+        assertEquals(EdgeKind.GUTTER, status.runs(Edge.BOTTOM).get(1).kind);
         assertEquals(70, status.runs(Edge.BOTTOM).get(1).from, D);
         assertEquals(376, status.runs(Edge.BOTTOM).get(1).to, D);
         assertEquals(EdgeKind.JOIN, status.runs(Edge.BOTTOM).get(2).kind);
-        assertEquals(EdgeKind.OPENING, status.kind(Edge.BOTTOM));
+        assertEquals(EdgeKind.GUTTER, status.kind(Edge.BOTTOM));
+        assertFalse(status.drawsRim(Edge.BOTTOM));
 
-        // A bar stands on every side of the opening.
-        assertEquals(EdgeKind.JOIN, shape.opening().kind(Edge.LEFT));
-        assertEquals(EdgeKind.JOIN, shape.opening().kind(Edge.RIGHT));
+        // The insert's own rounded edge is what carries the rim.
+        for (Edge edge : Edge.values()) assertEquals(EdgeKind.RIM, shape.opening().kind(edge));
     }
 
     // ---------------------------------------------------------------- grouping
@@ -266,7 +351,7 @@ public class ChromeShapeModelTest {
         assertBox(apps.box, 0, 40, 400, 100);
         assertEquals(EdgeKind.JOIN, status.kind(Edge.BOTTOM));
         assertEquals(EdgeKind.JOIN, apps.kind(Edge.TOP));
-        assertEquals(EdgeKind.OPENING, apps.kind(Edge.BOTTOM));
+        assertEquals(EdgeKind.GUTTER, apps.kind(Edge.BOTTOM));
         assertCorners(status, 28, 28, 0, 0);
         assertCorners(apps, 0, 0, 0, 0);
     }
@@ -307,19 +392,19 @@ public class ChromeShapeModelTest {
         az = piece(docked, PieceId.AZ);
         assertBox(az.box, 0, 0, 24, 800);
         assertCorners(az, 28, 0, 0, 28);
-        assertEquals(EdgeKind.OPENING, az.kind(Edge.RIGHT));
+        assertEquals(EdgeKind.GUTTER, az.kind(Edge.RIGHT));
         assertEquals(EdgeKind.SCREEN, az.kind(Edge.LEFT));
         assertEquals(EdgeKind.SCREEN, az.kind(Edge.TOP));
     }
 
     @Test
-    public void aDockedFrameWithNothingInItIsJustTheOpening() {
+    public void aDockedFrameWithNothingInItIsAGutterAroundTheInsert() {
         ChromeShape shape = shape(keyboardOnly(KeyboardForm.DOCKED, false), LayoutStyle.DOCKED);
         assertTrue(shape.pieces().isEmpty());
-        assertTrue(shape.cards().isEmpty());
-        assertBox(shape.opening().box, 0, 0, 400, 800);
-        assertEquals(28, shape.opening().corners.topLeft, D);
-        assertEquals(EdgeKind.SCREEN, shape.opening().kind(Edge.TOP));
+        assertEquals(1, shape.cards().size());
+        assertBox(shape.opening().box, 8, 8, 392, 792);
+        assertEquals(CORNERS, shape.opening().corners.topLeft, D);
+        assertEquals(EdgeKind.RIM, shape.opening().kind(Edge.TOP));
     }
 
     // ---------------------------------------------------------------- keyboard form by Style
@@ -331,7 +416,7 @@ public class ChromeShapeModelTest {
         Piece docked = piece(shape(layout, LayoutStyle.DOCKED), PieceId.KEYBOARD);
         assertBox(docked.box, 0, 600, 400, 800);
         assertCorners(docked, 0, 0, 28, 28);
-        assertEquals(EdgeKind.OPENING, docked.kind(Edge.TOP));
+        assertEquals(EdgeKind.GUTTER, docked.kind(Edge.TOP));
         assertEquals(EdgeKind.SCREEN, docked.kind(Edge.BOTTOM));
         assertFalse(docked.overlay);
 
@@ -354,10 +439,12 @@ public class ChromeShapeModelTest {
         assertBox(kb.box, 20, 600, 380, 800);
         assertCorners(kb, 12, 12, 12, 12);
         for (Edge edge : Edge.values()) assertEquals(EdgeKind.RIM, kb.kind(edge));
-        // It takes no band: the opening still fills the frame.
-        assertBox(docked.opening().box, 0, 0, 400, 800);
-        assertEquals(1, docked.cards().size());
-        assertFalse(docked.cards().get(0).frame);
+        // It takes no band: the insert still fills the frame, a gutter in. The frame is the first
+        // card and the keyboard a card of its own over it.
+        assertBox(docked.opening().box, 8, 8, 392, 792);
+        assertEquals(2, docked.cards().size());
+        assertTrue(docked.cards().get(0).frame);
+        assertFalse(docked.cards().get(1).frame);
 
         ChromeShape floating = shape(layout, LayoutStyle.FLOATING);
         kb = piece(floating, PieceId.KEYBOARD);
@@ -392,9 +479,9 @@ public class ChromeShapeModelTest {
         assertCorners(right, 0, 0, 28, 0);
         assertEquals(EdgeKind.SCREEN, left.kind(Edge.LEFT));
         assertEquals(EdgeKind.SCREEN, left.kind(Edge.BOTTOM));
-        assertEquals(EdgeKind.OPENING, left.kind(Edge.RIGHT));
-        assertEquals(EdgeKind.OPENING, left.kind(Edge.TOP));
-        assertBox(shape.opening().box, 0, 0, 400, 600);
+        assertEquals(EdgeKind.GUTTER, left.kind(Edge.RIGHT));
+        assertEquals(EdgeKind.GUTTER, left.kind(Edge.TOP));
+        assertBox(shape.opening().box, 8, 8, 392, 592);
     }
 
     @Test
@@ -425,7 +512,7 @@ public class ChromeShapeModelTest {
         assertBox(apps.box, 0, 690, 400, 750);
         assertEquals(EdgeKind.JOIN, keys.kind(Edge.TOP));
         assertEquals(EdgeKind.JOIN, apps.kind(Edge.BOTTOM));
-        assertBox(docked.opening().box, 0, 0, 400, 690);
+        assertBox(docked.opening().box, 8, 8, 392, 682);
 
         // Nothing stands between the two groups, so they are neighbours and share a card.
         ChromeShape floating = shape(layout, LayoutStyle.FLOATING);
@@ -469,30 +556,35 @@ public class ChromeShapeModelTest {
     // ---------------------------------------------------------------- split panes
 
     @Test
-    public void aTwoPaneSplitIsOneOpeningWithADividerUnderDocked() {
+    public void aTwoPaneSplitIsTwoInsertsWithAGutterBetweenUnderDocked() {
         PlaceLayout layout = layout(Slot.on(Edge.TOP, Element.STATUS), GONE, GONE, GONE,
             KeyboardForm.DOCKED, false);
         ChromeShape shape = ChromeShapeModel.shape(input(layout, LayoutStyle.DOCKED)
-            .panes(2, SplitAxis.SIDE_BY_SIDE).dividerThickness(1f).build());
+            .panes(2, SplitAxis.SIDE_BY_SIDE).build());
 
-        assertBox(shape.opening().box, 0, 40, 400, 800);
+        // The area under the status bar, a gutter of 8 inside it, split with 8 between.
+        assertBox(shape.opening().box, 8, 48, 392, 792);
         assertEquals(2, shape.panes().size());
-        assertBox(shape.panes().get(0).box, 0, 40, 200, 800);
-        assertBox(shape.panes().get(1).box, 200, 40, 400, 800);
-        assertEquals(shape.panes().get(0).groupId, shape.panes().get(1).groupId);
-        assertFalse(shape.panes().get(0).drawsRim);
-        assertEquals(1, shape.dividers().size());
-        ChromeShape.Divider line = shape.dividers().get(0);
-        assertEquals(200, line.x1, D);
-        assertEquals(200, line.x2, D);
-        assertEquals(40, line.y1, D);
-        assertEquals(800, line.y2, D);
-        assertEquals(1, line.thickness, D);
-        // Each pane rounds only a screen corner it stands in.
-        assertEquals(0, shape.panes().get(0).corners.topLeft, D);
-        assertEquals(28, shape.panes().get(0).corners.bottomLeft, D);
-        assertEquals(28, shape.panes().get(1).corners.bottomRight, D);
-        assertEquals(0, shape.panes().get(1).corners.bottomLeft, D);
+        assertBox(shape.panes().get(0).box, 8, 48, 196, 792);
+        assertBox(shape.panes().get(1).box, 204, 48, 392, 792);
+        assertNotEquals(shape.panes().get(0).groupId, shape.panes().get(1).groupId);
+        assertTrue(shape.panes().get(0).drawsRim);
+        // No shared opening and no divider line; each pane is rounded on all four corners.
+        assertTrue(shape.dividers().isEmpty());
+        assertEquals(CORNERS, shape.panes().get(0).corners.topRight, D);
+        assertEquals(CORNERS, shape.panes().get(1).corners.bottomLeft, D);
+        // The frame has one hole per insert, so the gutter between them is frame glass.
+        ChromeShape.Card frame = shape.cards().get(0);
+        assertEquals(2, frame.holes.size());
+        assertBox(frame.holes.get(0), 8, 48, 196, 792);
+        assertBox(frame.holes.get(1), 204, 48, 392, 792);
+        assertBox(frame.hole, 8, 48, 392, 792);
+
+        // The gutter between panes stops at the cap, as Floating's does.
+        ChromeShape capped = ChromeShapeModel.shape(input(layout, LayoutStyle.DOCKED).margin(40f)
+            .panes(2, SplitAxis.STACKED).build());
+        assertBox(capped.panes().get(0).box, 40, 80, 360, 408);
+        assertBox(capped.panes().get(1).box, 40, 432, 360, 760);
     }
 
     @Test
@@ -546,7 +638,7 @@ public class ChromeShapeModelTest {
         assertBox(docked.box, 0, 40, 400, 70);
         assertCorners(docked, 0, 0, 0, 0);
         assertEquals(EdgeKind.JOIN, docked.kind(Edge.TOP));
-        assertEquals(EdgeKind.OPENING, docked.kind(Edge.BOTTOM));
+        assertEquals(EdgeKind.GUTTER, docked.kind(Edge.BOTTOM));
     }
 
     @Test

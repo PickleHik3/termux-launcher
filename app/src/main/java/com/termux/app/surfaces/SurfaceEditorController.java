@@ -855,8 +855,7 @@ public final class SurfaceEditorController {
             // Style belongs to no Look: it never moves the slider.
             prefs.setAppLauncherDockStyle(style);
             applyStructuralPreview();
-            // Corners and Margin are Floating's: shown under it, hidden (their room kept) under
-            // Docked. Margin reads the side gap Floating spends it on.
+            // Corners and Margin show under both Styles and read the same keys.
             if (mPanel != null)
                 mPanel.setFloating(floating);
             syncLayoutControls();
@@ -1039,17 +1038,16 @@ public final class SurfaceEditorController {
     }
 
     /**
-     * Margin: one number for all the air on screen, as the old shared Margin wrote it. Docked
-     * surfaces are flush with the screen edges by definition, so there it is the terminal's own
-     * margin alone; Floating spends it on the surfaces' side gap too.
+     * Margin: one number for all the air on screen, as the old shared Margin wrote it. Under
+     * Floating it is the air round the cards; under Docked it is the gutter of frame glass round
+     * the insert. Both read the same side gap, so flipping Style keeps the number.
      */
     private void writeMargin(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
         int margin = AppearanceLooks.marginDp(value);
-        if (mHost.isFloatingDock())
-            prefs.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, margin);
+        prefs.setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, margin);
         prefs.setTerminalPaneGap(AppearanceLooks.terminalMarginDp(margin));
         if (mPanel != null)
             mPanel.setMarginLabel(getString(R.string.appearance_editor_margin, margin));
@@ -1098,8 +1096,8 @@ public final class SurfaceEditorController {
 
     /**
      * Tells Layout mode the Style, Corners and Margin it draws its shapes from, as preferences
-     * hold them now. Margin is the side gap Floating spends; Docked spends none, so the canvas
-     * reads it only under Floating.
+     * hold them now. Margin is the side gap, spent as air under Floating and as the gutter under
+     * Docked.
      */
     private void pushLayoutShape(@NonNull LayoutEditorController layout) {
         TermuxAppSharedPreferences prefs = prefs();

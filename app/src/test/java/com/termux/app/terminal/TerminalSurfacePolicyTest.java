@@ -31,4 +31,27 @@ public class TerminalSurfacePolicyTest {
             .getMethod("showsTerminalSurface", boolean.class, int.class).getParameterTypes();
         assertEquals(2, params.length);
     }
+
+    /**
+     * Floating -> Done -> Docked left the root's dim different from a fresh Docked start (device
+     * measurement, 2026-10-01). The ground is a function of the glass switch and the two colours
+     * alone, so the round trip is the same call with the same arguments.
+     */
+    @Test
+    public void aFloatingToDockedRoundTripLeavesTheSameRootDimAsAFreshDockedStart() {
+        int tint = 0x99101820;
+        int dim = 0x33000000;
+        int fresh = TerminalSurfacePolicy.wallGround(true, tint, dim);
+        TerminalSurfacePolicy.wallGround(true, tint, dim);  // Floating's pass in between
+        assertEquals(fresh, TerminalSurfacePolicy.wallGround(true, tint, dim));
+        assertEquals("with slabs the root carries only the wallpaper dim", dim, fresh);
+    }
+
+    @Test
+    public void withoutSlabsTheTintIsFoldedIntoTheDim() {
+        int ground = TerminalSurfacePolicy.wallGround(false, 0xFF000000, 0x33000000);
+        assertEquals(0xFF000000, ground);
+        assertEquals(0x80000000, TerminalSurfacePolicy.wallGround(false, 0x80000000, 0));
+        assertEquals(0, TerminalSurfacePolicy.wallGround(false, 0, 0));
+    }
 }

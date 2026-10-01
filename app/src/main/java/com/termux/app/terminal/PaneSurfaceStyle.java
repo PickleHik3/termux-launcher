@@ -62,9 +62,10 @@ public interface PaneSurfaceStyle {
      */
     @Nullable default android.graphics.drawable.Drawable paneRimDrawable(float radiusPx) { return null; }
     /**
-     * Whether the Style is Docked: the panes tile the opening with no gap, wear no rim of their
-     * own, and the line between two of them is drawn from each pane's own edge of it
-     * ({@link PaneDividerEdges}).
+     * Retired with the rounded insert (SPEC 3.7, 2026-10-01): a Docked pane is its own rounded
+     * insert with a gutter between panes and no divider line, so the live activity always answers
+     * false and the panes draw their own rim under both Styles. Kept for {@link PaneDividerEdges}'
+     * tests.
      */
     default boolean paneDocked() { return false; }
 

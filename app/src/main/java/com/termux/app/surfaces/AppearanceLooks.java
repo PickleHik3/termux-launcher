@@ -221,12 +221,11 @@ public final class AppearanceLooks {
     }
 
     /**
-     * Where Margin stands: Floating spends it on the surfaces' side gap, so that is its read;
-     * Docked surfaces are flush with the screen edges by definition, so there it is the
-     * terminal's own margin alone.
+     * Where Margin stands: the side gap under both Styles, the air round Floating cards and the
+     * gutter round the Docked insert. The Style and the pane gap no longer change the read.
      */
     public static int marginValueFor(boolean floating, int sideGap, int paneGap) {
-        return marginDp(floating ? sideGap : paneGap);
+        return marginDp(sideGap);
     }
 
     /** Legibility's three segments, in order. */

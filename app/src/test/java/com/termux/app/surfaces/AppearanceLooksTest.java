@@ -158,11 +158,11 @@ public class AppearanceLooksTest {
         assertEquals(24, AppearanceLooks.terminalMarginDp(200));
     }
 
-    /** Floating reads the side gap it spends Margin on; Docked the terminal's own margin. */
+    /** Margin reads the side gap under both Styles: air under Floating, the gutter under Docked. */
     @Test
-    public void marginReadsTheSideGapFloatingAndThePaneGapDocked() {
+    public void marginReadsTheSideGapUnderBothStyles() {
         assertEquals(30, AppearanceLooks.marginValueFor(true, 30, 6));
-        assertEquals(6, AppearanceLooks.marginValueFor(false, 30, 6));
+        assertEquals(30, AppearanceLooks.marginValueFor(false, 30, 6));
         assertEquals(48, AppearanceLooks.marginValueFor(true, 99, 6));
     }
 

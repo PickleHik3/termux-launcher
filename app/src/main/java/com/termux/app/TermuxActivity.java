@@ -1460,6 +1460,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // keyboard crashes its next draw exactly like recycling it under a frost would.
             return frame != null
                 && (frame == mInAppKeyboardBackdropBitmap || frame == mUnderKeyboardBackdropBitmap
+                    || frame == mFrameGutterBackdropBitmap
                     || isSharedWallpaperBlurFrameInUse(frame));
         }
 
@@ -2773,7 +2774,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (terminalSurfaceHost == null || terminalBodySurface == null || terminalStatusSurface == null) {
             return;
         }
-        applyTerminalBorderAppearance();
         boolean wallpaperMode = shouldUseWallpaperPassthroughMode();
         int accessoryBaseColor = resolveAccessoryGlassBaseColor();
         // The dock plank's tint is deliberately NOT painted here. This pass used to flat-colour it
@@ -2791,30 +2791,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int terminalSurfaceColor = showSurface ? resolveTerminalSurfaceColor() : Color.TRANSPARENT;
             int wallpaperDim = resolveWallpaperBackdropDimColor();
             boolean glassPane = isTerminalPaneGlassActive();
-            // A rounded Docked terminal is a bounded slab, and a slab's tint cannot be the
-            // full-screen dim: painted on the root it fills the very corners the radius is there to
-            // cut, and the radius reads as doing nothing. So the root keeps only the wallpaper dim
-            // and the tint moves onto the slab itself.
-            boolean slab = false;
-            if (glassPane || slab) {
-                // The terminal tint lives on each pane's own glass slab now; the root carries only
-                // the wallpaper dim, so the gaps between panes — and the margin around them — show
-                // the wallpaper at whatever opacity the Wallpaper control asks for.
-                mWallGroundColor = wallpaperDim;
-            } else {
-                // Unify the background: apply the terminal-opacity dim to the full-screen root so the
-                // terminal area, the space under the floating dock, and the gesture-pill strip all read
-                // as one continuous surface (the dock then floats on top of it). The bounded
-                // terminal_background overlay is retired so the dim isn't applied twice. The wallpaper
-                // dim composes underneath it.
-                mWallGroundColor = androidx.core.graphics.ColorUtils.compositeColors(
-                    terminalSurfaceColor, wallpaperDim);
-            }
+            // With glass on, the terminal tint lives on each pane's own slab (a Floating card's, or
+            // the Docked insert's), so the root carries only the wallpaper dim and the gaps between
+            // and around the panes show the wallpaper, or under Docked the frame glass, at whatever
+            // opacity the Wallpaper control asks for. Without it the tint is folded into the dim.
+            // Settled before the panes are dressed: they read this colour for their corner arcs.
+            mWallGroundColor = com.termux.app.terminal.TerminalSurfacePolicy.wallGround(glassPane,
+                terminalSurfaceColor, wallpaperDim);
             mWallGroundPainted = true;
             applyUnifiedBackgroundDim(mWallGroundColor);
+            applyTerminalBorderAppearance();
             terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
-            applyTerminalBodySurface(terminalBodySurface,
-                slab ? terminalSurfaceColor : Color.TRANSPARENT, slab);
+            applyTerminalBodySurface(terminalBodySurface, Color.TRANSPARENT, false);
+            applyFrameGutterGlass(terminalBodySurface, glassPane && !isRoundedDockStyle());
             terminalStatusSurface.setBackgroundColor(Color.TRANSPARENT);
             terminalStatusSurface.setVisibility(View.GONE);
             if (terminalView != null) {
@@ -2825,10 +2814,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             applyTerminalStatusBarSurfaceColor(showSurface, terminalSurfaceColor);
             applyTerminalWindowBarBackdropInsets();
+            redressKeyboardForStyle();
             return;
         }
 
         // Opaque (non-wallpaper) mode keeps the bounded terminal surface; no full-screen dim needed.
+        applyFrameGutterGlass(terminalBodySurface, false);
         applyUnifiedBackgroundDim(Color.TRANSPARENT);
         boolean showSurface = true;
         int terminalSurfaceColor = resolveTerminalSurfaceColor();
@@ -2837,6 +2828,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
                 R.color.termux_surface_base));
         mWallGroundPainted = true;
+        applyTerminalBorderAppearance();
         terminalSurfaceHost.setBackgroundColor(Color.TRANSPARENT);
         applyTerminalBodySurface(terminalBodySurface, terminalSurfaceColor,
             showSurface && Color.alpha(terminalSurfaceColor) > 0);
@@ -2850,6 +2842,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         applyTerminalStatusBarSurfaceColor(showSurface, terminalSurfaceColor);
         applyTerminalWindowBarBackdropInsets();
+        redressKeyboardForStyle();
+    }
+
+    /**
+     * A live Style change: the keyboard host is redressed in the pass that changes everything else,
+     * as a card or as a slice of the frame, rather than waiting for a chrome render that may not
+     * come.
+     */
+    private void redressKeyboardForStyle() {
+        if (isInAppKeyboardShown() && isInAppKeyboardCapsule() != mKeyboardSurfaceDressedAsCard)
+            applyInAppKeyboardSurfaceState(buildChromeSpec());
     }
 
     /**
@@ -2881,11 +2884,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The radius the terminal's own top corners actually draw with, which is what any surface
-     * hanging off them has to match. Docked the pane is the frame's opening and has no corners of
-     * its own, so nothing hangs off a radius; Floating the pane is a card with the Corners radius.
+     * hanging off them has to match: Corners, whether the pane is a Floating card or the Docked
+     * rounded insert.
      */
     private float terminalEdgeCornerRadiusPx() {
-        return isRoundedDockStyle() ? layoutCornersPx() : 0f;
+        return layoutCornersPx();
     }
 
     /**
@@ -2938,11 +2941,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *     which is what buys the Floating frame its vertical air.
      */
     private int terminalFrameInsetPx(boolean vertical, boolean framed) {
-        // Docked the pane is the opening: no margin of its own, the bars' inner edges and the
-        // screen's edge are its border. Floating the model's opening keeps Margin from every bar
-        // and screen edge, and the pane card stands at exactly that.
-        if (!isRoundedDockStyle())
-            return 0;
+        // The model's opening keeps Margin from every bar and screen edge under both Styles: the
+        // Floating pane card stands at exactly that, the Docked insert a gutter of frame glass in.
         return terminalFrameInsetPx(vertical);
     }
 
@@ -2968,7 +2968,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The same two numbers the frame is laid out with, for a surface that has to meet its edge. */
     private int terminalFrameInsetPx(boolean vertical) {
-        if (!isRoundedDockStyle()) return 0;
         com.termux.app.place.ChromeShape shape = chromeShape();
         View root = findViewById(R.id.activity_termux_root_view);
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
@@ -2991,8 +2990,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // splits, the pane borders are the frame and the terminal border stands down — two
         // concentric strokes only ever cost the terminal a row and clipped the prompt's own glyph
         // against the outer one.
-        // Docked has no pane border at all: the opening is outlined by the bars around it.
-        boolean preferBorder = mPreferences.isTerminalBorderEnabled() && isRoundedDockStyle();
+        boolean preferBorder = mPreferences.isTerminalBorderEnabled();
         boolean singlePane = visiblePaneCount() <= 1;
         // With glass on, each pane carries its own lit rim, and a second frame drawn around the
         // whole terminal would box the floating slabs inside a sheet — the exact reading the glass
@@ -3000,7 +2998,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean glass = isTerminalPaneGlassActive();
         boolean enabled = preferBorder && singlePane && !glass;
         borderView.setVisibility(enabled ? View.VISIBLE : View.GONE);
-        boolean capsule = isRoundedDockStyle();
+        // The pane is a shape of its own under both Styles: a card over the wallpaper or the
+        // rounded insert over the frame glass, at Corners either way.
+        boolean capsule = true;
         int capsuleMarginPx = getDockLayout().horizontalInsetPx;
 
         // Where a frame line sits, whichever view draws it. Sideways it tucks under the dock's own
@@ -3030,8 +3030,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         int strokePx = Math.max(1, Math.round(dpToPx(1)));
-        // Floating's pane is a card at Corners; Docked draws no pane frame, so no radius.
-        float cornerRadiusPx = capsule ? resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE) : 0f;
+        // The pane's shape is Corners, a card under Floating and the insert under Docked.
+        float cornerRadiusPx = resolveDockCapsuleCornerRadiusPx(Integer.MAX_VALUE);
 
         // Clearance inside the frame line, so a glyph never touches the stroke. Only the terminal
         // border needs it: pane borders draw their own stroke on the frame line itself, and adding
@@ -3069,8 +3069,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (borderView instanceof TerminalGlassFrameView) {
                 ((TerminalGlassFrameView) borderView).setRim(false, 0f);
             }
-            // The host rounds nothing itself: Docked the frame's single clip owns the corners
-            // and the pane is the opening, Floating each pane card clips its own slab.
+            // The host rounds nothing itself: each pane's slab clips its own corners, a card
+            // under Floating and the insert under Docked.
             applyPaneHostCornerPadding(paneHost, 0);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 paneHost.setOutlineProvider(paneHostContainmentOutlineProvider());
@@ -3108,6 +3108,58 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             paneHost.setClipToOutline(true);
         }
     }
+
+    /**
+     * The Docked frame's glass behind the gutter: the dock's material (frost of the wallpaper, the
+     * tint at the dock's opacity, its grain) filling the terminal's host, which the pane slabs then
+     * sit on, inset by Margin. Under Floating and in opaque mode the view carries none, and
+     * whatever a Docked pass left on it is cleared, so a Style round trip cannot leave a layer
+     * behind.
+     */
+    private void applyFrameGutterGlass(@NonNull View body, boolean on) {
+        if (!on) {
+            mFrameGutterBackdropBitmap = null;
+            mFrameGutterKey = null;
+            if (mFrameGutterShown) body.setBackground(null);
+            mFrameGutterShown = false;
+            return;
+        }
+        if (mPreferences == null) return;
+        float density = getResources().getDisplayMetrics().density;
+        int blurRadiusDp = getEffectiveExtraKeysBlurRadius();
+        Bitmap frame = null;
+        View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
+        if (ChromePolicy.dockBlurEnabled(blurRadiusDp) && wallpaperFrame != null
+                && wallpaperPicture().blurs()) {
+            frame = mChrome.blurCache().obtain(blurRadiusDp, wallpaperFrame);
+            if (frame != null && frame.isRecycled()) frame = null;
+        }
+        // Rebuilt only when what it is dressed with has moved: this runs behind every chrome pass.
+        List<Object> key = Arrays.asList(frame, blurRadiusDp, mPreferences.getAppBarOpacity(),
+            mPreferences.getDockGlassGrain(), mFancierGlassLook);
+        if (mFrameGutterShown && body.getBackground() != null && key.equals(mFrameGutterKey))
+            return;
+        mFrameGutterKey = key;
+        mFrameGutterBackdropBitmap = frame;
+        com.termux.app.chrome.SharedFrameDrawable backdrop = frame == null ? null
+            : new com.termux.app.chrome.SharedFrameDrawable(frame,
+                new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
+                com.termux.app.chrome.GlassAnchor.layout(body, () -> 0f));
+        com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec.of(
+            blurRadiusDp, mPreferences.getAppBarOpacity() / 100f,
+            mPreferences.getDockGlassGrain(), 0f, mFancierGlassLook).withRim(false);
+        body.setBackground(
+            com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop));
+        body.setVisibility(View.VISIBLE);
+        mFrameGutterShown = true;
+    }
+
+    /** The shared frame the Docked gutter glass is drawing, for the blur cache's in-use scan. */
+    @Nullable private Bitmap mFrameGutterBackdropBitmap;
+    /** What the gutter glass was last dressed with; null while it is not shown. */
+    @Nullable private List<Object> mFrameGutterKey;
+    /** Whether the terminal's backdrop view currently carries the Docked gutter glass. */
+    private boolean mFrameGutterShown;
 
     /**
      * Paints the terminal's own field. Square and full-bleed by default, which is what makes the
@@ -3164,9 +3216,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * is what makes a split read as several floating terminals rather than a sheet with lines on it.
      */
     private boolean isTerminalPaneGlassActive() {
-        // A glass slab is a Floating card; Docked the pane is the opening and wears none.
-        return isRoundedDockStyle() && isTerminalGlassConfigured()
-            && mPreferences.isTerminalBorderEnabled();
+        // Under both Styles: a Floating card's slab, or the Docked insert's, which keeps its
+        // frost, tint, grain and Legibility veil.
+        return isTerminalGlassConfigured() && mPreferences.isTerminalBorderEnabled();
+    }
+
+    /**
+     * The frame glass's effective colour, for the insert's tone floor: the dock's tint at the
+     * dock's opacity over a mid grey standing for the wallpaper. Deliberately not sampled from the
+     * wallpaper, so the floor is a pure function of the settings and cannot flicker as it pans.
+     */
+    private int frameGlassEstimate() {
+        float alpha = mPreferences == null ? 0.5f : mPreferences.getAppBarOpacity() / 100f;
+        return androidx.core.graphics.ColorUtils.compositeColors(
+            resolveAccessorySurfaceColor(alpha), 0xFF808080);
     }
 
     /**
@@ -3181,12 +3244,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public boolean paneBorderEnabled() {
-                return mPreferences != null && mPreferences.isTerminalBorderEnabled()
-                    && isRoundedDockStyle();
-            }
-
-            @Override public boolean paneDocked() {
-                return !isRoundedDockStyle();
+                return mPreferences != null && mPreferences.isTerminalBorderEnabled();
             }
 
             @Override @Nullable public Bitmap paneGlassBlurFrame() {
@@ -3234,9 +3292,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public int paneGlassTintColor() {
-                return shouldShowTerminalOverlaySurface()
+                int tint = shouldShowTerminalOverlaySurface()
                     ? mChrome.glass().look().flatTint(resolveTerminalSurfaceColor())
                     : Color.TRANSPARENT;
+                // The Docked insert stands at least one tone step darker than the frame glass.
+                return isRoundedDockStyle() ? tint
+                    : com.termux.app.chrome.InsertTone.floorTint(tint, frameGlassEstimate());
             }
 
             @Override public int paneGlassVeil(@NonNull Rect rootRect) {
@@ -3283,16 +3344,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public int paneCornerRadiusDp() {
-                // Floating's pane card wears Corners, a stored 0 being square corners; Docked the
-                // pane is the opening and has none.
-                return isRoundedDockStyle() ? Math.round(layoutCornersPx() / getResources()
-                    .getDisplayMetrics().density) : 0;
+                // The pane wears Corners under both Styles, a stored 0 being square corners.
+                return Math.round(layoutCornersPx() / getResources().getDisplayMetrics().density);
             }
 
             @Override public int paneGapDp() {
-                // Floating: Margin between pane cards, never past 24dp. Docked the panes tile the
-                // opening exactly and the divider is drawn by the panes' own edges.
-                if (!isRoundedDockStyle()) return 0;
+                // Margin between panes, never past 24dp: air between Floating cards, the gutter
+                // of frame glass between Docked inserts.
                 return Math.min(Math.round(layoutMarginPx() / getResources()
                     .getDisplayMetrics().density),
                     Math.round(com.termux.app.chrome.LiveChromeShape.PANE_GAP_CAP_DP));
@@ -3347,6 +3405,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // rotation, a new wallpaper), and a different width puts the resting place at a different
         // offset into it — whether or not the panes' own dress changed below.
         syncWallpaperParallax();
+        // The Docked gutter's glass samples the same frame, so it follows it as it lands.
+        View gutterBody = findViewById(R.id.terminal_background);
+        if (gutterBody != null && shouldUseWallpaperPassthroughMode())
+            applyFrameGutterGlass(gutterBody, isTerminalPaneGlassActive() && !isRoundedDockStyle());
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         // This runs behind every chrome apply, several times a page change, and the style is a
@@ -5043,6 +5105,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Rests a live blur on one more capture, taken once the next layout pass has landed: the pass
+     * a Style change sets going leaves the first capture showing the frame as it was.
+     */
+    private void restLiveBlurAfterLayout(@Nullable View blur) {
+        if (!(blur instanceof RealtimeBlurView) || mLiveBlurRefreshPending) return;
+        mLiveBlurRefreshPending = true;
+        final android.view.ViewTreeObserver.OnGlobalLayoutListener[] listener =
+            new android.view.ViewTreeObserver.OnGlobalLayoutListener[1];
+        listener[0] = () -> {
+            android.view.ViewTreeObserver observer = blur.getViewTreeObserver();
+            if (observer.isAlive()) observer.removeOnGlobalLayoutListener(listener[0]);
+            mLiveBlurRefreshPending = false;
+            blur.post(() -> restLiveBlur(blur, true));
+        };
+        blur.getViewTreeObserver().addOnGlobalLayoutListener(listener[0]);
+    }
+
+    /** Whether a one-shot re-capture of the status strip's resting blur is waiting on a layout. */
+    private boolean mLiveBlurRefreshPending;
+
+    /**
      * Rests a live blur on one fresh capture, or wakes it. A resting blur draws its last frame
      * instead of re-rasterising the whole decor every time the window draws.
      */
@@ -5835,6 +5918,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         boolean capsule = isInAppKeyboardCapsule();
         boolean floating = isKeyboardFloating();
+        // Remembered, so a Style change that reaches the surfaces without a chrome render redresses
+        // the host at once instead of leaving the other Style's material on it.
+        mKeyboardSurfaceDressedAsCard = capsule;
         int horizontalMargin = resolveInAppKeyboardHorizontalInsetPx();
         // A floating keyboard already sits under its card's grab handle, so the capsule's top gap
         // would only push the keys further from it: the host runs straight up to the handle row
@@ -5997,6 +6083,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyInAppKeyboardSurfaceState(buildChromeSpec());
     }
 
+    /** Whether the keyboard host was last dressed as a card (Floating) rather than a frame slice. */
+    private boolean mKeyboardSurfaceDressedAsCard;
+
     /** The in-app keyboard host's clip, the model's: see {@link #chromeClipOf}. */
     private final com.termux.app.chrome.ChromeShapeOutlineProvider mKeyboardOutline =
         new com.termux.app.chrome.ChromeShapeOutlineProvider();
@@ -6059,6 +6148,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.keyboard(
                 mPreferences, state.barAlpha, capsule ? cornerRadiusPx : 0f, mFancierGlassLook)
             .withBlur(blurRadiusDp)
+            // A card is a card: its fill and rim are never faded out by the stack alpha a
+            // detached Keyboard Opacity may hold. That alpha belongs to a slice of the frame.
+            .withStackAlpha(capsule && !floating ? 100
+                : com.termux.app.chrome.GlassStack.keyboardStackAlphaPercent(mPreferences))
             .withRim(capsule ? !floating : modelRim != com.termux.app.chrome.ChromeEdgeRule.NONE)
             .withSlice(defaultDockGlassFootFraction(), false)
             .withSeams(capsule ? com.termux.app.chrome.ChromeEdgeRule.NONE
@@ -7524,8 +7617,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (statusBlur != null) {
             statusBlur.setVisibility(statusBlurEnabled ? View.VISIBLE : View.GONE);
             // Behind the status band there is only the window's own ground, so one capture is
-            // the whole picture.
+            // the whole picture. A Style change re-lays the chrome after this pass, so the
+            // capture rested here would be of the Floating-era frame: it is taken again once
+            // that layout has landed.
             restLiveBlur(statusBlur, true);
+            restLiveBlurAfterLayout(statusBlur);
         }
         if (statusSurface != null) {
             statusSurface.setBackground(mChrome.glass().statusBarExtensionSurface(opacity, 0f,
@@ -7569,6 +7665,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             statusBlur.setVisibility(ChromePolicy.dockBlurEnabled(blurRadiusDp)
                 ? View.VISIBLE : View.GONE);
             restLiveBlur(statusBlur, true);
+            restLiveBlurAfterLayout(statusBlur);
         }
         if (statusSurface != null) {
             statusSurface.setBackground(mChrome.glass().dockSurface(opacity, 0f,

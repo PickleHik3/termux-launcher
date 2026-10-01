@@ -119,12 +119,11 @@ public class LayoutModeViewsTest {
     }
 
     /**
-     * Corners and Margin are Floating's (SPEC section 3.7): Docked spends neither, so the sliders are
-     * hidden under it. They are invisible rather than gone, so the bottom area keeps its height and
-     * the card does not jump when Style flips.
+     * Corners and Margin mean the same under both Styles (SPEC section 3.7, 2026-10-01): the sliders
+     * stay up, so the bottom area keeps its height and the card does not jump when Style flips.
      */
     @Test
-    public void cornersAndMarginAreShownUnderFloatingAndHiddenUnderDockedWithoutTheCardJumping() {
+    public void cornersAndMarginAreShownUnderBothStylesSoTheCardNeverJumps() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ContextThemeWrapper themed = new ContextThemeWrapper(activity,
             R.style.Theme_TermuxActivity_DayNight_NoActionBar);
@@ -143,9 +142,8 @@ public class LayoutModeViewsTest {
         assertEquals(R.id.appearance_editor_style_floating, style.getCheckedButtonId());
 
         panel.setFloating(false);
-        assertFalse("hidden under Docked", panel.shapeControlsShown());
-        assertEquals("invisible, not gone: the card keeps its height", View.INVISIBLE,
-            row.getVisibility());
+        assertTrue("shown under Docked too", panel.shapeControlsShown());
+        assertEquals(View.VISIBLE, row.getVisibility());
         assertEquals(R.id.appearance_editor_style_docked, style.getCheckedButtonId());
 
         panel.setFloating(true);
