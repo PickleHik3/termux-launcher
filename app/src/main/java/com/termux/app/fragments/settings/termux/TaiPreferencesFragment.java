@@ -561,16 +561,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         return layout;
     }
 
-    private TextView buildTokenHintView(Context context, int textRes) {
-        float density = context.getResources().getDisplayMetrics().density;
-        TextView hint = new TextView(context);
-        hint.setText(textRes);
-        hint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        hint.setTextColor(resolveAttrColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
-        hint.setPadding(0, Math.round(10 * density), 0, 0);
-        return hint;
-    }
-
     private void refreshEndpointPreferences(Context context) {
         try {
             JSONObject endpoint = LauncherCtlApiServer.getInstance().endpointSettings(context);
