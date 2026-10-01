@@ -158,15 +158,17 @@ public final class HelpTargets {
         return s;
     }
     /**
-     * The page's border as one strip along its bottom edge, less the corner squares: the frame
-     * line a border drag is held on. The wall is the page at rest, so its bounds are the page's.
+     * The page's border as one strip along its left edge, less the corner squares: the frame line
+     * a border drag is held on. Any side takes the drag; the left one is shown because the bottom
+     * edge already carries the dock and the keyboard swipe's pill, and a card for the border there
+     * would have nowhere to stand. The wall is the page at rest, so its bounds are the page's.
      */
     private void pageBorder(Snapshot s, Rect wall) {
         float density = context.getResources().getDisplayMetrics().density;
         int corner = Math.round(com.termux.app.chrome.CornerZones.paneSizePx(density));
         int band = Math.round(BORDER_BAND_DP * density);
-        Rect strip = new Rect(wall.left + corner, wall.bottom - band, wall.right - corner,
-            wall.bottom);
+        Rect strip = new Rect(wall.left, wall.top + corner, wall.left + band,
+            wall.bottom - corner);
         add(s, "border", strip, 0);
     }
 
