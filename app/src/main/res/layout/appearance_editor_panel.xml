@@ -34,8 +34,7 @@
 
         <com.google.android.material.button.MaterialButtonToggleGroup
             android:id="@+id/appearance_editor_mode"
-            android:layout_width="0dp"
-            android:layout_weight="1"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:checkedButton="@+id/appearance_editor_mode_appearance"
             app:selectionRequired="true"
@@ -44,27 +43,26 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_editor_mode_appearance"
                 style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:maxLines="1"
-                android:minWidth="0dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:maxLines="1"
                 android:text="@string/action_appearance_editor" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_editor_mode_layout"
                 style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:maxLines="1"
-                android:minWidth="0dp"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:maxLines="1"
                 android:text="@string/action_layout_editor" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        <!-- Takes the leftover width, so the pill, Undo's slot and Done never re-measure when
+             Undo appears. -->
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:layout_weight="1" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_undo"
@@ -73,18 +71,14 @@
             android:layout_height="wrap_content"
             android:contentDescription="@string/appearance_editor_undo"
             android:tooltipText="@string/appearance_editor_undo"
-            android:visibility="gone"
+            android:visibility="invisible"
             app:icon="@drawable/ic_symbol_undo" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_done"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
             android:maxLines="1"
-            android:minWidth="0dp"
-            android:paddingStart="16dp"
-            android:paddingEnd="16dp"
             android:text="@string/appearance_editor_done" />
     </LinearLayout>
 
@@ -124,9 +118,6 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:contentDescription="@string/settings_layout_orientation_portrait"
-                    android:minWidth="48dp"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
                     app:icon="@drawable/ic_symbol_phone_portrait"
                     app:iconGravity="textStart"
                     app:iconPadding="0dp" />
@@ -137,9 +128,6 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:contentDescription="@string/settings_layout_orientation_landscape"
-                    android:minWidth="48dp"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
                     app:icon="@drawable/ic_symbol_phone_landscape"
                     app:iconGravity="textStart"
                     app:iconPadding="0dp" />
@@ -160,9 +148,6 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:contentDescription="@string/appearance_editor_style_docked"
-                    android:minWidth="48dp"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
                     app:icon="@drawable/ic_style_docked"
                     app:iconGravity="textStart"
                     app:iconPadding="0dp" />
@@ -173,9 +158,6 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:contentDescription="@string/appearance_editor_style_floating"
-                    android:minWidth="48dp"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
                     app:icon="@drawable/ic_style_floating"
                     app:iconGravity="textStart"
                     app:iconPadding="0dp" />
@@ -204,21 +186,6 @@
                     android:src="@drawable/ic_symbol_delete"
                     android:tint="?attr/colorOnSurfaceVariant" />
 
-                <TextView
-                    android:id="@+id/layout_editor_tray_badge"
-                    android:layout_width="16dp"
-                    android:layout_height="16dp"
-                    android:layout_gravity="end|top"
-                    android:layout_marginTop="4dp"
-                    android:layout_marginEnd="4dp"
-                    android:background="@drawable/layout_editor_trash_badge"
-                    android:gravity="center"
-                    android:importantForAccessibility="no"
-                    android:includeFontPadding="false"
-                    android:textColor="?attr/colorOnPrimary"
-                    android:textSize="10sp"
-                    android:textStyle="bold"
-                    android:visibility="gone" />
             </FrameLayout>
         </LinearLayout>
 
@@ -329,8 +296,7 @@
             android:id="@+id/appearance_editor_row2_name"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:textAllCaps="true"
-            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:textAppearance="?attr/textAppearanceTitleSmall"
             android:textColor="?attr/colorPrimary" />
 
         <!-- One line of controls side by side. On a narrow panel (AppearanceEditorPanel.setNarrow)
@@ -389,9 +355,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:maxLines="1"
-                            android:text="@string/appearance_editor_soft_off"
-                            app:iconPadding="4dp"
-                            app:iconSize="16dp" />
+                            android:text="@string/appearance_editor_soft_off" />
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/appearance_editor_soft_on"
@@ -400,9 +364,7 @@
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
                             android:maxLines="1"
-                            android:text="@string/appearance_editor_soft_on"
-                            app:iconPadding="4dp"
-                            app:iconSize="16dp" />
+                            android:text="@string/appearance_editor_soft_on" />
                     </com.google.android.material.button.MaterialButtonToggleGroup>
                 </LinearLayout>
 

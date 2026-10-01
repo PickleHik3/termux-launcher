@@ -12,6 +12,8 @@ import android.os.SystemClock;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.util.AttributeSet;
+import android.util.TypedValue;
+import android.view.DragEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -239,15 +241,9 @@ public final class LayoutCanvasView extends View {
     private static final float TRAY_STROKE_DP = 1.25f;
     private static final float TRAY_DASH_DP = 4f;
     private static final float TRAY_TEXT_SP = 11f;
-    /** The trash icon's glyph, its badge, and the popup of hidden elements it opens. */
+    /** The trash icon's glyph and its badge (the list of hidden elements is a popup window the editor shows). */
     private static final float TRASH_ICON_DP = 24f;
     private static final float BADGE_RADIUS_DP = 8f;
-    private static final float POPUP_CHIP_HEIGHT_DP = 40f;
-    private static final float POPUP_GAP_DP = 6f;
-    private static final float POPUP_PAD_DP = 8f;
-    private static final float POPUP_ANCHOR_GAP_DP = 8f;
-    private static final float POPUP_CHIP_INSET_DP = 12f;
-    private static final float POPUP_GLYPH_DP = 18f;
     /** Half the platform's minimum target: what a handle is hit-tested with around its centre. */
     private static final float HANDLE_TOUCH_HALF_DP = 24f;
     /** The one outline a selected element wears: 2dp of the theme's primary. */
@@ -338,12 +334,11 @@ public final class LayoutCanvasView extends View {
     @Nullable private Block mDraggedBar;
     /** The bar a finger is down on that has not yet travelled far enough to lift it, or null. */
     @Nullable private Block mPressedBar;
-    /** The hidden-elements popup: open or not, which chip a finger is down on (-1 for none). */
-    private boolean mPopupOpen;
-    private int mPressedChip = -1;
     /** A press on the trash icon the canvas itself draws (a view that has no host tray). */
     private boolean mPressedTrash;
-    /** The lifted element came out of the popup, so it is hidden now and the tray is no target. */
+    /** Told when the canvas's own trash (a view that has no host tray) is tapped. */
+    @Nullable private Runnable mTrashTapListener;
+    /** The lifted element is a hidden one dragged in from the editor's popup, so it is hidden now and the tray is no target. */
     private boolean mFromPopup;
     /** How far a finger has to travel before the bar under it is lifted rather than tapped. */
     private final float mTouchSlop;
@@ -421,7 +416,6 @@ public final class LayoutCanvasView extends View {
     @NonNull private final Drawable mIconTerminal;
     @NonNull private final Drawable mIconTrash;
     @NonNull private final Drawable mIconTrashFilled;
-    @NonNull private final Drawable mIconHiddenGlyph;
 
     public LayoutCanvasView(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -447,7 +441,6 @@ public final class LayoutCanvasView extends View {
         mIconTerminal = loadIcon(R.drawable.ic_symbol_terminal);
         mIconTrash = loadIcon(R.drawable.ic_symbol_delete);
         mIconTrashFilled = loadIcon(R.drawable.ic_trash_filled);
-        mIconHiddenGlyph = loadIcon(R.drawable.ic_symbol_visibility_off);
     }
 
     /**
@@ -613,8 +606,6 @@ public final class LayoutCanvasView extends View {
         // A new arrangement is the answer to the drag that wrote it, or someone else's write while
         // a finger was down; either way the gesture is over and nothing may spring back into it.
         endDrag();
-        // The last hidden element coming back leaves nothing to list.
-        if (mPopupOpen && hiddenBlocks().isEmpty()) mPopupOpen = false;
         // The blocks are laid out from the frame, and the frame from the view's size; a new
         // arrangement, place or orientation at the same size never reaches onSizeChanged, so the
         // blocks are recomputed here or the old picture would be drawn again.
@@ -1009,6 +1000,10 @@ public final class LayoutCanvasView extends View {
     }
 
     /** Whether the phone outline is the view's own bounds. */
+    public void setOnTrashTapListener(@Nullable Runnable listener) {
+        mTrashTapListener = listener;
+    }
+
     public boolean fillsView() {
         return mFillsView;
     }
@@ -2155,7 +2150,6 @@ public final class LayoutCanvasView extends View {
         drawTray(canvas);
         drawTrash(canvas);
         drawLegend(canvas);
-        drawPopup(canvas);
         drawGhost(canvas);
         drawReadout(canvas);
     }
@@ -2599,7 +2593,8 @@ public final class LayoutCanvasView extends View {
         if (mReadout == null || mDraggedHandle == null) return;
         RectF handle = mHandleRects.get(mDraggedHandle);
         if (handle == null) return;
-        mLegendPaint.setTextSize(READOUT_TEXT_SP * getResources().getDisplayMetrics().scaledDensity);
+        mLegendPaint.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, READOUT_TEXT_SP,
+            getResources().getDisplayMetrics()));
         mLegendPaint.setTypeface(Typeface.DEFAULT_BOLD);
         mLegendPaint.setLetterSpacing(0f);
         float textWidth = mLegendPaint.measureText(mReadout);
@@ -2970,61 +2965,102 @@ public final class LayoutCanvasView extends View {
             : getContext().getString(R.string.layout_editor_trash_filled, count);
     }
 
-    /**
-     * The icon was tapped: opens the list of hidden elements, or closes it. With nothing hidden it
-     * does nothing, since there is nothing to list.
-     */
-    public void toggleHiddenPopup() {
-        if (mPopupOpen) {
-            closeHiddenPopup();
-            return;
-        }
-        if (mLayout == null || mDraggedBar != null || hiddenBlocks().isEmpty()
-            || trashRect().isEmpty()) return;
-        mPopupOpen = true;
-        invalidate();
-    }
-
-    public void closeHiddenPopup() {
-        if (!mPopupOpen) return;
-        mPopupOpen = false;
-        mPressedChip = -1;
-        invalidate();
-    }
-
-    public boolean isHiddenPopupOpen() {
-        return mPopupOpen;
+    /** The hidden elements, in the order the popup lists them. */
+    @NonNull
+    public List<Block> hiddenElements() {
+        return hiddenBlocks();
     }
 
     /** The name a hidden element's chip wears. */
     @NonNull
-    private String chipName(@NonNull Block block) {
+    public String chipName(@NonNull Block block) {
         if (block == Block.KEYBOARD) return getContext().getString(R.string.layout_editor_keyboard);
         String name = barName(block);
         return name == null ? "" : name;
     }
 
-    /**
-     * The popup's geometry, standing on the icon: its chips in {@link #hiddenBlocks} order. Null
-     * while it is closed or has nothing to list.
-     */
-    @VisibleForTesting
-    @Nullable
-    MiniatureDragPolicy.HiddenPopup hiddenPopup() {
-        if (!mPopupOpen || mLayout == null) return null;
-        List<Block> hidden = hiddenBlocks();
-        RectF trash = trashRect();
-        if (hidden.isEmpty() || trash.isEmpty()) return null;
-        mLegendPaint.setTextSize(traySizePx());
-        mLegendPaint.setTypeface(Typeface.DEFAULT);
-        float[] widths = new float[hidden.size()];
-        for (int i = 0; i < widths.length; i++) {
-            widths[i] = 2 * dp(POPUP_CHIP_INSET_DP) + dp(POPUP_GLYPH_DP) + dp(8)
-                + mLegendPaint.measureText(chipName(hidden.get(i)));
+    /** The glyph a hidden element's chip wears as its icon. */
+    @DrawableRes
+    public static int chipGlyph(@NonNull Block block) {
+        switch (block) {
+            case STATUS_BAR: return R.drawable.ic_symbol_notifications;
+            case APPS_ROW: return R.drawable.ic_symbol_apps;
+            case KEYBOARD:
+            case EXTRA_KEYS: return R.drawable.ic_symbol_keyboard;
+            default: return R.drawable.ic_symbol_visibility_off;
         }
-        return MiniatureDragPolicy.HiddenPopup.layout(widths, dp(POPUP_CHIP_HEIGHT_DP),
-            dp(POPUP_GAP_DP), dp(POPUP_PAD_DP), trash.right, trash.top - dp(POPUP_ANCHOR_GAP_DP),
-            dp(8), Math.max(dp(8), getWidth() - dp(8)));
+    }
+
+    /**
+     * A drag of a hidden element's chip out of the editor's popup: the canvas accepts it and runs
+     * the lift it has always run for a bar, hover placeholder and drop included. The chip itself is
+     * the system's drag shadow; the canvas draws only the targets and, over one, the shape the
+     * element would take. A drop reports through the same listener a bar's drop does.
+     */
+    @Override
+    public boolean onDragEvent(@NonNull DragEvent event) {
+        Object local = event.getLocalState();
+        if (!(local instanceof Block)) return false;
+        switch (event.getAction()) {
+            case DragEvent.ACTION_DRAG_STARTED:
+                return beginHiddenDrag((Block) local);
+            case DragEvent.ACTION_DRAG_LOCATION:
+                hoverHiddenDrag(event.getX(), event.getY());
+                return true;
+            case DragEvent.ACTION_DROP:
+                return dropHiddenDrag(event.getX(), event.getY());
+            case DragEvent.ACTION_DRAG_EXITED:
+                hoverHiddenDrag(-1f, -1f);
+                return true;
+            case DragEvent.ACTION_DRAG_ENDED:
+                endHiddenDrag();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    /** A hidden element's chip is being dragged: lifts it, the copy starting at the trash. */
+    @VisibleForTesting
+    boolean beginHiddenDrag(@NonNull Block block) {
+        if (mLayout == null || mDraggedBar != null) return false;
+        // The system reports no reliable start point: the copy starts at the trash.
+        RectF trash = trashRect().isEmpty() ? mTrayRect : trashRect();
+        float cx = trash.isEmpty() ? getWidth() / 2f : trash.centerX();
+        float cy = trash.isEmpty() ? getHeight() : trash.centerY();
+        float halfW = dp(48f);
+        float halfH = dp(16f);
+        mFromPopup = true;
+        if (!liftFrom(block, new RectF(cx - halfW, cy - halfH, cx + halfW, cy + halfH), cx, cy)) {
+            mFromPopup = false;
+            return false;
+        }
+        return true;
+    }
+
+    /** The chip is over {@code (x, y)} in this view: the hover placeholder follows. */
+    @VisibleForTesting
+    void hoverHiddenDrag(float x, float y) {
+        if (mDraggedBar != null) moveDrag(x, y);
+    }
+
+    /** Dropped at {@code (x, y)}: restores through the drop listener over a target, else nothing. */
+    @VisibleForTesting
+    boolean dropHiddenDrag(float x, float y) {
+        if (mDraggedBar == null) return false;
+        moveDrag(x, y);
+        if (mHoverSlot == null) {
+            endDrag();
+            return false;
+        }
+        releaseDrag();
+        return true;
+    }
+
+    /** The drag ended, wherever; a drag that dropped nowhere leaves the element hidden. */
+    @VisibleForTesting
+    void endHiddenDrag() {
+        if (mDraggedBar != null) endDrag();
     }
 
     /**
@@ -3058,93 +3094,6 @@ public final class LayoutCanvasView extends View {
         canvas.drawText(text, bx - width / 2f,
             by - (mLegendPaint.ascent() + mLegendPaint.descent()) / 2f, mLegendPaint);
         mLegendPaint.setTypeface(Typeface.DEFAULT);
-    }
-
-    /** The popup: a panel over the phone with one chip per hidden element, each with the eye-off glyph. */
-    private void drawPopup(@NonNull Canvas canvas) {
-        MiniatureDragPolicy.HiddenPopup popup = hiddenPopup();
-        if (popup == null) return;
-        float radius = slotRadiusPx();
-        mScratchRectA.set(popup.left, popup.top, popup.right, popup.bottom);
-        mFillPaint.setColor(container());
-        canvas.drawRoundRect(mScratchRectA, radius, radius, mFillPaint);
-        mLinePaint.setColor(lineColor());
-        mLinePaint.setAlpha(255);
-        mLinePaint.setStrokeWidth(dp(1f));
-        canvas.drawRoundRect(mScratchRectA, radius, radius, mLinePaint);
-        List<Block> hidden = hiddenBlocks();
-        for (int i = 0; i < popup.chipCount() && i < hidden.size(); i++) {
-            float[] chip = popup.chip(i);
-            drawChip(canvas, chip[0], chip[1], chip[2], chip[3], chipName(hidden.get(i)),
-                i == mPressedChip);
-        }
-    }
-
-    private void drawChip(@NonNull Canvas canvas, float left, float top, float right, float bottom,
-                          @NonNull String name, boolean pressed) {
-        mScratchRectB.set(left, top, right, bottom);
-        float round = (bottom - top) / 2f;
-        mFillPaint.setColor(surface());
-        canvas.drawRoundRect(mScratchRectB, round, round, mFillPaint);
-        if (pressed) {
-            mFillPaint.setColor(accentWash());
-            canvas.drawRoundRect(mScratchRectB, round, round, mFillPaint);
-        }
-        mLinePaint.setColor(pressed ? accent() : lineColor());
-        mLinePaint.setAlpha(255);
-        mLinePaint.setStrokeWidth(dp(1f));
-        canvas.drawRoundRect(mScratchRectB, round, round, mLinePaint);
-        int glyph = Math.round(dp(POPUP_GLYPH_DP));
-        int gx = Math.round(left + dp(POPUP_CHIP_INSET_DP));
-        int gy = Math.round((top + bottom) / 2f - glyph / 2f);
-        DrawableCompat.setTint(mIconHiddenGlyph, onVariant());
-        mIconHiddenGlyph.setBounds(gx, gy, gx + glyph, gy + glyph);
-        mIconHiddenGlyph.draw(canvas);
-        mLegendPaint.setTextSize(traySizePx());
-        mLegendPaint.setTypeface(Typeface.DEFAULT);
-        mLegendPaint.setLetterSpacing(0f);
-        mLegendPaint.setColor(text());
-        float textLeft = gx + glyph + dp(8);
-        CharSequence shown = TextUtils.ellipsize(name, mLegendPaint,
-            Math.max(0f, right - dp(POPUP_CHIP_INSET_DP) - textLeft), TextUtils.TruncateAt.END);
-        canvas.drawText(shown, 0, shown.length(), textLeft,
-            (top + bottom) / 2f - (mLegendPaint.ascent() + mLegendPaint.descent()) / 2f,
-            mLegendPaint);
-    }
-
-    /** The chip lifted out of the popup, at the finger: drawn raised, with the accent rim. */
-    private void drawLiftedChip(@NonNull Canvas canvas, @NonNull Block block) {
-        mGhostRect.set(mLiftOrigin);
-        mGhostRect.offset(mGhostX.value, mGhostY.value);
-        scaleAboutCentre(mGhostRect, mGhostScale.value);
-        float round = mGhostRect.height() / 2f;
-        mScratchRectC.set(mGhostRect);
-        mScratchRectC.offset(0f, u(LIFT_OFFSET_U));
-        mFillPaint.setColor(surface());
-        canvas.drawRoundRect(mScratchRectC, round, round, mFillPaint);
-        drawChip(canvas, mGhostRect.left, mGhostRect.top, mGhostRect.right, mGhostRect.bottom,
-            chipName(block), true);
-    }
-
-    /**
-     * Lifts the chip a finger has travelled with out of the popup. The popup closes at once, and
-     * from there it is the same drag a bar on the phone gets, except the tray is no target (the
-     * element is hidden already) and the keyboard's is the whole phone.
-     */
-    private void beginChipDrag(int index, float x, float y) {
-        MiniatureDragPolicy.HiddenPopup popup = hiddenPopup();
-        List<Block> hidden = hiddenBlocks();
-        mPressedChip = -1;
-        if (popup == null || index < 0 || index >= hidden.size()) return;
-        float[] chip = popup.chip(index);
-        RectF origin = new RectF(chip[0], chip[1], chip[2], chip[3]);
-        mFromPopup = true;
-        if (!liftFrom(hidden.get(index), origin, x, y)) {
-            mFromPopup = false;
-            return;
-        }
-        mPopupOpen = false;
-        moveDrag(x, y);
     }
 
     // ---- The lifted copy -----------------------------------------------------------------------
@@ -3249,11 +3198,8 @@ public final class LayoutCanvasView extends View {
         LayoutCanvasArtwork.Palette p = palette();
         float k = Math.max(0.01f, mCanvasScale);
         float scale = mGhostScale.value;
-        // Out of the popup the lifted copy is the chip until a target gives it a shape.
-        if (mFromPopup && (bar == Block.KEYBOARD || mGhostMorph.value <= 0.01f)) {
-            drawLiftedChip(canvas, bar);
-            return;
-        }
+        // Out of the popup the system's drag shadow is the chip until a target gives it a shape.
+        if (mFromPopup && (bar == Block.KEYBOARD || mGhostMorph.value <= 0.01f)) return;
         if (bar == Block.KEYBOARD) {
             for (Piece piece : mKeyboardPieces) {
                 mGhostRect.set(viewRect(piece.box));
@@ -3511,23 +3457,9 @@ public final class LayoutCanvasView extends View {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
                 mPressedBar = null;
-                mPressedChip = -1;
                 mPressedTrash = false;
                 mDownX = x;
                 mDownY = y;
-                if (mPopupOpen) {
-                    MiniatureDragPolicy.HiddenPopup popup = hiddenPopup();
-                    if (popup != null && popup.contains(x, y)) {
-                        // A chip waits to see whether it is tapped (restore) or pulled out (lift).
-                        mPressedChip = popup.chipAt(x, y);
-                        ViewParent parent = getParent();
-                        if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
-                        invalidate();
-                        return true;
-                    }
-                    // A touch anywhere else closes it, and goes on to do what it would have done.
-                    closeHiddenPopup();
-                }
                 if (!mFillsView && trashRect().contains(x, y)) {
                     mPressedTrash = true;
                     return true;
@@ -3547,11 +3479,6 @@ public final class LayoutCanvasView extends View {
                 return !mTrayRect.contains(x, y);
             }
             case MotionEvent.ACTION_MOVE:
-                if (mPressedChip >= 0 && mDraggedBar == null) {
-                    if (Math.hypot(x - mDownX, y - mDownY) > mTouchSlop)
-                        beginChipDrag(mPressedChip, mDownX, mDownY);
-                    return true;
-                }
                 if (mDraggedHandle != null) {
                     ViewParent parent = getParent();
                     if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
@@ -3586,19 +3513,10 @@ public final class LayoutCanvasView extends View {
                     releaseDrag();
                     return true;
                 }
-                if (mPressedChip >= 0) {
-                    // A tap on a chip brings its element back where it left, as the tray's chips did.
-                    List<Block> hidden = hiddenBlocks();
-                    int chip = mPressedChip;
-                    mPressedChip = -1;
-                    invalidate();
-                    if (chip < hidden.size() && mEditListener != null)
-                        mEditListener.onHiddenChipTapped(hidden.get(chip));
-                    return true;
-                }
                 if (mPressedTrash) {
                     mPressedTrash = false;
-                    if (trashRect().contains(x, y)) toggleHiddenPopup();
+                    if (trashRect().contains(x, y) && mTrashTapListener != null)
+                        mTrashTapListener.run();
                     return true;
                 }
                 mPressedBar = null;
@@ -3610,10 +3528,6 @@ public final class LayoutCanvasView extends View {
             case MotionEvent.ACTION_CANCEL:
                 mPressedBar = null;
                 mPressedTrash = false;
-                if (mPressedChip >= 0) {
-                    mPressedChip = -1;
-                    invalidate();
-                }
                 if (mDraggedHandle != null) releaseHandle();
                 if (mDraggedBar != null) springBack();
                 return true;

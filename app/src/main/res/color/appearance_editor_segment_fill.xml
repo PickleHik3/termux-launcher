@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- A segment that shows its checked state by fill alone (the Legibility group, which has no room
-     for the check icon on a narrow screen): the M3 secondary container when checked, nothing
-     otherwise, so the outlined segment's own stroke is all an unchecked one wears. -->
-<selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:color="?attr/colorSecondaryContainer" android:state_checked="true" />
-    <item android:color="@android:color/transparent" />
-</selector>

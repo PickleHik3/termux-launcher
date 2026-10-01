@@ -2,6 +2,7 @@ package com.termux.app.surfaces;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.drawable.Drawable;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -113,7 +114,6 @@ final class AppearanceEditorPanel {
     private final MaterialButtonToggleGroup mOrientation;
     private final View mTray;
     private final ImageView mTrayTrash;
-    private final TextView mTrayBadge;
     /** Whether Layout mode's row is showing in place of rows 1, 2 and the hint. */
     private boolean mLayoutMode;
     /** Whether row 2 was up when Layout mode took its place, so Appearance gets it back. */
@@ -174,7 +174,6 @@ final class AppearanceEditorPanel {
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
         mTray = root.findViewById(R.id.layout_editor_tray);
         mTrayTrash = root.findViewById(R.id.layout_editor_tray_trash);
-        mTrayBadge = root.findViewById(R.id.layout_editor_tray_badge);
         paintSheet();
         buildLookLabels();
         bind();
@@ -293,6 +292,7 @@ final class AppearanceEditorPanel {
                 mListener.onModeChanged(checkedId == R.id.appearance_editor_mode_layout);
         });
         syncCheckIcons(mMode);
+        evenModeSegments();
         mUndo.setOnClickListener(view -> {
             if (mListener != null) mListener.onUndo();
         });
@@ -396,9 +396,8 @@ final class AppearanceEditorPanel {
     private void syncCheckIcons(@NonNull MaterialButtonToggleGroup group) {
         // Legibility's three words have no room for the icon on a narrow panel: its checked
         // segment is told by the fill alone. The orientation and Style toggles are glyphs
-        // already. The mode pill shares the top row with Undo and Done: its icon pushed Done
-        // off a narrow panel.
-        if (group == mOrientation || group == mStyle || group == mMode)
+        // already.
+        if (group == mOrientation || group == mStyle)
             return;
         for (int i = 0; i < group.getChildCount(); i++) {
             View child = group.getChildAt(i);
@@ -408,6 +407,32 @@ final class AppearanceEditorPanel {
             button.setIcon(button.isChecked()
                 ? ContextCompat.getDrawable(mContext, R.drawable.ic_symbol_check) : null);
         }
+    }
+
+    /**
+     * The mode pill's two segments get the same width, the one the wider of them needs with the
+     * check icon on, so choosing the other mode moves nothing. Measured once, before the first
+     * frame; the pill is wrap_content and Undo's slot is reserved, so nothing else in the row
+     * depends on it afterwards.
+     */
+    private void evenModeSegments() {
+        MaterialButton appearance = mRoot.findViewById(R.id.appearance_editor_mode_appearance);
+        MaterialButton layout = mRoot.findViewById(R.id.appearance_editor_mode_layout);
+        if (appearance == null || layout == null)
+            return;
+        Drawable check = ContextCompat.getDrawable(mContext, R.drawable.ic_symbol_check);
+        int checkWidth = check == null ? 0 : check.getIntrinsicWidth();
+        int spec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        int widest = 0;
+        for (MaterialButton button : new MaterialButton[] {appearance, layout}) {
+            button.measure(spec, spec);
+            int natural = button.getMeasuredWidth();
+            if (button.getIcon() == null)
+                natural += checkWidth + button.getIconPadding();
+            widest = Math.max(widest, natural);
+        }
+        appearance.setMinWidth(widest);
+        layout.setMinWidth(widest);
     }
 
     // ------------------------------------------------------------------------- restatements
@@ -546,12 +571,9 @@ final class AppearanceEditorPanel {
         return mTrayTrash;
     }
 
-    @NonNull TextView trayBadge() {
-        return mTrayBadge;
-    }
-
     void setDirty(boolean dirty) {
-        int visibility = dirty ? View.VISIBLE : View.GONE;
+        // Invisible, never gone: Undo's slot is always reserved, so the row never re-measures.
+        int visibility = dirty ? View.VISIBLE : View.INVISIBLE;
         if (mUndo.getVisibility() != visibility)
             mUndo.setVisibility(visibility);
     }
