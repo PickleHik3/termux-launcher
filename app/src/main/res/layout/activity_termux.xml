@@ -29,6 +29,16 @@
             android:importantForAccessibility="no"
             android:visibility="invisible" />
 
+        <!-- The joined Docked frame's glass: one sheet behind the status bar, the canvas band, the
+             dock rows and the keyboard, so there is no seam between them. Dressed (and shown) by
+             applyFrameGutterGlass only while the shape model has a joined frame card. -->
+        <View
+            android:id="@+id/docked_frame_glass"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
         <FrameLayout
             android:id="@+id/terminal_status_bar_background"
             android:layout_width="match_parent"

@@ -203,6 +203,15 @@ public final class WallpaperFrostPainter {
             rectKey, SurfaceDirtyLedger.FrostRadius.OFF_DOCK, cornerRadiusPx, seams);
     }
 
+    /**
+     * Takes an off-dock sheet's frost down, ledger and all, so the pass that dresses it again finds
+     * it missing and rebuilds it. Used while the joined Docked frame's glass is the sheet instead.
+     */
+    public void hideOffDockSheet(@NonNull ImageView frost,
+                                 @NonNull SurfaceDirtyLedger.FrostRect rectKey) {
+        hide(frost, rectKey);
+    }
+
     /** The frosts {@link #followMoves} already watches. */
     @NonNull private final java.util.Set<View> mFollowed =
         java.util.Collections.newSetFromMap(new java.util.WeakHashMap<>());
