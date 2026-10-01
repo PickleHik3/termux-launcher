@@ -154,6 +154,8 @@ public final class TaiRuntimeService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+        // Before any MNN or LiteRT library loads in this process: MNN prints prompts at DEBUG.
+        TaiNativeLog.silenceDebugOnce();
         // Self-heal for builds where the category sort posted under this same id: its last frame
         // could outlive both services and sit in the shade forever, ongoing and unswipeable. This
         // id is ours, and nothing of ours is posted under it until ensureForeground() runs.
