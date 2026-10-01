@@ -808,9 +808,10 @@ public final class SurfaceEditorController {
             // The palette Legibility changes is the Material one; with wallpaper colours off the
             // terminal wears a scheme file, which no contrast level moves (as in Settings).
             boolean palette = prefs.isTerminalDynamicColorsEnabled();
-            panel.setLegibility(getString(palette ? R.string.appearance_editor_legibility
-                    : R.string.appearance_editor_legibility_unavailable),
-                AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel()), palette);
+            int stop = AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
+            panel.setLegibility(palette ? panel.legibilityLabel(stop)
+                    : getString(R.string.appearance_editor_legibility_unavailable),
+                stop, palette);
         } else {
             panel.hideLegibility();
         }

@@ -14,9 +14,9 @@
     <string name="appearance_editor_style_docked">Docked</string>
     <string name="appearance_editor_style_floating">Floating</string>
 
-    <string name="appearance_editor_hint_look">Slide to try a Look. The last stop is yours.</string>
-    <string name="appearance_editor_hint_custom">Tap anything in the frame to tune it.</string>
-    <string name="appearance_editor_custom_replaced">Custom look replaced</string>
+    <string name="appearance_editor_hint_look">Slide to try a look. The last stop is your own.</string>
+    <string name="appearance_editor_hint_custom">Tap a part of the preview to adjust it.</string>
+    <string name="appearance_editor_custom_replaced">Your custom look was replaced</string>
 
     <!-- The elements a tap in the frame selects; row 2's heading and the targets' descriptions. -->
     <string name="appearance_editor_target_status">Status bar</string>
@@ -27,16 +27,15 @@
     <string name="appearance_editor_target_description">Tune %1$s</string>
 
     <!-- Row 2's controls; the number is the control's own read-out. -->
-    <string name="appearance_editor_darkness">Darkness · %1$d%%</string>
+    <string name="appearance_editor_darkness">Opacity · %1$d%%</string>
     <string name="appearance_editor_blur">Blur · %1$d dp</string>
-    <string name="appearance_editor_legibility">Legibility</string>
-    <string name="appearance_editor_legibility_unavailable">Legibility · needs wallpaper colors</string>
-    <string name="appearance_editor_key_corners">Key corners · %1$d dp</string>
-    <string name="appearance_editor_soft">Soft wallpaper</string>
+    <string name="appearance_editor_legibility_low">Text contrast · Low</string>
+    <string name="appearance_editor_legibility_unavailable">Text contrast · needs wallpaper colors</string>
+    <string name="appearance_editor_key_corners">Key radius · %1$d dp</string>
+    <string name="appearance_editor_soft">Soften wallpaper</string>
     <string name="appearance_editor_dim">Dim · %1$d%%</string>
-    <string name="appearance_editor_legibility_softer">Softer</string>
-    <string name="appearance_editor_legibility_default">Default</string>
-    <string name="appearance_editor_legibility_harder">Harder</string>
+    <string name="appearance_editor_legibility_normal">Text contrast · Normal</string>
+    <string name="appearance_editor_legibility_high">Text contrast · High</string>
     <string name="appearance_editor_soft_off">Off</string>
     <string name="appearance_editor_soft_on">On</string>
 

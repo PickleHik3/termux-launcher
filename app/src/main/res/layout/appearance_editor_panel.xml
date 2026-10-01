@@ -420,71 +420,18 @@
                         android:id="@+id/appearance_editor_cl_label"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="@string/appearance_editor_legibility"
+                        android:text="@string/appearance_editor_legibility_normal"
                         android:textAppearance="?attr/textAppearanceLabelMedium"
                         android:textColor="?attr/colorOnSurfaceVariant" />
 
-                    <com.google.android.material.button.MaterialButtonToggleGroup
+                    <com.google.android.material.slider.Slider
                         android:id="@+id/appearance_editor_legibility"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        app:selectionRequired="true"
-                        app:singleSelection="true">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/appearance_editor_legibility_softer"
-                            style="?attr/materialButtonOutlinedStyle"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:insetLeft="0dp"
-                            android:insetRight="0dp"
-                            android:maxLines="1"
-                            android:minWidth="0dp"
-                            android:paddingStart="2dp"
-                            android:paddingEnd="2dp"
-                            android:text="@string/appearance_editor_legibility_softer"
-                            android:textAppearance="?attr/textAppearanceLabelMedium"
-                            app:backgroundTint="@color/appearance_editor_segment_fill"
-                            app:icon="@null"
-                            app:iconPadding="0dp" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/appearance_editor_legibility_default"
-                            style="?attr/materialButtonOutlinedStyle"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:insetLeft="0dp"
-                            android:insetRight="0dp"
-                            android:maxLines="1"
-                            android:minWidth="0dp"
-                            android:paddingStart="2dp"
-                            android:paddingEnd="2dp"
-                            android:text="@string/appearance_editor_legibility_default"
-                            android:textAppearance="?attr/textAppearanceLabelMedium"
-                            app:backgroundTint="@color/appearance_editor_segment_fill"
-                            app:icon="@null"
-                            app:iconPadding="0dp" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/appearance_editor_legibility_harder"
-                            style="?attr/materialButtonOutlinedStyle"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:insetLeft="0dp"
-                            android:insetRight="0dp"
-                            android:maxLines="1"
-                            android:minWidth="0dp"
-                            android:paddingStart="2dp"
-                            android:paddingEnd="2dp"
-                            android:text="@string/appearance_editor_legibility_harder"
-                            android:textAppearance="?attr/textAppearanceLabelMedium"
-                            app:backgroundTint="@color/appearance_editor_segment_fill"
-                            app:icon="@null"
-                            app:iconPadding="0dp" />
-                    </com.google.android.material.button.MaterialButtonToggleGroup>
+                        android:stepSize="1"
+                        android:valueFrom="0"
+                        android:valueTo="2"
+                        app:labelBehavior="gone" />
                 </LinearLayout>
 
                 <LinearLayout
