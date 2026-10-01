@@ -235,7 +235,7 @@ _Avoid_: bar (for the keyboard), widget, slot (the store's word for where an ele
 **Layout editor**:
 The editor for where the elements sit and how big they are: bars, dock, keyboard, widget grid,
 hidden or shown. It has no rows of controls (spec `project-docs/active/appearance-layout-editor`
-§3.5): a bar moves by its grip, anything is put away by dropping it in the **restore tray** and
+§3.5): a bar moves by pressing it anywhere and dragging, anything is put away by dropping it in the **restore tray** and
 brought back by its chip there, and a tap selects an element and shows its **handle** — the dock's
 height, the keyboard's height and chin, Home's grid cells — with a readout in real units while it
 is held. The selected keyboard shows its type chips (docked, floating, split). The layout is

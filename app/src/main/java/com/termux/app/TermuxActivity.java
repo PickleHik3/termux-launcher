@@ -10456,6 +10456,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return currentWallPlace();
         }
 
+        @Override public int extraKeyCount() {
+            if (mTermuxTerminalExtraKeys == null || mTermuxTerminalExtraKeys.getExtraKeysInfo() == null) {
+                return -1;
+            }
+            com.termux.shared.termux.extrakeys.ExtraKeyButton[][] matrix =
+                mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix();
+            return matrix.length == 0 ? -1 : matrix[0].length;
+        }
+
         @NonNull @Override public PlaceOrientation placeOrientation() {
             return currentPlaceOrientation();
         }

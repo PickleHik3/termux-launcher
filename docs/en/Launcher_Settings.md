@@ -34,8 +34,8 @@ There are no rows of settings under the canvas: you move things by dragging them
 dropping them in the tray, and size them by their handles.
 
 - **Move.** Every bar — **Status bar**, **Apps row**, **A–Z index** and **Extra keys** — is
-  dragged by the six-dot grip at its corner to the edge you want it on, any of the four, in either
-  orientation. Dropping a bar between two others on the same edge sets the order they stack in.
+  pressed anywhere and moved to the edge you want it on, any of the four, in either orientation;
+  a tap only selects it. Dropping a bar between two others on the same edge sets the order they stack in.
   The A–Z index rides the pinned apps row while the two share an edge; dropped on another edge it
   stands on a bar of its own.
 - **Under the keyboard.** Where the canvas shows the keyboard, it also offers a slot below it:
@@ -82,7 +82,7 @@ title, Undo, Discard and Done — stays at the top. It rests low enough to leave
 screen in view; pull it up by the handle or the header and it grows toward the top of the screen,
 and a tap on the handle does the same. A firm pull down past its resting size closes the editor the
 way Back does: straight away when nothing has changed, and with the keep-or-discard question when
-something has. While you drag a bar by its grip or hold a handle, the card stays still.
+something has. While you drag a bar or hold a handle, the card stays still.
 
 The keyboard itself remembers where it was: Terminal and Display each come back with the keyboard
 up or down the way you left them, and Home always comes back with it down. On Home the keyboard
