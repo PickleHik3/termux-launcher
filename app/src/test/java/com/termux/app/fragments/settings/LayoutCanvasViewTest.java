@@ -930,8 +930,11 @@ public class LayoutCanvasViewTest {
         assertNotNull(column);
         assertNotNull(canvas);
         assertNotNull(keys);
-        assertEquals("the column flanks the canvas", canvas.top, column.top, 0.5f);
-        assertEquals(canvas.bottom, column.bottom, 0.5f);
+        // The canvas is the rounded insert, a gutter inside the bars, so the column flanks it
+        // from outside: no shorter than the insert, and never down past the dock's rows.
+        assertTrue("the column flanks the canvas", column.top <= canvas.top + 0.5f);
+        assertTrue(column.bottom >= canvas.bottom - 0.5f);
+        assertTrue("the column stops at the dock's rows", column.bottom <= keys.top + 0.5f);
         assertTrue("the dock's row keeps the whole width", keys.left <= column.left + 0.5f);
     }
 
