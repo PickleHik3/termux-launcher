@@ -207,12 +207,18 @@ public final class LayoutCanvasView extends View {
     private static final float FRAME_INSET_BOTTOM_U = 16f;
     /** Half the gap between two elements, taken off every block on every side. */
     private static final float CARD_PAD_U = 3f;
-    /** The elements' corner radii. */
-    private static final float PANE_RADIUS_U = 20f;
+    /**
+     * The one corner every element block wears, in real dp scaled by the canvas like the other
+     * metrics: bands, keyboard, pane, grid, drop outlines and the selection all share it. Small, so
+     * nothing reads as a pill; a block thinner than twice this stops at a half-capsule of its own.
+     */
+    private static final float CANVAS_CORNER_DP = 6f;
+    /** A key cap's corner, in the keyboard pack's dp: proportionally under the block's own. */
+    private static final float KEY_CORNER_DP = 4f;
     /**
      * The dock's corner until the editor says otherwise: the follow-the-style radius a Floating
-     * dock ships with. Every band and the keyboard are rounded from this one figure, scaled to the
-     * picture ({@link #surfaceRadiusUnits}); each card then stops at a true half-capsule of its own.
+     * dock ships with. It only says floating or docked now (the dock band's height); the corner
+     * drawn is {@link #CANVAS_CORNER_DP} for every block.
      */
     public static final float DEFAULT_DOCK_RADIUS_DP =
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
@@ -268,7 +274,6 @@ public final class LayoutCanvasView extends View {
      */
     private static final float TRAY_HEIGHT_DP = 48f;
     private static final float TRAY_GAP_DP = 12f;
-    private static final float TRAY_RADIUS_DP = 12f;
     private static final float TRAY_STROKE_DP = 1.25f;
     private static final float TRAY_DASH_DP = 4f;
     private static final float TRAY_TEXT_SP = 11f;
@@ -316,8 +321,6 @@ public final class LayoutCanvasView extends View {
     private final RectF mContentRect = new RectF();
     /** One design unit on this frame, in pixels. */
     private float mUnit = 1f;
-    /** The one corner radius every band and the keyboard share, in design units. */
-    private float mSurfaceRadiusU;
     private final Path mClipPath = new Path();
     /** The floating keyboard's card, or a split keyboard's halves and the whole they cut. */
     private final RectF mKeyboardPartA = new RectF();
@@ -436,19 +439,14 @@ public final class LayoutCanvasView extends View {
         mIconHomeGrid = loadIcon(R.drawable.ic_symbol_grid_view);
         mIconDisplay = loadIcon(R.drawable.ic_symbol_desktop_windows);
         mIconTerminal = loadIcon(R.drawable.ic_symbol_terminal);
-        mSurfaceRadiusU = surfaceRadiusUnits(DEFAULT_DOCK_RADIUS_DP, screenShortSideDp());
     }
 
     /**
-     * The dock's corner radius, in dp, that the bands and the keyboard are rounded from. The
-     * picture is the phone at {@value #PHONE_SHORT_SIDE_UNITS} units across its short side, so the
-     * real radius is scaled by that against the real screen's short side: the cards corner as the
-     * surfaces do, one system, rather than each band a number of its own.
+     * The dock's corner radius, in dp. Zero is the docked dock and above it the floating one; the
+     * picture tells them apart by the band's height, not by the corner, which every block shares.
      */
     public void setDockCornerRadiusDp(float radiusDp) {
-        float units = surfaceRadiusUnits(radiusDp, screenShortSideDp());
-        if (units == mSurfaceRadiusU && Float.compare(radiusDp, mDockRadiusDp) == 0) return;
-        mSurfaceRadiusU = units;
+        if (Float.compare(radiusDp, mDockRadiusDp) == 0) return;
         mDockRadiusDp = radiusDp;
         // A square dock and a floating one differ in height too, so the bands are laid again.
         if (getWidth() > 0 && getHeight() > 0) layoutFrame(getWidth(), getHeight());
@@ -486,16 +484,6 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * A real radius, in dp, in the picture's units: the phone's short side is
-     * {@value #PHONE_SHORT_SIDE_UNITS} of them, the screen's is {@code screenShortSideDp}.
-     */
-    @VisibleForTesting
-    public static float surfaceRadiusUnits(float radiusDp, float screenShortSideDp) {
-        float side = screenShortSideDp > 0f ? screenShortSideDp : REFERENCE_SHORT_SIDE_DP;
-        return Math.max(0f, radiusDp) * PHONE_SHORT_SIDE_UNITS / side;
-    }
-
-    /**
      * The radius a card of this size is drawn at: the shared radius, no more than a true
      * half-capsule of its shorter side. A thin band is then a capsule and a tall one — the
      * keyboard — keeps the whole radius, which is what the real surfaces do.
@@ -506,10 +494,10 @@ public final class LayoutCanvasView extends View {
         return Math.max(0f, Math.min(surfaceRadiusPx, half));
     }
 
-    /** The shared radius in view pixels, at this frame's unit. */
+    /** The shared block corner in view pixels: {@value #CANVAS_CORNER_DP}dp at the canvas scale. */
     @VisibleForTesting
     public float surfaceRadiusPx() {
-        return u(mSurfaceRadiusU);
+        return CANVAS_CORNER_DP * mCanvasScale;
     }
 
     private float cardRadius(@NonNull RectF card) {
@@ -2063,7 +2051,7 @@ public final class LayoutCanvasView extends View {
         RectF block = mSelected == Block.KEYBOARD ? mKeyboardRect : mBlockRects.get(mSelected);
         if (block == null || block.isEmpty()) return;
         cardOf(block, mScratchRectA);
-        float radius = mSelected == Block.CANVAS ? u(PANE_RADIUS_U) : cardRadius(mScratchRectA);
+        float radius = mSelected == Block.CANVAS ? surfaceRadiusPx() : cardRadius(mScratchRectA);
         mLinePaint.setColor(accent());
         mLinePaint.setStrokeWidth(dp(SELECTION_STROKE_DP));
         canvas.drawRoundRect(mScratchRectA, radius, radius, mLinePaint);
@@ -2562,7 +2550,7 @@ public final class LayoutCanvasView extends View {
         if (rect == null || rect.isEmpty() || mLayout == null) return;
         RectF pane = mScratchRectC;
         cardOf(rect, pane);
-        float radius = u(PANE_RADIUS_U);
+        float radius = surfaceRadiusPx();
         mFillPaint.setColor(terminalFill());
         canvas.drawRoundRect(pane, radius, radius, mFillPaint);
         mLinePaint.setColor(lineColor());
@@ -2635,7 +2623,7 @@ public final class LayoutCanvasView extends View {
         int tile = ColorUtils.setAlphaComponent(container(), TILE_ALPHA);
         if (mGridCollapsed) {
             mFillPaint.setColor(tile);
-            canvas.drawRoundRect(area, u(8f), u(8f), mFillPaint);
+            canvas.drawRoundRect(area, surfaceRadiusPx(), surfaceRadiusPx(), mFillPaint);
             return; // the "n×m" figure is in the legend, so nothing else is written here
         }
         int columns = Math.max(1, mLayout.widgetColumns);
@@ -2643,7 +2631,7 @@ public final class LayoutCanvasView extends View {
         float cellGap = 6f * mUnit;
         float cellW = (area.width() - cellGap * (columns - 1)) / columns;
         float cellH = (area.height() - cellGap * (rows - 1)) / rows;
-        float radius = Math.min(u(10f), Math.min(cellW, cellH) * 0.3f);
+        float radius = Math.min(surfaceRadiusPx(), Math.min(cellW, cellH) * 0.3f);
         boolean decorated = Math.min(cellW, cellH) >= u(22f);
         float areaLeft = area.left;
         float areaTop = area.top;
@@ -2703,7 +2691,7 @@ public final class LayoutCanvasView extends View {
         window.set(desk.left + winInsetX, winTop, desk.right - winInsetX, winBottom);
         // A window on the display is a raised surface, the same tone the tiles wear.
         mFillPaint.setColor(ColorUtils.setAlphaComponent(container(), TILE_ALPHA));
-        float radius = u(6f);
+        float radius = surfaceRadiusPx();
         canvas.drawRoundRect(window, radius, radius, mFillPaint);
         mLinePaint.setColor(lineColor());
         mLinePaint.setStrokeWidth(u(CARD_STROKE_U));
@@ -2836,7 +2824,7 @@ public final class LayoutCanvasView extends View {
         if (grabber && h > 30f) pkBar(canvas, w / 2f - 14f, 8f, 28f, onVariant(), 3f);
         for (int r = 0; r < rows.size(); r++) {
             float y = top + r * rowPitch;
-            float keyRadius = r == rows.size() - 1 ? 7f : Math.min(6f, keyH / 3f);
+            float keyRadius = Math.min(KEY_CORNER_DP, keyH / 3f);
             for (LayoutCanvasGeometry.KeyCell cell : rows.get(r)) {
                 drawKeyCell(canvas, cell, PACK_KEY_MARGIN + cell.x * pitch, y,
                     cell.w * pitch - PACK_KEY_GAP, keyH, keyRadius);
@@ -3036,7 +3024,7 @@ public final class LayoutCanvasView extends View {
     private void drawSlots(@NonNull Canvas canvas) {
         if (mSlots.isEmpty()) return;
         int accent = accent();
-        float radius = dp(4);
+        float radius = surfaceRadiusPx();
         MiniatureDragPolicy.Slot hoveredSlot = mHoverSlot;
         Edge hovered = hoveredSlot == null ? null : hoveredSlot.edge;
         mDashPaint.setPathEffect(mSlotDash);
@@ -3119,7 +3107,7 @@ public final class LayoutCanvasView extends View {
      */
     private void drawTray(@NonNull Canvas canvas) {
         if (trayState() != TrayState.OFFERING) return;
-        float radius = dp(TRAY_RADIUS_DP);
+        float radius = surfaceRadiusPx();
         boolean active = mHoverSlot != null && mHoverSlot.isTray();
         mFillPaint.setColor(surface());
         canvas.drawRoundRect(mTrayRect, radius, radius, mFillPaint);
