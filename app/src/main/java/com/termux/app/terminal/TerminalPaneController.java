@@ -365,6 +365,7 @@ public class TerminalPaneController {
     /** Reused by {@link #provideCursorTarget}, so the animated pull runs no arrays of its own. */
     private final int[] mCursorViewLocationScratch = new int[2];
     private final int[] mCursorOverlayLocationScratch = new int[2];
+    private final float[] mCursorBentScratch = new float[2];
 
     public TerminalPaneController(Host host, FrameLayout hostView, LayoutInflater inflater) {
         mHost = host;
@@ -419,6 +420,34 @@ public class TerminalPaneController {
         } else if (shape == TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE) {
             out.top = cellTop + cellHeight * 3f / 4f;
         }
+        out.hasClip = false;
+        if (view.getParent() instanceof PaneContentFrame) {
+            PaneContentFrame frame = (PaneContentFrame) view.getParent();
+            frame.getLocationOnScreen(mCursorViewLocationScratch);
+            float frameX = mCursorViewLocationScratch[0] - mCursorOverlayLocationScratch[0];
+            float frameY = mCursorViewLocationScratch[1] - mCursorOverlayLocationScratch[1];
+            out.hasClip = true;
+            out.clipLeft = frameX;
+            out.clipTop = frameY;
+            out.clipRight = frameX + frame.getWidth();
+            out.clipBottom = frameY + frame.getHeight();
+            // A bent CRT card shows the cursor somewhere else than it sits; aim the trail there.
+            PaneRetroStyle retro = frame.retroStyle();
+            if (retro.usesCrt()) {
+                float w = frame.getWidth();
+                float h = frame.getHeight();
+                PaneRetroEffect.displayedPoint(retro, w, h, out.left - frameX, out.top - frameY,
+                    mCursorBentScratch);
+                float left = frameX + mCursorBentScratch[0];
+                float top = frameY + mCursorBentScratch[1];
+                PaneRetroEffect.displayedPoint(retro, w, h, out.right - frameX, out.bottom - frameY,
+                    mCursorBentScratch);
+                out.left = left;
+                out.top = top;
+                out.right = frameX + mCursorBentScratch[0];
+                out.bottom = frameY + mCursorBentScratch[1];
+            }
+        }
         out.cellWidthPx = cellWidth;
         out.cellHeightPx = cellHeight;
         out.dectcemOn = emulator.isCursorEnabled();
@@ -433,6 +462,31 @@ public class TerminalPaneController {
     private static final float DEFAULT_CURSOR_TRAIL_DECAY_SLOW = 0.40f;
     private static final int DEFAULT_CURSOR_TRAIL_THRESHOLD = 2;
 
+    /** Trail style id from kitty.conf {@code custom_shaders}; null when it names none. */
+    @Nullable private String mKittyCursorTrailStyleId;
+    /** Trail style id from the Settings preference. */
+    @Nullable private String mPrefCursorTrailStyleId;
+    /** Retro effect id from the Settings preference; one global setting for every terminal pane. */
+    @Nullable private String mRetroEffectId;
+
+    /** Records the Settings choice; kitty.conf still wins when it names a style. */
+    public void setCursorTrailStylePreference(@Nullable String id) {
+        mPrefCursorTrailStyleId = id;
+        applyEffectiveCursorTrailStyle();
+    }
+
+    private void applyEffectiveCursorTrailStyle() {
+        mMotionOverlay.setCursorTrailStyle(
+            CursorTrailStyle.effective(mKittyCursorTrailStyleId, mPrefCursorTrailStyleId));
+    }
+
+    /** Sets the retro effect on every terminal pane frame (not wall widget pages), now and later. */
+    public void setRetroEffectPreference(@Nullable String id) {
+        mRetroEffectId = id;
+        PaneRetroStyle style = PaneRetroStyle.fromId(id);
+        for (PaneContentFrame frame : mPaneFrames.values()) frame.setRetroStyle(style);
+    }
+
     /**
      * Feeds the trail's tunables from a freshly (re)loaded {@code kitty.conf}: {@code cursor_trail}
      * (a positive value only — kitty's own on/off use of 0 is not this app's switch, which stays the
@@ -442,6 +496,8 @@ public class TerminalPaneController {
      * read once for both.
      */
     public void applyCursorTrailKittyConfig(@NonNull TerminalFontConfig.Result config) {
+        mKittyCursorTrailStyleId = config.cursorTrailStyleId;
+        applyEffectiveCursorTrailStyle();
         long delayMs = config.cursorTrailDelayMs > 0
             ? config.cursorTrailDelayMs : DEFAULT_CURSOR_TRAIL_DELAY_MS;
         float decayFast = config.cursorTrailDecayFast != null
@@ -3201,6 +3257,7 @@ public class TerminalPaneController {
             // A pane beside this one already measured these fonts at this size; start from it.
             view.adoptFontFrom(anyFontInitializedPaneView());
             mHost.configurePaneView(view);
+            frame.setRetroStyle(PaneRetroStyle.fromId(mRetroEffectId));
             view.setOnTouchListener((v, ev) -> {
                 if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
                     TerminalSession s = ((TerminalView) v).getCurrentSession();

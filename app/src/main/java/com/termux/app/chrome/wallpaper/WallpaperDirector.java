@@ -132,6 +132,11 @@ public final class WallpaperDirector {
         /** 0 means paused: draw nothing new and stop the clock. */
         public final int fps;
         public final float timeSeconds;
+        /**
+         * Shader time integrated over energy: it slows to a stop as energy falls and picks up
+         * again without a jump, and is 0 once a lock settles. For one-way motion (scrolls, rises).
+         */
+        public final float phaseSeconds;
         /** 0..1: how far the picture is from its rest pose. */
         public final float energy;
         /** 0..1. */
@@ -143,10 +148,11 @@ public final class WallpaperDirector {
         /** True on exactly one frame per lock: the host should run the lock now. */
         public final boolean lockDue;
 
-        Frame(int fps, float timeSeconds, float energy, float dim, int[] palette,
+        Frame(int fps, float timeSeconds, float phaseSeconds, float energy, float dim, int[] palette,
               Moment[] moments, boolean lockDue) {
             this.fps = fps;
             this.timeSeconds = timeSeconds;
+            this.phaseSeconds = phaseSeconds;
             this.energy = energy;
             this.dim = dim;
             this.palette = palette;
@@ -160,6 +166,8 @@ public final class WallpaperDirector {
     private Conditions cond;
 
     private double time;
+    private double phase;
+    private float lastEnergy = 1f;
     private long lastFrameNanos = -1;
     private boolean lastFramePlayed;
 
@@ -286,6 +294,9 @@ public final class WallpaperDirector {
             if (delta > 0) {
                 time += delta / 1e9;
                 if (time >= wrapSeconds) time -= wrapSeconds;
+                // Phase advances at the previous frame's energy; a one-frame lag is invisible.
+                phase += delta / 1e9 * lastEnergy;
+                if (phase >= wrapSeconds) phase -= wrapSeconds;
             }
         }
         lastFramePlayed = playing;
@@ -308,6 +319,7 @@ public final class WallpaperDirector {
                 if (lockForced || elapsed >= LOCK_SETTLE_MS * NANOS_PER_MS) {
                     lockDue = true;
                     mode = LOCKED;
+                    phase = 0; // the locked frame is the rest pose, as the system's still is
                     lockForced = false;
                     energy = 0f;
                     dim = LOCK_DIM;
@@ -341,6 +353,7 @@ public final class WallpaperDirector {
                 break;
         }
         lastDim = dim;
+        lastEnergy = energy;
 
         Moment[] moments = new Moment[MAX_MOMENTS];
         for (int i = 0; i < MAX_MOMENTS; i++) {
@@ -360,7 +373,7 @@ public final class WallpaperDirector {
             moments[i] = new Moment(slotKind[i], slotX[i], slotY[i], slotW[i], slotH[i], p);
         }
 
-        return new Frame(fps, (float) time, energy, dim, palette, moments, lockDue);
+        return new Frame(fps, (float) time, (float) phase, energy, dim, palette, moments, lockDue);
     }
 
     /**

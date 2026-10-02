@@ -15,7 +15,7 @@ import java.util.Set;
 public class AnimatedWallpapersTest {
 
     private static final String[] UNIFORMS = {
-        "uniform float2 uResolution", "uniform float uTime", "uniform float uEnergy", "uniform float uDim",
+        "uniform float2 uResolution", "uniform float uTime", "uniform float uPhase", "uniform float uEnergy", "uniform float uDim",
         "layout(color) uniform half4 uPalette0", "layout(color) uniform half4 uPalette1",
         "layout(color) uniform half4 uPalette2", "layout(color) uniform half4 uPalette3",
         "uniform float4 uMomentRect0", "uniform float2 uMomentState0",
@@ -23,11 +23,12 @@ public class AnimatedWallpapersTest {
         "half4 main(float2 "
     };
 
-    @Test public void idsAreTheFourBuiltInsAndUnique() {
+    @Test public void idsAreTheBuiltInsAndUnique() {
+        String[] expected = {"mesh", "aurora", "tide", "rain", "contour", "drift", "lava", "silk", "caustics", "chrome"};
         Set<String> ids = new HashSet<>();
         for (AnimatedWallpaper w : AnimatedWallpapers.all()) assertTrue(w.id(), ids.add(w.id()));
-        assertEquals(4, ids.size());
-        assertTrue(ids.contains("aurora") && ids.contains("mesh") && ids.contains("tide") && ids.contains("rain"));
+        assertEquals(expected.length, ids.size());
+        for (String id : expected) assertTrue(id, ids.contains(id));
     }
 
     @Test public void lookups() {

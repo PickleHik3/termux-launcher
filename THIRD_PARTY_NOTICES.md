@@ -15,10 +15,17 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
 - **[Unexpected-Keyboard](https://github.com/Julow/Unexpected-Keyboard)** — GPL-3.0 — Copyright Jules Aguillon (Julow) and Unexpected-Keyboard contributors. Vendored and modified as the `inapp-keyboard/` module (upstream commit `38836e440d8ca779d572b52601c6b2ad10f3bb7f` recorded in `inapp-keyboard/UPSTREAM.md`); modifications include removal of the IME service and adaptation as an embedded view. See `inapp-keyboard/UPSTREAM.md`.
 - **[kitty](https://github.com/kovidgoyal/kitty)** — GPL-3.0-only — Copyright Kovid Goyal
   and kitty contributors. `terminal-view/.../KittyCursorTrail.java` adapts
-  `kitty/cursor_trail.c` to Java and Android pane geometry; the graphics animation handling in
+  `kitty/cursor_trail.c` to Java and Android pane geometry; `app/.../terminal/CursorTrailMotionBlur.java`
+  translates `cursor-trail-motion-blur.slang` to AGSL (originally contributed to kitty by Jonathan
+  Lippincott) and `app/.../terminal/CursorTrailParticles.java` ports `cursor-trail-particles.slang`
+  (railgun, torpedo, pixiedust) to a CPU particle model; the graphics animation handling in
   `terminal-emulator/.../KittyImageStore.java` also follows kitty's `graphics.c`. These are
   adaptations shipped inside the APK, separate from the external `kitten` tool below. The original
   port commits did not record an exact upstream revision; the Java files document local changes.
+- **[Android-AGSL-Shader-Playground](https://github.com/mejdi14/Android-AGSL-Shader-Playground)** —
+  MIT — Copyright (c) 2025 Mejdi Hafiene. The `Chrome` generated background
+  (`app/.../chrome/wallpaper/Chrome.java`) follows the sine warp and sheen of its
+  `LiquidChromeEffect`, rewritten to bend a palette instead of an input picture and to loop.
 - **[herdr](https://github.com/herdrdev/herdr)** — Apache-2.0 — herdr contributors.
   `AgentTitleRules.java` and `AgentScreenRules.java` adapt the agent-detection manifests recorded
   on 2026-09-11 into ordered Java rules. The original work is credited here separately from the

@@ -69,6 +69,36 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
     }
 
     @Override
+    public void putString(String key, String value) {
+        if (mPreferences == null || key == null) return;
+        switch (key) {
+            case "terminal_cursor_trail_style":
+                mPreferences.setTerminalCursorTrailStyle(value);
+                TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
+                break;
+            case "terminal_retro_effect":
+                mPreferences.setTerminalRetroEffect(value);
+                TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
+                break;
+            default:
+                break;
+        }
+    }
+
+    @Override
+    public String getString(String key, String defValue) {
+        if (mPreferences == null || key == null) return defValue;
+        switch (key) {
+            case "terminal_cursor_trail_style":
+                return mPreferences.getTerminalCursorTrailStyle();
+            case "terminal_retro_effect":
+                return mPreferences.getTerminalRetroEffect();
+            default:
+                return defValue;
+        }
+    }
+
+    @Override
     public boolean getBoolean(String key, boolean defValue) {
         if (mPreferences == null)
             return defValue;

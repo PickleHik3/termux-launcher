@@ -6,8 +6,8 @@ package com.termux.app.chrome.wallpaper;
  * program (API 33+) and binds the frame's uniforms.
  *
  * <p>Every program declares the same uniform contract (see {@link MomentAgsl#HEAD}), is
- * independent of {@code uTime} at {@code uEnergy == 0} (its rest pose), and loops seamlessly
- * every {@link #periodSeconds()}.</p>
+ * independent of {@code uTime} at {@code uEnergy == 0} and {@code uPhase == 0} (its rest pose),
+ * and loops seamlessly every {@link #periodSeconds()} of either clock.</p>
  */
 public interface AnimatedWallpaper {
 

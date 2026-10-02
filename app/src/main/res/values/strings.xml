@@ -75,7 +75,7 @@
     <string name="settings_destination_appearance">Look</string>
     <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons and keyboard look</string>
     <string name="settings_destination_terminal">Terminal</string>
-    <string name="settings_destination_terminal_summary">Split panes, full screen, and Recents</string>
+    <string name="settings_destination_terminal_summary">Split panes, full screen, cursor trail and effects</string>
     <string name="settings_destination_status_bar">Status bar</string>
     <string name="settings_destination_status_bar_summary">Clock, CPU, memory, and weather</string>
     <string name="settings_destination_notifications">Notifications</string>
@@ -101,6 +101,8 @@
     <string name="settings_adjust_keyboard_summary">Workaround for Android system keyboards: pads the layout so the terminal and key rows stay visible above the on-screen keyboard. Turn off if you see gaps or jumpy resizing.</string>
     <string name="settings_show_recents_title">Show in Recents when not the default launcher</string>
     <string name="settings_show_recents_summary">Keeps the launcher available from the Recents screen when another home app is active.</string>
+    <string name="settings_terminal_cursor_trail_style_title">Cursor trail</string>
+    <string name="settings_terminal_retro_effect_title">Terminal effect</string>
     <string name="settings_terminal_padding_fill_title">Fill padding with edge colours</string>
     <string name="settings_terminal_padding_fill_summary">The space between the text and a pane\'s rounded border takes the colour of the nearest edge of what is on screen, so a full-screen app reaches the border. Ported from Ghostty\'s window-padding-color = extend.</string>
     <string name="settings_clipboard_header">Clipboard</string>

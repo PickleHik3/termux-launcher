@@ -29,6 +29,8 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         PreferenceManager manager = getPreferenceManager();
         manager.setPreferenceDataStore(new TerminalPreferencesDataStore(context));
         setPreferencesFromResource(R.xml.terminal_preferences, rootKey);
+        androidx.preference.Preference retro = findPreference("terminal_retro_effect");
+        if (retro != null) retro.setVisible(com.termux.app.terminal.PaneRetroEffect.available());
         SettingsLayoutUtils.applyScreenLayout(this);
     }
 
@@ -67,7 +69,15 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
             return io.getBoolean(key, fallback);
         }
 
-        @Override public void putString(String key, @Nullable String value) { io.putString(key, value); }
-        @Override public String getString(String key, @Nullable String fallback) { return io.getString(key, fallback); }
+        private static boolean isViewStringKey(String key) {
+            return "terminal_cursor_trail_style".equals(key) || "terminal_retro_effect".equals(key);
+        }
+
+        @Override public void putString(String key, @Nullable String value) {
+            if (isViewStringKey(key)) view.putString(key, value); else io.putString(key, value);
+        }
+        @Override public String getString(String key, @Nullable String fallback) {
+            return isViewStringKey(key) ? view.getString(key, fallback) : io.getString(key, fallback);
+        }
     }
 }

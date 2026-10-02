@@ -22,6 +22,20 @@
             app:title="@string/settings_terminal_padding_fill_title"
             app:summary="@string/settings_terminal_padding_fill_summary"
             android:defaultValue="true" />
+        <ListPreference
+            app:key="terminal_cursor_trail_style"
+            app:title="@string/settings_terminal_cursor_trail_style_title"
+            app:entries="@array/settings_terminal_cursor_trail_style_entries"
+            app:entryValues="@array/settings_terminal_cursor_trail_style_values"
+            app:defaultValue="default"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="terminal_retro_effect"
+            app:title="@string/settings_terminal_retro_effect_title"
+            app:entries="@array/settings_terminal_retro_effect_entries"
+            app:entryValues="@array/settings_terminal_retro_effect_values"
+            app:defaultValue="none"
+            app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_clipboard_header">

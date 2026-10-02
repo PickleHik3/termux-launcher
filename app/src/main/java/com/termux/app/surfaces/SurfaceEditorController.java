@@ -47,6 +47,7 @@ import com.termux.app.place.PlaceLayout;
 import com.termux.app.statusbar.TopPaneClockForm;
 import com.termux.app.surfaces.AppearanceLooks.Target;
 import com.termux.app.terminal.Motion;
+import com.termux.app.terminal.PaneRetroEffect;
 import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallPage;
@@ -127,6 +128,11 @@ public final class SurfaceEditorController {
         void refreshTerminalWindowBar();
         /** Rebuilds the terminal palette if the contrast level moved (Legibility drives both). */
         void refreshTerminalPalette();
+        /**
+         * Pushes the cursor-trail style and retro terminal effect preferences into the panes
+         * (the Trail and Effect menus drive both).
+         */
+        void applyTerminalMotionLook();
         /** Dock geometry changed; with {@code commit} the terminal is also resized. */
         void applyGeometryPreview(boolean commit);
         /** The coalesced glass re-render. */
@@ -946,8 +952,9 @@ public final class SurfaceEditorController {
 
     /**
      * Row 2 for one element: its name and its controls, at the stored values. The terminal has
-     * three — Darkness, Legibility, Blur; the status bar and the dock Blur alone; the keyboard Blur
-     * and its "Keyboard theme" door (Key radius is Layout's now); the wallpaper Soft and Dim.
+     * five — Darkness, Legibility, Blur, and the Trail and Effect menus (Effect only on API 33
+     * and up); the status bar and the dock Blur alone; the keyboard Blur and its "Keyboard theme"
+     * door (Key radius is Layout's now); the wallpaper Soft and Dim.
      */
     private void showRow2(@NonNull Target target) {
         AppearanceEditorPanel panel = mPanel;
@@ -986,6 +993,12 @@ public final class SurfaceEditorController {
                 stop, palette);
         } else {
             panel.hideLegibility();
+        }
+        if (target == Target.TERMINAL) {
+            panel.setTerminalLooks(prefs.getTerminalCursorTrailStyle(),
+                prefs.getTerminalRetroEffect(), PaneRetroEffect.available());
+        } else {
+            panel.hideTerminalLooks();
         }
         if (target == Target.WALLPAPER) {
             boolean soft = SoftWallpaper.isOn(prefs);
@@ -1075,6 +1088,14 @@ public final class SurfaceEditorController {
 
         @Override public void onLegibility(int index) {
             if (mTarget != null && mTarget.hasLegibility()) writeLegibility(index);
+        }
+
+        @Override public void onTrailStyle(@NonNull String id) {
+            if (mTarget == Target.TERMINAL) writeTrailStyle(id);
+        }
+
+        @Override public void onRetroEffect(@NonNull String id) {
+            if (mTarget == Target.TERMINAL) writeRetroEffect(id);
         }
 
         @Override public void onSecondSlider(int value, boolean dragging) {
@@ -1229,6 +1250,24 @@ public final class SurfaceEditorController {
         prefs.setTerminalContrastLevel(level);
         mHost.refreshTerminalPalette();
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
+    }
+
+    /** Trail: the cursor-trail style, the same preference Settings writes, applied on the tap. */
+    private void writeTrailStyle(@NonNull String id) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null || id.equals(prefs.getTerminalCursorTrailStyle()))
+            return;
+        prefs.setTerminalCursorTrailStyle(id);
+        mHost.applyTerminalMotionLook();
+    }
+
+    /** Effect: the retro terminal effect, the same preference Settings writes. */
+    private void writeRetroEffect(@NonNull String id) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null || id.equals(prefs.getTerminalRetroEffect()))
+            return;
+        prefs.setTerminalRetroEffect(id);
+        mHost.applyTerminalMotionLook();
     }
 
     /** Key radius: the key caps' radius, and nothing else; Layout mode's (DECISIONS item 6). */
@@ -2298,6 +2337,7 @@ public final class SurfaceEditorController {
         mHost.applyTerminalSurfaceAppearance();
         mHost.refreshTerminalWindowBar();
         mHost.refreshTerminalPalette();
+        mHost.applyTerminalMotionLook();
         SoftWallpaper.apply(mHost.findView(R.id.wallpaper_backdrop), prefs);
         if (keyboard() != null)
             keyboard().onPreferencesReloaded();

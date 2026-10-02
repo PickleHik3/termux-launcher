@@ -218,6 +218,11 @@ public final class TerminalFontConfig {
         @Nullable public final Integer cursorTrailThresholdY;
         /** {@code cursor_trail_color}, ARGB with the alpha byte forced opaque; null for "none". */
         @Nullable public final Integer cursorTrailColor;
+        /**
+         * The {@link CursorTrailStyle} id named by the first mappable {@code custom_shaders} entry
+         * (kitty's {@code cursor-trail-*} shaders), or null when none maps.
+         */
+        @Nullable public final String cursorTrailStyleId;
         @NonNull public final List<String> errors;
 
         private Result(boolean filePresent, @NonNull Map<Face, FaceSpec> faces,
@@ -239,7 +244,9 @@ public final class TerminalFontConfig {
                        @Nullable Integer cursorTrailThresholdX,
                        @Nullable Integer cursorTrailThresholdY,
                        @Nullable Integer cursorTrailColor,
+                       @Nullable String cursorTrailStyleId,
                        @NonNull List<String> errors) {
+            this.cursorTrailStyleId = cursorTrailStyleId;
             this.cursorTrailDelayMs = cursorTrailDelayMs;
             this.cursorTrailDecayFast = cursorTrailDecayFast;
             this.cursorTrailDecaySlow = cursorTrailDecaySlow;
@@ -367,6 +374,7 @@ public final class TerminalFontConfig {
         @Nullable Integer cursorTrailThresholdX;
         @Nullable Integer cursorTrailThresholdY;
         @Nullable Integer cursorTrailColor;
+        @Nullable String cursorTrailStyleId;
         int symbolRangeCount;
         boolean filePresent;
         long includeBudget = MAX_INCLUDE_TOTAL_BYTES;
@@ -854,6 +862,17 @@ public final class TerminalFontConfig {
                 }
                 continue;
             }
+            if ("custom_shaders".equals(directive)) {
+                // Only kitty's cursor-trail shaders mean anything here; the first one that maps wins.
+                for (int w = 1; w < words.size(); w++) {
+                    CursorTrailStyle style = CursorTrailStyle.fromKittyShaderName(words.get(w));
+                    if (style != null) {
+                        accumulator.cursorTrailStyleId = style.id();
+                        break;
+                    }
+                }
+                continue;
+            }
             if ("cursor_trail_color".equals(directive)) {
                 if (words.size() != 2) {
                     errors.add(where + ": expected cursor_trail_color or none");
@@ -1072,7 +1091,7 @@ public final class TerminalFontConfig {
             accumulator.cursorTrailDelayMs, accumulator.cursorTrailDecayFast,
             accumulator.cursorTrailDecaySlow, accumulator.cursorTrailThresholdX,
             accumulator.cursorTrailThresholdY, accumulator.cursorTrailColor,
-            accumulator.errors);
+            accumulator.cursorTrailStyleId, accumulator.errors);
     }
 
     /**

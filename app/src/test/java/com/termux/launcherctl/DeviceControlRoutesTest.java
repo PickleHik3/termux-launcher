@@ -114,7 +114,7 @@ public class DeviceControlRoutesTest {
     public void builtinList_namesEveryBackgroundWithItsOwnPalette() throws Exception {
         org.json.JSONArray list = DeviceControlRoutes.handle(null, "GET", "/v1/wallpaper/builtins", null)
             .getJSONArray("builtins");
-        assertEquals(4, list.length());
+        assertEquals(com.termux.app.chrome.wallpaper.AnimatedWallpapers.all().size(), list.length());
         // The wallpaper always uses its own colours; the system theme follows it.
         assertEquals(1, list.getJSONObject(0).getJSONArray("palettes").length());
         assertEquals("own", list.getJSONObject(0).getJSONArray("palettes").getString(0));

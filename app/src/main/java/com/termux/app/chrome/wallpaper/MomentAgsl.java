@@ -6,7 +6,9 @@ package com.termux.app.chrome.wallpaper;
  *
  * <p>A built-in's source is {@code HEAD + its own code + TAIL}. Its own code defines
  * {@code float3 scene(float2 p)}, the base picture in full-frame pixels (top-left origin), and
- * must multiply everything time-dependent by {@code uEnergy}. AGSL has no preprocessor, no
+ * must either multiply everything {@code uTime}-dependent by {@code uEnergy} (swaying motion) or
+ * drive one-way motion from {@code uPhase} alone, which the director integrates over energy and
+ * zeroes once a lock settles. AGSL has no preprocessor, no
  * unsigned or bitwise operators, so the hashes are sin/fract floats.</p>
  *
  * <p>Moments never touch {@code scene}'s maths. A page change warps the sample position (a
@@ -22,6 +24,7 @@ final class MomentAgsl {
     static final String HEAD =
         "uniform float2 uResolution;\n" +
         "uniform float uTime;\n" +
+        "uniform float uPhase;\n" +
         "uniform float uEnergy;\n" +
         "uniform float uDim;\n" +
         "layout(color) uniform half4 uPalette0;\n" +

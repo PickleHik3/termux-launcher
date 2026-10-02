@@ -617,6 +617,14 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_PADDING_FILL = "terminal_padding_fill";
         public static final boolean DEFAULT_TERMINAL_PADDING_FILL = true;
 
+        /** Cursor trail style id (default, motion_blur, railgun, torpedo, pixiedust, comet). */
+        public static final String KEY_TERMINAL_CURSOR_TRAIL_STYLE = "terminal_cursor_trail_style";
+        public static final String DEFAULT_TERMINAL_CURSOR_TRAIL_STYLE = "default";
+
+        /** Retro terminal effect id (none, crt, crt_green, crt_amber, tft). Global, API 33+. */
+        public static final String KEY_TERMINAL_RETRO_EFFECT = "terminal_retro_effect";
+        public static final String DEFAULT_TERMINAL_RETRO_EFFECT = "none";
+
         /** Whether an OSC 52 query ("ESC ] 52 ; c ; ? BEL") may read the Android clipboard. */
         public static final String KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = "terminal_osc52_clipboard_read_enabled";
         public static final boolean DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = true;

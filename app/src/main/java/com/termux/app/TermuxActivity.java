@@ -10601,6 +10601,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new PaneHost(), paneHost, getLayoutInflater());
         mAppliedPaneStyleKey = null;
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
+        applyTrailStyleAndRetroEffect();
         createPaneWallController(paneHost);
         applyPaneBehaviourPreferences();
         // Bootstrap a sessionless pane so the many single-view call sites (in-app keyboard,
@@ -10959,6 +10960,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void refreshTerminalWindowBar() {
             TermuxActivity.this.refreshTerminalWindowBar();
+        }
+
+        @Override public void applyTerminalMotionLook() {
+            TermuxActivity.this.applyTrailStyleAndRetroEffect();
         }
 
         @Override public void refreshTerminalPalette() {
@@ -16981,6 +16986,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
         }
         mTermuxTerminalViewClient.applyPaddingFillPolicy(getTerminalView());
+    }
+
+    /**
+     * Push the cursor trail style and retro terminal effect preferences into the pane controller
+     * (kitty.conf {@code custom_shaders} still wins for the trail inside it). The retro effect is
+     * global and reaches terminal pane frames only, never wall widget pages. Called when the
+     * controller is created and from {@link #reloadActivityStyling}.
+     */
+    private void applyTrailStyleAndRetroEffect() {
+        if (mPaneController == null || mPreferences == null)
+            return;
+        mPaneController.setCursorTrailStylePreference(mPreferences.getTerminalCursorTrailStyle());
+        mPaneController.setRetroEffectPreference(mPreferences.getTerminalRetroEffect());
     }
 
     void openSurfaceEditor() {
@@ -24042,6 +24060,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setMargins();
         updateAppLauncherBarHeight();
         applyPaddingFillPolicyToVisiblePanes();
+        applyTrailStyleAndRetroEffect();
         applySuggestionBarPreferences();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.resetTransientVisualState();

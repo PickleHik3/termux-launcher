@@ -2,7 +2,8 @@ package com.termux.app.chrome.wallpaper;
 
 /**
  * Sparse glyph-cell rain: blocky procedural cells (no font) fall in a minority of columns and
- * fade into a trail. At rest the heads hang where their columns start, so the picture is still.
+ * fade into a trail. The fall runs on {@code uPhase}; at rest (phase 0) the heads hang where their
+ * columns start, so the picture is still.
  */
 final class Rain implements AnimatedWallpaper {
 
@@ -18,7 +19,8 @@ final class Rain implements AnimatedWallpaper {
         "    float live = step(0.62, hash11(g.x * 2.71 + 9.0));\n" +
         // whole cycles per period, 3..7, so the loop closes exactly
         "    float cycles = 3.0 + floor(hash11(g.x * 5.13 + 2.0) * 5.0);\n" +
-        "    float t = mod(uTime, PERIOD) / PERIOD * uEnergy;\n" +
+        // uPhase, not uTime * uEnergy: the fall slows and resumes instead of rewinding on a lock
+        "    float t = mod(uPhase, PERIOD) / PERIOD;\n" +
         "    float head = fract(hc + cycles * t);\n" +
         "    float d = fract(head - (g.y + 0.5) / rows);\n" +
         "    float trail = exp(-d * 7.0) * live;\n" +

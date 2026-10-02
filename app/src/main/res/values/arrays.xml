@@ -339,4 +339,34 @@
         <item>ubuntu</item>
         <item>arch</item>
     </string-array>
+    <string-array name="settings_terminal_cursor_trail_style_entries">
+        <item>Default</item>
+        <item>Motion blur</item>
+        <item>Railgun</item>
+        <item>Torpedo</item>
+        <item>Pixie dust</item>
+        <item>Comet</item>
+    </string-array>
+    <string-array name="settings_terminal_cursor_trail_style_values">
+        <item>default</item>
+        <item>motion_blur</item>
+        <item>railgun</item>
+        <item>torpedo</item>
+        <item>pixiedust</item>
+        <item>comet</item>
+    </string-array>
+    <string-array name="settings_terminal_retro_effect_entries">
+        <item>None</item>
+        <item>CRT</item>
+        <item>CRT (green)</item>
+        <item>CRT (amber)</item>
+        <item>TFT grid</item>
+    </string-array>
+    <string-array name="settings_terminal_retro_effect_values">
+        <item>none</item>
+        <item>crt</item>
+        <item>crt_green</item>
+        <item>crt_amber</item>
+        <item>tft</item>
+    </string-array>
 </resources>

@@ -671,6 +671,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_PADDING_FILL, value, false);
     }
 
+    public String getTerminalCursorTrailStyle() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL_STYLE, TERMUX_APP.DEFAULT_TERMINAL_CURSOR_TRAIL_STYLE, true);
+    }
+
+    public void setTerminalCursorTrailStyle(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL_STYLE, value, false);
+    }
+
+    public String getTerminalRetroEffect() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_TERMINAL_RETRO_EFFECT, TERMUX_APP.DEFAULT_TERMINAL_RETRO_EFFECT, true);
+    }
+
+    public void setTerminalRetroEffect(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_RETRO_EFFECT, value, false);
+    }
+
     public boolean isOsc52ClipboardReadEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED, TERMUX_APP.DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED);
