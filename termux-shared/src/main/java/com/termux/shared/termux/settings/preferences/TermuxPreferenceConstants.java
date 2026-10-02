@@ -1434,8 +1434,6 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_SURFACE_GLASS_RIM = "surface_glass_rim";
         /** The 1dp containing stroke in the outline colour: what every install has always drawn. */
         public static final String GLASS_RIM_HAIRLINE = "hairline";
-        /** The 1dp stroke as a diagonal white gradient, bright top-left and faint bottom-right. */
-        public static final String GLASS_RIM_GRADIENT = "gradient";
         public static final String DEFAULT_SURFACE_GLASS_RIM = GLASS_RIM_HAIRLINE;
 
         public static final String KEY_SURFACE_GLASS_MOTION = "surface_glass_motion";
