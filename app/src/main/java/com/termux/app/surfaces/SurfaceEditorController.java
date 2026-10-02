@@ -433,7 +433,7 @@ public final class SurfaceEditorController {
                 ((ViewGroup) frame.getParent()).removeView(frame);
             // Over the activity's root, under the bottom area.
             FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(0, 0,
-                Gravity.TOP | Gravity.START);
+                Gravity.TOP | Gravity.LEFT);
             int panelIndex = content.indexOfChild(panel.view());
             if (panelIndex >= 0) content.addView(frame, panelIndex, params);
             else content.addView(frame, params);
@@ -456,7 +456,7 @@ public final class SurfaceEditorController {
                 if (zone.getParent() instanceof ViewGroup)
                     ((ViewGroup) zone.getParent()).removeView(zone);
                 FrameLayout.LayoutParams zoneParams = new FrameLayout.LayoutParams(0,
-                    dp(HIDE_ZONE_DP), Gravity.TOP | Gravity.START);
+                    dp(HIDE_ZONE_DP), Gravity.TOP | Gravity.LEFT);
                 int panelIndex = content.indexOfChild(panel.view());
                 if (panelIndex >= 0) content.addView(zone, panelIndex, zoneParams);
                 else content.addView(zone, zoneParams);
@@ -496,7 +496,7 @@ public final class SurfaceEditorController {
             params.height = height;
             params.leftMargin = rect[0];
             params.topMargin = rect[1];
-            params.gravity = Gravity.TOP | Gravity.START;
+            params.gravity = Gravity.TOP | Gravity.LEFT;
             frame.setLayoutParams(params);
         }
         frame.invalidateOutline();
@@ -524,7 +524,7 @@ public final class SurfaceEditorController {
             params.height = dp(HIDE_ZONE_DP);
             params.leftMargin = rect[0];
             params.topMargin = top;
-            params.gravity = Gravity.TOP | Gravity.START;
+            params.gravity = Gravity.TOP | Gravity.LEFT;
             zone.setLayoutParams(params);
         }
     }

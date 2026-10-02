@@ -109,7 +109,7 @@ final class HiddenElementsPopup {
             metrics.widthPixels - margin);
         int top = topAbove(sheetAt[1], height, gap);
         window.setWidth(width);
-        window.showAtLocation(mAnchor, Gravity.NO_GRAVITY, left, top);
+        window.showAtLocation(mAnchor, Gravity.TOP | Gravity.LEFT, left, top);
     }
 
     /** The bottom sheet the anchor stands in (the anchor itself when it is not in one). */

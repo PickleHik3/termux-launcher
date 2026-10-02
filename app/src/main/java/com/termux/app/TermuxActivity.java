@@ -1562,6 +1562,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setActivityThemeAndWindow();
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_termux);
+        // The window's content root holds the shell and every overlay placed over it by absolute
+        // geometry (the layout editor's frame, the hide zone, the dictation pill), so it stays left
+        // to right in every locale. Reading-order overlays added here (help, tour, notices, the
+        // first-run card, the Appearance editor's panel) set the locale's direction on themselves.
+        View contentRoot = findViewById(android.R.id.content);
+        if (contentRoot != null) contentRoot.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         // Load termux shared preferences
         // This will also fail if TermuxConstants.TERMUX_PACKAGE_NAME does not equal applicationId
         if (mPreferences == null) {
@@ -5623,6 +5629,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         FrameLayout decorRoot = (FrameLayout) getWindow().getDecorView();
         FrameLayout surfaceOverlay = new FrameLayout(this);
+        // Shell chrome under the gesture bar, placed by absolute geometry like the rest of it.
+        surfaceOverlay.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         surfaceOverlay.setVisibility(View.GONE);
         surfaceOverlay.setClickable(false);
         surfaceOverlay.setFocusable(false);

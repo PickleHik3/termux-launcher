@@ -1,8 +1,13 @@
+<!-- The launcher shell is a spatial arrangement the user builds (panes, dock, rails, keys,
+     status strip), placed by absolute geometry, so it never mirrors: it stays left to right in
+     every locale. Reading-order surfaces inside it (the sheet plane below) opt back in with
+     layoutDirection="locale". -->
 <com.termux.app.terminal.TermuxActivityRootView
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/activity_termux_root_view"
+    android:layoutDirection="ltr"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
@@ -1217,9 +1222,14 @@
              Above the palette in z because a sheet is modal and the palette collapses before it
              opens one, and below the rename chip because a rename can be started from a sheet.
              INVISIBLE rather than gone so the host stays measured and the blur gates its own work
-             on isShown(). -->
+             on isShown().
+
+             The one part of the shell that follows the locale's direction: a sheet is reading-order
+             UI. Cards are placed by absolute LEFT margins, so the plane's direction mirrors only
+             what is inside them. -->
         <FrameLayout
             android:id="@+id/terminal_sheet_host"
+            android:layoutDirection="locale"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:clipChildren="false"

@@ -87,7 +87,7 @@ final class WidgetPaneMenu {
             Math.max(paneLeft, paneLeft + pane.getWidth() - width));
         int y = clamp(Math.round(rawY) - height / 2, paneTop,
             Math.max(paneTop, paneTop + pane.getHeight() - height));
-        popup.showAtLocation(pane, Gravity.NO_GRAVITY, x, y);
+        popup.showAtLocation(pane, Gravity.TOP | Gravity.LEFT, x, y);
 
         return popup;
     }

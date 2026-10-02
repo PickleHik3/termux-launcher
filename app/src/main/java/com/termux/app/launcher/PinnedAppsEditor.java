@@ -509,7 +509,7 @@ public final class PinnedAppsEditor {
             M3.textAppearance(label, com.google.android.material.R.attr.textAppearanceBodyLarge);
             label.setTextColor(colorText);
             label.setSingleLine(true);
-            label.setPadding(dp(14), 0, dp(8), 0);
+            label.setPaddingRelative(dp(14), 0, dp(8), 0);
             row.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             MaterialCheckBox check = new MaterialCheckBox(context);
             check.setClickable(false);
@@ -563,7 +563,7 @@ public final class PinnedAppsEditor {
             M3.textAppearance(label, com.google.android.material.R.attr.textAppearanceBodyLarge);
             label.setTextColor(colorText);
             label.setSingleLine(true);
-            label.setPadding(dp(12), 0, dp(8), 0);
+            label.setPaddingRelative(dp(12), 0, dp(8), 0);
             row.addView(label, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
             MaterialButton delete = new MaterialButton(context, null,

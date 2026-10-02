@@ -547,7 +547,7 @@ public final class ExtraKeyGlyphPicker {
         view.setText(text);
         M3.textAppearance(view, com.google.android.material.R.attr.textAppearanceTitleLarge);
         view.setTextColor(colorText);
-        view.setPadding(pad(4), 0, 0, 0);
+        view.setPaddingRelative(pad(4), 0, 0, 0);
         return view;
     }
 

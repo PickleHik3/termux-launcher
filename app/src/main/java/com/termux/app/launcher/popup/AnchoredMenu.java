@@ -103,7 +103,7 @@ public final class AnchoredMenu {
         AnchoredMenuGeometry.sideAlignedPosition(mainLoc[0], main.getWidth(),
             rowLoc[1] + (rowAnchor.getHeight() / 2), popup.getWidth(), popup.getHeight(),
             screenW, screenH, dp(AnchoredMenuGeometry.GAP_DP), xy);
-        popup.showAtLocation(host, Gravity.NO_GRAVITY, xy[0], xy[1]);
+        popup.showAtLocation(host, Gravity.TOP | Gravity.LEFT, xy[0], xy[1]);
         return popup;
     }
 
@@ -139,7 +139,7 @@ public final class AnchoredMenu {
             int[] xy = new int[2];
             AnchoredMenuGeometry.anchoredPosition(anchorRect, popup.getWidth(), popup.getHeight(),
                 screenW, visibleFrame, gap, xy);
-            popup.showAtLocation(host, Gravity.NO_GRAVITY, xy[0], xy[1]);
+            popup.showAtLocation(host, Gravity.TOP | Gravity.LEFT, xy[0], xy[1]);
         } else {
             popup.showAtLocation(host, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM, 0,
                 host.getHeight() + gap);

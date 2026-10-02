@@ -10,6 +10,10 @@
      (appearance_editor_appearance_group / appearance_editor_layout_group), and a mode switch
      shows one Group and hides the other.
 
+     The sheet follows the locale's direction (it is reading-order UI, docked full width, so
+     nothing about where it sits changes), though the content root it is added to is pinned left
+     to right.
+
      Top row: the mode pill is the start anchor (wrap_content, never squeezed); Done is pinned to
      the end and Undo to Done's start. Undo is GONE while there is nothing to undo; the gap between
      the pill and Undo absorbs it, so neither the pill nor Done moves.
@@ -54,6 +58,7 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/appearance_editor_panel"
+    android:layoutDirection="locale"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:clickable="true"
