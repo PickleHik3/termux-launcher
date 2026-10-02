@@ -255,18 +255,27 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         // The controls tab sits above everything, drawn only while shown; the frame itself
         // answers the taps, so the view never stands between a finger and X.
         mControls = new PaneControlsView(getContext());
-        mControls.setActions(PaneControlsView.Action.glyph(ACTION_POWER, CornerTabGlyphs.POWER),
+        mControls.setActions(PaneControlsView.Action.glyph(ACTION_POWER, CornerTabGlyphs.POWER,
+                () -> getContext().getString(mRunning ? R.string.pane_controls_turn_display_off
+                    : R.string.pane_controls_turn_display_on)),
             // Minimal mode gives the display the whole screen; the mark reads the state as it
             // draws, so the same button is the way back.
             PaneControlsView.Action.drawn(ACTION_MINIMAL, com.termux.app.chrome.MinimalModeGlyph
-                .mark(getContext(), () -> mHost != null && mHost.isMinimalMode())),
-            PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS),
+                .mark(getContext(), () -> mHost != null && mHost.isMinimalMode()),
+                PaneControlsView.TINT_PRIMARY, () -> getContext().getString(
+                    mHost != null && mHost.isMinimalMode()
+                        ? R.string.pane_controls_leave_minimal_mode
+                        : R.string.pane_controls_enter_minimal_mode)),
+            PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS,
+                getContext().getString(R.string.pane_controls_open_settings)),
             PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE,
                 getContext().getString(R.string.appearance_editor_corner_tab_description)),
             PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT,
                 getContext().getString(R.string.corner_tab_layout_description)),
-            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.WALLPAPER),
-            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
+            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.WALLPAPER,
+                getContext().getString(R.string.pane_controls_change_wallpaper)),
+            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
+                getContext().getString(R.string.pane_controls_help)));
         mControls.setListener(id -> {
             if (mHost == null) return;
             // Help first, the tab second: help reads the ? it was opened from while it is still

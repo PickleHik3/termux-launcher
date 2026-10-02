@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Names a screen reader reads for the corner tab's buttons, which are drawn marks and glyphs. -->
+<resources>
+    <string name="pane_controls_edit_widgets">Edit widgets</string>
+    <string name="pane_controls_add_page">Add page</string>
+    <string name="pane_controls_keep_changes">Keep changes</string>
+    <string name="pane_controls_discard_changes">Discard changes</string>
+    <string name="pane_controls_change_wallpaper">Change wallpaper</string>
+    <string name="pane_controls_enter_minimal_mode">Enter minimal mode</string>
+    <string name="pane_controls_leave_minimal_mode">Leave minimal mode</string>
+    <string name="pane_controls_turn_on_auto_tiling">Turn on automatic tiling</string>
+    <string name="pane_controls_turn_off_auto_tiling">Turn off automatic tiling</string>
+    <string name="pane_controls_open_settings">Open settings</string>
+    <string name="pane_controls_restore_pane">Restore pane</string>
+    <string name="pane_controls_turn_display_on">Turn display on</string>
+    <string name="pane_controls_turn_display_off">Turn display off</string>
+    <string name="pane_controls_help">Help</string>
+</resources>
