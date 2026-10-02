@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The mode segment's glyph; the M3 checkmark takes its place while the segment is selected. -->
+<!-- The mode segment's glyph, kept while the segment is selected: the fill marks the choice. -->
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@drawable/ic_symbol_check" android:state_checked="true" />
     <item android:drawable="@drawable/ic_symbol_grid_view" />
 </selector>
