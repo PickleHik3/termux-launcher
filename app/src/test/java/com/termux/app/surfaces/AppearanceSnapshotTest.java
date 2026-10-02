@@ -59,6 +59,8 @@ public class AppearanceSnapshotTest {
         preferences.setWallpaperBackdropDim(60);
         SoftWallpaper.set(preferences, true);
         preferences.setTerminalContrastLevel("harder");
+        preferences.setTerminalCursorTrailStyle("comet");
+        preferences.setTerminalRetroEffect("crt_amber");
         // Layout mode's Corners and Margin.
         int corners = preferences.getSurfaceBaseValue(SurfaceProperty.CORNER_RADIUS);
         int sideGap = preferences.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP);
@@ -86,6 +88,8 @@ public class AppearanceSnapshotTest {
         assertEquals(0, preferences.getWallpaperBackdropDim());
         assertFalse(SoftWallpaper.isOn(preferences));
         assertEquals("default", preferences.getTerminalContrastLevel().value);
+        assertEquals("default", preferences.getTerminalCursorTrailStyle());
+        assertEquals("none", preferences.getTerminalRetroEffect());
     }
 
     /** A key radius the theme owned (no key at all) comes back as no key, not today's default. */

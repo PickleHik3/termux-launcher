@@ -10960,6 +10960,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.refreshTerminalWindowBar();
         }
 
+        @Override public void applyTerminalMotionLook() {
+            TermuxActivity.this.applyTrailStyleAndRetroEffect();
+        }
+
         @Override public void refreshTerminalPalette() {
             if (mTermuxTerminalSessionActivityClient != null)
                 mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();

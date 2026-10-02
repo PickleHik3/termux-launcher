@@ -6,7 +6,10 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.ViewGroup;
+import android.widget.PopupMenu;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
@@ -63,6 +66,10 @@ final class AppearanceEditorPanel {
         void onFirstSegment(int index);
         /** The terminal's Text contrast, by stop: 0 Low (Softer), 1 Normal (Default), 2 High (Harder). */
         void onLegibility(int index);
+        /** The terminal's Trail menu: the cursor-trail style id the user chose. */
+        void onTrailStyle(@NonNull String id);
+        /** The terminal's Effect menu: the retro effect id the user chose. */
+        void onRetroEffect(@NonNull String id);
         /** Row B's last slider (Blur or Dim). */
         void onSecondSlider(int value, boolean dragging);
         /** A slider was released; deferred work settles here. */
@@ -98,6 +105,8 @@ final class AppearanceEditorPanel {
     private final MaterialButtonToggleGroup mSoft;
     private final TextView mLegibilityLabel;
     private final Slider mLegibility;
+    private final MaterialButton mTrail;
+    private final MaterialButton mEffect;
     private final TextView mSecondLabel;
     private final Slider mSecondSlider;
 
@@ -115,6 +124,8 @@ final class AppearanceEditorPanel {
     private boolean mRow2Shown;
     /** Whether Text contrast may be moved (the Material palette is on). */
     private boolean mLegibilityEnabled = true;
+    @NonNull private String mTrailId = "default";
+    @NonNull private String mEffectId = "none";
 
     @Nullable private Listener mListener;
     private boolean mRestating;
@@ -141,6 +152,8 @@ final class AppearanceEditorPanel {
         mSoft = root.findViewById(R.id.appearance_editor_c1_soft);
         mLegibilityLabel = root.findViewById(R.id.appearance_editor_cl_label);
         mLegibility = root.findViewById(R.id.appearance_editor_legibility);
+        mTrail = root.findViewById(R.id.appearance_editor_trail);
+        mEffect = root.findViewById(R.id.appearance_editor_effect);
         mSecondLabel = root.findViewById(R.id.appearance_editor_c2_label);
         mSecondSlider = root.findViewById(R.id.appearance_editor_c2_slider);
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
@@ -239,8 +252,12 @@ final class AppearanceEditorPanel {
         TextView[] labels = {mFirstLabel, mLegibilityLabel, mSecondLabel};
         for (TextView label : labels)
             label.setMinLines(2);
+        // The terminal's Trail row is the tallest Row B gets, so the frame stands above it.
+        int trailVisibility = mTrail.getVisibility();
+        mTrail.setVisibility(View.VISIBLE);
         applyGroups(false);
         int height = measureNow(widthPx);
+        mTrail.setVisibility(trailVisibility);
         for (TextView label : labels)
             label.setMinLines(1);
         mRow2Shown = rowShown;
@@ -419,6 +436,20 @@ final class AppearanceEditorPanel {
                 return;
             mListener.onFirstSegment(group.indexOfChild(group.findViewById(checkedId)));
         });
+        mTrail.setOnClickListener(view -> showChoiceMenu(mTrail,
+            R.array.settings_terminal_cursor_trail_style_entries,
+            R.array.settings_terminal_cursor_trail_style_values, mTrailId, id -> {
+                mTrailId = id;
+                restateTrail();
+                if (mListener != null) mListener.onTrailStyle(id);
+            }));
+        mEffect.setOnClickListener(view -> showChoiceMenu(mEffect,
+            R.array.settings_terminal_retro_effect_entries,
+            R.array.settings_terminal_retro_effect_values, mEffectId, id -> {
+                mEffectId = id;
+                restateEffect();
+                if (mListener != null) mListener.onRetroEffect(id);
+            }));
         mLegibility.addOnChangeListener((slider, value, fromUser) -> {
             if (mRestating || !fromUser || mListener == null)
                 return;
@@ -426,6 +457,79 @@ final class AppearanceEditorPanel {
             mLegibilityLabel.setText(legibilityLabel(index));
             mListener.onLegibility(index);
         });
+    }
+
+    // ------------------------------------------------------------- Trail and Effect menus
+
+    private interface Choice {
+        void chosen(@NonNull String id);
+    }
+
+    /** Opens the entries/values arrays as a single-choice menu on {@code anchor}. */
+    private void showChoiceMenu(@NonNull View anchor, int entriesRes, int valuesRes,
+                                @NonNull String current, @NonNull Choice choice) {
+        String[] entries = mContext.getResources().getStringArray(entriesRes);
+        String[] values = mContext.getResources().getStringArray(valuesRes);
+        PopupMenu menu = new PopupMenu(mContext, anchor);
+        for (int i = 0; i < entries.length && i < values.length; i++) {
+            MenuItem item = menu.getMenu().add(Menu.NONE, i, i, entries[i]);
+            item.setCheckable(true);
+            item.setChecked(values[i].equals(current));
+        }
+        menu.getMenu().setGroupCheckable(Menu.NONE, true, true);
+        menu.setOnMenuItemClickListener(item -> {
+            int index = item.getItemId();
+            if (index >= 0 && index < values.length && !values[index].equals(current))
+                choice.chosen(values[index]);
+            return true;
+        });
+        menu.show();
+    }
+
+    @NonNull
+    private String optionLabel(int entriesRes, int valuesRes, @NonNull String id) {
+        String[] entries = mContext.getResources().getStringArray(entriesRes);
+        String[] values = mContext.getResources().getStringArray(valuesRes);
+        for (int i = 0; i < values.length && i < entries.length; i++)
+            if (values[i].equals(id)) return entries[i];
+        return entries.length > 0 ? entries[0] : id;
+    }
+
+    /**
+     * The terminal's Trail (and, where {@code effectAvailable}, Effect) at the stored ids. An id
+     * this build does not know reads as the first option, as the preference's own getter does.
+     */
+    void setTerminalLooks(@NonNull String trailId, @NonNull String effectId,
+                          boolean effectAvailable) {
+        mTrailId = trailId;
+        mEffectId = effectId;
+        restateTrail();
+        restateEffect();
+        mTrail.setVisibility(View.VISIBLE);
+        mEffect.setVisibility(effectAvailable ? View.VISIBLE : View.GONE);
+        mTrail.setEnabled(mRow2Shown);
+        mEffect.setEnabled(mRow2Shown);
+    }
+
+    void hideTerminalLooks() {
+        mTrail.setVisibility(View.GONE);
+        mEffect.setVisibility(View.GONE);
+    }
+
+    private void restateTrail() {
+        String label = optionLabel(R.array.settings_terminal_cursor_trail_style_entries,
+            R.array.settings_terminal_cursor_trail_style_values, mTrailId);
+        mTrail.setText(mContext.getString(R.string.appearance_editor_trail, label));
+        mTrail.setContentDescription(
+            mContext.getString(R.string.appearance_editor_trail_description, label));
+    }
+
+    private void restateEffect() {
+        String label = optionLabel(R.array.settings_terminal_retro_effect_entries,
+            R.array.settings_terminal_retro_effect_values, mEffectId);
+        mEffect.setText(mContext.getString(R.string.appearance_editor_effect, label));
+        mEffect.setContentDescription(
+            mContext.getString(R.string.appearance_editor_effect_description, label));
     }
 
     // ------------------------------------------------------------------------------ the modes
@@ -542,6 +646,8 @@ final class AppearanceEditorPanel {
             mSoft.getChildAt(i).setEnabled(shown);
         mLegibility.setEnabled(shown && mLegibilityEnabled);
         mSecondSlider.setEnabled(shown);
+        mTrail.setEnabled(shown);
+        mEffect.setEnabled(shown);
         mRow2.setVisibility(shown && !mLayoutMode ? View.VISIBLE : View.GONE);
     }
 
