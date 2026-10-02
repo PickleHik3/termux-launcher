@@ -17286,8 +17286,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.place.PlaceChromeTravel.Frame frame =
             com.termux.app.place.PlaceChromeTravel.at(pages, mPaneWallController.currentPage(),
                 offsetPx, wall.getWidth(), this::chromeRestOf, mLastWallPage);
+        // The dock rows are always laid out by the layout on screen, the minimal one included
+        // (chromeRestOf), so nothing is pre-rolled for them: a pre-roll here would swap the
+        // minimal layout for the normal one's bottom rows in the middle of the drag.
         if (!mTravelDockPreRolled
-            && com.termux.app.place.PlaceChromeTravel.needsDockPreRoll(frame, !isChromeMinimal())) {
+            && com.termux.app.place.PlaceChromeTravel.needsDockPreRoll(frame, true)) {
             preRollTravelDock();
         }
         if (!mTravelKeyboardPreRolled
@@ -17337,16 +17340,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * What a place's chrome looks like at rest, for the travel: the place the chrome is committed
      * to answers from what is on screen, every other place from its memory.
+     *
+     * <p>No place is a travel {@code minimal} one any more: minimal mode has a layout of its own,
+     * shared by every place, so whatever dock rows and keyboard it keeps are laid out and travel
+     * like any layout's. Answering the mode here read as a dock with nothing showing on both sides
+     * of every slide, and slid the whole stack off the screen until the wall settled.
      */
     @NonNull
     private com.termux.app.place.PlaceChromeTravel.Rest chromeRestOf(
             @NonNull com.termux.app.wall.PaneWallPage place) {
         if (place == mLastWallPage) {
             return new com.termux.app.place.PlaceChromeTravel.Rest(committedKeyboardVisible(),
-                isMinimalMode());
+                false);
         }
-        return new com.termux.app.place.PlaceChromeTravel.Rest(wantsKeyboardOnEnter(place),
-            isMinimalMode());
+        return new com.termux.app.place.PlaceChromeTravel.Rest(wantsKeyboardOnEnter(place), false);
     }
 
     /**
@@ -17424,7 +17431,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                         boolean toolbarShown) {
         com.termux.app.place.PlaceChromeTravel.Rest rest = chromeRestOf(place);
         return travelRestReservationPx(place, toolbarShown, rest.keyboardReveal() > 0f,
-            rest.minimal);
+            isChromeMinimal());
     }
 
     /** The same, for the place with its keyboard up or down as {@code keyboardShown} says. */
