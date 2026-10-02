@@ -100,3 +100,6 @@ project-docs/reference/help-diagrams/out/
 
 # tts-eval listening samples and report (models cached in ~/.cache/termux-launcher/tts, never in git)
 scripts/tts-eval/out/
+
+# Layout editor v2 pack: the generator writes this archive; the sources are committed
+project-docs/reference/layout-editor-v2/layout-editor-v2.zip
