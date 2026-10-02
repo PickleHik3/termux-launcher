@@ -33,7 +33,7 @@ public class UnderKeyboardBandTest {
 
     /** The gap the stack itself keeps under everything it holds, as the activity resolves it. */
     private static int edgeGap(DockLayout dock) {
-        return ChromePolicy.bottomEdgeGapPx(false, dock.capsule, dock.capsuleBottomGapPx);
+        return ChromePolicy.bottomEdgeGapPx(dock.capsule, dock.capsuleBottomGapPx);
     }
 
     @Test

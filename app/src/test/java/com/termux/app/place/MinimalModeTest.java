@@ -13,8 +13,7 @@ import org.junit.Test;
 
 /**
  * Minimal mode (CONTEXT.md): the layout its variant starts from (what it puts away, what it
- * leaves), what the slide away from it lays out again, and what it does to the keyboard a place
- * remembers. What it shows afterwards is its own layout, tested with {@link PlaceLayoutStoreTest}.
+ * leaves), and what it does to the keyboard a place remembers. What it shows afterwards is its own layout, tested with {@link PlaceLayoutStoreTest}.
  */
 public class MinimalModeTest {
 
@@ -58,23 +57,7 @@ public class MinimalModeTest {
     public void aStatusBarAlreadyPutAwayStaysSoInTheSeed() {
         PlaceLayout hidden = EdgeStackPolicy.withAway(portrait(), Element.STATUS);
         assertTrue(MinimalMode.apply(hidden).slot(Element.STATUS).hidden);
-        assertTrue(MinimalMode.bottomOnly(hidden).slot(Element.STATUS).hidden);
         assertEquals(hidden.slot(Element.STATUS), MinimalMode.apply(hidden).slot(Element.STATUS));
-    }
-
-    @Test
-    public void theSlideAwayLaysOnlyTheBottomRowsOutAgain() {
-        PlaceLayout portrait = MinimalMode.bottomOnly(portrait());
-        // Everything in portrait stands in the accessory stack, so the whole dock rises.
-        assertEquals(portrait(), portrait);
-
-        PlaceLayout landscape = MinimalMode.bottomOnly(landscape());
-        // The rail on the side and the index along the top would take their room from the pane
-        // as they were laid out, so they wait for settle; the bottom keys come back for the slide.
-        assertTrue(landscape.slot(Element.APPS).hidden);
-        assertTrue(landscape.slot(Element.AZ).hidden);
-        assertFalse(landscape.slot(Element.EXTRA_KEYS).hidden);
-        assertFalse(landscape.slot(Element.STATUS).hidden);
     }
 
     @Test

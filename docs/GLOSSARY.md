@@ -69,9 +69,10 @@ Only a managed wallpaper can move with parallax; a wallpaper set anywhere else s
 _Avoid_: custom wallpaper, in-app wallpaper
 
 **Minimal mode**:
-The launcher shown with only each place's content, unless the user chose otherwise: by default the
+A second saved layout and nothing more, which starts with only each place's content: by default the
 status bar, the apps bar, the A–Z index, the extra keys and the keyboard go away, and the widgets,
-the pane or the display are maximised in either orientation. One mode for every place, not a state
+the panes or the display take the room in either orientation. It changes no behaviour: a split
+shows all its panes and the bars it keeps answer the same gestures as in the normal layout. One mode for every place, not a state
 of one: turned on and off only from the corner tab's minimal button, which every place carries, and
 remembered until turned off; paging never leaves it. It has a layout of its own, the **minimal
 layout**, beside the normal one, in the same element model: the Layout editor opened while the mode
@@ -126,8 +127,8 @@ The keyboard swipe's mirror on the current page's top border: a swipe that sets 
 from it before the border drag's hold. Down unfolds the status bar, up folds it: the bar's own
 two forms, compact and open, driven by the same fold its drag across itself drives, following the
 finger and landing by the keyboard swipe's rule. A grabber pill marks it. It is there only while
-the status bar stands along the top and can unfold; a bar on another edge or put away, and minimal
-mode, leave the top border to paging. A press in the phone's own strip at the top of the screen is
+the status bar stands along the top and can unfold, minimal mode included; a bar on another edge
+or put away leaves the top border to paging. A press in the phone's own strip at the top of the screen is
 never taken, so the notification shade still pulls down.
 _Avoid_: status bar swipe (the retired page swipe on the bar), pull-down
 
