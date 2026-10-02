@@ -32,6 +32,7 @@ public final class WallpaperUniforms {
                              float frameW, float frameH) {
         s.setFloatUniform("uResolution", frameW, frameH);
         s.setFloatUniform("uTime", f.timeSeconds);
+        s.setFloatUniform("uPhase", f.phaseSeconds);
         s.setFloatUniform("uEnergy", f.energy);
         s.setFloatUniform("uDim", f.dim);
         setPalette(s, f.palette);
@@ -39,11 +40,12 @@ public final class WallpaperUniforms {
         setMoment(s, 1, f.moments != null && f.moments.length > 1 ? f.moments[1] : null);
     }
 
-    /** The rest pose: energy 0, dim 0, time 0, no moments. What the system's still is drawn with. */
+    /** The rest pose: energy 0, dim 0, time and phase 0, no moments. What the system's still is drawn with. */
     public static void applyRest(@NonNull RuntimeShader s, @NonNull int[] palette,
                                  float frameW, float frameH) {
         s.setFloatUniform("uResolution", frameW, frameH);
         s.setFloatUniform("uTime", 0f);
+        s.setFloatUniform("uPhase", 0f);
         s.setFloatUniform("uEnergy", 0f);
         s.setFloatUniform("uDim", 0f);
         setPalette(s, palette);

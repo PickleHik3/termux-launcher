@@ -15,7 +15,7 @@ import java.util.Set;
 public class AnimatedWallpapersTest {
 
     private static final String[] UNIFORMS = {
-        "uniform float2 uResolution", "uniform float uTime", "uniform float uEnergy", "uniform float uDim",
+        "uniform float2 uResolution", "uniform float uTime", "uniform float uPhase", "uniform float uEnergy", "uniform float uDim",
         "layout(color) uniform half4 uPalette0", "layout(color) uniform half4 uPalette1",
         "layout(color) uniform half4 uPalette2", "layout(color) uniform half4 uPalette3",
         "uniform float4 uMomentRect0", "uniform float2 uMomentState0",

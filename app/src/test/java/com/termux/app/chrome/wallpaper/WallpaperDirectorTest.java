@@ -165,6 +165,50 @@ public class WallpaperDirectorTest {
     }
 
     @Test
+    public void phaseFollowsTimeAtFullEnergy() {
+        WallpaperDirector d = playing();
+        at(d, 0);
+        Frame f = at(d, 33);
+        assertEquals(f.timeSeconds, f.phaseSeconds, EPS);
+        f = at(d, 66);
+        assertEquals(f.timeSeconds, f.phaseSeconds, EPS);
+    }
+
+    @Test
+    public void phaseSlowsThroughALockAndIsZeroOnceItSettles() {
+        WallpaperDirector d = playing();
+        run(d, 0, 1000);
+        Frame before = at(d, 1000);
+        d.lockRequested(T0 + 1000 * MS);
+        Frame mid = run(d, 1033, 1165);
+        float gained = mid.phaseSeconds - before.phaseSeconds;
+        float elapsed = mid.timeSeconds - before.timeSeconds;
+        assertTrue("still moving: " + gained, gained > 0f);
+        assertTrue("but slower than time: " + gained + " vs " + elapsed, gained < elapsed - 0.01f);
+        Frame end = at(d, 1000 + 350);
+        assertTrue(end.lockDue);
+        assertEquals(0f, end.phaseSeconds, EPS);
+        assertEquals("energy 0 holds it there", 0f, at(d, 1000 + 600).phaseSeconds, EPS);
+    }
+
+    @Test
+    public void phaseResumesFromRestOnUnlockWithoutAJump() {
+        WallpaperDirector d = playing();
+        run(d, 0, 1000);
+        d.lockRequested(T0 + 1000 * MS);
+        run(d, 1000, 1400);
+        d.unlock(T0 + 2000 * MS);
+        float prev = at(d, 2000).phaseSeconds;
+        for (long t = 2033; t <= 3000; t += 33) {
+            float p = at(d, t).phaseSeconds;
+            assertTrue("never rewinds", p >= prev);
+            assertTrue("never more than a frame's worth", p - prev <= 0.034f);
+            prev = p;
+        }
+        assertTrue("moving again", prev > 0f);
+    }
+
+    @Test
     public void lockEasesEnergyAndDimThenFiresOnce() {
         WallpaperDirector d = playing();
         run(d, 0, 100);
