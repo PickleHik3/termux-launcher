@@ -396,8 +396,6 @@
     <string name="settings_keyboard_input_none">None</string>
     <string name="settings_hide_keyboard_hardware_title">Hide the on-screen keyboard</string>
     <string name="settings_hide_keyboard_hardware_summary">Hides the on-screen keyboard while a hardware keyboard is connected.</string>
-    <string name="settings_keyboard_colors_title">Keyboard colors</string>
-    <string name="settings_keyboard_colors_summary">Edit keyboard colors with a persistent live preview.</string>
     <string name="settings_typeface_title">Typeface</string>
     <string name="settings_keyboard_bottom_padding_title">Bottom padding</string>
     <string name="settings_keyboard_bottom_padding_summary">Lift the bottom key row away from the edge of the screen.</string>
@@ -967,7 +965,6 @@
                 <string name="termux_in_app_keyboard_theme_light">Light</string>
                 <string name="termux_in_app_keyboard_theme_dark">Dark</string>
                 <string name="termux_in_app_keyboard_theme_imported">Imported · %1$s</string>
-                <string name="termux_keyboard_color_scheme_title">Keyboard colors</string>
                 <string name="termux_keyboard_color_scheme_edit_colors">Edit colors</string>
                 <string name="termux_keyboard_color_scheme_save_colors">Save colors</string>
                 <string name="termux_keyboard_color_scheme_follow_theme">Reset to theme</string>

@@ -1,6 +1,8 @@
 package com.termux.app.fragments.settings.termux;
 
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.net.Uri;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.InputType;
@@ -14,6 +16,8 @@ import android.widget.LinearLayout;
 import android.widget.Space;
 import android.widget.TextView;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -22,6 +26,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.color.MaterialColors;
 import com.termux.app.notice.AppNotice;
@@ -32,6 +37,10 @@ import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -82,6 +91,25 @@ public class KeyboardColorSchemeFragment extends Fragment {
         "error + onSurface 20%", "tertiary + onSurface 20%", "primary + onSurface 20%",
         "secondary + onSurface 20%", "tertiary + primary 50%", "primary + secondary 50%"
     };
+    private static final String[] THEME_VALUES = {"system", "light", "dark"};
+    private static final String FONT_DIR_NAME = "inapp-keyboard";
+    private static final String FONT_FILE_NAME = "label-font.ttf";
+
+    private ActivityResultLauncher<String[]> mFontPickerLauncher;
+    private FrameLayout mPreviewHolder;
+    private MaterialButtonToggleGroup mThemeGroup;
+    private MaterialButton[] mThemeButtons;
+    private String[] mThemeSegmentValues = THEME_VALUES;
+    private boolean mUpdatingThemeGroup;
+    private TextView mFontSummary;
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mFontPickerLauncher = registerForActivityResult(
+            new ActivityResultContracts.OpenDocument(), this::onFontPicked);
+    }
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
@@ -97,13 +125,44 @@ public class KeyboardColorSchemeFragment extends Fragment {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(12), dp(16), dp(12));
 
-        // Whether the keyboard still moves with the wallpaper is the first thing to say.
+        // 1. The live preview, which every control below repaints.
+        mPreviewHolder = new FrameLayout(context);
+        root.addView(mPreviewHolder, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        rebuildPreview();
+
+        // 2. Theme.
+        root.addView(sectionHeader(context, R.string.termux_in_app_keyboard_theme_title));
+        mThemeGroup = (MaterialButtonToggleGroup) inflater.inflate(
+            R.layout.keyboard_theme_segments, root, false);
+        mThemeButtons = new MaterialButton[] {
+            mThemeGroup.findViewById(R.id.keyboard_theme_system),
+            mThemeGroup.findViewById(R.id.keyboard_theme_light),
+            mThemeGroup.findViewById(R.id.keyboard_theme_dark),
+            mThemeGroup.findViewById(R.id.keyboard_theme_custom)
+        };
+        mThemeGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
+            if (!isChecked || mUpdatingThemeGroup) return;
+            for (int i = 0; i < mThemeButtons.length; i++) {
+                if (mThemeButtons[i].getId() == checkedId && i < mThemeSegmentValues.length) {
+                    onThemeChosen(mThemeSegmentValues[i]);
+                    return;
+                }
+            }
+        });
+        root.addView(mThemeGroup);
+        refreshThemeGroup();
+
+        // 3. Colors. The status line sits first and is dimmed while an imported palette is not the
+        // chosen theme, so it is plain which choice the colors belong to.
+        root.addView(sectionHeader(context, R.string.keyboard_theme_section_colors));
         mStatus = new TextView(context);
         mStatus.setTextAppearance(
             com.google.android.material.R.style.TextAppearance_Material3_TitleSmall);
         mStatus.setText(statusText(context, mScheme));
         root.addView(mStatus, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        updateStatusEmphasis();
 
         TextView instructions = new TextView(context);
         instructions.setTextAppearance(
@@ -121,20 +180,51 @@ public class KeyboardColorSchemeFragment extends Fragment {
         instructionParams.topMargin = dp(6);
         root.addView(instructions, instructionParams);
 
-        // Push the preview and its palette to the bottom, within thumb reach, instead of
-        // leaving dead space below a top-anchored palette.
-        Space spacer = new Space(context);
-        root.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
-
-        // All 24 swatches sit right above the preview so a chosen color lands next to the keys
-        // it paints; the card below keeps the actions and role filters.
+        // All 24 swatches sit right under the preview's controls so a chosen color lands next to
+        // the keys it paints; the card below keeps the actions and role filters.
         mSwatchGrid = new LinearLayout(context);
         mSwatchGrid.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        gridParams.bottomMargin = dp(8);
+        gridParams.topMargin = dp(12);
         root.addView(mSwatchGrid, gridParams);
 
+        root.addView(buildPaletteCard(context), new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        createSwatches();
+
+        // 4. Typeface.
+        root.addView(sectionHeader(context, R.string.settings_typeface_title));
+        root.addView(buildTypefaceRow(context));
+
+        android.widget.ScrollView scroll = new android.widget.ScrollView(context);
+        scroll.setFillViewport(true);
+        scroll.addView(root, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return scroll;
+    }
+
+    /** Section header: TitleSmall in the primary colour, set apart from the block above it. */
+    @NonNull
+    private TextView sectionHeader(@NonNull android.content.Context context, int title) {
+        TextView header = new TextView(context);
+        header.setTextAppearance(
+            com.google.android.material.R.style.TextAppearance_Material3_TitleSmall);
+        header.setTextColor(MaterialColors.getColor(context,
+            androidx.appcompat.R.attr.colorPrimary, Color.GRAY));
+        header.setText(title);
+        header.setAccessibilityHeading(true);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(24);
+        params.bottomMargin = dp(8);
+        header.setLayoutParams(params);
+        return header;
+    }
+
+    /** (Re)creates the preview keyboard; Config is immutable, so a new typeface needs a new view. */
+    private void rebuildPreview() {
+        android.content.Context context = requireContext();
         Config.Builder config = new Config.Builder(getResources(), new Config.IKeyEventHandler() {
             @Override public void key_down(KeyValue value, boolean isSwipe) {}
             @Override public void key_up(KeyValue value, Pointers.Modifiers modifiers) {}
@@ -143,6 +233,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         });
         config.hapticEnabled = false;
         config.keySoundEnabled = false;
+        config.labelFont = previewLabelFont(context, mPreferences.getInAppKeyboardFontPath());
         mKeyboard = new Keyboard2View(context, config.build(), buildPreviewPalette(context));
         KeyboardData previewLayout = KeyboardData.load(getResources(),
             juloo.keyboard2.R.xml.termux_launcher_qwerty);
@@ -167,13 +258,190 @@ public class KeyboardColorSchemeFragment extends Fragment {
             mScheme.paint(keyId, mSelectedRole, mSelectedSwatch);
             persistAndRender();
         });
-        root.addView(mKeyboard, new LinearLayout.LayoutParams(
+        mPreviewHolder.removeAllViews();
+        mPreviewHolder.addView(mKeyboard, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+    }
 
-        root.addView(buildPaletteCard(context), new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        createSwatches();
-        return root;
+    /** The face the keyboard itself would use: the picked file, else the bundled symbols font. */
+    @Nullable
+    private static Typeface previewLabelFont(@NonNull android.content.Context context,
+                                             @Nullable String fontPath) {
+        if (fontPath != null && !fontPath.isEmpty()) {
+            File file = new File(fontPath);
+            if (file.isFile()) {
+                try {
+                    Typeface typeface = com.termux.shared.termux.font.FileTypefaces.load(file);
+                    if (typeface != null && !Typeface.DEFAULT.equals(typeface)) return typeface;
+                } catch (RuntimeException ignored) {
+                    // Falls through to the bundled face, like the keyboard does.
+                }
+            }
+        }
+        return com.termux.shared.termux.font.NerdFontSpans.typeface(context);
+    }
+
+    /** Segments for the stored theme: a fourth "Imported: X" one only while a palette is imported. */
+    private void refreshThemeGroup() {
+        String importedId = mScheme.getImportedThemeId();
+        boolean imported = !importedId.isEmpty();
+        if (!imported && "custom".equals(mPreferences.getInAppKeyboardTheme()))
+            mPreferences.setInAppKeyboardTheme("system");
+        mThemeSegmentValues = imported
+            ? new String[]{"system", "light", "dark", "custom"} : THEME_VALUES;
+        CharSequence[] labels = {
+            getString(R.string.termux_in_app_keyboard_theme_system),
+            getString(R.string.termux_in_app_keyboard_theme_light),
+            getString(R.string.termux_in_app_keyboard_theme_dark),
+            imported ? getString(R.string.termux_in_app_keyboard_theme_imported_short, importedId)
+                : ""
+        };
+        String current = mPreferences.getInAppKeyboardTheme();
+        mUpdatingThemeGroup = true;
+        try {
+            for (int i = 0; i < mThemeButtons.length; i++) {
+                boolean present = i < mThemeSegmentValues.length;
+                mThemeButtons[i].setVisibility(present ? View.VISIBLE : View.GONE);
+                mThemeButtons[i].setText(labels[i]);
+            }
+            int checked = 0;
+            for (int i = 0; i < mThemeSegmentValues.length; i++) {
+                if (mThemeSegmentValues[i].equals(current)) checked = i;
+            }
+            mThemeGroup.check(mThemeButtons[checked].getId());
+        } finally {
+            mUpdatingThemeGroup = false;
+        }
+    }
+
+    /** Same write as the Style page's old theme pill; the preview follows it. */
+    private void onThemeChosen(@NonNull String value) {
+        mPreferences.setInAppKeyboardTheme(value);
+        mKeyboard.setPalette(buildPreviewPalette(requireContext()));
+        updateStatusEmphasis();
+    }
+
+    /** The imported-palette status reads at full strength only while the Imported theme is on. */
+    private void updateStatusEmphasis() {
+        if (mStatus == null) return;
+        boolean inactive = mScheme.hasImportedPalette()
+            && !mScheme.shouldApplyImportedPalette(mPreferences.getInAppKeyboardTheme());
+        mStatus.setAlpha(inactive ? 0.6f : 1f);
+    }
+
+    /** A two-line row, title over summary, that opens the pick/reset flow. */
+    @NonNull
+    private View buildTypefaceRow(@NonNull android.content.Context context) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.VERTICAL);
+        android.util.TypedValue ripple = new android.util.TypedValue();
+        context.getTheme().resolveAttribute(
+            android.R.attr.selectableItemBackground, ripple, true);
+        row.setBackgroundResource(ripple.resourceId);
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setMinimumHeight(dp(48));
+        TextView title = new TextView(context);
+        title.setTextAppearance(
+            com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
+        title.setText(R.string.termux_in_app_keyboard_font_title);
+        row.addView(title);
+        mFontSummary = new TextView(context);
+        mFontSummary.setTextAppearance(
+            com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
+        mFontSummary.setTextColor(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY));
+        row.addView(mFontSummary);
+        row.setOnClickListener(view -> onFontRowClicked());
+        updateFontSummary();
+        return row;
+    }
+
+    private void onFontRowClicked() {
+        if (mPreferences.getInAppKeyboardFontPath().isEmpty()) {
+            launchFontPicker();
+            return;
+        }
+        new MaterialAlertDialogBuilder(requireActivity())
+            .setTitle(R.string.termux_in_app_keyboard_font_title)
+            .setItems(new CharSequence[]{
+                getString(R.string.termux_in_app_keyboard_font_pick),
+                getString(R.string.termux_in_app_keyboard_font_reset)
+            }, (dialog, which) -> {
+                if (which == 0) {
+                    launchFontPicker();
+                } else {
+                    clearCustomFont();
+                }
+            })
+            .show();
+    }
+
+    private void launchFontPicker() {
+        // SAF mime coverage for ttf/otf across providers; octet-stream catches
+        // file managers that don't map font extensions.
+        mFontPickerLauncher.launch(new String[]{
+            "font/ttf", "font/otf", "font/*",
+            "application/x-font-ttf", "application/x-font-otf",
+            "application/octet-stream"
+        });
+    }
+
+    private void onFontPicked(@Nullable Uri uri) {
+        android.content.Context context = getContext();
+        if (uri == null || context == null || mPreferences == null || mPreviewHolder == null)
+            return;
+        File fontDir = new File(context.getFilesDir(), FONT_DIR_NAME);
+        File fontFile = new File(fontDir, FONT_FILE_NAME);
+        File stagedFile = new File(fontDir, FONT_FILE_NAME + ".tmp");
+        try {
+            if (!fontDir.isDirectory() && !fontDir.mkdirs())
+                throw new java.io.IOException("Cannot create " + fontDir);
+            try (InputStream in = context.getContentResolver().openInputStream(uri);
+                 OutputStream out = new FileOutputStream(stagedFile)) {
+                if (in == null)
+                    throw new java.io.IOException("Cannot open " + uri);
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1)
+                    out.write(buffer, 0, read);
+            }
+            // createFromFile returns DEFAULT (or throws) when the bytes are not a usable font.
+            Typeface typeface = Typeface.createFromFile(stagedFile);
+            if (typeface == null || Typeface.DEFAULT.equals(typeface))
+                throw new java.io.IOException("Unreadable font " + uri);
+            if (!stagedFile.renameTo(fontFile))
+                throw new java.io.IOException("Cannot replace " + fontFile);
+            mPreferences.setInAppKeyboardFontPath(fontFile.getAbsolutePath());
+        } catch (Exception e) {
+            //noinspection ResultOfMethodCallIgnored
+            stagedFile.delete();
+            AppNotice.show(context, R.string.termux_in_app_keyboard_font_error, false);
+        }
+        updateFontSummary();
+        rebuildPreview();
+    }
+
+    private void clearCustomFont() {
+        String path = mPreferences.getInAppKeyboardFontPath();
+        mPreferences.setInAppKeyboardFontPath("");
+        if (!path.isEmpty()) {
+            //noinspection ResultOfMethodCallIgnored
+            new File(path).delete();
+        }
+        updateFontSummary();
+        rebuildPreview();
+    }
+
+    private void updateFontSummary() {
+        if (mFontSummary == null) return;
+        String path = mPreferences.getInAppKeyboardFontPath();
+        if (path.isEmpty() || !new File(path).isFile()) {
+            mFontSummary.setText(R.string.termux_in_app_keyboard_font_summary_default);
+        } else {
+            mFontSummary.setText(getString(
+                R.string.termux_in_app_keyboard_font_summary_custom, new File(path).getName()));
+        }
     }
 
     /** Glass preview palette: the imported palette when active, then the background override. */
@@ -207,7 +475,8 @@ public class KeyboardColorSchemeFragment extends Fragment {
     @NonNull
     private View buildPaletteCard(@NonNull android.content.Context context) {
         MaterialCardView card = new MaterialCardView(context);
-        card.setRadius(dpFloat(24));
+        card.setRadius(com.termux.app.chrome.ShapeTokens.cornerPx(context,
+            com.google.android.material.R.attr.shapeAppearanceCornerExtraLarge, 28));
         card.setCardElevation(0f);
         card.setStrokeWidth(dp(1));
         card.setStrokeColor(MaterialColors.getColor(context,
@@ -287,7 +556,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        requireActivity().setTitle(R.string.termux_keyboard_color_scheme_title);
+        requireActivity().setTitle(R.string.keyboard_theme_title);
         // The wallpaper may have changed while this screen sat in the background; dynamic slots
         // have to show what the keyboard will actually use.
         if (mScheme != null && mKeyboard != null
@@ -321,6 +590,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         // a deliberate light/dark choice is left alone.
         if ("custom".equals(mPreferences.getInAppKeyboardTheme()))
             mPreferences.setInAppKeyboardTheme("system");
+        refreshThemeGroup();
         mSelectedSwatch = 0;
         persistAndRender();
         createSwatches();
@@ -659,6 +929,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mPreferences.setInAppKeyboardColorScheme(mScheme.toJson());
         mKeyboard.setPalette(buildPreviewPalette(requireContext()));
         mKeyboard.setKeyColorOverrides(mScheme.resolvedOverrides());
+        updateStatusEmphasis();
     }
 
     private int dp(float value) { return Math.round(dpFloat(value)); }
