@@ -230,10 +230,14 @@ public final class SurfaceEditorController {
     @Nullable private AppearanceEditorPanel mPanel;
     private ViewTreeObserver.OnGlobalLayoutListener mLayoutListener;
     private long mLayoutSignature = Long.MIN_VALUE;
-    /** The panel's height at rest, and with row 2 up; recomputed with the frame. */
-    private int mRestHeightPx;
-    /** The panel's height in Layout mode: at least the resting one; recomputed with the frame. */
+    /**
+     * The panel's one height per mode (AppearanceEditorPanel.measureFor), and the taller of the
+     * two, which the frame stands above so neither mode's sheet covers it. Recomputed with the
+     * frame.
+     */
+    private int mAppearanceHeightPx;
     private int mLayoutHeightPx;
+    private int mRestHeightPx;
     private int mNavInsetPx;
 
     /** The gap between the frame and the status inset above it, and the bottom area below it. */
@@ -435,7 +439,7 @@ public final class SurfaceEditorController {
                 return;
             // One set of views per process, like the panel: the controller binds them once.
             mLayoutViews = new LayoutEditorController.Views(frame, canvas, forms,
-                panel.orientationToggle(), panel.tray(), panel.trayTrash());
+                panel.orientationToggle(), panel.trash());
         }
         layout.attach(mLayoutViews);
         positionLayoutFrame();
@@ -625,8 +629,8 @@ public final class SurfaceEditorController {
     // ------------------------------------------------------------------------------- the frame
 
     /**
-     * Places the frame and sizes the bottom area: the bottom area at a fifth of the window (or
-     * what its content needs, if more), the frame scaled to fit between the status inset and it.
+     * Places the frame and sizes the bottom area: the bottom area at the height its rows need in
+     * each mode, the frame scaled to fit between the status inset and the taller of the two.
      */
     private void layoutFrame(boolean animate) {
         AppearanceEditorFrame frame = mFrame;
@@ -650,30 +654,13 @@ public final class SurfaceEditorController {
             - (decorHeight - bars.bottom));
         int statusInset = Math.max(0, Math.max(bars.top, mHost.statusBarInsetTop())
             - contentInWindow[1]);
-        View panelView = panel.view();
-        panelView.setPadding(panelView.getPaddingLeft(), panelView.getPaddingTop(),
-            panelView.getPaddingRight(), dp(12) + mNavInsetPx);
-        panel.setNarrow(content.getWidth() < dp(AppearanceEditorPanel.NARROW_DP));
-        // The resting height is Appearance's at rest, whichever mode is showing: the frame does
-        // not move when the mode pill does. Layout mode's two rows may need a little more; that
-        // grows the card upward over the frame's foot, as row 2 does, and never moves the frame.
-        boolean layoutMode = panel.isLayoutMode();
-        if (layoutMode) panel.setMode(false);
-        boolean row2 = panel.isRow2Shown();
-        if (row2) panel.hideRow2();
-        int widthSpec = View.MeasureSpec.makeMeasureSpec(content.getWidth(),
-            View.MeasureSpec.EXACTLY);
-        int heightSpec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
-        panelView.measure(widthSpec, heightSpec);
-        int restMeasured = panelView.getMeasuredHeight();
-        panel.setMode(true);
-        panelView.measure(widthSpec, heightSpec);
-        int layoutMeasured = panelView.getMeasuredHeight();
-        panel.setMode(false);
-        if (row2) panel.showRow2(nameOf(mTarget));
-        if (layoutMode) panel.setMode(true);
-        mRestHeightPx = Math.max(Math.round(windowHeight * 0.2f), restMeasured);
-        mLayoutHeightPx = Math.max(mRestHeightPx, layoutMeasured);
+        panel.setNavInset(mNavInsetPx);
+        // One fixed height per mode, measured from the rows that mode shows (Appearance always
+        // counts Row B, which only fades). The frame stands above the taller of the two, so it
+        // never moves when the mode pill does and no sheet ever covers it.
+        mAppearanceHeightPx = panel.measureFor(false, content.getWidth());
+        mLayoutHeightPx = panel.measureFor(true, content.getWidth());
+        mRestHeightPx = Math.max(mAppearanceHeightPx, mLayoutHeightPx);
         applyPanelHeight();
 
         int[] parentOffset = new int[2];
@@ -699,15 +686,14 @@ public final class SurfaceEditorController {
     }
 
     /**
-     * The bottom area's one fixed height at rest, its taller state with row 2 up, and Layout
-     * mode's own (its toggles and tray over Corners and Margin).
+     * The bottom area's height for the mode showing, as measured by the panel: it does not change
+     * when an element is tapped, when Undo comes and goes, or when Style flips.
      */
     private void applyPanelHeight() {
         AppearanceEditorPanel panel = mPanel;
         if (panel == null || mRestHeightPx <= 0)
             return;
-        int height = mLayoutMode ? Math.max(mRestHeightPx, mLayoutHeightPx)
-            : mRestHeightPx + (panel.isRow2Shown() ? dp(panel.row2HeightDp()) : 0);
+        int height = mLayoutMode ? mLayoutHeightPx : mAppearanceHeightPx;
         ViewGroup.LayoutParams params = panel.view().getLayoutParams();
         if (params == null || params.height == height)
             return;

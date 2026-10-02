@@ -9,8 +9,6 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.FrameLayout;
-import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
@@ -21,11 +19,11 @@ import androidx.annotation.VisibleForTesting;
 import com.google.android.material.badge.BadgeDrawable;
 import com.google.android.material.badge.BadgeUtils;
 import com.google.android.material.badge.ExperimentalBadgeUtils;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.color.MaterialColors;
-import com.google.android.material.shape.MaterialShapeDrawable;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.LayoutCanvasView;
@@ -197,9 +195,10 @@ public final class LayoutEditorController {
 
     /**
      * The views the hosting editor lends Layout mode. The canvas and the keyboard's type chips
-     * stand in the frame; the toggle and the tray stand in the bottom area. The tray holds the
-     * trash icon, which is the drop target a lifted element is put away in (the canvas is told its
-     * rect) and which, tapped, opens the canvas's list of what is hidden.
+     * stand in the frame; the orientation toggle and the trash stand in the bottom area. The trash
+     * is an icon button: the drop target a lifted element is put away in (the canvas is told its
+     * rect), the anchor of the canvas's list of what is hidden, which a tap opens, and the anchor
+     * of the count badge.
      */
     public static final class Views {
         /** What the canvas and the keyboard's chips stand in: the frame's own rect. */
@@ -207,18 +206,16 @@ public final class LayoutEditorController {
         @NonNull final LayoutCanvasView canvas;
         @NonNull final ChipGroup keyboardForms;
         @NonNull final MaterialButtonToggleGroup orientation;
-        @NonNull final View tray;
-        @NonNull final ImageView trash;
+        @NonNull final MaterialButton trash;
 
         public Views(@NonNull ViewGroup canvasHost, @NonNull LayoutCanvasView canvas,
                      @NonNull ChipGroup keyboardForms,
-                     @NonNull MaterialButtonToggleGroup orientation, @NonNull View tray,
-                     @NonNull ImageView trash) {
+                     @NonNull MaterialButtonToggleGroup orientation,
+                     @NonNull MaterialButton trash) {
             this.canvasHost = canvasHost;
             this.canvas = canvas;
             this.keyboardForms = keyboardForms;
             this.orientation = orientation;
-            this.tray = tray;
             this.trash = trash;
         }
     }
@@ -247,7 +244,8 @@ public final class LayoutEditorController {
     @Nullable private HiddenElementsPopup mHiddenPopup;
     @Nullable private BadgeDrawable mTrashBadge;
     /** The icon's resting background (its ripple), which the drop zone replaces while offered. */
-    @Nullable private android.graphics.drawable.Drawable mTrashRestBackground;
+    /** The trash's own container tint, put back once it stops being offered as the drop zone. */
+    @Nullable private ColorStateList mTrashRestTint;
     /** Whether a lifted element may be dropped in the tray, and whether the finger is over it. */
     private boolean mTrayOffered;
     private boolean mTrayHovered;
@@ -503,7 +501,7 @@ public final class LayoutEditorController {
             if (mViews == views)
                 syncTrayTarget(views);
         });
-        mTrashRestBackground = views.trash.getBackground();
+        mTrashRestTint = views.trash.getBackgroundTintList();
         mHiddenPopup = new HiddenElementsPopup(views.canvas, views.trash, block -> {
             LayoutEditorPlan current = mPlan;
             LayoutEditorPlan.TrayItem item = trayItemOf(block);
@@ -680,7 +678,7 @@ public final class LayoutEditorController {
         mTrayShown = new ArrayList<>(items);
         int count = items.size();
         boolean filled = MiniatureDragPolicy.trashState(count) == MiniatureDragPolicy.TrashState.FILLED;
-        views.trash.setImageResource(filled ? R.drawable.ic_trash_filled : R.drawable.ic_symbol_delete);
+        views.trash.setIconResource(filled ? R.drawable.ic_trash_filled : R.drawable.ic_symbol_delete);
         showTrashBadge(views, count);
         views.trash.setContentDescription(views.canvas.trashDescription());
         // Restate the popup's chips; nothing left to list closes it (a host write can change the
@@ -707,23 +705,24 @@ public final class LayoutEditorController {
             com.google.android.material.R.attr.colorOnSurfaceVariant,
             mHost.themeColor(com.google.android.material.R.attr.colorOnSurfaceVariant,
                 R.color.termux_on_surface_variant));
-        views.trash.setImageTintList(ColorStateList.valueOf(filled || offered ? primary : muted));
+        views.trash.setIconTint(ColorStateList.valueOf(filled || offered ? primary : muted));
         if (!offered) {
-            views.trash.setBackground(mTrashRestBackground);
+            views.trash.setStrokeWidth(0);
+            views.trash.setBackgroundTintList(mTrashRestTint);
             return;
         }
+        // The button's own shape, outlined while it is offered and washed once the finger is over
+        // it: the drop zone is the trash itself, not a drawable laid over it.
         float density = mHost.context().getResources().getDisplayMetrics().density;
-        MaterialShapeDrawable zone = new MaterialShapeDrawable(EditorM3.shape(
-            views.trash.getContext(), com.google.android.material.R.attr.shapeAppearanceCornerMedium));
         int outline = MaterialColors.getColor(views.trash,
             com.google.android.material.R.attr.colorOutline,
             mHost.themeColor(com.google.android.material.R.attr.colorOutline,
                 R.color.termux_on_surface));
         int container = MaterialColors.getColor(views.trash,
             com.google.android.material.R.attr.colorSecondaryContainer, 0);
-        zone.setFillColor(ColorStateList.valueOf(mTrayHovered ? container : 0));
-        zone.setStroke(mTrayHovered ? 2f * density : density, mTrayHovered ? primary : outline);
-        views.trash.setBackground(zone);
+        views.trash.setStrokeColor(ColorStateList.valueOf(mTrayHovered ? primary : outline));
+        views.trash.setStrokeWidth(Math.round((mTrayHovered ? 2f : 1f) * density));
+        views.trash.setBackgroundTintList(ColorStateList.valueOf(mTrayHovered ? container : 0));
     }
 
     /**
@@ -749,21 +748,56 @@ public final class LayoutEditorController {
     }
 
     /**
-     * The count on the trash: a Material badge on the icon, shown while something is hidden.
-     * Attached once, to the tray the icon stands in.
+     * The count on the trash: a Material badge at the icon's top end, shown while something is
+     * hidden. Created once; attached to the trash button itself (its overlay, no custom parent)
+     * once the button has been laid out, since the badge takes its place from the anchor's
+     * bounds at attach time, and placed again whenever the button moves.
      */
     @OptIn(markerClass = ExperimentalBadgeUtils.class)
     private void showTrashBadge(@NonNull Views views, int count) {
         if (mTrashBadge == null) {
-            mTrashBadge = BadgeDrawable.create(views.trash.getContext());
-            if (views.tray instanceof FrameLayout)
-                BadgeUtils.attachBadgeDrawable(mTrashBadge, views.trash, (FrameLayout) views.tray);
+            BadgeDrawable badge = BadgeDrawable.create(views.trash.getContext());
+            badge.setBadgeGravity(BadgeDrawable.TOP_END);
+            mTrashBadge = badge;
+            attachTrashBadgeWhenLaidOut(views, badge);
         }
         mTrashBadge.setVisible(count > 0);
         if (count > 0)
             mTrashBadge.setNumber(count);
         else
             mTrashBadge.clearNumber();
+    }
+
+    @OptIn(markerClass = ExperimentalBadgeUtils.class)
+    private void attachTrashBadgeWhenLaidOut(@NonNull Views views, @NonNull BadgeDrawable badge) {
+        MaterialButton trash = views.trash;
+        Runnable attach = () -> {
+            if (mViews != views || mTrashBadge != badge)
+                return;
+            // Towards the button's centre by the icon's inset, so the badge sits on the glyph's
+            // top-end corner rather than on the 48dp touch target's.
+            badge.setHorizontalOffset(Math.max(0, (trash.getWidth() - trash.getIconSize()) / 2));
+            badge.setVerticalOffset(Math.max(0, (trash.getHeight() - trash.getIconSize()) / 2));
+            BadgeUtils.attachBadgeDrawable(badge, trash, null);
+        };
+        if (trash.isLaidOut() && trash.getWidth() > 0) trash.post(attach);
+        else trash.addOnLayoutChangeListener(new View.OnLayoutChangeListener() {
+            @Override
+            public void onLayoutChange(View view, int left, int top, int right, int bottom,
+                                       int oldLeft, int oldTop, int oldRight, int oldBottom) {
+                if (right - left <= 0)
+                    return;
+                view.removeOnLayoutChangeListener(this);
+                view.post(attach);
+            }
+        });
+        // The trash moves with the sheet (Undo, a mode switch, a rotation): the badge follows.
+        trash.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft, oldTop,
+                                         oldRight, oldBottom) -> {
+            if (mTrashBadge == badge && (left != oldLeft || top != oldTop || right != oldRight
+                || bottom != oldBottom))
+                badge.updateBadgeCoordinates(view);
+        });
     }
 
     /** The tray item the popup's chip for this block stands for; null for what has none. */
