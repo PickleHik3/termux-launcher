@@ -4628,8 +4628,10 @@ public final class SuggestionBarView extends GridLayout
 
         ImageButton gear = new ImageButton(getContext());
         gear.setImageResource(R.drawable.ic_settings);
-        styleIconButton(gear, dp(3));
-        int gearSize = dp(24);
+        // An 18dp glyph centred in the 48dp touch minimum, named for screen readers.
+        styleIconButton(gear, dp(15));
+        gear.setContentDescription(getContext().getString(R.string.folder_popup_settings_description));
+        int gearSize = dp(48);
         gear.setOnClickListener(v -> {
             dismissFolderPopup();
             refreshPinnedItemsFromRepository();
