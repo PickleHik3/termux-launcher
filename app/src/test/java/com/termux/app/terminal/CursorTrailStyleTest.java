@@ -46,6 +46,16 @@ public class CursorTrailStyleTest {
         assertNull(CursorTrailStyle.fromKittyShaderName(null));
     }
 
+    /** kitty.conf's id wins; otherwise the preference; otherwise the default. */
+    @Test
+    public void effectiveStylePrefersKittyThenPreferenceThenDefault() {
+        assertEquals(CursorTrailStyle.RAILGUN, CursorTrailStyle.effective("railgun", "comet"));
+        assertEquals(CursorTrailStyle.DEFAULT, CursorTrailStyle.effective("default", "comet"));
+        assertEquals(CursorTrailStyle.COMET, CursorTrailStyle.effective(null, "comet"));
+        assertEquals(CursorTrailStyle.DEFAULT, CursorTrailStyle.effective(null, null));
+        assertEquals(CursorTrailStyle.DEFAULT, CursorTrailStyle.effective(null, "bogus"));
+    }
+
     /** The AGSL source sticks to the subset every AGSL device compiles, and declares its inputs. */
     @Test
     public void motionBlurShaderUsesOnlyPortableAgsl() {
