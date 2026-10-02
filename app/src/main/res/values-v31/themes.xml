@@ -1,31 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <!-- Theme.TermuxApp.* now live once in values/themes.xml; only the wallpaper variant remains. -->
     <!--
      https://github.com/material-components/material-components-android/blob/master/lib/java/com/google/android/material/theme/res/values/themes.xml
      https://m3.material.io/components
     -->
-
-    <!-- TermuxApp Light DarkActionBar theme. -->
-    <style name="Theme.TermuxApp.Light.DarkActionBar" parent="Theme.BaseActivity.Light.DarkActionBar">
-        <item name="android:navigationBarColor">?attr/termuxColorSurfaceBase</item>
-        <item name="android:enforceNavigationBarContrast">false</item>
-    </style>
-    <!-- TermuxApp Light NoActionBar theme. -->
-    <style name="Theme.TermuxApp.Light.NoActionBar" parent="Theme.TermuxApp.Light.DarkActionBar">
-        <item name="windowActionBar">false</item>
-        <item name="windowNoTitle">true</item>
-    </style>
-
-    <!-- TermuxApp DayNight DarkActionBar theme. -->
-    <style name="Theme.TermuxApp.DayNight.DarkActionBar" parent="Theme.BaseActivity.DayNight.DarkActionBar">
-        <item name="android:navigationBarColor">?attr/termuxColorSurfaceBase</item>
-        <item name="android:enforceNavigationBarContrast">false</item>
-    </style>
-    <!-- TermuxApp DayNight NoActionBar theme. -->
-    <style name="Theme.TermuxApp.DayNight.NoActionBar" parent="Theme.TermuxApp.DayNight.DarkActionBar">
-        <item name="windowActionBar">false</item>
-        <item name="windowNoTitle">true</item>
-    </style>
 
     <style name="Theme.TermuxActivity.Wallpaper" parent="Theme.TermuxActivity.DayNight.NoActionBar">
         <item name="android:windowBackground">@android:color/transparent</item>

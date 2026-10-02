@@ -36,4 +36,40 @@
 
     <color name="icon_neutral_accent">@color/termux_on_surface_variant</color>
     <color name="icon_neutral_accent_bg">@color/termux_surface_panel</color>
+
+    <!-- Material 3 colour roles, static dark values. -->
+    <color name="role_primary">#B8C7FF</color>
+    <color name="role_on_primary">#08204F</color>
+    <color name="role_primary_container">#29477A</color>
+    <color name="role_on_primary_container">#D9E2FF</color>
+    <color name="role_secondary">#C2CAD9</color>
+    <color name="role_on_secondary">#24313F</color>
+    <color name="role_secondary_container">#3E4858</color>
+    <color name="role_on_secondary_container">#DAE3F5</color>
+    <color name="role_tertiary">#D0BCFF</color>
+    <color name="role_on_tertiary">#381E72</color>
+    <color name="role_tertiary_container">#4A3780</color>
+    <color name="role_on_tertiary_container">#EADDFF</color>
+    <color name="role_error">#F2B8B5</color>
+    <color name="role_on_error">#601410</color>
+    <color name="role_error_container">#8C1D18</color>
+    <color name="role_on_error_container">#F9DEDC</color>
+    <color name="role_background">#0F141B</color>
+    <color name="role_on_background">#E8EDF7</color>
+    <color name="role_surface">#0F141B</color>
+    <color name="role_on_surface">#E8EDF7</color>
+    <color name="role_surface_variant">#3A4454</color>
+    <color name="role_on_surface_variant">#A9B4C5</color>
+    <color name="role_outline">#8893A5</color>
+    <color name="role_outline_variant">#404B5D</color>
+    <color name="role_surface_dim">#0F141B</color>
+    <color name="role_surface_bright">#353B46</color>
+    <color name="role_surface_container_lowest">#0A0E14</color>
+    <color name="role_surface_container_low">#131921</color>
+    <color name="role_surface_container">#171D26</color>
+    <color name="role_surface_container_high">#202837</color>
+    <color name="role_surface_container_highest">#2A3343</color>
+    <color name="role_inverse_surface">#E3E8F2</color>
+    <color name="role_inverse_on_surface">#2B3139</color>
+    <color name="role_inverse_primary">#345CA8</color>
 </resources>

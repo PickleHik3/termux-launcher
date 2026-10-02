@@ -4,10 +4,6 @@
     <!-- The Model centre's list, built in code; an id so its scroll position survives recreation. -->
     <item name="tai_centre_list" type="id" />
 
-    <!-- The corner the preset tile's outline is clipped at, which is the preset's own radius and
-         so changes per tile and per render. -->
-    <item name="editor_shell_preset_corner" type="id" />
-
     <!-- The benchmark screens (Home, Choose, Run, Result), built in code: their lists and the
          views a row binds by id. -->
     <item name="tai_bench_list" type="id" />

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- A phone standing up: the glyph on the Layout editor's Portrait segment. Stroked rather than
      filled, so it reads as an outline of a screen beside the word at 16dp. -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="?attr/colorControlNormal"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"

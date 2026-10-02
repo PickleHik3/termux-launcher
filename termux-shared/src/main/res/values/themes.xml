@@ -1,59 +1,130 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!--
-     The light themes are only for day mode and must not be defined in night/theme.xml.
-     https://material.io/develop/android/theming/dark
+     Theme structure (Material 3, material 1.14):
+
+       Theme.BaseActivity.DayNight.Roles          the colour roles only. Static M3 colours here
+                                                  (values/, role_* in colors.xml, with night twins
+                                                  in values-night/colors.xml); on Android 12+ the
+                                                  values-v31 copy of this style takes the dynamic
+                                                  parent instead, so light and dark are both
+                                                  dynamic there.
+       Theme.BaseActivity.DayNight.DarkActionBar  everything else, once: the termuxColor* aliases
+                                                  (each set FROM its M3 role), shape tokens, widget
+                                                  styles, dialog theme.
+       Theme.BaseActivity.DayNight.NoActionBar    the same without the action bar.
+       Theme.BaseActivity.Light.*                 thin aliases of the DayNight themes.
+
+     No values-night themes: Theme.Material3.DayNight already switches itself, and the static roles
+     switch through values-night/colors.xml.
     -->
 
-    <!--
-      BaseActivity Light DarkActionBar theme.
-      https://github.com/material-components/material-components-android/blob/1.4.0/lib/java/com/google/android/material/theme/res/values/themes.xml#L33
-     -->
-    <style name="Theme.BaseActivity.Light.DarkActionBar" parent="Theme.Material3.Light">
-        <item name="termuxColorPrimary">@color/termux_primary</item>
-        <item name="termuxColorOnPrimary">@color/termux_on_primary</item>
-        <item name="termuxColorSecondary">@color/termux_secondary</item>
-        <item name="termuxColorOnSecondary">@color/termux_on_secondary</item>
-        <item name="termuxColorSurfaceBase">@color/termux_surface_base</item>
-        <item name="termuxColorSurfacePanel">@color/termux_surface_panel</item>
-        <item name="termuxColorSurfacePanelHigh">@color/termux_surface_panel_high</item>
-        <item name="termuxColorSurfacePanelHighest">@color/termux_surface_panel_highest</item>
-        <item name="termuxColorOnSurface">@color/termux_on_surface</item>
-        <item name="termuxColorOnSurfaceVariant">@color/termux_on_surface_variant</item>
-        <item name="termuxColorOutlineVariant">@color/termux_outline_variant</item>
-        <item name="termuxColorAccentContainer">@color/termux_accent_container</item>
-        <item name="termuxColorOnAccentContainer">@color/termux_on_accent_container</item>
-        <item name="termuxColorPrimaryContainer">@color/termux_primary_container</item>
-        <item name="termuxColorOnPrimaryContainer">@color/termux_on_primary_container</item>
-        <item name="termuxColorTertiaryContainer">@color/termux_tertiary_container</item>
-        <item name="termuxColorOnTertiaryContainer">@color/termux_on_tertiary_container</item>
-        <item name="termuxColorError">@color/termux_error</item>
-        <item name="termuxColorErrorContainer">@color/termux_error_container</item>
-        <item name="termuxColorOnErrorContainer">@color/termux_on_error_container</item>
+    <!-- Role layer, static colours. See values-v31/themes.xml for the dynamic twin. -->
+    <style name="Theme.BaseActivity.DayNight.Roles" parent="Theme.Material3.DayNight">
+        <item name="colorPrimary">@color/role_primary</item>
+        <item name="colorOnPrimary">@color/role_on_primary</item>
+        <item name="colorPrimaryContainer">@color/role_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/role_on_primary_container</item>
+        <item name="colorPrimaryInverse">@color/role_inverse_primary</item>
+        <item name="colorSecondary">@color/role_secondary</item>
+        <item name="colorOnSecondary">@color/role_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/role_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/role_on_secondary_container</item>
+        <item name="colorTertiary">@color/role_tertiary</item>
+        <item name="colorOnTertiary">@color/role_on_tertiary</item>
+        <item name="colorTertiaryContainer">@color/role_tertiary_container</item>
+        <item name="colorOnTertiaryContainer">@color/role_on_tertiary_container</item>
+        <item name="colorError">@color/role_error</item>
+        <item name="colorOnError">@color/role_on_error</item>
+        <item name="colorErrorContainer">@color/role_error_container</item>
+        <item name="colorOnErrorContainer">@color/role_on_error_container</item>
+        <item name="android:colorBackground">@color/role_background</item>
+        <item name="colorOnBackground">@color/role_on_background</item>
+        <item name="colorSurface">@color/role_surface</item>
+        <item name="colorOnSurface">@color/role_on_surface</item>
+        <item name="colorSurfaceVariant">@color/role_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/role_on_surface_variant</item>
+        <item name="colorSurfaceDim">@color/role_surface_dim</item>
+        <item name="colorSurfaceBright">@color/role_surface_bright</item>
+        <item name="colorSurfaceContainerLowest">@color/role_surface_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/role_surface_container_low</item>
+        <item name="colorSurfaceContainer">@color/role_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/role_surface_container_high</item>
+        <item name="colorSurfaceContainerHighest">@color/role_surface_container_highest</item>
+        <item name="colorSurfaceInverse">@color/role_inverse_surface</item>
+        <item name="colorOnSurfaceInverse">@color/role_inverse_on_surface</item>
+        <item name="colorOutline">@color/role_outline</item>
+        <item name="colorOutlineVariant">@color/role_outline_variant</item>
+    </style>
+
+    <!-- BaseActivity DayNight DarkActionBar theme: the one theme everything else sits on. -->
+    <style name="Theme.BaseActivity.DayNight.DarkActionBar" parent="Theme.BaseActivity.DayNight.Roles">
+        <!-- termuxColor* aliases: always FROM the M3 role, never the reverse. -->
+        <item name="termuxColorPrimary">?attr/colorPrimary</item>
+        <item name="termuxColorOnPrimary">?attr/colorOnPrimary</item>
+        <item name="termuxColorSecondary">?attr/colorSecondary</item>
+        <item name="termuxColorOnSecondary">?attr/colorOnSecondary</item>
+        <item name="termuxColorSurfaceBase">?attr/colorSurface</item>
+        <item name="termuxColorSurfacePanel">?attr/colorSurfaceContainer</item>
+        <item name="termuxColorSurfacePanelHigh">?attr/colorSurfaceContainerHigh</item>
+        <item name="termuxColorSurfacePanelHighest">?attr/colorSurfaceContainerHighest</item>
+        <item name="termuxColorOnSurface">?attr/colorOnSurface</item>
+        <item name="termuxColorOnSurfaceVariant">?attr/colorOnSurfaceVariant</item>
+        <item name="termuxColorOutlineVariant">?attr/colorOutlineVariant</item>
+        <item name="termuxColorAccentContainer">?attr/colorSecondaryContainer</item>
+        <item name="termuxColorOnAccentContainer">?attr/colorOnSecondaryContainer</item>
+        <item name="termuxColorPrimaryContainer">?attr/colorPrimaryContainer</item>
+        <item name="termuxColorOnPrimaryContainer">?attr/colorOnPrimaryContainer</item>
+        <item name="termuxColorTertiaryContainer">?attr/colorTertiaryContainer</item>
+        <item name="termuxColorOnTertiaryContainer">?attr/colorOnTertiaryContainer</item>
+        <item name="termuxColorError">?attr/colorError</item>
+        <item name="termuxColorErrorContainer">?attr/colorErrorContainer</item>
+        <item name="termuxColorOnErrorContainer">?attr/colorOnErrorContainer</item>
+        <!-- Not an M3 role: a thumb drawn over the terminal needs a mode-agnostic grey. -->
         <item name="termuxColorScrollbar">@color/termux_scrollbar</item>
-        <item name="colorPrimary">?attr/termuxColorPrimary</item>
-        <item name="colorOnPrimary">?attr/termuxColorOnPrimary</item>
-        <item name="colorSecondary">?attr/termuxColorSecondary</item>
-        <item name="colorOnSecondary">?attr/termuxColorOnSecondary</item>
-        <item name="colorPrimaryContainer">?attr/termuxColorAccentContainer</item>
-        <item name="colorOnPrimaryContainer">?attr/termuxColorOnAccentContainer</item>
-        <item name="colorSecondaryContainer">?attr/termuxColorAccentContainer</item>
-        <item name="colorOnSecondaryContainer">?attr/termuxColorOnAccentContainer</item>
-        <item name="colorSurface">?attr/termuxColorSurfaceBase</item>
-        <item name="colorSurfaceVariant">?attr/termuxColorSurfacePanel</item>
-        <item name="colorSurfaceContainer">?attr/termuxColorSurfacePanel</item>
-        <item name="colorSurfaceContainerHigh">?attr/termuxColorSurfacePanelHigh</item>
-        <item name="colorSurfaceContainerHighest">?attr/termuxColorSurfacePanelHighest</item>
-        <item name="colorOnSurface">?attr/termuxColorOnSurface</item>
-        <item name="colorOnSurfaceVariant">?attr/termuxColorOnSurfaceVariant</item>
-        <item name="colorOutlineVariant">?attr/termuxColorOutlineVariant</item>
-        <item name="colorError">?attr/termuxColorError</item>
-        <item name="colorErrorContainer">?attr/termuxColorErrorContainer</item>
-        <item name="colorOnErrorContainer">?attr/termuxColorOnErrorContainer</item>
-        <item name="android:statusBarColor" tools:targetApi="l">?attr/termuxColorSurfaceBase</item>
-        <item name="android:textColorPrimary">?attr/termuxColorOnSurface</item>
-        <item name="android:textColorSecondary">?attr/termuxColorOnSurfaceVariant</item>
-        <item name="android:textColorLink">@color/blue_link_light</item>
+
+        <item name="android:statusBarColor" tools:targetApi="l">?attr/colorSurface</item>
+        <item name="android:textColorPrimary">?attr/colorOnSurface</item>
+        <item name="android:textColorSecondary">?attr/colorOnSurfaceVariant</item>
+        <item name="android:textColorLink">?attr/colorPrimary</item>
+        <item name="colorControlHighlight">@color/termux_control_highlight</item>
+
+        <!-- Shape tokens. The Small/Medium/Large component shapes follow them. -->
+        <item name="shapeAppearanceCornerExtraSmall">@style/ShapeAppearance.Termux.Corner.ExtraSmall</item>
+        <item name="shapeAppearanceCornerSmall">@style/ShapeAppearance.Termux.Corner.Small</item>
+        <item name="shapeAppearanceCornerMedium">@style/ShapeAppearance.Termux.Corner.Medium</item>
+        <item name="shapeAppearanceCornerLarge">@style/ShapeAppearance.Termux.Corner.Large</item>
+        <item name="shapeAppearanceCornerExtraLarge">@style/ShapeAppearance.Termux.Corner.ExtraLarge</item>
+        <item name="shapeAppearanceCornerFull">@style/ShapeAppearance.Termux.Corner.Full</item>
+        <item name="shapeAppearanceSmallComponent">@style/ShapeAppearance.Termux.Corner.Small</item>
+        <item name="shapeAppearanceMediumComponent">@style/ShapeAppearance.Termux.Corner.Medium</item>
+        <item name="shapeAppearanceLargeComponent">@style/ShapeAppearance.Termux.Corner.Large</item>
+
+        <!-- Widget styles. -->
+        <item name="materialCardViewStyle">?attr/materialCardViewOutlinedStyle</item>
+        <item name="materialCardViewFilledStyle">@style/Widget.Termux.CardView.Filled</item>
+        <item name="materialCardViewOutlinedStyle">@style/Widget.Termux.CardView.Outlined</item>
+        <item name="bottomSheetDialogTheme">@style/ThemeOverlay.Termux.BottomSheetDialog</item>
+        <item name="bottomSheetStyle">@style/Widget.Termux.BottomSheet.Modal</item>
+        <item name="popupMenuStyle">@style/Widget.Material3.PopupMenu</item>
+        <item name="listPopupWindowStyle">@style/Widget.Material3.PopupMenu.ListPopupWindow</item>
+        <item name="popupMenuBackground">@drawable/termux_popup_menu_background</item>
+        <item name="textInputStyle">?attr/textInputOutlinedStyle</item>
+        <item name="textInputOutlinedStyle">@style/Widget.Material3.TextInputLayout.OutlinedBox</item>
+        <item name="textInputFilledStyle">@style/Widget.Material3.TextInputLayout.FilledBox</item>
+        <item name="sliderStyle">@style/Widget.Termux.Slider</item>
+        <item name="chipStyle">@style/Widget.Material3.Chip.Assist</item>
+        <item name="chipGroupStyle">@style/Widget.Material3.ChipGroup</item>
+        <item name="materialSwitchStyle">@style/Widget.Material3.CompoundButton.MaterialSwitch</item>
+        <item name="snackbarStyle">@style/Widget.Material3.Snackbar</item>
+        <item name="toolbarStyle">@style/Widget.Material3.Toolbar</item>
+        <item name="materialDividerStyle">@style/Widget.Material3.MaterialDivider</item>
+        <item name="linearProgressIndicatorStyle">@style/Widget.Material3.LinearProgressIndicator</item>
+        <item name="circularProgressIndicatorStyle">@style/Widget.Material3.CircularProgressIndicator</item>
+        <item name="materialButtonToggleGroupStyle">@style/Widget.Material3.MaterialButtonToggleGroup</item>
+        <item name="materialIconButtonStyle">@style/Widget.Material3.Button.IconButton</item>
+        <item name="materialIconButtonFilledStyle">@style/Widget.Material3.Button.IconButton.Filled</item>
+        <item name="materialIconButtonFilledTonalStyle">@style/Widget.Material3.Button.IconButton.Filled.Tonal</item>
 
         <!--
          Dialog Themes.
@@ -63,66 +134,21 @@
          at index... TypedValue` will be thrown, since ThemeOverlay would have all the activity
          theme attributes defined.
         -->
-        <item name="alertDialogTheme">@style/ThemeOverlay.BaseDialog.DayNight</item>
+        <item name="alertDialogTheme">@style/ThemeOverlay.Material3.Dialog.Alert</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.BaseDialog.DayNight</item>
     </style>
 
-    <!-- BaseActivity Light NoActionBar theme. -->
-    <style name="Theme.BaseActivity.Light.NoActionBar" parent="Theme.BaseActivity.Light.DarkActionBar">
+    <!-- BaseActivity DayNight NoActionBar theme. -->
+    <style name="Theme.BaseActivity.DayNight.NoActionBar" parent="Theme.BaseActivity.DayNight.DarkActionBar">
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
     </style>
 
 
 
-    <!-- BaseActivity DayNight DarkActionBar theme. -->
-    <style name="Theme.BaseActivity.DayNight.DarkActionBar" parent="Theme.Material3.DayNight">
-        <item name="termuxColorPrimary">@color/termux_primary</item>
-        <item name="termuxColorOnPrimary">@color/termux_on_primary</item>
-        <item name="termuxColorSecondary">@color/termux_secondary</item>
-        <item name="termuxColorOnSecondary">@color/termux_on_secondary</item>
-        <item name="termuxColorSurfaceBase">@color/termux_surface_base</item>
-        <item name="termuxColorSurfacePanel">@color/termux_surface_panel</item>
-        <item name="termuxColorSurfacePanelHigh">@color/termux_surface_panel_high</item>
-        <item name="termuxColorSurfacePanelHighest">@color/termux_surface_panel_highest</item>
-        <item name="termuxColorOnSurface">@color/termux_on_surface</item>
-        <item name="termuxColorOnSurfaceVariant">@color/termux_on_surface_variant</item>
-        <item name="termuxColorOutlineVariant">@color/termux_outline_variant</item>
-        <item name="termuxColorAccentContainer">@color/termux_accent_container</item>
-        <item name="termuxColorOnAccentContainer">@color/termux_on_accent_container</item>
-        <item name="termuxColorPrimaryContainer">@color/termux_primary_container</item>
-        <item name="termuxColorOnPrimaryContainer">@color/termux_on_primary_container</item>
-        <item name="termuxColorTertiaryContainer">@color/termux_tertiary_container</item>
-        <item name="termuxColorOnTertiaryContainer">@color/termux_on_tertiary_container</item>
-        <item name="termuxColorError">@color/termux_error</item>
-        <item name="termuxColorErrorContainer">@color/termux_error_container</item>
-        <item name="termuxColorOnErrorContainer">@color/termux_on_error_container</item>
-        <item name="termuxColorScrollbar">@color/termux_scrollbar</item>
-        <item name="colorPrimary">?attr/termuxColorPrimary</item>
-        <item name="colorOnPrimary">?attr/termuxColorOnPrimary</item>
-        <item name="colorSecondary">?attr/termuxColorSecondary</item>
-        <item name="colorOnSecondary">?attr/termuxColorOnSecondary</item>
-        <item name="colorPrimaryContainer">?attr/termuxColorAccentContainer</item>
-        <item name="colorOnPrimaryContainer">?attr/termuxColorOnAccentContainer</item>
-        <item name="colorSecondaryContainer">?attr/termuxColorAccentContainer</item>
-        <item name="colorOnSecondaryContainer">?attr/termuxColorOnAccentContainer</item>
-        <item name="colorSurface">?attr/termuxColorSurfaceBase</item>
-        <item name="colorSurfaceVariant">?attr/termuxColorSurfacePanel</item>
-        <item name="colorSurfaceContainer">?attr/termuxColorSurfacePanel</item>
-        <item name="colorSurfaceContainerHigh">?attr/termuxColorSurfacePanelHigh</item>
-        <item name="colorSurfaceContainerHighest">?attr/termuxColorSurfacePanelHighest</item>
-        <item name="colorOnSurface">?attr/termuxColorOnSurface</item>
-        <item name="colorOnSurfaceVariant">?attr/termuxColorOnSurfaceVariant</item>
-        <item name="colorOutlineVariant">?attr/termuxColorOutlineVariant</item>
-        <item name="colorError">?attr/termuxColorError</item>
-        <item name="colorErrorContainer">?attr/termuxColorErrorContainer</item>
-        <item name="colorOnErrorContainer">?attr/termuxColorOnErrorContainer</item>
-        <item name="android:textColorPrimary">?attr/termuxColorOnSurface</item>
-        <item name="android:textColorSecondary">?attr/termuxColorOnSurfaceVariant</item>
-        <item name="android:textColorLink">@color/blue_link_dark</item>
-    </style>
-    <!-- BaseActivity DayNight NoActionBar theme. -->
-    <style name="Theme.BaseActivity.DayNight.NoActionBar" parent="Theme.BaseActivity.Light.NoActionBar"/>
+    <!-- Light aliases of the DayNight themes (there is no separate light-only theme any more). -->
+    <style name="Theme.BaseActivity.Light.DarkActionBar" parent="Theme.BaseActivity.DayNight.DarkActionBar"/>
+    <style name="Theme.BaseActivity.Light.NoActionBar" parent="Theme.BaseActivity.DayNight.NoActionBar"/>
 
 
 
@@ -139,15 +165,11 @@
 
 
     <!--
-      BaseDialog Light theme.
+      BaseDialog DayNight theme. Colours come from the activity's roles (an M3 dialog already sits on
+      colorSurfaceContainerHigh), so this only carries the title panel and message text styles.
       https://github.com/material-components/material-components-android/blob/1.4.0/lib/java/com/google/android/material/dialog/res/values/themes.xml#L70
      -->
-    <style name="ThemeOverlay.BaseDialog.Light" parent="ThemeOverlay.Material3.MaterialAlertDialog">
-        <item name="colorPrimary">?attr/termuxColorPrimary</item>
-        <item name="colorOnPrimary">?attr/termuxColorOnPrimary</item>
-        <item name="colorSurface">?attr/termuxColorSurfacePanelHigh</item>
-        <item name="colorOnSurface">?attr/termuxColorOnSurface</item>
-        <item name="colorOutlineVariant">?attr/termuxColorOutlineVariant</item>
+    <style name="ThemeOverlay.BaseDialog.DayNight" parent="ThemeOverlay.Material3.MaterialAlertDialog">
         <!-- Dialog title panel style. -->
         <item name="materialAlertDialogTitlePanelStyle">@style/BaseDialog.Title.Panel</item>
 
@@ -155,8 +177,8 @@
         <item name="materialAlertDialogBodyTextStyle">@style/BaseDialog.Message.Text.Dark</item>
     </style>
 
-    <!-- BaseDialog DayNight theme. -->
-    <style name="ThemeOverlay.BaseDialog.DayNight" parent="ThemeOverlay.BaseDialog.Light"/>
+    <!-- BaseDialog Light theme: alias. -->
+    <style name="ThemeOverlay.BaseDialog.Light" parent="ThemeOverlay.BaseDialog.DayNight"/>
 
     <!-- BaseDialog extended classes DayNight themes. -->
     <style name="ThemeOverlay.MessageDialog.DayNight" parent="ThemeOverlay.BaseDialog.DayNight"/>
