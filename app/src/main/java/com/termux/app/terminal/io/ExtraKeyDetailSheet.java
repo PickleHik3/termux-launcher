@@ -292,7 +292,7 @@ public final class ExtraKeyDetailSheet {
         card.setOnClickListener(v -> onClick.run());
         LinearLayout rowView = row();
         rowView.setMinimumHeight(dp(52));
-        rowView.setPadding(dp(14), dp(6), dp(8), dp(6));
+        rowView.setPaddingRelative(dp(14), dp(6), dp(8), dp(6));
         card.addView(rowView);
 
         TextView valueView = new TextView(context);
@@ -330,7 +330,7 @@ public final class ExtraKeyDetailSheet {
         view.setText(text);
         M3.textAppearance(view, com.google.android.material.R.attr.textAppearanceLabelLarge);
         view.setTextColor(colorSubtle);
-        view.setPadding(dp(2), dp(14), 0, dp(6));
+        view.setPaddingRelative(dp(2), dp(14), 0, dp(6));
         return view;
     }
 

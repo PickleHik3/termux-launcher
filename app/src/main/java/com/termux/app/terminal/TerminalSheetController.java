@@ -996,6 +996,10 @@ public final class TerminalSheetController
      * listener, and {@code setLayoutParams} asks for another layout — so writing the same numbers
      * back unconditionally would lay the plane out again on every frame for as long as the drawer
      * was open.
+     *
+     * <p>Absolute {@code LEFT}, not {@code START}: the plane follows the locale's direction so the
+     * cards' contents mirror, and a {@code START} child of a right-to-left frame is placed from
+     * the right edge with its left margin ignored.
      */
     private static void setFrameBounds(@NonNull View view, int left, int top, int width,
                                        int height) {
@@ -1005,12 +1009,12 @@ public final class TerminalSheetController
             : new FrameLayout.LayoutParams(width, height);
         if (existing == params && params.leftMargin == left && params.topMargin == top
             && params.width == width && params.height == height
-            && params.gravity == (Gravity.TOP | Gravity.START)) return;
+            && params.gravity == (Gravity.TOP | Gravity.LEFT)) return;
         params.width = width;
         params.height = height;
         params.leftMargin = left;
         params.topMargin = top;
-        params.gravity = Gravity.TOP | Gravity.START;
+        params.gravity = Gravity.TOP | Gravity.LEFT;
         view.setLayoutParams(params);
     }
 
@@ -1050,7 +1054,7 @@ public final class TerminalSheetController
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width,
             fillHeight ? ViewGroup.LayoutParams.MATCH_PARENT : ViewGroup.LayoutParams.WRAP_CONTENT,
-            Gravity.BOTTOM | Gravity.START);
+            Gravity.BOTTOM | Gravity.LEFT);
         params.leftMargin = left;
         params.topMargin = Math.max(0, top);
         return params;
@@ -1094,7 +1098,7 @@ public final class TerminalSheetController
             top = Math.max(inset, Math.min(top, planeHeight - height - inset));
 
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width,
-            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START);
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.LEFT);
         params.leftMargin = Math.max(0, left);
         params.topMargin = Math.max(0, top);
         return params;

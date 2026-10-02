@@ -309,7 +309,7 @@ public final class ClipboardPanelView extends FrameLayout implements ClipboardHi
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setMinimumHeight(dp(44));
-        row.setPadding(dp(12), dp(4), dp(4), dp(4));
+        row.setPaddingRelative(dp(12), dp(4), dp(4), dp(4));
         // A pinned row sits on a faint wash of the accent; a recent one on the panel itself.
         GradientDrawable background = new GradientDrawable();
         background.setCornerRadius(dp(12));

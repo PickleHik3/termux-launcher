@@ -256,7 +256,7 @@ public final class StatusCardHost {
         // the four: an anchored popup pins the corner it was hung from, which is the wrong corner
         // on three edges and stops being re-derived the moment the content grows.
         applyPlacement();
-        popup.showAtLocation(anchor, Gravity.NO_GRAVITY, mBounds.left, mBounds.top);
+        popup.showAtLocation(anchor, Gravity.TOP | Gravity.LEFT, mBounds.left, mBounds.top);
         if (animate) {
             if (focusable) container.requestFocus();
             animateIn(container, growth);

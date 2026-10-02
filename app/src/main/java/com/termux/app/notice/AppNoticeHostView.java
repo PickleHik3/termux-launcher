@@ -137,6 +137,9 @@ public final class AppNoticeHostView extends LinearLayout {
 
     public AppNoticeHostView(@NonNull Context context) {
         super(context);
+        // The band it sits in is placed by absolute geometry; the pill's glyph, text and count read
+        // in the locale's direction even though the content root above is pinned left to right.
+        setLayoutDirection(LAYOUT_DIRECTION_LOCALE);
         setOrientation(HORIZONTAL);
         setGravity(Gravity.CENTER_VERTICAL);
         setClickable(true);

@@ -120,7 +120,7 @@ public final class WallpaperPickerSheet {
             for (AnimatedWallpaper w : AnimatedWallpapers.all()) {
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                lp.rightMargin = dp(12);
+                lp.setMarginEnd(dp(12));
                 row.addView(tile(w), lp);
             }
             scroll.addView(row);

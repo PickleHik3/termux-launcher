@@ -170,6 +170,9 @@ public final class TourOverlayView extends FrameLayout {
     public TourOverlayView(@NonNull Context context) {
         super(context);
         mDensity = context.getResources().getDisplayMetrics().density;
+        // The card is placed by absolute geometry in onLayout; what it says reads in the locale's
+        // direction even though the content root it hangs off is pinned left to right.
+        setLayoutDirection(LAYOUT_DIRECTION_LOCALE);
         setWillNotDraw(false);
         // Passive by construction: the gesture the card is asking for belongs to the chrome below.
         setClickable(false);
@@ -864,6 +867,8 @@ public final class TourOverlayView extends FrameLayout {
         TextView command = new TextView(context);
         command.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
         command.setTypeface(Typeface.MONOSPACE);
+        // A shell command reads left to right whatever the card around it does.
+        command.setTextDirection(TEXT_DIRECTION_LTR);
         command.setTextColor(mDress.textColor);
         command.setText(section.commandRes);
         command.setLineSpacing(dp(1), 1f);
@@ -877,7 +882,7 @@ public final class TourOverlayView extends FrameLayout {
         mCopyButtons.add(copyButton);
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        buttonParams.leftMargin = dp(6);
+        buttonParams.setMarginStart(dp(6));
         commandRow.addView(copyButton, buttonParams);
 
         LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
@@ -919,7 +924,7 @@ public final class TourOverlayView extends FrameLayout {
                 if (stacked) {
                     params.topMargin = dp(4f);
                 } else {
-                    params.leftMargin = dp(8f);
+                    params.setMarginStart(dp(8f));
                 }
                 mButtonRow.addView(button, params);
                 mActionButtons.add(button);

@@ -223,7 +223,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
 
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(2), dp(8), dp(6));
+        content.setPaddingRelative(dp(16), dp(2), dp(8), dp(6));
 
         LinearLayout heading = new LinearLayout(context);
         heading.setGravity(Gravity.CENTER_VERTICAL);

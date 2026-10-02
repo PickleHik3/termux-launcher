@@ -469,6 +469,9 @@ public final class TerminalView extends View {
     public TerminalView(Context context, AttributeSet attributes) {
         // NO_UCD (unused code)
         super(context, attributes);
+        // The grid is columns, not reading order: column 0 is on the left in every locale, and
+        // right-to-left text inside it is the program's business (bidi is not done here).
+        setLayoutDirection(LAYOUT_DIRECTION_LTR);
         mGestureRecognizer = new GestureAndScaleRecognizer(context, new GestureAndScaleRecognizer.Listener() {
 
             @Override
