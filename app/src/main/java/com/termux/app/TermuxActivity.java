@@ -2178,7 +2178,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshCalendarIconsIfDayChanged();
         refreshSuggestionBarIfLauncherCatalogChanged();
         getWindow().getDecorView().post(() -> LauncherCtlApiServer.getInstance().ensureStartedAsync(getApplicationContext()));
-        mSurfaceEditor.collapseStatusPaneIfLeftExpanded();
+        // An editor left open under another activity (the Keyboard theme page it opened) is the
+        // same session on the way back: restated, never closed or reverted.
+        mSurfaceEditor.onActivityStarted();
     }
 
     /**

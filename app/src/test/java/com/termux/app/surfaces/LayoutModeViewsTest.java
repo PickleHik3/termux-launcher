@@ -30,9 +30,10 @@ import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 
 /**
- * Layout mode lives in the one editor (SPEC §3.5): its canvas in the frame
- * ({@code layout_editor_frame}), its orientation toggle and trash in the bottom area
- * ({@code appearance_editor_panel}). {@code SurfaceEditorController} looks each view up by id to
+ * Layout mode lives in the one editor (SPEC §3.5, layout editor v2): its canvas, move control and
+ * keyboard tools in the frame ({@code layout_editor_frame}), its orientation toggle, eye-off and
+ * hidden tiles in the bottom area ({@code appearance_editor_panel}). The hide zone and the trash
+ * are gone. {@code SurfaceEditorController} looks each view up by id to
  * lend it to {@code LayoutEditorController}; a lost id would leave Layout mode with nothing to
  * draw into and no crash to say so. These inflate the real layouts and pin every id it asks for.
  *
@@ -51,7 +52,7 @@ public class LayoutModeViewsTest {
     }
 
     @Test
-    public void theFrameCarriesTheCanvasAndTheKeyboardsTypeChips() {
+    public void theFrameCarriesTheCanvasTheMoveControlAndTheKeyboardsTools() {
         View frame = inflate(R.layout.layout_editor_frame);
         assertTrue("the frame is what the canvas stands in", frame instanceof FrameLayout);
         assertTrue(frame.findViewById(R.id.layout_editor_canvas) instanceof LayoutCanvasView);
@@ -61,16 +62,34 @@ public class LayoutModeViewsTest {
         assertNotNull(frame.findViewById(R.id.layout_editor_keyboard_form_docked));
         assertNotNull(frame.findViewById(R.id.layout_editor_keyboard_form_floating));
         assertNotNull(frame.findViewById(R.id.layout_editor_keyboard_form_split));
+        // Key radius moved here from Look mode, beside the type chips (DECISIONS item 6).
+        View tools = frame.findViewById(R.id.layout_editor_keyboard_tools);
+        View radius = frame.findViewById(R.id.layout_editor_key_radius);
+        assertTrue(radius instanceof Slider);
+        assertTrue("Key radius stands with the chips", isInside(radius, tools));
+        assertTrue(isInside(forms, tools));
+        assertEquals("gone until the keyboard is selected", View.GONE, tools.getVisibility());
+        // The move control: a 48dp icon button, gone until a bar is selected (items 4 and 5).
+        View move = frame.findViewById(R.id.layout_editor_move);
+        assertTrue(move instanceof MaterialButton);
+        assertEquals(View.GONE, move.getVisibility());
+        assertNotNull(move.getContentDescription());
+        float density = frame.getResources().getDisplayMetrics().density;
+        assertEquals(Math.round(48 * density), move.getLayoutParams().width);
+        assertEquals(Math.round(48 * density), move.getLayoutParams().height);
+        assertEquals("the canvas is spatial: pinned left to right", View.LAYOUT_DIRECTION_LTR,
+            frame.getLayoutDirection());
     }
 
-    /** The hide zone is its own view under the frame: a text hint, hidden until Layout mode shows it. */
+    /** The hide zone is gone: nothing in the editor's layouts carries it any more. */
     @Test
-    public void theHideZoneIsATextHintThatStartsHidden() {
-        View zone = inflate(R.layout.layout_editor_hide_zone);
-        assertTrue(zone instanceof android.widget.TextView);
-        assertEquals(R.id.layout_editor_hide_zone, zone.getId());
-        assertEquals(View.GONE, zone.getVisibility());
-        assertEquals("Drag here to hide", ((android.widget.TextView) zone).getText().toString());
+    public void thereIsNoHideZoneAndNoTrash() {
+        android.content.res.Resources resources = inflate(R.layout.appearance_editor_panel)
+            .getResources();
+        String pkg = resources.getResourcePackageName(R.layout.appearance_editor_panel);
+        assertEquals(0, resources.getIdentifier("layout_editor_hide_zone", "layout", pkg));
+        assertEquals(0, resources.getIdentifier("layout_editor_tray_trash", "id", pkg));
+        assertEquals(0, resources.getIdentifier("layout_editor_hide_zone_hint", "string", pkg));
     }
 
     @Test
@@ -87,8 +106,16 @@ public class LayoutModeViewsTest {
             2, ((MaterialButtonToggleGroup) orientation).getChildCount());
         assertNotNull(panel.findViewById(R.id.layout_editor_orientation_portrait));
         assertNotNull(panel.findViewById(R.id.layout_editor_orientation_landscape));
-        assertTrue("the trash is an icon button: the drop target, the list's and the badge's anchor",
-            panel.findViewById(R.id.layout_editor_tray_trash) instanceof MaterialButton);
+        assertTrue("eye-off is an icon button: the drop target, the tiles' toggle, the badge's anchor",
+            panel.findViewById(R.id.layout_editor_hidden) instanceof MaterialButton);
+        View highlight = panel.findViewById(R.id.layout_editor_hidden_highlight);
+        assertNotNull(highlight);
+        float density = panel.getResources().getDisplayMetrics().density;
+        assertTrue("the highlight is larger than the 48dp target",
+            highlight.getLayoutParams().width > Math.round(48 * density));
+        assertEquals("never GONE: it must not move anything", View.INVISIBLE,
+            highlight.getVisibility());
+        assertTrue(panel.findViewById(R.id.layout_editor_hidden_tile_group) instanceof ChipGroup);
         // Layout mode also carries what no Look sets (2026-10-01): Style, Corners and Margin.
         View style = panel.findViewById(R.id.appearance_editor_style);
         assertTrue(style instanceof MaterialButtonToggleGroup);
@@ -195,6 +222,76 @@ public class LayoutModeViewsTest {
         assertFalse(panel.isRow2Shown());
         assertEquals(View.GONE, row2.getVisibility());
         assertFalse(blur.isEnabled());
+    }
+
+    /** The hidden tiles stand in Corner radius and Margin's place, and the sheet keeps its height. */
+    @Test
+    public void theHiddenTilesStandInRowBsPlaceWithoutMovingTheSheet() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ContextThemeWrapper themed = new ContextThemeWrapper(activity,
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
+        View root = panel.view();
+        int width = Math.round(360 * root.getResources().getDisplayMetrics().density);
+        panel.showLayoutMode();
+        int closed = panel.measureFor(true, width);
+        View tiles = root.findViewById(R.id.layout_editor_hidden_tiles);
+        View corners = root.findViewById(R.id.appearance_editor_corners);
+        assertEquals(View.GONE, tiles.getVisibility());
+        assertEquals(View.VISIBLE, corners.getVisibility());
+
+        panel.setHiddenTilesOpen(true);
+        assertTrue(panel.isHiddenTilesOpen());
+        assertEquals(View.VISIBLE, tiles.getVisibility());
+        assertEquals("kept for its height, not shown", View.INVISIBLE, corners.getVisibility());
+        assertFalse(corners.isEnabled());
+        assertEquals("the sheet does not move", closed, panel.measureFor(true, width));
+
+        panel.showAppearanceMode();
+        assertEquals("Appearance never shows the tiles", View.GONE, tiles.getVisibility());
+        panel.showLayoutMode();
+        assertEquals(View.VISIBLE, tiles.getVisibility());
+        panel.setHiddenTilesOpen(false);
+        assertEquals(View.GONE, tiles.getVisibility());
+        assertEquals(View.VISIBLE, corners.getVisibility());
+    }
+
+    /**
+     * The global row's middle column is a slider of its own, and the keyboard's last column the
+     * "Keyboard theme" button (DECISIONS items 13 and 15).
+     */
+    @Test
+    public void rowTwoCarriesTheGlobalRowAndTheKeyboardThemeDoor() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ContextThemeWrapper themed = new ContextThemeWrapper(activity,
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
+        View root = panel.view();
+        Slider middle = root.findViewById(R.id.appearance_editor_cl_slider);
+        MaterialButton theme = root.findViewById(R.id.appearance_editor_c2_button);
+        assertNotNull(middle);
+        assertNotNull(theme);
+
+        panel.showRow2(R.string.appearance_editor_target_all);
+        panel.setFirstSlider("Blur · 8 dp", 8, 30);
+        panel.setMiddleSlider("Opacity · 34%", 34, 100);
+        panel.setSecondSlider("Grain · 18%", 18, 100);
+        assertTrue(panel.isMiddleSliderShown());
+        assertEquals(View.GONE, root.findViewById(R.id.appearance_editor_legibility)
+            .getVisibility());
+        assertFalse(panel.isSecondButtonShown());
+        assertEquals(34f, middle.getValue(), 0f);
+
+        panel.showRow2(R.string.appearance_editor_target_keyboard);
+        panel.setFirstSlider("Blur · 8 dp", 8, 30);
+        panel.hideLegibility();
+        panel.setSecondButton("Keyboard theme");
+        assertFalse(panel.isMiddleSliderShown());
+        assertTrue(panel.isSecondButtonShown());
+        assertEquals(View.GONE, root.findViewById(R.id.appearance_editor_c2_slider)
+            .getVisibility());
+        assertEquals("Keyboard theme", theme.getText().toString());
+        assertTrue(theme.isEnabled());
     }
 
     private static boolean isInside(View view, View ancestor) {
