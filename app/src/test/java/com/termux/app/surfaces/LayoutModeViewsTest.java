@@ -3,6 +3,7 @@ package com.termux.app.surfaces;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -97,20 +98,20 @@ public class LayoutModeViewsTest {
         assertNotNull(panel.findViewById(R.id.appearance_editor_done));
     }
 
-    /** Text contrast is the terminal's: its own column in Row B, out of the first control's. */
+    /** Contrast is the terminal's: its own label and slider in Row B, apart from the first control's. */
     @Test
     public void rowTwoCarriesLegibilityInAColumnOfItsOwn() {
         View panel = inflate(R.layout.appearance_editor_panel);
         View row2 = panel.findViewById(R.id.appearance_editor_row2);
-        View column = panel.findViewById(R.id.appearance_editor_cl);
+        View label = panel.findViewById(R.id.appearance_editor_cl_label);
         View legibility = panel.findViewById(R.id.appearance_editor_legibility);
-        assertNotNull(column);
+        assertNotNull(label);
         assertTrue(legibility instanceof Slider);
         assertEquals(2f, ((Slider) legibility).getValueTo(), 0f);
-        assertTrue(isInside(legibility, column));
-        assertTrue(isInside(column, row2));
-        assertFalse("not the first control's any more",
-            isInside(legibility, panel.findViewById(R.id.appearance_editor_c1)));
+        assertTrue(isInside(legibility, row2));
+        assertTrue(isInside(label, row2));
+        assertNotNull(panel.findViewById(R.id.appearance_editor_row2_barrier));
+        assertNotSame(label, panel.findViewById(R.id.appearance_editor_c1_label));
     }
 
     /**
@@ -153,17 +154,16 @@ public class LayoutModeViewsTest {
         assertEquals(View.GONE, corners.getVisibility());
     }
 
-    /** Row B keeps its place whether or not an element is tapped: alpha, never GONE. */
+    /** Row B is GONE until an element is tapped, and keeps its state across Layout mode. */
     @Test
-    public void rowTwoFadesInPlaceAndKeepsItsStateAcrossLayoutMode() {
+    public void rowTwoIsGoneUntilTappedAndKeepsItsStateAcrossLayoutMode() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ContextThemeWrapper themed = new ContextThemeWrapper(activity,
             R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
         View row2 = panel.view().findViewById(R.id.appearance_editor_row2);
         Slider blur = panel.view().findViewById(R.id.appearance_editor_c2_slider);
-        assertEquals(View.VISIBLE, row2.getVisibility());
-        assertEquals(0f, row2.getAlpha(), 0f);
+        assertEquals(View.GONE, row2.getVisibility());
         assertFalse("a hidden Row B takes no touches", blur.isEnabled());
 
         panel.showRow2(R.string.appearance_editor_target_dock);
@@ -172,18 +172,18 @@ public class LayoutModeViewsTest {
         panel.setSecondSlider("Blur · 8 dp", 8, 32);
         assertTrue(panel.isRow2Shown());
         assertEquals(View.VISIBLE, row2.getVisibility());
-        assertEquals(1f, row2.getAlpha(), 0f);
         assertTrue(blur.isEnabled());
 
         panel.showLayoutMode();
         assertTrue("kept while Layout is shown", panel.isRow2Shown());
+        assertEquals(View.GONE, row2.getVisibility());
         panel.showAppearanceMode();
         assertTrue(panel.isRow2Shown());
         assertEquals(View.VISIBLE, row2.getVisibility());
 
         panel.hideRow2();
         assertFalse(panel.isRow2Shown());
-        assertEquals(View.VISIBLE, row2.getVisibility());
+        assertEquals(View.GONE, row2.getVisibility());
         assertFalse(blur.isEnabled());
     }
 

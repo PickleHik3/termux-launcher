@@ -10778,19 +10778,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return matrix.length == 0 ? -1 : matrix[0].length;
         }
 
-        @NonNull @Override public java.util.List<String> extraKeyLabels() {
-            java.util.List<String> labels = new java.util.ArrayList<>();
+        @NonNull @Override
+        public java.util.List<com.termux.app.fragments.settings.LayoutCanvasView.KeySlot> extraKeySlots() {
+            java.util.List<com.termux.app.fragments.settings.LayoutCanvasView.KeySlot> slots =
+                new java.util.ArrayList<>();
             if (mTermuxTerminalExtraKeys == null || mTermuxTerminalExtraKeys.getExtraKeysInfo() == null) {
-                return labels;
+                return slots;
             }
             com.termux.shared.termux.extrakeys.ExtraKeyButton[][] matrix =
                 mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix();
-            if (matrix.length == 0) return labels;
+            if (matrix.length == 0) return slots;
+            // The real bar draws an icon key as a Nerd Font code point on the bundled symbols
+            // face (ExtraKeysView.setKeyCapText), so an icon key here is that glyph on that face.
+            android.graphics.Typeface symbols =
+                com.termux.shared.termux.font.NerdFontSpans.typeface(TermuxActivity.this);
             for (com.termux.shared.termux.extrakeys.ExtraKeyButton button : matrix[0]) {
                 String display = button == null ? null : button.getDisplay();
-                labels.add(display == null ? "" : display);
+                if (display == null) display = "";
+                if (symbols != null && isAllNerdSymbols(display)) {
+                    slots.add(com.termux.app.fragments.settings.LayoutCanvasView.KeySlot.ofIcon(
+                        new com.termux.app.fragments.settings.LayoutCanvasKeyGlyph(display, symbols)));
+                } else {
+                    slots.add(com.termux.app.fragments.settings.LayoutCanvasView.KeySlot.ofText(display));
+                }
             }
-            return labels;
+            return slots;
+        }
+
+        private boolean isAllNerdSymbols(@NonNull String display) {
+            if (display.isEmpty()) return false;
+            for (int i = 0; i < display.length(); ) {
+                int codePoint = display.codePointAt(i);
+                if (!com.termux.shared.termux.font.NerdFontSpans.isNerdSymbol(codePoint)) return false;
+                i += Character.charCount(codePoint);
+            }
+            return true;
         }
 
         @NonNull @Override public PlaceOrientation placeOrientation() {

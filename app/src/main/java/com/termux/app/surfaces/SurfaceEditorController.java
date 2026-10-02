@@ -231,14 +231,19 @@ public final class SurfaceEditorController {
     private ViewTreeObserver.OnGlobalLayoutListener mLayoutListener;
     private long mLayoutSignature = Long.MIN_VALUE;
     /**
-     * The panel's one height per mode (AppearanceEditorPanel.measureFor), and the taller of the
-     * two, which the frame stands above so neither mode's sheet covers it. Recomputed with the
-     * frame.
+     * The tallest the sheet gets in each mode (AppearanceEditorPanel.measureTallest: Appearance
+     * with Row B up), and the taller of the two, which the frame stands above so no sheet covers
+     * it and the frame never moves when Row B comes and goes. Recomputed with the frame. The
+     * sheet's own height follows what shows (applyPanelHeight).
      */
     private int mAppearanceHeightPx;
     private int mLayoutHeightPx;
     private int mRestHeightPx;
     private int mNavInsetPx;
+    /** The content width the panel was last measured at, and its running height animation. */
+    private int mPanelWidthPx;
+    @Nullable private android.animation.ValueAnimator mPanelAnimator;
+    private int mPanelTargetPx;
 
     /** The gap between the frame and the status inset above it, and the bottom area below it. */
     private static final int FRAME_GAP_DP = 8;
@@ -486,7 +491,7 @@ public final class SurfaceEditorController {
             return;
         mLayoutMode = layout;
         panel.setMode(layout);
-        applyPanelHeight();
+        applyPanelHeight(animate);
         LayoutEditorController editor = mHost.layoutEditor();
         if (layout) {
             dismissClockDropdown();
@@ -655,13 +660,14 @@ public final class SurfaceEditorController {
         int statusInset = Math.max(0, Math.max(bars.top, mHost.statusBarInsetTop())
             - contentInWindow[1]);
         panel.setNavInset(mNavInsetPx);
-        // One fixed height per mode, measured from the rows that mode shows (Appearance always
-        // counts Row B, which only fades). The frame stands above the taller of the two, so it
-        // never moves when the mode pill does and no sheet ever covers it.
-        mAppearanceHeightPx = panel.measureFor(false, content.getWidth());
-        mLayoutHeightPx = panel.measureFor(true, content.getWidth());
+        // The sheet's height follows its content, but the frame stands above the tallest it gets
+        // (Appearance with Row B up, or Layout), so it never moves when Row B comes and goes or
+        // when the mode pill does, and no sheet ever covers it.
+        mPanelWidthPx = content.getWidth();
+        mAppearanceHeightPx = panel.measureTallest(false, mPanelWidthPx);
+        mLayoutHeightPx = panel.measureTallest(true, mPanelWidthPx);
         mRestHeightPx = Math.max(mAppearanceHeightPx, mLayoutHeightPx);
-        applyPanelHeight();
+        applyPanelHeight(false);
 
         int[] parentOffset = new int[2];
         if (!AppearanceEditorFrame.offsetIn((View) root.getParent(), content, parentOffset))
@@ -686,19 +692,56 @@ public final class SurfaceEditorController {
     }
 
     /**
-     * The bottom area's height for the mode showing, as measured by the panel: it does not change
-     * when an element is tapped, when Undo comes and goes, or when Style flips.
+     * The bottom area's height for what shows now, as measured by the panel: Row A alone until an
+     * element is tapped, then Row A + Row B; it does not change when Undo comes and goes or when
+     * Style flips. A change animates (a jump with reduced motion), the sheet growing up from the
+     * screen's foot while the frame stays where it is.
      */
-    private void applyPanelHeight() {
+    private void applyPanelHeight(boolean animate) {
         AppearanceEditorPanel panel = mPanel;
-        if (panel == null || mRestHeightPx <= 0)
+        if (panel == null || mRestHeightPx <= 0 || mPanelWidthPx <= 0)
             return;
-        int height = mLayoutMode ? mLayoutHeightPx : mAppearanceHeightPx;
-        ViewGroup.LayoutParams params = panel.view().getLayoutParams();
-        if (params == null || params.height == height)
+        int height = panel.measureFor(mLayoutMode, mPanelWidthPx);
+        View view = panel.view();
+        ViewGroup.LayoutParams params = view.getLayoutParams();
+        if (params == null)
             return;
-        params.height = height;
-        panel.view().setLayoutParams(params);
+        if (mPanelAnimator != null) {
+            if (mPanelTargetPx == height)
+                return;
+            mPanelAnimator.cancel();
+            mPanelAnimator = null;
+        }
+        if (params.height == height)
+            return;
+        int from = params.height > 0 ? params.height : view.getHeight();
+        boolean instant = !animate || from <= 0 || !view.isAttachedToWindow()
+            || view.getVisibility() != View.VISIBLE
+            || ReducedMotion.isEnabled(mHost.context());
+        if (instant) {
+            params.height = height;
+            view.setLayoutParams(params);
+            return;
+        }
+        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofInt(from, height);
+        animator.setDuration(PANEL_MS);
+        animator.setInterpolator(Motion.settle());
+        animator.addUpdateListener(a -> {
+            ViewGroup.LayoutParams live = view.getLayoutParams();
+            if (live == null)
+                return;
+            live.height = (Integer) a.getAnimatedValue();
+            view.setLayoutParams(live);
+        });
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator a) {
+                if (mPanelAnimator == animator)
+                    mPanelAnimator = null;
+            }
+        });
+        mPanelAnimator = animator;
+        mPanelTargetPx = height;
+        animator.start();
     }
 
     private void revealPanel() {
@@ -731,7 +774,7 @@ public final class SurfaceEditorController {
         } else {
             panel.hideRow2();
         }
-        applyPanelHeight();
+        applyPanelHeight(mFramed);
         syncDirty();
     }
 

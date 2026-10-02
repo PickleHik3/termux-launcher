@@ -3,6 +3,7 @@ package com.termux.app.layouteditor;
 import android.content.ClipData;
 import android.content.Context;
 import android.util.DisplayMetrics;
+import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -16,6 +17,7 @@ import androidx.appcompat.content.res.AppCompatResources;
 
 import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
+import com.termux.R;
 import com.termux.app.fragments.settings.LayoutCanvasView;
 
 import java.util.ArrayList;
@@ -23,7 +25,7 @@ import java.util.List;
 
 /**
  * What the trash lists: a popup window of Material chips, one per hidden element, standing above
- * the trash icon. A chip is tapped to bring its element back where it left, or pulled out of the
+ * the bottom sheet, its end edge on the trash icon's. A chip is tapped to bring its element back where it left, or pulled out of the
  * popup onto the canvas with a system drag, which dismisses the popup and which the canvas turns
  * into its lift, hover placeholder and drop. The popup is a window of its own, so the bottom area
  * and the canvas's bounds clip nothing of it.
@@ -88,27 +90,54 @@ final class HiddenElementsPopup {
         fill(chips, hidden);
 
         DisplayMetrics metrics = context.getResources().getDisplayMetrics();
-        // The popup belongs to the phone frame on the canvas: at most the frame's width, and
-        // centred over the trash icon, kept inside the frame.
-        int[] canvasAt = new int[2];
-        mCanvas.getLocationInWindow(canvasAt);
-        android.graphics.RectF frame = mCanvas.frameRect();
-        int frameLeft = canvasAt[0] + Math.round(frame.left);
-        int frameRight = canvasAt[0] + Math.round(frame.right);
-        if (frameRight - frameLeft <= 2 * pad) {
-            frameLeft = 0;
-            frameRight = metrics.widthPixels;
-        }
-        content.measure(View.MeasureSpec.makeMeasureSpec(frameRight - frameLeft,
+        // The popup stands above the whole bottom sheet, never over it (the sheet's top row has
+        // Done and Undo): its bottom edge is 8dp over the sheet's top, its end edge on the trash's
+        // end edge, kept 16dp inside the screen.
+        int margin = Math.round(16f * metrics.density);
+        int gap = Math.round(8f * metrics.density);
+        content.measure(View.MeasureSpec.makeMeasureSpec(metrics.widthPixels - 2 * margin,
             View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(0,
             View.MeasureSpec.UNSPECIFIED));
         int width = content.getMeasuredWidth();
         int height = content.getMeasuredHeight();
         int[] at = new int[2];
-        mAnchor.getLocationInWindow(at);
-        int left = leftCentredOn(at[0] + mAnchor.getWidth() / 2, width, frameLeft, frameRight);
+        mAnchor.getLocationOnScreen(at);
+        int[] sheetAt = new int[2];
+        View sheet = sheetOf(mAnchor);
+        sheet.getLocationOnScreen(sheetAt);
+        int left = leftEndAlignedOn(at[0] + mAnchor.getWidth(), width, margin,
+            metrics.widthPixels - margin);
+        int top = topAbove(sheetAt[1], height, gap);
         window.setWidth(width);
-        window.showAsDropDown(mAnchor, left - at[0], -(mAnchor.getHeight() + height));
+        window.showAtLocation(mAnchor, Gravity.NO_GRAVITY, left, top);
+    }
+
+    /** The bottom sheet the anchor stands in (the anchor itself when it is not in one). */
+    @NonNull
+    private static View sheetOf(@NonNull View anchor) {
+        android.view.ViewParent parent = anchor.getParent();
+        while (parent instanceof View) {
+            View view = (View) parent;
+            if (view.getId() == R.id.appearance_editor_panel)
+                return view;
+            parent = view.getParent();
+        }
+        return anchor;
+    }
+
+    /**
+     * Where a popup {@code width} wide stands so its end edge is on {@code endX}, moved only as
+     * far as keeps it between {@code minLeft} and {@code maxRight}; the left edge when it is wider
+     * than that span.
+     */
+    static int leftEndAlignedOn(int endX, int width, int minLeft, int maxRight) {
+        int left = Math.min(endX - width, maxRight - width);
+        return Math.max(left, minLeft);
+    }
+
+    /** The top of a popup {@code height} tall whose bottom edge is {@code gap} above {@code sheetTop}. */
+    static int topAbove(int sheetTop, int height, int gap) {
+        return sheetTop - gap - height;
     }
 
     /**

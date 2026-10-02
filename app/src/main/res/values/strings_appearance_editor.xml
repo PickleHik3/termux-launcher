@@ -13,7 +13,7 @@
     <string name="appearance_editor_look_description">Look</string>
     <!-- Row B's sliders before an element names them; the label text replaces it in code. -->
     <string name="appearance_editor_control_description">Element setting</string>
-    <string name="appearance_editor_legibility_description">Text contrast</string>
+    <string name="appearance_editor_legibility_description">Contrast</string>
     <string name="appearance_editor_style_description">Style</string>
     <string name="appearance_editor_style_docked">Docked</string>
     <string name="appearance_editor_style_floating">Floating</string>
@@ -31,13 +31,13 @@
     <!-- Row 2's controls; the number is the control's own read-out. -->
     <string name="appearance_editor_darkness">Opacity · %1$d%%</string>
     <string name="appearance_editor_blur">Blur · %1$d dp</string>
-    <string name="appearance_editor_legibility_low">Text contrast · Low</string>
-    <string name="appearance_editor_legibility_unavailable">Text contrast · needs wallpaper colors</string>
+    <string name="appearance_editor_legibility_low">Contrast · Low</string>
+    <string name="appearance_editor_legibility_unavailable">Contrast · needs wallpaper colors</string>
     <string name="appearance_editor_key_corners">Key radius · %1$d dp</string>
     <string name="appearance_editor_soft">Soften wallpaper</string>
     <string name="appearance_editor_dim">Dim · %1$d%%</string>
-    <string name="appearance_editor_legibility_normal">Text contrast · Normal</string>
-    <string name="appearance_editor_legibility_high">Text contrast · High</string>
+    <string name="appearance_editor_legibility_normal">Contrast · Normal</string>
+    <string name="appearance_editor_legibility_high">Contrast · High</string>
     <string name="appearance_editor_soft_off">Off</string>
     <string name="appearance_editor_soft_on">On</string>
 
