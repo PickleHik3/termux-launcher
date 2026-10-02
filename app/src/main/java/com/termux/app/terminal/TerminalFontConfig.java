@@ -864,8 +864,8 @@ public final class TerminalFontConfig {
             }
             if ("custom_shaders".equals(directive)) {
                 // Only kitty's cursor-trail shaders mean anything here; the first one that maps wins.
-                for (int i = 1; i < words.size(); i++) {
-                    CursorTrailStyle style = CursorTrailStyle.fromKittyShaderName(words.get(i));
+                for (int w = 1; w < words.size(); w++) {
+                    CursorTrailStyle style = CursorTrailStyle.fromKittyShaderName(words.get(w));
                     if (style != null) {
                         accumulator.cursorTrailStyleId = style.id();
                         break;
