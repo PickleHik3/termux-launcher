@@ -221,12 +221,8 @@ public final class SegmentedPillPreference extends Preference {
         return -1;
     }
 
-    /** The M3 segmented button shows a check on the selected segment. */
+    /** The check on the selected segment comes from Widget.Termux.Button.Segment's icon selector. */
     private void updateCheckedIcons(@NonNull MaterialButton[] buttons, int selected) {
-        for (int i = 0; i < buttons.length; i++) {
-            buttons[i].setIconResource(i == selected ? R.drawable.ic_symbol_check : 0);
-            buttons[i].setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
-        }
     }
 
     /** The lit segment, or -1 for {@link #VALUE_NONE}, where none of them is. */

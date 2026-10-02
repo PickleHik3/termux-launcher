@@ -137,6 +137,48 @@ public final class LayoutEditorController {
         }
 
         /**
+         * The pinned apps' real icons, in dock order (a folder shows its first app), each a fresh
+         * copy the canvas may size and draw without touching the dock's own. Empty where they
+         * cannot be read, which leaves the canvas on the pack's glyphs.
+         */
+        @NonNull
+        default java.util.List<android.graphics.drawable.Drawable> pinnedAppIcons() {
+            java.util.List<android.graphics.drawable.Drawable> out = new java.util.ArrayList<>();
+            try {
+                TermuxAppSharedPreferences preferences =
+                    TermuxAppSharedPreferences.build(context(), false);
+                if (preferences == null) return out;
+                com.termux.app.launcher.data.LauncherIconResolver resolver =
+                    new com.termux.app.launcher.data.LauncherIconResolver(context());
+                for (com.termux.app.launcher.model.PinnedItem item :
+                        new LauncherConfigRepository(preferences).loadPinnedItems()) {
+                    com.termux.app.launcher.model.PinnedAppItem app = null;
+                    if (item instanceof com.termux.app.launcher.model.PinnedAppItem) {
+                        app = (com.termux.app.launcher.model.PinnedAppItem) item;
+                    } else if (item instanceof com.termux.app.launcher.model.PinnedFolderItem
+                            && !((com.termux.app.launcher.model.PinnedFolderItem) item).apps.isEmpty()) {
+                        app = ((com.termux.app.launcher.model.PinnedFolderItem) item).apps.get(0);
+                    }
+                    if (app == null) continue;
+                    android.graphics.drawable.Drawable icon =
+                        resolver.resolvePinned(app.appRef, app.iconOverride);
+                    if (icon == null) continue;
+                    android.graphics.drawable.Drawable.ConstantState state = icon.getConstantState();
+                    out.add(state == null ? icon : state.newDrawable(context().getResources()).mutate());
+                }
+            } catch (RuntimeException e) {
+                out.clear();
+            }
+            return out;
+        }
+
+        /** The key texts of the extra-keys bar's first row, in order; empty where unknown. */
+        @NonNull
+        default java.util.List<String> extraKeyLabels() {
+            return new java.util.ArrayList<>();
+        }
+
+        /**
          * How thick the live dock's pinned apps stand, in dp, as last laid out — or -1 when there
          * is no dock on screen to measure. What the dock's handle reads out.
          */
@@ -195,6 +237,8 @@ public final class LayoutEditorController {
     /** How many pinned apps and extra keys the canvas draws symbols for, read when a session opens. */
     private int mPinnedAppCount = -1;
     private int mExtraKeyCount = -1;
+    private java.util.List<android.graphics.drawable.Drawable> mPinnedIcons = java.util.Collections.emptyList();
+    private java.util.List<String> mKeyLabels = java.util.Collections.emptyList();
     /** The handle a finger is on, whose readout a late measurement may restate; or null. */
     @Nullable private LayoutCanvasView.Handle mHeldHandle;
     /** What the trash was last restated for, so it is redrawn only when that changes. */
@@ -285,6 +329,8 @@ public final class LayoutEditorController {
             mPlan = LayoutEditorPlan.enter(places, target, mHost.placeOrientation());
             mPinnedAppCount = mHost.pinnedAppCount();
             mExtraKeyCount = mHost.extraKeyCount();
+            mPinnedIcons = mHost.pinnedAppIcons();
+            mKeyLabels = mHost.extraKeyLabels();
         } else {
             mPlan.showPlace(target);
         }
@@ -520,6 +566,7 @@ public final class LayoutEditorController {
         mRestatingToggle = false;
         views.canvas.setShape(mStyle, mCornersDp, mMarginDp);
         views.canvas.setSlotCounts(mPinnedAppCount, mExtraKeyCount);
+        views.canvas.setSlotContent(mPinnedIcons, mKeyLabels);
         views.canvas.setSizes(plan.dockHeightScale(), plan.keyboardHeightScale(),
             plan.keyboardChinDp());
         // The status bar's collapsed/expanded state is a per-orientation key the status swipe

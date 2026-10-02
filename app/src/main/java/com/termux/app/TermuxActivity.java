@@ -10778,6 +10778,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return matrix.length == 0 ? -1 : matrix[0].length;
         }
 
+        @NonNull @Override public java.util.List<String> extraKeyLabels() {
+            java.util.List<String> labels = new java.util.ArrayList<>();
+            if (mTermuxTerminalExtraKeys == null || mTermuxTerminalExtraKeys.getExtraKeysInfo() == null) {
+                return labels;
+            }
+            com.termux.shared.termux.extrakeys.ExtraKeyButton[][] matrix =
+                mTermuxTerminalExtraKeys.getExtraKeysInfo().getMatrix();
+            if (matrix.length == 0) return labels;
+            for (com.termux.shared.termux.extrakeys.ExtraKeyButton button : matrix[0]) {
+                String display = button == null ? null : button.getDisplay();
+                labels.add(display == null ? "" : display);
+            }
+            return labels;
+        }
+
         @NonNull @Override public PlaceOrientation placeOrientation() {
             return currentPlaceOrientation();
         }

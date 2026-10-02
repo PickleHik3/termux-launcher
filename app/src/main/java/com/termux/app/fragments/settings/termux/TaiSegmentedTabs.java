@@ -61,8 +61,8 @@ public final class TaiSegmentedTabs extends MaterialButtonToggleGroup {
         applying = true;
         removeAllViews();
         for (CharSequence text : texts) {
-            MaterialButton button = new MaterialButton(getContext(), null,
-                com.google.android.material.R.attr.materialButtonOutlinedStyle);
+            MaterialButton button = (MaterialButton) android.view.LayoutInflater.from(getContext())
+                .inflate(com.termux.R.layout.segment_button, this, false);
             button.setId(View.generateViewId());
             button.setText(text);
             button.setSingleLine(true);

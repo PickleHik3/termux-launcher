@@ -1752,8 +1752,8 @@ public final class SurfaceEditorController {
         final java.util.Map<Integer, String> alignmentOf = new java.util.HashMap<>();
         int currentId = View.NO_ID;
         for (String alignment : CLOCK_ALIGNMENTS) {
-            MaterialButton button = new MaterialButton(context, null,
-                com.google.android.material.R.attr.materialButtonOutlinedStyle);
+            MaterialButton button = (MaterialButton) android.view.LayoutInflater.from(context)
+                .inflate(R.layout.segment_button, group, false);
             button.setId(View.generateViewId());
             button.setText(clockAlignmentLabel(alignment));
             button.setMaxLines(1);

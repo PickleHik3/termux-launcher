@@ -52,4 +52,16 @@
     <style name="Preference.SwitchPreferenceCompat.Termux" parent="Preference.SwitchPreferenceCompat.Material">
         <item name="android:widgetLayout">@layout/preference_widget_material_switch</item>
     </style>
+
+    <!-- A text segment of any MaterialButtonToggleGroup: the check shows on the chosen one. The
+         unchecked state keeps an empty slot of the same size, so choosing never moves the row. -->
+    <style name="Widget.Termux.Button.Segment" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="icon">@drawable/segment_checked_icon</item>
+        <item name="iconSize">18dp</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconPadding">4dp</item>
+        <item name="android:paddingStart">12dp</item>
+        <item name="android:paddingEnd">12dp</item>
+        <item name="android:maxLines">1</item>
+    </style>
 </resources>

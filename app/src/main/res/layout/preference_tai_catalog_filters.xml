@@ -19,7 +19,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tai_catalog_filter_all"
-            style="?attr/materialButtonOutlinedStyle"
+            style="@style/Widget.Termux.Button.Segment"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -27,7 +27,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tai_catalog_filter_litert"
-            style="?attr/materialButtonOutlinedStyle"
+            style="@style/Widget.Termux.Button.Segment"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -35,7 +35,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tai_catalog_filter_mnn"
-            style="?attr/materialButtonOutlinedStyle"
+            style="@style/Widget.Termux.Button.Segment"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -43,7 +43,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tai_catalog_filter_installed"
-            style="?attr/materialButtonOutlinedStyle"
+            style="@style/Widget.Termux.Button.Segment"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -51,7 +51,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/tai_catalog_filter_usable"
-            style="?attr/materialButtonOutlinedStyle"
+            style="@style/Widget.Termux.Button.Segment"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"

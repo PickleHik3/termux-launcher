@@ -34,7 +34,9 @@
 
         <com.google.android.material.button.MaterialButtonToggleGroup
             android:id="@+id/appearance_editor_mode"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:minWidth="0dp"
             android:layout_height="wrap_content"
             app:checkedButton="@+id/appearance_editor_mode_appearance"
             app:selectionRequired="true"
@@ -42,27 +44,28 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_editor_mode_appearance"
-                style="?attr/materialButtonOutlinedStyle"
+                style="@style/Widget.Termux.Button.Segment"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:ellipsize="none"
                 android:maxLines="1"
                 android:text="@string/action_appearance_editor" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_editor_mode_layout"
-                style="?attr/materialButtonOutlinedStyle"
+                style="@style/Widget.Termux.Button.Segment"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:ellipsize="none"
                 android:maxLines="1"
                 android:text="@string/action_layout_editor" />
         </com.google.android.material.button.MaterialButtonToggleGroup>
 
-        <!-- Takes the leftover width, so the pill, Undo's slot and Done never re-measure when
-             Undo appears. -->
+        <!-- The pill takes the leftover width (it may shrink); Undo's slot and Done keep their
+             intrinsic widths at the trailing edge, so nothing re-measures when Undo appears. -->
         <Space
-            android:layout_width="0dp"
-            android:layout_height="0dp"
-            android:layout_weight="1" />
+            android:layout_width="8dp"
+            android:layout_height="0dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_undo"
@@ -115,8 +118,11 @@
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/layout_editor_orientation_portrait"
                     style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
+                    android:layout_width="48dp"
                     android:layout_height="wrap_content"
+                    android:minWidth="48dp"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
                     android:contentDescription="@string/settings_layout_orientation_portrait"
                     app:icon="@drawable/ic_symbol_phone_portrait"
                     app:iconGravity="textStart"
@@ -125,8 +131,11 @@
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/layout_editor_orientation_landscape"
                     style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
+                    android:layout_width="48dp"
                     android:layout_height="wrap_content"
+                    android:minWidth="48dp"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
                     android:contentDescription="@string/settings_layout_orientation_landscape"
                     app:icon="@drawable/ic_symbol_phone_landscape"
                     app:iconGravity="textStart"
@@ -145,8 +154,11 @@
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/appearance_editor_style_docked"
                     style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
+                    android:layout_width="48dp"
                     android:layout_height="wrap_content"
+                    android:minWidth="48dp"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
                     android:contentDescription="@string/appearance_editor_style_docked"
                     app:icon="@drawable/ic_style_docked"
                     app:iconGravity="textStart"
@@ -155,8 +167,11 @@
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/appearance_editor_style_floating"
                     style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="wrap_content"
+                    android:layout_width="48dp"
                     android:layout_height="wrap_content"
+                    android:minWidth="48dp"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
                     android:contentDescription="@string/appearance_editor_style_floating"
                     app:icon="@drawable/ic_style_floating"
                     app:iconGravity="textStart"
@@ -350,7 +365,7 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/appearance_editor_soft_off"
-                            style="?attr/materialButtonOutlinedStyle"
+                            style="@style/Widget.Termux.Button.Segment"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
@@ -359,7 +374,7 @@
 
                         <com.google.android.material.button.MaterialButton
                             android:id="@+id/appearance_editor_soft_on"
-                            style="?attr/materialButtonOutlinedStyle"
+                            style="@style/Widget.Termux.Button.Segment"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"

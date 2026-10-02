@@ -88,18 +88,38 @@ final class HiddenElementsPopup {
         fill(chips, hidden);
 
         DisplayMetrics metrics = context.getResources().getDisplayMetrics();
-        content.measure(View.MeasureSpec.makeMeasureSpec(metrics.widthPixels - 2 * pad,
+        // The popup belongs to the phone frame on the canvas: at most the frame's width, and
+        // centred over the trash icon, kept inside the frame.
+        int[] canvasAt = new int[2];
+        mCanvas.getLocationInWindow(canvasAt);
+        android.graphics.RectF frame = mCanvas.frameRect();
+        int frameLeft = canvasAt[0] + Math.round(frame.left);
+        int frameRight = canvasAt[0] + Math.round(frame.right);
+        if (frameRight - frameLeft <= 2 * pad) {
+            frameLeft = 0;
+            frameRight = metrics.widthPixels;
+        }
+        content.measure(View.MeasureSpec.makeMeasureSpec(frameRight - frameLeft,
             View.MeasureSpec.AT_MOST), View.MeasureSpec.makeMeasureSpec(0,
             View.MeasureSpec.UNSPECIFIED));
         int width = content.getMeasuredWidth();
         int height = content.getMeasuredHeight();
         int[] at = new int[2];
         mAnchor.getLocationInWindow(at);
-        // Standing on the icon: its trailing edge, kept inside the window.
-        boolean rtl = mAnchor.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
-        int left = rtl ? at[0] : at[0] + mAnchor.getWidth() - width;
-        left = Math.max(pad, Math.min(left, metrics.widthPixels - width - pad));
+        int left = leftCentredOn(at[0] + mAnchor.getWidth() / 2, width, frameLeft, frameRight);
+        window.setWidth(width);
         window.showAsDropDown(mAnchor, left - at[0], -(mAnchor.getHeight() + height));
+    }
+
+    /**
+     * Where a popup {@code width} wide stands so its centre is on {@code centerX}, moved only as
+     * far as keeps it between {@code minLeft} and {@code maxRight}; the left edge when it is wider
+     * than that span.
+     */
+    static int leftCentredOn(int centerX, int width, int minLeft, int maxRight) {
+        int left = centerX - width / 2;
+        left = Math.min(left, maxRight - width);
+        return Math.max(left, minLeft);
     }
 
     /** The hidden elements changed: restate the chips, or close once nothing is left to list. */

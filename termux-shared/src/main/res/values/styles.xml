@@ -57,6 +57,7 @@
          row prints its own value beside the control). -->
     <style name="Widget.Termux.Slider" parent="Widget.Material3.Slider">
         <item name="labelBehavior">gone</item>
+        <item name="tickVisible">false</item>
     </style>
 
     <!-- BaseToolbar Title text appearance. -->

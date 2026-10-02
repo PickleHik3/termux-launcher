@@ -33,7 +33,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/segmented_pill_default"
-            style="?attr/materialButtonOutlinedStyle"
+            style="@style/Widget.Termux.Button.Segment"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -43,7 +43,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/segmented_pill_capsule"
-            style="?attr/materialButtonOutlinedStyle"
+            style="@style/Widget.Termux.Button.Segment"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -53,7 +53,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/segmented_pill_third"
-            style="?attr/materialButtonOutlinedStyle"
+            style="@style/Widget.Termux.Button.Segment"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -63,7 +63,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/segmented_pill_fourth"
-            style="?attr/materialButtonOutlinedStyle"
+            style="@style/Widget.Termux.Button.Segment"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
