@@ -92,7 +92,7 @@ final class TaiBenchViews {
         row.setPadding(dp(context, 16), dp(context, 16), dp(context, 16), dp(context, 8));
         TextView text = new TextView(context);
         text.setText(title);
-        style(text, com.google.android.material.R.attr.textAppearanceTitleSmall, com.google.android.material.R.attr.colorPrimary);
+        style(text, com.google.android.material.R.attr.textAppearanceTitleSmall, androidx.appcompat.R.attr.colorPrimary);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) text.setAccessibilityHeading(true);
         row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         if (end.length() > 0) {

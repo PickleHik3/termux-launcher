@@ -199,7 +199,7 @@ public final class ExtraKeyDetailSheet {
         LinearLayout actions = row();
         actions.setPadding(0, dp(12), 0, dp(8));
         MaterialButton remove = new MaterialButton(context, null,
-            com.google.android.material.R.attr.borderlessButtonStyle);
+            androidx.appcompat.R.attr.borderlessButtonStyle);
         remove.setText(R.string.settings_extra_keys_sheet_remove);
         remove.setTextColor(colorError);
         remove.setOnClickListener(v -> {

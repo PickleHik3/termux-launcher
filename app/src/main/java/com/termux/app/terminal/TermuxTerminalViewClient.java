@@ -201,7 +201,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         int color = 0;
         if (mHost.properties().shouldOpenTerminalTranscriptURLOnClick()) {
             color = com.google.android.material.color.MaterialColors.getColor(mContext,
-                com.google.android.material.R.attr.colorPrimary, 0);
+                androidx.appcompat.R.attr.colorPrimary, 0);
         }
         view.setUrlUnderlineColor(color);
     }
@@ -1355,7 +1355,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // Material text-button ink: the accent says "action", which the borderless pill no longer
         // says with an outline.
         button.setTextColor(com.google.android.material.color.MaterialColors.getColor(mContext,
-            com.google.android.material.R.attr.colorPrimary, button.getCurrentTextColor()));
+            androidx.appcompat.R.attr.colorPrimary, button.getCurrentTextColor()));
         button.setSingleLine(true);
         button.setGravity(android.view.Gravity.CENTER);
         // The 40dp is the strip's whole height budget: a thinner row than this stops being tappable.

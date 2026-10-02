@@ -153,9 +153,9 @@ public final class AppNoticeHostView extends LinearLayout {
             com.termux.shared.R.attr.termuxColorOnSurface,
             ContextCompat.getColor(context, R.color.termux_on_surface));
         mAccentInfo = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorPrimary, onSurface);
+            androidx.appcompat.R.attr.colorPrimary, onSurface);
         mAccentError = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorError, mAccentInfo);
+            androidx.appcompat.R.attr.colorError, mAccentInfo);
         mAccentAttention = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorTertiary,
             MaterialColors.getColor(context,

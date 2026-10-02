@@ -354,7 +354,6 @@ public final class PinnedAppsEditor {
         dialog.show();
         if (listener != null) listener.onPinEditorOpened();
     }
-    }
 
     private void rebuildMostUsedChips(@NonNull LinearLayout row, @NonNull List<LauncherAppEntry> mostUsed, @NonNull Runnable refreshAll) {
         row.removeAllViews();

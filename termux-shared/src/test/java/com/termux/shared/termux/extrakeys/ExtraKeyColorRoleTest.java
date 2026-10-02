@@ -59,7 +59,7 @@ public class ExtraKeyColorRoleTest {
     @Test
     public void eachThemedRoleTakesItsOwnAttributeAndTheMatchingOnRole() {
         assertAttrs(ExtraKeyColorRole.PRIMARY,
-            com.google.android.material.R.attr.colorPrimary,
+            androidx.appcompat.R.attr.colorPrimary,
             com.google.android.material.R.attr.colorOnPrimary);
         assertAttrs(ExtraKeyColorRole.SECONDARY,
             com.google.android.material.R.attr.colorSecondary,
@@ -68,7 +68,7 @@ public class ExtraKeyColorRoleTest {
             com.google.android.material.R.attr.colorTertiary,
             com.google.android.material.R.attr.colorOnTertiary);
         assertAttrs(ExtraKeyColorRole.ERROR,
-            com.google.android.material.R.attr.colorError,
+            androidx.appcompat.R.attr.colorError,
             com.google.android.material.R.attr.colorOnError);
         assertAttrs(ExtraKeyColorRole.PRIMARY_CONTAINER,
             com.google.android.material.R.attr.colorPrimaryContainer,

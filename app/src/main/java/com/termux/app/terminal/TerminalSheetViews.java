@@ -107,7 +107,7 @@ public final class TerminalSheetViews {
         button.setContentDescription(description);
         if (primary) {
             button.setTextColor(MaterialColors.getColor(context,
-                com.google.android.material.R.attr.colorPrimary,
+                androidx.appcompat.R.attr.colorPrimary,
                 button.getCurrentTextColor()));
         }
         android.util.TypedValue background = new android.util.TypedValue();

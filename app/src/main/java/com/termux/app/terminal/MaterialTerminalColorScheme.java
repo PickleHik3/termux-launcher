@@ -103,12 +103,12 @@ public final class MaterialTerminalColorScheme {
             R.color.termux_surface_base);
         int foreground = materialColor(context, com.google.android.material.R.attr.colorOnSurface,
             R.color.termux_on_surface);
-        int primary = materialColor(context, com.google.android.material.R.attr.colorPrimary,
+        int primary = materialColor(context, androidx.appcompat.R.attr.colorPrimary,
             R.color.termux_primary);
         // Raw, not materialColor: the anchor is only replaced when the theme really carries an error
         // role. An app-resource fallback would be a colour of ours, not one of the theme's, and the
         // whole point of the substitution is to keep red inside the theme's own tonal system.
-        int themeError = MaterialColors.getColor(context, com.google.android.material.R.attr.colorError, 0);
+        int themeError = MaterialColors.getColor(context, androidx.appcompat.R.attr.colorError, 0);
 
         boolean dark = perceivedBrightness(surface) < 128;
         // Read before the tone move so a surface pushed to tone 4 or 99 — where HCT cannot hold much
@@ -339,7 +339,7 @@ public final class MaterialTerminalColorScheme {
                                                           @NonNull TerminalContrastLevel level) {
         Properties props = new Properties();
 
-        putMaterialColor(props, "primary", context, com.google.android.material.R.attr.colorPrimary,
+        putMaterialColor(props, "primary", context, androidx.appcompat.R.attr.colorPrimary,
             R.color.termux_primary);
         putMaterialColor(props, "on_primary", context, com.google.android.material.R.attr.colorOnPrimary,
             R.color.termux_on_primary);
@@ -351,7 +351,7 @@ public final class MaterialTerminalColorScheme {
             R.color.termux_primary);
         putMaterialColor(props, "on_tertiary", context, com.google.android.material.R.attr.colorOnTertiary,
             R.color.termux_on_primary);
-        putMaterialColor(props, "error", context, com.google.android.material.R.attr.colorError,
+        putMaterialColor(props, "error", context, androidx.appcompat.R.attr.colorError,
             R.color.termux_error);
         putMaterialColor(props, "on_error", context, com.google.android.material.R.attr.colorOnError,
             R.color.termux_surface_base);
@@ -562,7 +562,7 @@ public final class MaterialTerminalColorScheme {
      * primary, secondary and tertiary where they were, and such a change used to read as "unchanged".
      */
     private static final int[] PALETTE_ATTRS = {
-        com.google.android.material.R.attr.colorPrimary,
+        androidx.appcompat.R.attr.colorPrimary,
         com.google.android.material.R.attr.colorOnPrimary,
         com.google.android.material.R.attr.colorPrimaryContainer,
         com.google.android.material.R.attr.colorOnPrimaryContainer,
@@ -574,7 +574,7 @@ public final class MaterialTerminalColorScheme {
         com.google.android.material.R.attr.colorOnTertiary,
         com.google.android.material.R.attr.colorTertiaryContainer,
         com.google.android.material.R.attr.colorOnTertiaryContainer,
-        com.google.android.material.R.attr.colorError,
+        androidx.appcompat.R.attr.colorError,
         com.google.android.material.R.attr.colorOnError,
         com.google.android.material.R.attr.colorErrorContainer,
         com.google.android.material.R.attr.colorOnErrorContainer,

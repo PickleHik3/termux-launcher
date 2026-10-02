@@ -1564,7 +1564,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mBusyColor = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorTertiary, primary);
         mAttentionColor = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorError,
+            androidx.appcompat.R.attr.colorError,
             ContextCompat.getColor(context, R.color.termux_error));
         // Material has no success role, and the busy accent cannot stand in for one: a chip that
         // has finished must not be the colour of a chip that is still going.

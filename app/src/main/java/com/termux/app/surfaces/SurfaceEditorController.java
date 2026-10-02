@@ -1365,7 +1365,7 @@ public final class SurfaceEditorController {
         placeInOverlay(outline, overlay, grown);
         GradientDrawable ring = new GradientDrawable();
         ring.setColor(0);
-        ring.setStroke(stroke, mHost.themeColor(com.google.android.material.R.attr.colorPrimary,
+        ring.setStroke(stroke, mHost.themeColor(androidx.appcompat.R.attr.colorPrimary,
             R.color.termux_primary));
         ring.setCornerRadius(Math.max(0f, outlineRadiusPx(target) + grow));
         outline.setBackground(ring);
@@ -1696,7 +1696,7 @@ public final class SurfaceEditorController {
         name.setMaxLines(2);
         name.setEllipsize(TextUtils.TruncateAt.END);
         name.setTextColor(EditorM3.color(row, selected
-            ? com.google.android.material.R.attr.colorPrimary
+            ? androidx.appcompat.R.attr.colorPrimary
             : com.google.android.material.R.attr.colorOnSurface));
         name.setLayoutParams(new LinearLayout.LayoutParams(
             dp(84), ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -1712,7 +1712,7 @@ public final class SurfaceEditorController {
         tick.setText(R.string.termux_surface_tuning_clock_selected);
         applyTextAppearance(tick, com.google.android.material.R.attr.textAppearanceTitleMedium);
         tick.setGravity(Gravity.CENTER);
-        tick.setTextColor(EditorM3.color(row, com.google.android.material.R.attr.colorPrimary));
+        tick.setTextColor(EditorM3.color(row, androidx.appcompat.R.attr.colorPrimary));
         tick.setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
         tick.setLayoutParams(new LinearLayout.LayoutParams(
             dp(24), ViewGroup.LayoutParams.WRAP_CONTENT));

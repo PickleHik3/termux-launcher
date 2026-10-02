@@ -57,9 +57,9 @@ public final class StatusActionPreference extends Preference {
     }
 
     private int toneColor() {
-        int attr = tone == Tone.ERROR ? com.google.android.material.R.attr.colorError
+        int attr = tone == Tone.ERROR ? androidx.appcompat.R.attr.colorError
             : tone == Tone.WARNING ? com.google.android.material.R.attr.colorTertiary
-            : tone == Tone.POSITIVE ? com.google.android.material.R.attr.colorPrimary
+            : tone == Tone.POSITIVE ? androidx.appcompat.R.attr.colorPrimary
             : com.google.android.material.R.attr.colorOnSurfaceVariant;
         return MaterialColors.getColor(getContext(), attr,
             ContextCompat.getColor(getContext(), R.color.termux_on_surface_variant));

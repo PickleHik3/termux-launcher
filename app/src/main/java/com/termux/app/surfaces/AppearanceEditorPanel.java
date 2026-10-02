@@ -272,7 +272,7 @@ final class AppearanceEditorPanel {
 
     private void styleLookLabels(int stop) {
         int active = MaterialColors.getColor(mRoot,
-            com.google.android.material.R.attr.colorPrimary,
+            androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(mContext, R.color.termux_primary));
         int quiet = MaterialColors.getColor(mRoot,
             com.google.android.material.R.attr.colorOnSurfaceVariant,

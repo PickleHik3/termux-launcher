@@ -76,7 +76,7 @@ public final class BorderGrabber {
     /** Re-read the accent: the scheme or the theme may have moved under it. */
     void refreshColor() {
         int color = MaterialColors.getColor(mHost.getContext(),
-            com.google.android.material.R.attr.colorPrimary,
+            androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(mHost.getContext(), com.termux.R.color.termux_primary));
         if (color == mColor) return;
         mColor = color;

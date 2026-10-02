@@ -362,7 +362,7 @@ public final class SuggestionBarView extends GridLayout
             @Override public int outlineColor() { return resolveLauncherOutlineColor(); }
             @Override public int highlightAccentColor() {
                 return MaterialColors.getColor(SuggestionBarView.this,
-                    com.google.android.material.R.attr.colorPrimary, resolveLauncherOutlineColor());
+                    androidx.appcompat.R.attr.colorPrimary, resolveLauncherOutlineColor());
             }
             @Override public int sendButtonTextColor() {
                 return MaterialColors.getColor(SuggestionBarView.this,
@@ -7372,7 +7372,7 @@ public final class SuggestionBarView extends GridLayout
 
     /** The ticks' accent: the launcher's own, which is what the dock's ticks were drawn from. */
     private int resolvePageIndicatorAccentColor() {
-        return MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary,
+        return MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(getContext(), R.color.termux_primary));
     }
 

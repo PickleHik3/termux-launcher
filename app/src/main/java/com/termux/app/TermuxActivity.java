@@ -2596,7 +2596,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         kicker.setAllCaps(true);
         kicker.setLetterSpacing(0.08f);
         kicker.setTextColor(MaterialColors.getColor(this,
-            com.google.android.material.R.attr.colorPrimary, Color.WHITE));
+            androidx.appcompat.R.attr.colorPrimary, Color.WHITE));
         TextView heading = new TextView(this);
         heading.setText(R.string.extra_keys_default_offer_title);
         heading.setTextSize(android.util.TypedValue.COMPLEX_UNIT_SP, 20f);
@@ -3996,7 +3996,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Wallpaper-derived accent (Material You primary) used across the dock's reactive glass treatment. */
     private int resolveDockAccentColor() {
-        return MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary,
+        return MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(this, R.color.termux_primary));
     }
 
@@ -10372,7 +10372,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveAzGestureAccentColor() {
-        return MaterialColors.getColor(this, com.google.android.material.R.attr.colorPrimary,
+        return MaterialColors.getColor(this, androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(this, R.color.termux_primary));
     }
 

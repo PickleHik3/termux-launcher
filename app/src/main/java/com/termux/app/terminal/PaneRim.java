@@ -54,10 +54,10 @@ public final class PaneRim {
     @NonNull
     public static PaneBorderStyle.Palette palette(@NonNull Context context) {
         int focus = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorPrimary,
+            androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
         int attention = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorError,
+            androidx.appcompat.R.attr.colorError,
             ContextCompat.getColor(context, R.color.termux_error));
         return new PaneBorderStyle.Palette(focus, attention);
     }

@@ -347,7 +347,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
     /** The loud action style (Install, Add, Retry, the banner's follow-up); a stock button carries it itself. */
     static void goPill(@NonNull TextView pill) {
         if (pill instanceof MaterialButton) return;
-        pill.setBackgroundTintList(ColorStateList.valueOf(role(pill.getContext(), com.google.android.material.R.attr.colorPrimary)));
+        pill.setBackgroundTintList(ColorStateList.valueOf(role(pill.getContext(), androidx.appcompat.R.attr.colorPrimary)));
         pill.setTextColor(role(pill.getContext(), com.google.android.material.R.attr.colorOnPrimary));
     }
 
@@ -542,7 +542,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             switch (state.phase) {
                 case PAUSED: indicator = com.google.android.material.R.attr.colorTertiary; break;
                 case WAITING: indicator = com.google.android.material.R.attr.colorOnSurfaceVariant; break;
-                default: indicator = com.google.android.material.R.attr.colorPrimary; break;
+                default: indicator = androidx.appcompat.R.attr.colorPrimary; break;
             }
             // Track and thickness are the theme's; only the phase picks the indicator's role.
             bar.setIndicatorColor(role(context, indicator));
@@ -681,7 +681,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             more.setVisibility(next.installed != null ? View.VISIBLE : View.GONE);
             more.setContentDescription(context.getString(R.string.tai_centre_action_more, next.title));
             setText(note, next.note);
-            note.setTextColor(role(context, next.noteIsError ? com.google.android.material.R.attr.colorError
+            note.setTextColor(role(context, next.noteIsError ? androidx.appcompat.R.attr.colorError
                 : com.google.android.material.R.attr.colorOnSurfaceVariant));
             setText(noteAction, next.tokenAction ? context.getString(R.string.tai_centre_action_add_token) : "");
         }

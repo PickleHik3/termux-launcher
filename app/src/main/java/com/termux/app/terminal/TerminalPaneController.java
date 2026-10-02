@@ -2909,7 +2909,7 @@ public class TerminalPaneController {
             if (android.graphics.Color.alpha(color) > 0) return color;
         }
         return MaterialColors.getColor(mHostView.getContext(),
-            com.google.android.material.R.attr.colorPrimary,
+            androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(mHostView.getContext(), R.color.termux_primary));
     }
 

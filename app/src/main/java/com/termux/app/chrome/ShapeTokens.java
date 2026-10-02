@@ -21,10 +21,10 @@ public final class ShapeTokens {
 
     /** The M3 shape scale. {@code FULL} is a pill: callers use half the view's short side. */
     public enum Corner {
-        SMALL(R.attr.shapeAppearanceCornerSmall, 8f),
-        MEDIUM(R.attr.shapeAppearanceCornerMedium, 12f),
-        LARGE(R.attr.shapeAppearanceCornerLarge, 16f),
-        EXTRA_LARGE(R.attr.shapeAppearanceCornerExtraLarge, 28f);
+        SMALL(com.google.android.material.R.attr.shapeAppearanceCornerSmall, 8f),
+        MEDIUM(com.google.android.material.R.attr.shapeAppearanceCornerMedium, 12f),
+        LARGE(com.google.android.material.R.attr.shapeAppearanceCornerLarge, 16f),
+        EXTRA_LARGE(com.google.android.material.R.attr.shapeAppearanceCornerExtraLarge, 28f);
 
         @AttrRes public final int attr;
         public final float defaultDp;

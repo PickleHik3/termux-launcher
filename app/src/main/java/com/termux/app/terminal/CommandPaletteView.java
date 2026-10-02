@@ -289,7 +289,7 @@ public final class CommandPaletteView extends View {
     public void refreshPalette() {
         Context context = getContext();
         mGlassBase = InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(context);
-        mPrimary = MaterialColors.getColor(context, com.google.android.material.R.attr.colorPrimary,
+        mPrimary = MaterialColors.getColor(context, androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
         int onSurface = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOnSurface,

@@ -301,7 +301,7 @@ public final class StatusBarWindowColumn extends ScrollView {
      */
     private int markColor(@NonNull WindowItem item) {
         if (item.attention || item.agentState == com.termux.app.terminal.AgentStatus.State.BLOCKED) {
-            return MaterialColors.getColor(this, com.google.android.material.R.attr.colorError,
+            return MaterialColors.getColor(this, androidx.appcompat.R.attr.colorError,
                 ContextCompat.getColor(getContext(), R.color.termux_error));
         }
         if (item.busy || item.done

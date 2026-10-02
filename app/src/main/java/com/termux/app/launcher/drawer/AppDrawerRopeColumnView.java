@@ -125,7 +125,7 @@ public final class AppDrawerRopeColumnView extends View {
         // The same resolution prepareOverlay uses for the plane's own accent, so the focused letter
         // and the drawer's glass tint are the one colour rather than two ideas of the theme.
         mFocusColor = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorPrimary,
+            androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
         mFillPaint.setTextAlign(Paint.Align.CENTER);
         mOutlinePaint.setTextAlign(Paint.Align.CENTER);

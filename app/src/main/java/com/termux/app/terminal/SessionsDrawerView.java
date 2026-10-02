@@ -973,7 +973,7 @@ public final class SessionsDrawerView extends LinearLayout
     private int agentTint(@NonNull SessionBrowserModel.Session session) {
         Context context = getContext();
         if (session.agentState == AgentStatus.State.BLOCKED) {
-            return MaterialColors.getColor(context, com.google.android.material.R.attr.colorError,
+            return MaterialColors.getColor(context, androidx.appcompat.R.attr.colorError,
                 ContextCompat.getColor(context, R.color.termux_error));
         }
         if (session.agentState == AgentStatus.State.WORKING) {

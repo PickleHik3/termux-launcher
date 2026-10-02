@@ -140,7 +140,7 @@ final class TaiSpeechInstallSheet {
         TextView label = new TextView(context);
         label.setText(textRes);
         appearance(label, com.google.android.material.R.attr.textAppearanceTitleSmall);
-        label.setTextColor(color(context, com.google.android.material.R.attr.colorPrimary));
+        label.setTextColor(color(context, androidx.appcompat.R.attr.colorPrimary));
         label.setPadding(0, Math.round(18 * context.getResources().getDisplayMetrics().density), 0, 0);
         return label;
     }

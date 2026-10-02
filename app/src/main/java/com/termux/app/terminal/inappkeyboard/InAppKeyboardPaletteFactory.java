@@ -145,7 +145,7 @@ public final class InAppKeyboardPaletteFactory {
         SourceRoles roles = resolve(context);
         int tertiary = materialColor(context, com.google.android.material.R.attr.colorTertiary,
             ColorUtils.blendARGB(roles.primary, roles.secondary, 0.5f));
-        int error = materialColor(context, com.google.android.material.R.attr.colorError,
+        int error = materialColor(context, androidx.appcompat.R.attr.colorError,
             0xFFBA1A1A);
         return new int[] {
             // Keep the original six entries first so persisted per-key assignments migrate
@@ -322,7 +322,7 @@ public final class InAppKeyboardPaletteFactory {
         int surfaceVariant = materialColor(context,
             com.google.android.material.R.attr.colorSurfaceVariant,
             ColorUtils.blendARGB(surface, onSurface, 0.08f));
-        int primary = materialColor(context, com.google.android.material.R.attr.colorPrimary,
+        int primary = materialColor(context, androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
         int secondary = materialColor(context, com.google.android.material.R.attr.colorSecondary,
             primary);

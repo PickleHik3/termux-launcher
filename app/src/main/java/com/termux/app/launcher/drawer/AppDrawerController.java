@@ -1313,7 +1313,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             : preferences.getDockGlassGrain();
         plane.applyGlassMaterial(
             InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(mHost.context()),
-            MaterialColors.getColor(mHost.context(), com.google.android.material.R.attr.colorPrimary,
+            MaterialColors.getColor(mHost.context(), androidx.appcompat.R.attr.colorPrimary,
                 ContextCompat.getColor(mHost.context(), R.color.termux_primary)),
             opacity, grain);
         glass.setVisibility(View.VISIBLE);

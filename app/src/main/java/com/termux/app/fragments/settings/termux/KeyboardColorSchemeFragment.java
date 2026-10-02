@@ -465,7 +465,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         GradientDrawable bar = new GradientDrawable();
         bar.setCornerRadius(dpFloat(2));
         bar.setColor(MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorPrimary, Color.WHITE));
+            androidx.appcompat.R.attr.colorPrimary, Color.WHITE));
         indicator.setBackground(bar);
         LinearLayout.LayoutParams indicatorParams = new LinearLayout.LayoutParams(dp(16), dp(3));
         indicatorParams.topMargin = dp(3);

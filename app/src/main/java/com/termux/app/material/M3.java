@@ -72,12 +72,12 @@ public final class M3 {
     }
 
     @ColorInt public static int primary(@NonNull Context c) {
-        return color(c, com.google.android.material.R.attr.colorPrimary,
+        return color(c, androidx.appcompat.R.attr.colorPrimary,
             com.google.android.material.R.color.m3_sys_color_dark_primary);
     }
 
     @ColorInt public static int error(@NonNull Context c) {
-        return color(c, com.google.android.material.R.attr.colorError,
+        return color(c, androidx.appcompat.R.attr.colorError,
             com.google.android.material.R.color.m3_sys_color_dark_error);
     }
 

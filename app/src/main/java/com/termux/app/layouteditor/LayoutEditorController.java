@@ -653,8 +653,8 @@ public final class LayoutEditorController {
         mTrayHovered = offered && hovered;
         boolean filled = mTrayShown != null && !mTrayShown.isEmpty();
         int primary = MaterialColors.getColor(views.trash,
-            com.google.android.material.R.attr.colorPrimary,
-            mHost.themeColor(com.google.android.material.R.attr.colorPrimary,
+            androidx.appcompat.R.attr.colorPrimary,
+            mHost.themeColor(androidx.appcompat.R.attr.colorPrimary,
                 R.color.termux_primary));
         int muted = MaterialColors.getColor(views.trash,
             com.google.android.material.R.attr.colorOnSurfaceVariant,

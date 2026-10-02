@@ -145,7 +145,6 @@ public final class AnchoredMenu {
                 host.getHeight() + gap);
         }
     }
-    }
 
     // ------------------------------------------------------------------ dismissing
 

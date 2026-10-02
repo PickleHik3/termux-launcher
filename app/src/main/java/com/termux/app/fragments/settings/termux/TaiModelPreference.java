@@ -155,7 +155,7 @@ public final class TaiModelPreference extends Preference {
                 title.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_star_16, 0, 0, 0);
                 title.setCompoundDrawablePadding(dp(5));
                 title.setCompoundDrawableTintList(ColorStateList.valueOf(
-                    MaterialColors.getColor(getContext(), com.google.android.material.R.attr.colorPrimary, 0)));
+                    MaterialColors.getColor(getContext(), androidx.appcompat.R.attr.colorPrimary, 0)));
             } else {
                 title.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0);
             }

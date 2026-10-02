@@ -2039,7 +2039,7 @@ public final class LayoutCanvasView extends View {
     /** The pack's accent. */
     @ColorInt
     private int accent() {
-        return themeColor(com.google.android.material.R.attr.colorPrimary,
+        return themeColor(androidx.appcompat.R.attr.colorPrimary,
             R.color.termux_primary);
     }
 

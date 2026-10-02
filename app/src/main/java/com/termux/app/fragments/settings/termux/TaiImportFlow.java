@@ -1363,7 +1363,7 @@ final class TaiImportFlow {
         TextView label = new TextView(context);
         label.setText(textRes);
         appearance(label, com.google.android.material.R.attr.textAppearanceTitleSmall);
-        label.setTextColor(resolveAttrColor(context, com.google.android.material.R.attr.colorPrimary));
+        label.setTextColor(resolveAttrColor(context, androidx.appcompat.R.attr.colorPrimary));
         float density = context.getResources().getDisplayMetrics().density;
         label.setPadding(0, Math.round(12 * density), 0, Math.round(4 * density));
         return label;
