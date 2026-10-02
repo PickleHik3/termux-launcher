@@ -411,23 +411,20 @@ final class DeviceControlRoutes {
     static final long BUILTIN_TIMEOUT_SECONDS = 30;
 
     /**
-     * {@code {"builtin":"aurora","palette":"material|own","target":"home|lock|both"}}. Unknown id
+     * {@code {"builtin":"aurora","palette":"own","target":"home|lock|both"}}. Unknown id
      * is 404; below API 34 the still cannot be rendered, so 409 with {@code reason: "api"}. The
      * still is set whenever the phone can render it; {@code animated} says whether the live frames
      * will play (API 34 and Fancier Glass active), else {@code reason} is {@code fancier_glass_off}.
-     * Material colours are read on the main thread from the running launcher's activity, which
-     * carries the scheme theme; with no launcher running they come from the application context
-     * and follow the launcher scheme only as far as the application theme does.
+     * {@code palette} is ignored; the wallpaper always uses its own colours and the system theme
+     * follows it.
      */
     @NonNull
     private static JSONObject wallpaperSetBuiltin(@NonNull Context context, @NonNull JSONObject arguments,
                                                   @NonNull String builtin) throws JSONException {
         AnimatedWallpaper w = AnimatedWallpapers.byId(builtin);
         if (w == null) return error(404, "not_found", "Unknown built-in background: " + builtin);
-        String palette = arguments.optString("palette", "material").trim().toLowerCase(java.util.Locale.ROOT);
-        if (!"material".equals(palette) && !"own".equals(palette)) {
-            return error(400, "bad_request", "'palette' must be material or own");
-        }
+        // palette is ignored; the wallpaper always uses its own colours and the system theme follows it.
+        final String palette = "own";
         String target = arguments.optString("target", "both").trim().toLowerCase(java.util.Locale.ROOT);
         int flags = ManagedWallpaper.flagsForTarget(target);
         if (flags == 0) return error(400, "bad_request", "'target' must be home, lock or both");
@@ -445,7 +442,7 @@ final class DeviceControlRoutes {
         final CountDownLatch done = new CountDownLatch(1);
         final boolean[] ok = {false};
         final String[] failure = {null};
-        applyBuiltin(app, w, palette, ManagedWallpaper.targetName(flags), (success, message) -> {
+        applyBuiltin(app, w, ManagedWallpaper.targetName(flags), (success, message) -> {
             ok[0] = success;
             failure[0] = message;
             done.countDown();
@@ -470,24 +467,24 @@ final class DeviceControlRoutes {
     }
 
     @android.annotation.SuppressLint("NewApi")
-    private static void applyBuiltin(@NonNull Context app, @NonNull AnimatedWallpaper w, @NonNull String palette,
+    private static void applyBuiltin(@NonNull Context app, @NonNull AnimatedWallpaper w,
                                      @NonNull String target,
                                      @NonNull GeneratedWallpaperApplier.Callback callback) {
         com.termux.app.chrome.wallpaper.AnimatedWallpaperStatus status = GeneratedWallpaperApplier.statusProvider();
         final Context themed = status instanceof com.termux.app.chrome.wallpaper.GeneratedWallpaperHost
             ? ((com.termux.app.chrome.wallpaper.GeneratedWallpaperHost) status).themedContext() : app;
-        // The palette is read from theme attributes, so apply() runs on the main thread.
+        // apply() runs on the main thread.
         new android.os.Handler(android.os.Looper.getMainLooper())
-            .post(() -> GeneratedWallpaperApplier.apply(themed, w, palette, target, callback));
+            .post(() -> GeneratedWallpaperApplier.apply(themed, w, target, callback));
     }
 
-    /** {@code [{id,label,palettes:["material","own"]}]} under {@code builtins}. */
+    /** {@code [{id,label,palettes:["own"]}]} under {@code builtins}. */
     @NonNull
     private static JSONObject wallpaperBuiltins() throws JSONException {
         JSONArray list = new JSONArray();
         for (AnimatedWallpaper w : AnimatedWallpapers.all()) {
             list.put(new JSONObject().put("id", w.id()).put("label", w.label())
-                .put("palettes", new JSONArray().put("material").put("own")));
+                .put("palettes", new JSONArray().put("own")));
         }
         return ok().put("builtins", list);
     }
@@ -509,7 +506,6 @@ final class DeviceControlRoutes {
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, false);
         int storedId = preferences == null ? -1 : preferences.getManagedWallpaperSystemId();
         String animatedId = preferences == null ? null : preferences.getManagedWallpaperAnimatedId();
-        String palette = preferences == null ? null : preferences.getManagedWallpaperAnimatedPalette();
         AnimatedWallpaperStatus status = GeneratedWallpaperApplier.statusProvider();
         boolean playing = status != null && status.playing();
         String reason = playing ? null : status == null ? "inactive" : status.reason();
@@ -517,7 +513,7 @@ final class DeviceControlRoutes {
         return ok().put("home_id", homeId).put("lock_id", lockId).put("live", live)
             .put("managed", storedId > 0 && storedId == homeId)
             .put("animated", animatedId == null ? JSONObject.NULL : animatedId)
-            .put("palette", animatedId == null ? JSONObject.NULL : palette)
+            .put("palette", animatedId == null ? JSONObject.NULL : "own")
             .put("playing", playing)
             .put("reason", reason == null ? JSONObject.NULL : reason)
             .put("desired_width", manager.getDesiredMinimumWidth())

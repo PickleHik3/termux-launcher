@@ -3040,8 +3040,6 @@
     <string name="wallpaper_picker_photo_hint">Choose a picture from your gallery</string>
     <string name="wallpaper_picker_animated">Animated</string>
     <string name="wallpaper_picker_current">In use</string>
-    <string name="wallpaper_picker_palette_material">Material</string>
-    <string name="wallpaper_picker_palette_own">Own</string>
     <string name="wallpaper_picker_applying">Applying background…</string>
     <string name="wallpaper_picker_apply_failed">Could not apply the background</string>
 

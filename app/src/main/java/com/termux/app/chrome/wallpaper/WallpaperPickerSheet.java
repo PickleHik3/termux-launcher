@@ -23,8 +23,6 @@ import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.google.android.material.button.MaterialButton;
-import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.termux.R;
@@ -38,10 +36,10 @@ import java.util.concurrent.Executors;
 
 /**
  * The wallpaper picker as a small bottom sheet: a Photo row, and, when generated backgrounds are
- * offered, a row of tiles (rest-pose still, name, Material / Own palette toggle). Tapping a tile
+ * offered, a row of tiles (rest-pose still, name). Tapping a tile
  * asks home / lock / both and applies it through {@link GeneratedWallpaperApplier}.
  *
- * <p>Thumbnails are stills rendered once per (background, palette mode) on a worker thread and
+ * <p>Thumbnails are stills rendered once per background on a worker thread and
  * kept in memory only while the sheet is open; nothing animates here.</p>
  */
 public final class WallpaperPickerSheet {
@@ -53,6 +51,7 @@ public final class WallpaperPickerSheet {
 
         /** A generated background was applied; the sheet has dismissed itself. */
         void onGeneratedApplied(@NonNull AnimatedWallpaper wallpaper, @NonNull String paletteMode);
+        // paletteMode is always "own" (kept so existing hosts compile).
     }
 
     private static final String LOG_TAG = "WallpaperPickerSheet";
@@ -69,7 +68,6 @@ public final class WallpaperPickerSheet {
     });
     private final Map<String, Bitmap> mThumbs = new HashMap<>();
     private final String mStoredId;
-    private final String mStoredMode;
     private final int mThumbW;
     private final int mThumbH;
     private boolean mDismissed;
@@ -93,7 +91,6 @@ public final class WallpaperPickerSheet {
         mDensity = activity.getResources().getDisplayMetrics().density;
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(activity.getApplicationContext(), false);
         mStoredId = prefs == null ? null : prefs.getManagedWallpaperAnimatedId();
-        mStoredMode = prefs == null ? null : prefs.getManagedWallpaperAnimatedPalette();
         DisplayMetrics dm = activity.getResources().getDisplayMetrics();
         mThumbH = Math.round(THUMB_HEIGHT_DP * mDensity);
         mThumbW = WallpaperPickerLogic.thumbWidth(mThumbH, dm.widthPixels, dm.heightPixels);
@@ -190,7 +187,6 @@ public final class WallpaperPickerSheet {
     private View tile(@NonNull AnimatedWallpaper w) {
         Context ctx = mActivity;
         final boolean stored = WallpaperPickerLogic.isStored(w.id(), mStoredId);
-        final String[] mode = {WallpaperPickerLogic.initialMode(w.id(), mStoredId, mStoredMode)};
 
         LinearLayout tile = new LinearLayout(ctx);
         tile.setOrientation(LinearLayout.VERTICAL);
@@ -223,47 +219,15 @@ public final class WallpaperPickerSheet {
         name.setMaxWidth(Math.max(mThumbW, dp(96)));
         tile.addView(name);
 
-        MaterialButtonToggleGroup toggle = new MaterialButtonToggleGroup(ctx);
-        toggle.setSingleSelection(true);
-        toggle.setSelectionRequired(true);
-        MaterialButton material = toggleButton(R.string.wallpaper_picker_palette_material);
-        MaterialButton own = toggleButton(R.string.wallpaper_picker_palette_own);
-        toggle.addView(material);
-        toggle.addView(own);
-        toggle.check(WallpaperPaletteCapture.MODE_OWN.equals(mode[0]) ? own.getId() : material.getId());
-        toggle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            if (!isChecked) return;
-            mode[0] = checkedId == own.getId() ? WallpaperPaletteCapture.MODE_OWN : WallpaperPaletteCapture.MODE_MATERIAL;
-            loadThumb(w, mode[0], image);
-        });
-        tile.addView(toggle, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, dp(36)));
-
-        image.setOnClickListener(v -> onTileTapped(w, mode[0]));
-        name.setOnClickListener(v -> onTileTapped(w, mode[0]));
-        loadThumb(w, mode[0], image);
+        image.setOnClickListener(v -> onTileTapped(w));
+        name.setOnClickListener(v -> onTileTapped(w));
+        loadThumb(w, image);
         return tile;
     }
 
-    @NonNull
-    private MaterialButton toggleButton(int textRes) {
-        MaterialButton b = new MaterialButton(mActivity, null,
-            com.google.android.material.R.attr.materialButtonOutlinedStyle);
-        b.setId(View.generateViewId());
-        b.setText(textRes);
-        b.setAllCaps(false);
-        b.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
-        b.setInsetTop(0);
-        b.setInsetBottom(0);
-        b.setPadding(dp(10), 0, dp(10), 0);
-        b.setMinWidth(0);
-        b.setMinimumWidth(0);
-        return b;
-    }
-
-    private void loadThumb(@NonNull AnimatedWallpaper w, @NonNull String mode, @NonNull ImageView image) {
+    private void loadThumb(@NonNull AnimatedWallpaper w, @NonNull ImageView image) {
         if (Build.VERSION.SDK_INT < 34) return;
-        final String key = w.id() + ":" + mode;
+        final String key = w.id();
         image.setTag(key);
         Bitmap cached = mThumbs.get(key);
         if (cached != null) {
@@ -271,16 +235,16 @@ public final class WallpaperPickerSheet {
             return;
         }
         image.setImageDrawable(null);
-        renderThumb(w, mode, key, image);
+        renderThumb(w, key, image);
     }
 
     @RequiresApi(34)
-    private void renderThumb(@NonNull AnimatedWallpaper w, @NonNull String mode, @NonNull String key,
+    private void renderThumb(@NonNull AnimatedWallpaper w, @NonNull String key,
                              @NonNull ImageView image) {
         // Theme attributes are read here on the main thread; the worker gets plain colours.
         final int[] palette;
         try {
-            palette = WallpaperPaletteCapture.resolve(mActivity, w, mode);
+            palette = WallpaperPaletteCapture.own(w);
         } catch (RuntimeException e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Thumbnail palette failed", e);
             return;
@@ -306,7 +270,7 @@ public final class WallpaperPickerSheet {
         }
     }
 
-    private void onTileTapped(@NonNull AnimatedWallpaper w, @NonNull String mode) {
+    private void onTileTapped(@NonNull AnimatedWallpaper w) {
         if (mApplying || mDismissed) return;
         String[] labels = {
             mActivity.getString(R.string.wallpaper_target_home_screen),
@@ -316,20 +280,20 @@ public final class WallpaperPickerSheet {
         String[] targets = {"home", "lock", "both"};
         new MaterialAlertDialogBuilder(mActivity)
             .setAdapter(new ArrayAdapter<>(mActivity, android.R.layout.simple_list_item_1, labels),
-                (dialog, which) -> applyGenerated(w, mode, targets[which]))
+                (dialog, which) -> applyGenerated(w, targets[which]))
             .show();
     }
 
-    private void applyGenerated(@NonNull AnimatedWallpaper w, @NonNull String mode, @NonNull String target) {
+    private void applyGenerated(@NonNull AnimatedWallpaper w, @NonNull String target) {
         if (Build.VERSION.SDK_INT < 34 || mApplying || mDismissed) return;
         mApplying = true;
         setBusy(true);
-        applyOnApi34(w, mode, target);
+        applyOnApi34(w, target);
     }
 
     @RequiresApi(34)
-    private void applyOnApi34(@NonNull AnimatedWallpaper w, @NonNull String mode, @NonNull String target) {
-        GeneratedWallpaperApplier.apply(mActivity, w, mode, target, (ok, error) -> {
+    private void applyOnApi34(@NonNull AnimatedWallpaper w, @NonNull String target) {
+        GeneratedWallpaperApplier.apply(mActivity, w, target, (ok, error) -> {
             mApplying = false;
             if (mActivity.isFinishing() || mActivity.isDestroyed()) {
                 if (!mDismissed) mSheet.dismiss();
@@ -337,7 +301,7 @@ public final class WallpaperPickerSheet {
             }
             if (ok) {
                 if (!mDismissed) mSheet.dismiss();
-                mListener.onGeneratedApplied(w, mode);
+                mListener.onGeneratedApplied(w, WallpaperPaletteCapture.MODE_OWN);
             } else {
                 Logger.logError(LOG_TAG, "Applying " + w.id() + " failed: " + error);
                 if (!mDismissed) setBusy(false);

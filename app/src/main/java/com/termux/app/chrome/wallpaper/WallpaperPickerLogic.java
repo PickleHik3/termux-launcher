@@ -8,18 +8,6 @@ public final class WallpaperPickerLogic {
 
     private WallpaperPickerLogic() {}
 
-    /**
-     * The palette mode a tile starts on: the stored mode for the stored background, Material for
-     * every other tile (and for a stored mode that is not recognised).
-     */
-    @NonNull
-    public static String initialMode(@NonNull String tileId, @Nullable String storedId, @Nullable String storedMode) {
-        if (tileId.equals(storedId) && WallpaperPaletteCapture.MODE_OWN.equals(storedMode)) {
-            return WallpaperPaletteCapture.MODE_OWN;
-        }
-        return WallpaperPaletteCapture.MODE_MATERIAL;
-    }
-
     /** Whether this tile is the stored background. */
     public static boolean isStored(@NonNull String tileId, @Nullable String storedId) {
         return tileId.equals(storedId);

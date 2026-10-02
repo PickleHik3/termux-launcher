@@ -3185,20 +3185,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED, id == null ? "" : id, false);
     }
 
-    /** {@code material} (default) or {@code own}. */
-    @androidx.annotation.NonNull
-    public String getManagedWallpaperAnimatedPalette() {
-        String mode = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED_PALETTE,
-            TERMUX_APP.DEFAULT_VALUE_MANAGED_WALLPAPER_ANIMATED_PALETTE, true);
-        return "own".equals(mode) ? "own" : "material";
-    }
-
-    public void setManagedWallpaperAnimatedPalette(@Nullable String mode) {
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED_PALETTE, "own".equals(mode) ? "own" : "material", false);
-    }
-
     /** {@code home} (default), {@code lock} or {@code both}: where the last generated still went. */
     @androidx.annotation.NonNull
     public String getManagedWallpaperAnimatedTarget() {

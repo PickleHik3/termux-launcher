@@ -328,12 +328,8 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
         kick();
     }
 
-    /** The launcher's colour scheme was reloaded: a Material palette is captured again if it moved. */
+    /** The launcher's colour scheme was reloaded: nothing to do, the wallpaper keeps its own palette. */
     public void onStylingReloaded() {
-        if (!mSupported || mWallpaper == null) return;
-        GeneratedWallpaperApplier.recaptureIfMaterial(mActivity, (ok, error) -> {
-            if (ok) refresh();
-        });
     }
 
     /** A photo became the wallpaper: forget the generated background and go still. */

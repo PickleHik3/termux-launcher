@@ -39,7 +39,7 @@ public class GeneratedWallpaperChoosingTest {
     @Test
     public void ownModeGivesTheBackgroundsShippedPaletteWithoutAContext() {
         for (AnimatedWallpaper w : AnimatedWallpapers.all()) {
-            int[] palette = WallpaperPaletteCapture.resolve(null, w, "own");
+            int[] palette = WallpaperPaletteCapture.own(w);
             assertArrayEquals(w.id(), w.ownPalette(), palette);
             assertNotSame("a copy, so a caller cannot edit the shipped palette", w.ownPalette(), palette);
         }
@@ -59,27 +59,18 @@ public class GeneratedWallpaperChoosingTest {
     @Test
     public void storedChoiceRoundTrips() {
         assertNull(preferences.getManagedWallpaperAnimatedId());
-        assertEquals("material", preferences.getManagedWallpaperAnimatedPalette());
         assertNull(preferences.getManagedWallpaperAnimatedColors());
         assertFalse(preferences.isAnimatedWallpaperDisabled());
 
         int[] colors = {0xFF112233, 0xFF445566, 0xFF778899, 0xFFAABBCC};
         preferences.setManagedWallpaperAnimatedId("aurora");
-        preferences.setManagedWallpaperAnimatedPalette("own");
         preferences.setManagedWallpaperAnimatedColors(colors);
         assertEquals("aurora", preferences.getManagedWallpaperAnimatedId());
-        assertEquals("own", preferences.getManagedWallpaperAnimatedPalette());
         assertArrayEquals(colors, preferences.getManagedWallpaperAnimatedColors());
 
         preferences.setManagedWallpaperAnimatedId(null);
         preferences.setManagedWallpaperAnimatedColors(null);
         assertNull(preferences.getManagedWallpaperAnimatedId());
         assertNull(preferences.getManagedWallpaperAnimatedColors());
-    }
-
-    @Test
-    public void anUnknownPaletteModeFallsBackToMaterial() {
-        preferences.setManagedWallpaperAnimatedPalette("neon");
-        assertEquals("material", preferences.getManagedWallpaperAnimatedPalette());
     }
 }
