@@ -571,13 +571,16 @@
     <!-- The keyboard's tools (DECISIONS item 6): while the keyboard is selected they stand where
          Corner radius and Margin are, which are hidden meanwhile (the hidden tiles' swap), so the
          sheet keeps its height. The three type chips at the start, centred on Key radius's
-         slider; Key radius takes the rest of the row, a label above its slider, as tall as the
-         row it stands in. -->
+         slider; Key radius takes the rest of the row, a label above its slider. The row is pinned to
+         Corner radius's extent (the 48dp chips stand a little past the slider, unclipped), so the
+         sheet is the same height either way. -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layout_editor_keyboard_tools"
         android:layout_width="0dp"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:clipChildren="false"
         android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/appearance_editor_corners"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="@id/appearance_editor_corners_label">
