@@ -275,7 +275,7 @@ public final class TourOverlayView extends FrameLayout {
             if (mCallbacks != null) mCallbacks.onTourDocsTapped();
         });
         mDocsLink.setVisibility(GONE);
-        addDocsLink();
+        addDocsLink(false);
 
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -896,27 +896,27 @@ public final class TourOverlayView extends FrameLayout {
     }
 
     /**
-     * The card's buttons, rebuilt only when the set actually changed. Two answers share a row;
-     * three — the usage card's, each a phrase — stand one under another, or the row would run
-     * off the card on a phone.
+     * The card's buttons, rebuilt only when the set actually changed. They share a row while
+     * their labels fit across the card; the usage card's three answers, each a phrase, would run
+     * off it on a phone, so they stand one under another.
      */
     private void applyActions(@NonNull List<TourAction> actions) {
         if (!mActions.equals(actions)) {
             mActions.clear();
             mActions.addAll(actions);
-            boolean stacked = mActions.size() > 2;
+            boolean stacked = !labelsFitOneRow(mActions);
             mButtonRow.setOrientation(stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
             mButtonRow.removeAllViews();
-            addDocsLink();
+            addDocsLink(stacked);
             mActionButtons.clear();
             for (TourAction action : mActions) {
                 TextView button = textButton(getContext(), view -> onActionTapped(action));
                 button.setText(action.labelRes);
                 button.setContentDescription(getContext().getString(action.labelRes));
                 LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                    stacked ? ViewGroup.LayoutParams.MATCH_PARENT : ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT);
                 if (stacked) {
-                    params.gravity = Gravity.END;
                     params.topMargin = dp(4f);
                 } else {
                     params.leftMargin = dp(8f);
@@ -931,15 +931,32 @@ public final class TourOverlayView extends FrameLayout {
     /**
      * The docs link leads the row as a pill of its own size, and an empty spacer takes the
      * slack, so the action buttons keep the trailing edge without the link stretching to meet
-     * them.
+     * them. A stacked column gets no spacer: there the weight would be a height weight, and the
+     * spacer would stretch the card down to the gesture bar.
      */
-    private void addDocsLink() {
+    private void addDocsLink(boolean stacked) {
         LinearLayout.LayoutParams linkParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         linkParams.gravity = Gravity.CENTER_VERTICAL;
         mButtonRow.addView(mDocsLink, linkParams);
+        if (stacked) return;
         View spacer = new View(getContext());
         mButtonRow.addView(spacer, new LinearLayout.LayoutParams(0, 0, 1f));
+    }
+
+    /** Whether the labels, as {@link #textButton} pads and spaces them, fit the widest card. */
+    private boolean labelsFitOneRow(@NonNull List<TourAction> actions) {
+        Paint paint = new Paint();
+        paint.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 13f,
+            getResources().getDisplayMetrics()));
+        paint.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        float row = 0f;
+        for (TourAction action : actions) {
+            float label = paint.measureText(getContext().getString(action.labelRes));
+            row += Math.max(dp(48f), label + dp(24f)) + dp(8f);
+        }
+        int maxWidth = Math.min(dp(CARD_MAX_WIDTH_DP), getResources().getDisplayMetrics().widthPixels - dp(32f));
+        return row <= maxWidth - dp(28f);
     }
 
     private void onActionTapped(@NonNull TourAction action) {
