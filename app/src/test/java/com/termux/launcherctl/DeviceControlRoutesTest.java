@@ -105,20 +105,18 @@ public class DeviceControlRoutesTest {
             "{\"builtin\":\"nope\"}");
         assertEquals(404, unknown.getInt("_statusCode"));
         assertEquals("not_found", unknown.getString("error"));
-        org.json.JSONObject badPalette = DeviceControlRoutes.handle(null, "POST", "/v1/wallpaper",
-            "{\"builtin\":\"aurora\",\"palette\":\"neon\"}");
-        assertEquals(400, badPalette.getInt("_statusCode"));
         org.json.JSONObject badTarget = DeviceControlRoutes.handle(null, "POST", "/v1/wallpaper",
             "{\"builtin\":\"aurora\",\"target\":\"sideways\"}");
         assertEquals(400, badTarget.getInt("_statusCode"));
     }
 
     @Test
-    public void builtinList_namesEveryBackgroundWithBothPalettes() throws Exception {
+    public void builtinList_namesEveryBackgroundWithItsOwnPalette() throws Exception {
         org.json.JSONArray list = DeviceControlRoutes.handle(null, "GET", "/v1/wallpaper/builtins", null)
             .getJSONArray("builtins");
         assertEquals(4, list.length());
-        assertEquals("material", list.getJSONObject(0).getJSONArray("palettes").getString(0));
-        assertEquals("own", list.getJSONObject(0).getJSONArray("palettes").getString(1));
+        // The wallpaper always uses its own colours; the system theme follows it.
+        assertEquals(1, list.getJSONObject(0).getJSONArray("palettes").length());
+        assertEquals("own", list.getJSONObject(0).getJSONArray("palettes").getString(0));
     }
 }

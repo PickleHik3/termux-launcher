@@ -5,4 +5,8 @@
     android:width="18dp"
     android:height="18dp"
     android:viewportWidth="18"
-    android:viewportHeight="18" />
+    android:viewportHeight="18">
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M0,0h18v18h-18z" />
+</vector>
