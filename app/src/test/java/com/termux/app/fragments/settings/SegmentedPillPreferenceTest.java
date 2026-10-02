@@ -58,4 +58,22 @@ public class SegmentedPillPreferenceTest {
         SegmentedPillPreference pill = (SegmentedPillPreference) found;
         assertEquals(3, pill.segmentCount());
     }
+
+    @Test
+    public void selectedSegmentFollowsTheValueAndNoneLightsNothing() {
+        Application app = RuntimeEnvironment.getApplication();
+        SegmentedPillPreference pill = new SegmentedPillPreference(app);
+        pill.setSegments(
+            new String[]{"a", "b", "c", "d"},
+            new CharSequence[]{"A", "B", "C", "D"});
+        assertEquals(4, pill.segmentCount());
+        assertEquals(0, pill.selectedSegment());
+        pill.setValue("c");
+        assertEquals(2, pill.selectedSegment());
+        pill.setValue(SegmentedPillPreference.VALUE_NONE);
+        assertEquals(-1, pill.selectedSegment());
+        // An unknown value falls back to the first segment.
+        pill.setValue("zzz");
+        assertEquals(0, pill.selectedSegment());
+    }
 }

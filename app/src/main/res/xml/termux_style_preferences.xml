@@ -49,7 +49,7 @@
             app:title="@string/settings_wallpaper_parallax_title"
             app:summary="@string/settings_wallpaper_parallax_summary"
             android:defaultValue="true" />
-        <SeekBarPreference
+        <com.termux.app.fragments.settings.SliderPreference
             app:key="wallpaper_render_zoom"
             app:title="@string/settings_wallpaper_alignment_title"
             app:summary="@string/settings_wallpaper_alignment_summary"

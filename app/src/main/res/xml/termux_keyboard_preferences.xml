@@ -57,7 +57,7 @@
     <!-- The keyboard's type left for the Layout editor (spec §6): three chips beside the
          keyboard on the layout canvas write the same key, per orientation. -->
     <PreferenceCategory app:key="keyboard_shapes" app:title="@string/settings_keyboard_shapes_header">
-        <SeekBarPreference
+        <com.termux.app.fragments.settings.SliderPreference
             app:key="in_app_keyboard_floating_width"
             app:title="@string/settings_keyboard_floating_width_title"
             app:summary="@string/settings_keyboard_floating_width_summary"
@@ -65,7 +65,7 @@
             app:min="35"
             android:max="100"
             app:showSeekBarValue="true" />
-        <SeekBarPreference
+        <com.termux.app.fragments.settings.SliderPreference
             app:key="in_app_keyboard_floating_height"
             app:title="@string/settings_keyboard_floating_height_title"
             app:summary="@string/settings_keyboard_floating_height_summary"
@@ -73,7 +73,7 @@
             app:min="60"
             android:max="160"
             app:showSeekBarValue="true" />
-        <SeekBarPreference
+        <com.termux.app.fragments.settings.SliderPreference
             app:key="in_app_keyboard_split_gap"
             app:title="@string/settings_keyboard_split_gap_title"
             app:summary="@string/settings_keyboard_split_gap_summary"

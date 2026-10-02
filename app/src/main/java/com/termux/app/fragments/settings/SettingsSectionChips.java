@@ -297,15 +297,10 @@ public final class SettingsSectionChips {
         chip.setCheckable(true);
         chip.setChecked(checked);
         chip.setFocusable(true);
-        // Compact, so a page's sections usually fit in two lines; the touch target stays 48dp.
-        chip.setChipMinHeight(dp(context, 30));
         chip.setLayoutParams(new ChipGroup.LayoutParams(
             ChipGroup.LayoutParams.WRAP_CONTENT, ChipGroup.LayoutParams.WRAP_CONTENT));
         chip.setOnClickListener(view -> onClick.run());
         return chip;
     }
 
-    private static int dp(@NonNull android.content.Context context, int value) {
-        return Math.round(value * context.getResources().getDisplayMetrics().density);
-    }
 }

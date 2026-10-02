@@ -6,7 +6,6 @@ import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceGroup;
 import androidx.preference.PreferenceScreen;
-import androidx.preference.SeekBarPreference;
 import androidx.preference.SwitchPreferenceCompat;
 import androidx.preference.TwoStatePreference;
 
@@ -71,6 +70,7 @@ public final class SettingsLayoutUtils {
 
         // Preferences that fully own their layout.
         if (preference instanceof SegmentedPillPreference
+            || preference instanceof SliderPreference
             || preference instanceof CategorySortProgressPreference
             || preference instanceof StatusActionPreference
             || preference instanceof SettingsSearchPreference
@@ -81,11 +81,6 @@ public final class SettingsLayoutUtils {
             || preference instanceof TaiModelCentreRowPreference
             || preference instanceof SpeechModelCardPreference
             || preference instanceof TaiModelPreference) {
-            return;
-        }
-
-        if (preference instanceof SeekBarPreference) {
-            preference.setLayoutResource(R.layout.preference_settings_seekbar);
             return;
         }
 

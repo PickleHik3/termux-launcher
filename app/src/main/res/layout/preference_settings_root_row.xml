@@ -5,19 +5,20 @@
     android:layout_height="wrap_content"
     android:background="?attr/selectableItemBackground"
     android:baselineAligned="false"
-    android:minHeight="76dp"
+    android:gravity="center_vertical"
+    android:minHeight="72dp"
     android:orientation="horizontal"
-    android:paddingStart="24dp"
-    android:paddingTop="14dp"
-    android:paddingEnd="24dp"
-    android:paddingBottom="14dp">
+    android:paddingStart="16dp"
+    android:paddingTop="12dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="12dp">
 
-    <FrameLayout
+    <com.google.android.material.card.MaterialCardView
+        style="?attr/materialCardViewFilledStyle"
         android:layout_width="48dp"
         android:layout_height="48dp"
-        android:layout_marginTop="1dp"
-        android:background="@drawable/settings_icon_background"
-        android:clipToOutline="true">
+        app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+        app:shapeAppearance="?attr/shapeAppearanceCornerMedium">
 
         <ImageView
             android:id="@android:id/icon"
@@ -25,8 +26,8 @@
             android:layout_height="24dp"
             android:layout_gravity="center"
             android:importantForAccessibility="no"
-            app:tint="?attr/termuxColorOnSurfaceVariant" />
-    </FrameLayout>
+            app:tint="?attr/colorOnSurfaceVariant" />
+    </com.google.android.material.card.MaterialCardView>
 
     <LinearLayout
         android:layout_width="0dp"
@@ -39,18 +40,15 @@
             android:id="@android:id/title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="sans-serif-medium"
-            android:textColor="?attr/termuxColorOnSurface"
-            android:textSize="16sp" />
+            android:textAppearance="?attr/textAppearanceTitleMedium"
+            android:textColor="?attr/colorOnSurface" />
 
         <TextView
             android:id="@android:id/summary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
-            android:lineSpacingExtra="2dp"
-            android:textColor="?attr/termuxColorOnSurfaceVariant"
-            android:textSize="13sp" />
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant" />
     </LinearLayout>
 
     <FrameLayout
@@ -58,6 +56,5 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
-        android:layout_marginTop="4dp"
         android:gravity="center" />
 </LinearLayout>

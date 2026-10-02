@@ -4,25 +4,21 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
-    <View
+    <com.google.android.material.divider.MaterialDivider
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="10dp"
-        android:layout_marginEnd="24dp"
-        android:background="?attr/termuxColorOutlineVariant" />
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="16dp" />
 
     <TextView
         android:id="@android:id/title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:letterSpacing="0.03"
-        android:paddingStart="24dp"
-        android:paddingTop="18dp"
-        android:paddingEnd="24dp"
-        android:paddingBottom="6dp"
-        android:textAllCaps="false"
-        android:textColor="?attr/termuxColorPrimary"
-        android:textSize="13sp"
-        android:textStyle="bold" />
+        android:paddingStart="16dp"
+        android:paddingTop="16dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="8dp"
+        android:textAppearance="?attr/textAppearanceTitleSmall"
+        android:textColor="?attr/colorPrimary" />
 </LinearLayout>
