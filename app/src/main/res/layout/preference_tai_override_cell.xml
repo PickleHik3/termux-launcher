@@ -4,22 +4,21 @@
     android:layout_height="wrap_content"
     android:background="?attr/selectableItemBackground"
     android:orientation="vertical"
-    android:paddingTop="9dp"
-    android:paddingBottom="9dp">
+    android:paddingTop="8dp"
+    android:paddingBottom="8dp">
 
     <TextView
         android:id="@+id/tai_override_key"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:textColor="?attr/termuxColorOnSurfaceVariant"
-        android:textSize="13sp" />
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        android:textColor="?attr/colorOnSurfaceVariant" />
 
     <TextView
         android:id="@+id/tai_override_value"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="2dp"
-        android:fontFamily="monospace"
-        android:textColor="?attr/termuxColorOnSurface"
-        android:textSize="14sp" />
+        android:textAppearance="?attr/textAppearanceLabelLarge"
+        android:textColor="?attr/colorOnSurface" />
 </LinearLayout>

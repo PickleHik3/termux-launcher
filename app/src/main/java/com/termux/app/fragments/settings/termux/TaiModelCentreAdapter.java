@@ -11,15 +11,18 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
-import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.color.MaterialColors;
 import com.google.android.material.progressindicator.CircularProgressIndicator;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.termux.R;
@@ -299,63 +302,70 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         return context.getTheme().resolveAttribute(attr, value, true) ? value.data : 0xFF808080;
     }
 
-    /** A pill in one of the tones, on the theme's container colours so light and dark both hold. */
+    /** A Material colour role (colorPrimary, colorOnSurfaceVariant, ...) in the view's theme. */
+    static int role(@NonNull Context context, int attr) {
+        return MaterialColors.getColor(context, attr, 0xFF808080);
+    }
+
+    /**
+     * A status chip in one of the tones. The container roles (primary, tertiary, error, and the
+     * neutral surface) come from colour-state resources that name the theme's colour roles, so
+     * light and dark both hold. A plain TextView pill (a layout outside the Model centre still
+     * on the old pill) gets the same roles as tints.
+     */
     static void tonePill(@NonNull TextView pill, @NonNull TaiModelCentreRows.Tone tone) {
         Context context = pill.getContext();
         int background;
         int text;
         switch (tone) {
             case ACCENT:
-                background = com.termux.shared.R.attr.termuxColorPrimaryContainer;
-                text = com.termux.shared.R.attr.termuxColorOnPrimaryContainer;
+                background = R.color.tai_chip_bg_accent;
+                text = R.color.tai_chip_fg_accent;
                 break;
             case WARN:
-                background = com.termux.shared.R.attr.termuxColorTertiaryContainer;
-                text = com.termux.shared.R.attr.termuxColorOnTertiaryContainer;
+                background = R.color.tai_chip_bg_warn;
+                text = R.color.tai_chip_fg_warn;
                 break;
             case ERROR:
-                background = com.termux.shared.R.attr.termuxColorErrorContainer;
-                text = com.termux.shared.R.attr.termuxColorOnErrorContainer;
+                background = R.color.tai_chip_bg_error;
+                text = R.color.tai_chip_fg_error;
                 break;
             default:
-                background = com.termux.shared.R.attr.termuxColorSurfacePanel;
-                text = com.termux.shared.R.attr.termuxColorOnSurfaceVariant;
+                background = R.color.tai_chip_bg_neutral;
+                text = R.color.tai_chip_fg_neutral;
                 break;
         }
-        pill.setBackgroundTintList(ColorStateList.valueOf(color(context, background)));
-        pill.setTextColor(color(context, text));
+        if (pill instanceof Chip) {
+            ((Chip) pill).setChipBackgroundColorResource(background);
+            pill.setTextColor(AppCompatResources.getColorStateList(context, text));
+        } else {
+            pill.setBackgroundTintList(AppCompatResources.getColorStateList(context, background));
+            pill.setTextColor(AppCompatResources.getColorStateList(context, text));
+        }
     }
 
-    /** The one loud pill style: Install, Add, Start now, Retry, the banner's follow-up. */
+    /** The loud action style (Install, Add, Retry, the banner's follow-up); a stock button carries it itself. */
     static void goPill(@NonNull TextView pill) {
-        Context context = pill.getContext();
-        pill.setBackgroundTintList(ColorStateList.valueOf(color(context, com.termux.shared.R.attr.termuxColorPrimary)));
-        pill.setTextColor(color(context, com.termux.shared.R.attr.termuxColorOnPrimary));
+        if (pill instanceof MaterialButton) return;
+        pill.setBackgroundTintList(ColorStateList.valueOf(role(pill.getContext(), com.google.android.material.R.attr.colorPrimary)));
+        pill.setTextColor(role(pill.getContext(), com.google.android.material.R.attr.colorOnPrimary));
     }
 
-    /** The quiet pill style: File, and the Start now pill of a waiting row. */
+    /** The quiet action style (File, Start now, Change window); a stock button carries it itself. */
     static void ghostPill(@NonNull TextView pill) {
-        Context context = pill.getContext();
-        pill.setBackgroundTintList(ColorStateList.valueOf(color(context, com.termux.shared.R.attr.termuxColorSurfacePanelHighest)));
-        pill.setTextColor(color(context, com.termux.shared.R.attr.termuxColorOnSurface));
+        if (pill instanceof MaterialButton) return;
+        pill.setBackgroundTintList(ColorStateList.valueOf(role(pill.getContext(), com.google.android.material.R.attr.colorSurfaceContainerHighest)));
+        pill.setTextColor(role(pill.getContext(), com.google.android.material.R.attr.colorOnSurface));
     }
 
-    /** The quietest pill of all: a model's backend name, dimmer than In use / Default. */
+    /** The quietest chip of all: a model's backend name. */
     static void backendPill(@NonNull TextView pill) {
-        Context context = pill.getContext();
-        pill.setBackgroundTintList(ColorStateList.valueOf(color(context, com.termux.shared.R.attr.termuxColorSurfacePanel)));
-        pill.setTextColor(dim(color(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant), 0xA8));
+        tonePill(pill, TaiModelCentreRows.Tone.NEUTRAL);
     }
 
-    /** The given ARGB colour with its alpha channel replaced. */
-    private static int dim(int argb, int alpha) {
-        return (argb & 0x00FFFFFF) | (alpha << 24);
-    }
-
-    static void roundButton(@NonNull ImageButton button) {
-        Context context = button.getContext();
-        button.setBackgroundTintList(ColorStateList.valueOf(color(context, com.termux.shared.R.attr.termuxColorSurfacePanelHighest)));
-        button.setImageTintList(ColorStateList.valueOf(color(context, com.termux.shared.R.attr.termuxColorOnSurface)));
+    /** Sets a stock icon button's glyph. */
+    static void setIcon(@NonNull MaterialButton button, int drawable) {
+        button.setIcon(AppCompatResources.getDrawable(button.getContext(), drawable));
     }
 
     private static void setText(@NonNull TextView view, @NonNull CharSequence text) {
@@ -371,7 +381,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         final EditText input;
         final TextView file;
         final TextView add;
-        final ImageButton more;
+        final MaterialButton more;
         final TextView error;
 
         LinkHolder(@NonNull View view) {
@@ -381,9 +391,6 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             add = view.findViewById(R.id.tai_centre_link_add);
             more = view.findViewById(R.id.tai_centre_link_more);
             error = view.findViewById(R.id.tai_centre_link_error);
-            ghostPill(file);
-            goPill(add);
-            roundButton(more);
             file.setOnClickListener(v -> callbacks.onLinkFile());
             add.setOnClickListener(v -> callbacks.onLinkAdd(input.getText().toString(), v));
             more.setOnClickListener(callbacks::onLinkMore);
@@ -444,8 +451,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         final TextView subtitle;
         final TextView pill;
         final TextView textAction;
-        final ImageButton toggle;
-        final ImageButton cancel;
+        final MaterialButton toggle;
+        final MaterialButton cancel;
         final LinearProgressIndicator bar;
         final TextView metaStart;
         final TextView metaEnd;
@@ -466,9 +473,6 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             bar = view.findViewById(R.id.tai_centre_bar);
             metaStart = view.findViewById(R.id.tai_centre_meta_start);
             metaEnd = view.findViewById(R.id.tai_centre_meta_end);
-            roundButton(toggle);
-            roundButton(cancel);
-            kind.setImageTintList(ColorStateList.valueOf(color(view.getContext(), com.termux.shared.R.attr.termuxColorOnSurface)));
             // Listeners read the row at tap time, so a rebind never has to swap them.
             toggle.setOnClickListener(v -> {
                 if (row != null && boundToggle != null) callbacks.onDownloadAction(row.snapshot, boundToggle, v);
@@ -506,8 +510,6 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             setText(textAction, startNow ? context.getString(R.string.tai_centre_action_start_now)
                 : retry ? context.getString(retryNeedsToken(next) ? R.string.tai_centre_action_add_token
                     : R.string.tai_centre_action_retry) : "");
-            if (retry) goPill(textAction);
-            else if (startNow) ghostPill(textAction);
 
             TaiModelCentreRows.Action toggleAction = state.actions.contains(TaiModelCentreRows.Action.PAUSE)
                 ? TaiModelCentreRows.Action.PAUSE
@@ -515,7 +517,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             toggle.setVisibility(toggleAction == null ? View.GONE : View.VISIBLE);
             if (toggleAction != null) {
                 boolean pause = toggleAction == TaiModelCentreRows.Action.PAUSE;
-                toggle.setImageResource(pause ? R.drawable.ic_tai_pause : R.drawable.ic_tai_play);
+                setIcon(toggle, pause ? R.drawable.ic_tai_pause : R.drawable.ic_tai_play);
                 toggle.setContentDescription(context.getString(pause ? R.string.tai_centre_action_pause
                     : R.string.tai_centre_action_resume) + " " + next.title);
                 // Pause and play morph into each other on the same row; a recycled holder just shows it.
@@ -538,12 +540,12 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             }
             int indicator;
             switch (state.phase) {
-                case PAUSED: indicator = com.termux.shared.R.attr.termuxColorOnTertiaryContainer; break;
-                case WAITING: indicator = com.termux.shared.R.attr.termuxColorOnSurfaceVariant; break;
-                default: indicator = com.termux.shared.R.attr.termuxColorPrimary; break;
+                case PAUSED: indicator = com.google.android.material.R.attr.colorTertiary; break;
+                case WAITING: indicator = com.google.android.material.R.attr.colorOnSurfaceVariant; break;
+                default: indicator = com.google.android.material.R.attr.colorPrimary; break;
             }
-            bar.setIndicatorColor(color(context, indicator));
-            bar.setTrackColor(color(context, com.termux.shared.R.attr.termuxColorSurfacePanel));
+            // Track and thickness are the theme's; only the phase picks the indicator's role.
+            bar.setIndicatorColor(role(context, indicator));
             boolean indeterminate = state.bar == TaiModelCentreRows.Bar.INDETERMINATE;
             if (bar.isIndeterminate() != indeterminate) {
                 // Switching mode while shown restarts the drawable mid-frame; hide it for the swap.
@@ -567,7 +569,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         final ImageView icon;
         final TextView text;
         final TextView action;
-        final ImageButton dismiss;
+        final MaterialButton dismiss;
         @Nullable Banner banner;
 
         BannerHolder(@NonNull View view) {
@@ -577,13 +579,6 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             text = view.findViewById(R.id.tai_centre_banner_text);
             action = view.findViewById(R.id.tai_centre_banner_action);
             dismiss = view.findViewById(R.id.tai_centre_banner_dismiss);
-            Context context = view.getContext();
-            int on = color(context, com.termux.shared.R.attr.termuxColorOnPrimaryContainer);
-            strip.setBackgroundTintList(ColorStateList.valueOf(color(context, com.termux.shared.R.attr.termuxColorPrimaryContainer)));
-            icon.setImageTintList(ColorStateList.valueOf(on));
-            dismiss.setImageTintList(ColorStateList.valueOf(on));
-            text.setTextColor(on);
-            goPill(action);
             action.setOnClickListener(v -> {
                 if (banner != null) callbacks.onBannerAction(banner);
             });
@@ -626,14 +621,14 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         final TextView pillSecondary;
         final TextView install;
         final CircularProgressIndicator ring;
-        final ImageButton more;
+        final MaterialButton more;
         final TextView note;
         final TextView noteAction;
         @Nullable ModelRow row;
 
         ModelHolder(@NonNull View view) {
             super(view);
-            core = view.findViewById(R.id.tai_centre_core);
+            core = view.findViewById(R.id.tai_centre_shell);
             kind = view.findViewById(R.id.tai_centre_kind_icon);
             title = view.findViewById(R.id.tai_centre_title);
             subtitle = view.findViewById(R.id.tai_centre_subtitle);
@@ -646,15 +641,9 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             more = view.findViewById(R.id.tai_centre_more);
             note = view.findViewById(R.id.tai_centre_note);
             noteAction = view.findViewById(R.id.tai_centre_note_action);
-            Context context = view.getContext();
-            noteAction.setTextColor(color(context, com.termux.shared.R.attr.termuxColorPrimary));
             noteAction.setOnClickListener(v -> {
                 if (row != null) callbacks.onAddToken(row);
             });
-            kind.setImageTintList(ColorStateList.valueOf(color(context, com.termux.shared.R.attr.termuxColorOnSurface)));
-            ring.setIndicatorColor(color(context, com.termux.shared.R.attr.termuxColorPrimary));
-            goPill(install);
-            roundButton(more);
             tonePill(pillSecondary, TaiModelCentreRows.Tone.NEUTRAL);
             backendPill(pillBackend);
             backendPill(pillSpeed);
@@ -692,8 +681,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             more.setVisibility(next.installed != null ? View.VISIBLE : View.GONE);
             more.setContentDescription(context.getString(R.string.tai_centre_action_more, next.title));
             setText(note, next.note);
-            note.setTextColor(color(context, next.noteIsError ? com.termux.shared.R.attr.termuxColorError
-                : com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
+            note.setTextColor(role(context, next.noteIsError ? com.google.android.material.R.attr.colorError
+                : com.google.android.material.R.attr.colorOnSurfaceVariant));
             setText(noteAction, next.tokenAction ? context.getString(R.string.tai_centre_action_add_token) : "");
         }
     }

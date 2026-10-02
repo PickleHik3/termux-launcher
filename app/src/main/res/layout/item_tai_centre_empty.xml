@@ -6,18 +6,17 @@
     android:gravity="center_horizontal"
     android:orientation="vertical"
     android:paddingStart="32dp"
-    android:paddingTop="20dp"
+    android:paddingTop="24dp"
     android:paddingEnd="32dp"
-    android:paddingBottom="12dp">
+    android:paddingBottom="16dp">
 
     <TextView
         android:id="@+id/tai_centre_empty_title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:fontFamily="sans-serif-medium"
         android:gravity="center"
-        android:textColor="?attr/termuxColorOnSurface"
-        android:textSize="13.5sp"
+        android:textAppearance="?attr/textAppearanceTitleMedium"
+        android:textColor="?attr/colorOnSurface"
         android:visibility="gone" />
 
     <TextView
@@ -26,6 +25,6 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="4dp"
         android:gravity="center"
-        android:textColor="?attr/termuxColorOnSurfaceVariant"
-        android:textSize="12sp" />
+        android:textAppearance="?attr/textAppearanceBodyMedium"
+        android:textColor="?attr/colorOnSurfaceVariant" />
 </LinearLayout>

@@ -61,8 +61,6 @@ public final class TaiModelCentreRowPreference extends Preference {
         LinearProgressIndicator bar = (LinearProgressIndicator) view;
         bar.setTag(this);
         boundBar = bar;
-        bar.setIndicatorColor(TaiModelCentreAdapter.color(getContext(), com.termux.shared.R.attr.termuxColorPrimary));
-        bar.setTrackColor(TaiModelCentreAdapter.color(getContext(), com.termux.shared.R.attr.termuxColorSurfacePanelHigh));
         if (!showProgress) {
             bar.setVisibility(View.GONE);
             return;

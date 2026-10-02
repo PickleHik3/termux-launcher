@@ -1,36 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Keyboard › Voice input › Speech model: one installed speech model as a selectable card, in
-     the Model centre's nested-card language. The radio marks the one voice input uses; the whole
-     card is the tap target. -->
+     the Model centre's card language. The radio marks the one voice input uses (the chosen card
+     is also outlined, through the card's checked state); the whole card is the tap target. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:paddingStart="16dp"
-    android:paddingTop="3dp"
+    android:paddingTop="4dp"
     android:paddingEnd="16dp"
-    android:paddingBottom="3dp">
+    android:paddingBottom="4dp">
 
-    <LinearLayout
+    <com.google.android.material.card.MaterialCardView
         android:id="@+id/speech_card_shell"
+        style="@style/Widget.Material3.CardView.Filled"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/tai_centre_shell"
-        android:padding="4dp">
+        android:checkable="true"
+        app:checkedIcon="@null"
+        app:strokeColor="@color/tai_card_stroke"
+        app:strokeWidth="2dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/tai_centre_core"
             android:baselineAligned="false"
             android:gravity="center_vertical"
             android:minHeight="64dp"
             android:orientation="horizontal"
-            android:paddingStart="6dp"
-            android:paddingTop="10dp"
-            android:paddingEnd="12dp"
-            android:paddingBottom="10dp">
+            android:padding="16dp">
 
-            <RadioButton
+            <com.google.android.material.radiobutton.MaterialRadioButton
                 android:id="@+id/speech_card_radio"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -41,7 +41,7 @@
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="2dp"
+                android:layout_marginStart="8dp"
                 android:layout_weight="1"
                 android:orientation="vertical">
 
@@ -49,59 +49,46 @@
                     android:id="@android:id/title"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-medium"
-                    android:textColor="?attr/termuxColorOnSurface"
-                    android:textSize="14.5sp" />
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                    android:textColor="?attr/colorOnSurface" />
 
                 <TextView
                     android:id="@android:id/summary"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:fontFamily="monospace"
-                    android:textColor="?attr/termuxColorOnSurfaceVariant"
-                    android:textSize="11sp" />
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant" />
 
                 <TextView
                     android:id="@+id/speech_card_status"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:textColor="?attr/termuxColorPrimary"
-                    android:textSize="11.5sp"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorPrimary"
                     android:visibility="gone" />
 
-                <TextView
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/speech_card_window"
+                    style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="wrap_content"
-                    android:layout_height="28dp"
+                    android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:background="@drawable/tai_centre_pill"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:fontFamily="sans-serif-medium"
-                    android:gravity="center"
-                    android:paddingStart="12dp"
-                    android:paddingEnd="12dp"
-                    android:textSize="11.5sp"
                     android:visibility="gone" />
             </LinearLayout>
 
-            <TextView
+            <com.google.android.material.chip.Chip
                 android:id="@+id/speech_card_pill"
+                style="@style/Widget.Material3.Chip.Assist"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="top"
                 android:layout_marginStart="8dp"
-                android:background="@drawable/tai_centre_pill"
-                android:fontFamily="sans-serif-medium"
-                android:paddingStart="9dp"
-                android:paddingTop="3dp"
-                android:paddingEnd="9dp"
-                android:paddingBottom="3dp"
+                android:clickable="false"
+                android:focusable="false"
                 android:text="@string/speech_model_in_use"
-                android:textSize="10.5sp"
                 android:visibility="gone" />
         </LinearLayout>
-    </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 </FrameLayout>

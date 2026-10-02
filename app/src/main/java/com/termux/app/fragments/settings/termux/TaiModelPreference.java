@@ -6,18 +6,17 @@ import android.graphics.Typeface;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.View;
-import android.widget.Button;
-import android.widget.ImageButton;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.content.ContextCompat;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.color.MaterialColors;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.termux.R;
 
 /**
@@ -45,7 +44,7 @@ public final class TaiModelPreference extends Preference {
     private CharSequence tuneActionText = "";
     private View.OnClickListener tuneActionClickListener;
     /** The currently bound progress bar, so per-tick updates can skip the rebind entirely. */
-    @Nullable private ProgressBar boundProgressBar;
+    @Nullable private LinearProgressIndicator boundProgressBar;
 
     public TaiModelPreference(@NonNull Context context) {
         super(context);
@@ -148,22 +147,23 @@ public final class TaiModelPreference extends Preference {
 
         TextView title = (TextView) holder.findViewById(android.R.id.title);
         if (title != null) {
-            // Holders recycle, so the default face must be restored explicitly when unset.
-            title.setTypeface(titleTypeface != null
-                ? titleTypeface : Typeface.create("sans-serif-medium", Typeface.NORMAL));
+            // Holders recycle, so the theme's title style is re-applied when no face is set; the
+            // font picker's own face (each row previews its family) is laid over it after.
+            title.setTextAppearance(titleAppearance());
+            if (titleTypeface != null) title.setTypeface(titleTypeface);
             if (recommended) {
                 title.setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_star_16, 0, 0, 0);
                 title.setCompoundDrawablePadding(dp(5));
                 title.setCompoundDrawableTintList(ColorStateList.valueOf(
-                    resolveAttrColor(com.termux.shared.R.attr.termuxColorPrimary)));
+                    MaterialColors.getColor(getContext(), com.google.android.material.R.attr.colorPrimary, 0)));
             } else {
                 title.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, 0, 0);
             }
         }
 
         View view = holder.findViewById(R.id.tai_download_progress);
-        if (view instanceof ProgressBar) {
-            ProgressBar progressBar = (ProgressBar) view;
+        if (view instanceof LinearProgressIndicator) {
+            LinearProgressIndicator progressBar = (LinearProgressIndicator) view;
             progressBar.setVisibility(showProgress ? View.VISIBLE : View.GONE);
             progressBar.setIndeterminate(indeterminate);
             progressBar.setProgress(progress);
@@ -178,23 +178,9 @@ public final class TaiModelPreference extends Preference {
             } else {
                 pill.setVisibility(View.VISIBLE);
                 if (!pillText.toString().contentEquals(pill.getText())) pill.setText(pillText);
-                int pillTextColor;
-                int pillBgColor;
-                if (pillAccent) {
-                    int pillAttr = backendTone == BackendTone.MNN
-                        ? com.termux.shared.R.attr.termuxColorTertiaryContainer
-                        : com.termux.shared.R.attr.termuxColorPrimaryContainer;
-                    int pillOnAttr = backendTone == BackendTone.MNN
-                        ? com.termux.shared.R.attr.termuxColorOnTertiaryContainer
-                        : com.termux.shared.R.attr.termuxColorOnPrimaryContainer;
-                    pillTextColor = resolveAttrColor(pillOnAttr);
-                    pillBgColor = resolveAttrColor(pillAttr);
-                } else {
-                    pillTextColor = resolveAttrColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant);
-                    pillBgColor = resolveAttrColor(com.termux.shared.R.attr.termuxColorSurfacePanel);
-                }
-                pill.setTextColor(pillTextColor);
-                pill.setBackgroundTintList(ColorStateList.valueOf(pillBgColor));
+                // LiteRT reads as the accent, MNN as the tertiary (warn) container, the rest quiet.
+                TaiModelCentreAdapter.tonePill(pill, !pillAccent ? TaiModelCentreRows.Tone.NEUTRAL
+                    : backendTone == BackendTone.MNN ? TaiModelCentreRows.Tone.WARN : TaiModelCentreRows.Tone.ACCENT);
             }
         }
 
@@ -208,18 +194,22 @@ public final class TaiModelPreference extends Preference {
             }
         }
 
-        ImageButton tuneAction = (ImageButton) holder.findViewById(R.id.tai_model_tune_action);
+        MaterialButton tuneAction = (MaterialButton) holder.findViewById(R.id.tai_model_tune_action);
         boolean showTune = bindTuneButton(tuneAction, tuneActionText);
-        Button primaryAction = (Button) holder.findViewById(R.id.tai_model_primary_action);
-        boolean showPrimary = bindActionButton(primaryAction, primaryActionText, primaryActionEnabled);
-        if (primaryAction != null && showPrimary) {
-            tintPrimaryAction(primaryAction);
-        }
+        // A destructive action is the same button in the error role (a second stock button),
+        // so the role comes from its style, not from tinting.
+        MaterialButton primaryAction = (MaterialButton) holder.findViewById(R.id.tai_model_primary_action);
+        MaterialButton destructiveAction = (MaterialButton) holder.findViewById(R.id.tai_model_primary_action_destructive);
+        boolean showPrimary = bindActionButton(primaryDestructive() ? null : primaryAction, primaryActionText, primaryActionEnabled);
+        boolean showDestructive = bindActionButton(primaryDestructive() ? destructiveAction : null, primaryActionText, primaryActionEnabled);
+        if (primaryDestructive() && primaryAction != null) primaryAction.setVisibility(View.GONE);
+        if (!primaryDestructive() && destructiveAction != null) destructiveAction.setVisibility(View.GONE);
+        showPrimary |= showDestructive;
         LinearLayout actions = (LinearLayout) holder.findViewById(R.id.tai_model_actions);
         if (actions != null) actions.setVisibility(showTune || showPrimary ? View.VISIBLE : View.GONE);
     }
 
-    private boolean bindActionButton(@Nullable Button button, @NonNull CharSequence text,
+    private boolean bindActionButton(@Nullable MaterialButton button, @NonNull CharSequence text,
                                      boolean enabled) {
         if (button == null) return false;
         if (text.length() == 0) {
@@ -244,24 +234,17 @@ public final class TaiModelPreference extends Preference {
         return Math.round(value * getContext().getResources().getDisplayMetrics().density);
     }
 
-    private void tintPrimaryAction(@NonNull Button button) {
-        int backgroundAttr;
-        int textAttr;
-        if (!button.isEnabled()) {
-            backgroundAttr = com.termux.shared.R.attr.termuxColorSurfacePanelHigh;
-            textAttr = com.termux.shared.R.attr.termuxColorOnSurfaceVariant;
-        } else if (primaryActionDestructive) {
-            backgroundAttr = com.termux.shared.R.attr.termuxColorErrorContainer;
-            textAttr = com.termux.shared.R.attr.termuxColorOnErrorContainer;
-        } else {
-            backgroundAttr = com.termux.shared.R.attr.termuxColorPrimaryContainer;
-            textAttr = com.termux.shared.R.attr.termuxColorOnPrimaryContainer;
-        }
-        button.setBackgroundTintList(ColorStateList.valueOf(resolveAttrColor(backgroundAttr)));
-        button.setTextColor(resolveAttrColor(textAttr));
+    private boolean primaryDestructive() {
+        return primaryActionDestructive;
     }
 
-    private boolean bindTuneButton(@Nullable ImageButton button, @NonNull CharSequence text) {
+    private int titleAppearance() {
+        TypedValue value = new TypedValue();
+        getContext().getTheme().resolveAttribute(com.google.android.material.R.attr.textAppearanceTitleMedium, value, true);
+        return value.resourceId;
+    }
+
+    private boolean bindTuneButton(@Nullable MaterialButton button, @NonNull CharSequence text) {
         if (button == null) return false;
         if (text.length() == 0) {
             button.setVisibility(View.GONE);
@@ -272,22 +255,10 @@ public final class TaiModelPreference extends Preference {
         button.setEnabled(true);
         // The caller's label ("Parameters", "Change window") is what a screen reader announces.
         button.setContentDescription(text);
-        button.setImageTintList(ColorStateList.valueOf(
-            resolveAttrColor(com.termux.shared.R.attr.termuxColorOnSurface)));
-        button.setBackgroundTintList(ColorStateList.valueOf(
-            resolveAttrColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh)));
         button.setOnClickListener(view -> {
             View.OnClickListener current = tuneActionClickListener;
             if (current != null) current.onClick(view);
         });
         return true;
-    }
-
-    private int resolveAttrColor(int attr) {
-        TypedValue value = new TypedValue();
-        if (getContext().getTheme().resolveAttribute(attr, value, true)) {
-            return value.data;
-        }
-        return ContextCompat.getColor(getContext(), R.color.termux_on_surface_variant);
     }
 }

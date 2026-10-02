@@ -1,119 +1,118 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:paddingStart="16dp"
-    android:paddingTop="2dp"
+    android:paddingTop="4dp"
     android:paddingEnd="16dp"
-    android:paddingBottom="2dp">
+    android:paddingBottom="4dp">
 
-    <LinearLayout
+    <com.google.android.material.card.MaterialCardView
+        style="@style/Widget.Material3.CardView.Filled"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="@drawable/settings_card_background"
-        android:orientation="vertical"
-        android:paddingStart="10dp"
-        android:paddingTop="7dp"
-        android:paddingEnd="10dp"
-        android:paddingBottom="7dp">
+        android:layout_height="wrap_content">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:baselineAligned="false"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:id="@android:id/title"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textAppearance="?attr/textAppearanceTitleMedium"
+                    android:textColor="?attr/colorOnSurface" />
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/tai_model_pill"
+                    style="@style/Widget.Material3.Chip.Assist"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="16dp"
+                    android:clickable="false"
+                    android:focusable="false"
+                    android:visibility="gone" />
+            </LinearLayout>
 
             <TextView
-                android:id="@android:id/title"
-                android:layout_width="0dp"
+                android:id="@android:id/summary"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:fontFamily="sans-serif-medium"
-                android:textColor="?attr/termuxColorOnSurface"
-                android:textSize="13.5sp" />
+                android:layout_marginTop="2dp"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant" />
 
             <TextView
-                android:id="@+id/tai_model_pill"
-                android:layout_width="wrap_content"
+                android:id="@+id/tai_model_meta"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="12dp"
-                android:background="@drawable/settings_pill_background"
-                android:fontFamily="monospace"
-                android:letterSpacing="0.04"
-                android:paddingStart="8dp"
-                android:paddingTop="1dp"
-                android:paddingEnd="8dp"
-                android:paddingBottom="1dp"
-                android:textSize="9.5sp"
-                android:textStyle="bold"
+                android:layout_marginTop="4dp"
+                android:textAppearance="?attr/textAppearanceLabelSmall"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:visibility="gone" />
+
+            <LinearLayout
+                android:id="@+id/tai_model_actions"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="end|center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/tai_model_tune_action"
+                    style="?attr/materialIconButtonFilledTonalStyle"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:contentDescription="@string/termux_ai_model_tune_action"
+                    android:visibility="gone"
+                    app:icon="@drawable/ic_tune_sliders_24" />
+
+                <!-- cursorVisible=false: Nothing OS (Android 16) briefly paints a ghost insertion
+                     cursor over the last glyph when a button's text is (re)bound while the row is
+                     on screen, which reads as a grey overlay on the label during downloads. -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/tai_model_primary_action"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:contentDescription="@string/termux_ai_model_primary_action_desc"
+                    android:cursorVisible="false"
+                    android:visibility="gone" />
+
+                <!-- The same action in the error role, for a destructive one (Delete). -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/tai_model_primary_action_destructive"
+                    style="@style/Widget.Tai.Button.Error"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:contentDescription="@string/termux_ai_model_primary_action_desc"
+                    android:cursorVisible="false"
+                    android:visibility="gone" />
+            </LinearLayout>
+
+            <com.google.android.material.progressindicator.LinearProgressIndicator
+                android:id="@+id/tai_download_progress"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:indeterminate="false"
+                android:max="10000"
                 android:visibility="gone" />
         </LinearLayout>
-
-        <TextView
-            android:id="@android:id/summary"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:textColor="?attr/termuxColorOnSurfaceVariant"
-            android:textSize="11sp" />
-
-        <TextView
-            android:id="@+id/tai_model_meta"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="3dp"
-            android:fontFamily="monospace"
-            android:textSize="10sp"
-            android:visibility="gone" />
-
-        <LinearLayout
-            android:id="@+id/tai_model_actions"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:gravity="end|center_vertical"
-            android:orientation="horizontal"
-            android:visibility="gone">
-
-            <ImageButton
-                android:id="@+id/tai_model_tune_action"
-                style="?android:attr/borderlessButtonStyle"
-                android:layout_width="36dp"
-                android:layout_height="36dp"
-                android:background="@drawable/settings_pill_background"
-                android:minWidth="0dp"
-                android:padding="8dp"
-                android:contentDescription="@string/termux_ai_model_tune_action"
-                android:src="@drawable/ic_tune_sliders_24"
-                android:visibility="gone" />
-
-            <!-- cursorVisible=false: Nothing OS (Android 16) briefly paints a ghost insertion
-                 cursor over the last glyph when a button's text is (re)bound while the row is
-                 on screen, which reads as a grey overlay on the label during downloads. -->
-            <Button
-                android:id="@+id/tai_model_primary_action"
-                android:layout_width="wrap_content"
-                android:layout_height="36dp"
-                android:layout_marginStart="8dp"
-                android:minWidth="0dp"
-                android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:contentDescription="@string/termux_ai_model_primary_action_desc"
-                android:cursorVisible="false"
-                android:textAllCaps="false"
-                android:textSize="11.5sp"
-                android:visibility="gone" />
-        </LinearLayout>
-
-        <ProgressBar
-            android:id="@+id/tai_download_progress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="5dp"
-            android:indeterminate="false"
-            android:max="10000"
-            android:visibility="gone" />
-    </LinearLayout>
+    </com.google.android.material.card.MaterialCardView>
 </LinearLayout>

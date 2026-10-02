@@ -1,12 +1,11 @@
 package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
-import android.content.res.ColorStateList;
-import android.graphics.Typeface;
 import android.os.Build;
 import android.text.format.DateUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -16,6 +15,9 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.chip.Chip;
 import com.termux.R;
 import com.termux.ai.TaiBenchStats;
 import com.termux.ai.TaiBenchSuite;
@@ -24,11 +26,11 @@ import com.termux.ai.TaiModelSpec;
 import java.util.Locale;
 
 /**
- * The benchmark screens' building blocks, in the Model centre's dress: a tonal card (the
- * {@code tai_centre_shell} tray with a {@code tai_centre_core} surface inside), small-caps
- * section headers, monospace detail lines, the pills, and the number formats every screen shares.
- * Everything takes its colours from the theme attributes through
- * {@link TaiModelCentreAdapter#color}, so light and dark both hold.
+ * The benchmark screens' building blocks, in the Model centre's dress, all stock Material 3: a
+ * filled {@link MaterialCardView}, section headers in the title-small style, text on the type
+ * scale, {@link Chip} status pills and {@link MaterialButton} actions, and the number formats
+ * every screen shares. Colours are the theme's roles and sizes its text appearances, so light and
+ * dark both hold.
  */
 final class TaiBenchViews {
     private TaiBenchViews() {
@@ -37,10 +39,10 @@ final class TaiBenchViews {
     /** A card: {@link #outer} goes into the list, {@link #core} takes the content. */
     static final class Card {
         @NonNull final FrameLayout outer;
-        @NonNull final LinearLayout shell;
+        @NonNull final MaterialCardView shell;
         @NonNull final LinearLayout core;
 
-        Card(@NonNull FrameLayout outer, @NonNull LinearLayout shell, @NonNull LinearLayout core) {
+        Card(@NonNull FrameLayout outer, @NonNull MaterialCardView shell, @NonNull LinearLayout core) {
             this.outer = outer;
             this.shell = shell;
             this.core = core;
@@ -55,47 +57,50 @@ final class TaiBenchViews {
         return TaiModelCentreAdapter.color(context, attr);
     }
 
+    /** The text appearance a theme attribute (textAppearanceBodyMedium, ...) points at. */
+    static int appearance(@NonNull Context context, int attr) {
+        TypedValue value = new TypedValue();
+        context.getTheme().resolveAttribute(attr, value, true);
+        return value.resourceId;
+    }
+
+    private static void style(@NonNull TextView view, int appearanceAttr, int colorAttr) {
+        view.setTextAppearance(appearance(view.getContext(), appearanceAttr));
+        view.setTextColor(TaiModelCentreAdapter.role(view.getContext(), colorAttr));
+    }
+
     @NonNull
     static Card card(@NonNull Context context) {
         FrameLayout outer = new FrameLayout(context);
-        outer.setPadding(dp(context, 16), dp(context, 3), dp(context, 16), dp(context, 3));
-        LinearLayout shell = new LinearLayout(context);
-        shell.setOrientation(LinearLayout.VERTICAL);
-        shell.setBackgroundResource(R.drawable.tai_centre_shell);
-        int pad = dp(context, 4);
-        shell.setPadding(pad, pad, pad, pad);
+        outer.setPadding(dp(context, 16), dp(context, 4), dp(context, 16), dp(context, 4));
+        MaterialCardView shell = new MaterialCardView(context, null,
+            com.google.android.material.R.attr.materialCardViewFilledStyle);
         LinearLayout core = new LinearLayout(context);
         core.setOrientation(LinearLayout.VERTICAL);
-        core.setBackgroundResource(R.drawable.tai_centre_core);
-        core.setPadding(dp(context, 14), dp(context, 12), dp(context, 14), dp(context, 12));
-        shell.addView(core, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        core.setPadding(dp(context, 16), dp(context, 16), dp(context, 16), dp(context, 16));
+        shell.addView(core, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         outer.addView(shell, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return new Card(outer, shell, core);
     }
 
-    /** The Model centre's section header: small caps in the accent, a dim fact at the end. */
+    /** The Model centre's section header: title-small in the primary role, a dim fact at the end. */
     @NonNull
     static View sectionHeader(@NonNull Context context, @NonNull CharSequence title, @NonNull CharSequence end) {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setBaselineAligned(true);
-        row.setPadding(dp(context, 22), dp(context, 16), dp(context, 22), dp(context, 6));
+        row.setPadding(dp(context, 16), dp(context, 16), dp(context, 16), dp(context, 8));
         TextView text = new TextView(context);
         text.setText(title);
-        text.setAllCaps(true);
-        text.setLetterSpacing(0.16f);
-        text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
-        text.setTypeface(Typeface.DEFAULT_BOLD);
-        text.setTextColor(color(context, com.termux.shared.R.attr.termuxColorPrimary));
+        style(text, com.google.android.material.R.attr.textAppearanceTitleSmall, com.google.android.material.R.attr.colorPrimary);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) text.setAccessibilityHeading(true);
         row.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         if (end.length() > 0) {
             TextView fact = new TextView(context);
             fact.setText(end);
-            fact.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
-            fact.setTextColor(color(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
+            style(fact, com.google.android.material.R.attr.textAppearanceLabelMedium, com.google.android.material.R.attr.colorOnSurfaceVariant);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            params.setMarginStart(dp(context, 12));
+            params.setMarginStart(dp(context, 16));
             row.addView(fact, params);
         }
         return row;
@@ -106,9 +111,7 @@ final class TaiBenchViews {
     static TextView title(@NonNull Context context, @NonNull CharSequence text) {
         TextView view = new TextView(context);
         view.setText(text);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13.5f);
-        view.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        view.setTextColor(color(context, com.termux.shared.R.attr.termuxColorOnSurface));
+        style(view, com.google.android.material.R.attr.textAppearanceTitleMedium, com.google.android.material.R.attr.colorOnSurface);
         return view;
     }
 
@@ -117,100 +120,84 @@ final class TaiBenchViews {
     static TextView body(@NonNull Context context, @NonNull CharSequence text) {
         TextView view = new TextView(context);
         view.setText(text);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-        view.setTextColor(color(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
+        style(view, com.google.android.material.R.attr.textAppearanceBodyMedium, com.google.android.material.R.attr.colorOnSurfaceVariant);
         return view;
     }
 
-    /** The Model centre's monospace detail line. */
+    /** A small detail line (package names, figures); the type scale's body-small. */
     @NonNull
     static TextView mono(@NonNull Context context, @NonNull CharSequence text) {
         TextView view = new TextView(context);
         view.setText(text);
-        view.setTypeface(Typeface.MONOSPACE);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
-        view.setTextColor(color(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant));
+        style(view, com.google.android.material.R.attr.textAppearanceBodySmall, com.google.android.material.R.attr.colorOnSurfaceVariant);
         return view;
     }
 
-    /** A big figure, for a tile or the Result headline. */
+    /** A big figure, for a tile or the Result headline, on the type scale entry {@code appearanceAttr}. */
     @NonNull
-    static TextView figure(@NonNull Context context, @NonNull CharSequence text, float sp) {
+    static TextView figure(@NonNull Context context, @NonNull CharSequence text, int appearanceAttr) {
         TextView view = new TextView(context);
         view.setText(text);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
-        view.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        view.setTextColor(color(context, com.termux.shared.R.attr.termuxColorOnSurface));
+        style(view, appearanceAttr, com.google.android.material.R.attr.colorOnSurface);
         return view;
     }
 
-    /** A small pill in a tone; empty text hides it. */
+    /** A big figure sized by the old sp request: the nearest type scale entry (headline for 30sp and up). */
+    @NonNull
+    static TextView figure(@NonNull Context context, @NonNull CharSequence text, float sp) {
+        return figure(context, text, sp >= 30f ? com.google.android.material.R.attr.textAppearanceHeadlineLarge
+            : sp >= 16f ? com.google.android.material.R.attr.textAppearanceTitleLarge
+            : com.google.android.material.R.attr.textAppearanceTitleMedium);
+    }
+
+    /** A status chip in a tone; empty text hides it. */
     @NonNull
     static TextView pill(@NonNull Context context, @NonNull CharSequence text, @NonNull TaiModelCentreRows.Tone tone) {
-        TextView pill = new TextView(context);
+        Chip pill = new Chip(context);
         pill.setText(text);
-        pill.setBackgroundResource(R.drawable.tai_centre_pill);
-        pill.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        pill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f);
-        pill.setPadding(dp(context, 9), dp(context, 3), dp(context, 9), dp(context, 3));
+        pill.setCheckable(false);
+        pill.setClickable(false);
+        pill.setFocusable(false);
         pill.setSingleLine(true);
         TaiModelCentreAdapter.tonePill(pill, tone);
         pill.setVisibility(text.length() == 0 ? View.GONE : View.VISIBLE);
         return pill;
     }
 
-    /** The quiet backend pill ("LiteRT", "MNN"). */
+    /** The quiet backend chip ("LiteRT", "MNN"). */
     @NonNull
     static TextView backendPill(@NonNull Context context, @NonNull String backend) {
-        TextView pill = pill(context, backendLabel(context, backend), TaiModelCentreRows.Tone.NEUTRAL);
-        TaiModelCentreAdapter.backendPill(pill);
-        return pill;
+        return pill(context, backendLabel(context, backend), TaiModelCentreRows.Tone.NEUTRAL);
     }
 
-    /** The one loud button: Run a benchmark, Start, Run this model again. */
+    /** The one loud button: Run a benchmark, Start, Run this model again. A filled button. */
     @NonNull
     static TextView goButton(@NonNull Context context, @NonNull CharSequence text) {
-        TextView button = actionButton(context, text);
-        TaiModelCentreAdapter.goPill(button);
+        MaterialButton button = new MaterialButton(context);
+        button.setText(text);
         return button;
     }
 
-    /** The quiet button: Show why, Skip the wait, Stop. */
+    /** The quiet button: Show why, Skip the wait, Stop. A tonal button. */
     @NonNull
     static TextView ghostButton(@NonNull Context context, @NonNull CharSequence text) {
-        TextView button = actionButton(context, text);
-        TaiModelCentreAdapter.ghostPill(button);
+        MaterialButton button = (MaterialButton) LayoutInflater.from(context).inflate(R.layout.view_tai_button_tonal, null, false);
+        button.setText(text);
         return button;
     }
 
-    /** A button in the error tone: Stop, Delete results. */
+    /** A button in the error role: Stop, Delete results. */
     @NonNull
     static TextView errorButton(@NonNull Context context, @NonNull CharSequence text) {
-        TextView button = actionButton(context, text);
-        button.setBackgroundTintList(ColorStateList.valueOf(color(context, com.termux.shared.R.attr.termuxColorErrorContainer)));
-        button.setTextColor(color(context, com.termux.shared.R.attr.termuxColorOnErrorContainer));
-        return button;
-    }
-
-    @NonNull
-    private static TextView actionButton(@NonNull Context context, @NonNull CharSequence text) {
-        TextView button = new TextView(context);
+        MaterialButton button = (MaterialButton) LayoutInflater.from(context).inflate(R.layout.view_tai_button_error, null, false);
         button.setText(text);
-        button.setBackgroundResource(R.drawable.tai_centre_pill);
-        button.setClickable(true);
-        button.setFocusable(true);
-        button.setGravity(Gravity.CENTER);
-        button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12.5f);
-        button.setMinHeight(dp(context, 36));
-        button.setPadding(dp(context, 16), 0, dp(context, 16), 0);
         return button;
     }
 
-    /** Dims a button that cannot be tapped now, and says so to accessibility. */
+    /** Enables or disables a button; a stock button draws its own disabled state. */
     static void setEnabled(@NonNull View button, boolean enabled) {
         button.setEnabled(enabled);
-        button.setAlpha(enabled ? 1f : 0.45f);
+        if (!(button instanceof MaterialButton)) button.setAlpha(enabled ? 1f : 0.45f);
     }
 
     /** A horizontal row of views with a gap between them. */
