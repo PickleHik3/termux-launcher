@@ -31,9 +31,9 @@ public final class GlassRimRenderer {
      * edge of the drawer plane, the dock capsule, every anchored menu and every terminal pane all
      * being invisible at once.
      */
-    private static final int BASE_COLOR = 0x3DFFFFFF;
-    private static final int LIGHT_TOP_COLOR = 0x7DFFFFFF;
-    private static final int SHIMMER_COLOR = 0xC8FFFFFF;
+    private static final int BASE_COLOR = com.termux.app.chrome.GlassTokens.RIM_BASE;
+    private static final int LIGHT_TOP_COLOR = com.termux.app.chrome.GlassTokens.RIM_LIGHT_TOP;
+    private static final int SHIMMER_COLOR = com.termux.app.chrome.GlassTokens.RIM_SHIMMER;
 
     private final Paint basePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint lightPaint = new Paint(Paint.ANTI_ALIAS_FLAG);

@@ -455,7 +455,7 @@ public final class CommandPaletteView extends View {
     }
 
     private float lineHeight(float sizeDp) {
-        mMono.setTextSize(dp(sizeDp));
+        mMono.setTextSize(sp(sizeDp));
         Paint.FontMetrics metrics = mMono.getFontMetrics();
         return metrics.descent - metrics.ascent;
     }
@@ -572,14 +572,14 @@ public final class CommandPaletteView extends View {
         // meta right-aligned inside it instead of on a row of their own.
         float filterBottom = mFrame.top + dp(FILTER_ROW_H);
         drawHairline(canvas, filterBottom, ColorUtils.setAlphaComponent(Color.WHITE, 26), alpha);
-        mMono.setTextSize(dp(SIZE_FILTER));
+        mMono.setTextSize(sp(SIZE_FILTER));
         mMono.setLetterSpacing(0f);
         mMono.setColor(withBodyAlpha(mPrimary, alpha));
         float promptBaseline = baseline(mFrame.top, dp(FILTER_ROW_H), mMono);
         canvas.drawText("❯", mFrame.left + dp(ROW_PAD_LEFT), promptBaseline, mMono);
         float queryStart = mFrame.left + dp(ROW_PAD_LEFT) + mMono.measureText("❯ ");
 
-        mMono.setTextSize(dp(SIZE_META));
+        mMono.setTextSize(sp(SIZE_META));
         mMono.setColor(withBodyAlpha(mMeta, alpha));
         float metaWidth = mMono.measureText(mMetaText);
         canvas.drawText(mMetaText, mFrame.right - dp(ROW_PAD_RIGHT) - metaWidth,
@@ -588,7 +588,7 @@ public final class CommandPaletteView extends View {
             - (metaWidth > 0f ? metaWidth + dp(8f) : 0f);
 
         if (!mCrumb.isEmpty()) {
-            mMono.setTextSize(dp(SIZE_CRUMB));
+            mMono.setTextSize(sp(SIZE_CRUMB));
             mMono.setColor(withBodyAlpha(mOnSurfaceVariant, alpha));
             String crumb = ellipsize(mMono, "/ " + mCrumb, (queryEnd - queryStart) * 0.5f);
             float crumbWidth = mMono.measureText(crumb);
@@ -596,7 +596,7 @@ public final class CommandPaletteView extends View {
             queryEnd -= crumbWidth + dp(8f);
         }
 
-        mMono.setTextSize(dp(SIZE_FILTER));
+        mMono.setTextSize(sp(SIZE_FILTER));
         boolean showPlaceholder = mQuery.isEmpty();
         mMono.setColor(withBodyAlpha(showPlaceholder ? mMeta : mOnSurface, alpha));
         String queryText = showPlaceholder ? mQueryPlaceholder : mQuery;
@@ -688,7 +688,7 @@ public final class CommandPaletteView extends View {
             canvas.drawRect(mFrame.left, top, mFrame.left + dp(FOCUS_BAR_W), top + height, mFill);
         }
         int titleColor = row.enabled ? mOnSurface : mMeta;
-        mMono.setTextSize(dp(SIZE_ROW));
+        mMono.setTextSize(sp(SIZE_ROW));
         mMono.setLetterSpacing(0f);
         mMono.setColor(withBodyAlpha(titleColor, row.enabled ? alpha : alpha / 2));
         float titleBaseline = top + dp(ROW_PAD_V) - mMono.getFontMetrics().ascent;
@@ -698,22 +698,22 @@ public final class CommandPaletteView extends View {
             textLeft += dp(ICON_SIZE) + dp(ICON_GAP);
         }
 
-        mMono.setTextSize(dp(SIZE_SHORTCUT));
+        mMono.setTextSize(sp(SIZE_SHORTCUT));
         float shortcutWidth = row.shortcut.isEmpty() ? 0f
             : mMono.measureText(row.shortcut) + dp(10f);
-        mMono.setTextSize(dp(SIZE_ROW));
+        mMono.setTextSize(sp(SIZE_ROW));
         float titleWidth = mFrame.right - dp(ROW_PAD_RIGHT) - shortcutWidth - textLeft;
         canvas.drawText(ellipsize(mMono, row.primary, titleWidth), textLeft, titleBaseline, mMono);
 
         if (!row.shortcut.isEmpty()) {
-            mMono.setTextSize(dp(SIZE_SHORTCUT));
+            mMono.setTextSize(sp(SIZE_SHORTCUT));
             mMono.setColor(withBodyAlpha(mOnSurfaceVariant, alpha));
             canvas.drawText(row.shortcut,
                 mFrame.right - dp(ROW_PAD_RIGHT) - mMono.measureText(row.shortcut),
                 titleBaseline, mMono);
         }
         if (focused && row.description != null && !row.description.isEmpty()) {
-            mMono.setTextSize(dp(SIZE_DESCRIPTION));
+            mMono.setTextSize(sp(SIZE_DESCRIPTION));
             mMono.setColor(withBodyAlpha(mMeta, alpha));
             float descriptionBaseline = titleBaseline + lineHeightOf(mMono);
             float width = mFrame.right - dp(ROW_PAD_RIGHT) - textLeft;
@@ -742,7 +742,7 @@ public final class CommandPaletteView extends View {
     /** {@code ── LABEL} followed by a hairline filling the remaining width. */
     private void drawRule(@NonNull Canvas canvas, @NonNull String label, float top, int alpha,
                           @ColorInt int color) {
-        mMono.setTextSize(dp(SIZE_CATEGORY));
+        mMono.setTextSize(sp(SIZE_CATEGORY));
         mMono.setLetterSpacing(0.1f);
         mMono.setColor(withBodyAlpha(color, alpha));
         float baseline = top + dp(8f) - mMono.getFontMetrics().ascent;
@@ -768,7 +768,7 @@ public final class CommandPaletteView extends View {
         canvas.drawRect(mFrame.left, top, mFrame.right, mFrame.bottom, mFill);
         drawHairline(canvas, top, ColorUtils.setAlphaComponent(mPrimary, 56), alpha);
 
-        mMono.setTextSize(dp(SIZE_FILTER));
+        mMono.setTextSize(sp(SIZE_FILTER));
         mMono.setLetterSpacing(0f);
         float argBaseline = baseline(top, dp(ARG_ROW_H), mMono);
         mMono.setColor(withBodyAlpha(mPrimary, alpha));
@@ -812,13 +812,13 @@ public final class CommandPaletteView extends View {
             mRect.set(cap.left + inset, cap.top + inset, cap.right - inset, cap.bottom - inset);
             canvas.drawRoundRect(mRect, radius, radius, mStroke);
 
-            mMono.setTextSize(dp(SIZE_CAP_GLYPH));
+            mMono.setTextSize(sp(SIZE_CAP_GLYPH));
             mMono.setLetterSpacing(0f);
             float baseline = baseline(cap.top, cap.height(), mMono);
             mMono.setColor(withBodyAlpha(mPrimary, alpha));
             canvas.drawText(keycap.glyph, cap.left + dp(CAP_PAD_H), baseline, mMono);
             float labelStart = cap.left + dp(CAP_PAD_H) + mMono.measureText(keycap.glyph) + dp(4f);
-            mMono.setTextSize(dp(SIZE_CAP_LABEL));
+            mMono.setTextSize(sp(SIZE_CAP_LABEL));
             mMono.setColor(withBodyAlpha(mCapLabel, alpha));
             // Clipped to the cap it belongs to: layoutKeycaps may have scaled the caps down to fit
             // the row, and the text does not scale with them, so an unclipped label ran past its own
@@ -836,7 +836,7 @@ public final class CommandPaletteView extends View {
     private void layoutKeycaps() {
         mCapRects.clear();
         if (mKeycaps.isEmpty() || mFrame.isEmpty()) return;
-        mMono.setTextSize(dp(SIZE_CAP_LABEL));
+        mMono.setTextSize(sp(SIZE_CAP_LABEL));
         float capHeight = dp(CAP_PAD_V) * 2f + lineHeight(SIZE_CAP_GLYPH);
         float top = mFrame.bottom + dp(STRIP_GAP);
         float available = mFrame.width() - dp(STRIP_LEFT_EXTRA);
@@ -844,9 +844,9 @@ public final class CommandPaletteView extends View {
         float total = dp(CAP_GAP) * (mKeycaps.size() - 1);
         for (int i = 0; i < mKeycaps.size(); i++) {
             Keycap keycap = mKeycaps.get(i);
-            mMono.setTextSize(dp(SIZE_CAP_GLYPH));
+            mMono.setTextSize(sp(SIZE_CAP_GLYPH));
             float glyph = mMono.measureText(keycap.glyph);
-            mMono.setTextSize(dp(SIZE_CAP_LABEL));
+            mMono.setTextSize(sp(SIZE_CAP_LABEL));
             widths[i] = dp(CAP_PAD_H) * 2f + glyph + dp(4f) + mMono.measureText(keycap.label);
             total += widths[i];
         }
@@ -1110,6 +1110,12 @@ public final class CommandPaletteView extends View {
 
     private static int withBodyAlpha(@ColorInt int color, int alpha) {
         return ColorUtils.setAlphaComponent(color, Color.alpha(color) * alpha / 255);
+    }
+
+    /** Font-scale-aware px for a size in sp. */
+    private float sp(float value) {
+        return android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, value,
+            getResources().getDisplayMetrics());
     }
 
     private float dp(float value) {

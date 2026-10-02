@@ -51,7 +51,7 @@ final class GridSizeWheelView extends View {
         mValue = policy.clamp(value);
         mPaint.setTextAlign(Paint.Align.CENTER);
         mPaint.setTypeface(Typeface.DEFAULT_BOLD);
-        mPaint.setTextSize(dp(20));
+        mPaint.setTextSize(sp(20));
         setClickable(true);
         setFocusable(true);
     }
@@ -165,6 +165,12 @@ final class GridSizeWheelView extends View {
 
     private float step() {
         return dp(GridSizeWheelPolicy.STEP_DP);
+    }
+
+    /** Font-scale-aware px for a size in sp. */
+    private float sp(float value) {
+        return android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, value,
+            getResources().getDisplayMetrics());
     }
 
     private float dp(float value) {

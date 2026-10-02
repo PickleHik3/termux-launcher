@@ -203,8 +203,8 @@ public final class HelpOverlayView extends FrameLayout {
         // Above every control it marks. The dock, the A-Z row, the extra keys and the keyboard are
         // lifted between 6 and 40dp, and exploration has to wash over all of them; the outline is
         // dropped so the height casts no shadow of its own.
-        setElevation(dp(56));
-        setTranslationZ(dp(56));
+        setElevation(com.termux.app.chrome.ShapeTokens.elevationPx(context, 5));
+        setTranslationZ(dp(100)); // 12dp level-5 elevation + 100dp = the original 112dp stack height
         setOutlineProvider(null);
         setWillNotDraw(false);
         setClickable(true);
