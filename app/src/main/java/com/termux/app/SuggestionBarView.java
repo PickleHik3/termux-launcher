@@ -4240,7 +4240,8 @@ public final class SuggestionBarView extends GridLayout
                 com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT));
             FrameLayout.LayoutParams badge = new FrameLayout.LayoutParams(miniSize, miniSize,
                 Gravity.END | Gravity.BOTTOM);
-            badge.setMargins(0, 0, pinnedFolderMiniIconMarginPx(), pinnedFolderMiniIconMarginPx());
+            badge.bottomMargin = pinnedFolderMiniIconMarginPx();
+            badge.setMarginEnd(pinnedFolderMiniIconMarginPx());
             iconShell.addView(overflow, badge);
         }
         iconShell.addView(miniGrid, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));

@@ -389,7 +389,7 @@ public final class NotificationCardSurface {
         reply.setTextColor(host.textColor());
         reply.setHintTextColor(host.subtleTextColor());
         reply.setTextSize(13f);
-        reply.setPadding(dp(10), 0, dp(8), 0);
+        reply.setPaddingRelative(dp(10), 0, dp(8), 0);
         reply.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         reply.setMinHeight(dp(MIN_TOUCH_DP));
         reply.setMinimumHeight(dp(MIN_TOUCH_DP));
@@ -463,8 +463,8 @@ public final class NotificationCardSurface {
             withAlphaComponent(host.highlightAccentColor(), 0xB0));
         card.setBackground(highlight);
         // Padding, or the stroke clips the title and the action row.
-        card.setPadding(card.getPaddingLeft() + dp(4), card.getPaddingTop(),
-            card.getPaddingRight() + dp(4), card.getPaddingBottom() + dp(3));
+        card.setPaddingRelative(card.getPaddingStart() + dp(4), card.getPaddingTop(),
+            card.getPaddingEnd() + dp(4), card.getPaddingBottom() + dp(3));
         card.post(() -> card.requestRectangleOnScreen(
             new Rect(0, 0, card.getWidth(), card.getHeight()), false));
     }
@@ -648,7 +648,7 @@ public final class NotificationCardSurface {
     private LinearLayout.LayoutParams actionLayoutParams(boolean withStartGap) {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        if (withStartGap) lp.leftMargin = dp(4);
+        if (withStartGap) lp.setMarginStart(dp(4));
         return lp;
     }
 

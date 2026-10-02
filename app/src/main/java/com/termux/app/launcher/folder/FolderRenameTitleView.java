@@ -77,14 +77,17 @@ public final class FolderRenameTitleView extends View {
         float baseline = (getHeight() - (paint.descent() + paint.ascent())) / 2f;
         String text = model.text();
         if (!editing) {
-            canvas.drawText(TextUtils.ellipsize(text, paint, viewport, TextUtils.TruncateAt.END)
-                .toString(), left, baseline, paint);
+            String shown = TextUtils.ellipsize(text, paint, viewport, TextUtils.TruncateAt.END)
+                .toString();
+            canvas.drawText(shown, left + startInset(paint.measureText(shown), viewport),
+                baseline, paint);
             return;
         }
         float caretWidth = Math.max(1f, getResources().getDisplayMetrics().density);
         int utf16 = text.offsetByCodePoints(0, model.caret());
         float caretX = paint.measureText(text, 0, utf16);
-        float shift = scrollFor(caretX, caretWidth, viewport);
+        float shift = scrollFor(caretX, caretWidth, viewport)
+            - startInset(paint.measureText(text) + caretWidth, viewport);
         canvas.save();
         canvas.clipRect(left, 0, left + viewport, getHeight());
         canvas.drawText(text, left - shift, baseline, paint);
@@ -92,6 +95,12 @@ public final class FolderRenameTitleView extends View {
         canvas.drawRect(x, baseline + paint.ascent(), x + caretWidth, baseline + paint.descent(),
             paint);
         canvas.restore();
+    }
+
+    /** In a right-to-left popup a name that fits sits against the right, where the row starts. */
+    private float startInset(float textWidth, float viewport) {
+        if (getLayoutDirection() != LAYOUT_DIRECTION_RTL) return 0f;
+        return Math.max(0f, viewport - textWidth);
     }
 
     /** How far the text slides left so a caret at {@code caretX} stays inside the viewport. */
