@@ -137,6 +137,13 @@ Turning the trail on or off is the `terminal_cursor_trail` preference, further g
 mode and on the pane layer's own reduce-motion setting: off means no trail at all, for a cursor
 move inside a pane or a switch between panes alike.
 
+The trail's look is a choice of style: Default, Motion blur, Railgun, Torpedo, Pixie dust or Comet,
+set in Settings, Terminal, Cursor trail. `kitty.conf` can pick one too with
+`custom_shaders cursor-trail-motion-blur | cursor-trail-railgun | cursor-trail-torpedo | cursor-trail-pixiedust | cursor-trail-default`;
+that overrides the Settings choice, and any other kitty shader name is ignored. Separately,
+Settings, Terminal, Terminal effect applies a CRT, green or amber CRT, or TFT grid look to every
+terminal pane (Android 13 and newer only).
+
 ## Kitty graphics Tier 2
 
 The terminal supports:

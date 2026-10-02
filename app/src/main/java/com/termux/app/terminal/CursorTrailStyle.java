@@ -39,6 +39,12 @@ public enum CursorTrailStyle {
         return DEFAULT;
     }
 
+    /** The style to draw: kitty.conf's id wins when non-null, else the preference, else default. */
+    @NonNull
+    public static CursorTrailStyle effective(@Nullable String kittyId, @Nullable String prefId) {
+        return fromId(kittyId != null ? kittyId : prefId);
+    }
+
     /**
      * The style kitty's {@code custom_shaders} entry names, or null when it names none this app
      * has an equivalent for.
