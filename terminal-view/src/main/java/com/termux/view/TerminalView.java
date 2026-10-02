@@ -1750,9 +1750,9 @@ public final class TerminalView extends View {
     /** Hardware keyboard modifiers on the event, plus any the extra keys row held. */
     private static int modifiersOf(MotionEvent e, boolean ctrlLatched, boolean altLatched, boolean shiftLatched) {
         int modifiers = 0;
-        if (shiftLatched || (e != null && e.isShiftPressed())) modifiers |= TerminalEmulator.MOUSE_MODIFIER_SHIFT;
-        if (altLatched || (e != null && e.isAltPressed())) modifiers |= TerminalEmulator.MOUSE_MODIFIER_ALT;
-        if (ctrlLatched || (e != null && e.isCtrlPressed())) modifiers |= TerminalEmulator.MOUSE_MODIFIER_CTRL;
+        if (shiftLatched || (e != null && (e.getMetaState() & KeyEvent.META_SHIFT_ON) != 0)) modifiers |= TerminalEmulator.MOUSE_MODIFIER_SHIFT;
+        if (altLatched || (e != null && (e.getMetaState() & KeyEvent.META_ALT_ON) != 0)) modifiers |= TerminalEmulator.MOUSE_MODIFIER_ALT;
+        if (ctrlLatched || (e != null && (e.getMetaState() & KeyEvent.META_CTRL_ON) != 0)) modifiers |= TerminalEmulator.MOUSE_MODIFIER_CTRL;
         return modifiers;
     }
 
@@ -1768,7 +1768,7 @@ public final class TerminalView extends View {
     /** Whether Shift is on for this tap, held on a keyboard or latched in the extra keys row. */
     private boolean takeShiftForTap(MotionEvent e) {
         boolean latched = mClient.readShiftKey();
-        return latched || e.isShiftPressed();
+        return latched || (e.getMetaState() & KeyEvent.META_SHIFT_ON) != 0;
     }
 
     /**
@@ -2075,7 +2075,7 @@ public final class TerminalView extends View {
                     float[] at = TapPrecision.clickPointFor(mHoldGesture.holdX(),
                         mHoldGesture.holdY(), mHoldGesture.x(), mHoldGesture.y(),
                         mRenderer.mFontLineSpacing);
-                    sendClickAt(getColumnForX(at[0]), getRowForY(at[1]));
+                    sendClickAt(getColumnForX(at[0]), getRowForY(at[1]), null);
                 }
                 break;
             case ABANDONED:
@@ -2193,7 +2193,7 @@ public final class TerminalView extends View {
             } else if (mEmulator.isMouseTrackingActive()) { // BUTTON_PRIMARY.
                 // A pointer held with Shift is the app's, as for a finger tap: nothing is reported
                 // for the whole press, and the confirmed tap opens the link under it.
-                if (action == MotionEvent.ACTION_DOWN) mTapShiftBypass = event.isShiftPressed();
+                if (action == MotionEvent.ACTION_DOWN) mTapShiftBypass = (event.getMetaState() & KeyEvent.META_SHIFT_ON) != 0;
                 if (!mTapShiftBypass) switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
                     case MotionEvent.ACTION_UP:
