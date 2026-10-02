@@ -109,8 +109,8 @@ instead of following your finger.
 The top border does the same for the status bar. Swipe down from it and the bar opens with your
 finger; swipe up and it folds back to its slim form. The same third-of-the-way or quick-flick rule
 decides where it lands, with the same light tick, and a small pill marks the middle of the line. It
-works on every place wherever the status bar stands along the top; with the bar on the bottom, down
-a side or put away in the Layout editor, and in minimal mode, the top border only pages. A swipe
+works on every place wherever the status bar stands along the top, minimal mode included; with the
+bar on the bottom, down a side or put away in the Layout editor, the top border only pages. A swipe
 that starts in Android's own strip at the very top of the screen still pulls down the notification
 shade.
 
@@ -156,9 +156,11 @@ covers turning it on, its menu, the touchpad and GPU acceleration.
 
 ### Minimal mode
 
-Minimal mode gives every place the whole screen: the status bar, the pinned apps, the A–Z index,
-the extra keys and the keyboard go away, and the widgets, the terminal or the display take the
-room in portrait and landscape alike. On the terminal a split shows its active pane maximised. It
+Minimal mode is a second saved layout. It starts with only the content showing: the status bar,
+the pinned apps, the A–Z index, the extra keys and the keyboard go away, and the widgets, the
+terminal or the display take the room in portrait and landscape alike. Open the Layout editor
+while it is on to choose what it keeps. Everything else works as in your normal layout: splitting
+the terminal shows both panes, and the status bar and the borders answer the same gestures. It
 is one mode for the whole launcher, not a setting of one place: turn it on from Widgets and the
 terminal and the display are minimal too, and moving between places never turns it off. Hold a
 corner and tap the four outward corners to turn it on; the same button, now pointing inward, turns

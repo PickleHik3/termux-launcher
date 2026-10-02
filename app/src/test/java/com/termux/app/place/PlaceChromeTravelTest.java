@@ -174,16 +174,13 @@ public class PlaceChromeTravelTest {
     }
 
     @Test
-    public void leavingAMinimalPlaceAsksForTheDockToBePreRolled() {
+    public void leavingAMinimalPlaceAsksForTheKeyboardToBePreRolled() {
         PlaceChromeTravel.States s = states(true, true);
         Frame atRest = at(PaneWallPage.DISPLAY, 0f, s);
-        assertFalse(PlaceChromeTravel.needsDockPreRoll(atRest, false));
         assertFalse(PlaceChromeTravel.needsKeyboardPreRoll(atRest, false));
         // The first pixel toward the terminal already shows some dock and some keyboard.
         Frame first = at(PaneWallPage.DISPLAY, 4f, s);
-        assertTrue(PlaceChromeTravel.needsDockPreRoll(first, false));
         assertTrue(PlaceChromeTravel.needsKeyboardPreRoll(first, false));
-        assertFalse(PlaceChromeTravel.needsDockPreRoll(first, true));
         assertFalse(PlaceChromeTravel.needsKeyboardPreRoll(first, true));
         // Pre-rolled at full height, both start all the way below the screen.
         assertEquals(KEYBOARD + DOCK,

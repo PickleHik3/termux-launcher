@@ -243,8 +243,7 @@ public final class PlaceChromeTravel {
      * How far down the accessory stack is drawn from where it is laid out, for one frame.
      *
      * <p>The stack is laid out for the most it will show during the slide — the keyboard is
-     * pre-rolled in before the first frame that needs it, and a minimal place's dock rows likewise
-     * — so every frame only ever takes chrome away, by sliding it down past the screen's bottom
+     * pre-rolled in before the first frame that needs it — so every frame only ever takes chrome away, by sliding it down past the screen's bottom
      * edge. The keyboard sits under the dock: the part of it that is not revealed is slid out
      * first, and the dock follows it down once the dock itself is going away.
      *
@@ -268,11 +267,6 @@ public final class PlaceChromeTravel {
      */
     public static boolean needsKeyboardPreRoll(@NonNull Frame frame, boolean keyboardLaidOut) {
         return !keyboardLaidOut && frame.keyboardInPlay;
-    }
-
-    /** As {@link #needsKeyboardPreRoll}, for the dock rows a minimal place has put away. */
-    public static boolean needsDockPreRoll(@NonNull Frame frame, boolean dockLaidOut) {
-        return !dockLaidOut && frame.dockInPlay;
     }
 
     /**

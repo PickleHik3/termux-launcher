@@ -656,8 +656,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * so it does not change from solid to glass as it lands; null while nothing is pre-rolled.
      */
     @Nullable private com.termux.app.wall.PaneWallPage mTravelKeyboardPlace;
-    /** A minimal place's dock rows were laid out again for this slide (MinimalMode#bottomOnly). */
-    private boolean mTravelDockPreRolled;
     /**
      * The content was given the arriving place's roomier room for this slide (ADR 0003, amended):
      * the terminal's grid is paused under it and resized once, at settle, by
@@ -4781,9 +4779,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ViewGroup.MarginLayoutParams mlp = (ViewGroup.MarginLayoutParams) lp;
             int sideMargin = resolveStatusBarHorizontalInsetPx();
             // Extend Rounded away from its own edge without moving the edge it faces the terminal
-            // with, or the terminal content beside it. Minimal mode draws no bar and keeps no
-            // air: the band is nothing, so the pane runs to the screen's edge.
-            int outerMargin = isChromeMinimal() ? 0 : statusBarColumnOuterMarginPx();
+            // with, or the terminal content beside it.
+            int outerMargin = statusBarColumnOuterMarginPx();
             int targetThickness = targetStatusBarHeightPx(capsule, collapsed);
             boolean vertical = isStatusBarVertical();
             // A column keeps only its own air from the band beside it. The camera hole it used to
@@ -11842,17 +11839,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private PlaceLayout currentPlaceLayout() {
-        // Minimal mode has a layout of its own, which placeLayout resolves while the chrome is
-        // minimal. It is one mode for every place, so a slide never crosses into or out of it; the
-        // pre-roll that lays the bottom rows out again below the screen (MinimalMode#bottomOnly)
-        // is kept for the frame that asks for it all the same, over the normal layout.
-        PlaceLayout layout = placeLayout(currentPlaceOrientation());
-        return mTravelDockPreRolled ? com.termux.app.place.MinimalMode.bottomOnly(layout) : layout;
-    }
-
-    /** Whether the chrome on screen is arranged for minimal mode, a pre-rolled slide aside. */
-    private boolean isChromeMinimal() {
-        return !mTravelDockPreRolled && isMinimalMode();
+        // Minimal mode is a layout of its own, which placeLayout resolves while it is on. It is
+        // one preference for every place, so a slide never crosses into or out of it.
+        return placeLayout(currentPlaceOrientation());
     }
 
     /** Whether the launcher is in minimal mode (CONTEXT.md), as its memory says. */
@@ -11871,9 +11860,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
             return true;
         }
-        // Minimal mode's bar rests folded, at no thickness; the orientation's own memory is left
-        // as it was, for the bar to open back into when the mode is turned off.
-        if (isChromeMinimal()) return true;
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && store.isStatusCompact(currentPlaceOrientation());
     }
@@ -11889,7 +11875,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return NO_PREFERENCES_PLACE_LAYOUT;
         com.termux.app.place.LayoutVariant variant =
-            com.termux.app.place.LayoutVariant.of(isChromeMinimal());
+            com.termux.app.place.LayoutVariant.of(isMinimalMode());
         if (mCachedPlaceLayout == null
             || mCachedPlaceLayoutOrientation != orientation
             || mCachedPlaceLayoutVariant != variant
@@ -13109,7 +13095,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // what is counted here is exactly what the column lays out. Zero with no band there.
         boolean bandsUnderKeyboard = state.toolbarShown
             && !EdgeStackPolicy.underKeyboard(currentPlaceLayout()).isEmpty();
-        int stackEdgeGapPx = ChromePolicy.bottomEdgeGapPx(isChromeMinimal(), isRoundedDockStyle(),
+        int stackEdgeGapPx = ChromePolicy.bottomEdgeGapPx(isRoundedDockStyle(),
             dockMetrics.capsuleBottomGapPx);
         int underKeyboardAirPx = com.termux.app.dock.UnderKeyboardBand.airPx(dockMetrics,
             stackEdgeGapPx, bandsUnderKeyboard);
@@ -13352,8 +13338,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveAccessoryStackBottomMarginPx(@NonNull ChromeSpec state) {
-        return resolveAccessoryStackBottomMarginPx(state.toolbarShown, state.keyboardShown,
-            isChromeMinimal());
+        return resolveAccessoryStackBottomMarginPx(state.toolbarShown, state.keyboardShown);
     }
 
     /**
@@ -13363,12 +13348,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * with the keyboard up and down, so a slide that brings the keyboard in or puts it away lands
      * the dock where the slide left it. Root/decor inset policy keeps the whole stack above the
      * navigation bar; nothing here is for that. Also read for a stack other than the one on
-     * screen: the arriving place's, mid-slide, which is why the minimal state is a parameter.
+     * screen: the arriving place's, mid-slide.
      */
-    private int resolveAccessoryStackBottomMarginPx(boolean toolbarShown, boolean keyboardShown,
-                                                    boolean minimal) {
+    private int resolveAccessoryStackBottomMarginPx(boolean toolbarShown, boolean keyboardShown) {
         int lift = toolbarShown || keyboardShown ? mImeLiftPx : 0;
-        return lift + ChromePolicy.bottomEdgeGapPx(minimal, isRoundedDockStyle(),
+        return lift + ChromePolicy.bottomEdgeGapPx(isRoundedDockStyle(),
             getDockLayout().capsuleBottomGapPx);
     }
 
@@ -17183,9 +17167,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (page != mLastWallPage) {
             rememberPlaceKeyboard(mLastWallPage, leavingKeyboardUp);
             mLastWallPage = page;
-            // The arriving place's minimal mode before its keyboard, so the keyboard's geometry
-            // pass sees the chrome it will stand in.
-            syncChromeArrangement(false);
+            // The arrangement before the keyboard, so the keyboard's geometry pass sees the
+            // chrome it will stand in.
+            syncChromeArrangement();
         }
         applyPlaceKeyboard(page);
     }
@@ -17249,13 +17233,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * One frame of the chrome's travel between two places (PlaceChromeTravel). The dock rises or
      * falls and the keyboard slides in or out as a function of the wall's live offset, between the
      * state of the place being left and the place being arrived at — Home with the dock at the
-     * bottom and the keyboard down, the terminal with the dock riding on its keyboard, a minimal
-     * place with neither. Only translationY and alpha change per frame; nothing is laid out.
+     * bottom and the keyboard down, the terminal with the dock riding on its keyboard. Only
+     * translationY and alpha change per frame; nothing is laid out.
      *
      * <p>What the frame needs that is not laid out yet is pre-rolled once, in the first frame
-     * that asks for it: the keyboard is brought up at its full height below the screen, a minimal
-     * place's bottom rows are laid out again under it, and the content is held at the room it was
-     * committed with so neither costs the terminal a resize. {@link #settlePlaceChrome} makes the
+     * that asks for it: the keyboard is brought up at its full height below the screen, and the
+     * content is held at the room it was committed with so it costs the terminal no resize. {@link #settlePlaceChrome} makes the
      * outcome the layout, or undoes the pre-roll if the wall came back to where it started.
      */
     private void syncChromeTravel(float offsetPx) {
@@ -17287,12 +17270,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.place.PlaceChromeTravel.at(pages, mPaneWallController.currentPage(),
                 offsetPx, wall.getWidth(), this::chromeRestOf, mLastWallPage);
         // The dock rows are always laid out by the layout on screen, the minimal one included
-        // (chromeRestOf), so nothing is pre-rolled for them: a pre-roll here would swap the
-        // minimal layout for the normal one's bottom rows in the middle of the drag.
-        if (!mTravelDockPreRolled
-            && com.termux.app.place.PlaceChromeTravel.needsDockPreRoll(frame, true)) {
-            preRollTravelDock();
-        }
+        // (chromeRestOf), so only the keyboard is ever pre-rolled.
         if (!mTravelKeyboardPreRolled
             && com.termux.app.place.PlaceChromeTravel.needsKeyboardPreRoll(frame,
                 isInAppKeyboardShown())
@@ -17325,16 +17303,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncTerminalTravelDisplacement(frame, arriving);
             syncTerminalTravelCover(translation);
         }
-        // A minimal place's strip has no content to show, and gets it back at settle; a normal
-        // place's content fades as the strip it is heading for comes closer. The bars minimal mode
-        // takes away from the sides and the top fade with the dock.
-        if (!isChromeMinimal()) {
-            // A pre-rolled minimal place has its side and top bars still put away; only the
-            // bottom rows came back for the slide.
-            float sideAlpha = mTravelDockPreRolled ? 0f : frame.dockReveal;
-            if (frame.statusReveal != 1f || sideAlpha != 1f) mChromeTravelMoved = true;
-            applyChromeTravelAlpha(frame.statusReveal, sideAlpha);
-        }
+        // The status strip's content and the side and top bars fade as the places' rests say;
+        // the minimal layout's bars fade like the normal one's.
+        if (frame.statusReveal != 1f || frame.dockReveal != 1f) mChromeTravelMoved = true;
+        applyChromeTravelAlpha(frame.statusReveal, frame.dockReveal);
     }
 
     /**
@@ -17430,20 +17402,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place,
                                         boolean toolbarShown) {
         com.termux.app.place.PlaceChromeTravel.Rest rest = chromeRestOf(place);
-        return travelRestReservationPx(place, toolbarShown, rest.keyboardReveal() > 0f,
-            isChromeMinimal());
+        return travelRestReservationPx(place, toolbarShown, rest.keyboardReveal() > 0f);
     }
 
     /** The same, for the place with its keyboard up or down as {@code keyboardShown} says. */
     private int travelRestReservationPx(@NonNull com.termux.app.wall.PaneWallPage place,
-                                        boolean toolbarShown, boolean keyboardShown,
-                                        boolean minimal) {
+                                        boolean toolbarShown, boolean keyboardShown) {
         int flushPadding = place == com.termux.app.wall.PaneWallPage.TERMINAL
             && place == mLastWallPage && !keyboardShown ? mAppliedTerminalFlushPaddingPx : 0;
         return KeyboardOverlayPolicy.restReservationPx(mAppliedDockContentHeightPx, flushPadding,
             keyboardShown, KeyboardOverlayPolicy.overlays(place, currentPlaceLayout()),
             Math.max(0, mKeyboardGeometry.desiredHeightPx()),
-            resolveAccessoryStackBottomMarginPx(toolbarShown, keyboardShown, minimal));
+            resolveAccessoryStackBottomMarginPx(toolbarShown, keyboardShown));
     }
 
     /**
@@ -17535,18 +17505,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mPaneWallController != null && mPaneWallController.isTerminalShowing();
     }
 
-    /** Lays a minimal place's bottom rows out again for the slide toward a place that has them. */
-    private void preRollTravelDock() {
-        Trace.beginSection("Wall.preRollDock");
-        try {
-            beginTravelHold();
-            mTravelDockPreRolled = true;
-            syncPlaceLayout();
-        } finally {
-            Trace.endSection();
-        }
-    }
-
     /** The keyboard's height as the stack lays it out; 0 while it is down or floating. */
     private int travelKeyboardLaidOutPx() {
         if (!isInAppKeyboardShown() || isKeyboardFloating()) return 0;
@@ -17557,7 +17515,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Everything else the stack lays out above the keyboard, and the margin under it: what has to
      * slide down for the dock to leave the screen. A status bar standing along the bottom is a
      * band of the same stack but not the dock's, so it is left out; it rides along with the
-     * container, and a minimal place's strip is not the dock's to take away.
+     * container.
      */
     private int travelDockLaidOutPx(int keyboardPx) {
         View stack = findViewById(R.id.accessory_stack_container);
@@ -17620,7 +17578,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         settleKeyboardSwipeTravelNow();
         boolean leavingKeyboardUp = committedKeyboardVisible();
         boolean keyboardPreRolled = mTravelKeyboardPreRolled;
-        boolean dockPreRolled = mTravelDockPreRolled;
         boolean contentPreRolled = mTravelContentPreRolled;
         boolean held = mTravelHoldsContent;
         boolean moved = mChromeTravelMoved;
@@ -17628,7 +17585,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTravelHoldsContent = false;
         mTravelKeyboardPreRolled = false;
         mTravelKeyboardPlace = null;
-        mTravelDockPreRolled = false;
         mTravelContentPreRolled = false;
         mTravelRoomArriving = null;
         mChromeTravelMoved = false;
@@ -17664,11 +17620,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mX11Display.onUserKeyboardIntent(true);
         }
         syncPlaceState(page, leavingKeyboardUp);
-        // A place that changed applied its own arrangement in syncWallKeyboard. What is left is a
-        // slide that pre-rolled a minimal place's bottom rows and then landed on a minimal place
-        // anyway — springing back, or reversing onto another — whose arrangement has to be put
-        // back even though the minimal state never changed.
-        if (dockPreRolled && isChromeMinimal()) syncChromeArrangement(true);
         // The hold is over: one geometry pass gives the content the room the place it landed on
         // leaves it, which is the terminal's one resize for the whole slide. A slide that gave
         // the room back in its first frame finds it already right, and only the grid's resize
@@ -17682,13 +17633,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Applies minimal mode's arrangement and status strip when the chrome's minimal state has
-     * changed since it was last applied, or always when {@code force} — a slide that pre-rolled
-     * the bottom rows has to put the committed arrangement back whichever way it landed.
+     * Applies the minimal or the normal layout, and the status strip, when minimal mode has
+     * changed since it was last applied.
      */
-    private void syncChromeArrangement(boolean force) {
-        boolean minimal = isChromeMinimal();
-        if (!force && minimal == mAppliedChromeMinimal) return;
+    private void syncChromeArrangement() {
+        boolean minimal = isMinimalMode();
+        if (minimal == mAppliedChromeMinimal) return;
         mAppliedChromeMinimal = minimal;
         syncPlaceLayout();
         applyMinimalStatusChrome();
@@ -17699,10 +17649,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Turns minimal mode (CONTEXT.md) on or off for the whole launcher, from the corner tab of
      * whichever place is on screen: the only door in or out, so the mode never ends on its own.
-     * On, the place's keyboard memory is kept as it was, the keyboard goes away, the chrome is
-     * arranged without the dock and the bars, and the status bar goes with them; off, all of that
-     * comes back, keyboard included. The terminal shows its tiled panes maximised on the active
-     * one while the mode is on, wherever the wall is.
+     * Minimal mode is a second saved layout and nothing more: on, the place's keyboard memory is
+     * kept as it was, the keyboard goes away and the chrome is arranged by the minimal layout;
+     * off, the normal layout comes back, keyboard included. Everything else, the panes included,
+     * works as it does in the normal layout.
      */
     void setMinimalMode(boolean minimal) {
         PlaceLayoutStore store = placeLayoutStore();
@@ -17711,19 +17661,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Recorded before the mode is on, since minimal mode records nothing.
         if (minimal) rememberPlaceKeyboard(place);
         store.setMinimal(minimal);
-        syncTerminalMinimalPresentation();
         if (minimal && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
             mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                 .HideReason.KEYBOARD_ACTION);
         }
-        syncChromeArrangement(false);
+        syncChromeArrangement();
         if (!minimal) applyPlaceKeyboard(place);
         invalidateMinimalModeGlyphs();
-    }
-
-    /** The terminal's panes follow minimal mode, on screen or not. */
-    private void syncTerminalMinimalPresentation() {
-        if (mPaneController != null) mPaneController.setMinimalPresentation(isMinimalMode());
     }
 
     /** The corner tabs draw the glyph from the state, so a change only has to redraw them. */
@@ -17736,10 +17680,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The status bar as the minimal layout has it. Whether it is there at all is the layout's
-     * ({@link #applyStatusBarEdge} puts it away or keeps it), so this only settles what a bar that
-     * stays looks like: rested folded, since the mode gives it no swipe to open (the corner tab
-     * is the way out), and drawn in full, not left faded from an earlier version of the mode.
+     * The status bar as the layout just applied has it. Whether it is there at all is the
+     * layout's ({@link #applyStatusBarEdge} puts it away or keeps it), so this only settles what a
+     * bar that stays looks like: folded or open as the orientation remembers, with its swipe, the
+     * same in the minimal layout as in the normal one, and drawn in full.
      */
     private void applyMinimalStatusChrome() {
         View host = findViewById(R.id.terminal_window_bar_host);
@@ -17922,8 +17866,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The room a place's chrome leaves the content with the keyboard up or down, at rest. */
     private int keyboardSwipeReservationPx(boolean keyboardUp) {
-        return travelRestReservationPx(mLastWallPage, buildChromeSpec().toolbarShown, keyboardUp,
-            isMinimalMode());
+        return travelRestReservationPx(mLastWallPage, buildChromeSpec().toolbarShown, keyboardUp);
     }
 
     /**
@@ -17942,7 +17885,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return 0;
         return Math.max(0, resolveTerminalFlushDockPaddingPx(
             computeAccessoryStackHeight(mAppliedDockContentHeightPx, 0, 0),
-            resolveAccessoryStackBottomMarginPx(toolbarShown, false, isChromeMinimal())));
+            resolveAccessoryStackBottomMarginPx(toolbarShown, false)));
     }
 
     /**
@@ -18093,8 +18036,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // Whoever took the fold over since has landed it; otherwise the landing is
                     // this release's, and it returns the lease the drag took.
                     if (!mStatusBarFoldDragging) return;
-                    boolean collapsed = isChromeMinimal() ? isStatusBarCompact() : !expanded;
-                    setTopStatusBarCollapsed(collapsed, true, towardOpenVelocityPxPerSec);
+                    setTopStatusBarCollapsed(!expanded, true, towardOpenVelocityPxPerSec);
                 }
                 @Override public void onPageSinkChanged(
                         @NonNull com.termux.app.wall.PaneWallPage page, float scale) {
@@ -18250,11 +18192,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController.restoreInstanceState(state);
         }
         // Minimal mode is remembered across launches. The arrangement reads it through
-        // currentPlaceLayout on its own; the panes and the bar are told once here, and every
-        // change after this goes through syncChromeArrangement.
-        syncTerminalMinimalPresentation();
-        if (isChromeMinimal() != mAppliedChromeMinimal) {
-            mAppliedChromeMinimal = isChromeMinimal();
+        // currentPlaceLayout on its own; the bar is told once here, and every change after this
+        // goes through syncChromeArrangement.
+        if (isMinimalMode() != mAppliedChromeMinimal) {
+            mAppliedChromeMinimal = isMinimalMode();
             applyMinimalStatusChrome();
         }
     }
@@ -20106,19 +20047,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge));
             swipeHost.setListener(new com.termux.app.statusbar.StatusBarSwipeLayout.Listener() {
                 @Override public void onCollapsedStateRequested(boolean collapsed) {
-                    // In minimal mode there is no bar to open: the mode is left from the corner
-                    // tab, never from a swipe, so a fold that somehow reaches here does nothing.
-                    if (isChromeMinimal()) return;
                     setTopStatusBarCollapsed(collapsed, true);
                 }
                 @Override public void onCollapsedStateRequested(boolean collapsed,
                                                                 float towardOpenVelocityPxPerSec) {
                     // The fold lands from wherever the finger left the bar, at the speed it let go.
-                    if (isChromeMinimal()) return;
                     setTopStatusBarCollapsed(collapsed, true, towardOpenVelocityPxPerSec);
                 }
                 @Override public void onFoldDrag(float towardOpenPx) {
-                    if (!isChromeMinimal()) dragTopStatusBar(towardOpenPx);
+                    dragTopStatusBar(towardOpenPx);
                 }
                 @Override public void onFoldDragCancelled() {
                     // Back to the form the bar had, from wherever the finger left it.
@@ -20441,7 +20378,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * landing rather than one a frame, and takes over from any landing still running.
      */
     private void dragTopStatusBar(float towardOpenPx) {
-        if (mPreferences == null || isChromeMinimal()
+        if (mPreferences == null
             || !com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
             return;
         }
@@ -20463,11 +20400,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Whether a swipe off the pane's top border may fold the bar now: there is one to fold
-     * ({@link #mBorderStatusBarFoldable}), minimal mode is off, and no other surface has the
-     * bar's gesture (the same vetoes as the bar's own drag). Cheap: the wall asks it per frame.
+     * ({@link #mBorderStatusBarFoldable}) and no other surface has the bar's gesture (the same vetoes as the bar's own drag). Cheap: the wall asks it per frame.
      */
     private boolean isBorderStatusSwipeAvailable() {
-        return mBorderStatusBarFoldable && mPreferences != null && !isChromeMinimal()
+        return mBorderStatusBarFoldable && mPreferences != null
             && !isCommandPaletteOpen() && !isAppDrawerEngaged() && !mSurfaceEditor.isActive();
     }
 

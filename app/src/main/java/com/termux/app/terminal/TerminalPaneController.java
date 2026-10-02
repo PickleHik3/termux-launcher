@@ -338,16 +338,6 @@ public class TerminalPaneController {
 
     @Nullable private Window mActiveWindow;
     @Nullable private Leaf mMaximizedLeaf;
-    /**
-     * The terminal place is in minimal mode, which shows only one pane: a tiled split is shown
-     * maximised on its active pane for as long as the mode is on.
-     */
-    private boolean mMinimalPresentation;
-    /**
-     * The maximised pane is minimal mode's doing rather than the user's, so leaving the mode puts
-     * the split back. A pane the user maximised before stays maximised afterwards.
-     */
-    private boolean mMaximizedForMinimal;
 
     /** Fallback gap between tiled panes when no surface style is attached. */
     private static final int DIVIDER_DP = 1;
@@ -933,32 +923,10 @@ public class TerminalPaneController {
     }
 
     /**
-     * Minimal mode on the terminal place (CONTEXT.md): on, a tiled split is shown maximised on its
-     * active pane; off, a split minimal mode maximised is shown tiled again. A pane the user
-     * maximised themselves is left as they had it.
+     * Whether a pane is maximised. Its tab stays out while it is: the tab is the way back.
      */
-    public void setMinimalPresentation(boolean minimal) {
-        if (mMinimalPresentation == minimal) return;
-        mMinimalPresentation = minimal;
-        if (!minimal && mMaximizedForMinimal) mMaximizedLeaf = null;
-        mMaximizedForMinimal = false;
-        if (mActiveWindow == null) return;
-        render();
-        mHost.onActivePaneChanged();
-    }
-
-    public boolean isMinimalPresentation() {
-        return mMinimalPresentation;
-    }
-
-    /**
-     * Whether the user maximised the pane on screen themselves, as opposed to minimal mode holding
-     * a split maximised for them. The user's maximise keeps its tab out — the tab is the way back
-     * — while minimal mode's has the corner behave as a lone pane's: the tab comes out on a hold
-     * and goes on a tap, and the strip's swipe is the way back.
-     */
-    private boolean isUserMaximized() {
-        return mMaximizedLeaf != null && !mMaximizedForMinimal;
+    private boolean isMaximized() {
+        return mMaximizedLeaf != null;
     }
 
     /** Redraws the corner tab, whose minimal-mode glyph is read from the host as it draws. */
@@ -2401,14 +2369,6 @@ public class TerminalPaneController {
     }
 
     private void doRender() {
-        // Minimal mode shows a split the way the maximise button does, on the active pane, and
-        // keeps doing so as windows switch and panes come and go under it.
-        if (mMinimalPresentation && mMaximizedLeaf == null && mActiveWindow != null
-            && mActiveWindow.active != null && !mActiveWindow.floating.contains(mActiveWindow.active)
-            && leavesOf(mActiveWindow.root).size() > 1) {
-            mMaximizedLeaf = mActiveWindow.active;
-            mMaximizedForMinimal = true;
-        }
         // A re-render invalidates the geometry a running divider reveal was easing toward.
         cancelSplitReveal();
         // Weights first, so the tree is built already grown; the pane-move animation carries the
@@ -3459,20 +3419,18 @@ public class TerminalPaneController {
     /**
      * The buttons of a split pane's corner tab, in the order they are drawn: close, move and
      * maximise, and nothing else. The grip needs a neighbour to move onto, so a maximised pane
-     * has none. Minimal mode holds the split maximised for the user, so it offers no maximise to
-     * undo that; its glyph, the one other thing a split's tab may carry, is the way back.
+     * has none. Minimal mode is a layout, not a pane state, so a split's tab is the same in it.
      *
      * @return the overlay's action ids
      */
     @NonNull
-    static int[] splitTabActions(boolean maximised, boolean minimalPresentation) {
+    static int[] splitTabActions(boolean maximised) {
         int count = 1 + (maximised ? 0 : 1) + 1;
         int[] ids = new int[count];
         int at = 0;
         ids[at++] = PaneInteractionOverlay.ACTION_CLOSE;
         if (!maximised) ids[at++] = PaneInteractionOverlay.ACTION_MOVE_PANE;
-        ids[at++] = minimalPresentation ? PaneInteractionOverlay.ACTION_MINIMAL
-            : PaneInteractionOverlay.ACTION_MAXIMIZE;
+        ids[at++] = PaneInteractionOverlay.ACTION_MAXIMIZE;
         return ids;
     }
 
@@ -3694,7 +3652,7 @@ public class TerminalPaneController {
                 actions.add(PaneControlsView.Action.label(ACTION_HELP,
                     CornerTabGlyphs.help(getContext())));
             } else {
-                for (int id : splitTabActions(mMaximizedLeaf != null, mMinimalPresentation)) {
+                for (int id : splitTabActions(mMaximizedLeaf != null)) {
                     if (id == ACTION_CLOSE) {
                         actions.add(PaneControlsView.Action.drawn(ACTION_CLOSE,
                             this::drawCloseMark, PaneControlsView.TINT_ERROR,
@@ -3707,8 +3665,6 @@ public class TerminalPaneController {
                         actions.add(PaneControlsView.Action.drawn(ACTION_MAXIMIZE,
                             this::drawMaximizeMark, PaneControlsView.TINT_PRIMARY,
                             context.getString(R.string.pane_corner_tab_maximise_description)));
-                    } else if (id == ACTION_MINIMAL) {
-                        actions.add(PaneControlsView.Action.drawn(ACTION_MINIMAL, mMinimalMark));
                     }
                 }
             }
@@ -3777,11 +3733,10 @@ public class TerminalPaneController {
             // What the tab carries follows the tree: a pane that has just been split has a
             // neighbour to move onto, and a maximized one has none.
             applyControlActions();
-            if (isUserMaximized()) {
+            if (isMaximized()) {
                 mControlLeaf = mMaximizedLeaf;
                 // A dismiss still in flight would fade the tab off a pane that has just been
-                // maximized, so this is the state asserted rather than animated towards. Minimal
-                // mode's maximise is not this: its tab is a lone pane's, out on a hold only.
+                // maximized, so this is the state asserted rather than animated towards.
                 mControls.showNow(mControls.corner());
             } else if (mControlLeaf != null
                 && (mActiveWindow == null || findLeafIn(mActiveWindow.root,
@@ -3815,7 +3770,7 @@ public class TerminalPaneController {
                         return true;
                     }
 
-                    if (mControls.isControlsShown() && !isUserMaximized()) dismissControls();
+                    if (mControls.isControlsShown() && !isMaximized()) dismissControls();
                     // The gap between two panes is the divider's: a finger down in it drags the
                     // split at once, with no hold. It never reaches over a pane's content.
                     List<SplitDividerHit.Gap> gaps = dividerGapsAt(x, y);
@@ -4368,7 +4323,7 @@ public class TerminalPaneController {
         }
 
         private void dismissControls() {
-            if (isUserMaximized()) return;
+            if (isMaximized()) return;
             if (mControls.isControlsShown()) mHost.onPaneControlsDismissed();
             mControls.dismiss();
         }

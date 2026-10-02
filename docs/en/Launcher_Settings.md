@@ -94,7 +94,7 @@ Minimal mode is a preset of the same elements: with it on, the status bar, the p
 A–Z index and the extra keys are put away and the keyboard is put down, and turning it off brings
 each one back exactly where the layout has it. Anything you want left on screen in minimal mode is
 therefore arranged here — a terminal with only the A–Z index and the keyboard, say, is that layout
-with the other bars hidden, and minimal mode adds nothing to it but the full-screen pane. Widgets
+with the other bars hidden, and minimal mode adds nothing to it. Widgets
 that no longer fit a smaller grid move to free space or a new page rather than being dropped.
 
 ## Look

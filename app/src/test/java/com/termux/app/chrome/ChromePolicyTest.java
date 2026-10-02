@@ -52,14 +52,12 @@ public class ChromePolicyTest {
     @Test
     public void testOneBottomEdgeGapForWhateverStandsOnTheEdge() {
         // Floating keeps its card's gap under the dock, the keyboard and the pane alike.
-        Assert.assertEquals(6, ChromePolicy.bottomEdgeGapPx(false, true, 6));
+        // The minimal layout keeps the same gap: it is a layout, not a style.
+        Assert.assertEquals(6, ChromePolicy.bottomEdgeGapPx(true, 6));
         // Docked is flush.
-        Assert.assertEquals(0, ChromePolicy.bottomEdgeGapPx(false, false, 6));
-        // A minimal place is maximised and keeps nothing, whichever the style.
-        Assert.assertEquals(0, ChromePolicy.bottomEdgeGapPx(true, true, 6));
-        Assert.assertEquals(0, ChromePolicy.bottomEdgeGapPx(true, false, 6));
+        Assert.assertEquals(0, ChromePolicy.bottomEdgeGapPx(false, 6));
         // A bad gap reads as none rather than as a pull below the edge.
-        Assert.assertEquals(0, ChromePolicy.bottomEdgeGapPx(false, true, -4));
+        Assert.assertEquals(0, ChromePolicy.bottomEdgeGapPx(true, -4));
     }
 
     @Test

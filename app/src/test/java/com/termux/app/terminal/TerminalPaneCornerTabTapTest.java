@@ -74,7 +74,7 @@ public class TerminalPaneCornerTabTapTest {
         }
         /** Minimal mode, as the launcher keeps it for the terminal place. */
         boolean minimal;
-        /** What the launcher does with the toggle: it tells the panes, which re-render. */
+        /** What the launcher does with the toggle: it re-lays the place out around the panes. */
         @Nullable Runnable afterToggle;
         @Override public boolean isMinimalMode() { return minimal; }
         @Override public void toggleMinimalMode() {
@@ -152,16 +152,13 @@ public class TerminalPaneCornerTabTapTest {
     @Test
     public void theSplitTabPolicyIsCloseMoveMaximiseAndDropsWhatCannotApply() {
         // Tiled: all three, close first.
-        assertEquals(Arrays.asList(2, 0, 1), ids(TerminalPaneController.splitTabActions(false, false)));
+        assertEquals(Arrays.asList(2, 0, 1), ids(TerminalPaneController.splitTabActions(false)));
         // Maximised: no neighbour to move onto.
-        assertEquals(Arrays.asList(2, 1), ids(TerminalPaneController.splitTabActions(true, false)));
-        // Minimal mode holds the split maximised: no maximise to undo, the glyph is the way back.
-        assertEquals(Arrays.asList(2, 9), ids(TerminalPaneController.splitTabActions(true, true)));
+        assertEquals(Arrays.asList(2, 1), ids(TerminalPaneController.splitTabActions(true)));
         for (boolean maximised : new boolean[] {false, true}) {
-            for (boolean minimal : new boolean[] {false, true}) {
-                for (int id : TerminalPaneController.splitTabActions(maximised, minimal)) {
-                    assertTrue("never an editor door: " + id, id != 3 && id != 5 && id != 8);
-                }
+            for (int id : TerminalPaneController.splitTabActions(maximised)) {
+                assertTrue("never an editor door: " + id, id != 3 && id != 5 && id != 8);
+                assertTrue("never the minimal glyph: " + id, id != 9);
             }
         }
     }
@@ -174,44 +171,33 @@ public class TerminalPaneCornerTabTapTest {
     }
 
     /**
-     * Minimal mode shows a split maximised on its active pane, offers no maximise to undo that
-     * (the minimal glyph is the way back), and puts the split back when it is turned off.
+     * Minimal mode is a saved layout, not a pane state: a split made in it shows both panes, as
+     * in the normal layout, and the split's tab is the usual close, move and maximise.
      */
     @Test
-    public void minimalModeShowsASplitMaximisedAndPutsItBack() {
+    public void aSplitInMinimalModeShowsBothPanes() {
         Fixture fixture = fixture();
+        fixture.host.minimal = true;
         assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
         fixture.layout();
 
-        fixture.controller.setMinimalPresentation(true);
-        fixture.layout();
-        assertNotNull("the split is shown maximised",
-            ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
-        assertEquals(1, fixture.controller.tiledPaneCount());
-        fixture.showTab();
-        assertEquals(Arrays.asList(2, 9), fixture.actionsAtEverySlot());
-
-        fixture.controller.setMinimalPresentation(false);
-        fixture.layout();
-        assertEquals("the split is back", null,
+        assertEquals("nothing is maximised", null,
             ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
         assertEquals(2, fixture.controller.tiledPaneCount());
+        fixture.showTab();
+        assertEquals(Arrays.asList(2, 0, 1), fixture.actionsAtEverySlot());
     }
 
     /**
-     * The minimal glyph puts the tab away and re-lays the place out in the same tap, and that
-     * render takes the tab off the host and puts it back. The retract that was cut short used to
-     * leave the tab fully drawn and marked retracting — out for the whole of minimal mode and after
-     * it, with nothing able to put it away and every button still answering. On a window, because a
-     * view never attached is never told it has been detached.
+     * The minimal glyph puts the tab away and re-lays the place out in the same tap. A retract cut
+     * short by that used to leave the tab fully drawn and marked retracting — out for the whole of
+     * minimal mode and after it, with nothing able to put it away and every button still
+     * answering. On a window, because a view never attached is never told it has been detached.
      */
     @Test
     public void theMinimalGlyphLeavesNoTabBehindWhenThePlaceReLaysOut() {
         Fixture fixture = fixtureOnAWindow();
-        fixture.host.afterToggle = () -> {
-            fixture.controller.setMinimalPresentation(fixture.host.minimal);
-            fixture.layout();
-        };
+        fixture.host.afterToggle = fixture::layout;
         fixture.showTab();
         RectF minimalSlot = new RectF(fixture.slots()[3]);
 
@@ -231,31 +217,6 @@ public class TerminalPaneCornerTabTapTest {
     }
 
     /**
-     * Minimal mode holds a split maximised for the user, but it is not the user's maximise: the
-     * tab is a lone pane's there — out on a hold, away on a tap off it — rather than asserted on
-     * every render and refusing to go, which is what the way back from a maximise the user asked
-     * for needs.
-     */
-    @Test
-    public void aSplitInMinimalModeKeepsItsTabForAHoldAndGivesItUpToATap() {
-        Fixture fixture = fixture();
-        assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
-        fixture.layout();
-
-        fixture.controller.setMinimalPresentation(true);
-        fixture.layout();
-        assertFalse("minimal mode asserts no tab", fixture.controls.isControlsShown());
-
-        fixture.showTab();
-        fixture.tap(WIDTH / 2f, HEIGHT / 2f);
-        assertFalse("a tap off the tab puts it away", fixture.controls.isControlsShown());
-
-        fixture.controller.setMinimalPresentation(false);
-        fixture.layout();
-        assertFalse("and none is left out on the way back", fixture.controls.isControlsShown());
-    }
-
-    /**
      * The sibling a maximised render took off the host keeps its frame inside the detached split
      * container, and a view off the window answers its location with the screen's origin. Read as
      * a pane, that put a rect the sibling's size at the host's top-left: a corner square for the
@@ -267,37 +228,21 @@ public class TerminalPaneCornerTabTapTest {
         Fixture fixture = fixture();
         assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
         fixture.layout();
-        fixture.controller.setMinimalPresentation(true);
+        fixture.showTab();
+        fixture.tapSlot(2);
         fixture.layout();
         assertEquals(1, fixture.controller.tiledPaneCount());
+        // A maximised pane keeps its tab out, on its own corner.
+        assertTrue(fixture.controls.isControlsShown());
+        List<RectF> before = new ArrayList<>();
+        for (RectF slot : fixture.slots()) before.add(new RectF(slot));
 
         // The top pane is the one shown maximised; the bottom pane's frame was last laid out
         // over the lower half, and its phantom rect's bottom-right corner is here.
         fixture.hold(WIDTH - 2f, HEIGHT / 2f - 2f);
-        assertFalse("no tab came out of a pane that is not on screen",
-            fixture.controls.isControlsShown());
-
-        // The pane that is on screen still answers at its own corner.
-        fixture.showTab();
-    }
-
-    /** A pane the user maximised before minimal mode stays maximised after it. */
-    @Test
-    public void minimalModeLeavesAPaneTheUserMaximisedAlone() {
-        Fixture fixture = fixture();
-        assertTrue(fixture.controller.split(LinearLayout.VERTICAL));
-        fixture.layout();
-        fixture.showTab();
-        fixture.tapSlot(2);
-        fixture.layout();
-        Object maximised = ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf");
-        assertNotNull(maximised);
-
-        fixture.controller.setMinimalPresentation(true);
-        fixture.layout();
-        fixture.controller.setMinimalPresentation(false);
-        fixture.layout();
-        assertEquals(maximised, ReflectionHelpers.getField(fixture.controller, "mMaximizedLeaf"));
+        List<RectF> after = new ArrayList<>();
+        for (RectF slot : fixture.slots()) after.add(new RectF(slot));
+        assertEquals("no tab moved onto a pane that is not on screen", before, after);
     }
 
     /** Maximised there is no neighbour to move onto, so that slot goes and the rest shuffle up. */

@@ -73,7 +73,7 @@ public final class ChromePolicy {
      * The one gap between the screen's bottom edge and whatever surface stands on it: the dock's
      * rows, the keyboard under them, a status bar along the bottom, or the pane itself when the
      * stack is away. Floating keeps its card's gap ({@code capsuleBottomGapPx}); Docked is flush.
-     * A minimal place is maximised and keeps nothing.
+     * The minimal layout keeps the same gap as the normal one.
      *
      * <p>One number for every bottom-most surface, whichever it is, so the slide between two
      * places never lands on a different margin than it travelled toward: the keyboard used to
@@ -81,9 +81,8 @@ public final class ChromePolicy {
      * stack's margin came back only once the keyboard was hidden at settle — the dock reached the
      * bottom with the slide and then stepped up by the gap (pong, 2026-09-28).
      */
-    public static int bottomEdgeGapPx(boolean minimal, boolean roundedDock,
-                                      int capsuleBottomGapPx) {
-        if (minimal || !roundedDock) return 0;
+    public static int bottomEdgeGapPx(boolean roundedDock, int capsuleBottomGapPx) {
+        if (!roundedDock) return 0;
         return Math.max(0, capsuleBottomGapPx);
     }
 
