@@ -680,15 +680,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED, value, false);
     }
 
-    public boolean isTrimWrappedTrailingSpacesEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES, TERMUX_APP.DEFAULT_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES);
-    }
-
-    public void setTrimWrappedTrailingSpacesEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES, value, false);
-    }
-
     public boolean isClipboardCleanupEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_TERMINAL_CLIPBOARD_CLEANUP, TERMUX_APP.DEFAULT_TERMINAL_CLIPBOARD_CLEANUP);

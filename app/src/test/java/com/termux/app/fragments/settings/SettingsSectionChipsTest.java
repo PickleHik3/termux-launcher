@@ -189,7 +189,6 @@ public class SettingsSectionChipsTest {
         assertEquals(clipboardSection, SettingsSectionChips.topCategoryOf(adapter.getItem(0), screen));
 
         clipboardRow.setVisible(false);
-        fragment.findPreference("terminal_trim_wrapped_trailing_spaces").setVisible(false);
         fragment.findPreference("terminal_clipboard_cleanup").setVisible(false);
         idle(); // let PreferenceGroupAdapter's deferred sync run and notify our wrapper.
 

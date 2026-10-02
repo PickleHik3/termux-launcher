@@ -50,6 +50,11 @@ public final class TerminalEmulator {
     public static final int MOUSE_WHEEL_LEFT = 66;
     public static final int MOUSE_WHEEL_RIGHT = 67;
 
+    /** Modifier bits xterm adds to a mouse report's button code. */
+    public static final int MOUSE_MODIFIER_SHIFT = 4;
+    public static final int MOUSE_MODIFIER_ALT = 8;
+    public static final int MOUSE_MODIFIER_CTRL = 16;
+
     /**
      * Used for invalid data - http://en.wikipedia.org/wiki/Replacement_character#Replacement_character
      */
@@ -906,6 +911,17 @@ public final class TerminalEmulator {
      * @param mouseButton one of the MOUSE_* constants of this class.
      */
     public void sendMouseEvent(int mouseButton, int column, int row, boolean pressed) {
+        sendMouseEvent(mouseButton, column, row, pressed, 0);
+    }
+
+    /**
+     * @param mouseButton one of the MOUSE_* constants of this class.
+     * @param modifiers any of {@link #MOUSE_MODIFIER_SHIFT}, {@link #MOUSE_MODIFIER_ALT} and
+     *                  {@link #MOUSE_MODIFIER_CTRL}, which xterm adds to the button code of press,
+     *                  release and motion alike.
+     */
+    public void sendMouseEvent(int mouseButton, int column, int row, boolean pressed, int modifiers) {
+        modifiers &= MOUSE_MODIFIER_SHIFT | MOUSE_MODIFIER_ALT | MOUSE_MODIFIER_CTRL;
         if (column < 1)
             column = 1;
         if (column > mColumns)
@@ -917,10 +933,10 @@ public final class TerminalEmulator {
         if (mouseButton == MOUSE_LEFT_BUTTON_MOVED && !isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT)) {
             // Do not send tracking.
         } else if (isDecsetInternalBitSet(DECSET_BIT_MOUSE_PROTOCOL_SGR)) {
-            mSession.write(String.format("\033[<%d;%d;%d" + (pressed ? 'M' : 'm'), mouseButton, column, row));
+            mSession.write(String.format("\033[<%d;%d;%d" + (pressed ? 'M' : 'm'), mouseButton | modifiers, column, row));
         } else {
             // 3 for release of all buttons.
-            mouseButton = pressed ? mouseButton : 3;
+            mouseButton = (pressed ? mouseButton : 3) | modifiers;
             // Clip to screen, and clip to the limits of 8-bit data.
             boolean out_of_bounds = column > 255 - 32 || row > 255 - 32;
             if (!out_of_bounds) {
@@ -1190,29 +1206,11 @@ public final class TerminalEmulator {
     }
 
     /**
-     * Whether copying a selection that includes a wrapped row trims that row's trailing padding
-     * spaces the same way an unwrapped row is trimmed. Consulted by both {@link #mMainBuffer} and
-     * {@link #mAltBuffer}, which hold no preferences access of their own; the app pushes the
-     * "Trim trailing spaces on wrapped lines" setting here on every new session and again whenever
-     * the preference changes.
-     */
-    public void setTrimWrappedTrailingSpaces(boolean trimWrappedTrailingSpaces) {
-        mMainBuffer.setTrimWrappedTrailingSpaces(trimWrappedTrailingSpaces);
-        mAltBuffer.setTrimWrappedTrailingSpaces(trimWrappedTrailingSpaces);
-    }
-
-    /** @see #setTrimWrappedTrailingSpaces(boolean) */
-    public boolean isTrimWrappedTrailingSpaces() {
-        return mMainBuffer.isTrimWrappedTrailingSpaces();
-    }
-
-    /**
      * Whether copy and paste run through {@link ClipboardCleanup}: copying drops a line's
      * trailing spaces and tabs and any blank lines left at the end, and pasting a single line
      * loses its trailing whitespace and newline so it runs instead of queuing an empty line
      * behind it. An emulator has no preferences access of its own; the app pushes the "Clipboard
-     * Cleanup" setting here on every new session and again whenever the preference changes, the
-     * same way it does {@link #setTrimWrappedTrailingSpaces(boolean)}.
+     * Cleanup" setting here on every new session and again whenever the preference changes.
      */
     public void setClipboardCleanupEnabled(boolean clipboardCleanupEnabled) {
         mClipboardCleanupEnabled = clipboardCleanupEnabled;

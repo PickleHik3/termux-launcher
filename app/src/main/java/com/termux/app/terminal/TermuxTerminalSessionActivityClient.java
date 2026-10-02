@@ -1104,15 +1104,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
-     * Push the "Trim trailing spaces on wrapped lines" and "Clipboard Cleanup" preferences into
-     * every live session's emulator, the same way {@link #resetAllSessionColors()} pushes a
-     * palette change: an emulator has no preferences access of its own, and a toggle should not
-     * need its shell reopened to take effect. Called for a newly shown session and again on the
-     * settings-return refresh.
+     * Push the "Clipboard Cleanup" preference into every live session's emulator, the same way
+     * {@link #resetAllSessionColors()} pushes a palette change: an emulator has no preferences
+     * access of its own, and a toggle should not need its shell reopened to take effect. Called
+     * for a newly shown session and again on the settings-return refresh.
      */
-    public void applyTrimWrappedTrailingSpacesPreference() {
-        boolean trimWrappedTrailingSpaces = mHost.preferences() == null
-            || mHost.preferences().isTrimWrappedTrailingSpacesEnabled();
+    public void applyClipboardCleanupPreference() {
         boolean clipboardCleanup = mHost.preferences() == null
             || mHost.preferences().isClipboardCleanupEnabled();
         TermuxService service = mHost.service();
@@ -1120,7 +1117,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             for (TermuxSession termuxSession : service.getTermuxSessions()) {
                 TerminalSession session = termuxSession.getTerminalSession();
                 if (session != null && session.getEmulator() != null) {
-                    session.getEmulator().setTrimWrappedTrailingSpaces(trimWrappedTrailingSpaces);
                     session.getEmulator().setClipboardCleanupEnabled(clipboardCleanup);
                 }
             }
@@ -1128,7 +1124,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         }
         TerminalSession session = mHost.currentSession();
         if (session != null && session.getEmulator() != null) {
-            session.getEmulator().setTrimWrappedTrailingSpaces(trimWrappedTrailingSpaces);
             session.getEmulator().setClipboardCleanupEnabled(clipboardCleanup);
         }
     }
