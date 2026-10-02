@@ -2937,11 +2937,11 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             tint == null ? TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT : tint, false);
     }
 
-    /** The glass rim; always {@code hairline}: a stored {@code gradient} (retired) reads as the default. */
+    /** The glass rim a preset chose; {@code hairline} unless it named another that we know. */
     @NonNull
     public String getSurfaceGlassRim() {
         return knownOrDefault(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.DEFAULT_SURFACE_GLASS_RIM,
-            TERMUX_APP.GLASS_RIM_HAIRLINE);
+            TERMUX_APP.GLASS_RIM_HAIRLINE, TERMUX_APP.GLASS_RIM_GRADIENT);
     }
 
     public void setSurfaceGlassRim(@Nullable String rim) {

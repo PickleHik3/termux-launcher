@@ -20,27 +20,29 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
  */
 public final class GlassLook {
 
-    public static final GlassLook SCHEME = new GlassLook(false);
+    public static final GlassLook SCHEME = new GlassLook(false, false);
 
     @ColorInt public static final int OBSIDIAN_DARK = GlassTokens.OBSIDIAN_DARK;
     @ColorInt public static final int OBSIDIAN_LIGHT = GlassTokens.OBSIDIAN_LIGHT;
     /** White 0.05, out of 255. */
     public static final int WASH_ALPHA = GlassTokens.WASH_ALPHA;
+    @ColorInt public static final int RIM_START = GlassTokens.RIM_START;
+    @ColorInt public static final int RIM_END = GlassTokens.RIM_END;
 
     public final boolean obsidianTint;
+    public final boolean gradientRim;
 
-    public GlassLook(boolean obsidianTint) {
+    public GlassLook(boolean obsidianTint, boolean gradientRim) {
         this.obsidianTint = obsidianTint;
+        this.gradientRim = gradientRim;
     }
 
-    /**
-     * The look the tint string names; anything unknown is the shipped scheme. {@code rim} is read
-     * for no purpose: the gradient rim is retired, and a stored {@code gradient} is the default.
-     */
+    /** The look two preset strings name; anything unknown is the shipped half of that pair. */
     @NonNull
     public static GlassLook of(@Nullable String tint, @Nullable String rim) {
         boolean obsidian = TERMUX_APP.GLASS_TINT_OBSIDIAN.equals(tint);
-        return obsidian ? new GlassLook(true) : SCHEME;
+        boolean gradient = TERMUX_APP.GLASS_RIM_GRADIENT.equals(rim);
+        return !obsidian && !gradient ? SCHEME : new GlassLook(obsidian, gradient);
     }
 
     @NonNull
@@ -95,10 +97,11 @@ public final class GlassLook {
     }
 
     @Override public boolean equals(@Nullable Object other) {
-        return other instanceof GlassLook && ((GlassLook) other).obsidianTint == obsidianTint;
+        return other instanceof GlassLook && ((GlassLook) other).obsidianTint == obsidianTint
+            && ((GlassLook) other).gradientRim == gradientRim;
     }
 
     @Override public int hashCode() {
-        return obsidianTint ? 2 : 0;
+        return (obsidianTint ? 2 : 0) + (gradientRim ? 1 : 0);
     }
 }

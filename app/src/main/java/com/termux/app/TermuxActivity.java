@@ -3469,7 +3469,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public boolean paneGlassRimWanted() {
-                return false; // the gradient rim is retired
+                return mChrome.glass().look().gradientRim;
             }
 
             @Override @Nullable public Drawable paneGlassRim(float radiusPx) {
@@ -3610,7 +3610,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.GlassRefraction.Look look = currentFancierGlassLook();
         if (java.util.Objects.equals(look, mFancierGlassLook)) return;
         mFancierGlassLook = look;
-        mChrome.glass().setFancierGlass(look != null);
         mChrome.ledger().markAllBackdropsDirty();
         mAppliedPaneStyleKey = null;
         // The switch is the one gate of a generated background; re-read it next message, not

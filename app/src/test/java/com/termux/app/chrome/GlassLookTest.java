@@ -23,6 +23,7 @@ public class GlassLookTest {
     public void obsidianKeepsTheAlphaAndPicksInkOrWhiteByTheScheme() {
         GlassLook look = GlassLook.of("obsidian", "gradient");
         assertTrue(look.obsidianTint);
+        assertTrue(look.gradientRim);
         assertEquals(0x99161822, look.tintBase(0x99202020));
         assertEquals(0x99FFFFFF, look.tintBase(0x99F2F2F2));
     }

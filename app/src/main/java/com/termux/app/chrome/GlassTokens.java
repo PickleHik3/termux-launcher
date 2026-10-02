@@ -10,6 +10,8 @@ public final class GlassTokens {
     @ColorInt public static final int OBSIDIAN_LIGHT = 0xFFFFFFFF;
     /** White 0.05, out of 255. */
     public static final int WASH_ALPHA = 13;
+    @ColorInt public static final int RIM_START = 0x40FFFFFF;   // white 0.25
+    @ColorInt public static final int RIM_END = 0x08FFFFFF;     // white 0.03
 
     @ColorInt public static final int RIM_BASE = 0x3DFFFFFF;
     @ColorInt public static final int RIM_LIGHT_TOP = 0x7DFFFFFF;

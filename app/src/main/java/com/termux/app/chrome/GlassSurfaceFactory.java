@@ -45,25 +45,13 @@ public final class GlassSurfaceFactory {
         mLookOverride = lookOverride;
     }
 
-    /**
-     * Whether Fancier Glass is on. While it is, the refraction shader's edge light is every glass
-     * surface's edge, as on the dock, and no surface draws a visible rim of its own.
-     */
-    private volatile boolean mFancierGlass;
-
-    public void setFancierGlass(boolean on) {
-        mFancierGlass = on;
-    }
-
     /** A preset's tint and rim standing in for the live preferences'; null reads the preferences. */
     @Nullable private final GlassLook mLookOverride;
 
     /** This factory's material, drawn in {@code look} instead of the preferences' (the preset tiles). */
     @NonNull
     public GlassSurfaceFactory withLook(@NonNull GlassLook look) {
-        GlassSurfaceFactory factory = new GlassSurfaceFactory(mSurfaces, mInk, look);
-        factory.mFancierGlass = mFancierGlass;
-        return factory;
+        return new GlassSurfaceFactory(mSurfaces, mInk, look);
     }
 
     /** The tint colour and rim every surface built here wears: the preset's, or the live one. */
@@ -351,17 +339,14 @@ public final class GlassSurfaceFactory {
     }
 
     /**
-     * The rim every surface wears: the hairline above, or, while Fancier Glass is on, a stroke-less
-     * shape of the same corner (the refraction's edge light is the edge then, and the shape still
-     * supplies the outline a host clips to).
+     * The rim in this factory's look: the hairline above, or the diagonal white gradient. Every
+     * surface's rim goes through here, so the look's choice is made once.
      */
     @NonNull
     public Drawable rimDrawable(float cornerRadiusPx) {
-        if (!mFancierGlass) return rim(cornerRadiusPx);
-        GradientDrawable none = new GradientDrawable();
-        none.setColor(Color.TRANSPARENT);
-        none.setCornerRadius(cornerRadiusPx);
-        return none;
+        if (!look().gradientRim) return rim(cornerRadiusPx);
+        return new GradientRimDrawable(cornerRadiusPx, Math.max(1, Math.round(mSurfaces.dpToPx(1))),
+            GlassLook.RIM_START, GlassLook.RIM_END);
     }
 
     /**
