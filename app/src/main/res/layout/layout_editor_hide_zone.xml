@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Layout mode's hide zone: the drop target for putting an element away, between the miniature
+     and the bottom area. SurfaceEditorController stands it under the frame; LayoutEditorController
+     draws its dashed outline and tints it as a drag offers and hovers it. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/layout_editor_hide_zone"
+    android:layout_width="0dp"
+    android:layout_height="48dp"
+    android:gravity="center"
+    android:importantForAccessibility="no"
+    android:maxLines="1"
+    android:text="@string/layout_editor_hide_zone_hint"
+    android:textSize="13sp"
+    android:visibility="gone" />

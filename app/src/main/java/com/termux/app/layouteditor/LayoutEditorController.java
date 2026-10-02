@@ -9,6 +9,7 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.OptIn;
@@ -211,11 +212,21 @@ public final class LayoutEditorController {
         @NonNull final ChipGroup keyboardForms;
         @NonNull final MaterialButtonToggleGroup orientation;
         @NonNull final MaterialButton trash;
+        /** The drop target for hiding, under the frame; null where a host has none (the trash). */
+        @Nullable final TextView hideZone;
 
         public Views(@NonNull ViewGroup canvasHost, @NonNull LayoutCanvasView canvas,
                      @NonNull ChipGroup keyboardForms,
                      @NonNull MaterialButtonToggleGroup orientation,
                      @NonNull MaterialButton trash) {
+            this(canvasHost, canvas, keyboardForms, orientation, trash, null);
+        }
+
+        public Views(@NonNull ViewGroup canvasHost, @NonNull LayoutCanvasView canvas,
+                     @NonNull ChipGroup keyboardForms,
+                     @NonNull MaterialButtonToggleGroup orientation,
+                     @NonNull MaterialButton trash, @Nullable TextView hideZone) {
+            this.hideZone = hideZone;
             this.canvasHost = canvasHost;
             this.canvas = canvas;
             this.keyboardForms = keyboardForms;
@@ -506,6 +517,13 @@ public final class LayoutEditorController {
             if (mViews == views)
                 syncTrayTarget(views);
         });
+        if (views.hideZone != null) {
+            views.hideZone.addOnLayoutChangeListener((view, left, top, right, bottom, oldLeft,
+                                                      oldTop, oldRight, oldBottom) -> {
+                if (mViews == views)
+                    syncTrayTarget(views);
+            });
+        }
         mTrashRestTint = views.trash.getBackgroundTintList();
         mHiddenPopup = new HiddenElementsPopup(views.canvas, views.trash, block -> {
             LayoutEditorPlan current = mPlan;
@@ -694,9 +712,9 @@ public final class LayoutEditorController {
     }
 
     /**
-     * The trash at rest wears the muted ink (outline) or the accent (filled); while a lifted
-     * element may be put away it is outlined as the drop zone, and filled with a wash once the
-     * finger is over it.
+     * The trash at rest wears the muted ink (outline) or the accent (filled). The hide zone is
+     * the drop target: quiet at rest, in the accent's dashed outline while a lifted element may
+     * be put away, and washed with the secondary container once the finger is over it.
      */
     private void showTrayOffer(@NonNull Views views, boolean offered, boolean hovered) {
         mTrayOffered = offered;
@@ -710,33 +728,39 @@ public final class LayoutEditorController {
             com.google.android.material.R.attr.colorOnSurfaceVariant,
             mHost.themeColor(com.google.android.material.R.attr.colorOnSurfaceVariant,
                 R.color.termux_on_surface_variant));
-        views.trash.setIconTint(ColorStateList.valueOf(filled || offered ? primary : muted));
-        if (!offered) {
-            views.trash.setStrokeWidth(0);
-            views.trash.setBackgroundTintList(mTrashRestTint);
+        views.trash.setIconTint(ColorStateList.valueOf(filled ? primary : muted));
+        views.trash.setStrokeWidth(0);
+        views.trash.setBackgroundTintList(mTrashRestTint);
+        TextView zone = views.hideZone;
+        if (zone == null)
             return;
-        }
-        // The button's own shape, outlined while it is offered and washed once the finger is over
-        // it: the drop zone is the trash itself, not a drawable laid over it.
         float density = mHost.context().getResources().getDisplayMetrics().density;
-        int outline = MaterialColors.getColor(views.trash,
+        int outline = MaterialColors.getColor(zone,
             com.google.android.material.R.attr.colorOutline,
             mHost.themeColor(com.google.android.material.R.attr.colorOutline,
                 R.color.termux_on_surface));
-        int container = MaterialColors.getColor(views.trash,
+        int container = MaterialColors.getColor(zone,
             com.google.android.material.R.attr.colorSecondaryContainer, 0);
-        views.trash.setStrokeColor(ColorStateList.valueOf(mTrayHovered ? primary : outline));
-        views.trash.setStrokeWidth(Math.round((mTrayHovered ? 2f : 1f) * density));
-        views.trash.setBackgroundTintList(ColorStateList.valueOf(mTrayHovered ? container : 0));
+        int onContainer = MaterialColors.getColor(zone,
+            com.google.android.material.R.attr.colorOnSecondaryContainer, muted);
+        float width = mTrayHovered ? 2f : offered ? 1.5f : 1f;
+        android.graphics.drawable.GradientDrawable shape =
+            new android.graphics.drawable.GradientDrawable();
+        shape.setCornerRadius(12f * density);
+        shape.setColor(mTrayHovered ? container : 0);
+        shape.setStroke(Math.round(width * density), offered ? primary : outline,
+            6f * density, 4f * density);
+        zone.setBackground(shape);
+        zone.setTextColor(mTrayHovered ? onContainer : offered ? primary : muted);
     }
 
     /**
-     * Tells the canvas where the trash stands, in the canvas's own coordinates. The two are in
+     * Tells the canvas where the hide zone stands (the trash where there is none), in the canvas's own coordinates. The two are in
      * different parents — the frame and the bottom area — so the rect is taken from their places
      * in the window; neither is under the frame's scale.
      */
     private void syncTrayTarget(@NonNull Views views) {
-        View tray = views.trash;
+        View tray = views.hideZone != null ? views.hideZone : views.trash;
         LayoutCanvasView canvas = views.canvas;
         if (tray.getWidth() <= 0 || tray.getHeight() <= 0 || !tray.isShown()) {
             canvas.setExternalTrayRect(null);

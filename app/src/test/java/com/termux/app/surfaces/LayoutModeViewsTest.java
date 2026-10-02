@@ -63,6 +63,16 @@ public class LayoutModeViewsTest {
         assertNotNull(frame.findViewById(R.id.layout_editor_keyboard_form_split));
     }
 
+    /** The hide zone is its own view under the frame: a text hint, hidden until Layout mode shows it. */
+    @Test
+    public void theHideZoneIsATextHintThatStartsHidden() {
+        View zone = inflate(R.layout.layout_editor_hide_zone);
+        assertTrue(zone instanceof android.widget.TextView);
+        assertEquals(R.id.layout_editor_hide_zone, zone.getId());
+        assertEquals(View.GONE, zone.getVisibility());
+        assertEquals("Drag here to hide", ((android.widget.TextView) zone).getText().toString());
+    }
+
     @Test
     public void theBottomAreaCarriesLayoutModesRowsAndTheyStartHidden() {
         View panel = inflate(R.layout.appearance_editor_panel);

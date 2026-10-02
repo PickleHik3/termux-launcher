@@ -1888,7 +1888,8 @@
                 <string name="settings_destination_layout_editor_summary">Move, hide and size the bars, the dock and the keyboard</string>
                 <!-- The trash under the phone, read aloud: nothing in it, or how many are hidden
                      (a tap opens the list, a bar dropped on it is hidden). -->
-                <string name="layout_editor_trash_empty">Nothing hidden. Drop a bar here to hide it</string>
+                <string name="layout_editor_trash_empty">Nothing hidden. Drag a bar to the zone above to hide it</string>
+                <string name="layout_editor_hide_zone_hint">Drag here to hide</string>
                 <string name="layout_editor_trash_filled">Hidden elements, %1$d. Tap to list them</string>
                 <string name="layout_editor_keyboard">Keyboard</string>
                 <string name="layout_editor_keyboard_forms">Keyboard type</string>
