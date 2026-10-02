@@ -1460,7 +1460,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     private void reportIssueFromTranscript(String transcriptText, boolean addTermuxDebugInfo) {
-        Logger.showToast(mContext, mContext.getString(R.string.msg_generating_report), true);
+        com.termux.app.notice.AppNotice.show(mContext, mContext.getString(R.string.msg_generating_report), true);
         REPORT_EXECUTOR.execute(() -> {
             StringBuilder reportString = new StringBuilder();
             String title = TermuxConstants.TERMUX_LAUNCHER_APP_DISPLAY_NAME + " Report Issue";

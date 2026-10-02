@@ -341,7 +341,7 @@ public final class WallpaperPickerSheet {
             } else {
                 Logger.logError(LOG_TAG, "Applying " + w.id() + " failed: " + error);
                 if (!mDismissed) setBusy(false);
-                Toast.makeText(mActivity, R.string.wallpaper_picker_apply_failed, Toast.LENGTH_LONG).show();
+                com.termux.app.notice.AppNotice.show(mActivity, R.string.wallpaper_picker_apply_failed, true);
             }
         });
     }

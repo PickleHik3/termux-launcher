@@ -866,16 +866,13 @@
                                 android:gravity="center"
                                 android:orientation="horizontal">
 
-                                <TextView
+                                <com.google.android.material.button.MaterialButton
                                     android:id="@+id/inapp_keyboard_height_adjust_cancel"
-                                    android:layout_width="40dp"
-                                    android:layout_height="32dp"
-                                    android:background="?attr/selectableItemBackgroundBorderless"
+                                    style="?attr/materialIconButtonStyle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
                                     android:contentDescription="@string/termux_in_app_keyboard_height_adjust_cancel"
-                                    android:gravity="center"
-                                    android:text="@string/termux_in_app_keyboard_height_adjust_cancel_symbol"
-                                    android:textColor="?attr/termuxColorOnSurface"
-                                    android:textSize="18sp" />
+                                    app:icon="@drawable/ic_symbol_close" />
 
                                 <FrameLayout
                                     android:id="@+id/inapp_keyboard_height_adjust_handle"
@@ -885,30 +882,26 @@
                                     android:clickable="true"
                                     android:focusable="true">
 
-                                    <View
+                                    <com.google.android.material.bottomsheet.BottomSheetDragHandleView
                                         android:id="@+id/inapp_keyboard_height_adjust_handle_indicator"
-                                        android:layout_width="52dp"
-                                        android:layout_height="4dp"
-                                        android:layout_gravity="center"
-                                        android:background="?attr/termuxColorOnSurfaceVariant" />
+                                        android:layout_width="match_parent"
+                                        android:layout_height="wrap_content"
+                                        android:layout_gravity="center" />
                                 </FrameLayout>
 
-                                <TextView
+                                <com.google.android.material.button.MaterialButton
                                     android:id="@+id/inapp_keyboard_height_adjust_confirm"
-                                    android:layout_width="40dp"
-                                    android:layout_height="32dp"
-                                    android:background="?attr/selectableItemBackgroundBorderless"
+                                    style="?attr/materialIconButtonStyle"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
                                     android:contentDescription="@string/termux_in_app_keyboard_height_adjust_confirm"
-                                    android:gravity="center"
-                                    android:text="@string/termux_in_app_keyboard_height_adjust_confirm_symbol"
-                                    android:textColor="?attr/termuxColorOnSurface"
-                                    android:textSize="18sp" />
+                                    app:icon="@drawable/ic_symbol_check" />
                             </LinearLayout>
                         </FrameLayout>
 
                         <LinearLayout
                             android:layout_width="match_parent"
-                            android:layout_height="28dp"
+                            android:layout_height="wrap_content"
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
                             android:paddingStart="8dp"
@@ -920,22 +913,23 @@
                                 android:layout_height="wrap_content"
                                 android:maxLines="1"
                                 android:text="@string/termux_in_app_keyboard_key_spacing"
-                                android:textColor="?attr/termuxColorOnSurface"
-                                android:textSize="11sp" />
+                                android:textAppearance="?attr/textAppearanceLabelMedium"
+                                android:textColor="?attr/termuxColorOnSurface" />
 
-                            <SeekBar
+                            <com.google.android.material.slider.Slider
                                 android:id="@+id/inapp_keyboard_key_spacing_slider"
                                 android:layout_width="0dp"
-                                android:layout_height="28dp"
+                                android:layout_height="wrap_content"
                                 android:layout_weight="1"
                                 android:contentDescription="@string/termux_in_app_keyboard_key_spacing_slider"
-                                android:max="200"
-                                android:splitTrack="false" />
+                                android:valueFrom="0.0"
+                                android:valueTo="200.0"
+                                android:stepSize="1.0" />
                         </LinearLayout>
 
                         <LinearLayout
                             android:layout_width="match_parent"
-                            android:layout_height="28dp"
+                            android:layout_height="wrap_content"
                             android:gravity="center_vertical"
                             android:orientation="horizontal"
                             android:paddingStart="8dp"
@@ -947,17 +941,18 @@
                                 android:layout_height="wrap_content"
                                 android:maxLines="1"
                                 android:text="@string/termux_in_app_keyboard_key_corner_radius"
-                                android:textColor="?attr/termuxColorOnSurface"
-                                android:textSize="11sp" />
+                                android:textAppearance="?attr/textAppearanceLabelMedium"
+                                android:textColor="?attr/termuxColorOnSurface" />
 
-                            <SeekBar
+                            <com.google.android.material.slider.Slider
                                 android:id="@+id/inapp_keyboard_key_corner_radius_slider"
                                 android:layout_width="0dp"
-                                android:layout_height="28dp"
+                                android:layout_height="wrap_content"
                                 android:layout_weight="1"
                                 android:contentDescription="@string/termux_in_app_keyboard_key_corner_radius_slider"
-                                android:max="240"
-                                android:splitTrack="false" />
+                                android:valueFrom="0.0"
+                                android:valueTo="240.0"
+                                android:stepSize="1.0" />
                         </LinearLayout>
                     </LinearLayout>
 

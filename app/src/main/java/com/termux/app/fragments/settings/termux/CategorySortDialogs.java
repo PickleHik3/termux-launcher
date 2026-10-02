@@ -4,17 +4,12 @@ import android.app.Activity;
 import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.res.ColorStateList;
-import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.RippleDrawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
@@ -25,8 +20,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 
-import com.google.android.material.color.MaterialColors;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
+import com.termux.app.material.M3;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.ai.TaiDeviceCapabilities;
@@ -205,35 +203,24 @@ final class CategorySortDialogs {
                                  boolean enabled,
                                  @NonNull Runnable onClick) {
         float density = context.getResources().getDisplayMetrics().density;
-        int titleColor = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorOnSurface, 0xFFECEFF4);
-        int summaryColor = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFF9AA3B2);
-        int surfaceColor = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-            MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel, 0xFF20242C));
-        int accent = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorPrimary, 0xFF8AB4F8);
+        int titleColor = enabled ? M3.onSurface(context) : M3.onSurfaceVariant(context);
+        int summaryColor = M3.onSurfaceVariant(context);
+        int accent = M3.primary(context);
+
+        // A clickable filled card: the ripple, shape and container colour are the card's own. A
+        // disabled card keeps its text, because the summary is the reason it is disabled.
+        MaterialCardView card = M3.clickableCard(context, false);
+        card.setEnabled(enabled);
+        card.setClickable(enabled);
+        card.setFocusable(enabled);
+        if (enabled) card.setOnClickListener(v -> onClick.run());
 
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         int padding = Math.round(16 * density);
         row.setPadding(padding, padding, padding, padding);
-
-        GradientDrawable card = new GradientDrawable();
-        card.setColor(surfaceColor);
-        card.setCornerRadius(20 * density);
-        if (enabled) {
-            row.setBackground(new RippleDrawable(
-                ColorStateList.valueOf(MaterialColors.compositeARGBWithAlpha(accent, 48)), card, null));
-            row.setClickable(true);
-            row.setFocusable(true);
-            row.setOnClickListener(v -> onClick.run());
-        } else {
-            row.setBackground(card);
-            row.setAlpha(0.5f);
-        }
+        card.addView(row);
 
         ImageView icon = new ImageView(context);
         icon.setImageResource(iconRes);
@@ -248,17 +235,15 @@ final class CategorySortDialogs {
 
         TextView titleView = new TextView(context);
         titleView.setText(title);
+        M3.textAppearance(titleView, com.google.android.material.R.attr.textAppearanceTitleMedium);
         titleView.setTextColor(titleColor);
-        titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f);
-        titleView.setTypeface(Typeface.DEFAULT_BOLD);
         texts.addView(titleView);
 
         if (summary != null && !summary.isEmpty()) {
             TextView summaryView = new TextView(context);
             summaryView.setText(summary);
+            M3.textAppearance(summaryView, com.google.android.material.R.attr.textAppearanceBodyMedium);
             summaryView.setTextColor(summaryColor);
-            summaryView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
-            summaryView.setLineSpacing(Math.round(2 * density), 1f);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             params.topMargin = Math.round(2 * density);
@@ -268,9 +253,8 @@ final class CategorySortDialogs {
         if (note != null && !note.isEmpty()) {
             TextView noteView = new TextView(context);
             noteView.setText(note);
-            noteView.setTextColor(MaterialColors.compositeARGBWithAlpha(summaryColor, 200));
-            noteView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-            noteView.setLineSpacing(Math.round(2 * density), 1f);
+            M3.textAppearance(noteView, com.google.android.material.R.attr.textAppearanceBodySmall);
+            noteView.setTextColor(summaryColor);
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             params.topMargin = Math.round(6 * density);
@@ -284,8 +268,8 @@ final class CategorySortDialogs {
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         rowParams.topMargin = Math.round(6 * density);
         rowParams.bottomMargin = Math.round(6 * density);
-        row.setLayoutParams(rowParams);
-        return row;
+        card.setLayoutParams(rowParams);
+        return card;
     }
 
     /**
@@ -319,19 +303,23 @@ final class CategorySortDialogs {
                               @NonNull List<LauncherCategorySortPrompt.AppEntry> apps,
                               @Nullable Runnable onApplied) {
         float density = context.getResources().getDisplayMetrics().density;
-        EditText input = new EditText(context);
+        TextInputLayout inputLayout = new TextInputLayout(context);
+        inputLayout.setHint(context.getString(
+            R.string.settings_app_drawer_category_sort_paste_input_hint));
+        TextInputEditText input = new TextInputEditText(inputLayout.getContext());
+        inputLayout.addView(input, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
         input.setSingleLine(false);
         input.setMinLines(6);
         input.setMaxLines(12);
-        input.setHint(R.string.settings_app_drawer_category_sort_paste_input_hint);
         input.setGravity(Gravity.TOP | Gravity.START);
 
         LinearLayout layout = new LinearLayout(context);
         layout.setOrientation(LinearLayout.VERTICAL);
         int padH = Math.round(24 * density);
         layout.setPadding(padH, Math.round(8 * density), padH, 0);
-        layout.addView(input, new LinearLayout.LayoutParams(
+        layout.addView(inputLayout, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // Neutral button rather than a view button: the dialog must not close when the prompt is

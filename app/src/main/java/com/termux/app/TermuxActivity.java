@@ -1665,7 +1665,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 throw new RuntimeException("bindService() failed");
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "TermuxActivity failed to start TermuxService", e);
-            Logger.showToast(this, getString(e.getMessage() != null && e.getMessage().contains("app is in background") ? R.string.error_termux_service_start_failed_bg : R.string.error_termux_service_start_failed_general), true);
+            com.termux.app.notice.AppNotice.show(this, getString(e.getMessage() != null && e.getMessage().contains("app is in background") ? R.string.error_termux_service_start_failed_bg : R.string.error_termux_service_start_failed_general), true);
             mIsInvalidState = true;
             return;
         }
@@ -3983,13 +3983,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private int resolveMaterialDarkBackgroundColor() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            int colorResId = getResources().getIdentifier("system_neutral1_900", "color", "android");
-            if (colorResId != 0) {
-                return ContextCompat.getColor(this, colorResId);
-            }
-        }
-        return Color.parseColor("#1C1B1F");
+        // The theme's own surface role: with dynamic colour it is the system neutral, without it
+        // the M3 baseline, so no framework resource lookup or literal fallback is needed.
+        return com.termux.app.material.M3.color(this,
+            com.google.android.material.R.attr.colorSurface,
+            com.google.android.material.R.color.m3_sys_color_dark_surface);
     }
 
     private int resolveAccessoryOutlineColor() {
@@ -4371,7 +4369,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isNightThemeActive() || LauncherSchemeTheme.isSchemeChromeActive(this)) {
             return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base);
         }
-        return Color.parseColor("#1C1B1F");
+        return com.termux.app.material.M3.color(this,
+            com.google.android.material.R.attr.colorSurfaceContainerLowest,
+            com.google.android.material.R.color.m3_sys_color_dark_surface_container_lowest);
     }
 
     private int resolveTerminalSurfaceColor() {
@@ -11594,9 +11594,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View confirm = findViewById(R.id.inapp_keyboard_height_adjust_confirm);
         View cancel = findViewById(R.id.inapp_keyboard_height_adjust_cancel);
         TextView spacingLabel = findViewById(R.id.inapp_keyboard_key_spacing_label);
-        SeekBar spacingSlider = findViewById(R.id.inapp_keyboard_key_spacing_slider);
+        com.google.android.material.slider.Slider spacingSlider =
+            findViewById(R.id.inapp_keyboard_key_spacing_slider);
         TextView radiusLabel = findViewById(R.id.inapp_keyboard_key_corner_radius_label);
-        SeekBar radiusSlider = findViewById(
+        com.google.android.material.slider.Slider radiusSlider = findViewById(
             R.id.inapp_keyboard_key_corner_radius_slider);
         if (controls == null || handle == null || handleIndicator == null
             || confirm == null || cancel == null || spacingLabel == null
@@ -11607,8 +11608,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             handle.setOnTouchListener(null);
             confirm.setOnClickListener(null);
             cancel.setOnClickListener(null);
-            spacingSlider.setOnSeekBarChangeListener(null);
-            radiusSlider.setOnSeekBarChangeListener(null);
+            spacingSlider.clearOnChangeListeners();
+            radiusSlider.clearOnChangeListeners();
             return;
         }
 
@@ -11624,49 +11625,44 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int controlColor = ((Keyboard2View) mAttachedInAppKeyboardView)
                 .getKeyboardLabelColor();
             ColorStateList controlTint = ColorStateList.valueOf(controlColor);
-            handleIndicator.setBackgroundColor(controlColor);
-            ((TextView) confirm).setTextColor(controlColor);
-            ((TextView) cancel).setTextColor(controlColor);
+            if (handleIndicator instanceof android.widget.ImageView) {
+                ((android.widget.ImageView) handleIndicator).setImageTintList(controlTint);
+            }
+            ((com.google.android.material.button.MaterialButton) confirm).setIconTint(controlTint);
+            ((com.google.android.material.button.MaterialButton) cancel).setIconTint(controlTint);
             spacingLabel.setTextColor(controlColor);
             radiusLabel.setTextColor(controlColor);
-            spacingSlider.setProgressTintList(controlTint);
+            spacingSlider.setTrackActiveTintList(controlTint);
             spacingSlider.setThumbTintList(controlTint);
-            radiusSlider.setProgressTintList(controlTint);
+            radiusSlider.setTrackActiveTintList(controlTint);
             radiusSlider.setThumbTintList(controlTint);
         }
-        spacingSlider.setMax(Math.round(
+        // A Slider insists on valueTo before value, and on a value inside [valueFrom, valueTo].
+        float spacingMax = Math.round(
             TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE
-                * IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT));
-        spacingSlider.setProgress(Math.round(mInAppKeyboard.getKeyMarginScale()
-            * IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT));
-        radiusSlider.setMax(Math.round(
+                * IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT);
+        spacingSlider.setValueTo(spacingMax);
+        spacingSlider.setValue(Math.max(0f, Math.min(spacingMax,
+            Math.round(mInAppKeyboard.getKeyMarginScale()
+                * IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT))));
+        float radiusMax = Math.round(
             TermuxPreferenceConstants.TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP
-                * IN_APP_KEYBOARD_RADIUS_SLIDER_STEPS_PER_DP));
-        radiusSlider.setProgress(Math.round(mInAppKeyboard.getEffectiveKeyCornerRadiusDp()
-            * IN_APP_KEYBOARD_RADIUS_SLIDER_STEPS_PER_DP));
-        spacingSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (fromUser && mInAppKeyboard != null)
-                    mInAppKeyboard.previewKeyMarginScale(
-                        progress / (float) IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT);
-            }
-
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+                * IN_APP_KEYBOARD_RADIUS_SLIDER_STEPS_PER_DP);
+        radiusSlider.setValueTo(radiusMax);
+        radiusSlider.setValue(Math.max(0f, Math.min(radiusMax,
+            Math.round(mInAppKeyboard.getEffectiveKeyCornerRadiusDp()
+                * IN_APP_KEYBOARD_RADIUS_SLIDER_STEPS_PER_DP))));
+        spacingSlider.clearOnChangeListeners();
+        spacingSlider.addOnChangeListener((slider, value, fromUser) -> {
+            if (fromUser && mInAppKeyboard != null)
+                mInAppKeyboard.previewKeyMarginScale(
+                    value / (float) IN_APP_KEYBOARD_MARGIN_SLIDER_STEPS_PER_UNIT);
         });
-        radiusSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (fromUser && mInAppKeyboard != null)
-                    mInAppKeyboard.previewKeyCornerRadiusDp(
-                        progress / (float) IN_APP_KEYBOARD_RADIUS_SLIDER_STEPS_PER_DP);
-            }
-
-            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
-
-            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+        radiusSlider.clearOnChangeListeners();
+        radiusSlider.addOnChangeListener((slider, value, fromUser) -> {
+            if (fromUser && mInAppKeyboard != null)
+                mInAppKeyboard.previewKeyCornerRadiusDp(
+                    value / (float) IN_APP_KEYBOARD_RADIUS_SLIDER_STEPS_PER_DP);
         });
         confirm.setOnClickListener(view -> {
             if (mInAppKeyboard != null) {
@@ -13586,7 +13582,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     public void toggleTerminalToolbar() {
         boolean showNow = mPreferences.toogleShowTerminalToolbar();
-        Logger.showToast(this, showNow ? getString(R.string.msg_enabling_terminal_toolbar) : getString(R.string.msg_disabling_terminal_toolbar), true);
+        com.termux.app.notice.AppNotice.show(this, showNow ? getString(R.string.msg_enabling_terminal_toolbar) : getString(R.string.msg_disabling_terminal_toolbar), true);
 
         mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
@@ -21446,23 +21442,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return new com.termux.app.statusbar.StatusCardHost.StyleProvider() {
             @Override
             public Drawable cardBackground() {
-                int surface = getTermuxThemeColor(
-                    com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-                    R.color.termux_surface_panel_high);
-                int outline = getTermuxThemeColor(
-                    com.termux.shared.R.attr.termuxColorOutlineVariant,
-                    R.color.termux_outline_variant);
-                GradientDrawable materialSurface = new GradientDrawable();
-                materialSurface.setColor(withAlphaComponent(surface, 248));
-                materialSurface.setCornerRadius(dpToPx(16));
-                materialSurface.setStroke(Math.max(1, Math.round(dpToPx(1))),
-                    withAlphaComponent(outline, 118));
-                return materialSurface;
+                com.google.android.material.shape.MaterialShapeDrawable card =
+                    com.termux.app.material.M3.surface(TermuxActivity.this,
+                        com.google.android.material.R.attr.shapeAppearanceCornerLarge,
+                        com.termux.app.material.M3.surfaceContainer(TermuxActivity.this));
+                card.setStroke(getResources().getDimension(
+                        com.google.android.material.R.dimen.m3_comp_outlined_card_outline_width),
+                    com.termux.app.material.M3.outlineVariant(TermuxActivity.this));
+                return card;
             }
 
             @Override
             public float cornerRadiusPx() {
-                return dpToPx(16);
+                return com.termux.app.material.M3.shape(TermuxActivity.this,
+                    com.google.android.material.R.attr.shapeAppearanceCornerLarge)
+                    .getTopLeftCornerSize().getCornerSize(new android.graphics.RectF(0, 0, 1, 1));
             }
 
             @Override

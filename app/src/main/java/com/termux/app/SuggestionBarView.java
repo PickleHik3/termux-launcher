@@ -4050,13 +4050,15 @@ public final class SuggestionBarView extends GridLayout
         BottomSheetDialog dialog = new BottomSheetDialog(getContext());
         LinearLayout root = new LinearLayout(getContext());
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(12), dp(16), dp(12));
+        root.setPadding(dp(16), 0, dp(16), dp(12));
+        root.addView(new com.google.android.material.bottomsheet.BottomSheetDragHandleView(getContext()),
+            new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView title = new TextView(getContext());
         title.setText(TextUtils.isEmpty(folder.title) ? "Folder Apps" : folder.title);
-        title.setTextColor(resolveLauncherTextColor());
-        title.setTypeface(Typeface.DEFAULT_BOLD);
-        title.setTextSize(14f);
+        com.termux.app.material.M3.textAppearance(title, com.google.android.material.R.attr.textAppearanceTitleMedium);
+        title.setTextColor(com.termux.app.material.M3.onSurface(getContext()));
 
         final Set<String> selectedIds = new LinkedHashSet<>();
         for (PinnedAppItem folderApp : folder.apps) {
@@ -4075,9 +4077,12 @@ public final class SuggestionBarView extends GridLayout
         });
         final List<String> labels = buildDisplayLabels(source);
 
-        EditText searchInput = new EditText(getContext());
-        searchInput.setHint("Search apps");
+        com.google.android.material.textfield.TextInputLayout folderSearchLayout = new com.google.android.material.textfield.TextInputLayout(getContext());
+        folderSearchLayout.setHint("Search apps");
+        EditText searchInput = new com.google.android.material.textfield.TextInputEditText(folderSearchLayout.getContext());
         searchInput.setSingleLine(true);
+        folderSearchLayout.addView(searchInput, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         final List<LauncherAppEntry> filteredApps = new ArrayList<>(source);
         final List<String> filteredLabels = new ArrayList<>(labels);
@@ -4131,10 +4136,10 @@ public final class SuggestionBarView extends GridLayout
         topActions.setOrientation(LinearLayout.HORIZONTAL);
         topActions.setGravity(Gravity.END);
 
-        ImageButton delete = new ImageButton(getContext());
-        delete.setImageResource(R.drawable.ic_delete_sweep_24);
+        com.google.android.material.button.MaterialButton delete = new com.google.android.material.button.MaterialButton(getContext(), null,
+            com.google.android.material.R.attr.materialIconButtonStyle);
+        delete.setIconResource(R.drawable.ic_delete_sweep_24);
         delete.setContentDescription("Delete folder");
-        styleIconButton(delete, dp(4));
         delete.setOnClickListener(v -> {
             if (folderIndex >= 0) {
                 removePinnedAt(folderIndex);
@@ -4143,21 +4148,21 @@ public final class SuggestionBarView extends GridLayout
             }
             dialog.dismiss();
         });
-        LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(dp(28), dp(28));
+        LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         topActions.addView(delete, deleteParams);
 
         LinearLayout buttons = new LinearLayout(getContext());
         buttons.setOrientation(LinearLayout.HORIZONTAL);
         buttons.setGravity(Gravity.END);
 
-        Button cancel = new Button(getContext());
+        com.google.android.material.button.MaterialButton cancel = new com.google.android.material.button.MaterialButton(getContext(), null,
+            androidx.appcompat.R.attr.borderlessButtonStyle);
         cancel.setText("Cancel");
-        styleGhostButton(cancel);
         cancel.setOnClickListener(v -> dialog.dismiss());
 
-        Button save = new Button(getContext());
+        com.google.android.material.button.MaterialButton save = new com.google.android.material.button.MaterialButton(getContext());
         save.setText("Save");
-        styleGhostButton(save);
         save.setOnClickListener(v -> {
             List<PinnedAppItem> selectedApps = collectSelectedFolderApps(folder, source, selectedIds);
             dialog.dismiss();
@@ -4169,7 +4174,7 @@ public final class SuggestionBarView extends GridLayout
 
         root.addView(topActions, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(searchInput, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(folderSearchLayout, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(listView, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(320)));
         root.addView(buttons, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -4359,30 +4364,26 @@ public final class SuggestionBarView extends GridLayout
         List<IconPackDrawableItem> source = pack.drawableItems();
         LinearLayout root = new LinearLayout(getContext());
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(18), dp(18), dp(18), dp(12));
+        root.setPadding(dp(18), 0, dp(18), dp(12));
+        root.addView(new com.google.android.material.bottomsheet.BottomSheetDragHandleView(getContext()),
+            new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
 
         TextView title = new TextView(getContext());
         title.setText(packInfo.label);
-        title.setTextColor(resolveLauncherTextColor());
-        title.setTextSize(18f);
-        title.setTypeface(Typeface.DEFAULT_BOLD);
+        com.termux.app.material.M3.textAppearance(title, com.google.android.material.R.attr.textAppearanceTitleLarge);
+        title.setTextColor(com.termux.app.material.M3.onSurface(getContext()));
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
         title.setPadding(0, 0, 0, dp(12));
         root.addView(title, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        EditText search = new EditText(getContext());
+        com.google.android.material.textfield.TextInputLayout searchLayout = new com.google.android.material.textfield.TextInputLayout(getContext());
+        searchLayout.setHint("Search icons");
+        EditText search = new com.google.android.material.textfield.TextInputEditText(searchLayout.getContext());
         search.setSingleLine(true);
-        search.setHint("Search icons");
-        search.setTextColor(resolveLauncherTextColor());
-        search.setHintTextColor(resolveLauncherSubtleTextColor());
-        GradientDrawable searchBg = new GradientDrawable();
-        searchBg.setCornerRadius(dp(8));
-        searchBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xF2));
-        searchBg.setStroke(dp(1), withAlphaComponent(resolveLauncherOutlineColor(), 0x66));
-        search.setBackground(searchBg);
-        search.setPadding(dp(10), 0, dp(10), 0);
-        search.setMinHeight(dp(38));
+        searchLayout.addView(search, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         GridView iconGrid = new GridView(getContext());
         iconGrid.setNumColumns(GridView.AUTO_FIT);
@@ -4394,7 +4395,7 @@ public final class SuggestionBarView extends GridLayout
         iconGrid.setPadding(0, dp(2), 0, dp(2));
         iconGrid.setBackgroundColor(0x00000000);
         iconGrid.setSelector(new ColorDrawable(0x00000000));
-        root.addView(search, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(searchLayout, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f);
         gridParams.setMargins(0, dp(10), 0, 0);
         root.addView(iconGrid, gridParams);
@@ -4438,116 +4439,26 @@ public final class SuggestionBarView extends GridLayout
             }
         });
 
-        Dialog dialog = new Dialog(getContext(), android.R.style.Theme_Translucent_NoTitleBar);
-        dialog.requestWindowFeature(android.view.Window.FEATURE_NO_TITLE);
-        dialog.setCanceledOnTouchOutside(true);
-        View dialogSurface = buildIconPickerDialogSurface(root);
-        dialog.setContentView(dialogSurface);
+        BottomSheetDialog dialog = new BottomSheetDialog(getContext());
+        dialog.setContentView(root);
+        // The grid takes the sheet's height, so the sheet opens full rather than as a stub.
+        View sheetView = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
+        if (sheetView != null) {
+            ViewGroup.LayoutParams sheetParams = sheetView.getLayoutParams();
+            if (sheetParams != null) {
+                sheetParams.height = ViewGroup.LayoutParams.MATCH_PARENT;
+                sheetView.setLayoutParams(sheetParams);
+            }
+        }
+        dialog.getBehavior().setSkipCollapsed(true);
+        dialog.getBehavior().setState(com.google.android.material.bottomsheet.BottomSheetBehavior.STATE_EXPANDED);
         iconPickerDialog = dialog;
-        dialog.setOnShowListener(shownDialog -> configureIconPickerDialogWindow(dialog, dialogSurface, root));
         iconPickerDialog.setOnDismissListener(dismissedDialog -> {
             if (iconPickerDialog != null && !iconPickerDialog.isShowing()) {
                 iconPickerDialog = null;
             }
         });
         iconPickerDialog.show();
-    }
-
-    @NonNull
-    private View buildIconPickerDialogSurface(@NonNull View content) {
-        FrameLayout overlay = new FrameLayout(getContext());
-        overlay.setClipToPadding(false);
-        overlay.setPadding(0, 0, 0, 0);
-        int screenWidth = getResources().getDisplayMetrics().widthPixels;
-        int screenHeight = getResources().getDisplayMetrics().heightPixels;
-        overlay.setMinimumWidth(screenWidth);
-        overlay.setMinimumHeight(screenHeight);
-        overlay.setLayoutParams(new ViewGroup.LayoutParams(
-            screenWidth,
-            screenHeight
-        ));
-
-        GradientDrawable panelBg = new GradientDrawable();
-        panelBg.setCornerRadius(dp(12));
-        panelBg.setColor(withAlphaComponent(resolveLauncherPanelColor(), 0xF4));
-        content.setBackground(panelBg);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            content.setClipToOutline(true);
-            content.setElevation(dp(8));
-        }
-
-        int sideMargin = dp(18);
-        int topMargin = iconPickerTopMargin();
-        int bottomMargin = dp(24);
-        int cardWidth = screenWidth >= dp(640) ? dp(560) : Math.max(dp(280), screenWidth - (sideMargin * 2));
-        int cardHeight = Math.max(dp(360), screenHeight - topMargin - bottomMargin);
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
-            cardWidth,
-            cardHeight,
-            Gravity.CENTER
-        );
-        params.setMargins(sideMargin, topMargin, sideMargin, bottomMargin);
-        overlay.addView(content, params);
-        return overlay;
-    }
-
-    private int iconPickerTopMargin() {
-        return getStatusBarHeight() + dp(20);
-    }
-
-    private int getStatusBarHeight() {
-        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
-        return resourceId > 0 ? getResources().getDimensionPixelSize(resourceId) : dp(24);
-    }
-
-    private void configureIconPickerDialogWindow(
-        @NonNull Dialog dialog,
-        @NonNull View dialogSurface,
-        @NonNull View content
-    ) {
-        android.view.Window window = dialog.getWindow();
-        if (window == null) {
-            return;
-        }
-
-        window.setBackgroundDrawable(new ColorDrawable(0x00000000));
-        window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-        window.setDimAmount(0.32f);
-        window.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
-        window.setSoftInputMode(
-            WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING |
-            WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN
-        );
-        installKeyboardAwareIconPickerLayout(dialogSurface, content);
-    }
-
-    private void installKeyboardAwareIconPickerLayout(@NonNull View dialogSurface, @NonNull View content) {
-        ViewTreeObserver observer = dialogSurface.getViewTreeObserver();
-        observer.addOnGlobalLayoutListener(() -> {
-            Rect visibleFrame = new Rect();
-            dialogSurface.getWindowVisibleDisplayFrame(visibleFrame);
-            int fullHeight = dialogSurface.getRootView() == null ? dialogSurface.getHeight() : dialogSurface.getRootView().getHeight();
-            int keyboardHeight = Math.max(0, fullHeight - visibleFrame.bottom);
-            int sideMargin = dp(18);
-            int topMargin = iconPickerTopMargin();
-            int bottomMargin = dp(24) + keyboardHeight;
-            int availableHeight = Math.max(dp(280), fullHeight - topMargin - bottomMargin);
-            ViewGroup.LayoutParams rawParams = content.getLayoutParams();
-            if (!(rawParams instanceof FrameLayout.LayoutParams)) {
-                return;
-            }
-            FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) rawParams;
-            if (params.leftMargin == sideMargin
-                && params.topMargin == topMargin
-                && params.rightMargin == sideMargin
-                && params.bottomMargin == bottomMargin
-                && params.height == availableHeight) {
-                return;
-            }
-            params.setMargins(sideMargin, topMargin, sideMargin, bottomMargin);
-            params.height = availableHeight;
-            content.setLayoutParams(params);
-        });
     }
 
     private void showIconPickerMessagePopup(@NonNull String title, @NonNull String message) {
@@ -8136,12 +8047,6 @@ public final class SuggestionBarView extends GridLayout
         int byHeight = (maxPopupHeight - verticalPadding - (cellMargin * rows * 2)) / Math.max(rows, 1);
         int candidate = Math.min(iconSizePx(), Math.min(byWidth, byHeight));
         return clamp(candidate, dp(16), iconSizePx());
-    }
-
-    private void styleGhostButton(@NonNull Button button) {
-        button.setBackgroundColor(0x00000000);
-        button.setTextColor(resolveLauncherTextColor());
-        button.setAllCaps(false);
     }
 
     private void styleIconButton(@NonNull ImageButton button, int paddingPx) {
