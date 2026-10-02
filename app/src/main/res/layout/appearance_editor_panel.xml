@@ -310,6 +310,52 @@
             app:layout_constraintStart_toStartOf="@id/appearance_editor_c2_label"
             app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier"
             app:tickVisibilityMode="hidden" />
+
+        <!-- The terminal's Trail and Effect: two outlined buttons, each opening a menu of its
+             choices (six trail styles do not fit as a segmented row). Equal columns with one 16dp
+             gap; the Effect button is GONE below API 33, and Trail then takes the full width. Both
+             are GONE for every element but the terminal. -->
+        <androidx.constraintlayout.widget.Barrier
+            android:id="@+id/appearance_editor_row2_barrier_controls"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:barrierDirection="bottom"
+            app:constraint_referenced_ids="appearance_editor_c1_slider,appearance_editor_c1_soft,appearance_editor_legibility,appearance_editor_c2_slider" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_editor_trail"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="16dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:minWidth="0dp"
+            android:visibility="gone"
+            app:icon="@drawable/ic_arrow_drop_down_16"
+            app:iconGravity="end"
+            app:layout_constraintEnd_toStartOf="@id/appearance_editor_effect"
+            app:layout_constraintHorizontal_chainStyle="spread"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier_controls"
+            app:layout_goneMarginEnd="0dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_editor_effect"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:minWidth="0dp"
+            android:visibility="gone"
+            app:icon="@drawable/ic_arrow_drop_down_16"
+            app:iconGravity="end"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/appearance_editor_trail"
+            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier_controls" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <androidx.constraintlayout.widget.Group

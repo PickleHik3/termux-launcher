@@ -124,6 +124,21 @@ public class LayoutModeViewsTest {
         assertNotSame(label, panel.findViewById(R.id.appearance_editor_c1_label));
     }
 
+    /** Trail and Effect are menu buttons in Row B, hidden until the terminal shows them. */
+    @Test
+    public void rowTwoCarriesTrailAndEffectAsMenuButtonsThatStartHidden() {
+        View panel = inflate(R.layout.appearance_editor_panel);
+        View row2 = panel.findViewById(R.id.appearance_editor_row2);
+        View trail = panel.findViewById(R.id.appearance_editor_trail);
+        View effect = panel.findViewById(R.id.appearance_editor_effect);
+        assertTrue(trail instanceof MaterialButton);
+        assertTrue(effect instanceof MaterialButton);
+        assertTrue(isInside(trail, row2));
+        assertTrue(isInside(effect, row2));
+        assertEquals(View.GONE, trail.getVisibility());
+        assertEquals(View.GONE, effect.getVisibility());
+    }
+
     /**
      * The two modes are two Groups in one layout: a switch shows one and hides the other, and
      * Corners and Margin stay up under both Styles (SPEC section 3.7), so Style never moves the
