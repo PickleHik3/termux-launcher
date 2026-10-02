@@ -78,6 +78,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_mode_appearance"
+            app:icon="@drawable/segment_icon_look"
             style="@style/Widget.Termux.Button.Segment"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -87,6 +88,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_mode_layout"
+            app:icon="@drawable/segment_icon_layout"
             style="@style/Widget.Termux.Button.Segment"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
