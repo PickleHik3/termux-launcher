@@ -7,6 +7,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
+import android.os.Build;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -68,6 +69,9 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     private int mTravelBottomInsetPx;
     /** The clip a square frame, which does not clip to its outline, takes the inset through. */
     private final Rect mTravelClipRect = new Rect();
+
+    private PaneRetroStyle mRetroStyle = PaneRetroStyle.NONE;
+    private final PaneRetroEffect mRetroEffect = new PaneRetroEffect();
 
     /** Re-capped on every ask: a divider drag resizes the frame without re-dressing the pane. */
     private final ViewOutlineProvider mShapeOutline = new ViewOutlineProvider() {
@@ -214,6 +218,26 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             foreground.setBounds(0, 0, width, height);
     }
 
+    /**
+     * The retro monitor look this card is drawn through. NONE, or a phone below API 33, clears the
+     * effect. Nothing else sets a render effect on this frame; the terminal's own frost is on the
+     * child, not here.
+     */
+    public void setRetroStyle(@Nullable PaneRetroStyle style) {
+        mRetroStyle = style == null ? PaneRetroStyle.NONE : style;
+        applyRetroEffect();
+    }
+
+    private void applyRetroEffect() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+        if (mRetroStyle == PaneRetroStyle.NONE || !PaneRetroEffect.available()) {
+            setRenderEffect(null);
+            return;
+        }
+        float density = getResources().getDisplayMetrics().density;
+        setRenderEffect(mRetroEffect.effectFor(mRetroStyle, getWidth(), getHeight(), density));
+    }
+
     @Override
     public void onDrawForeground(Canvas canvas) {
         if (mTravelBottomInsetPx > 0)
@@ -225,6 +249,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         mBandClipPathDirty = true;
+        if (mRetroStyle != PaneRetroStyle.NONE) applyRetroEffect();
         if (mTravelBottomInsetPx > 0 && !mClipToShape) {
             mTravelClipRect.set(0, 0, w, Math.max(0, h - mTravelBottomInsetPx));
             setClipBounds(mTravelClipRect);
