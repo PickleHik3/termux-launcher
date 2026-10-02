@@ -261,8 +261,8 @@ final class LayoutCanvasArtwork {
         float h = box.height() / k;
         float length = vertical ? h : w;
         float cross = vertical ? w : h;
-        boolean labels = !mKeyLabels.isEmpty();
-        int n = slotsForContent(mKeyLabels.size(), count, length, 18f);
+        boolean labels = !mKeys.isEmpty();
+        int n = slotsForContent(mKeys.size(), count, length, 18f);
         if (n <= 0) return;
         float pitch = (length - 16f) / n;
         float size = Math.min(22f, Math.min(cross - 12f, pitch - 4f));
@@ -279,9 +279,26 @@ final class LayoutCanvasArtwork {
                     rr(canvas, cx - size / 2f - 3f, cy - size / 2f - 3f, size + 6f, size + 6f, 5f,
                         p.accentBg);
                 }
-                int maxChars = Math.max(1, (int) ((vertical ? cross - 8f : pitch) / 6f));
-                text(canvas, fitLabel(mKeyLabels.get(i), maxChars), cx, cy + 3.5f, 10f,
-                    lit ? p.accent : p.text, Paint.Align.CENTER);
+                LayoutCanvasView.KeySlot key = mKeys.get(i);
+                int ink = lit ? p.accent : p.text;
+                if (key.hasIcon()) {
+                    // The icon the real bar draws, in the slot's square and the canvas's ink.
+                    android.graphics.drawable.Drawable icon = key.icon;
+                    android.graphics.Rect old = icon.copyBounds();
+                    icon.setBounds(Math.round(cx - size / 2f), Math.round(cy - size / 2f),
+                        Math.round(cx + size / 2f), Math.round(cy + size / 2f));
+                    icon.setColorFilter(new android.graphics.PorterDuffColorFilter(ink,
+                        android.graphics.PorterDuff.Mode.SRC_IN));
+                    icon.draw(canvas);
+                    icon.setBounds(old);
+                } else if (key.hasLabel()) {
+                    int maxChars = Math.max(1, (int) ((vertical ? cross - 8f : pitch) / 6f));
+                    text(canvas, fitLabel(key.label, maxChars), cx, cy + 3.5f, 10f, ink,
+                        Paint.Align.CENTER);
+                } else {
+                    LayoutCanvasGlyphs.draw(canvas, mStroke, TOOL_GLYPHS[i % PACK_SLOTS], cx, cy,
+                        size * 0.72f, ink);
+                }
                 continue;
             }
             float along = 8f + (i + 0.5f) * pitch;
@@ -421,13 +438,13 @@ final class LayoutCanvasArtwork {
     }
 
     private java.util.List<android.graphics.drawable.Drawable> mIcons = java.util.Collections.emptyList();
-    private java.util.List<String> mKeyLabels = java.util.Collections.emptyList();
+    private java.util.List<LayoutCanvasView.KeySlot> mKeys = java.util.Collections.emptyList();
 
-    /** The user's real dock icons and extra-key texts; an empty list keeps the pack's glyphs. */
+    /** The user's real dock icons and extra keys; an empty list keeps the pack's glyphs. */
     void setSlotContent(@NonNull java.util.List<android.graphics.drawable.Drawable> icons,
-                        @NonNull java.util.List<String> keyLabels) {
+                        @NonNull java.util.List<LayoutCanvasView.KeySlot> keys) {
         mIcons = icons;
-        mKeyLabels = keyLabels;
+        mKeys = keys;
     }
 
     /** Opens a frame whose origin is the box's corner and whose unit is {@code k} pixels. */

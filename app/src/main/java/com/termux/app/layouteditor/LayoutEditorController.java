@@ -170,9 +170,13 @@ public final class LayoutEditorController {
             return out;
         }
 
-        /** The key texts of the extra-keys bar's first row, in order; empty where unknown. */
+        /**
+         * The extra-keys bar's first row, in order, each key as the real bar shows it: the icon
+         * it draws (a fresh Drawable the canvas may size and tint) or, for a key with no icon,
+         * its text. Empty where unknown, which leaves the canvas on the pack's glyphs.
+         */
         @NonNull
-        default java.util.List<String> extraKeyLabels() {
+        default java.util.List<com.termux.app.fragments.settings.LayoutCanvasView.KeySlot> extraKeySlots() {
             return new java.util.ArrayList<>();
         }
 
@@ -235,7 +239,8 @@ public final class LayoutEditorController {
     private int mPinnedAppCount = -1;
     private int mExtraKeyCount = -1;
     private java.util.List<android.graphics.drawable.Drawable> mPinnedIcons = java.util.Collections.emptyList();
-    private java.util.List<String> mKeyLabels = java.util.Collections.emptyList();
+    private java.util.List<com.termux.app.fragments.settings.LayoutCanvasView.KeySlot> mKeySlots =
+        java.util.Collections.emptyList();
     /** The handle a finger is on, whose readout a late measurement may restate; or null. */
     @Nullable private LayoutCanvasView.Handle mHeldHandle;
     /** What the trash was last restated for, so it is redrawn only when that changes. */
@@ -328,7 +333,7 @@ public final class LayoutEditorController {
             mPinnedAppCount = mHost.pinnedAppCount();
             mExtraKeyCount = mHost.extraKeyCount();
             mPinnedIcons = mHost.pinnedAppIcons();
-            mKeyLabels = mHost.extraKeyLabels();
+            mKeySlots = mHost.extraKeySlots();
         } else {
             mPlan.showPlace(target);
         }
@@ -564,7 +569,7 @@ public final class LayoutEditorController {
         mRestatingToggle = false;
         views.canvas.setShape(mStyle, mCornersDp, mMarginDp);
         views.canvas.setSlotCounts(mPinnedAppCount, mExtraKeyCount);
-        views.canvas.setSlotContent(mPinnedIcons, mKeyLabels);
+        views.canvas.setSlotContent(mPinnedIcons, mKeySlots);
         views.canvas.setSizes(plan.dockHeightScale(), plan.keyboardHeightScale(),
             plan.keyboardChinDp());
         // The status bar's collapsed/expanded state is a per-orientation key the status swipe

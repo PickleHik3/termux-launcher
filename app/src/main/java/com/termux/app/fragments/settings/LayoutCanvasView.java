@@ -497,9 +497,39 @@ public final class LayoutCanvasView extends View {
      * row's key texts. An empty list leaves that bar on the pack's glyphs.
      */
     public void setSlotContent(@NonNull java.util.List<android.graphics.drawable.Drawable> icons,
-                               @NonNull java.util.List<String> keyLabels) {
-        mArtwork.setSlotContent(icons, keyLabels);
+                               @NonNull java.util.List<KeySlot> keys) {
+        mArtwork.setSlotContent(icons, keys);
         invalidate();
+    }
+
+    /**
+     * What one extra key shows on the canvas: the icon the real bar draws for it, or else its
+     * text. Neither leaves that slot on the pack's glyph.
+     */
+    public static final class KeySlot {
+        @Nullable public final Drawable icon;
+        @Nullable public final String label;
+
+        public KeySlot(@Nullable Drawable icon, @Nullable String label) {
+            this.icon = icon;
+            this.label = label;
+        }
+
+        @NonNull public static KeySlot ofIcon(@NonNull Drawable icon) {
+            return new KeySlot(icon, null);
+        }
+
+        @NonNull public static KeySlot ofText(@Nullable String label) {
+            return new KeySlot(null, label);
+        }
+
+        boolean hasIcon() {
+            return icon != null;
+        }
+
+        boolean hasLabel() {
+            return label != null && !label.isEmpty();
+        }
     }
 
     /**
