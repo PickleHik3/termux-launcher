@@ -1206,29 +1206,11 @@ public final class TerminalEmulator {
     }
 
     /**
-     * Whether copying a selection that includes a wrapped row trims that row's trailing padding
-     * spaces the same way an unwrapped row is trimmed. Consulted by both {@link #mMainBuffer} and
-     * {@link #mAltBuffer}, which hold no preferences access of their own; the app pushes the
-     * "Trim trailing spaces on wrapped lines" setting here on every new session and again whenever
-     * the preference changes.
-     */
-    public void setTrimWrappedTrailingSpaces(boolean trimWrappedTrailingSpaces) {
-        mMainBuffer.setTrimWrappedTrailingSpaces(trimWrappedTrailingSpaces);
-        mAltBuffer.setTrimWrappedTrailingSpaces(trimWrappedTrailingSpaces);
-    }
-
-    /** @see #setTrimWrappedTrailingSpaces(boolean) */
-    public boolean isTrimWrappedTrailingSpaces() {
-        return mMainBuffer.isTrimWrappedTrailingSpaces();
-    }
-
-    /**
      * Whether copy and paste run through {@link ClipboardCleanup}: copying drops a line's
      * trailing spaces and tabs and any blank lines left at the end, and pasting a single line
      * loses its trailing whitespace and newline so it runs instead of queuing an empty line
      * behind it. An emulator has no preferences access of its own; the app pushes the "Clipboard
-     * Cleanup" setting here on every new session and again whenever the preference changes, the
-     * same way it does {@link #setTrimWrappedTrailingSpaces(boolean)}.
+     * Cleanup" setting here on every new session and again whenever the preference changes.
      */
     public void setClipboardCleanupEnabled(boolean clipboardCleanupEnabled) {
         mClipboardCleanupEnabled = clipboardCleanupEnabled;

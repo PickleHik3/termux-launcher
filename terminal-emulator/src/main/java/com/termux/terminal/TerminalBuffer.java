@@ -52,13 +52,6 @@ public final class TerminalBuffer {
     private long bitmapLastGC;
 
     /**
-     * Whether {@link #getSelectedText} trims a wrapped row's trailing padding spaces like an
-     * unwrapped row, instead of keeping them. Set by {@link TerminalEmulator#setTrimWrappedTrailingSpaces(boolean)};
-     * defaults to on so a fresh buffer matches the shipped default of the setting.
-     */
-    private boolean mTrimWrappedTrailingSpaces = true;
-
-    /**
      * Create a transcript screen.
      *
      * @param columns    the width of the screen in characters.
@@ -84,14 +77,6 @@ public final class TerminalBuffer {
 
     public TerminalSessionClient getClient() {
         return mClient;
-    }
-
-    void setTrimWrappedTrailingSpaces(boolean trimWrappedTrailingSpaces) {
-        mTrimWrappedTrailingSpaces = trimWrappedTrailingSpaces;
-    }
-
-    boolean isTrimWrappedTrailingSpaces() {
-        return mTrimWrappedTrailingSpaces;
     }
 
     public String getTranscriptText() {
@@ -139,20 +124,14 @@ public final class TerminalBuffer {
                 StringBuilder rowText = new StringBuilder();
                 appendRowWithTextBlocks(rowText, row, lineObject, x1, x2, blocksTaken);
                 boolean blockRowWrap = getLineWrap(row);
-                boolean trimThisBlockRow = blockRowWrap && x2 == columns && mTrimWrappedTrailingSpaces && !joinFullLines;
                 int lastPrinting = -1;
-                if (blockRowWrap && x2 == columns && !trimThisBlockRow) {
+                if (blockRowWrap && x2 == columns) {
                     lastPrinting = rowText.length() - 1;
                 } else {
                     for (int i = 0; i < rowText.length(); i++)
                         if (rowText.charAt(i) != ' ') lastPrinting = i;
                 }
                 if (lastPrinting >= 0) builder.append(rowText, 0, lastPrinting + 1);
-                if (trimThisBlockRow && joinBackLines && row < selY2 && lastPrinting < rowText.length() - 1) {
-                    TerminalRow nextLineObject = mLines[externalToInternalRow(row + 1)];
-                    if (nextLineObject != null && nextLineObject.mText.length > 0 && nextLineObject.mText[0] != ' ')
-                        builder.append(' ');
-                }
                 boolean blockRowFillsWidth = lastPrinting == rowText.length() - 1;
                 if ((!joinBackLines || !blockRowWrap) && (!joinFullLines || !blockRowFillsWidth)
                     && row < selY2 && row < mScreenRows - 1)
@@ -169,11 +148,7 @@ public final class TerminalBuffer {
             int lastPrintingCharIndex = -1;
             int i;
             boolean rowLineWrap = getLineWrap(row);
-            // joinFullLines is only ever true for internal fixed-width uses (getWordAtLocation's
-            // column math, getTranscriptTextWithFullLinesJoined) that need every wrapped row to
-            // keep contributing exactly `columns` characters; the trim setting never applies there.
-            boolean trimThisWrappedRow = rowLineWrap && x2 == columns && mTrimWrappedTrailingSpaces && !joinFullLines;
-            if (rowLineWrap && x2 == columns && !trimThisWrappedRow) {
+            if (rowLineWrap && x2 == columns) {
                 // If the line was wrapped, we shouldn't lose trailing space:
                 lastPrintingCharIndex = x2Index - 1;
             } else {
@@ -186,14 +161,6 @@ public final class TerminalBuffer {
             int len = lastPrintingCharIndex - x1Index + 1;
             if (lastPrintingCharIndex != -1 && len > 0)
                 builder.append(line, x1Index, len);
-            if (trimThisWrappedRow && joinBackLines && row < selY2 && lastPrintingCharIndex < x2Index - 1) {
-                // The row wrapped and its trailing padding was trimmed away, and it will be joined
-                // onto the next row with no newline between them. If the next row picks up mid-word,
-                // put back exactly one space so joined prose doesn't run two words together.
-                TerminalRow nextLineObject = mLines[externalToInternalRow(row + 1)];
-                if (nextLineObject.mText.length > 0 && nextLineObject.mText[0] != ' ')
-                    builder.append(' ');
-            }
             boolean lineFillsWidth = lastPrintingCharIndex == x2Index - 1;
             if ((!joinBackLines || !rowLineWrap) && (!joinFullLines || !lineFillsWidth) && row < selY2 && row < mScreenRows - 1)
                 builder.append('\n');

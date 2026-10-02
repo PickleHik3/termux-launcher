@@ -2480,7 +2480,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
         if (mTermuxTerminalSessionActivityClient != null)
-            mTermuxTerminalSessionActivityClient.applyTrimWrappedTrailingSpacesPreference();
+            mTermuxTerminalSessionActivityClient.applyClipboardCleanupPreference();
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onResume();
         refreshLauncherIconsIfPreferencesChanged();
@@ -21858,7 +21858,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Apply font/colours (nerd-font typeface) to every populated pane.
         if (getTermuxTerminalSessionClient() != null) {
             getTermuxTerminalSessionClient().checkForFontAndColors();
-            getTermuxTerminalSessionClient().applyTrimWrappedTrailingSpacesPreference();
+            getTermuxTerminalSessionClient().applyClipboardCleanupPreference();
         }
         for (TerminalView v : getTerminalPaneViews())
             if (v.getCurrentSession() != null) v.onScreenUpdated();
