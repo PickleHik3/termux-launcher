@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="notification_card_action_fallback">Action</string>
+    <string name="notification_card_dismiss">Dismiss</string>
+    <string name="notification_card_send">Send</string>
+    <string name="notification_card_reply_hint">Reply</string>
+    <string name="notification_card_reply_to_hint">Reply to %1$s</string>
+</resources>
