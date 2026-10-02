@@ -100,7 +100,7 @@ public final class WidgetGridSizePopup {
             Math.max(pageOnScreen[0], pageOnScreen[0] + page.getWidth() - width));
         int y = clamp(Math.round(pageOnScreen[1] + tab.bottom + 4f * density), pageOnScreen[1],
             Math.max(pageOnScreen[1], pageOnScreen[1] + page.getHeight() - height));
-        popup.showAtLocation(page, Gravity.NO_GRAVITY, x, y);
+        popup.showAtLocation(page, Gravity.TOP | Gravity.LEFT, x, y);
 
         return new WidgetGridSizePopup(popup);
     }

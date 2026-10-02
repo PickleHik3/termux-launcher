@@ -74,6 +74,9 @@ public final class FirstRunPermissionsCardView extends FrameLayout {
 
     public FirstRunPermissionsCardView(@NonNull Context context) {
         super(context);
+        // Reading-order UI over the shell: mirrors with the locale, though the content root it is
+        // added to is pinned left to right. The card is centred, so nothing here moves.
+        setLayoutDirection(LAYOUT_DIRECTION_LOCALE);
         mDensity = context.getResources().getDisplayMetrics().density;
         mDress = TerminalDress.stored(context);
         mAccent = FocusOutlineRenderer.resolveAccent(this);
@@ -133,7 +136,7 @@ public final class FirstRunPermissionsCardView extends FrameLayout {
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         LinearLayout.LayoutParams buttonRowParams = matchWrap();
         buttonRowParams.topMargin = dp(6);
-        buttonRowParams.rightMargin = -dp(4);
+        buttonRowParams.setMarginEnd(-dp(4));
         mCard.addView(buttonRow, buttonRowParams);
 
         FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(
@@ -306,7 +309,7 @@ public final class FirstRunPermissionsCardView extends FrameLayout {
     private LinearLayout.LayoutParams controlParams() {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.leftMargin = dp(8);
+        params.setMarginStart(dp(8));
         return params;
     }
 

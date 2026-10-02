@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Custom accessibility actions the layout canvas offers on each element (LayoutCanvasView). -->
+<resources>
+    <item name="layout_canvas_action_move_top" type="id" />
+    <item name="layout_canvas_action_move_bottom" type="id" />
+    <item name="layout_canvas_action_move_left" type="id" />
+    <item name="layout_canvas_action_move_right" type="id" />
+    <item name="layout_canvas_action_move_outward" type="id" />
+    <item name="layout_canvas_action_move_inward" type="id" />
+    <item name="layout_canvas_action_hide" type="id" />
+    <item name="layout_canvas_action_larger" type="id" />
+    <item name="layout_canvas_action_smaller" type="id" />
+    <item name="layout_canvas_action_chin_more" type="id" />
+    <item name="layout_canvas_action_chin_less" type="id" />
+    <item name="layout_canvas_action_add_column" type="id" />
+    <item name="layout_canvas_action_remove_column" type="id" />
+    <item name="layout_canvas_action_add_row" type="id" />
+    <item name="layout_canvas_action_remove_row" type="id" />
+</resources>

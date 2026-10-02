@@ -112,7 +112,7 @@
         android:hasFragileUserData="true"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:usesCleartextTraffic="${TERMUX_APP_USES_CLEARTEXT_TRAFFIC}"
-        android:supportsRtl="false"
+        android:supportsRtl="true"
         android:theme="@style/Theme.TermuxApp.DayNight.DarkActionBar"
         tools:targetApi="o">
 

@@ -99,7 +99,7 @@ final class TaiBenchCheckSheet {
             LinearLayout toggleRow = new LinearLayout(context);
             toggleRow.setOrientation(LinearLayout.HORIZONTAL);
             toggleRow.setGravity(Gravity.CENTER_VERTICAL);
-            toggleRow.setPadding(TaiBenchViews.dp(context, 34), 0, 0, 0);
+            toggleRow.setPaddingRelative(TaiBenchViews.dp(context, 34), 0, 0, 0);
             TextView toggleText = TaiBenchViews.body(context, context.getString(R.string.tai_bench_check_remove_afterwards));
             toggleRow.addView(toggleText, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             MaterialSwitch toggle = new MaterialSwitch(context);

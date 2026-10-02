@@ -181,7 +181,7 @@ public final class SessionsDrawerView extends LinearLayout
         mSavedTab = segment(R.string.sessions_drawer_saved, Tab.SAVED);
         segments.addView(mLiveTab, new LayoutParams(0, dp(32), 1f));
         LayoutParams savedParams = new LayoutParams(0, dp(32), 1f);
-        savedParams.leftMargin = dp(4);
+        savedParams.setMarginStart(dp(4));
         segments.addView(mSavedTab, savedParams);
         LayoutParams segmentRow = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
         segmentRow.topMargin = dp(6);
@@ -813,7 +813,7 @@ public final class SessionsDrawerView extends LinearLayout
                 if (child.getVisibility() == GONE) continue;
                 child.measure(unspecified, unspecified);
                 LayoutParams params = (LayoutParams) child.getLayoutParams();
-                width += child.getMeasuredWidth() + params.leftMargin + params.rightMargin;
+                width += child.getMeasuredWidth() + params.getMarginStart() + params.getMarginEnd();
             }
             return width;
         }
@@ -824,7 +824,7 @@ public final class SessionsDrawerView extends LinearLayout
                 LayoutParams params = (LayoutParams) getChildAt(i).getLayoutParams();
                 params.width = stacked ? LayoutParams.MATCH_PARENT : LayoutParams.WRAP_CONTENT;
                 params.weight = stacked ? 0f : 1f;
-                params.topMargin = stacked && i > 0 ? params.leftMargin : 0;
+                params.topMargin = stacked && i > 0 ? params.getMarginStart() : 0;
             }
         }
     }
@@ -842,7 +842,7 @@ public final class SessionsDrawerView extends LinearLayout
         button.setOnClickListener(view -> action.run());
         LayoutParams params = new LayoutParams(
             LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT, 1f);
-        params.leftMargin = dp(2);
+        params.setMarginStart(dp(2));
         strip.addView(button, params);
     }
 

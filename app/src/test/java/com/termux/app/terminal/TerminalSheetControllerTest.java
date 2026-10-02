@@ -290,7 +290,7 @@ public class TerminalSheetControllerTest {
         assertEquals(8, card.leftMargin);
         assertEquals(0, card.bottomMargin);
         assertEquals("the terminal's ceiling is what stops a long list", 40, card.topMargin);
-        assertEquals(Gravity.BOTTOM | Gravity.START, card.gravity);
+        assertEquals(Gravity.BOTTOM | Gravity.LEFT, card.gravity);
     }
 
     /** A list panel has no height of its own to wrap, so it takes the terminal's. */
@@ -328,7 +328,7 @@ public class TerminalSheetControllerTest {
         assertEquals("every pane of the split, so it is the terminal's panel and not a pane's",
             520, card.height);
         assertEquals("45% of a 384px area, which bites well before the 340dp cap", 173, card.width);
-        assertEquals(Gravity.TOP | Gravity.START, card.gravity);
+        assertEquals(Gravity.TOP | Gravity.LEFT, card.gravity);
         assertTrue("a drawer travelling its own width has to be cut off by the plane",
             ((ViewGroup) host.findView(R.id.terminal_sheet_stack)).getClipChildren());
     }

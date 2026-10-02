@@ -258,7 +258,7 @@ public class KeyboardLayoutsFragment extends Fragment {
         button.setOnClickListener(onClick);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.leftMargin = dp(4);
+        params.setMarginStart(dp(4));
         button.setLayoutParams(params);
         return button;
     }

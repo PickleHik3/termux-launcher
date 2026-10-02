@@ -4240,7 +4240,8 @@ public final class SuggestionBarView extends GridLayout
                 com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT));
             FrameLayout.LayoutParams badge = new FrameLayout.LayoutParams(miniSize, miniSize,
                 Gravity.END | Gravity.BOTTOM);
-            badge.setMargins(0, 0, pinnedFolderMiniIconMarginPx(), pinnedFolderMiniIconMarginPx());
+            badge.bottomMargin = pinnedFolderMiniIconMarginPx();
+            badge.setMarginEnd(pinnedFolderMiniIconMarginPx());
             iconShell.addView(overflow, badge);
         }
         iconShell.addView(miniGrid, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
@@ -4628,8 +4629,10 @@ public final class SuggestionBarView extends GridLayout
 
         ImageButton gear = new ImageButton(getContext());
         gear.setImageResource(R.drawable.ic_settings);
-        styleIconButton(gear, dp(3));
-        int gearSize = dp(24);
+        // An 18dp glyph centred in the 48dp touch minimum, named for screen readers.
+        styleIconButton(gear, dp(15));
+        gear.setContentDescription(getContext().getString(R.string.folder_popup_settings_description));
+        int gearSize = dp(48);
         gear.setOnClickListener(v -> {
             dismissFolderPopup();
             refreshPinnedItemsFromRepository();

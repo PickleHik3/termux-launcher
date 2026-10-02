@@ -5,15 +5,18 @@ import android.graphics.Canvas;
 import android.graphics.DashPathEffect;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
+import android.os.Bundle;
 import android.os.SystemClock;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.DragEvent;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -28,6 +31,11 @@ import androidx.annotation.VisibleForTesting;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.graphics.drawable.DrawableCompat;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat;
+import androidx.core.view.accessibility.AccessibilityNodeInfoCompat.RangeInfoCompat;
+import androidx.customview.widget.ExploreByTouchHelper;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
@@ -83,6 +91,27 @@ import java.util.Map;
  * shape of the dashed placeholder. A release anywhere else springs the bar back and reports
  * nothing. {@link MiniatureDragPolicy} owns which targets exist and which one the finger is over.
  * A selected element wears one outline, and the handle that resizes it.
+ *
+ * <p>Everything a finger can do here a screen reader and a keyboard can do too ({@link
+ * CanvasAccessibility}). Each element on the phone, and each hidden one, is a virtual view named
+ * with its place and size; the selected element's size handles are virtual views of their own.
+ * Each offers only the moves {@link LayoutCanvasA11yPolicy} reads off the drag's own legal set, and
+ * every action reports through the same listener call a drop, a handle or a tap does, so the
+ * editor's undo, dirty state and persistence see no difference.
+ *
+ * <p>Keyboard (the view is focusable for keys but not in touch mode, so touch is unchanged):
+ * <ul>
+ *   <li>Tab / Shift+Tab, and the arrow keys while nothing is selected, move between elements.</li>
+ *   <li>Enter, Space or the D-pad centre selects the focused element, or deselects it; on a hidden
+ *       element it shows it again. Escape deselects.</li>
+ *   <li>With a bar selected, an arrow key moves it to the screen edge in that direction (the
+ *       physical edge, as drawn); toward the edge it already stands on, it steps one place
+ *       outward along it.</li>
+ *   <li>{@code +} / {@code =} makes the focused element larger and {@code -} smaller: the pinned
+ *       apps' and the keyboard's height, Home's grid columns. With Alt held the same keys change
+ *       the space below the keys, or the grid's rows.</li>
+ *   <li>Delete hides the focused element; H hides or shows it.</li>
+ * </ul>
  */
 public final class LayoutCanvasView extends View {
 
@@ -417,8 +446,19 @@ public final class LayoutCanvasView extends View {
     @NonNull private final Drawable mIconTrash;
     @NonNull private final Drawable mIconTrashFilled;
 
+    /** The elements and handles as virtual views, for a screen reader and the keyboard. */
+    @NonNull private final CanvasAccessibility mAccessibility;
+
     public LayoutCanvasView(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
+        mAccessibility = new CanvasAccessibility(this);
+        ViewCompat.setAccessibilityDelegate(this, mAccessibility);
+        // Reachable with Tab and the D-pad; a finger never focuses it, so touch is unchanged.
+        setFocusable(true);
+        setFocusableInTouchMode(false);
+        // The focused element draws its own outline; the platform's whole-view tint would hide it.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O)
+            setDefaultFocusHighlightEnabled(false);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         mFramePaint.setStyle(Paint.Style.STROKE);
         mFillPaint.setStyle(Paint.Style.FILL);
@@ -695,6 +735,7 @@ public final class LayoutCanvasView extends View {
         mSelected = next;
         computeHandles();
         invalidate();
+        mAccessibility.invalidateRoot();
         if (mEditListener != null) mEditListener.onSelectionChanged(mSelected);
     }
 
@@ -1150,6 +1191,7 @@ public final class LayoutCanvasView extends View {
         }
         computeHandles();
         updateContentDescription();
+        mAccessibility.invalidateRoot();
     }
 
     /** A rect of the model's, which stands in the frame's own coordinates, in view pixels. */
@@ -1601,18 +1643,20 @@ public final class LayoutCanvasView extends View {
                 float grow;
                 switch (edgeOfBlock(Block.APPS_ROW)) {
                     case TOP: grow = dy; break;
-                    case LEFT: grow = isRtl() ? -dx : dx; break;
-                    case RIGHT: grow = isRtl() ? dx : -dx; break;
+                    // The miniature's edges are physical in every layout direction, so a side
+                    // dock grows toward the middle whichever way the text runs.
+                    case LEFT: grow = dx; break;
+                    case RIGHT: grow = -dx; break;
                     case BOTTOM:
                     default: grow = -dy; break;
                 }
-                mEditListener.onDockHeightDragged(scaleFor(mHandleStartScale,
+                commitHandleValue(Handle.DOCK_HEIGHT, scaleFor(mHandleStartScale,
                     mHandleStartExtentPx, grow, TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT,
                     TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT));
                 return;
             }
             case KEYBOARD_HEIGHT:
-                mEditListener.onKeyboardHeightDragged(scaleFor(mHandleStartScale,
+                commitHandleValue(Handle.KEYBOARD_HEIGHT, scaleFor(mHandleStartScale,
                     mHandleStartExtentPx, -dy, TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE,
                     TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE));
                 return;
@@ -1620,7 +1664,7 @@ public final class LayoutCanvasView extends View {
                 // The chin is drawn to scale, so a pixel of drag is 1/scale of a real dp.
                 float perDp = Math.max(0.01f, mCanvasScale);
                 int chin = Math.round(mHandleStartChin + (-dy) / perDp);
-                mEditListener.onKeyboardChinDragged(LayoutCanvasGeometry.chinDp(chin));
+                commitHandleValue(Handle.KEYBOARD_CHIN, LayoutCanvasGeometry.chinDp(chin));
                 return;
             }
             case WIDGET_GRID:
@@ -1637,9 +1681,60 @@ public final class LayoutCanvasView extends View {
                 if (columns == mHandleLastColumns && rows == mHandleLastRows) return;
                 mHandleLastColumns = columns;
                 mHandleLastRows = rows;
-                mEditListener.onWidgetGridDragged(columns, rows);
+                commitWidgetGrid(columns, rows);
             }
         }
+    }
+
+    /*
+     * The writes an edit on the canvas makes. A finger and an accessibility action or key both
+     * end here, so both reach the editor through the same listener call and nothing else.
+     */
+
+    /** A scalar handle's new value, in the store's units: a scale, or the chin in dp. */
+    private void commitHandleValue(@NonNull Handle handle, float value) {
+        if (mEditListener == null) return;
+        switch (handle) {
+            case DOCK_HEIGHT: mEditListener.onDockHeightDragged(value); return;
+            case KEYBOARD_HEIGHT: mEditListener.onKeyboardHeightDragged(value); return;
+            case KEYBOARD_CHIN: mEditListener.onKeyboardChinDragged(Math.round(value)); return;
+            case WIDGET_GRID:
+            default:
+        }
+    }
+
+    /** Home's grid in whole cells. */
+    private void commitWidgetGrid(int columns, int rows) {
+        if (mEditListener != null) mEditListener.onWidgetGridDragged(columns, rows);
+    }
+
+    /** A handle let go of: the editor takes the readout away and counts the change. */
+    private void commitHandleReleased() {
+        if (mEditListener != null) mEditListener.onHandleReleased();
+    }
+
+    /** A bar placed in a gap of an edge's stack, or put away for a null edge. */
+    private void commitDrop(@NonNull Block bar, @Nullable Edge edge, int index,
+                            boolean underKeyboard) {
+        if (mDropListener != null) mDropListener.onBarDropped(bar, edge, index, underKeyboard);
+    }
+
+    /** The keyboard switched on (out of the tray) or off (into it). */
+    private void commitKeyboardShown(boolean shown) {
+        if (mEditListener == null) return;
+        if (shown) mEditListener.onKeyboardRestored();
+        else mEditListener.onKeyboardPutAway();
+    }
+
+    /** A hidden element brought back where it left, as its chip in the popup does. */
+    private void commitRestore(@NonNull Block block) {
+        if (mEditListener != null) mEditListener.onHiddenChipTapped(block);
+    }
+
+    /** A tap's selection: what it landed on, or nothing; the tap listener hears the block. */
+    private void selectFromTap(@Nullable Block tapped) {
+        setSelectedBlock(tapped);
+        if (tapped != null && mListener != null) mListener.onBlockTapped(tapped);
     }
 
     /**
@@ -1660,7 +1755,7 @@ public final class LayoutCanvasView extends View {
         mReadout = null;
         computeHandles();
         invalidate();
-        if (mEditListener != null) mEditListener.onHandleReleased();
+        commitHandleReleased();
     }
 
     /**
@@ -1870,9 +1965,9 @@ public final class LayoutCanvasView extends View {
 
 
     /**
-     * The picture read aloud: every bar and where it stands, hidden ones included. The grips are
-     * decorative — a screen reader changes these values in the page's own rows, which is why
-     * nothing here is only reachable by dragging.
+     * The picture read aloud as a whole: every bar and where it stands, hidden ones included.
+     * Each element is also a virtual view of its own with the moves it allows
+     * ({@link CanvasAccessibility}), so nothing here is only reachable by dragging.
      */
     private void updateContentDescription() {
         if (mLayout == null) {
@@ -2180,6 +2275,7 @@ public final class LayoutCanvasView extends View {
         drawPlaceholder(canvas);
         drawSlots(canvas);
         drawSelection(canvas);
+        drawKeyboardFocus(canvas);
         canvas.restoreToCount(saved);
 
         mFramePaint.setStrokeWidth(frameStrokePx());
@@ -3421,15 +3517,11 @@ public final class LayoutCanvasView extends View {
         if (bar == Block.KEYBOARD) {
             // The keyboard's one target is the tray: dropped there, it is switched off. Out of the
             // popup it is the other way round.
-            if (mEditListener == null) return;
-            if (fromPopup) mEditListener.onKeyboardRestored();
-            else if (slot.isTray()) mEditListener.onKeyboardPutAway();
+            if (fromPopup) commitKeyboardShown(true);
+            else if (slot.isTray()) commitKeyboardShown(false);
             return;
         }
-        if (mDropListener != null) {
-            mDropListener.onBarDropped(bar, slot.edge, slot.isTray() ? -1 : slot.index,
-                slot.underKeyboard);
-        }
+        commitDrop(bar, slot.edge, slot.isTray() ? -1 : slot.index, slot.underKeyboard);
     }
 
     private void springBack() {
@@ -3583,9 +3675,7 @@ public final class LayoutCanvasView extends View {
                     return true;
                 }
                 mPressedBar = null;
-                Block tapped = blockAt(x, y);
-                setSelectedBlock(tapped);
-                if (tapped != null && mListener != null) mListener.onBlockTapped(tapped);
+                selectFromTap(blockAt(x, y));
                 performClick();
                 return true;
             case MotionEvent.ACTION_CANCEL:
@@ -3602,6 +3692,784 @@ public final class LayoutCanvasView extends View {
     @Override
     public boolean performClick() {
         return super.performClick();
+    }
+
+    // ---- Accessibility and keys ----------------------------------------------------------------
+
+    /** A handle's virtual view id is this plus its ordinal; an element's is its own ordinal. */
+    private static final int HANDLE_ID_BASE = 100;
+
+    /** The move actions, in {@link Edge} order, and what each is called. */
+    private static final int[] MOVE_ACTION_IDS = {
+        R.id.layout_canvas_action_move_top, R.id.layout_canvas_action_move_bottom,
+        R.id.layout_canvas_action_move_left, R.id.layout_canvas_action_move_right};
+    private static final int[] MOVE_ACTION_LABELS = {
+        R.string.layout_canvas_a11y_move_top, R.string.layout_canvas_a11y_move_bottom,
+        R.string.layout_canvas_a11y_move_left, R.string.layout_canvas_a11y_move_right};
+
+    @VisibleForTesting
+    static int virtualIdOf(@NonNull Block block) {
+        return block.ordinal();
+    }
+
+    @VisibleForTesting
+    static int virtualIdOf(@NonNull Handle handle) {
+        return HANDLE_ID_BASE + handle.ordinal();
+    }
+
+    @Nullable
+    private static Block blockOfVirtualId(int id) {
+        Block[] blocks = Block.values();
+        return id >= 0 && id < blocks.length ? blocks[id] : null;
+    }
+
+    @Nullable
+    private static Handle handleOfVirtualId(int id) {
+        Handle[] handles = Handle.values();
+        int at = id - HANDLE_ID_BASE;
+        return at >= 0 && at < handles.length ? handles[at] : null;
+    }
+
+    /** The element a handle resizes. */
+    @NonNull
+    private static Block ownerOf(@NonNull Handle handle) {
+        switch (handle) {
+            case DOCK_HEIGHT: return Block.APPS_ROW;
+            case KEYBOARD_HEIGHT:
+            case KEYBOARD_CHIN: return Block.KEYBOARD;
+            case WIDGET_GRID:
+            default: return Block.CANVAS;
+        }
+    }
+
+    /**
+     * Whether an element is a virtual view: drawn on the phone, or hidden, which is when it can
+     * be brought back. The keyboard on a place that draws none is neither while it is on.
+     */
+    private boolean hasNode(@NonNull Block block) {
+        if (mLayout == null) return false;
+        if (block == Block.KEYBOARD) return !mKeyboardRect.isEmpty() || !mLayout.keyboardShown;
+        if (block == Block.CANVAS) return isSelectable(block);
+        return isSelectable(block) || isBlockHidden(block);
+    }
+
+    /** Where the drag may put a bar right now; null for what is not a bar. */
+    @Nullable
+    private MiniatureDragPolicy.Targets targetsFor(@NonNull Block block) {
+        MiniatureDragPolicy.Bar bar = barOf(block);
+        if (bar == null || mLayout == null) return null;
+        return MiniatureDragPolicy.targets(mPlace, mOrientation, mLayout, bar);
+    }
+
+    /**
+     * Whether a handle's value can be changed on what the canvas shows: the same conditions
+     * {@link #computeHandles} draws it under, without needing the element to be selected.
+     */
+    private boolean handleOffered(@NonNull Handle handle) {
+        if (mLayout == null) return false;
+        switch (handle) {
+            case DOCK_HEIGHT: return isSelectable(Block.APPS_ROW);
+            case KEYBOARD_HEIGHT: return !mKeyboardRect.isEmpty();
+            case KEYBOARD_CHIN:
+                return !mKeyboardRect.isEmpty() && mLayout.keyboardForm != KeyboardForm.FLOATING;
+            case WIDGET_GRID:
+            default: return canvasKind() == CanvasKind.HOME_GRID && gridArea() != null;
+        }
+    }
+
+    /** The handle {@code +} and {@code -} change on an element; null where it has none. */
+    @Nullable
+    private static Handle sizeHandleOf(@NonNull Block block) {
+        switch (block) {
+            case APPS_ROW: return Handle.DOCK_HEIGHT;
+            case KEYBOARD: return Handle.KEYBOARD_HEIGHT;
+            default: return null;
+        }
+    }
+
+    private float handleValue(@NonNull Handle handle) {
+        switch (handle) {
+            case DOCK_HEIGHT: return mDockScale;
+            case KEYBOARD_HEIGHT: return mKeyboardScale;
+            case KEYBOARD_CHIN: return mKeyboardChinDp;
+            case WIDGET_GRID:
+            default: return 0f;
+        }
+    }
+
+    private static float handleMin(@NonNull Handle handle) {
+        switch (handle) {
+            case DOCK_HEIGHT: return TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT;
+            case KEYBOARD_HEIGHT: return TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE;
+            case KEYBOARD_CHIN:
+            default: return TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING;
+        }
+    }
+
+    private static float handleMax(@NonNull Handle handle) {
+        switch (handle) {
+            case DOCK_HEIGHT: return TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT;
+            case KEYBOARD_HEIGHT: return TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE;
+            case KEYBOARD_CHIN:
+            default: return TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING;
+        }
+    }
+
+    /** One step of a scalar handle's value, larger for a positive direction, in range. */
+    private float steppedValue(@NonNull Handle handle, int direction) {
+        switch (handle) {
+            case DOCK_HEIGHT:
+                return LayoutCanvasA11yPolicy.stepScale(mDockScale,
+                    LayoutCanvasA11yPolicy.DOCK_SCALE_STEP, handleMin(handle), handleMax(handle),
+                    direction);
+            case KEYBOARD_HEIGHT:
+                return LayoutCanvasA11yPolicy.stepScale(mKeyboardScale,
+                    LayoutCanvasA11yPolicy.KEYBOARD_SCALE_STEP, handleMin(handle),
+                    handleMax(handle), direction);
+            case KEYBOARD_CHIN:
+            default:
+                return LayoutCanvasA11yPolicy.stepInt(mKeyboardChinDp,
+                    LayoutCanvasA11yPolicy.CHIN_STEP_DP, (int) handleMin(handle),
+                    (int) handleMax(handle), direction);
+        }
+    }
+
+    private boolean canStep(@NonNull Handle handle, int direction) {
+        return handle != Handle.WIDGET_GRID && handleOffered(handle)
+            && Float.compare(steppedValue(handle, direction), handleValue(handle)) != 0;
+    }
+
+    /**
+     * Sets a scalar handle the way a finger does: the value reported as if dragged to it, then
+     * the handle let go of, so the editor writes it and counts it for Undo.
+     */
+    private boolean setHandleValue(@NonNull Handle handle, float value) {
+        if (handle == Handle.WIDGET_GRID || !handleOffered(handle)) return false;
+        float clamped = Math.max(handleMin(handle), Math.min(handleMax(handle), value));
+        if (handle == Handle.KEYBOARD_CHIN) clamped = Math.round(clamped);
+        if (Float.compare(clamped, handleValue(handle)) == 0) return false;
+        commitHandleValue(handle, clamped);
+        commitHandleReleased();
+        return true;
+    }
+
+    private boolean stepHandle(@NonNull Handle handle, int direction) {
+        return canStep(handle, direction) && setHandleValue(handle, steppedValue(handle, direction));
+    }
+
+    private int steppedColumns(int step) {
+        return LayoutCanvasA11yPolicy.stepInt(mLayout == null ? 0 : mLayout.widgetColumns, 1,
+            TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+            TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS, step);
+    }
+
+    private int steppedRows(int step) {
+        return LayoutCanvasA11yPolicy.stepInt(mLayout == null ? 0 : mLayout.widgetRows, 1,
+            TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
+            TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS, step);
+    }
+
+    private boolean canStepGrid(int columnStep, int rowStep) {
+        if (mLayout == null || !handleOffered(Handle.WIDGET_GRID)) return false;
+        return steppedColumns(columnStep) != mLayout.widgetColumns
+            || steppedRows(rowStep) != mLayout.widgetRows;
+    }
+
+    /** Home's grid a column or a row larger or smaller, as its corner handle writes it. */
+    private boolean stepGrid(int columnStep, int rowStep) {
+        if (!canStepGrid(columnStep, rowStep)) return false;
+        commitWidgetGrid(steppedColumns(columnStep), steppedRows(rowStep));
+        commitHandleReleased();
+        return true;
+    }
+
+    private boolean performGridAction(int action) {
+        if (action == R.id.layout_canvas_action_add_column) return stepGrid(1, 0);
+        if (action == R.id.layout_canvas_action_remove_column) return stepGrid(-1, 0);
+        if (action == R.id.layout_canvas_action_add_row) return stepGrid(0, 1);
+        if (action == R.id.layout_canvas_action_remove_row) return stepGrid(0, -1);
+        return false;
+    }
+
+    /** A bar put on a gap the policy picked out of the drag's own targets. */
+    private boolean performMove(@NonNull Block bar, @Nullable EdgeStackPolicy.Drop drop) {
+        if (drop == null) return false;
+        commitDrop(bar, drop.edge, drop.index, drop.underKeyboard);
+        return true;
+    }
+
+    /** Puts an element away, as a drop in the tray does. */
+    private boolean hideElement(@NonNull Block block) {
+        if (mLayout == null) return false;
+        if (block == Block.KEYBOARD) {
+            if (mKeyboardRect.isEmpty()) return false;
+            commitKeyboardShown(false);
+            return true;
+        }
+        Element element = elementOf(block);
+        MiniatureDragPolicy.Targets targets = targetsFor(block);
+        if (element == null || targets == null
+            || !LayoutCanvasA11yPolicy.canHide(targets, mLayout, element)) return false;
+        commitDrop(block, null, -1, false);
+        return true;
+    }
+
+    /** Brings a hidden element back, as its chip does (the keyboard as its drag out does). */
+    private boolean showElement(@NonNull Block block) {
+        if (mLayout == null || block == Block.CANVAS || !isBlockHidden(block)) return false;
+        if (block == Block.KEYBOARD) commitKeyboardShown(true);
+        else commitRestore(block);
+        return true;
+    }
+
+    /**
+     * One accessibility action on one element. Every branch ends in the same write a finger
+     * makes; false where the action is not legal on the arrangement as it stands.
+     */
+    private boolean performElementAction(@NonNull Block block, int action) {
+        if (mLayout == null) return false;
+        if (action == AccessibilityNodeInfoCompat.ACTION_CLICK) {
+            if (block != Block.CANVAS && isBlockHidden(block)) return showElement(block);
+            if (!isSelectable(block)) return false;
+            selectFromTap(block == mSelected ? null : block);
+            return true;
+        }
+        if (action == R.id.layout_canvas_action_hide) return hideElement(block);
+        Handle size = sizeHandleOf(block);
+        if (action == R.id.layout_canvas_action_larger) return size != null && stepHandle(size, 1);
+        if (action == R.id.layout_canvas_action_smaller) return size != null && stepHandle(size, -1);
+        if (action == R.id.layout_canvas_action_chin_more)
+            return block == Block.KEYBOARD && stepHandle(Handle.KEYBOARD_CHIN, 1);
+        if (action == R.id.layout_canvas_action_chin_less)
+            return block == Block.KEYBOARD && stepHandle(Handle.KEYBOARD_CHIN, -1);
+        if (block == Block.CANVAS) return performGridAction(action);
+        Element element = elementOf(block);
+        MiniatureDragPolicy.Targets targets = targetsFor(block);
+        if (element == null || targets == null) return false;
+        if (action == R.id.layout_canvas_action_move_outward)
+            return performMove(block, LayoutCanvasA11yPolicy.step(targets, mLayout, element, true));
+        if (action == R.id.layout_canvas_action_move_inward)
+            return performMove(block, LayoutCanvasA11yPolicy.step(targets, mLayout, element, false));
+        Edge[] edges = Edge.values();
+        for (int i = 0; i < edges.length; i++) {
+            if (action == MOVE_ACTION_IDS[i])
+                return performMove(block, LayoutCanvasA11yPolicy.toEdge(targets, mLayout, element,
+                    edges[i]));
+        }
+        return false;
+    }
+
+    /** One accessibility action on one handle: a step, a value set outright, or a grid step. */
+    private boolean performHandleAction(@NonNull Handle handle, int action,
+                                        @Nullable Bundle arguments) {
+        if (handle == Handle.WIDGET_GRID) return performGridAction(action);
+        if (action == AccessibilityNodeInfoCompat.ACTION_SCROLL_FORWARD)
+            return stepHandle(handle, 1);
+        if (action == AccessibilityNodeInfoCompat.ACTION_SCROLL_BACKWARD)
+            return stepHandle(handle, -1);
+        if (action == AccessibilityActionCompat.ACTION_SET_PROGRESS.getId() && arguments != null
+            && arguments.containsKey(AccessibilityNodeInfoCompat.ACTION_ARGUMENT_PROGRESS_VALUE)) {
+            return setHandleValue(handle, arguments.getFloat(
+                AccessibilityNodeInfoCompat.ACTION_ARGUMENT_PROGRESS_VALUE));
+        }
+        return false;
+    }
+
+    /**
+     * What a screen reader's action on a virtual view does, and what a key does: the edit, then
+     * the virtual views read again and the new state said aloud. Nothing happens mid-gesture.
+     */
+    @VisibleForTesting
+    boolean performVirtualAction(int virtualId, int action, @Nullable Bundle arguments) {
+        if (mLayout == null || mDraggedBar != null || mDraggedHandle != null) return false;
+        Handle handle = handleOfVirtualId(virtualId);
+        Block block = handle != null ? ownerOf(handle) : blockOfVirtualId(virtualId);
+        if (block == null) return false;
+        boolean selecting = handle == null && action == AccessibilityNodeInfoCompat.ACTION_CLICK
+            && (block == Block.CANVAS || !isBlockHidden(block));
+        boolean done = handle != null ? performHandleAction(handle, action, arguments)
+            : performElementAction(block, action);
+        if (!done) return false;
+        mAccessibility.invalidateRoot();
+        // A selection change is the node's own selected state; an edit is said in words.
+        if (!selecting) announceForAccessibility(spokenState(virtualId));
+        return true;
+    }
+
+    /** The name and the state of one virtual view, as one line. */
+    @NonNull
+    @VisibleForTesting
+    String spokenState(int virtualId) {
+        Handle handle = handleOfVirtualId(virtualId);
+        if (handle != null) return join(handleName(handle), sizeText(handle));
+        Block block = blockOfVirtualId(virtualId);
+        if (block == null) return "";
+        String state = elementState(block);
+        return state.isEmpty() ? elementName(block) : join(elementName(block), state);
+    }
+
+    @NonNull
+    private String join(@NonNull String first, @NonNull String second) {
+        return getContext().getString(R.string.layout_canvas_a11y_join, first, second);
+    }
+
+    @NonNull
+    private String elementName(@NonNull Block block) {
+        return block == Block.CANVAS ? canvasLabel() : chipName(block);
+    }
+
+    @NonNull
+    private String handleName(@NonNull Handle handle) {
+        switch (handle) {
+            case DOCK_HEIGHT:
+                return getContext().getString(R.string.layout_canvas_a11y_handle_dock);
+            case KEYBOARD_HEIGHT:
+                return getContext().getString(R.string.layout_canvas_a11y_handle_keyboard);
+            case KEYBOARD_CHIN:
+                return getContext().getString(R.string.layout_canvas_a11y_handle_chin);
+            case WIDGET_GRID:
+            default:
+                return getContext().getString(R.string.settings_layout_widget_grid_title);
+        }
+    }
+
+    /** A size in the units a person would say it in. */
+    @NonNull
+    private String sizeText(@NonNull Handle handle) {
+        Context context = getContext();
+        switch (handle) {
+            case DOCK_HEIGHT:
+                if (edgeOfBlock(Block.APPS_ROW).isOnSide()) {
+                    // A rail's width is fixed; its height setting is said against the usual one.
+                    return context.getString(R.string.layout_canvas_a11y_size_percent,
+                        Math.round(mDockScale / TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT * 100f));
+                }
+                return context.getString(R.string.layout_canvas_a11y_size_dp,
+                    LayoutCanvasGeometry.dockBandHeightDp(mDockScale,
+                        mStyle == LayoutStyle.FLOATING));
+            case KEYBOARD_HEIGHT:
+                return context.getString(R.string.layout_canvas_a11y_size_dp,
+                    Math.round(LayoutCanvasGeometry.keyboardHeightDp(mKeyboardScale,
+                        mOrientation == PlaceOrientation.LANDSCAPE, screenHeightDp())));
+            case KEYBOARD_CHIN:
+                return context.getString(R.string.layout_canvas_a11y_chin_dp,
+                    LayoutCanvasGeometry.chinDp(mKeyboardChinDp));
+            case WIDGET_GRID:
+            default:
+                return context.getString(R.string.layout_canvas_a11y_grid_size,
+                    mLayout == null ? 0 : mLayout.widgetColumns,
+                    mLayout == null ? 0 : mLayout.widgetRows);
+        }
+    }
+
+    /** The physical edge's name. */
+    private static int edgeName(@NonNull Edge edge) {
+        switch (edge) {
+            case BOTTOM: return R.string.layout_canvas_a11y_edge_bottom;
+            case LEFT: return R.string.layout_canvas_a11y_edge_left;
+            case RIGHT: return R.string.layout_canvas_a11y_edge_right;
+            case TOP:
+            default: return R.string.layout_canvas_a11y_edge_top;
+        }
+    }
+
+    private static int formName(@NonNull KeyboardForm form) {
+        switch (form) {
+            case FLOATING: return R.string.settings_layout_keyboard_form_floating;
+            case SPLIT: return R.string.settings_layout_keyboard_form_split;
+            case DOCKED:
+            default: return R.string.settings_layout_keyboard_form_docked;
+        }
+    }
+
+    /**
+     * Where an element stands and how big it is: "Bottom edge, 2 of 3 from the edge, 56 dp",
+     * "Docked, 220 dp", or "Hidden". The pane says nothing beyond its name.
+     */
+    @NonNull
+    @VisibleForTesting
+    String elementState(@NonNull Block block) {
+        PlaceLayout layout = mLayout;
+        if (layout == null || block == Block.CANVAS) return "";
+        Context context = getContext();
+        if (isBlockHidden(block)) return context.getString(R.string.settings_layout_row_hidden);
+        if (block == Block.KEYBOARD) {
+            String state = join(context.getString(formName(shapeLayout().keyboardForm)),
+                sizeText(Handle.KEYBOARD_HEIGHT));
+            return handleOffered(Handle.KEYBOARD_CHIN) && mKeyboardChinDp > 0
+                ? join(state, sizeText(Handle.KEYBOARD_CHIN)) : state;
+        }
+        Element element = elementOf(block);
+        LayoutCanvasA11yPolicy.Position at = element == null ? null
+            : LayoutCanvasA11yPolicy.positionOf(layout, element);
+        if (at == null) return "";
+        String where = context.getString(at.underKeyboard
+            ? R.string.settings_layout_edge_under_keyboard : edgeName(at.edge));
+        if (at.count > 1) {
+            where = context.getString(R.string.layout_canvas_a11y_stack_position, where,
+                at.index + 1, at.count);
+        }
+        return block == Block.APPS_ROW ? join(where, sizeText(Handle.DOCK_HEIGHT)) : where;
+    }
+
+    /**
+     * Where a virtual view stands, in view pixels. A hidden element has no band: it stands in the
+     * tray, or along the phone's bottom where the tray is outside this view.
+     */
+    @NonNull
+    private Rect nodeBounds(int virtualId) {
+        RectF bounds = null;
+        Handle handle = handleOfVirtualId(virtualId);
+        if (handle != null) {
+            RectF pill = mHandleRects.get(handle);
+            if (pill != null) {
+                float half = dp(HANDLE_TOUCH_HALF_DP);
+                bounds = new RectF(pill.centerX() - half, pill.centerY() - half,
+                    pill.centerX() + half, pill.centerY() + half);
+            }
+        } else {
+            Block block = blockOfVirtualId(virtualId);
+            bounds = block == null ? null : blockRect(block);
+            if (bounds == null || bounds.isEmpty()) {
+                RectF tray = new RectF(mTrayRect);
+                if (!tray.isEmpty() && tray.intersect(0f, 0f, getWidth(), getHeight())) {
+                    bounds = tray;
+                } else {
+                    float strip = Math.min(dp(HANDLE_TOUCH_HALF_DP), mFrameRect.height());
+                    bounds = new RectF(mFrameRect.left, mFrameRect.bottom - strip,
+                        mFrameRect.right, mFrameRect.bottom);
+                }
+            }
+        }
+        Rect rect = new Rect();
+        if (bounds != null) bounds.roundOut(rect);
+        if (!rect.intersect(0, 0, Math.max(1, getWidth()), Math.max(1, getHeight()))
+            || rect.isEmpty()) {
+            rect.set(0, 0, 1, 1);
+        }
+        return rect;
+    }
+
+    private void addAction(@NonNull AccessibilityNodeInfoCompat node, int id, int label) {
+        node.addAction(new AccessibilityActionCompat(id, getContext().getString(label)));
+    }
+
+    private void populateElement(@NonNull Block block, @NonNull AccessibilityNodeInfoCompat node) {
+        node.setClassName(android.widget.Button.class.getName());
+        node.setContentDescription(elementName(block));
+        String state = elementState(block);
+        if (!state.isEmpty()) node.setStateDescription(state);
+        node.setFocusable(true);
+        node.setClickable(true);
+        node.setSelected(block == mSelected);
+        if (block != Block.CANVAS && isBlockHidden(block)) {
+            addAction(node, AccessibilityNodeInfoCompat.ACTION_CLICK,
+                R.string.layout_canvas_a11y_show);
+            return;
+        }
+        addAction(node, AccessibilityNodeInfoCompat.ACTION_CLICK, block == mSelected
+            ? R.string.layout_canvas_a11y_deselect : R.string.layout_canvas_a11y_select);
+        PlaceLayout layout = mLayout;
+        Element element = elementOf(block);
+        MiniatureDragPolicy.Targets targets = targetsFor(block);
+        if (layout != null && element != null && targets != null) {
+            Edge[] edges = Edge.values();
+            for (int i = 0; i < edges.length; i++) {
+                if (LayoutCanvasA11yPolicy.toEdge(targets, layout, element, edges[i]) != null)
+                    addAction(node, MOVE_ACTION_IDS[i], MOVE_ACTION_LABELS[i]);
+            }
+            if (LayoutCanvasA11yPolicy.step(targets, layout, element, true) != null)
+                addAction(node, R.id.layout_canvas_action_move_outward,
+                    R.string.layout_canvas_a11y_move_outward);
+            if (LayoutCanvasA11yPolicy.step(targets, layout, element, false) != null)
+                addAction(node, R.id.layout_canvas_action_move_inward,
+                    R.string.layout_canvas_a11y_move_inward);
+            if (LayoutCanvasA11yPolicy.canHide(targets, layout, element))
+                addAction(node, R.id.layout_canvas_action_hide, R.string.layout_canvas_a11y_hide);
+        } else if (block == Block.KEYBOARD) {
+            addAction(node, R.id.layout_canvas_action_hide, R.string.layout_canvas_a11y_hide);
+        }
+        Handle size = sizeHandleOf(block);
+        if (size != null) {
+            if (canStep(size, 1))
+                addAction(node, R.id.layout_canvas_action_larger, R.string.layout_canvas_a11y_larger);
+            if (canStep(size, -1))
+                addAction(node, R.id.layout_canvas_action_smaller,
+                    R.string.layout_canvas_a11y_smaller);
+        }
+        if (block == Block.KEYBOARD) {
+            if (canStep(Handle.KEYBOARD_CHIN, 1))
+                addAction(node, R.id.layout_canvas_action_chin_more,
+                    R.string.layout_canvas_a11y_chin_more);
+            if (canStep(Handle.KEYBOARD_CHIN, -1))
+                addAction(node, R.id.layout_canvas_action_chin_less,
+                    R.string.layout_canvas_a11y_chin_less);
+        }
+        if (block == Block.CANVAS) addGridActions(node);
+    }
+
+    private void addGridActions(@NonNull AccessibilityNodeInfoCompat node) {
+        if (canStepGrid(1, 0))
+            addAction(node, R.id.layout_canvas_action_add_column,
+                R.string.layout_canvas_a11y_add_column);
+        if (canStepGrid(-1, 0))
+            addAction(node, R.id.layout_canvas_action_remove_column,
+                R.string.layout_canvas_a11y_remove_column);
+        if (canStepGrid(0, 1))
+            addAction(node, R.id.layout_canvas_action_add_row, R.string.layout_canvas_a11y_add_row);
+        if (canStepGrid(0, -1))
+            addAction(node, R.id.layout_canvas_action_remove_row,
+                R.string.layout_canvas_a11y_remove_row);
+    }
+
+    private void populateHandle(@NonNull Handle handle, @NonNull AccessibilityNodeInfoCompat node) {
+        node.setContentDescription(handleName(handle));
+        node.setStateDescription(sizeText(handle));
+        node.setFocusable(true);
+        if (handle == Handle.WIDGET_GRID) {
+            node.setClassName(android.widget.Button.class.getName());
+            addGridActions(node);
+            return;
+        }
+        node.setClassName(android.widget.SeekBar.class.getName());
+        node.setRangeInfo(RangeInfoCompat.obtain(handle == Handle.KEYBOARD_CHIN
+                ? RangeInfoCompat.RANGE_TYPE_INT : RangeInfoCompat.RANGE_TYPE_FLOAT,
+            handleMin(handle), handleMax(handle), handleValue(handle)));
+        if (canStep(handle, 1)) node.addAction(AccessibilityActionCompat.ACTION_SCROLL_FORWARD);
+        if (canStep(handle, -1)) node.addAction(AccessibilityActionCompat.ACTION_SCROLL_BACKWARD);
+        node.addAction(AccessibilityActionCompat.ACTION_SET_PROGRESS);
+    }
+
+    /** The virtual views in the order they are walked: the legend's, each handle after its element. */
+    @NonNull
+    @VisibleForTesting
+    List<Integer> virtualViewIds() {
+        List<Integer> ids = new ArrayList<>(LEGEND_ORDER.length + Handle.values().length);
+        if (mLayout == null) return ids;
+        for (Block block : LEGEND_ORDER) {
+            if (!hasNode(block)) continue;
+            ids.add(virtualIdOf(block));
+            if (block != mSelected || mDraggedBar != null) continue;
+            for (Handle handle : Handle.values()) {
+                if (mHandleRects.containsKey(handle)) ids.add(virtualIdOf(handle));
+            }
+        }
+        return ids;
+    }
+
+    /** Fills one virtual view's node, as the helper asks for it. */
+    @VisibleForTesting
+    void populateVirtualNode(int virtualId, @NonNull AccessibilityNodeInfoCompat node) {
+        node.setBoundsInParent(nodeBounds(virtualId));
+        if (!virtualViewIds().contains(virtualId)) {
+            // Gone since the reader last asked: an empty node, which the next refresh removes.
+            node.setContentDescription("");
+            return;
+        }
+        Handle handle = handleOfVirtualId(virtualId);
+        if (handle != null) {
+            populateHandle(handle, node);
+            return;
+        }
+        Block block = blockOfVirtualId(virtualId);
+        if (block != null) populateElement(block, node);
+    }
+
+    /**
+     * A key on the focused canvas (see the class comment for the map). Arrows move the selected
+     * bar only while it is the element in keyboard focus, or nothing is; otherwise they walk the
+     * elements.
+     */
+    @VisibleForTesting
+    boolean onArrangementKey(@NonNull KeyEvent event) {
+        if (mLayout == null || event.getAction() != KeyEvent.ACTION_DOWN) return false;
+        int focusedId = mAccessibility.getKeyboardFocusedVirtualViewId();
+        Handle focusedHandle = handleOfVirtualId(focusedId);
+        Block focused = focusedHandle != null ? null : blockOfVirtualId(focusedId);
+        Block target = focused != null ? focused
+            : focusedHandle != null ? ownerOf(focusedHandle) : mSelected;
+        boolean alt = event.isAltPressed();
+        switch (event.getKeyCode()) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT: {
+                Block bar = mSelected;
+                if (bar == null || barOf(bar) == null || focusedHandle != null
+                    || (focused != null && focused != bar)) return false;
+                Edge edge = arrowEdge(event.getKeyCode());
+                Element element = elementOf(bar);
+                LayoutCanvasA11yPolicy.Position at = element == null ? null
+                    : LayoutCanvasA11yPolicy.positionOf(mLayout, element);
+                if (at == null) return false;
+                int action = at.edge == edge ? R.id.layout_canvas_action_move_outward
+                    : MOVE_ACTION_IDS[edge.ordinal()];
+                if (!performVirtualAction(virtualIdOf(bar), action, null)) {
+                    // Nowhere to go that way: say where it is, and keep the key from walking off.
+                    announceForAccessibility(spokenState(virtualIdOf(bar)));
+                }
+                return true;
+            }
+            case KeyEvent.KEYCODE_PLUS:
+            case KeyEvent.KEYCODE_EQUALS:
+            case KeyEvent.KEYCODE_NUMPAD_ADD:
+                return target != null && resizeByKey(target, focusedHandle, 1, alt);
+            case KeyEvent.KEYCODE_MINUS:
+            case KeyEvent.KEYCODE_NUMPAD_SUBTRACT:
+                return target != null && resizeByKey(target, focusedHandle, -1, alt);
+            case KeyEvent.KEYCODE_DEL:
+            case KeyEvent.KEYCODE_FORWARD_DEL:
+                return target != null && performVirtualAction(virtualIdOf(target),
+                    R.id.layout_canvas_action_hide, null);
+            case KeyEvent.KEYCODE_H:
+                if (target == null || target == Block.CANVAS) return false;
+                return performVirtualAction(virtualIdOf(target), isBlockHidden(target)
+                    ? AccessibilityNodeInfoCompat.ACTION_CLICK : R.id.layout_canvas_action_hide,
+                    null);
+            case KeyEvent.KEYCODE_SPACE:
+                return focused != null && performVirtualAction(virtualIdOf(focused),
+                    AccessibilityNodeInfoCompat.ACTION_CLICK, null);
+            case KeyEvent.KEYCODE_ESCAPE:
+                if (mSelected == null) return false;
+                selectFromTap(null);
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    /** {@code +} or {@code -} on an element or a handle; Alt picks the chin, or the grid's rows. */
+    private boolean resizeByKey(@NonNull Block target, @Nullable Handle focusedHandle,
+                                int direction, boolean alt) {
+        boolean larger = direction > 0;
+        if (focusedHandle != null) {
+            if (focusedHandle == Handle.WIDGET_GRID) {
+                return performVirtualAction(virtualIdOf(focusedHandle), gridAction(larger, alt),
+                    null);
+            }
+            return performVirtualAction(virtualIdOf(focusedHandle), larger
+                ? AccessibilityNodeInfoCompat.ACTION_SCROLL_FORWARD
+                : AccessibilityNodeInfoCompat.ACTION_SCROLL_BACKWARD, null);
+        }
+        int action;
+        switch (target) {
+            case APPS_ROW:
+                action = larger ? R.id.layout_canvas_action_larger
+                    : R.id.layout_canvas_action_smaller;
+                break;
+            case KEYBOARD:
+                if (alt) {
+                    action = larger ? R.id.layout_canvas_action_chin_more
+                        : R.id.layout_canvas_action_chin_less;
+                } else {
+                    action = larger ? R.id.layout_canvas_action_larger
+                        : R.id.layout_canvas_action_smaller;
+                }
+                break;
+            case CANVAS:
+                action = gridAction(larger, alt);
+                break;
+            default:
+                return false;
+        }
+        return performVirtualAction(virtualIdOf(target), action, null);
+    }
+
+    private static int gridAction(boolean larger, boolean rows) {
+        if (rows) {
+            return larger ? R.id.layout_canvas_action_add_row
+                : R.id.layout_canvas_action_remove_row;
+        }
+        return larger ? R.id.layout_canvas_action_add_column
+            : R.id.layout_canvas_action_remove_column;
+    }
+
+    /** The physical edge an arrow key points at, as the canvas is drawn. */
+    @NonNull
+    private static Edge arrowEdge(int keyCode) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP: return Edge.TOP;
+            case KeyEvent.KEYCODE_DPAD_DOWN: return Edge.BOTTOM;
+            case KeyEvent.KEYCODE_DPAD_LEFT: return Edge.LEFT;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            default: return Edge.RIGHT;
+        }
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(@NonNull KeyEvent event) {
+        if (onArrangementKey(event)) return true;
+        return mAccessibility.dispatchKeyEvent(event) || super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    protected boolean dispatchHoverEvent(@NonNull MotionEvent event) {
+        return mAccessibility.dispatchHoverEvent(event) || super.dispatchHoverEvent(event);
+    }
+
+    @Override
+    protected void onFocusChanged(boolean gainFocus, int direction,
+                                  @Nullable Rect previouslyFocusedRect) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect);
+        mAccessibility.onFocusChanged(gainFocus, direction, previouslyFocusedRect);
+        invalidate();
+    }
+
+    /**
+     * The element in keyboard focus, while the canvas has it: a dashed outline in the accent, so a
+     * keyboard user sees where Tab has got to. Never drawn in touch mode, where nothing focuses.
+     */
+    private void drawKeyboardFocus(@NonNull Canvas canvas) {
+        if (!isFocused()) return;
+        Block block = blockOfVirtualId(mAccessibility.getKeyboardFocusedVirtualViewId());
+        if (block == null || block == mSelected || !isSelectable(block)) return;
+        mDashPaint.setPathEffect(mTrayDash);
+        mDashPaint.setStrokeWidth(dp(SELECTION_STROKE_DP));
+        mDashPaint.setColor(accent());
+        for (ShapeSpec shape : selectionShapes(block)) {
+            strokeInside(canvas, shape, dp(SELECTION_STROKE_DP), mDashPaint);
+        }
+    }
+
+    /** Each element, each hidden one and each handle of the selection as a virtual view. */
+    private final class CanvasAccessibility extends ExploreByTouchHelper {
+
+        CanvasAccessibility(@NonNull View host) {
+            super(host);
+        }
+
+        @Override
+        protected int getVirtualViewAt(float x, float y) {
+            if (mLayout == null) return INVALID_ID;
+            if (mDraggedBar == null) {
+                Handle handle = handleAt(x, y);
+                if (handle != null) return virtualIdOf(handle);
+            }
+            Block block = blockAt(x, y);
+            return block != null && hasNode(block) ? virtualIdOf(block) : INVALID_ID;
+        }
+
+        @Override
+        protected void getVisibleVirtualViews(@NonNull List<Integer> virtualViewIds) {
+            virtualViewIds.addAll(virtualViewIds());
+        }
+
+        @Override
+        protected void onPopulateNodeForVirtualView(int virtualViewId,
+                                                    @NonNull AccessibilityNodeInfoCompat node) {
+            populateVirtualNode(virtualViewId, node);
+        }
+
+        @Override
+        protected boolean onPerformActionForVirtualView(int virtualViewId, int action,
+                                                        @Nullable Bundle arguments) {
+            return performVirtualAction(virtualViewId, action, arguments);
+        }
+
+        @Override
+        protected void onVirtualViewKeyboardFocusChanged(int virtualViewId, boolean hasFocus) {
+            invalidate();
+        }
     }
 
     @Nullable

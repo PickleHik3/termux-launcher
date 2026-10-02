@@ -280,10 +280,10 @@ final class HelpStyle {
         return params;
     }
 
-    LinearLayout.LayoutParams beside(int leftMargin) {
+    LinearLayout.LayoutParams beside(int startMargin) {
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        params.leftMargin = leftMargin;
+        params.setMarginStart(startMargin);
         return params;
     }
 

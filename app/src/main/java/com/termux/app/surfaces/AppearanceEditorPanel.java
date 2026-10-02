@@ -208,8 +208,8 @@ final class AppearanceEditorPanel {
     void setNavInset(int navInsetPx) {
         int bottom = mBasePaddingBottom + Math.max(0, navInsetPx);
         if (mRoot.getPaddingBottom() != bottom)
-            mRoot.setPadding(mRoot.getPaddingLeft(), mRoot.getPaddingTop(),
-                mRoot.getPaddingRight(), bottom);
+            mRoot.setPaddingRelative(mRoot.getPaddingStart(), mRoot.getPaddingTop(),
+                mRoot.getPaddingEnd(), bottom);
     }
 
     /**
@@ -273,8 +273,11 @@ final class AppearanceEditorPanel {
                 mLook.setValue(AppearanceLooks.sliderValueForStop(stop));
                 if (mListener != null) mListener.onLookStop(stop);
             });
+            // Absolute LEFT: placeLookLabels translates each label from the strip's left edge,
+            // which a START label in a right-to-left strip would not be standing on.
             mLookLabels.addView(label, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.LEFT));
             mLookLabelViews[i] = label;
         }
         mLook.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> placeLookLabels());
@@ -285,7 +288,8 @@ final class AppearanceEditorPanel {
 
     /**
      * Centres each label under its stop: the stops run from one track padding to the other, in
-     * the slider's coordinates, which the label strip shares up to the two views' offset.
+     * the slider's coordinates, which the label strip shares up to the two views' offset. A
+     * right-to-left slider puts its first stop on the right, so the labels follow it there.
      */
     private void placeLookLabels() {
         int width = mLook.getWidth();
@@ -295,6 +299,7 @@ final class AppearanceEditorPanel {
         float span = Math.max(0, width - 2 * pad);
         int last = AppearanceLooks.STOP_COUNT - 1;
         int offset = mLook.getLeft() - mLookLabels.getLeft();
+        boolean rtl = mLook.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
         for (int i = 0; i < mLookLabelViews.length; i++) {
             TextView label = mLookLabelViews[i];
             int labelWidth = label.getWidth();
@@ -303,7 +308,8 @@ final class AppearanceEditorPanel {
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
                 labelWidth = label.getMeasuredWidth();
             }
-            float centre = offset + pad + span * i / last;
+            float along = span * i / last;
+            float centre = offset + (rtl ? width - pad - along : pad + along);
             float x = Math.max(0, Math.min(mLookLabels.getWidth() - labelWidth,
                 centre - labelWidth / 2f));
             label.setTranslationX(x);

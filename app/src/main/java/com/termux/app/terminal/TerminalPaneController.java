@@ -3641,16 +3641,25 @@ public class TerminalPaneController {
                     CornerTabGlyphs.LAYOUT, context.getString(
                         R.string.corner_tab_layout_description)));
                 actions.add(PaneControlsView.Action.glyph(ACTION_WALLPAPER,
-                    CornerTabGlyphs.WALLPAPER));
-                actions.add(PaneControlsView.Action.drawn(ACTION_MINIMAL, mMinimalMark));
+                    CornerTabGlyphs.WALLPAPER,
+                    context.getString(R.string.pane_controls_change_wallpaper)));
+                actions.add(PaneControlsView.Action.drawn(ACTION_MINIMAL, mMinimalMark,
+                    PaneControlsView.TINT_PRIMARY, () -> context.getString(
+                        mHost.isMinimalMode() ? R.string.pane_controls_leave_minimal_mode
+                            : R.string.pane_controls_enter_minimal_mode)));
                 actions.add(PaneControlsView.Action.drawn(ACTION_AUTO_TILING,
-                    this::drawAutoTilingMark));
+                    this::drawAutoTilingMark, PaneControlsView.TINT_PRIMARY,
+                    () -> context.getString(isAutoTilingActive()
+                        ? R.string.pane_controls_turn_off_auto_tiling
+                        : R.string.pane_controls_turn_on_auto_tiling)));
                 // The launcher's settings, one tap from the tab on every place, as the display's
                 // tab already offers them.
                 actions.add(PaneControlsView.Action.glyph(ACTION_SETTINGS,
-                    CornerTabGlyphs.SETTINGS));
+                    CornerTabGlyphs.SETTINGS,
+                    context.getString(R.string.pane_controls_open_settings)));
                 actions.add(PaneControlsView.Action.label(ACTION_HELP,
-                    CornerTabGlyphs.help(getContext())));
+                    CornerTabGlyphs.help(getContext()),
+                    context.getString(R.string.pane_controls_help)));
             } else {
                 for (int id : splitTabActions(mMaximizedLeaf != null)) {
                     if (id == ACTION_CLOSE) {
@@ -3664,7 +3673,9 @@ public class TerminalPaneController {
                     } else if (id == ACTION_MAXIMIZE) {
                         actions.add(PaneControlsView.Action.drawn(ACTION_MAXIMIZE,
                             this::drawMaximizeMark, PaneControlsView.TINT_PRIMARY,
-                            context.getString(R.string.pane_corner_tab_maximise_description)));
+                            () -> context.getString(mMaximizedLeaf != null
+                                ? R.string.pane_controls_restore_pane
+                                : R.string.pane_corner_tab_maximise_description)));
                     }
                 }
             }

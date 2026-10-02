@@ -218,17 +218,22 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         applyPreview(slotImage, null);
         requestArtwork(cell, item, true);
         title.setText(item.label);
-        String spanText = item.columnSpan + " × " + item.rowSpan + " cells";
+        Resources res = holder.itemView.getResources();
+        String spanText;
         if (item.minimumColumnSpan > 0 && item.minimumRowSpan > 0
             && (item.minimumColumnSpan != item.columnSpan || item.minimumRowSpan != item.rowSpan)) {
-            spanText += " · minimum " + item.minimumColumnSpan + " × " + item.minimumRowSpan;
+            spanText = res.getString(R.string.widget_picker_card_span_minimum, item.columnSpan,
+                item.rowSpan, item.minimumColumnSpan, item.minimumRowSpan);
+        } else {
+            spanText = res.getString(R.string.widget_picker_card_span, item.columnSpan, item.rowSpan);
         }
         span.setText(spanText);
         boolean enabled = fit.canFit(item);
         holder.itemView.setEnabled(enabled); holder.itemView.setAlpha(enabled ? 1f : 0.45f);
-        holder.itemView.setClickable(enabled); holder.itemView.setFocusable(false);
-        holder.itemView.setContentDescription(item.label + ", " + spanText
-            + (enabled ? "" : ", no space"));
+        holder.itemView.setClickable(enabled); makeKeyboardReachable(holder.itemView);
+        holder.itemView.setContentDescription(res.getString(enabled
+            ? R.string.widget_picker_card_description
+            : R.string.widget_picker_card_description_no_space, item.label, spanText));
         holder.itemView.setOnClickListener(enabled ? view -> listener.onProviderSelected(item) : null);
         // The hold rides alongside the tap rather than replacing it: the listener never consumes
         // an event, so a press that is not held long enough is the click it has always been.
@@ -297,6 +302,21 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         }
     }
 
+    /**
+     * Rows take focus from a keyboard or D-pad, never from a touch (touch-mode focus would move the
+     * focus ring and the IME target on every tap), and show it with a wash over the row.
+     */
+    private static void makeKeyboardReachable(@NonNull View row) {
+        row.setFocusable(true); row.setFocusableInTouchMode(false);
+        if (row.getBackground() != null) return;
+        android.graphics.drawable.StateListDrawable states =
+            new android.graphics.drawable.StateListDrawable();
+        int wash = (com.termux.app.material.M3.onSurface(row.getContext()) & 0x00FFFFFF) | 0x24000000;
+        states.addState(new int[]{android.R.attr.state_focused},
+            new android.graphics.drawable.ColorDrawable(wash));
+        row.setBackground(states);
+    }
+
     /** The app row stays live whatever its widgets measure: it is how they are reached at all. */
     private void bindSection(@NonNull RecyclerView.ViewHolder holder, @NonNull Section section) {
         WidgetAppGroup group = section.group;
@@ -313,10 +333,11 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         // nf-fa-angle_up / nf-fa-angle_down, the same family the page's own chrome wears.
         chevron.setText(section.expanded ? "\uf106" : "\uf107");
         holder.itemView.setEnabled(true); holder.itemView.setAlpha(1f);
-        holder.itemView.setClickable(true); holder.itemView.setFocusable(false);
-        holder.itemView.setContentDescription(group.label + ", " + countText + ", "
-            + resources.getString(section.expanded ? R.string.widget_picker_app_expanded
-                : R.string.widget_picker_app_collapsed));
+        holder.itemView.setClickable(true); makeKeyboardReachable(holder.itemView);
+        holder.itemView.setContentDescription(resources.getString(
+            R.string.widget_picker_app_description, group.label, countText,
+            resources.getString(section.expanded ? R.string.widget_picker_app_expanded
+                : R.string.widget_picker_app_collapsed)));
         holder.itemView.setOnClickListener(view -> toggleSection(group));
     }
 
