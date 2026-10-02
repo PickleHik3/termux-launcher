@@ -244,6 +244,7 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
     /** Back in front (also after a picker shown over the activity). */
     public void onResume() {
         if (!mSupported) return;
+        WallpaperSlots.keepHomeStill(mActivity);
         mVisible = true;
         refresh();
         leaveLockAfterScreenOff();

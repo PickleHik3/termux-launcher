@@ -261,6 +261,9 @@ public final class WallpaperPickerPage {
         mSnap.attachToRecyclerView(mPager);
         mPager.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
+                // A layout pass reports a scroll too, before the side padding that centres the
+                // cards is set, and Home can be nearest the middle then: follow real scrolls only.
+                if (rv.getScrollState() == RecyclerView.SCROLL_STATE_IDLE) return;
                 centreFromScroll();
             }
 
@@ -661,7 +664,7 @@ public final class WallpaperPickerPage {
             blp.bottomMargin = dp(6);
             cell.addView(badge, blp);
             badge.setBackground(EditorM3.surface(badge,
-                com.google.android.material.R.attr.shapeAppearanceCornerFull,
+                com.google.android.material.R.attr.shapeAppearanceCornerExtraLarge,
                 com.google.android.material.R.attr.colorSecondaryContainer));
             badge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         }

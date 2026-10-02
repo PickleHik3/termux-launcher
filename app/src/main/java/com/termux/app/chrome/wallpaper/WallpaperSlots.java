@@ -176,6 +176,35 @@ public final class WallpaperSlots {
         }
     }
 
+    private static volatile boolean sHealingHome;
+
+    /**
+     * Android's live-wallpaper preview can offer "Home and lock". Our live wallpaper on the home
+     * screen would leave the glass with nothing to blur, so when the launcher comes back and finds it
+     * there, the Home slot's still goes back on the home screen alone (the lock screen keeps the
+     * live wallpaper). Cheap when nothing is wrong: one WallpaperInfo read.
+     */
+    public static void keepHomeStill(@NonNull Context ctx) {
+        if (Build.VERSION.SDK_INT < 34 || sHealingHome) return;
+        Context app = ctx.getApplicationContext();
+        try {
+            WallpaperInfo home = WallpaperManager.getInstance(app).getWallpaperInfo(WallpaperManager.FLAG_SYSTEM);
+            if (home == null || !LockLiveWallpaperService.component(app).equals(home.getComponent())) return;
+        } catch (RuntimeException e) {
+            return;
+        }
+        State state = read(app);
+        AnimatedWallpaper w = state.home.animatedId == null ? null : AnimatedWallpapers.byId(state.home.animatedId);
+        if (w == null) {
+            Logger.logWarn(LOG_TAG, "Our live wallpaper is on the home screen with no Home background to put back");
+            return;
+        }
+        Logger.logInfo(LOG_TAG, "Our live wallpaper took the home screen too; putting the Home still back");
+        sHealingHome = true;
+        GeneratedWallpaperApplier.applyStill(app, w, WallpaperManager.FLAG_SYSTEM, true, null,
+            (ok, error) -> sHealingHome = false);
+    }
+
     @NonNull
     private static WallpaperSlotPlan.Inputs inputs(@NonNull Context ctx) {
         State state = read(ctx);
