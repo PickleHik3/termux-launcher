@@ -6,6 +6,8 @@ import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
 import android.view.Gravity;
+import android.view.FocusFinder;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -63,6 +65,7 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
     private boolean loading;
     private float downX, downY;
     private boolean scrimCandidate;
+    @Nullable private java.lang.ref.WeakReference<View> previousFocus;
 
     public WidgetPickerSheetView(@NonNull Context context,
                                  @NonNull WidgetPickerAdapter.Listener listener) {
@@ -70,7 +73,7 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
         setClipChildren(true); setClipToPadding(true); setFocusable(false);
         slop = ViewConfiguration.get(context).getScaledTouchSlop();
         scrim = new View(context); scrim.setBackgroundColor(M3.scrim(context));
-        scrim.setContentDescription("Close widget picker");
+        scrim.setContentDescription(context.getString(R.string.widget_picker_close));
         scrim.setOnTouchListener(this::onScrimTouch);
         addView(scrim, new CoordinatorLayout.LayoutParams(
             CoordinatorLayout.LayoutParams.MATCH_PARENT, CoordinatorLayout.LayoutParams.MATCH_PARENT));
@@ -87,7 +90,7 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
         LinearLayout header = new LinearLayout(context); header.setGravity(Gravity.CENTER_VERTICAL);
         int pad = dp(16); header.setPadding(pad, 0, dp(8), 0);
-        title = new TextView(context); title.setText("Add widget");
+        title = new TextView(context); title.setText(R.string.widget_picker_title);
         M3.textAppearance(title, com.google.android.material.R.attr.textAppearanceTitleLarge);
         title.setTextColor(M3.onSurface(context));
         header.addView(title, new LinearLayout.LayoutParams(0,
@@ -95,7 +98,8 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
         MaterialButton close = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialIconButtonStyle);
         close.setIconResource(android.R.drawable.ic_menu_close_clear_cancel);
-        close.setContentDescription("Close widget picker"); close.setFocusable(false);
+        close.setContentDescription(context.getString(R.string.widget_picker_close));
+        close.setFocusable(true); close.setFocusableInTouchMode(false);
         close.setOnClickListener(view -> close());
         header.addView(close, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -115,6 +119,7 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
         notice.setVisibility(GONE); sheet.addView(notice);
         list = new RecyclerView(context); list.setLayoutManager(new LinearLayoutManager(context));
         list.setNestedScrollingEnabled(true); list.setFocusable(false);
+        list.setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
         adapter = new WidgetPickerAdapter(listener); list.setAdapter(adapter);
         sheet.addView(list, new LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
@@ -153,15 +158,20 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
         field.setSingleLine(true);
         field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         field.setImeOptions(EditorInfo.IME_ACTION_SEARCH | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
-        field.setFocusable(false); field.setFocusableInTouchMode(false);
+        // Reachable by Tab/D-pad, never by touch alone: a tap still goes through the click below.
+        field.setFocusable(true); field.setFocusableInTouchMode(false);
         field.setOnClickListener(view -> {
-            field.setFocusableInTouchMode(true); field.setFocusable(true); field.requestFocus();
+            field.setFocusableInTouchMode(true); field.requestFocus(); activateSearch();
+        });
+        // Landing on the field from the keyboard is not asking for the soft keyboard; Enter is.
+        field.setOnKeyListener((view, keyCode, event) -> {
+            if (searchFocused || event.getAction() != KeyEvent.ACTION_DOWN) return false;
+            if (keyCode != KeyEvent.KEYCODE_ENTER && keyCode != KeyEvent.KEYCODE_DPAD_CENTER
+                && keyCode != KeyEvent.KEYCODE_NUMPAD_ENTER) return false;
+            activateSearch(); return true;
         });
         field.setOnFocusChangeListener((view, hasFocus) -> {
-            if (hasFocus) {
-                searchFocused = true;
-                if (searchFocusListener != null) searchFocusListener.onSearchFocusChanged(view);
-            } else releaseSearchFocus();
+            if (!hasFocus) releaseSearchFocus();
         });
         field.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
@@ -174,9 +184,16 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
         return field;
     }
 
+    /** The user asked for the field (tap or Enter): hand the system IME over through the host. */
+    private void activateSearch() {
+        if (searchFocused) return;
+        searchFocused = true;
+        if (searchFocusListener != null) searchFocusListener.onSearchFocusChanged(search);
+    }
+
     /** Hands the keyboard back, whether the field lost focus on its own or the sheet closed. */
     private void releaseSearchFocus() {
-        search.setFocusable(false); search.setFocusableInTouchMode(false);
+        search.setFocusable(true); search.setFocusableInTouchMode(false);
         if (!searchFocused) return;
         searchFocused = false;
         if (searchFocusListener != null) searchFocusListener.onSearchFocusChanged(null);
@@ -193,8 +210,8 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
     @NonNull public EditText searchField() { return search; }
 
     public void showLoading() {
-        loading = true; catalogEmpty = false; title.setText("Add widget");
-        showNotice("Loading widgets…");
+        loading = true; catalogEmpty = false; title.setText(R.string.widget_picker_title);
+        showNotice(getContext().getString(R.string.widget_picker_loading));
     }
 
     /** The app rows, before the widgets inside them are known; the loading notice stays up. */
@@ -211,16 +228,17 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
 
     private void updateNotice() {
         if (loading) return;
-        if (catalogEmpty) { title.setText("Add widget"); showNotice("No widgets available"); return; }
+        if (catalogEmpty) { title.setText(R.string.widget_picker_title); showNotice(getContext().getString(R.string.widget_picker_empty)); return; }
         if (adapter.searchFoundNothing()) {
-            title.setText("Add widget");
+            title.setText(R.string.widget_picker_title);
             showNotice(getContext().getString(R.string.widget_picker_no_matches));
             return;
         }
         if (!adapter.anyProviderFits()) {
-            title.setText("Grid is full"); showNotice("No widget fits the grid."); return;
+            title.setText(R.string.widget_picker_grid_full_title);
+            showNotice(getContext().getString(R.string.widget_picker_grid_full)); return;
         }
-        title.setText("Add widget"); notice.setVisibility(GONE);
+        title.setText(R.string.widget_picker_title); notice.setVisibility(GONE);
     }
     public void showNoSpace(int columns, int rows, WidgetGridDefinition grid) {
         showNotice(getContext().getString(R.string.widget_picker_no_space, columns, rows,
@@ -230,19 +248,41 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
         notice.setText(message); notice.setContentDescription(message); notice.setVisibility(VISIBLE);
     }
 
+    /**
+     * While the picker is open it is the whole focus world: Tab and the D-pad wrap inside it rather
+     * than escaping to the terminal or controls behind the overlay.
+     */
+    @Override public View focusSearch(View focused, int direction) {
+        if (!open) return super.focusSearch(focused, direction);
+        View next = FocusFinder.getInstance().findNextFocus(this, focused, direction);
+        if (next == null && (direction == View.FOCUS_FORWARD || direction == View.FOCUS_BACKWARD)) {
+            next = FocusFinder.getInstance().findNextFocus(this, null, direction);
+        }
+        return next;
+    }
+
+    /** Opening takes no focus; it only remembers who had it so closing can hand it back. */
     public void open() {
-        if (open) return; open = true; setVisibility(VISIBLE); bringToFront();
+        if (open) return;
+        View current = getRootView().findFocus();
+        previousFocus = current != null && !isInside(current)
+            ? new java.lang.ref.WeakReference<>(current) : null;
+        open = true; setVisibility(VISIBLE); bringToFront();
         behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
     }
     public void close() {
         if (!open) return; open = false;
+        boolean hadFocus = findFocus() != null;
         clearSearch();
+        restoreFocus(hadFocus);
         adapter.submit(Collections.emptyList());
         behavior.setState(BottomSheetBehavior.STATE_HIDDEN);
     }
     public void closeImmediate() {
+        boolean hadFocus = open && findFocus() != null;
         open = false;
         clearSearch();
+        restoreFocus(hadFocus);
         adapter.submit(Collections.emptyList());
         behavior.setState(BottomSheetBehavior.STATE_HIDDEN);
         scrim.setAlpha(0f); setVisibility(GONE);
@@ -252,10 +292,32 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
     private void finishClosing() {
         if (open) {
             open = false;
+            boolean hadFocus = findFocus() != null;
             clearSearch();
+            restoreFocus(hadFocus);
             adapter.submit(Collections.emptyList());
         }
         scrim.setAlpha(0f); setVisibility(GONE);
+    }
+
+    private boolean isInside(@NonNull View view) {
+        for (android.view.ViewParent p = view.getParent(); p != null; p = p.getParent()) {
+            if (p == this) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Gives keyboard focus back to what had it before the picker opened, but only when the picker
+     * itself held it at close: a picker closed from a touch never takes focus anywhere.
+     */
+    private void restoreFocus(boolean pickerHadFocus) {
+        View target = previousFocus != null ? previousFocus.get() : null;
+        previousFocus = null;
+        if (!pickerHadFocus) return;
+        if (target != null && target.isAttachedToWindow() && target.isShown()
+            && target.requestFocus()) return;
+        clearFocus();
     }
 
     /** A closing picker keeps nothing: not the query, and not the keyboard it borrowed. */
