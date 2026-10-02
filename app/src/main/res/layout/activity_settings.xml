@@ -17,7 +17,7 @@
         android:paddingEnd="20dp"
         app:contentInsetStartWithNavigation="0dp"
         app:navigationIconTint="?attr/termuxColorOnSurface"
-        app:popupTheme="@style/ThemeOverlay.AppCompat.DayNight"
+        app:popupTheme="@style/ThemeOverlay.Material3"
         app:titleMarginTop="0dp"
         app:titleMarginBottom="0dp"
         app:titleTextAppearance="@style/TextAppearance.Termux.Settings.ToolbarTitle" />

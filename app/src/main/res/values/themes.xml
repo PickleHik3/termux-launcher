@@ -4,16 +4,24 @@
      https://material.io/develop/android/theming/dark
     -->
 
-    <!-- TermuxApp Light DarkActionBar theme. -->
-    <style name="Theme.TermuxApp.Light.DarkActionBar" parent="Theme.BaseActivity.Light.DarkActionBar"/>
-    <!-- TermuxApp Light NoActionBar theme. -->
-    <style name="Theme.TermuxApp.Light.NoActionBar" parent="Theme.BaseActivity.Light.NoActionBar"/>
-
-    <!-- TermuxApp DayNight DarkActionBar theme. -->
-    <style name="Theme.TermuxApp.DayNight.DarkActionBar" parent="Theme.BaseActivity.DayNight.DarkActionBar"/>
+    <!-- TermuxApp DayNight DarkActionBar theme. The one app theme: the Light.* names below are thin
+         aliases kept for anything still naming them. preferenceTheme is set here (not in the shared
+         base theme) because the switch layout it points at lives in this module. -->
+    <style name="Theme.TermuxApp.DayNight.DarkActionBar" parent="Theme.BaseActivity.DayNight.DarkActionBar">
+        <item name="android:navigationBarColor">?attr/colorSurface</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="q">false</item>
+        <item name="preferenceTheme">@style/ThemeOverlay.Termux.Preference</item>
+    </style>
 
     <!-- TermuxApp DayNight NoActionBar theme. -->
-    <style name="Theme.TermuxApp.DayNight.NoActionBar" parent="Theme.BaseActivity.DayNight.NoActionBar"/>
+    <style name="Theme.TermuxApp.DayNight.NoActionBar" parent="Theme.TermuxApp.DayNight.DarkActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+    </style>
+
+    <!-- Light aliases of the DayNight themes. -->
+    <style name="Theme.TermuxApp.Light.DarkActionBar" parent="Theme.TermuxApp.DayNight.DarkActionBar"/>
+    <style name="Theme.TermuxApp.Light.NoActionBar" parent="Theme.TermuxApp.DayNight.NoActionBar"/>
 
     <!-- TermuxActivity DayNight NoActionBar theme. -->
     <style name="Theme.TermuxActivity.DayNight.NoActionBar" parent="Theme.TermuxApp.DayNight.NoActionBar">
@@ -64,10 +72,10 @@
       Applied on top of Material's own personalized-colour overlay when the chrome is themed from
       the terminal colour scheme; see LauncherSchemeTheme.
 
-      Material's overlay only rewires the Material role attributes. On API 30 the launcher's
-      termuxColor* attributes still point at the static palette (the ?attr/color* mapping only
-      exists in values-v31), so they are pointed back at the roles here — which makes this overlay a
-      no-op on API 31+, where the base theme already says the same thing.
+      Material's overlay only rewires the Material role attributes. The launcher's termuxColor*
+      aliases are set from those roles in the base theme, but an overlay applied later does not
+      re-resolve them for a theme that already bound the aliases, so they are pointed back at the
+      roles here again, which is a no-op whenever the base theme already says the same thing.
     -->
     <style name="ThemeOverlay.Termux.SchemeColors" parent="">
         <item name="termuxColorPrimary">?attr/colorPrimary</item>

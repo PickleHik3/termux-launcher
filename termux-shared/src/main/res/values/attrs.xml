@@ -22,6 +22,8 @@
     <attr name="termuxColorOnErrorContainer" format="color" />
     <attr name="termuxColorScrollbar" format="color" />
 
+    <!-- Material 1.14 declares ExtraSmall..ExtraLarge but not Full, so the token is declared here. -->
+    <attr name="shapeAppearanceCornerFull" format="reference" />
     <attr name="extraKeysButtonTextColor" format="reference" />
     <attr name="extraKeysButtonActiveTextColor" format="reference" />
     <attr name="extraKeysButtonBackgroundColor" format="reference" />

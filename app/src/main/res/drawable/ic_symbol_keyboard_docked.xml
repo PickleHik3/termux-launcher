@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- A docked keyboard: a screen outline with the keyboard as a block flush along its bottom edge.
      The Layout editor's keyboard-type chip; tinted by the chip. -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="?attr/colorControlNormal"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"

@@ -13,8 +13,8 @@
         android:background="?attr/colorSurfaceContainerHigh"
         android:gravity="center_vertical"
         android:minHeight="?attr/actionBarSize"
-        android:theme="@style/ThemeOverlay.AppCompat.DayNight.ActionBar"
-        app:popupTheme="@style/ThemeOverlay.AppCompat.DayNight"
+        android:theme="@style/ThemeOverlay.Material3.Toolbar.Surface"
+        app:popupTheme="@style/ThemeOverlay.Material3"
         app:titleTextAppearance="@style/TextAppearance.Widget.BaseToolbar.Title"
         app:subtitleTextAppearance="@style/TextAppearance.Widget.BaseToolbar.Subtitle">
     </com.google.android.material.appbar.MaterialToolbar>
