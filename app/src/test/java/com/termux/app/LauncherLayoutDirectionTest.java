@@ -57,7 +57,8 @@ public class LauncherLayoutDirectionTest {
     @Test
     public void theApplicationDeclaresRtlSupport() {
         assertTrue("without supportsRtl nothing mirrors, whatever a view asks for",
-            RuntimeEnvironment.getApplication().getApplicationInfo().hasRtlSupport());
+            (RuntimeEnvironment.getApplication().getApplicationInfo().flags
+                & android.content.pm.ApplicationInfo.FLAG_SUPPORTS_RTL) != 0);
     }
 
     @Test
