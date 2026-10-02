@@ -117,6 +117,13 @@ public final class PaneMotionOverlayView extends View {
         public boolean dectcemOn;
         public long positionChangedAtMillis;
         public int color;
+        /**
+         * The focused pane's card, in this overlay's pixels. Particles and the comet stay inside
+         * it, as kitty's stay inside its window; the trail itself is not clipped, so a flight
+         * between panes still crosses the gap.
+         */
+        public boolean hasClip;
+        public float clipLeft, clipTop, clipRight, clipBottom;
     }
 
     private static final class Ghost {
@@ -383,13 +390,17 @@ public final class PaneMotionOverlayView extends View {
         float opacity = clamp01(mCursorTrail.opacity());
         CursorTrailStyle style = mCursorTrailStyle;
         if (style == CursorTrailStyle.COMET) {
+            boolean clipped = clipToPane(canvas);
             mComet.draw(canvas, color, opacity, mFrameMs, getResources().getDisplayMetrics().density);
+            if (clipped) canvas.restore();
         } else {
             boolean blurred = style == CursorTrailStyle.MOTION_BLUR
                 && mMotionBlur.draw(canvas, mCursorTrail, color, baseAlpha / 255f * opacity,
                     mCursorTarget.left, mCursorTarget.top, mCursorTarget.right,
                     mCursorTarget.bottom);
             if (!blurred) drawQuad(canvas, color, baseAlpha, opacity);
+            boolean clipped = style != CursorTrailStyle.DEFAULT && style != CursorTrailStyle.MOTION_BLUR
+                && clipToPane(canvas);
             if (style == CursorTrailStyle.RAILGUN) {
                 drawParticles(canvas, CursorTrailParticles.MODE_RAILGUN, color, baseAlpha, opacity);
             } else if (style == CursorTrailStyle.TORPEDO) {
@@ -397,8 +408,18 @@ public final class PaneMotionOverlayView extends View {
             } else if (style == CursorTrailStyle.PIXIEDUST) {
                 drawParticles(canvas, CursorTrailParticles.MODE_PIXIEDUST, color, baseAlpha, opacity);
             }
+            if (clipped) canvas.restore();
         }
         if (didClip) canvas.restore();
+    }
+
+    /** Saves and clips to the focused pane's card; false (nothing saved) when there is none. */
+    private boolean clipToPane(@NonNull Canvas canvas) {
+        if (!mCursorTarget.hasClip) return false;
+        canvas.save();
+        canvas.clipRect(mCursorTarget.clipLeft, mCursorTarget.clipTop,
+            mCursorTarget.clipRight, mCursorTarget.clipBottom);
+        return true;
     }
 
     private void drawQuad(@NonNull Canvas canvas, int color, int baseAlpha, float opacity) {

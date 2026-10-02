@@ -14,6 +14,7 @@ import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
@@ -157,6 +158,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         setClipToOutline(clipToShape);
         invalidateOutline();
         mBandClipPathDirty = true;
+        if (mRetroStyle != PaneRetroStyle.NONE) applyRetroEffect();
         requestLayout();
     }
 
@@ -228,6 +230,11 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         applyRetroEffect();
     }
 
+    @NonNull
+    public PaneRetroStyle retroStyle() {
+        return mRetroStyle;
+    }
+
     private void applyRetroEffect() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
         if (mRetroStyle == PaneRetroStyle.NONE || !PaneRetroEffect.available()) {
@@ -235,7 +242,9 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             return;
         }
         float density = getResources().getDisplayMetrics().density;
-        setRenderEffect(mRetroEffect.effectFor(mRetroStyle, getWidth(), getHeight(), density));
+        float radius = mClipToShape
+            ? PaneShape.radiusForBounds(mRequestedRadiusPx, getWidth(), getHeight()) : 0f;
+        setRenderEffect(mRetroEffect.effectFor(mRetroStyle, getWidth(), getHeight(), density, radius));
     }
 
     @Override

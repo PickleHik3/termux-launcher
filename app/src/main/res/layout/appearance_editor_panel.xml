@@ -311,10 +311,11 @@
             app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier"
             app:tickVisibilityMode="hidden" />
 
-        <!-- The terminal's Trail and Effect: two outlined buttons, each opening a menu of its
-             choices (six trail styles do not fit as a segmented row). Equal columns with one 16dp
-             gap; the Effect button is GONE below API 33, and Trail then takes the full width. Both
-             are GONE for every element but the terminal. -->
+        <!-- The terminal's Trail and Effect: a label over an outlined button that names the
+             chosen option and opens a menu of the choices (six trail styles do not fit as a
+             segmented row, and "Trail · Motion blur" does not fit a 360dp column). Equal columns
+             with one 16dp gap; Effect is GONE below API 33, and Trail then takes the full width.
+             Both are GONE for every element but the terminal; each label follows its button. -->
         <androidx.constraintlayout.widget.Barrier
             android:id="@+id/appearance_editor_row2_barrier_controls"
             android:layout_width="wrap_content"
@@ -322,40 +323,70 @@
             app:barrierDirection="bottom"
             app:constraint_referenced_ids="appearance_editor_c1_slider,appearance_editor_c1_soft,appearance_editor_legibility,appearance_editor_c2_slider" />
 
+        <TextView
+            android:id="@+id/appearance_editor_trail_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="16dp"
+            android:ellipsize="end"
+            android:importantForAccessibility="no"
+            android:maxLines="1"
+            android:text="@string/appearance_editor_trail_label"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone"
+            app:layout_constraintEnd_toStartOf="@id/appearance_editor_effect_label"
+            app:layout_constraintHorizontal_chainStyle="spread"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier_controls"
+            app:layout_goneMarginEnd="0dp" />
+
+        <TextView
+            android:id="@+id/appearance_editor_effect_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:ellipsize="end"
+            android:importantForAccessibility="no"
+            android:maxLines="1"
+            android:text="@string/appearance_editor_effect_label"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/appearance_editor_trail_label"
+            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier_controls" />
+
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_trail"
             style="?attr/materialButtonOutlinedStyle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:layout_marginEnd="16dp"
             android:ellipsize="end"
             android:maxLines="1"
             android:minWidth="0dp"
             android:visibility="gone"
             app:icon="@drawable/ic_arrow_drop_down_16"
             app:iconGravity="end"
-            app:layout_constraintEnd_toStartOf="@id/appearance_editor_effect"
-            app:layout_constraintHorizontal_chainStyle="spread"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier_controls"
-            app:layout_goneMarginEnd="0dp" />
+            app:layout_constraintEnd_toEndOf="@id/appearance_editor_trail_label"
+            app:layout_constraintStart_toStartOf="@id/appearance_editor_trail_label"
+            app:layout_constraintTop_toBottomOf="@id/appearance_editor_trail_label" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_effect"
             style="?attr/materialButtonOutlinedStyle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
             android:ellipsize="end"
             android:maxLines="1"
             android:minWidth="0dp"
             android:visibility="gone"
             app:icon="@drawable/ic_arrow_drop_down_16"
             app:iconGravity="end"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/appearance_editor_trail"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier_controls" />
+            app:layout_constraintEnd_toEndOf="@id/appearance_editor_effect_label"
+            app:layout_constraintStart_toStartOf="@id/appearance_editor_effect_label"
+            app:layout_constraintTop_toBottomOf="@id/appearance_editor_effect_label" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <androidx.constraintlayout.widget.Group

@@ -365,6 +365,7 @@ public class TerminalPaneController {
     /** Reused by {@link #provideCursorTarget}, so the animated pull runs no arrays of its own. */
     private final int[] mCursorViewLocationScratch = new int[2];
     private final int[] mCursorOverlayLocationScratch = new int[2];
+    private final float[] mCursorBentScratch = new float[2];
 
     public TerminalPaneController(Host host, FrameLayout hostView, LayoutInflater inflater) {
         mHost = host;
@@ -418,6 +419,34 @@ public class TerminalPaneController {
             out.right = cellLeft + cellWidth / 4f;
         } else if (shape == TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE) {
             out.top = cellTop + cellHeight * 3f / 4f;
+        }
+        out.hasClip = false;
+        if (view.getParent() instanceof PaneContentFrame) {
+            PaneContentFrame frame = (PaneContentFrame) view.getParent();
+            frame.getLocationOnScreen(mCursorViewLocationScratch);
+            float frameX = mCursorViewLocationScratch[0] - mCursorOverlayLocationScratch[0];
+            float frameY = mCursorViewLocationScratch[1] - mCursorOverlayLocationScratch[1];
+            out.hasClip = true;
+            out.clipLeft = frameX;
+            out.clipTop = frameY;
+            out.clipRight = frameX + frame.getWidth();
+            out.clipBottom = frameY + frame.getHeight();
+            // A bent CRT card shows the cursor somewhere else than it sits; aim the trail there.
+            PaneRetroStyle retro = frame.retroStyle();
+            if (retro.usesCrt()) {
+                float w = frame.getWidth();
+                float h = frame.getHeight();
+                PaneRetroEffect.displayedPoint(retro, w, h, out.left - frameX, out.top - frameY,
+                    mCursorBentScratch);
+                float left = frameX + mCursorBentScratch[0];
+                float top = frameY + mCursorBentScratch[1];
+                PaneRetroEffect.displayedPoint(retro, w, h, out.right - frameX, out.bottom - frameY,
+                    mCursorBentScratch);
+                out.left = left;
+                out.top = top;
+                out.right = frameX + mCursorBentScratch[0];
+                out.bottom = frameY + mCursorBentScratch[1];
+            }
         }
         out.cellWidthPx = cellWidth;
         out.cellHeightPx = cellHeight;

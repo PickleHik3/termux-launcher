@@ -9,13 +9,13 @@ import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.ViewGroup;
-import android.widget.PopupMenu;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.appcompat.widget.PopupMenu;
 import androidx.constraintlayout.widget.Group;
 import androidx.core.content.ContextCompat;
 
@@ -107,6 +107,8 @@ final class AppearanceEditorPanel {
     private final Slider mLegibility;
     private final MaterialButton mTrail;
     private final MaterialButton mEffect;
+    private final TextView mTrailLabel;
+    private final TextView mEffectLabel;
     private final TextView mSecondLabel;
     private final Slider mSecondSlider;
 
@@ -154,6 +156,8 @@ final class AppearanceEditorPanel {
         mLegibility = root.findViewById(R.id.appearance_editor_legibility);
         mTrail = root.findViewById(R.id.appearance_editor_trail);
         mEffect = root.findViewById(R.id.appearance_editor_effect);
+        mTrailLabel = root.findViewById(R.id.appearance_editor_trail_label);
+        mEffectLabel = root.findViewById(R.id.appearance_editor_effect_label);
         mSecondLabel = root.findViewById(R.id.appearance_editor_c2_label);
         mSecondSlider = root.findViewById(R.id.appearance_editor_c2_slider);
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
@@ -254,10 +258,10 @@ final class AppearanceEditorPanel {
             label.setMinLines(2);
         // The terminal's Trail row is the tallest Row B gets, so the frame stands above it.
         int trailVisibility = mTrail.getVisibility();
-        mTrail.setVisibility(View.VISIBLE);
+        setTrailVisibility(View.VISIBLE);
         applyGroups(false);
         int height = measureNow(widthPx);
-        mTrail.setVisibility(trailVisibility);
+        setTrailVisibility(trailVisibility);
         for (TextView label : labels)
             label.setMinLines(1);
         mRow2Shown = rowShown;
@@ -505,21 +509,32 @@ final class AppearanceEditorPanel {
         mEffectId = effectId;
         restateTrail();
         restateEffect();
-        mTrail.setVisibility(View.VISIBLE);
-        mEffect.setVisibility(effectAvailable ? View.VISIBLE : View.GONE);
+        setTrailVisibility(View.VISIBLE);
+        setEffectVisibility(effectAvailable ? View.VISIBLE : View.GONE);
         mTrail.setEnabled(mRow2Shown);
         mEffect.setEnabled(mRow2Shown);
     }
 
     void hideTerminalLooks() {
-        mTrail.setVisibility(View.GONE);
-        mEffect.setVisibility(View.GONE);
+        setTrailVisibility(View.GONE);
+        setEffectVisibility(View.GONE);
+    }
+
+    /** A label always follows its button. */
+    private void setTrailVisibility(int visibility) {
+        mTrail.setVisibility(visibility);
+        mTrailLabel.setVisibility(visibility);
+    }
+
+    private void setEffectVisibility(int visibility) {
+        mEffect.setVisibility(visibility);
+        mEffectLabel.setVisibility(visibility);
     }
 
     private void restateTrail() {
         String label = optionLabel(R.array.settings_terminal_cursor_trail_style_entries,
             R.array.settings_terminal_cursor_trail_style_values, mTrailId);
-        mTrail.setText(mContext.getString(R.string.appearance_editor_trail, label));
+        mTrail.setText(label);
         mTrail.setContentDescription(
             mContext.getString(R.string.appearance_editor_trail_description, label));
     }
@@ -527,7 +542,7 @@ final class AppearanceEditorPanel {
     private void restateEffect() {
         String label = optionLabel(R.array.settings_terminal_retro_effect_entries,
             R.array.settings_terminal_retro_effect_values, mEffectId);
-        mEffect.setText(mContext.getString(R.string.appearance_editor_effect, label));
+        mEffect.setText(label);
         mEffect.setContentDescription(
             mContext.getString(R.string.appearance_editor_effect_description, label));
     }

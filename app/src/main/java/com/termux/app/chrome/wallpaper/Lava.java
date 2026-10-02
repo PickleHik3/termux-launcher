@@ -11,7 +11,9 @@ final class Lava implements AnimatedWallpaper {
     private static final String SCENE =
         "float blob(float2 s, float2 c, float r) {\n" +
         "    float2 d = s - c;\n" +
-        "    return r * r / (dot(d, d) + 0.0001);\n" +
+        // Squared so a blob's pull falls off fast: they meet as blobs instead of filling the glass.
+        "    float k = r * r / (dot(d, d) + 0.0001);\n" +
+        "    return k * k;\n" +
         "}\n" +
         // s: x in 0..W, y in 0..1 top-down. Each centre is its rest spot plus an energy-scaled orbit.
         "float3 scene(float2 p) {\n" +
@@ -27,11 +29,11 @@ final class Lava implements AnimatedWallpaper {
         "    float f = b0 + b1 + b2 + b3 + b4;\n" +
         "    float3 tint = (b0 * float3(uPalette0.rgb) + b1 * float3(uPalette1.rgb) + b2 * float3(uPalette0.rgb)\n" +
         "                 + b3 * float3(uPalette2.rgb) + b4 * float3(uPalette1.rgb)) / f;\n" +
-        "    float body = smoothstep(0.9, 1.2, f);\n" +
-        "    float rim = smoothstep(0.5, 0.95, f) * (1.0 - body);\n" +
-        "    float core = smoothstep(1.6, 4.0, f);\n" +
+        "    float body = smoothstep(0.9, 1.15, f);\n" +
+        "    float rim = smoothstep(0.45, 0.9, f) * (1.0 - body);\n" +
+        "    float core = smoothstep(2.5, 8.0, f);\n" +
         "    float3 col = mix(0.10 * float3(uPalette3.rgb), 0.04 * float3(uPalette3.rgb), s.y) + 0.006;\n" +
-        "    col += tint * (0.08 * rim + 0.20 * body + 0.10 * core);\n" +
+        "    col += tint * (0.06 * rim + 0.15 * body + 0.06 * core);\n" +
         "    return col;\n" +
         "}\n";
 
