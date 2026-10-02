@@ -451,10 +451,12 @@ public final class UrlDetector {
         regex_sb.append("(?:");
         // IP address (from http://www.regular-expressions.info/examples.html).
         regex_sb.append("(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|");
-        // Host name or domain.
-        regex_sb.append("(?:(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)(?:(?:\\.(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)*(?:\\.(?:[a-z\\u00a1-\\uffff0-9]-*){1,}[a-z\\u00a1-\\uffff0-9]{1,}))?|");
+        // Host name or domain. Unicode letters, digits and marks for international names, but not
+        // symbols: fish's ⏎ after output without a newline, or a pane border, is not part of a host.
+        final String h = "[a-z0-9\\p{L}\\p{N}\\p{M}]";
+        regex_sb.append("(?:(?:" + h + "-*)*" + h + "+)(?:(?:\\.(?:" + h + "-*)*" + h + "+)*(?:\\.(?:" + h + "-*){1,}" + h + "{1,}))?|");
         // Just path. Used in case of 'file://' scheme.
-        regex_sb.append("/(?:(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)");
+        regex_sb.append("/(?:(?:" + h + "-*)*" + h + "+)");
         // End host group.
         regex_sb.append(")");
         // Port number.

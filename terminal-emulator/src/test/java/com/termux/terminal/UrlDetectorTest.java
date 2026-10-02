@@ -110,6 +110,19 @@ public class UrlDetectorTest extends TerminalTestCase {
         assertNull(urlAt(0, 0));
     }
 
+    /** fish marks output that ends without a newline with ⏎; it opened as example.xn--com-9r3a. */
+    public void testASymbolAfterTheHostIsNotPartOfIt() {
+        row("https://example.com⏎");
+        assertEquals("https://example.com", urlAt(5, 0));
+        row("https://example.com/path⏎");
+        assertEquals("https://example.com/path", urlAt(5, 1));
+    }
+
+    public void testAnInternationalHostIsStillOneAddress() {
+        row("https://bücher.example/ok");
+        assertEquals("https://bücher.example/ok", urlAt(5, 0));
+    }
+
     public void testFindReturnsOnlyAddressesTouchingTheRange() {
         row("https://one.example")
             .row("plain")
