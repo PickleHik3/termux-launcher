@@ -14,15 +14,34 @@ wallpaper, and they are not a video.
   mode, battery saver and reduced motion must be off.
 - Android 14 or later.
 
-The **Animated** row in the wallpaper picker shows only when both hold. On Android 13 the extra
-glass works but the row stays hidden. While Lazy mode, battery saver or reduced motion is on, the
-background stops on its still; when it ends, the background carries on.
+The wallpaper picker page offers the backgrounds only when both hold. Otherwise **Wallpaper**
+goes straight to your photos, as before. On Android 13 the extra glass works but the backgrounds
+are not offered. While Lazy mode, battery saver or reduced motion is on, the background stops on
+its still; when it ends, the background carries on.
 
 ## Pick one
 
-1. Open the wallpaper picker.
-2. Choose a tile in the **Animated** row. The tiles are still pictures, so the picker itself costs no
-   battery.
+Hold a page's corner and tap **Wallpaper**. The wallpaper picker page opens full screen.
+
+- **Two previews, Lock screen then Home screen.** Swipe between them; the title names the one in
+  the middle. The middle preview plays its background live, and the other shows its still. The
+  Lock preview carries a generic lock screen with the current time. The launcher's own background
+  pauses while the page is open.
+- **Thumbnails.** Tap one to preview it in the middle slot, then tap **Apply** to set it. Apply is
+  only available when the choice differs from what the slot holds. Each slot keeps its choice
+  while you swipe, and back closes the page without applying anything.
+- **Same as Home** comes first in the strip while the Lock preview is in the middle. It is the
+  default: the lock screen follows every Home change.
+- **Photo…** opens your photos for the slot in the middle: Home sets the home wallpaper, Lock the
+  lock screen.
+- **Motion** sits under the Lock preview (Android 14 and later). On, the lock screen animates the
+  background through the launcher's live wallpaper; the first time, Android asks you to confirm it
+  in its own live-wallpaper preview, where you pick "Lock screen". Off, the lock screen shows the
+  background's still.
+- **Look**, **Icon pack** and **Layout** close the page and open the appearance editor, the icon
+  pack setting and the layout editor.
+
+The thumbnails are still pictures, rendered once while the page is open, so they cost no battery.
 
 The built-ins are **Aurora** (slow ribbons), **Mesh** (a four-colour gradient that drifts), **Tide**
 (soft waves) and **Rain** (sparse glyph-cell rain). Choosing a photo replaces a background in one
