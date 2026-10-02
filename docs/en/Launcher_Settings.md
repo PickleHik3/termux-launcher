@@ -124,7 +124,7 @@ Use this section for visible surfaces and colors:
   with the terminal. See [Tools that follow the terminal colours](#tools-that-follow-the-terminal-colours).
 - **Wallpaper:** show or hide the system wallpaper behind launcher surfaces.
 - **Icon appearance:** monochrome icons, system or custom icon pack, and pinned-app icon behavior.
-- **Keyboard look:** **Theme**, **Keyboard colors**, and **Typeface** for the built-in keyboard,
+- **Keyboard look:** one **Keyboard theme** page (live preview, **Theme**, colors and **Typeface**) for the built-in keyboard,
   and **Customize keyboard appearance** for live size, spacing, radius, and color tuning. These
   rows are only enabled while the built-in keyboard is the chosen input method on the **Keyboard**
   page. The padding under the keyboard's last key row is set in the **Layout** editor, by the
@@ -336,7 +336,7 @@ Whether the keyboard is docked, floating or split is picked in the **Layout** ed
 keyboard and three chips beside it choose the type, for the orientation on the toggle.
 
 The keyboard's look — theme, colors and typeface — moved to the **Look** page,
-alongside the launcher's other visual choices; **Theme**, **Keyboard colors**, **Typeface** and
+alongside the launcher's other visual choices; **Keyboard theme** and
 **Customize keyboard appearance** are greyed out here while the on-screen keyboard is not the
 built-in one. Keyboard height is remembered separately for portrait and landscape.
 
