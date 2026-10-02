@@ -3236,6 +3236,42 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED_COLORS, raw, false);
     }
 
+    /**
+     * The Lock wallpaper slot, normalised: {@code same_as_home} (default, and for anything
+     * unreadable), {@code photo}, or {@code animated:<id>} with a non-empty id.
+     */
+    @androidx.annotation.NonNull
+    public String getWallpaperLockChoice() {
+        return normaliseWallpaperLockChoice(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_WALLPAPER_LOCK_CHOICE, TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE, true));
+    }
+
+    /** Stores the Lock slot; anything {@link #getWallpaperLockChoice} would not read back is stored as the default. */
+    public void setWallpaperLockChoice(@Nullable String choice) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_LOCK_CHOICE,
+            normaliseWallpaperLockChoice(choice), false);
+    }
+
+    @androidx.annotation.NonNull
+    public static String normaliseWallpaperLockChoice(@Nullable String choice) {
+        if (choice == null) return TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE;
+        String c = choice.trim();
+        if (TERMUX_APP.VALUE_WALLPAPER_LOCK_PHOTO.equals(c)) return c;
+        if (c.startsWith(TERMUX_APP.VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX)
+            && c.length() > TERMUX_APP.VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX.length()) return c;
+        return TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE;
+    }
+
+    /** The Lock slot's Motion toggle, on by default. */
+    public boolean isWallpaperLockMotionEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_WALLPAPER_LOCK_MOTION, TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_MOTION);
+    }
+
+    public void setWallpaperLockMotionEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_LOCK_MOTION, value, false);
+    }
+
     /** Hidden kill switch for generated backgrounds; no settings UI, set through the preference file. */
     public boolean isAnimatedWallpaperDisabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,

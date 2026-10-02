@@ -29,9 +29,14 @@ In:
 - One pure policy that decides when to play, at what rate, and when to pause.
 - The picker, `launcherctl wallpaper`, and the still that the system is given.
 
+- A system `WallpaperService` for the **lock screen only** (`LockLiveWallpaperService`, API 34+),
+  added 2026-10-03 by [`lock-live-wallpaper.md`](lock-live-wallpaper.md). It animates the Lock
+  slot's background on the keyguard and settles to the rest pose as the unlock starts.
+
 Out:
-- A system `WallpaperService`. The launcher cannot blur it per surface (Fancier Glass §1), and
-  under one the glass falls to `WallpaperPicture.NO_STILL` (no blur at all).
+- A system `WallpaperService` on the **home screen**. The launcher cannot blur it per surface
+  (Fancier Glass §1), and under one the glass falls to `WallpaperPicture.NO_STILL` (no blur at
+  all). The home screen keeps the self-drawn animation over the rest-pose still.
 - User-supplied shaders. A shader is code, and packs carry no code (Fancier Glass §5).
 - The unlock pair (Fancier Glass §5 mode 2). It is a clip that ends on a still, and it is not
   affected by this spec.

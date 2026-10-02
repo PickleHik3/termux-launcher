@@ -479,7 +479,7 @@ the first time the new store opens.
 | POST | `/v1/wallpaper` | `{"path": "/sdcard/a.jpg", "target": "both"}` (`target`: `home`, `lock`, `both`; default `both`) | `{"ok": true, "target": "both", "width": 2400, "height": 1080, "launcher_refresh": "live"}` |
 | POST | `/v1/wallpaper` | `{"builtin": "aurora", "target": "both"}` (`palette` is ignored; `path` and `builtin` are mutually exclusive) | `{"ok": true, "target": "both", "builtin": "aurora", "palette": "own", "animated": true, "reason": null, "launcher_refresh": "live"}` |
 | GET | `/v1/wallpaper/builtins` | none | `{"ok": true, "builtins": [{"id": "aurora", "label": "Aurora", "palettes": ["own"]}, ...]}` |
-| GET | `/v1/wallpaper` | none | `{"ok": true, "home_id": 12, "lock_id": 13, "live": false, "managed": true, "animated": "aurora", "palette": "own", "playing": true, "reason": null, "desired_width": 1080, "desired_height": 2400}` |
+| GET | `/v1/wallpaper` | none | `{"ok": true, "home_id": 12, "lock_id": 13, "live": false, "managed": true, "animated": "aurora", "palette": "own", "playing": true, "reason": null, "tier": 0, "kills": 0, "lock_slot": "same_as_home", "lock_motion": true, "lock_live": true, "desired_width": 1080, "desired_height": 2400}` (`lock_slot`: `same_as_home`, a background id, or `photo`; `lock_live`: the launcher's live wallpaper holds the lock screen) |
 
 These are the answers `termux-vibrate`, `termux-torch`, `termux-battery-status`, `termux-volume`
 and `termux-toast` give, so a compatibility script can pass them through. They need no pane and

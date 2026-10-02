@@ -22,6 +22,7 @@ import com.termux.app.chrome.wallpaper.AnimatedWallpaper;
 import com.termux.app.chrome.wallpaper.AnimatedWallpaperStatus;
 import com.termux.app.chrome.wallpaper.AnimatedWallpapers;
 import com.termux.app.chrome.wallpaper.GeneratedWallpaperApplier;
+import com.termux.app.chrome.wallpaper.WallpaperSlots;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.terminal.TerminalActionDispatcher;
@@ -394,8 +395,20 @@ final class DeviceControlRoutes {
             portrait[0], portrait[1], TermuxAppSharedPreferences.build(app, false));
         if (!applied) return error(500, "wallpaper_failed", "Android refused the wallpaper");
 
-        // A photo is the wallpaper now: forget any generated background.
-        if ((flags & WallpaperManager.FLAG_SYSTEM) != 0) GeneratedWallpaperApplier.clear(app);
+        // A photo is the wallpaper now: forget any generated background. Slots: home or both
+        // records the Home slot (and both makes the Lock slot Same as Home); lock records the
+        // Lock slot as a photo.
+        if ((flags & WallpaperManager.FLAG_SYSTEM) != 0) {
+            WallpaperSlots.notePhotoApplied(app, WallpaperSlots.Slot.HOME);
+            TermuxAppSharedPreferences slotPrefs = (flags & WallpaperManager.FLAG_LOCK) != 0
+                ? TermuxAppSharedPreferences.build(app, false) : null;
+            if (slotPrefs != null) {
+                slotPrefs.setWallpaperLockChoice(
+                    com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.VALUE_WALLPAPER_LOCK_SAME_AS_HOME);
+            }
+        } else if ((flags & WallpaperManager.FLAG_LOCK) != 0) {
+            WallpaperSlots.notePhotoApplied(app, WallpaperSlots.Slot.LOCK);
+        }
         boolean live = TerminalActionDispatcher.getInstance().isAttached();
         if ((flags & WallpaperManager.FLAG_SYSTEM) != 0) {
             // What the picker does once its apply finishes: the picture is ours again, so turn
@@ -510,6 +523,7 @@ final class DeviceControlRoutes {
         boolean playing = status != null && status.playing();
         String reason = playing ? null : status == null ? "inactive" : status.reason();
         if (!playing && reason == null) reason = "inactive";
+        WallpaperSlots.State slots = WallpaperSlots.read(app);
         return ok().put("home_id", homeId).put("lock_id", lockId).put("live", live)
             .put("managed", storedId > 0 && storedId == homeId)
             .put("animated", animatedId == null ? JSONObject.NULL : animatedId)
@@ -518,6 +532,9 @@ final class DeviceControlRoutes {
             .put("reason", reason == null ? JSONObject.NULL : reason)
             .put("tier", status == null ? 0 : status.tier())
             .put("kills", status == null ? 0 : status.kills())
+            .put("lock_slot", WallpaperSlots.lockSlotName(slots.lock))
+            .put("lock_motion", slots.lockMotion)
+            .put("lock_live", slots.lockLiveActive)
             .put("desired_width", manager.getDesiredMinimumWidth())
             .put("desired_height", manager.getDesiredMinimumHeight());
     }

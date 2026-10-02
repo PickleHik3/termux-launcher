@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- LockLiveWallpaperService's metadata. The thumbnail is the app banner: Android's picker draws it
+     in its own process, where the launcher's theme attrs do not resolve. -->
+<wallpaper xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/lock_live_wallpaper_description"
+    android:thumbnail="@drawable/banner" />

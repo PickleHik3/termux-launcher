@@ -83,8 +83,10 @@ public final class ManagedWallpaper {
             if (!setCentre(context, wallpaperManager, source, fullImage, centre, wallpaperFlags)) {
                 return false;
             }
-            exportCopyToBackgroundDirectory(context, source);
             if ((wallpaperFlags & WallpaperManager.FLAG_SYSTEM) != 0) {
+                // The exported and exact copies are the home screen's picture; a lock-only set
+                // (the Lock slot) leaves them alone.
+                exportCopyToBackgroundDirectory(context, source);
                 promoteTempFile(context);
                 int wallpaperId = currentSystemWallpaperId(context);
                 if (preferences != null) {
@@ -96,6 +98,24 @@ public final class ManagedWallpaper {
             Logger.logStackTraceWithMessage(LOG_TAG, "Failed to apply managed wallpaper", e);
             return false;
         }
+    }
+
+    /**
+     * Puts the home screen's picture (the launcher's exact copy) on the lock screen as well, for
+     * a Lock slot that is Same as Home while Home holds a photo. Blocking; call it off the main
+     * thread. False when there is no exact copy or Android refused it.
+     */
+    public static boolean copyHomePictureToLock(@NonNull Context context) {
+        File exact = WallpaperPictureReader.managedWallpaperExactFile(context);
+        if (!exact.isFile()) {
+            Logger.logInfo(LOG_TAG, "No managed home picture to copy to the lock screen");
+            return false;
+        }
+        Uri staged = stageSource(context, exact);
+        if (staged == null) return false;
+        int[] portrait = portraitSize(context);
+        return apply(context, WallpaperManager.getInstance(context), staged, FLAGS_LOCK,
+            portrait[0], portrait[1], null);
     }
 
     /**
