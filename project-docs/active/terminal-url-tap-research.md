@@ -431,3 +431,32 @@ for `blockColumn` to see, so its text can still be glued on. A separate mechanis
 unreproduced on the device — rows joined by the emulator's wrap flag interleave a sidebar's text
 between an address's rows, which the `padded` probe shows but which cannot be what the device did,
 since it would have broken link 5 too.
+
+## Pane windows replace the sidebar, padding and border guesses
+
+`UrlDetector` used to decide whether a hand-wrapped address continued from blank-cell counts
+(`blockColumn`, the `minColumn - 2` tolerance), one cell of padding before a border, and the
+screen's last column. That failed for a sidebar or pane to the right of the address (the address
+was never at the end of the line text), a left sidebar with fewer than two blanks before the
+address, two or more padding cells before a border, and a border-less pane whose address ends
+before the screen edge. Real herdr 0.9.1 output makes the cases concrete: sidebar in columns 0-28,
+`│` at 29, pane 1 in 30-69, `│` at 70, pane 2 in 71-109, no padding, the wrapped address filling its
+pane and continuing at the pane's left edge.
+
+The join now follows iTerm2 (`restrictToLogicalWindowIncludingCoord`):
+
+- A column is a divider on a row when vertical line glyphs (`|`, `│`, `├`, `┤`, `┼`, `║` and their
+  weights) fill it on a run of at least min(8, screen rows) consecutive rows that includes the row.
+  Runs are measured once per `find` call, one pass per column.
+- A row's pane windows are the spans between its dividers and the screen edges. Matching runs per
+  window, so sidebar and neighbour text is never part of a line.
+- Rows join only inside one window (same `[left, right)` on both rows) when the address ends at the
+  window's last cell, or one short of it at the screen's right edge, and the next row's text starts
+  at the window's left edge or after blanks only. The old guards stay: no new address, the match
+  must grow, a match ending mid-row stops the chain.
+- With no divider the window is the row, which is kitty's rule plus the hanging indent. A
+  border-less side-by-side layout is not joined; that is accepted.
+- The upward walk treats a row as reaching the edge when any of its windows ends in text.
+
+Behaviour that went away on purpose: a padding cell before a border no longer joins, and a sidebar
+word is no longer skipped by blank counting; the divider does that job.
