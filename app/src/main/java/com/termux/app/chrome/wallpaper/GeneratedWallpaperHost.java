@@ -99,6 +99,8 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
     @Nullable private int[] mPalette;
 
     private boolean mVisible;
+    /** A full-screen page of the launcher's own (the wallpaper picker) hides the backdrop. */
+    private boolean mCovered;
     private boolean mScreenOn = true;
     /** Kills and screen-off bookkeeping; static because the kill cap is per process life. */
     @NonNull private static final WallpaperSession sSession = new WallpaperSession();
@@ -296,6 +298,17 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
     }
 
     /**
+     * A full-screen page of the launcher's own (the wallpaper picker page) covers the backdrop
+     * (true) or has gone (false). Covered reads as not visible: the background pauses on its
+     * current frame, as behind another app, and carries on when the page goes.
+     */
+    public void setCovered(boolean covered) {
+        if (!mSupported || mCovered == covered) return;
+        mCovered = covered;
+        publishAndKick();
+    }
+
+    /**
      * Frees the renderer under real pressure: the running-low levels while in front, and the
      * background levels from moderate up. A plain UI-hidden or background trim is not pressure and
      * leaves the 30 s release to {@link AnimatedWallpaperClock#stop}.
@@ -453,7 +466,7 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
         b.animatedIdStored = mWallpaper != null;
         b.managedPictureOnScreen = mEnv.managedPictureOnScreen();
         b.selfDrawnBackdrop = mEnv.selfDrawnBackdrop();
-        b.visible = mVisible;
+        b.visible = mVisible && !mCovered;
         b.screenOn = mScreenOn;
         b.powerSave = mPowerSave;
         b.batteryLowDischarging = mLowWhileDischarging;
