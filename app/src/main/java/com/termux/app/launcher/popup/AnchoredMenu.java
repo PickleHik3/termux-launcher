@@ -267,6 +267,13 @@ public final class AnchoredMenu {
         } else {
             popup.setContentView(scrollView);
             M3.styleMenuPopup(host.getContext(), popup);
+            // The plain surface honours the user's menu opacity preference too.
+            android.graphics.drawable.Drawable surface = popup.getBackground();
+            if (surface != null) {
+                int plainAlpha = AnchoredMenuGeometry.clamp(
+                    Math.max(theme.opacityPercent(), spec.minimumOpacityPercent), 0, 100);
+                surface.setAlpha(Math.round(255f * (plainAlpha / 100f)));
+            }
         }
         popup.setFocusable(false);
         popup.setTouchable(true);

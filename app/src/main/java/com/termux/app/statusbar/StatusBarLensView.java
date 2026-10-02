@@ -21,6 +21,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.chrome.GlassTokens;
 import com.termux.app.chrome.OnGlass;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -394,12 +395,12 @@ public final class StatusBarLensView extends View {
                 float inner = mVertical
                     ? (fromNear ? mTile.bottom : mTile.top)
                     : (fromNear ? mTile.right : mTile.left);
-                int outerColor = ColorUtils.setAlphaComponent(Color.WHITE,
+                int outerColor = ColorUtils.setAlphaComponent(GlassTokens.HIGHLIGHT,
                     Math.round(255 * mark.fadeOuterAlpha));
                 mFadePaint.setShader(mVertical
-                    ? new LinearGradient(0f, outer, 0f, inner, outerColor, Color.WHITE,
+                    ? new LinearGradient(0f, outer, 0f, inner, outerColor, GlassTokens.HIGHLIGHT,
                         Shader.TileMode.CLAMP)
-                    : new LinearGradient(outer, 0f, inner, 0f, outerColor, Color.WHITE,
+                    : new LinearGradient(outer, 0f, inner, 0f, outerColor, GlassTokens.HIGHLIGHT,
                         Shader.TileMode.CLAMP));
                 canvas.drawRect(mTile.left - 1f, mTile.top - 1f, mTile.right + 1f,
                     mTile.bottom + 1f, mFadePaint);

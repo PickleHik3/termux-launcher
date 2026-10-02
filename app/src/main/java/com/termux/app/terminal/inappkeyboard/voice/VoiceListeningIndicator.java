@@ -20,7 +20,6 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
-import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -205,7 +204,7 @@ public final class VoiceListeningIndicator {
         background.setColor(surface);
         background.setCornerRadius(dp(PILL_HEIGHT_DP / 2));
         view.setBackground(background);
-        view.setElevation(dp(4));
+        view.setElevation(com.termux.app.chrome.ShapeTokens.elevationPx(context, 2));
         view.setClipToOutline(true);
 
         // The pill row wraps its contents: no stretch between the state and the buttons, so the
@@ -708,9 +707,12 @@ public final class VoiceListeningIndicator {
         background.setCornerRadius(dp(10));
         chipView.setBackground(background);
 
-        ProgressBar ring = new ProgressBar(context);
+        com.google.android.material.progressindicator.CircularProgressIndicator ring =
+            new com.google.android.material.progressindicator.CircularProgressIndicator(context);
         ring.setIndeterminate(true);
-        ring.setIndeterminateTintList(ColorStateList.valueOf(accent));
+        ring.setIndicatorSize(dp(12));
+        ring.setTrackThickness(dp(2));
+        ring.setIndicatorColor(accent);
         LinearLayout.LayoutParams ringParams = new LinearLayout.LayoutParams(dp(12), dp(12));
         ringParams.setMarginEnd(dp(4));
         chipView.addView(ring, ringParams);

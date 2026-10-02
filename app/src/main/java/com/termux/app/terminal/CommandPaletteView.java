@@ -26,6 +26,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.chrome.GlassTokens;
 import com.termux.app.FocusOutlineRenderer;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
 
@@ -304,7 +305,7 @@ public final class CommandPaletteView extends View {
         // Reference background for the contrast pass: the glass tint plus its darkening
         // gradient, composited down to something opaque to measure against.
         int overGlass = ColorUtils.compositeColors(
-            ColorUtils.setAlphaComponent(Color.BLACK, 40), mGlassBase);
+            ColorUtils.setAlphaComponent(GlassTokens.SHADE, 40), mGlassBase);
         mOnSurface = InAppKeyboardPaletteFactory.ensureContrast(onSurface, overGlass);
         mOnSurfaceVariant = InAppKeyboardPaletteFactory.ensureContrast(onSurfaceVariant, overGlass);
         mMeta = ColorUtils.setAlphaComponent(mOnSurfaceVariant, 212);
@@ -484,15 +485,15 @@ public final class CommandPaletteView extends View {
         canvas.drawRoundRect(mFrame, mRadius, mRadius, mFill);
 
         mFill.setShader(new LinearGradient(0f, mFrame.top, 0f, mFrame.bottom,
-            ColorUtils.setAlphaComponent(Color.WHITE, 20),
-            ColorUtils.setAlphaComponent(Color.BLACK, 46), Shader.TileMode.CLAMP));
+            ColorUtils.setAlphaComponent(GlassTokens.HIGHLIGHT, 20),
+            ColorUtils.setAlphaComponent(GlassTokens.SHADE, 46), Shader.TileMode.CLAMP));
         canvas.drawRoundRect(mFrame, mRadius, mRadius, mFill);
         mFill.setShader(null);
 
         int save = canvas.save();
         clipToFrame(canvas);
         float specularAlpha = 0.35f + 0.5f * mProgress;
-        int specular = ColorUtils.setAlphaComponent(Color.WHITE, Math.round(33f * specularAlpha));
+        int specular = ColorUtils.setAlphaComponent(GlassTokens.HIGHLIGHT, Math.round(33f * specularAlpha));
         mFill.setShader(new RadialGradient(
             mFrame.left + mFrame.width() * 0.62f, mFrame.top + mFrame.height() * 0.18f,
             dp(SPECULAR_RADIUS),
@@ -550,7 +551,7 @@ public final class CommandPaletteView extends View {
         mShadowClip.addRoundRect(mFrame, mRadius, mRadius, Path.Direction.CW);
         canvas.clipOutPath(mShadowClip);
         mFill.setShader(null);
-        mFill.setColor(ColorUtils.setAlphaComponent(Color.BLACK,
+        mFill.setColor(ColorUtils.setAlphaComponent(GlassTokens.SHADE,
             Math.max(1, Math.round(SHADOW_RING_ALPHA * mProgress))));
         for (int ring = SHADOW_RINGS; ring >= 1; ring--) {
             float scale = ring / (float) SHADOW_RINGS;
@@ -571,7 +572,7 @@ public final class CommandPaletteView extends View {
         // One surface, no title bar: the filter row is the top edge, with the crumb and result
         // meta right-aligned inside it instead of on a row of their own.
         float filterBottom = mFrame.top + dp(FILTER_ROW_H);
-        drawHairline(canvas, filterBottom, ColorUtils.setAlphaComponent(Color.WHITE, 26), alpha);
+        drawHairline(canvas, filterBottom, ColorUtils.setAlphaComponent(GlassTokens.HIGHLIGHT, 26), alpha);
         mMono.setTextSize(sp(SIZE_FILTER));
         mMono.setLetterSpacing(0f);
         mMono.setColor(withBodyAlpha(mPrimary, alpha));
@@ -803,11 +804,11 @@ public final class CommandPaletteView extends View {
             mFill.setColor(withBodyAlpha(mChipFill, alpha));
             canvas.drawRoundRect(cap, radius, radius, mFill);
             mFill.setShader(new LinearGradient(0f, cap.top, 0f, cap.bottom,
-                ColorUtils.setAlphaComponent(Color.WHITE, 26),
-                ColorUtils.setAlphaComponent(Color.BLACK, 56), Shader.TileMode.CLAMP));
+                ColorUtils.setAlphaComponent(GlassTokens.HIGHLIGHT, 26),
+                ColorUtils.setAlphaComponent(GlassTokens.SHADE, 56), Shader.TileMode.CLAMP));
             canvas.drawRoundRect(cap, radius, radius, mFill);
             mFill.setShader(null);
-            mStroke.setColor(withBodyAlpha(ColorUtils.setAlphaComponent(Color.WHITE, 88), alpha));
+            mStroke.setColor(withBodyAlpha(ColorUtils.setAlphaComponent(GlassTokens.HIGHLIGHT, 88), alpha));
             float inset = mStroke.getStrokeWidth() / 2f;
             mRect.set(cap.left + inset, cap.top + inset, cap.right - inset, cap.bottom - inset);
             canvas.drawRoundRect(mRect, radius, radius, mStroke);
