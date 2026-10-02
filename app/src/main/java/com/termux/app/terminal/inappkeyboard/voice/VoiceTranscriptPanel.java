@@ -18,6 +18,7 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.StrikethroughSpan;
+import android.text.method.ScrollingMovementMethod;
 import android.text.style.StyleSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -62,8 +63,10 @@ import java.util.List;
  * and only on purpose, in its as-heard style.
  *
  * <p>Under the text, one long rounded pill ({@code termuxColorSurfacePanelHigh}) the full width of
- * the panel holds the three controls, spread evenly across it: undo (and, once undone, redo; only
- * while there is a cleanup to take back), Copy and ✓ (insert at the cursor, once). They never
+ * the panel holds the controls, spread evenly across it: undo (and, once undone, redo; only
+ * while there is a cleanup to take back), Copy, pause/resume and ✓ (insert at the cursor, once).
+ * The pill shows from the start, so pausing works before any text has come. The text scrolls by
+ * finger; it follows its tail only while the reader is at the bottom. They never
  * leave it. Both Copy and ✓ may be pressed early; the host stops listening and carries the press
  * out once the text settles. Discarding is the pill's ×, or a swipe of the card.
  */
@@ -75,6 +78,12 @@ final class VoiceTranscriptPanel extends LinearLayout {
         void onCopy();
 
         void onInsert();
+
+        /** Pause: stop listening; the text settles. */
+        void onPause();
+
+        /** Resume: listen again, carrying on the text. */
+        void onResume();
     }
 
     static final int VISIBLE_LINES = 7;
@@ -108,6 +117,10 @@ final class VoiceTranscriptPanel extends LinearLayout {
     @Nullable private List<VoiceWordDiff.Op> ops;
     /** Undo is showing {@link #raw} in place of {@link #cleaned}. */
     private boolean undone;
+    /** The newest line stays in view as text arrives; off once the reader has scrolled up. */
+    private boolean following = true;
+    @Nullable private ImageView toggle;
+    private boolean toggleListening = true;
 
     /**
      * @param onSurface the primary text colour: cleaned and final text, the icons
@@ -129,7 +142,11 @@ final class VoiceTranscriptPanel extends LinearLayout {
         text.setMaxLines(VISIBLE_LINES);
         // Bottom gravity so TextView's own bring-into-view agrees with scrollToEnd.
         text.setGravity(Gravity.BOTTOM | Gravity.START);
-        text.setVerticalScrollBarEnabled(false);
+        text.setMovementMethod(new ScrollingMovementMethod());
+        text.setVerticalScrollBarEnabled(true);
+        text.setScrollbarFadingEnabled(true);
+        text.setOnScrollChangeListener((v, x, y, oldX, oldY) -> following = atBottom());
+        text.setVisibility(GONE);
         text.setVerticalFadingEdgeEnabled(true);
         text.setFadingEdgeLength(dp(14));
         addView(text, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -141,8 +158,8 @@ final class VoiceTranscriptPanel extends LinearLayout {
         shimmer.setVisibility(GONE);
         addView(shimmer, shimmerParams);
 
-        // Undo, Copy and ✓ in one long pill the panel's width, spread evenly, ✓ at the end. Undo
-        // is there only while a cleanup can be taken back; Copy and ✓ share the pill without it.
+        // Undo, Copy, pause/resume and ✓ in one long pill the panel's width, spread evenly, ✓ at the
+        // end. Undo is there only while a cleanup can be taken back.
         actions = new LinearLayout(context);
         actions.setOrientation(HORIZONTAL);
         actions.setGravity(Gravity.CENTER_VERTICAL);
@@ -156,9 +173,15 @@ final class VoiceTranscriptPanel extends LinearLayout {
         actions.addView(undo, actionCell());
         actions.addView(iconButton(context, R.drawable.ic_symbol_content_copy, onSurface,
             R.string.voice_input_cleanup_copy, v -> callbacks.onCopy()), actionCell());
+        toggle = iconButton(context, R.drawable.ic_symbol_pause, onSurface,
+            R.string.voice_input_pause, v -> {
+                if (!v.isEnabled()) return;
+                if (toggleListening) callbacks.onPause();
+                else callbacks.onResume();
+            });
+        actions.addView(toggle, actionCell());
         actions.addView(iconButton(context, R.drawable.ic_symbol_check, accent,
             R.string.voice_input_insert, v -> callbacks.onInsert()), actionCell());
-        actions.setVisibility(GONE);
         LayoutParams actionParams = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(ACTION_PILL_DP));
         actionParams.topMargin = dp(ACTION_PILL_GAP_DP);
         addView(actions, actionParams);
@@ -196,7 +219,18 @@ final class VoiceTranscriptPanel extends LinearLayout {
     }
 
     boolean hasContent() {
-        return raw.length() > 0 || shimmer.getVisibility() == VISIBLE;
+        return raw.length() > 0 || shimmer.getVisibility() == VISIBLE || actions.getVisibility() == VISIBLE;
+    }
+
+    /** Pause (while {@code listening}) or resume on the pill, dimmed when it cannot be pressed. */
+    void setToggle(boolean listening, boolean enabled) {
+        ImageView view = toggle;
+        if (view == null) return;
+        toggleListening = listening;
+        view.setImageResource(listening ? R.drawable.ic_symbol_pause : R.drawable.ic_symbol_mic);
+        view.setContentDescription(getContext().getString(listening ? R.string.voice_input_pause : R.string.voice_input_resume));
+        view.setEnabled(enabled);
+        view.setAlpha(enabled ? 1f : 0.38f);
     }
 
     /** One phrase as it joins on (a leading space after an earlier one), typed out over {@link #TYPE_MS}. */
@@ -237,8 +271,9 @@ final class VoiceTranscriptPanel extends LinearLayout {
         raw.setLength(0);
         raw.append(base);
         revealed = raw.length();
+        following = true;
         renderRaw();
-        actions.setVisibility(raw.length() > 0 ? VISIBLE : GONE);
+        actions.setVisibility(VISIBLE);
     }
 
     /**
@@ -330,6 +365,7 @@ final class VoiceTranscriptPanel extends LinearLayout {
         if (revealed < builder.length()) {
             builder.setSpan(hidden, revealed, builder.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
+        text.setVisibility(raw.length() > 0 ? VISIBLE : GONE);
         text.setText(builder, TextView.BufferType.SPANNABLE);
         scrollToEnd();
     }
@@ -399,9 +435,21 @@ final class VoiceTranscriptPanel extends LinearLayout {
 
     // ------------------------------------------------------------------ layout
 
-    /** Keeps the newest line at the bottom; the ones above scroll up under the fading edge. */
+    /** Whether the text is scrolled to its end, give or take a few dp. */
+    private boolean atBottom() {
+        Layout layout = text.getLayout();
+        if (layout == null) return true;
+        int box = text.getHeight() - text.getCompoundPaddingTop() - text.getCompoundPaddingBottom();
+        return layout.getHeight() - box - text.getScrollY() <= dp(8);
+    }
+
+    /**
+     * Keeps the newest line at the bottom; the ones above scroll up under the fading edge. Left
+     * alone while the reader has scrolled up; scrolling back to the end resumes it.
+     */
     private void scrollToEnd() {
         text.post(() -> {
+            if (!following) return;
             Layout layout = text.getLayout();
             if (layout == null) return;
             int box = text.getHeight() - text.getCompoundPaddingTop() - text.getCompoundPaddingBottom();

@@ -116,7 +116,7 @@ public final class VoiceListeningIndicator {
     /** Between the waveform-and-state group and the chip-and-buttons group. */
     private static final int GROUP_GAP_DP = 4;
     /** The row's padding, the waveform and the two 36 dp buttons: all of the row but the state. */
-    private static final int ROW_FIXED_DP = 12 + 56 + 10 + GROUP_GAP_DP + 2 * PILL_HEIGHT_DP + 4;
+    private static final int ROW_FIXED_DP = 12 + 56 + 10 + GROUP_GAP_DP + PILL_HEIGHT_DP + 4;
     /** How far a finger may wander on the handle and still be a tap. */
     private static final int HANDLE_SLOP_DP = 6;
 
@@ -129,8 +129,6 @@ public final class VoiceListeningIndicator {
     @Nullable private TextView status;
     @Nullable private View chip;
     /** Pause while listening, resume once the microphone has closed; gone once the text is used. */
-    @Nullable private ImageView toggle;
-    private boolean toggleListening;
     @Nullable private VoiceWaveformView wave;
     @Nullable private VoiceTranscriptPanel panel;
     @Nullable private View handle;
@@ -237,15 +235,8 @@ public final class VoiceListeningIndicator {
         chipParams.setMarginStart(dp(2));
         pillRow.addView(warming, chipParams);
 
-        // Pause/resume, then the ×: each the pill's full height as the tap target around an 18 dp
-        // glyph. The × stays for the pill's whole life, and only ever discards.
-        ImageView toggleButton = pillButton(context, R.drawable.ic_symbol_pause, onSurface, R.string.voice_input_pause);
-        toggleButton.setOnClickListener(v -> {
-            if (!v.isEnabled()) return;
-            if (toggleListening) callbacks.onPause();
-            else callbacks.onResume();
-        });
-        pillRow.addView(toggleButton, new LinearLayout.LayoutParams(dp(PILL_HEIGHT_DP), dp(PILL_HEIGHT_DP)));
+        // The ×, the pill's full height as the tap target around an 18 dp glyph. It stays for the
+        // pill's whole life, and only ever discards. Pause/resume lives in the panel's action pill.
         ImageView closeButton = pillButton(context, R.drawable.ic_symbol_close, onSurface, R.string.voice_input_close);
         closeButton.setOnClickListener(v -> callbacks.onClose());
         pillRow.addView(closeButton, new LinearLayout.LayoutParams(dp(PILL_HEIGHT_DP), dp(PILL_HEIGHT_DP)));
@@ -272,6 +263,16 @@ public final class VoiceListeningIndicator {
                 @Override
                 public void onInsert() {
                     callbacks.onInsert();
+                }
+
+                @Override
+                public void onPause() {
+                    callbacks.onPause();
+                }
+
+                @Override
+                public void onResume() {
+                    callbacks.onResume();
                 }
             });
         transcript.setDimRaw(dimRaw);
@@ -302,7 +303,6 @@ public final class VoiceListeningIndicator {
         row = pillRow;
         status = label;
         chip = warming;
-        toggle = toggleButton;
         wave = levels;
         panel = transcript;
         handle = grab;
@@ -337,7 +337,6 @@ public final class VoiceListeningIndicator {
         row = null;
         status = null;
         chip = null;
-        toggle = null;
         wave = null;
         panel = null;
         handle = null;
@@ -406,14 +405,8 @@ public final class VoiceListeningIndicator {
     }
 
     private void setToggle(boolean listening, boolean enabled) {
-        ImageView view = toggle;
-        if (view == null) return;
-        toggleListening = listening;
-        view.setImageResource(listening ? R.drawable.ic_symbol_pause : R.drawable.ic_symbol_mic);
-        view.setContentDescription(activity.getString(listening ? R.string.voice_input_pause : R.string.voice_input_resume));
-        view.setEnabled(enabled);
-        view.setAlpha(enabled ? 1f : 0.38f);
-        view.setVisibility(View.VISIBLE);
+        VoiceTranscriptPanel view = panel;
+        if (view != null) view.setToggle(listening, enabled);
     }
 
     public void setStatus(@StringRes int text) {
@@ -490,7 +483,6 @@ public final class VoiceListeningIndicator {
     public void onActionDone(@StringRes int text) {
         VoiceTranscriptPanel view = panel;
         if (view != null) view.hideActions();
-        if (toggle != null) toggle.setVisibility(View.GONE);
         setStatus(text);
     }
 
@@ -748,12 +740,14 @@ public final class VoiceListeningIndicator {
     /**
      * The pill and its panel, swipeable sideways: a horizontal drag past the touch slop is taken
      * from the children (so the pill's buttons and the actions still get their taps), follows the finger and
-     * fades, and past a third of the width or on a fling it leaves and reports the swipe. Touches
+     * fades, and past 60% of the width, or on a fast fling that has covered a third of it, it leaves and reports the swipe. Touches
      * that land on the card never fall through to the terminal under it. Its place is a
      * translation from the frame's top left ({@link #setRest}); the swipe moves it from there.
      */
     static final class SwipeCard extends LinearLayout {
-        private static final float DISMISS_FRACTION = 0.35f;
+        private static final float DISMISS_FRACTION = 0.6f;
+        /** A fling dismisses only after travelling this much of the width. */
+        private static final float FLING_FRACTION = 0.35f;
         private static final long SETTLE_MS = 180L;
 
         private final Runnable onSwiped;
@@ -775,7 +769,7 @@ public final class VoiceListeningIndicator {
             this.onTouched = onTouched;
             ViewConfiguration configuration = ViewConfiguration.get(context);
             touchSlop = configuration.getScaledTouchSlop();
-            minFling = configuration.getScaledMinimumFlingVelocity() * 4;
+            minFling = configuration.getScaledMinimumFlingVelocity() * 8;
         }
 
         /** Puts the card at rest at {@code x, y}; a swipe under way keeps its offset from the new place. */
@@ -882,7 +876,8 @@ public final class VoiceListeningIndicator {
                 vx = velocity.getXVelocity();
             }
             boolean far = Math.abs(dx) > getWidth() * DISMISS_FRACTION;
-            boolean flung = Math.abs(vx) > minFling && Math.signum(vx) == Math.signum(dx);
+            boolean flung = Math.abs(dx) > getWidth() * FLING_FRACTION
+                && Math.abs(vx) > minFling && Math.signum(vx) == Math.signum(dx);
             if (!far && !flung) {
                 settleBack();
                 return;
