@@ -33,7 +33,7 @@ public class HelpGlossaryTest {
         for (String gone : new String[] {"surface", "base", "independent_value", "docked_floating"}) {
             assertNull(gone, HelpGlossary.term(gone));
         }
-        for (String now : new String[] {"look", "style", "restore_tray", "corner_tab",
+        for (String now : new String[] {"look", "style", "hidden_elements", "corner_tab",
             "border_drag", "keyboard_swipe", "status_swipe", "minimal_mode", "keyboard_form",
             "pinned_notification", "dictation"}) {
             assertNotNull(now, HelpGlossary.term(now));
@@ -72,6 +72,30 @@ public class HelpGlossaryTest {
             for (String jargon : new String[] {"Hyprland", "protocol", "keybind", "X11 socket"}) {
                 assertFalse(term.id + " mentions " + jargon, definition.contains(jargon));
             }
+        }
+    }
+
+    /**
+     * Layout editor v2 (DECISIONS item 11): the trash, the hide zone and the restore tray are gone,
+     * and nothing in the editor's help still sends anyone to them.
+     */
+    @Test public void theLayoutEditorsHelpNamesNoTrayTrashOrHideZone() {
+        List<Integer> words = new ArrayList<>();
+        HelpTopics.Entry layout = HelpTopics.entry("layout_editor");
+        assertNotNull(layout);
+        words.addAll(layout.stepsRes);
+        words.add(layout.summaryRes);
+        words.add(layout.actionRes);
+        words.add(layout.aliasesRes);
+        HelpGlossary.Term hidden = HelpGlossary.term("hidden_elements");
+        assertNotNull(hidden);
+        words.add(hidden.titleRes);
+        words.add(hidden.definitionRes);
+        for (int res : words) {
+            String line = text.get(res).toLowerCase(java.util.Locale.ROOT);
+            assertFalse(line, line.contains("tray"));
+            assertFalse(line, line.contains("trash"));
+            assertFalse(line, line.contains("drag here to hide"));
         }
     }
 }

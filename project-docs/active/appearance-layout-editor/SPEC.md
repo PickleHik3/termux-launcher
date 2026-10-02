@@ -3,10 +3,15 @@
 Status: approved with changes by the developer on 2026-09-30 (Lavish review, five rounds), and
 built the same day: §7 items 1–5 merged to dev at ad68d275, reviewed on Waydroid (API 33), on
 pong since 2026-09-30 23:39. The review page and its interactive mock lived at
-`.lavish/appearance-strip-mock.html` (gitignored). Known leftovers: the three Layout notices and
-the "Minimal layout" title have no place in the bottom area and their strings are unused; the
-layout canvas keeps its artwork rim insets in fill mode; a tray with four or more hidden elements
-may wrap past its row; `KeyboardPreferencesFragmentTest.theVoiceRowsWriteThroughToTheSharedPreferencesAndRejectStrays`
+`.lavish/appearance-strip-mock.html` (gitignored). Layout editor v2 (2026-10-02,
+`project-docs/reference/layout-editor-v2/DECISIONS.md` items 1–15) replaces §3.5, §3.6 and §5
+where they differ, and amends §3.4; built on a worktree branch, not yet device-checked. Known
+leftovers: the three Layout notices and the "Minimal layout" title have no place in the bottom
+area and their strings are unused; the layout canvas keeps its artwork rim insets in fill mode;
+the hidden tiles are one line that pans sideways when all five elements are hidden on a 360dp
+phone (nothing else in the sheet moves); the Settings "Look" section of
+`docs/en/Launcher_Settings.md` still names Key corners under Appearance;
+`KeyboardPreferencesFragmentTest.theVoiceRowsWriteThroughToTheSharedPreferencesAndRejectStrays`
 is order-dependent (passes alone and in the last full run).
 
 Supersedes: the on-screen Appearance card with per-surface pages, the Look page's glass rows, the
@@ -120,7 +125,60 @@ Rules:
   They have no control anywhere. Corners and margins are Layout's (§3.5).
 - Custom is stored as today's `surface_custom_preset` JSON (format 2).
 
+#### Amended 2026-10-02: layout editor v2 (DECISIONS items 13–15)
+
+- **The global row.** At the Custom stop with nothing tapped, row 2 is **Blur · Opacity · Grain**
+  (heading "All surfaces"), writing the base `SurfaceProperty.BLUR / OPACITY / GRAIN`. Each write
+  re-attaches every surface, terminal included, to the base, as Blur always did; the terminal's own
+  Opacity (Darkness) then detaches it again for fine-tuning. Opacity and Grain run 0–100%, the
+  stored values' own range, which covers every Look. There is no global row on the Look stops, and
+  Margin is not in it (Layout only). Tapping an element swaps in its row; a tap on the bare
+  wallpaper with an element tapped brings the global row back, and with the global row up opens the
+  wallpaper's own row (Soft wallpaper, Dim).
+- **The keyboard's row** is **Blur** and a **Keyboard theme ›** button. Key corners leaves this
+  row: it is **Key radius** in Layout mode (§3.5). The button opens the Keyboard theme page in
+  Settings over the editor; Back returns to the same session (the editor survives the stop and
+  restates itself on the way back). The editor's Undo does not cover that page.
+
 ### 3.5 Layout mode
+
+#### Layout editor v2 (2026-10-02, DECISIONS items 1–12): supersedes this section where it differs
+
+`project-docs/reference/layout-editor-v2/README.md` and `editor-preview.png` are the design;
+colour roles come from its `tokens.json` (selected = `primaryContainer` / `onPrimaryContainer`).
+
+- **Bottom area.** The top row (`Look | Layout`, Undo, Done) stays. Row A: the orientation pair
+  (`ic_layout_portrait` / `ic_layout_landscape`), the Style pair (`ic_layout_docked` /
+  `ic_layout_floating`) and **eye-off** (`ic_layout_hide`) at the end. Row B: Corner radius and
+  Margin, unchanged. Glyphs 24dp in 48dp targets; the selected segment is primaryContainer with an
+  onPrimaryContainer glyph. No visible hint text anywhere; names and states are said to
+  accessibility only.
+- **Eye-off** is the only hide drop target. The dashed hide zone and the trash are gone, and their
+  56dp are the frame's. It carries a count badge (absent when nothing is hidden). While a bar is
+  lifted and may be hidden, a 64dp highlight behind it (larger than its 48dp target) shows in
+  primaryContainer, with a primary rim while the finger is over it; that highlight is the drop area.
+- **Hidden tiles.** A tap on eye-off opens a row of tiles in Row B's place (Corner radius and Margin
+  go invisible, so the sheet keeps its height): one chip per hidden element with the restore arrow
+  (`ic_layout_restore`). A tap restores it to its last edge; a drag onto the canvas restores it at
+  the edge it is dropped on. The `HiddenElementsPopup` window is gone.
+- **Lift and select.** A bar lifts from anywhere on it; a tap selects it: the outline is drawn from
+  its own shape (separate outlines for the app bar, A–Z and extra keys even where they share a
+  card), its valid edge destinations are outlined, and a **move control** (`ic_layout_move`, 48dp)
+  stands outside it on its inner side. Only accepted drops highlight. A drop commits on release;
+  Back, or a release outside the canvas and off eye-off, cancels. The terminal stays the anchor.
+- **Move menu.** Tapping the move control lists the destinations the drag would offer (top, bottom,
+  left, right, then Hide), each running the canvas's accessibility action of the same name, so the
+  write, Undo and announcement are a drop's.
+- **Keyboard.** The type chips (Docked / Floating / Split) stay and are restyled; with **Key
+  radius** (`in_app_keyboard_key_corner_radius_dp`, 0–24dp) under them on one tonal card above the
+  keyboard while it is selected. The resize handles and readouts stay.
+- **Live variants.** The canvas draws the status bar compact or expanded, the keyboard full or
+  split, and the normal or minimal layout as they are; no toggles for them.
+- **App icons** are seven fixed placeholders (phone, chat, globe, terminal, play, display, grid),
+  in a row or a rail; the user's pinned apps and their count are never drawn (the `pinnedAppIcons`
+  and `pinnedAppCount` host plumbing is removed). Extra keys stay live.
+
+The text below is the 2026-09-30 / 2026-10-01 version, kept for its history.
 
 Layout mode is **not a miniature.** The same 8/10 frame is the canvas, drawn at full frame size
 from the layout element pack (§5), because Layout must show arrangements the live launcher cannot
@@ -157,11 +215,13 @@ Interactions in the frame:
   policy, the snapshot and the strings (`azMinimised` in EdgeStackPolicy, PlaceLayout,
   PlaceLayoutStore, PlaceArrangeSnapshot, PlaceArrangeModel, PlaceChromePolicy).
 
-### 3.6 Restore tray
+### 3.6 Hidden elements (was: Restore tray)
 
-The "Hidden" box becomes a row of M3 chips with an eye-off icon, one per hidden element. Tapping
-a chip returns the element to its last edge. Empty state is one short line, not a bar-height box.
-While a bar is lifted the tray reads "Drop here to hide".
+Replaced by layout editor v2 (DECISIONS items 2, 3 and 11): there is no tray, no "Drop here to
+hide" and no empty-state line. Eye-off in the bottom area is the drop target and the count; its
+tap opens the hidden tiles in Row B's place, each with the restore arrow; a tile tapped returns
+its element to its last edge, a tile dragged onto the canvas puts it on the edge it is dropped on
+(§3.5, v2). The glossary term is **Hidden elements**.
 
 ### 3.7 Style (2026-10-01)
 
@@ -283,6 +343,15 @@ replace Bare, Classic and Slate.
 - Style (docked / floating) is never part of a Look.
 
 ## 5. Layout canvas artwork
+
+**Layout editor v2 (2026-10-02).** The control glyphs are the v2 pack's
+(`project-docs/reference/layout-editor-v2/android/`, copied to `res/drawable/ic_layout_*`), tinted
+per state. The canvas painters keep the `termux-layout-assets` artwork below with two changes: the
+app icons bar is always the seven placeholder circles of `docked/app-icons-*.svg` (tonal circles,
+generic glyphs, never the user's pinned apps or their count), and "the slot count follows the real
+pinned-app count" no longer holds for it; extra keys still follow the real bar. The selection
+outline and the lifted copy are the element's own shape; a selected bar's destinations are drawn as
+dashed accent outlines of the edges it may move to.
 
 The canvas is drawn from `termux-layout-assets` (developer's pack, 2026-10-01, committed at
 `project-docs/reference/layout-assets/`: 24 surface SVGs for Docked and Floating, 11 glyphs,

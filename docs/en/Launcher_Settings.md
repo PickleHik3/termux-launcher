@@ -30,24 +30,34 @@ are arranging, since each orientation has its own layout; the real screen behind
 follows what you change only for the orientation you are actually holding the phone in. Done and
 Undo let you keep or throw away everything you changed in that visit.
 
-There are no rows of settings under the canvas: you move things by dragging them, hide them by
-dropping them in the tray, and size them by their handles.
+Under the canvas sit the Portrait/Landscape pair, the **Docked**/**Floating** pair, the eye-off
+button, and **Corner radius** and **Margin**. Everything else is on the canvas: you move things by
+dragging them, hide them by dropping them on the eye-off button, and size them by their handles.
+There is no hint text; a selected bar shows where it can go.
 
 - **Move.** Every bar — **Status bar**, **Apps row**, **A–Z index** and **Extra keys** — is
-  pressed anywhere and moved to the edge you want it on, any of the four, in either orientation;
-  a tap only selects it. Dropping a bar between two others on the same edge sets the order they stack in.
-  The A–Z index rides the pinned apps row while the two share an edge; dropped on another edge it
-  stands on a bar of its own.
+  pressed anywhere and moved to the edge you want it on, any of the four, in either orientation.
+  While it is lifted, the edges it may stand on are outlined. Dropping a bar between two others on
+  the same edge sets the order they stack in; letting go anywhere else, outside the canvas, or
+  pressing Back puts it back where it was. The terminal stays where it is and the bars arrange
+  around it. The A–Z index rides the pinned apps row while the two share an edge; dropped on
+  another edge it stands on a bar of its own.
+- **Tap to move.** A tap selects a bar: it gets an outline in its own shape, the edges it could
+  move to are outlined, and a move button (four arrows) appears beside it. The move button lists
+  the edges it can go to and **Hide**, the same choices a screen reader offers.
 - **Under the keyboard.** Where the canvas shows the keyboard, it also offers a slot below it:
   drop the apps row, the A–Z index or the extra keys there and they stand under the keyboard
   instead of over it, in the order you stack them. With the keyboard down or switched off they
   simply sit at the bottom of the dock with the other rows, with no gap between them. The status
   bar always stands over the keyboard.
-- **Hide and bring back.** Drop a bar into the tray under the phone to put it away; while a bar is
-  lifted the tray reads **Drop here to hide**. Each hidden element is a chip in the tray with a
-  struck-through eye; tap it and the element comes back to the edge it was hidden from.
-- **Keyboard on/off.** Drag the keyboard itself off the phone and into the tray to switch it off;
-  its chip in the tray switches it back on. Off, nothing raises it — not a tap on the terminal,
+- **Hide and bring back.** Drop a bar on the eye-off button under the canvas to hide it; while a
+  bar is lifted the button lights up, and only when the bar may be hidden. The button shows how many
+  things are hidden. Tap it and the hidden elements appear in a row in place of Corner radius and
+  Margin, each with a restore arrow: tap one and it comes back to the edge it was hidden from, or
+  drag it onto the canvas to put it on the edge you choose. Tap the eye-off button again to close
+  the row.
+- **Keyboard on/off.** Drag the keyboard itself onto the eye-off button to switch it off; its tile
+  in the hidden row switches it back on. Off, nothing raises it — not a tap on the terminal,
   not a text field — until you turn it on again, which makes it the setting for a hardware
   keyboard or a touch-driven full-screen program. It is the same switch as **Keyboard on/off** in
   the command palette and on the extra-keys row, and unlike the rest of the layout it is one
@@ -59,10 +69,16 @@ dropping them in the tray, and size them by their handles.
   whole cells (dragging it out makes the cells bigger and fewer). While you hold a handle it shows
   the size in real units — the dock or keyboard in dp as the launcher lays it out, the padding in
   dp, the grid in cells — and each is set separately per orientation.
-- **Keyboard type.** With the keyboard selected, three chips beside it pick docked, floating or
-  split, for the orientation on the toggle. The chips go when you select something else.
+- **Keyboard type and key radius.** With the keyboard selected, three chips above it pick docked,
+  floating or split, for the orientation on the toggle, and **Key radius** under them rounds the
+  key caps. They go when you select something else. The keyboard's colours, theme and typeface
+  are on the **Keyboard theme** page, opened from the keyboard in the Appearance editor.
+- **What the canvas shows.** The status bar compact or expanded, the keyboard whole or split, and
+  the normal or minimal layout are drawn as they are now; there are no switches for them here. The
+  pinned apps bar is drawn with seven placeholder icons, whatever you have pinned, while the extra
+  keys show your real keys.
 
-The A–Z index is on, somewhere, or in the tray: there is no longer a Minimised form, and an index
+The A–Z index is on, somewhere, or hidden: there is no longer a Minimised form, and an index
 that was minimised comes back as the bar it folded from.
 
 The status bar can be hidden like the rest, which is how a full-screen layout is built by hand:
@@ -77,12 +93,10 @@ places is the border drag, on every place, and never the bar's own gesture. A co
 edge with the pinned apps and the extra keys when those stand there too, in the order you stacked
 them.
 
-The card is a sheet from the bottom of the screen, like the Appearance card. Its header — the
-title, Undo, Discard and Done — stays at the top. It rests low enough to leave the top of the real
-screen in view; pull it up by the handle or the header and it grows toward the top of the screen,
-and a tap on the handle does the same. A firm pull down past its resting size closes the editor the
-way Back does: straight away when nothing has changed, and with the keep-or-discard question when
-something has. While you drag a bar or hold a handle, the card stays still.
+Layout is one mode of the editor it shares with Appearance: the **Look | Layout** switch, **Undo**
+and **Done** stay on the top row of the sheet in both modes, and the sheet never scrolls or changes
+height. Back closes the editor straight away when nothing has changed, and asks whether to keep or
+discard your changes when something has; with a bar lifted, Back only cancels the lift.
 
 The keyboard itself remembers where it was: Terminal and Display each come back with the keyboard
 up or down the way you left them, and Home always comes back with it down. On Home the keyboard
