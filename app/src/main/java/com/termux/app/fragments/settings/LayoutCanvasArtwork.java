@@ -177,37 +177,24 @@ final class LayoutCanvasArtwork {
     // ----------------------------------------------------------------------------------- dock
 
     /**
-     * The pinned apps as circles with glyphs, along a row or down a column, upright either way. The
-     * pack's seven symbols repeat to the real {@code count}, as many as fit; a negative count draws
-     * the pack's own seven.
+     * The app icons bar (layout editor v2, DECISIONS item 8): always the pack's seven fixed
+     * placeholders, tonal circles with generic glyphs (phone, chat, globe, terminal, play, display,
+     * grid), along a row or down a column, upright either way, as in
+     * {@code docked/app-icons-*.svg}. It never draws the user's pinned apps and never follows
+     * their count; a bar too short for seven draws as many as fit ({@link #dockSlotsFor}).
      */
-    void dock(@NonNull Canvas canvas, @NonNull RectF box, boolean vertical, int count,
+    void dock(@NonNull Canvas canvas, @NonNull RectF box, boolean vertical,
               @NonNull Palette p, float k) {
         float w = box.width() / k;
         float h = box.height() / k;
         float length = vertical ? h : w;
         float cross = vertical ? w : h;
-        int n = slotsForContent(mIcons.size(), count, length, 20f);
+        int n = dockSlotsFor(length);
         if (n <= 0) return;
         float pitch = (length - 16f) / n;
         float size = Math.min(32f, Math.min(cross - 12f, pitch - 4f));
         if (size < 6f) return;
         int saved = begin(canvas, box, k);
-        if (!mIcons.isEmpty()) {
-            for (int i = 0; i < n; i++) {
-                float along = 8f + (i + 0.5f) * pitch;
-                float cx = vertical ? w / 2f : along;
-                float cy = vertical ? along : h / 2f;
-                android.graphics.drawable.Drawable icon = mIcons.get(i);
-                android.graphics.Rect old = icon.copyBounds();
-                icon.setBounds(Math.round(cx - size / 2f), Math.round(cy - size / 2f),
-                    Math.round(cx + size / 2f), Math.round(cy + size / 2f));
-                icon.draw(canvas);
-                icon.setBounds(old);
-            }
-            canvas.restoreToCount(saved);
-            return;
-        }
         for (int i = 0; i < n; i++) {
             int role = i % PACK_SLOTS;
             float along = 8f + (i + 0.5f) * pitch;
@@ -221,6 +208,15 @@ final class LayoutCanvasArtwork {
                 primary ? p.accent : p.text);
         }
         canvas.restoreToCount(saved);
+    }
+
+    /**
+     * How many placeholder icons the app icons bar draws along {@code length} pack units: the
+     * pack's seven, whatever the user has pinned, or as many as fit a bar too short for seven.
+     */
+    @VisibleForTesting
+    static int dockSlotsFor(float length) {
+        return slotsFor(PACK_SLOTS, length, 20f);
     }
 
     // ------------------------------------------------------------------------------------ A-Z
@@ -437,13 +433,13 @@ final class LayoutCanvasArtwork {
         return label.length() <= maxChars ? label : label.substring(0, maxChars);
     }
 
-    private java.util.List<android.graphics.drawable.Drawable> mIcons = java.util.Collections.emptyList();
     private java.util.List<LayoutCanvasView.KeySlot> mKeys = java.util.Collections.emptyList();
 
-    /** The user's real dock icons and extra keys; an empty list keeps the pack's glyphs. */
-    void setSlotContent(@NonNull java.util.List<android.graphics.drawable.Drawable> icons,
-                        @NonNull java.util.List<LayoutCanvasView.KeySlot> keys) {
-        mIcons = icons;
+    /**
+     * The extra keys' first row as the real bar shows it; an empty list keeps the pack's glyphs.
+     * Extra keys stay live (DECISIONS item 8); the app icons bar never takes real content.
+     */
+    void setKeySlots(@NonNull java.util.List<LayoutCanvasView.KeySlot> keys) {
         mKeys = keys;
     }
 
