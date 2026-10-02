@@ -433,6 +433,31 @@ public class TerminalPaneController {
     private static final float DEFAULT_CURSOR_TRAIL_DECAY_SLOW = 0.40f;
     private static final int DEFAULT_CURSOR_TRAIL_THRESHOLD = 2;
 
+    /** Trail style id from kitty.conf {@code custom_shaders}; null when it names none. */
+    @Nullable private String mKittyCursorTrailStyleId;
+    /** Trail style id from the Settings preference. */
+    @Nullable private String mPrefCursorTrailStyleId;
+    /** Retro effect id from the Settings preference; one global setting for every terminal pane. */
+    @Nullable private String mRetroEffectId;
+
+    /** Records the Settings choice; kitty.conf still wins when it names a style. */
+    public void setCursorTrailStylePreference(@Nullable String id) {
+        mPrefCursorTrailStyleId = id;
+        applyEffectiveCursorTrailStyle();
+    }
+
+    private void applyEffectiveCursorTrailStyle() {
+        mMotionOverlay.setCursorTrailStyle(
+            CursorTrailStyle.effective(mKittyCursorTrailStyleId, mPrefCursorTrailStyleId));
+    }
+
+    /** Sets the retro effect on every terminal pane frame (not wall widget pages), now and later. */
+    public void setRetroEffectPreference(@Nullable String id) {
+        mRetroEffectId = id;
+        PaneRetroStyle style = PaneRetroStyle.fromId(id);
+        for (PaneContentFrame frame : mPaneFrames.values()) frame.setRetroStyle(style);
+    }
+
     /**
      * Feeds the trail's tunables from a freshly (re)loaded {@code kitty.conf}: {@code cursor_trail}
      * (a positive value only — kitty's own on/off use of 0 is not this app's switch, which stays the
@@ -442,6 +467,8 @@ public class TerminalPaneController {
      * read once for both.
      */
     public void applyCursorTrailKittyConfig(@NonNull TerminalFontConfig.Result config) {
+        mKittyCursorTrailStyleId = config.cursorTrailStyleId;
+        applyEffectiveCursorTrailStyle();
         long delayMs = config.cursorTrailDelayMs > 0
             ? config.cursorTrailDelayMs : DEFAULT_CURSOR_TRAIL_DELAY_MS;
         float decayFast = config.cursorTrailDecayFast != null
@@ -3201,6 +3228,7 @@ public class TerminalPaneController {
             // A pane beside this one already measured these fonts at this size; start from it.
             view.adoptFontFrom(anyFontInitializedPaneView());
             mHost.configurePaneView(view);
+            frame.setRetroStyle(PaneRetroStyle.fromId(mRetroEffectId));
             view.setOnTouchListener((v, ev) -> {
                 if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
                     TerminalSession s = ((TerminalView) v).getCurrentSession();
