@@ -8,7 +8,8 @@ import java.util.List;
 public final class AnimatedWallpapers {
 
     private static final List<AnimatedWallpaper> ALL = Collections.unmodifiableList(Arrays.<AnimatedWallpaper>asList(
-        new Mesh(), new Aurora(), new Tide(), new Rain()));
+        new Mesh(), new Aurora(), new Tide(), new Rain(),
+        new Contour(), new Drift(), new Lava(), new Silk(), new Caustics(), new Chrome()));
 
     private AnimatedWallpapers() {}
 
