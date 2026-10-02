@@ -5,9 +5,9 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 
-/** The bottom area at 360dp. */
+/** The bottom area at 411dp. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w360dp-h780dp-mdpi")
+@Config(sdk = {android.os.Build.VERSION_CODES.P}, qualifiers = "w411dp-h860dp-mdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-public class AppearanceEditorPanelFitTest extends AppearanceEditorPanelFitBase {
+public class AppearanceEditorPanelFit411Test extends AppearanceEditorPanelFitBase {
 }
