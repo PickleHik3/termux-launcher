@@ -3037,13 +3037,16 @@ public final class LayoutCanvasView extends View {
      * the system's drag shadow; the canvas draws only the targets and, over one, the shape the
      * element would take. A drop reports through the same listener a bar's drop does.
      */
+    /** The clip label a hidden element's chip drags under: this prefix and the Block's name. */
+    public static final String HIDDEN_DRAG_LABEL_PREFIX = "termux-launcher/hidden-element:";
+
     @Override
     public boolean onDragEvent(@NonNull DragEvent event) {
-        Object local = event.getLocalState();
-        if (!(local instanceof Block)) return false;
+        Block block = hiddenDragBlock(event);
+        if (block == null) return false;
         switch (event.getAction()) {
             case DragEvent.ACTION_DRAG_STARTED:
-                return beginHiddenDrag((Block) local);
+                return beginHiddenDrag(block);
             case DragEvent.ACTION_DRAG_LOCATION:
                 hoverHiddenDrag(event.getX(), event.getY());
                 return true;
@@ -3061,6 +3064,26 @@ public final class LayoutCanvasView extends View {
     }
 
     /** A hidden element's chip is being dragged: lifts it, the copy starting at the trash. */
+    /**
+     * The element a drag carries: its local state inside the window that started it, otherwise
+     * the clip label (the popup's chips drag from their own window, so the label is what arrives).
+     */
+    @Nullable
+    private static Block hiddenDragBlock(@NonNull DragEvent event) {
+        Object local = event.getLocalState();
+        if (local instanceof Block) return (Block) local;
+        android.content.ClipDescription description = event.getClipDescription();
+        CharSequence label = description == null ? null : description.getLabel();
+        if (label == null) return null;
+        String text = label.toString();
+        if (!text.startsWith(HIDDEN_DRAG_LABEL_PREFIX)) return null;
+        try {
+            return Block.valueOf(text.substring(HIDDEN_DRAG_LABEL_PREFIX.length()));
+        } catch (IllegalArgumentException unknown) {
+            return null;
+        }
+    }
+
     @VisibleForTesting
     boolean beginHiddenDrag(@NonNull Block block) {
         if (mLayout == null || mDraggedBar != null) return false;
@@ -3181,7 +3204,7 @@ public final class LayoutCanvasView extends View {
         if (drop != null && morph > 0f) {
             w = LayoutCanvasMorph.lerp(w, drop.box.width(), morph);
             h = LayoutCanvasMorph.lerp(h, drop.box.height(), morph);
-            corners = LayoutCanvasMorph.lerp(base.corners, drop.corners, morph);
+            corners = LayoutCanvasMorph.lerp(corners, drop.corners, morph);
             if (morph >= 0.5f && mDropEdge != null) vertical = mDropEdge.isOnSide();
         }
         mGhost.box.set(cx - w / 2f, cy - h / 2f, cx + w / 2f, cy + h / 2f);

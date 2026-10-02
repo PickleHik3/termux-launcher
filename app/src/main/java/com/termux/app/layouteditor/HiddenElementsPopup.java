@@ -216,8 +216,13 @@ final class HiddenElementsPopup {
 
     /** Pulls the chip out of the popup: the system drag the canvas accepts, the popup gone. */
     private boolean startDrag(@NonNull View chip, @NonNull LayoutCanvasView.Block block) {
-        ClipData clip = ClipData.newPlainText(mCanvas.chipName(block), mCanvas.chipName(block));
-        boolean started = chip.startDragAndDrop(clip, new View.DragShadowBuilder(chip), block, 0);
+        // The chip lives in this popup's window and the canvas in the activity's. A drag reaches
+        // another window only when it is global, and local state never crosses windows, so the
+        // element rides in the clip's label, which every window sees from the first event.
+        ClipData clip = ClipData.newPlainText(
+            LayoutCanvasView.HIDDEN_DRAG_LABEL_PREFIX + block.name(), mCanvas.chipName(block));
+        boolean started = chip.startDragAndDrop(clip, new View.DragShadowBuilder(chip), block,
+            View.DRAG_FLAG_GLOBAL);
         if (started)
             dismiss();
         return started;
