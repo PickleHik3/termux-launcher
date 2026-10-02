@@ -60,6 +60,11 @@
         <item name="iconSize">18dp</item>
         <item name="iconGravity">textStart</item>
         <item name="iconPadding">4dp</item>
+        <!-- All four: Widget.Material3.Button.OutlinedButton sets paddingLeft / paddingRight to
+             24dp, and they win over a paddingStart / paddingEnd stated beside them, which made a
+             text segment 32dp wider than its content. -->
+        <item name="android:paddingLeft">12dp</item>
+        <item name="android:paddingRight">12dp</item>
         <item name="android:paddingStart">12dp</item>
         <item name="android:paddingEnd">12dp</item>
         <item name="android:maxLines">1</item>

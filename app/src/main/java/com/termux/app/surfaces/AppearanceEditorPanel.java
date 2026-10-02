@@ -24,7 +24,6 @@ import com.google.android.material.shape.ShapeAppearanceModel;
 import com.google.android.material.slider.Slider;
 
 import com.termux.R;
-import com.termux.app.terminal.Motion;
 
 /**
  * The Appearance / Layout editor's bottom area (SPEC §3.2–3.6): views only. It inflates
@@ -35,8 +34,9 @@ import com.termux.app.terminal.Motion;
  *
  * <p>The layout is one ConstraintLayout: the top row (mode pill, Undo, Done) is both modes'; each
  * mode's rows are a {@link Group}, and a mode switch shows one and hides the other. Row B
- * (the tapped element's controls) is always laid out in Appearance mode and shown with alpha, so
- * the sheet has one height per mode, {@link #measureFor}, and never jumps.</p>
+ * (the tapped element's controls) is GONE until an element is tapped, so the sheet's height
+ * follows its content: {@link #measureFor} is the height for what shows now, and
+ * {@link #measureTallest} the height with Row B up, which the frame stands above.</p>
  *
  * <p>Every restatement from code runs with {@link #mRestating} set, so a value the controller
  * pushes in is never read back as the user's.</p>
@@ -76,9 +76,6 @@ final class AppearanceEditorPanel {
         R.string.termux_surface_preset_solid,
         R.string.termux_surface_preset_custom};
 
-    /** Row B's fade in and out. */
-    private static final long ROW2_FADE_MS = 150L;
-
     @NonNull private final Context mContext;
     @NonNull private final View mRoot;
     /** The bottom padding the layout declares; the controller adds the navigation inset to it. */
@@ -96,14 +93,11 @@ final class AppearanceEditorPanel {
 
     private final View mRow2;
     private final TextView mRow2Name;
-    private final View mFirstColumn;
     private final TextView mFirstLabel;
     private final Slider mFirstSlider;
     private final MaterialButtonToggleGroup mSoft;
-    private final View mLegibilityColumn;
     private final TextView mLegibilityLabel;
     private final Slider mLegibility;
-    private final View mSecondColumn;
     private final TextView mSecondLabel;
     private final Slider mSecondSlider;
 
@@ -142,14 +136,11 @@ final class AppearanceEditorPanel {
         mLookLabels = root.findViewById(R.id.appearance_editor_look_labels);
         mRow2 = root.findViewById(R.id.appearance_editor_row2);
         mRow2Name = root.findViewById(R.id.appearance_editor_row2_name);
-        mFirstColumn = root.findViewById(R.id.appearance_editor_c1);
         mFirstLabel = root.findViewById(R.id.appearance_editor_c1_label);
         mFirstSlider = root.findViewById(R.id.appearance_editor_c1_slider);
         mSoft = root.findViewById(R.id.appearance_editor_c1_soft);
-        mLegibilityColumn = root.findViewById(R.id.appearance_editor_cl);
         mLegibilityLabel = root.findViewById(R.id.appearance_editor_cl_label);
         mLegibility = root.findViewById(R.id.appearance_editor_legibility);
-        mSecondColumn = root.findViewById(R.id.appearance_editor_c2);
         mSecondLabel = root.findViewById(R.id.appearance_editor_c2_label);
         mSecondSlider = root.findViewById(R.id.appearance_editor_c2_slider);
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
@@ -162,7 +153,7 @@ final class AppearanceEditorPanel {
         // The groups' members, stated here as well as in the layout: a Group resolves its XML
         // names lazily, and the mode is applied before the panel is ever measured or attached.
         mAppearanceGroup.setReferencedIds(new int[] {R.id.appearance_editor_look,
-            R.id.appearance_editor_look_labels, R.id.appearance_editor_row2});
+            R.id.appearance_editor_look_labels});
         mLayoutGroup.setReferencedIds(new int[] {R.id.layout_editor_orientation,
             R.id.appearance_editor_style, R.id.layout_editor_tray_trash,
             R.id.appearance_editor_corners_label, R.id.appearance_editor_margin_label,
@@ -222,18 +213,45 @@ final class AppearanceEditorPanel {
     }
 
     /**
-     * The sheet's one height for {@code layout} mode at {@code widthPx}, padding included: the top
-     * row plus that mode's rows. Appearance always counts Row B, which is laid out (and only
-     * faded) whether or not an element is tapped. The mode showing is restored before returning.
+     * The sheet's height for {@code layout} mode at {@code widthPx}, padding included, for what
+     * shows now: Appearance is Row A alone until an element is tapped, then Row A + Row B. The
+     * mode showing is restored before returning.
      */
     int measureFor(boolean layout, int widthPx) {
         boolean shown = mLayoutMode;
         applyGroups(layout);
-        mRoot.measure(View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-        int height = mRoot.getMeasuredHeight();
+        int height = measureNow(widthPx);
         applyGroups(shown);
         return height;
+    }
+
+    /**
+     * The tallest the sheet gets in {@code layout} mode: Appearance with Row B up and its labels
+     * on two lines, whether or not an element is tapped. The frame stands above this, so it never
+     * moves when Row B comes and goes. Layout mode's rows are the same at every moment.
+     */
+    int measureTallest(boolean layout, int widthPx) {
+        if (layout)
+            return measureFor(true, widthPx);
+        boolean shown = mLayoutMode;
+        boolean rowShown = mRow2Shown;
+        mRow2Shown = true;
+        TextView[] labels = {mFirstLabel, mLegibilityLabel, mSecondLabel};
+        for (TextView label : labels)
+            label.setMinLines(2);
+        applyGroups(false);
+        int height = measureNow(widthPx);
+        for (TextView label : labels)
+            label.setMinLines(1);
+        mRow2Shown = rowShown;
+        applyGroups(shown);
+        return height;
+    }
+
+    private int measureNow(int widthPx) {
+        mRoot.measure(View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        return mRoot.getMeasuredHeight();
     }
 
     // ------------------------------------------------------------------------- the Look slider
@@ -433,6 +451,7 @@ final class AppearanceEditorPanel {
         mLayoutMode = layout;
         mAppearanceGroup.setVisibility(layout ? View.GONE : View.VISIBLE);
         mLayoutGroup.setVisibility(layout ? View.VISIBLE : View.GONE);
+        mRow2.setVisibility(!layout && mRow2Shown ? View.VISIBLE : View.GONE);
     }
 
     boolean isLayoutMode() {
@@ -488,7 +507,7 @@ final class AppearanceEditorPanel {
         return mRow2Shown;
     }
 
-    /** Row B down: faded out and untouchable; it keeps its place, so the sheet does not move. */
+    /** Row B down: GONE, so the sheet's content (and the controller's height for it) shrinks. */
     void hideRow2() {
         if (!mRow2Shown)
             return;
@@ -506,8 +525,8 @@ final class AppearanceEditorPanel {
     }
 
     /**
-     * Row B's alpha, and whether its controls take touches and are read out. Alpha 0 is not
-     * enough on its own: an invisible slider would still be dragged.
+     * Row B's visibility, and whether its controls take touches and are read out. Row B is not
+     * shown in Layout mode, whatever its state.
      */
     private void applyRow2(boolean shown, boolean animate) {
         mRow2.setImportantForAccessibility(shown ? View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
@@ -517,14 +536,7 @@ final class AppearanceEditorPanel {
             mSoft.getChildAt(i).setEnabled(shown);
         mLegibility.setEnabled(shown && mLegibilityEnabled);
         mSecondSlider.setEnabled(shown);
-        float alpha = shown ? 1f : 0f;
-        mRow2.animate().cancel();
-        if (animate && mRow2.isAttachedToWindow() && mRow2.isShown()) {
-            mRow2.animate().alpha(alpha).setDuration(ROW2_FADE_MS)
-                .setInterpolator(Motion.settle()).start();
-        } else {
-            mRow2.setAlpha(alpha);
-        }
+        mRow2.setVisibility(shown && !mLayoutMode ? View.VISIBLE : View.GONE);
     }
 
     /** The first control as a slider: Opacity or Key radius. */
@@ -534,7 +546,7 @@ final class AppearanceEditorPanel {
         mFirstSlider.setVisibility(View.VISIBLE);
         mSoft.setVisibility(View.GONE);
         restateSlider(mFirstSlider, value, max);
-        mFirstColumn.setVisibility(View.VISIBLE);
+        mFirstLabel.setVisibility(View.VISIBLE);
     }
 
     void setFirstLabel(@NonNull CharSequence label) {
@@ -548,12 +560,14 @@ final class AppearanceEditorPanel {
         mFirstSlider.setVisibility(View.GONE);
         mSoft.setVisibility(View.VISIBLE);
         checkSegment(mSoft, on ? 1 : 0);
-        mFirstColumn.setVisibility(View.VISIBLE);
+        mFirstLabel.setVisibility(View.VISIBLE);
     }
 
     /** No first control: the status bar and the dock have Blur alone. */
     void hideFirst() {
-        mFirstColumn.setVisibility(View.GONE);
+        mFirstLabel.setVisibility(View.GONE);
+        mFirstSlider.setVisibility(View.GONE);
+        mSoft.setVisibility(View.GONE);
     }
 
     /**
@@ -565,7 +579,8 @@ final class AppearanceEditorPanel {
         restateSlider(mLegibility, index, 2);
         mLegibilityEnabled = enabled;
         mLegibility.setEnabled(enabled && mRow2Shown);
-        mLegibilityColumn.setVisibility(View.VISIBLE);
+        mLegibilityLabel.setVisibility(View.VISIBLE);
+        mLegibility.setVisibility(View.VISIBLE);
     }
 
     /** The label for a Text contrast stop: Low, Normal or High. */
@@ -577,7 +592,8 @@ final class AppearanceEditorPanel {
     }
 
     void hideLegibility() {
-        mLegibilityColumn.setVisibility(View.GONE);
+        mLegibilityLabel.setVisibility(View.GONE);
+        mLegibility.setVisibility(View.GONE);
     }
 
     /** The last control: Blur or Dim. */
@@ -585,7 +601,8 @@ final class AppearanceEditorPanel {
         mSecondLabel.setText(label);
         mSecondSlider.setContentDescription(label);
         restateSlider(mSecondSlider, value, max);
-        mSecondColumn.setVisibility(View.VISIBLE);
+        mSecondLabel.setVisibility(View.VISIBLE);
+        mSecondSlider.setVisibility(View.VISIBLE);
     }
 
     void setSecondLabel(@NonNull CharSequence label) {
