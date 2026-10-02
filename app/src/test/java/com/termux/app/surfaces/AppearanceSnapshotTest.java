@@ -103,7 +103,7 @@ public class AppearanceSnapshotTest {
     @Test
     public void theSignatureSeesTintRimMotionAndDepth() {
         String before = AppearanceSnapshot.signatureOf(preferences);
-        preferences.setSurfaceGlassRim(TERMUX_APP.GLASS_RIM_GRADIENT);
+        preferences.setSurfaceGlassRim("gradient");
         assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
 
         before = AppearanceSnapshot.signatureOf(preferences);

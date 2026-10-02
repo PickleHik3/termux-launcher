@@ -54,13 +54,19 @@ public class SurfacePresetsGlassTest {
         assertEquals(60, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
         assertEquals(8, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
         assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN, preferences.getSurfaceGlassTint());
-        assertEquals(TERMUX_APP.GLASS_RIM_GRADIENT, preferences.getSurfaceGlassRim());
+        assertEquals(TERMUX_APP.GLASS_RIM_HAIRLINE, preferences.getSurfaceGlassRim());
         assertEquals(TERMUX_APP.GLASS_MOTION_MIST, preferences.getSurfaceGlassMotion());
         assertTrue(SurfacePresets.matches(preferences, mist));
 
-        // Undoing one of the three un-matches it: the ring reads the new keys too.
-        preferences.setSurfaceGlassRim(TERMUX_APP.GLASS_RIM_HAIRLINE);
+        // Undoing one of the two un-matches it: the ring reads the new keys too.
+        preferences.setSurfaceGlassMotion(TERMUX_APP.GLASS_MOTION_CLASSIC);
         assertFalse(SurfacePresets.matches(preferences, mist));
+    }
+
+    @Test
+    public void aStoredGradientRimReadsAsTheHairlineDefault() {
+        preferences.setSurfaceGlassRim("gradient");
+        assertEquals(TERMUX_APP.GLASS_RIM_HAIRLINE, preferences.getSurfaceGlassRim());
     }
 
     @Test
@@ -125,7 +131,7 @@ public class SurfacePresetsGlassTest {
             custom.values.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
         SurfacePresets.apply(preferences, custom);
         assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN, preferences.getSurfaceGlassTint());
-        assertEquals(TERMUX_APP.GLASS_RIM_GRADIENT, preferences.getSurfaceGlassRim());
+        assertEquals(TERMUX_APP.GLASS_RIM_HAIRLINE, preferences.getSurfaceGlassRim());
         assertEquals(TERMUX_APP.GLASS_MOTION_MIST, preferences.getSurfaceGlassMotion());
         assertTrue(SurfacePresets.matches(preferences, custom));
     }

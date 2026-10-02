@@ -205,8 +205,8 @@ public class GlassStackTest {
     }
 
     @Test
-    public void underMistTheKeyboardStackWearsTheDocksTintAndRim() {
-        GlassSurfaceFactory mist = glass.withLook(new GlassLook(true, true));
+    public void underMistTheKeyboardStackWearsTheDocksTintAndRimShape() {
+        GlassSurfaceFactory mist = glass.withLook(new GlassLook(true));
         preferences.setInAppKeyboardBackdropOpacityRaw(35);
 
         LayerDrawable dock = (LayerDrawable) GlassStack.build(mist, dockSpec(null), 2f, null);
@@ -214,10 +214,21 @@ public class GlassStackTest {
 
         assertEquals(dock.getNumberOfLayers(), keyboard.getNumberOfLayers());
         int last = dock.getNumberOfLayers() - 1;
-        assertTrue(dock.getDrawable(last) instanceof GradientRimDrawable);
-        assertTrue(keyboard.getDrawable(last) instanceof GradientRimDrawable);
+        assertTrue(dock.getDrawable(last) instanceof GradientDrawable);
+        assertTrue(keyboard.getDrawable(last) instanceof GradientDrawable);
         assertEquals(((GradientDrawable) dock.getDrawable(0)).getColor().getDefaultColor(),
             ((GradientDrawable) keyboard.getDrawable(0)).getColor().getDefaultColor());
         assertEquals(255, keyboard.getAlpha());
+    }
+
+    @Test
+    public void fancierGlassDrawsNoStrokeAndTheHairlineReturnsWhenItIsOff() {
+        glass.setFancierGlass(true);
+        LayerDrawable fancier = (LayerDrawable) GlassStack.build(glass,
+            keyboardSpec(FANCIER).withRim(true), 2f, null);
+        assertTrue(fancier.getDrawable(fancier.getNumberOfLayers() - 1) instanceof GradientDrawable);
+        assertTrue(glass.rimDrawable(8f) instanceof GradientDrawable);
+        glass.setFancierGlass(false);
+        assertTrue(glass.rimDrawable(8f) instanceof GradientDrawable);
     }
 }
