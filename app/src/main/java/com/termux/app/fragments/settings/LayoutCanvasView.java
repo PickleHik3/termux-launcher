@@ -263,6 +263,11 @@ public final class LayoutCanvasView extends View {
     private static final int SLOT_HOVER_ALPHA = 60;
     /** The gaps of the hovered edge that the finger is not on; enough to read, not to compete. */
     private static final int GAP_LINE_ALPHA = 110;
+    /** A destination guide's dashed outline: quiet while selected, stronger while lifting. */
+    private static final float GUIDE_STROKE_DP = 1f;
+    private static final float GUIDE_LIFT_STROKE_DP = 1.5f;
+    /** A guide thinner than this, once the other elements are cut out of it, is not drawn. */
+    private static final float GUIDE_MIN_DP = 4f;
 
     /**
      * The strip under the phone: the hidden elements live there, and a lifted one can be put there.
@@ -320,6 +325,13 @@ public final class LayoutCanvasView extends View {
     private final LayoutCanvasArtwork mArtwork = new LayoutCanvasArtwork();
     private final LayoutCanvasArtwork.Palette mPalette = new LayoutCanvasArtwork.Palette();
     private final RectF mFrameRect = new RectF();
+    /** Where the move control may stand outside the phone; empty for nowhere. */
+    private final RectF mMoveControlRoom = new RectF();
+    /** The view spanning the editor whose overlay carries the lifted copy, or null for none. */
+    @Nullable private View mLiftHost;
+    /** The host the copy is in the overlay of now; null while it is not there. */
+    @Nullable private View mLiftOverlayHost;
+    @Nullable private final Drawable mLiftOverlay = new LiftOverlay();
     /** One design unit on this frame, in pixels. */
     private float mUnit = 1f;
     private final Path mClipPath = new Path();
@@ -2338,7 +2350,7 @@ public final class LayoutCanvasView extends View {
         drawTray(canvas);
         drawTrash(canvas);
         drawLegend(canvas);
-        drawGhost(canvas);
+        if (mLiftOverlayHost == null) drawGhost(canvas);
         drawReadout(canvas);
     }
 
@@ -3002,10 +3014,11 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * Every edge the lifted bar may stand on, outlined as one region the way it always has been,
-     * and — on the edge under the finger — the gaps inside it: a thin line where each would put the
-     * band, the one being dropped into filled and drawn solid. Nothing here animates; the picture
-     * changes when the finger moves to another gap and not otherwise.
+     * Every destination the lifted bar is accepted on, outlined in the primary along its guide
+     * rect only ({@link #guideRect}: the part of the edge's zone no other element stands in), and
+     * — on the edge under the finger — the gaps inside it: the one being dropped into filled, the
+     * others a thin line, all clipped to that guide so nothing crosses another element. Nothing
+     * here animates; the picture changes when the finger moves to another gap and not otherwise.
      */
     private void drawSlots(@NonNull Canvas canvas) {
         if (mSlots.isEmpty()) return;
@@ -3013,18 +3026,24 @@ public final class LayoutCanvasView extends View {
         float radius = slotRadiusPx();
         MiniatureDragPolicy.Slot hoveredSlot = mHoverSlot;
         Edge hovered = hoveredSlot == null ? null : hoveredSlot.edge;
+        float stroke = dp(GUIDE_LIFT_STROKE_DP);
         mDashPaint.setPathEffect(mSlotDash);
-        mDashPaint.setStrokeWidth(dp(1f));
+        mDashPaint.setStrokeWidth(stroke);
+        mDashPaint.setColor(accent);
         // The bottom is two regions while the keyboard stands on it: the gaps over it, and the
         // ones under it, outlined apart so the keyboard between them is not a target.
         for (Edge edge : Edge.values()) {
             for (boolean underKeyboard : new boolean[] {false, true}) {
                 if (!edgeRegion(edge, underKeyboard, mScratchRectA)) continue;
-                mDashPaint.setColor(accent);
-                canvas.drawRoundRect(mScratchRectA, radius, radius, mDashPaint);
+                if (!guideRect(edge, mScratchRectA, mDraggedBar, mScratchRectA)) continue;
+                strokeGuide(canvas, mScratchRectA, radius, stroke, mDashPaint);
             }
         }
-        if (hovered == null) return;
+        if (hovered == null || hoveredSlot.isTray()) return;
+        if (!edgeRegion(hovered, hoveredSlot.underKeyboard, mScratchRectA)
+            || !guideRect(hovered, mScratchRectA, mDraggedBar, mScratchRectA)) return;
+        int saved = canvas.save();
+        canvas.clipRect(mScratchRectA);
         for (MiniatureDragPolicy.Slot slot : mSlots) {
             if (!slot.sameGroup(hoveredSlot)) continue;
             boolean under = slot == mHoverSlot;
@@ -3043,25 +3062,114 @@ public final class LayoutCanvasView extends View {
             else canvas.drawLine(slot.left, slot.line, slot.right, slot.line, mLinePaint);
         }
         mLinePaint.setAlpha(255);
+        canvas.restoreToCount(saved);
     }
 
     /**
      * The selected bar's destinations while nothing is lifted: each edge it may move to outlined
-     * as one region, as a lift outlines it, so a tap shows where the bar can go before a drag or
-     * the move control's menu takes it there. Nothing is filled; nothing is under a finger.
+     * along its guide rect in the outline-variant, a quiet hint of where the bar can go before a
+     * drag or the move control's menu takes it there. Nothing is filled; nothing is under a
+     * finger; no line crosses another element.
      */
     private void drawSelectionTargets(@NonNull Canvas canvas) {
         if (mSelectionSlots.isEmpty() || mDraggedBar != null) return;
         float radius = slotRadiusPx();
+        float stroke = dp(GUIDE_STROKE_DP);
         mDashPaint.setPathEffect(mSlotDash);
-        mDashPaint.setStrokeWidth(dp(1f));
-        mDashPaint.setColor(accent());
+        mDashPaint.setStrokeWidth(stroke);
+        mDashPaint.setColor(lineColor());
         for (Edge edge : Edge.values()) {
             for (boolean underKeyboard : new boolean[] {false, true}) {
                 if (!edgeRegion(mSelectionSlots, edge, underKeyboard, mScratchRectA)) continue;
-                canvas.drawRoundRect(mScratchRectA, radius, radius, mDashPaint);
+                if (!guideRect(edge, mScratchRectA, mSelected, mScratchRectA)) continue;
+                strokeGuide(canvas, mScratchRectA, radius, stroke, mDashPaint);
             }
         }
+    }
+
+    /** A guide stroked inside its own rect and clipped to it, so no part of it lies outside. */
+    private void strokeGuide(@NonNull Canvas canvas, @NonNull RectF guide, float radius,
+                             float stroke, @NonNull Paint paint) {
+        int saved = canvas.save();
+        canvas.clipRect(guide);
+        mScratchRectB.set(guide);
+        mScratchRectB.inset(stroke / 2f, stroke / 2f);
+        if (!mScratchRectB.isEmpty()) {
+            float r = Math.max(0f, radius - stroke / 2f);
+            canvas.drawRoundRect(mScratchRectB, r, r, paint);
+        }
+        canvas.restoreToCount(saved);
+    }
+
+    /**
+     * The guide a destination region is outlined along: the region cut, across its depth (y for
+     * the top and the bottom, x for the sides), to the widest stretch no other element stands in
+     * — the keyboard, the other bars — so the outline never crosses one. The pane is not an
+     * obstacle (a dropped bar takes its room from it), nor is {@code moving}, which leaves its own
+     * place. False where what is left is too thin to read as a guide.
+     */
+    @VisibleForTesting
+    boolean guideRect(@NonNull Edge edge, @NonNull RectF region, @Nullable Block moving,
+                      @NonNull RectF out) {
+        if (region.isEmpty()) return false;
+        boolean rows = !edge.isOnSide();
+        float lo = rows ? region.top : region.left;
+        float hi = rows ? region.bottom : region.right;
+        float crossLo = rows ? region.left : region.top;
+        float crossHi = rows ? region.right : region.bottom;
+        List<float[]> taken = new ArrayList<>(6);
+        for (Block block : Block.values()) {
+            if (block == Block.CANVAS || block == moving) continue;
+            RectF rect = block == Block.KEYBOARD ? mKeyboardRect : mBlockRects.get(block);
+            if (rect == null || rect.isEmpty()) continue;
+            float bLo = rows ? rect.top : rect.left;
+            float bHi = rows ? rect.bottom : rect.right;
+            float cLo = rows ? rect.left : rect.top;
+            float cHi = rows ? rect.right : rect.bottom;
+            if (cHi <= crossLo || cLo >= crossHi || bHi <= lo || bLo >= hi) continue;
+            taken.add(new float[] {Math.max(lo, bLo), Math.min(hi, bHi)});
+        }
+        java.util.Collections.sort(taken, (a, b) -> Float.compare(a[0], b[0]));
+        float bestLo = lo;
+        float bestHi = lo;
+        float at = lo;
+        for (float[] span : taken) {
+            if (span[0] - at > bestHi - bestLo) {
+                bestLo = at;
+                bestHi = span[0];
+            }
+            at = Math.max(at, span[1]);
+        }
+        if (hi - at > bestHi - bestLo) {
+            bestLo = at;
+            bestHi = hi;
+        }
+        if (bestHi - bestLo < dp(GUIDE_MIN_DP)) return false;
+        if (rows) out.set(region.left, bestLo, region.right, bestHi);
+        else out.set(bestLo, region.top, bestHi, region.bottom);
+        return true;
+    }
+
+    /**
+     * The guides drawn now, in view pixels: the lifted bar's accepted destinations while one is
+     * in the air, otherwise the selected bar's. For a test to read.
+     */
+    @NonNull
+    @VisibleForTesting
+    List<RectF> guideRects() {
+        List<RectF> out = new ArrayList<>();
+        boolean lifting = mDraggedBar != null;
+        List<MiniatureDragPolicy.Slot> slots = lifting ? mSlots : mSelectionSlots;
+        Block moving = lifting ? mDraggedBar : mSelected;
+        for (Edge edge : Edge.values()) {
+            for (boolean underKeyboard : new boolean[] {false, true}) {
+                RectF region = new RectF();
+                if (!edgeRegion(slots, edge, underKeyboard, region)) continue;
+                RectF guide = new RectF();
+                if (guideRect(edge, region, moving, guide)) out.add(guide);
+            }
+        }
+        return out;
     }
 
     /**
@@ -3476,6 +3584,104 @@ public final class LayoutCanvasView extends View {
         canvas.drawPath(mShapePath, mLinePaint);
     }
 
+    // ---- The lifted copy over the whole editor ----------------------------------------------------
+
+    /**
+     * Lends the canvas a view spanning the whole editor (the frame, the gutter round it and the
+     * sheet), in whose overlay the lifted copy is drawn while a bar is in the air: it follows the
+     * finger off the phone, over the sheet and onto eye-off, above everything the editor shows,
+     * instead of being clipped at the frame. Null draws the copy in this view as before.
+     */
+    public void setLiftOverlayHost(@Nullable View host) {
+        if (mLiftHost == host) return;
+        detachLiftOverlay();
+        mLiftHost = host;
+        if (mDraggedBar != null) attachLiftOverlay();
+        invalidate();
+    }
+
+    /** Whether the lifted copy is drawn in the host's overlay rather than in this view. */
+    private boolean liftsInOverlay() {
+        View host = mLiftHost;
+        return host != null && host.isAttachedToWindow() && isAttachedToWindow();
+    }
+
+    /** Whether the lifted copy is in the host's overlay now, for a test to read. */
+    @VisibleForTesting
+    boolean isLiftOverlayAttached() {
+        return mLiftOverlayHost != null;
+    }
+
+    private void attachLiftOverlay() {
+        View host = mLiftHost;
+        if (host == null || mLiftOverlayHost == host || !liftsInOverlay()) return;
+        detachLiftOverlay();
+        mLiftOverlay.setBounds(0, 0, Math.max(1, host.getWidth()), Math.max(1, host.getHeight()));
+        host.getOverlay().add(mLiftOverlay);
+        mLiftOverlayHost = host;
+    }
+
+    private void detachLiftOverlay() {
+        View host = mLiftOverlayHost;
+        mLiftOverlayHost = null;
+        if (host != null) {
+            host.getOverlay().remove(mLiftOverlay);
+            host.invalidate();
+        }
+    }
+
+    /**
+     * Every redraw of the canvas redraws the copy in the host's overlay too: the lift's frames,
+     * the finger's moves and the spring-back all come through here.
+     */
+    @Override
+    public void invalidate() {
+        super.invalidate();
+        Drawable overlay = mLiftOverlay;
+        if (overlay != null && mLiftOverlayHost != null) overlay.invalidateSelf();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        detachLiftOverlay();
+        super.onDetachedFromWindow();
+    }
+
+    /**
+     * The lifted copy in the host's overlay: the canvas's own drawing of it, moved from this
+     * view's coordinates to the host's by their places in the window.
+     */
+    private final class LiftOverlay extends Drawable {
+        private final int[] mCanvasAt = new int[2];
+        private final int[] mHostAt = new int[2];
+
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+            View host = mLiftOverlayHost;
+            if (host == null || mDraggedBar == null) return;
+            if (getBounds().width() != host.getWidth() || getBounds().height() != host.getHeight())
+                setBounds(0, 0, Math.max(1, host.getWidth()), Math.max(1, host.getHeight()));
+            getLocationInWindow(mCanvasAt);
+            host.getLocationInWindow(mHostAt);
+            int saved = canvas.save();
+            canvas.translate(mCanvasAt[0] - mHostAt[0], mCanvasAt[1] - mHostAt[1]);
+            drawGhost(canvas);
+            canvas.restoreToCount(saved);
+        }
+
+        @Override
+        public void setAlpha(int alpha) {}
+
+        @Override
+        public void setColorFilter(@Nullable android.graphics.ColorFilter colorFilter) {}
+
+        @Override
+        @SuppressWarnings("deprecation")
+        public int getOpacity() {
+            return android.graphics.PixelFormat.TRANSLUCENT;
+        }
+    }
+
     // ---- The drag ------------------------------------------------------------------------------
 
     /**
@@ -3531,6 +3737,7 @@ public final class LayoutCanvasView extends View {
         ViewParent parent = getParent();
         if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
         mHoverSlot = MiniatureDragPolicy.slotUnder(mSlots, x, y);
+        attachLiftOverlay();
         refreshDropShape();
         startMotion();
         invalidate();
@@ -3626,6 +3833,7 @@ public final class LayoutCanvasView extends View {
         mGhostMorph.reset(0f);
         mLastFrameNanos = 0L;
         removeCallbacks(mMotionTick);
+        detachLiftOverlay();
         if (lifted) {
             // The selection's destinations come back once nothing is in the air.
             computeSelectionTargets();
@@ -3739,11 +3947,24 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * The move control's square, in view pixels, while the selection has somewhere to go: outside
-     * the selected bar on its inner side (towards the pane), near its trailing end so it is clear
-     * of the resize handle on the middle; for the keyboard above its trailing end. Kept inside the
-     * view. The canvas is pinned left to right, so "trailing" is the right end. Null with nothing
-     * selected, while a gesture is under way, or with no destination.
+     * Where the move control may stand outside the phone, in this view's coordinates: the
+     * editor's own area round the frame, past the system bars and above the sheet. It may reach
+     * past the view's bounds; the host stands the control in a parent that does. Null or empty
+     * leaves the control nothing outside the phone, and it falls back to the bar's outer edge.
+     */
+    public void setMoveControlRoom(@Nullable RectF roomInView) {
+        if (roomInView == null) mMoveControlRoom.setEmpty();
+        else mMoveControlRoom.set(roomInView);
+    }
+
+    /**
+     * The move control's square, in view pixels, while the selection has somewhere to go. It
+     * never stands on the selected element or any other: first choice is the gutter outside the
+     * phone's frame, level with the bar — left or right of the frame for a row (and the
+     * keyboard), above or below it for a rail — on whichever side has more room
+     * ({@link #setMoveControlRoom}); with no room out there, on the bar's outer edge at its
+     * trailing end, away from the pane. The canvas is pinned left to right, so "trailing" is the
+     * right end. Null with nothing selected, while a gesture is under way, or with no destination.
      */
     @Nullable
     public RectF moveControlRect() {
@@ -3754,32 +3975,64 @@ public final class LayoutCanvasView extends View {
         float size = dp(MOVE_CONTROL_DP);
         float half = size / 2f;
         float gap = dp(MOVE_CONTROL_GAP_DP);
-        float alongX = Math.min(half, bar.width() / 4f);
-        float alongY = Math.min(half, bar.height() / 4f);
+        boolean rail = block != Block.KEYBOARD && isBarVertical(block);
+        RectF frame = mFrameRect.isEmpty() ? new RectF(0f, 0f, getWidth(), getHeight())
+            : mFrameRect;
+        RectF room = mMoveControlRoom;
+        if (!room.isEmpty()) {
+            if (!rail) {
+                float before = frame.left - room.left;
+                float after = room.right - frame.right;
+                float cy = clampCentre(bar.centerY(), room.top, room.bottom, half);
+                boolean fitsAfter = after >= size + gap && room.height() >= size;
+                boolean fitsBefore = before >= size + gap && room.height() >= size;
+                if (fitsAfter && (after >= before || !fitsBefore))
+                    return square(frame.right + gap + half, cy, half);
+                if (fitsBefore) return square(frame.left - gap - half, cy, half);
+            } else {
+                float above = frame.top - room.top;
+                float below = room.bottom - frame.bottom;
+                float cx = clampCentre(bar.centerX(), room.left, room.right, half);
+                boolean fitsBelow = below >= size + gap && room.width() >= size;
+                boolean fitsAbove = above >= size + gap && room.width() >= size;
+                if (fitsBelow && (below >= above || !fitsAbove))
+                    return square(cx, frame.bottom + gap + half, half);
+                if (fitsAbove) return square(cx, frame.top - gap - half, half);
+            }
+        }
+        // No room outside the phone: on the bar's outer edge, its outer side flush with the bar's,
+        // at the trailing end, so it reaches away from the pane rather than over it.
+        Edge outer = block == Block.KEYBOARD ? Edge.BOTTOM : edgeOfBlock(block);
         float cx;
         float cy;
-        Edge inner = block == Block.KEYBOARD ? Edge.TOP : innerEdgeOf(block);
-        switch (inner) {
-            case BOTTOM:
-                cx = bar.right - alongX - half;
-                cy = bar.bottom + gap + half;
-                break;
-            case RIGHT:
-                cx = bar.right + gap + half;
-                cy = bar.bottom - alongY - half;
+        switch (outer) {
+            case TOP:
+                cx = bar.right - half;
+                cy = bar.top + half;
                 break;
             case LEFT:
-                cx = bar.left - gap - half;
-                cy = bar.bottom - alongY - half;
+                cx = bar.left + half;
+                cy = bar.bottom - half;
                 break;
-            case TOP:
+            case RIGHT:
+            case BOTTOM:
             default:
-                cx = bar.right - alongX - half;
-                cy = bar.top - gap - half;
+                cx = bar.right - half;
+                cy = bar.bottom - half;
                 break;
         }
         cx = Math.max(half, Math.min(getWidth() - half, cx));
         cy = Math.max(half, Math.min(getHeight() - half, cy));
+        return square(cx, cy, half);
+    }
+
+    private static float clampCentre(float centre, float from, float to, float half) {
+        if (to - from < 2f * half) return (from + to) / 2f;
+        return Math.max(from + half, Math.min(to - half, centre));
+    }
+
+    @NonNull
+    private static RectF square(float cx, float cy, float half) {
         return new RectF(cx - half, cy - half, cx + half, cy + half);
     }
 

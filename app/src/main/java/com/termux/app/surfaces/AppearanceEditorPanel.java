@@ -47,7 +47,8 @@ import com.termux.R;
  * the only hide drop target, whose tap opens the hidden tiles in Row B's place; Appearance's Row B
  * carries the global Blur, Opacity and Grain at the Custom stop with nothing tapped, and the
  * keyboard's Blur with its "Keyboard theme" door. Selected segments wear primaryContainer and
- * onPrimaryContainer.</p>
+ * onPrimaryContainer. While the keyboard is selected its type chips and Key radius take Layout's
+ * Row B in the same way.</p>
  */
 final class AppearanceEditorPanel {
 
@@ -125,6 +126,11 @@ final class AppearanceEditorPanel {
     private final Slider mCorners;
     private final TextView mMarginLabel;
     private final Slider mMargin;
+    /** The keyboard's tools in Row B: its type chips and Key radius, lent to Layout mode. */
+    private final View mKeyboardTools;
+    private final ChipGroup mKeyboardForms;
+    private final TextView mKeyRadiusLabel;
+    private final Slider mKeyRadius;
 
     /** Whether Layout mode's rows are showing in place of Appearance's. */
     private boolean mLayoutMode;
@@ -134,6 +140,8 @@ final class AppearanceEditorPanel {
     private boolean mLegibilityEnabled = true;
     /** Whether the hidden tiles stand in Layout's Row B, in Corner radius and Margin's place. */
     private boolean mHiddenTilesOpen;
+    /** Whether the keyboard's tools stand there (the keyboard is selected); the tiles win. */
+    private boolean mKeyboardToolsShown;
 
     @Nullable private Listener mListener;
     private boolean mRestating;
@@ -175,6 +183,10 @@ final class AppearanceEditorPanel {
         mCorners = root.findViewById(R.id.appearance_editor_corners);
         mMarginLabel = root.findViewById(R.id.appearance_editor_margin_label);
         mMargin = root.findViewById(R.id.appearance_editor_margin);
+        mKeyboardTools = root.findViewById(R.id.layout_editor_keyboard_tools);
+        mKeyboardForms = root.findViewById(R.id.layout_editor_keyboard_forms);
+        mKeyRadiusLabel = root.findViewById(R.id.layout_editor_key_radius_label);
+        mKeyRadius = root.findViewById(R.id.layout_editor_key_radius);
         // The groups' members, stated here as well as in the layout: a Group resolves its XML
         // names lazily, and the mode is applied before the panel is ever measured or attached.
         mAppearanceGroup.setReferencedIds(new int[] {R.id.appearance_editor_look,
@@ -257,7 +269,7 @@ final class AppearanceEditorPanel {
      */
     int measureTallest(boolean layout, int widthPx) {
         if (layout)
-            return measureFor(true, widthPx);
+            return measureLayoutTallest(widthPx);
         boolean shown = mLayoutMode;
         boolean rowShown = mRow2Shown;
         mRow2Shown = true;
@@ -288,6 +300,28 @@ final class AppearanceEditorPanel {
         for (TextView label : labels)
             label.setMinLines(1);
         mRow2Shown = rowShown;
+        applyGroups(shown);
+        return height;
+    }
+
+    /**
+     * Layout mode's height: Row B as Corner radius and Margin, and as the keyboard's tools in
+     * their place, whichever stands taller, so the sheet does not move when the keyboard is
+     * selected. The state showing is restored before returning.
+     */
+    private int measureLayoutTallest(int widthPx) {
+        boolean shown = mLayoutMode;
+        boolean tools = mKeyboardToolsShown;
+        boolean tiles = mHiddenTilesOpen;
+        mHiddenTilesOpen = false;
+        mKeyboardToolsShown = false;
+        applyGroups(true);
+        int height = measureNow(widthPx);
+        mKeyboardToolsShown = true;
+        applyLayoutRow2();
+        height = Math.max(height, measureNow(widthPx));
+        mKeyboardToolsShown = tools;
+        mHiddenTilesOpen = tiles;
         applyGroups(shown);
         return height;
     }
@@ -552,22 +586,28 @@ final class AppearanceEditorPanel {
     }
 
     /**
-     * Layout's Row B: Corner radius and Margin, or the hidden tiles in their place. Corner radius
-     * and Margin go INVISIBLE rather than GONE while the tiles are open, so the row keeps their
-     * height and the sheet never moves.
+     * Layout's Row B: Corner radius and Margin, or in their place the hidden tiles, or the
+     * keyboard's tools while the keyboard is selected (the tiles win while both would). Corner
+     * radius and Margin go INVISIBLE rather than GONE while either stands there, so the row keeps
+     * their height and the sheet never moves.
      */
     private void applyLayoutRow2() {
         boolean tiles = mLayoutMode && mHiddenTilesOpen;
-        int shape = !mLayoutMode ? View.GONE : tiles ? View.INVISIBLE : View.VISIBLE;
+        boolean tools = mLayoutMode && mKeyboardToolsShown && !tiles;
+        boolean swapped = tiles || tools;
+        int shape = !mLayoutMode ? View.GONE : swapped ? View.INVISIBLE : View.VISIBLE;
         for (View view : new View[] {mCornersLabel, mMarginLabel, mCorners, mMargin}) {
             if (view.getVisibility() != shape)
                 view.setVisibility(shape);
         }
-        mCorners.setEnabled(mLayoutMode && !tiles);
-        mMargin.setEnabled(mLayoutMode && !tiles);
+        mCorners.setEnabled(mLayoutMode && !swapped);
+        mMargin.setEnabled(mLayoutMode && !swapped);
         int tileVisibility = tiles ? View.VISIBLE : View.GONE;
         if (mHiddenTiles.getVisibility() != tileVisibility)
             mHiddenTiles.setVisibility(tileVisibility);
+        int toolsVisibility = tools ? View.VISIBLE : View.GONE;
+        if (mKeyboardTools.getVisibility() != toolsVisibility)
+            mKeyboardTools.setVisibility(toolsVisibility);
     }
 
     boolean isLayoutMode() {
@@ -611,6 +651,40 @@ final class AppearanceEditorPanel {
 
     boolean isHiddenTilesOpen() {
         return mHiddenTilesOpen;
+    }
+
+    /**
+     * Puts the keyboard's tools in Row B's place while the keyboard is selected, or brings Corner
+     * radius and Margin back (DECISIONS item 6). The sheet's height does not change either way.
+     */
+    void setKeyboardToolsShown(boolean shown) {
+        if (mKeyboardToolsShown == shown)
+            return;
+        mKeyboardToolsShown = shown;
+        applyLayoutRow2();
+    }
+
+    /** Whether the keyboard's tools stand in Row B now. */
+    boolean isKeyboardToolsShown() {
+        return mKeyboardTools.getVisibility() == View.VISIBLE;
+    }
+
+    /** The keyboard's tools, the row holding its type chips and Key radius. */
+    @NonNull View keyboardTools() {
+        return mKeyboardTools;
+    }
+
+    /** The keyboard's type chips: Docked, Floating and Split. */
+    @NonNull ChipGroup keyboardForms() {
+        return mKeyboardForms;
+    }
+
+    @NonNull TextView keyRadiusLabel() {
+        return mKeyRadiusLabel;
+    }
+
+    @NonNull Slider keyRadius() {
+        return mKeyRadius;
     }
 
     // ------------------------------------------------------------------------- restatements

@@ -269,7 +269,7 @@ public class LayoutCanvasV2Test {
     }
 
     @Test
-    public void theMoveControlStandsOutsideTheSelectedBarAtTheTouchTargetSize() {
+    public void theMoveControlStandsOnTheBarsOuterEdgeWithNoRoomOutsideThePhone() {
         LayoutCanvasView view = editorCanvas(bottomBars());
         assertNull("nothing selected, no control", view.moveControlRect());
         view.setSelectedBlock(LayoutCanvasView.Block.APPS_ROW);
@@ -280,9 +280,78 @@ public class LayoutCanvasV2Test {
         float density = view.getResources().getDisplayMetrics().density;
         assertEquals(48f * density, control.width(), 0.5f);
         assertEquals(48f * density, control.height(), 0.5f);
-        assertTrue("above a bottom bar, toward the pane", control.bottom <= bar.top + 0.5f);
+        assertTrue("flush with a bottom bar's outer side, away from the pane",
+            control.bottom >= Math.min(bar.bottom, view.getHeight()) - 0.5f);
         view.setSelectedBlock(LayoutCanvasView.Block.CANVAS);
         assertNull("the pane has no move control", view.moveControlRect());
+    }
+
+    /**
+     * With room round the phone (the editor's gutter), the control stands outside the frame:
+     * beside it, level with a row, and never on the selected bar or any other element.
+     */
+    @Test
+    public void theMoveControlStandsInTheGutterOutsideThePhone() {
+        LayoutCanvasView view = editorCanvas(bottomBars());
+        float density = view.getResources().getDisplayMetrics().density;
+        float gutter = 64f * density;
+        view.setMoveControlRoom(new RectF(-gutter, 0f, view.getWidth() + gutter,
+            view.getHeight() + gutter));
+        for (LayoutCanvasView.Block block : new LayoutCanvasView.Block[] {
+                LayoutCanvasView.Block.APPS_ROW, LayoutCanvasView.Block.STATUS_BAR,
+                LayoutCanvasView.Block.KEYBOARD}) {
+            view.setSelectedBlock(block);
+            RectF control = view.moveControlRect();
+            if (control == null) continue;
+            RectF frame = view.frameRect();
+            assertNotNull(frame);
+            assertFalse(block + ": outside the phone's frame", RectF.intersects(control, frame));
+            RectF bar = view.blockRect(block);
+            assertNotNull(bar);
+            assertTrue(block + ": level with the row", control.centerY() >= bar.top - 0.5f
+                && control.centerY() <= bar.bottom + 0.5f
+                || control.top <= 0.5f || control.bottom >= view.getHeight() - 0.5f);
+            for (LayoutCanvasView.Block other : LayoutCanvasView.Block.values()) {
+                RectF rect = view.blockRect(other);
+                if (rect != null && !rect.isEmpty())
+                    assertFalse(block + "'s control on " + other, RectF.intersects(control, rect));
+            }
+        }
+    }
+
+    /**
+     * The destination guides are the accepted zones' outlines only, cut so that none crosses
+     * another element: no guide meets the keyboard or another bar, selected or lifted.
+     */
+    @Test
+    public void theDestinationGuidesNeverCrossAnotherElement() {
+        LayoutCanvasView view = editorCanvas(bottomBars());
+        view.setSelectedBlock(LayoutCanvasView.Block.APPS_ROW);
+        List<RectF> selected = view.guideRects();
+        assertFalse("a selected bar shows where it can go", selected.isEmpty());
+        assertGuidesClear(view, selected, LayoutCanvasView.Block.APPS_ROW);
+        view.setSelectedBlock(null);
+        lift(view, LayoutCanvasView.Block.APPS_ROW);
+        assertTrue(view.isLifting());
+        List<RectF> lifted = view.guideRects();
+        assertFalse("a lifted bar shows its accepted destinations", lifted.isEmpty());
+        assertGuidesClear(view, lifted, LayoutCanvasView.Block.APPS_ROW);
+        view.cancelLift();
+    }
+
+    private static void assertGuidesClear(LayoutCanvasView view, List<RectF> guides,
+                                          LayoutCanvasView.Block moving) {
+        for (RectF guide : guides) {
+            for (LayoutCanvasView.Block other : LayoutCanvasView.Block.values()) {
+                if (other == moving || other == LayoutCanvasView.Block.CANVAS) continue;
+                RectF rect = view.blockRect(other);
+                if (rect == null || rect.isEmpty()) continue;
+                RectF overlap = new RectF();
+                boolean meets = overlap.setIntersect(guide, rect)
+                    && overlap.width() > 0.5f && overlap.height() > 0.5f;
+                assertFalse("a guide " + guide + " crosses " + other + " " + rect, meets);
+            }
+        }
     }
 
     // ---- Item 8: placeholder app icons -----------------------------------------------------------
