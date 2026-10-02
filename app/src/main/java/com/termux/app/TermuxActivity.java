@@ -3130,7 +3130,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         // The lone pane's frame is the shared rim, the same border the status bar, dock and
-        // keyboard wear (hairline or gradient, per preset). The Material active colour belongs to
+        // keyboard wear (the dock's gradient, under every look). The Material active colour belongs to
         // the focused pane of a split only (PaneBorderStyle).
         borderView.setBackground(mChrome.glass().rimDrawable(cornerRadiusPx));
         if (borderView instanceof TerminalGlassFrameView) {
@@ -3469,7 +3469,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public boolean paneGlassRimWanted() {
-                return mChrome.glass().look().gradientRim;
+                return true; // every look wears the dock's gradient rim
             }
 
             @Override @Nullable public Drawable paneGlassRim(float radiusPx) {
@@ -5214,7 +5214,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int strokeEdges = innerRim ? chromeRimEdges(
                 ids.toArray(new com.termux.app.place.ChromeShape.PieceId[0]))
                 : com.termux.app.chrome.ChromeEdgeRule.NONE;
-            surface.setBackground(mChrome.glass().rimDrawable(0f, strokeEdges));
+            surface.setBackground(mChrome.glass().rimUnderGlass(0f, strokeEdges));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                 // Clip the dock to its slice of the frame so the reactive edge-glow's outward blur
                 // can't spill past the dock edges and make it look wider.
@@ -5237,7 +5237,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         // Barely-there containing stroke; the AGSL shader draws the dark glass contour + bevel at the
         // edge, so a visible outline here would read as a drawn border ("inside rim") over the glass.
-        Drawable outline = mChrome.glass().rimDrawable(resolveDockCapsuleCornerRadiusPx(surfaceHeightPx));
+        Drawable outline = mChrome.glass().rimUnderGlass(resolveDockCapsuleCornerRadiusPx(surfaceHeightPx));
         surface.setBackground(outline);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             surface.setOutlineProvider(ViewOutlineProvider.BACKGROUND);

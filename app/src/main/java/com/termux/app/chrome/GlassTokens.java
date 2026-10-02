@@ -12,6 +12,13 @@ public final class GlassTokens {
     public static final int WASH_ALPHA = 13;
     @ColorInt public static final int RIM_START = 0x40FFFFFF;   // white 0.25
     @ColorInt public static final int RIM_END = 0x08FFFFFF;     // white 0.03
+    /**
+     * The same gradient for a rim drawn over its glass: the dock's rim sits under its blurred
+     * backdrop, which lets about 0.4 of it through (measured on Waydroid under Mist, 2026-10-02),
+     * and every other surface's rim is matched to what the dock shows.
+     */
+    @ColorInt public static final int RIM_OVER_GLASS_START = 0x1AFFFFFF;   // white 0.10
+    @ColorInt public static final int RIM_OVER_GLASS_END = 0x03FFFFFF;     // white 0.01
 
     @ColorInt public static final int RIM_BASE = 0x3DFFFFFF;
     @ColorInt public static final int RIM_LIGHT_TOP = 0x7DFFFFFF;

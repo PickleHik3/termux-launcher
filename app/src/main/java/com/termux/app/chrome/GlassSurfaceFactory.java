@@ -339,14 +339,14 @@ public final class GlassSurfaceFactory {
     }
 
     /**
-     * The rim in this factory's look: the hairline above, or the diagonal white gradient. Every
-     * surface's rim goes through here, so the look's choice is made once.
+     * The rim every surface wears over its glass, under every look: the dock's gradient as the dock
+     * shows it (white 0.10 at the top-left to 0.01), so the keyboard, status bar, panes and cards
+     * read like the dock. Every such rim goes through here.
      */
     @NonNull
     public Drawable rimDrawable(float cornerRadiusPx) {
-        if (!look().gradientRim) return rim(cornerRadiusPx);
         return new GradientRimDrawable(cornerRadiusPx, Math.max(1, Math.round(mSurfaces.dpToPx(1))),
-            GlassLook.RIM_START, GlassLook.RIM_END);
+            GlassTokens.RIM_OVER_GLASS_START, GlassTokens.RIM_OVER_GLASS_END);
     }
 
     /**
@@ -356,9 +356,30 @@ public final class GlassSurfaceFactory {
      */
     @Nullable
     public Drawable rimDrawable(float cornerRadiusPx, int strokeEdges) {
+        return alongEdges(rimDrawable(cornerRadiusPx), cornerRadiusPx, strokeEdges);
+    }
+
+    /**
+     * The dock's rim, which is its host's background and so draws under the dock's blurred
+     * backdrop: the full gradient, which the backdrop softens to what {@link #rimDrawable(float)}
+     * draws over glass. Its outline is the capsule the dock clips to.
+     */
+    @NonNull
+    public Drawable rimUnderGlass(float cornerRadiusPx) {
+        return new GradientRimDrawable(cornerRadiusPx, Math.max(1, Math.round(mSurfaces.dpToPx(1))),
+            GlassTokens.RIM_START, GlassTokens.RIM_END);
+    }
+
+    /** {@link #rimUnderGlass(float)} along {@code strokeEdges} only, as {@link #rimDrawable(float, int)}. */
+    @Nullable
+    public Drawable rimUnderGlass(float cornerRadiusPx, int strokeEdges) {
+        return alongEdges(rimUnderGlass(cornerRadiusPx), cornerRadiusPx, strokeEdges);
+    }
+
+    @Nullable
+    private Drawable alongEdges(@NonNull Drawable rim, float cornerRadiusPx, int strokeEdges) {
         int edges = strokeEdges & ChromeEdgeRule.ALL;
         if (edges == ChromeEdgeRule.NONE) return null;
-        Drawable rim = rimDrawable(cornerRadiusPx);
         if (edges == ChromeEdgeRule.ALL) return rim;
         int reachPx = Math.round(Math.max(0f, cornerRadiusPx) + mSurfaces.dpToPx(2));
         return new OpenEdgeDrawable(rim, ChromeEdgeRule.ALL & ~edges, reachPx);
