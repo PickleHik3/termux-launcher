@@ -84,7 +84,7 @@
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
             android:ellipsize="none"
-            android:text="@string/action_appearance_editor" />
+            android:text="@string/appearance_editor_mode_look" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_mode_layout"

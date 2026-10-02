@@ -53,4 +53,6 @@
     <string name="settings_appearance_editor_summary">Try a Look and tune it live, on the home screen</string>
     <string name="settings_look_appearance_editor_title">Appearance editor</string>
     <string name="settings_look_appearance_editor_summary">Looks, glass, opacity and text contrast, previewed on the home screen</string>
+    <!-- The mode pill's first segment: the Looks slider and the tune row. Short on purpose: the pill shares its row with Undo and Done at 360dp. -->
+    <string name="appearance_editor_mode_look">Look</string>
 </resources>
