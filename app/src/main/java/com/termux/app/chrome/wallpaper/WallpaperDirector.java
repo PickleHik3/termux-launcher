@@ -22,6 +22,16 @@ public final class WallpaperDirector {
     public static final int MAX_FPS = 30;
     /** Rate under light thermal pressure or low battery while discharging. */
     public static final int PRESSURE_FPS = 15;
+    /**
+     * The self-check's step-down ladder (SPEC §9.4): tier 0 is full, each failed budget window
+     * moves one tier down, and failing the last tier is a kill. The rate per tier; the effective
+     * rate is never above the pressure rate either.
+     */
+    static final int[] TIER_FPS = {30, 15, 15, 10};
+    /** The lowest tier; a failed window here is a kill. */
+    public static final int MAX_TIER = TIER_FPS.length - 1;
+    /** From this tier the renderer draws its cheaper source resolution (the /4 node). */
+    public static final int LOW_RES_FROM_TIER = 2;
     /** Moment slots the shader has. */
     public static final int MAX_MOMENTS = 2;
 
@@ -171,6 +181,9 @@ public final class WallpaperDirector {
     private long lastFrameNanos = -1;
     private boolean lastFramePlayed;
 
+    /** The step-down tier; written on the UI thread, read by the status route too. */
+    private volatile int tier;
+
     private int mode = PLAY;
     private long lockStartNanos;
     private boolean lockForced;
@@ -204,6 +217,33 @@ public final class WallpaperDirector {
     /** Sets the phone's conditions; call whenever any of them changes. */
     public void setConditions(Conditions c, long nowNanos) {
         cond = c;
+    }
+
+    /** The step-down tier, 0 = full. */
+    public int tier() {
+        return tier;
+    }
+
+    /** Back to the top tier: a new chance (new background, new visible session). */
+    public void resetTier() {
+        tier = 0;
+    }
+
+    /** One tier down. @return false when already at the lowest, which the host treats as a kill */
+    public boolean stepDown() {
+        if (tier >= MAX_TIER) return false;
+        tier++;
+        return true;
+    }
+
+    /** The rate a tier allows, before pressure caps it. */
+    public static int tierFps(int tier) {
+        return TIER_FPS[Math.max(0, Math.min(MAX_TIER, tier))];
+    }
+
+    /** Whether a tier draws the cheaper source resolution. */
+    public static boolean tierLowRes(int tier) {
+        return tier >= LOW_RES_FROM_TIER;
     }
 
     /** Replaces the palette. Only the host calls this; the Director never changes it itself. */
@@ -398,14 +438,14 @@ public final class WallpaperDirector {
     }
 
     /** 0 when the gate is closed or any pause row holds, else the rate for the current pressure. */
-    private static int fps(Conditions c) {
+    private int fps(Conditions c) {
         if (!gateOpen(c)) return 0;
         if (c.killSwitch || !c.rendererHealthy || !c.visible || !c.screenOn || c.lazyMode
             || c.powerSave || c.reducedMotion || c.thermal == Thermal.MODERATE_OR_WORSE) {
             return 0;
         }
-        if (c.thermal == Thermal.LIGHT || c.batteryLowDischarging) return PRESSURE_FPS;
-        return MAX_FPS;
+        int pressure = (c.thermal == Thermal.LIGHT || c.batteryLowDischarging) ? PRESSURE_FPS : MAX_FPS;
+        return Math.min(pressure, tierFps(tier));
     }
 
     private void beginUnlock(long startNanos) {

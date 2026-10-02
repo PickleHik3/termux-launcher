@@ -28,6 +28,10 @@ import com.termux.shared.logger.Logger;
  * not on screen, and it goes on screen when N lands. That keeps the clock independent of whether
  * the director reuses its {@code Frame} object.</p>
  *
+ * <p>Self-check: a failed budget window steps the director down a tier (30 to 15 fps, then the
+ * cheaper source resolution, then 10 fps) and rebuilds the renderer at it; only the lowest tier
+ * failing, or a render exception, ends in {@link #die}.</p>
+ *
  * <p>The host feeds the director its inputs and calls {@link #kick} when a condition changed; it
  * owns no rules. The renderer is released 30 s after {@link #stop} and on {@link #trimMemory},
  * and rebuilt lazily by the next frame. All methods run on the main thread.</p>
@@ -51,7 +55,10 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
         /** The radii, in dp, that the visible surfaces draw right now (duplicates welcome). */
         @NonNull float[] liveRadiiDp();
 
-        /** A render failed or was too slow: the clock is dead for the session; the still shows. */
+        /**
+         * A render threw, or the lowest tier still failed a budget window: the clock is dead until
+         * {@link AnimatedWallpaperClock#revive}; the still shows.
+         */
         void onRendererUnhealthy();
     }
 
@@ -118,6 +125,7 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
 
     /** Begin (or resume) following the director; the launcher is visible. */
     public void start() {
+        if (!mRunning) restartWarmup();
         mRunning = true;
         mHandler.removeCallbacks(mRelease);
         post();
@@ -139,13 +147,31 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
         if (mRunning) post();
     }
 
+    /** The screen came on or the device unlocked: the renderer's self-check ignores the next renders. */
+    public void restartWarmup() {
+        LiveWallpaperRenderer renderer = mRenderer;
+        if (renderer != null) renderer.restartWarmup();
+    }
+
+    /**
+     * A new chance after a kill: the clock lives again, from the top tier with a fresh renderer.
+     * The host calls it at the next visible session.
+     */
+    public void revive() {
+        if (!mDead) return;
+        mDead = false;
+        mDirector.resetTier();
+        Logger.logInfo(TAG, "Live wallpaper retried from tier 0");
+        kick();
+    }
+
     /** Low memory: let the renderer and its rings go now; the next frame rebuilds them. */
     public void trimMemory() {
         mHandler.removeCallbacks(mRelease);
         releaseRenderer();
     }
 
-    /** True once a render failed or was too slow; nothing will play again this session. */
+    /** True once the renderer was killed; nothing plays until {@link #revive}. */
     public boolean isDead() {
         return mDead;
     }
@@ -194,8 +220,9 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
                 mBackdropShaders[0] = WallpaperUniforms.newShader(wallpaper);
                 mBackdropShaders[1] = WallpaperUniforms.newShader(wallpaper);
             }
+            int tier = mDirector.tier();
             renderer = new LiveWallpaperRenderer(mDensity, WallpaperUniforms.newShader(wallpaper),
-                mFrames);
+                mFrames, tier, WallpaperDirector.tierLowRes(tier));
         } catch (Throwable t) {
             Logger.logStackTraceWithMessage(TAG, "Live wallpaper shader failed", t);
             die();
@@ -215,6 +242,10 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
             die();
             return;
         }
+        if (renderer.slow()) {
+            stepDown();
+            return;
+        }
         int shader = mPendingShader;
         if (shader < 0) return;
         Trace.beginSection("LiveWallpaper.publish");
@@ -229,7 +260,21 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
         }
     }
 
-    /** The renderer is unusable: pause for the session and show the still. */
+    /** A budget window failed: one tier down with a fresh renderer, or a kill at the lowest. */
+    private void stepDown() {
+        int from = mDirector.tier();
+        if (!mDirector.stepDown()) {
+            die();
+            return;
+        }
+        Logger.logInfo(TAG, "Live wallpaper too slow at tier " + from + "; stepping down to tier "
+            + mDirector.tier() + " (" + WallpaperDirector.tierFps(mDirector.tier()) + " fps"
+            + (WallpaperDirector.tierLowRes(mDirector.tier()) ? ", reduced resolution" : "") + ")");
+        releaseRenderer();
+        kick();
+    }
+
+    /** The renderer is unusable: pause until the next visible session and show the still. */
     private void die() {
         if (mDead) return;
         mDead = true;
@@ -237,7 +282,7 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
             mChoreographer.removeFrameCallback(this);
             mPosted = false;
         }
-        Logger.logWarn(TAG, "Live wallpaper stopped for this session; showing the still");
+        Logger.logWarn(TAG, "Live wallpaper killed at tier " + mDirector.tier() + "; showing the still");
         releaseRenderer();
         mHost.onRendererUnhealthy();
     }
