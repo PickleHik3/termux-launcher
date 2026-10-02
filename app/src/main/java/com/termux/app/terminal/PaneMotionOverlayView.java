@@ -80,6 +80,21 @@ public final class PaneMotionOverlayView extends View {
 
     private final Choreographer.FrameCallback mFrameCallback = this::onFrame;
 
+    private CursorTrailStyle mCursorTrailStyle = CursorTrailStyle.DEFAULT;
+    private final CursorTrailParticles mParticles = new CursorTrailParticles();
+    private final CursorTrailMotionBlur mMotionBlur = new CursorTrailMotionBlur();
+    private final CursorTrailComet mComet = new CursorTrailComet();
+    private final float[] mParticleBuf = new float[CursorTrailParticles.OUT_SIZE];
+    private boolean mParticlesWereAlive;
+    private boolean mCometWasActive;
+    /**
+     * Seconds on a clock that restarts whenever no particles live, so float precision never
+     * degrades with device uptime. Starts at 1 s so a move's time is always above 0.
+     */
+    private long mClockBaseMs;
+    private long mFrameMs;
+    private float mFrameSeconds;
+
     /** App defaults, per the design brief: delay 10ms, decay 0.1/0.4s, threshold 2/2 cells. */
     private static final KittyCursorTrail.Config DEFAULT_TRAIL_CONFIG =
         new KittyCursorTrail.Config(10L, 0.10f, 0.40f, 2, 2);
@@ -167,6 +182,21 @@ public final class PaneMotionOverlayView extends View {
         mCursorTrailConfig = config;
     }
 
+    /** Picks how the trail looks; resets any particles or comet in flight. */
+    public void setCursorTrailStyle(@NonNull CursorTrailStyle style) {
+        if (mCursorTrailStyle == style) return;
+        mCursorTrailStyle = style;
+        resetStyleState();
+        invalidate();
+    }
+
+    private void resetStyleState() {
+        mParticles.reset();
+        mComet.reset();
+        mParticlesWereAlive = false;
+        mCometWasActive = false;
+    }
+
     /**
      * The single on/off switch for the whole trail: the preference, power save and reduce-motion
      * folded together by the caller. Off means no trail at all, for either kind of move.
@@ -176,6 +206,7 @@ public final class PaneMotionOverlayView extends View {
         mCursorTrailEnabled = enabled;
         if (!enabled) {
             mCursorTrail.reset();
+            resetStyleState();
             mCursorTargetValid = false;
             stopCursorTrailFrames();
             invalidate();
@@ -242,19 +273,55 @@ public final class PaneMotionOverlayView extends View {
         // {@code TerminalEmulator#monotonicMillis()} stamps getCursorPositionChangedAtMillis() on, so the
         // delay gate still compares like with like.
         long now = frameTimeNanos / 1_000_000L;
+        mFrameMs = now;
         boolean needsFrame = mCursorTrail.update(now, mCursorTarget.left, mCursorTarget.top,
             mCursorTarget.right, mCursorTarget.bottom, mCursorTarget.dectcemOn,
             mCursorTarget.positionChangedAtMillis, false, mCursorTarget.cellWidthPx,
             mCursorTarget.cellHeightPx, mCursorTrailConfig);
         previous.union(cursorTrailBounds());
         invalidateRect(previous);
-        if (needsFrame) requestCursorTrailFrame();
+        boolean styleLive = updateStyleEffects(now);
+        if (needsFrame || styleLive) requestCursorTrailFrame();
+    }
+
+    /** Feeds accepted moves to the particle and comet styles; true while either still shows. */
+    private boolean updateStyleEffects(long nowMs) {
+        CursorTrailStyle style = mCursorTrailStyle;
+        boolean particleStyle = style == CursorTrailStyle.RAILGUN
+            || style == CursorTrailStyle.TORPEDO || style == CursorTrailStyle.PIXIEDUST;
+        boolean comet = style == CursorTrailStyle.COMET;
+        if (!particleStyle && !comet) return false;
+        if (!mParticlesWereAlive && !mComet.active()) mClockBaseMs = nowMs - 1000L;
+        mFrameSeconds = (nowMs - mClockBaseMs) / 1000f;
+        boolean moved = mCursorTrail.moveStartedOnLastUpdate();
+        if (moved && particleStyle) {
+            mParticles.record(mCursorTrail.moveFromEdge(0), mCursorTrail.moveFromEdge(1),
+                mCursorTrail.moveFromEdge(2), mCursorTrail.moveFromEdge(3),
+                mCursorTrail.moveToEdge(0), mCursorTrail.moveToEdge(1),
+                mCursorTrail.moveToEdge(2), mCursorTrail.moveToEdge(3), mFrameSeconds);
+        }
+        if (moved && comet) {
+            mComet.start(mCursorTrail.moveFromEdge(0), mCursorTrail.moveFromEdge(1),
+                mCursorTrail.moveFromEdge(2), mCursorTrail.moveFromEdge(3),
+                mCursorTrail.moveToEdge(0), mCursorTrail.moveToEdge(1),
+                mCursorTrail.moveToEdge(2), mCursorTrail.moveToEdge(3), nowMs);
+        }
+        boolean particlesAlive = particleStyle && mParticles.alive(mFrameSeconds);
+        boolean cometAlive = comet && mComet.alive(nowMs);
+        // Particles can wander anywhere near the path; repaint the whole layer while they live,
+        // and once more on the frame they die so the last ones are erased.
+        if (particlesAlive || mParticlesWereAlive) invalidate();
+        if (cometAlive || mCometWasActive) invalidateRect(mComet.bounds());
+        mParticlesWereAlive = particlesAlive;
+        mCometWasActive = cometAlive;
+        return particlesAlive || cometAlive;
     }
 
     /** Drop everything in flight, for a re-render that invalidates the coordinates we captured. */
     public void clearMotion() {
         stopCursorTrailFrames();
         mCursorTrail.reset();
+        resetStyleState();
         mCursorTargetValid = false;
         for (Ghost ghost : new ArrayList<>(mGhosts)) {
             if (ghost.animator != null) ghost.animator.cancel();
@@ -311,19 +378,52 @@ public final class PaneMotionOverlayView extends View {
             canvas.clipOutRect(mCursorTarget.left, mCursorTarget.top,
                 mCursorTarget.right, mCursorTarget.bottom);
         }
+        int color = mCursorTrailConfig.hasColor ? mCursorTrailConfig.color : mCursorTarget.color;
+        int baseAlpha = Color.alpha(color) > 0 ? Color.alpha(color) : 255;
+        float opacity = clamp01(mCursorTrail.opacity());
+        CursorTrailStyle style = mCursorTrailStyle;
+        if (style == CursorTrailStyle.COMET) {
+            mComet.draw(canvas, color, opacity, mFrameMs, getResources().getDisplayMetrics().density);
+        } else {
+            boolean blurred = style == CursorTrailStyle.MOTION_BLUR
+                && mMotionBlur.draw(canvas, mCursorTrail, color, baseAlpha / 255f * opacity,
+                    mCursorTarget.left, mCursorTarget.top, mCursorTarget.right,
+                    mCursorTarget.bottom);
+            if (!blurred) drawQuad(canvas, color, baseAlpha, opacity);
+            if (style == CursorTrailStyle.RAILGUN) {
+                drawParticles(canvas, CursorTrailParticles.MODE_RAILGUN, color, baseAlpha, opacity);
+            } else if (style == CursorTrailStyle.TORPEDO) {
+                drawParticles(canvas, CursorTrailParticles.MODE_TORPEDO, color, baseAlpha, opacity);
+            } else if (style == CursorTrailStyle.PIXIEDUST) {
+                drawParticles(canvas, CursorTrailParticles.MODE_PIXIEDUST, color, baseAlpha, opacity);
+            }
+        }
+        if (didClip) canvas.restore();
+    }
+
+    private void drawQuad(@NonNull Canvas canvas, int color, int baseAlpha, float opacity) {
         mSmearPath.reset();
         mSmearPath.moveTo(mCursorTrail.cornerX(0), mCursorTrail.cornerY(0));
         mSmearPath.lineTo(mCursorTrail.cornerX(1), mCursorTrail.cornerY(1));
         mSmearPath.lineTo(mCursorTrail.cornerX(2), mCursorTrail.cornerY(2));
         mSmearPath.lineTo(mCursorTrail.cornerX(3), mCursorTrail.cornerY(3));
         mSmearPath.close();
-        int color = mCursorTrailConfig.hasColor ? mCursorTrailConfig.color : mCursorTarget.color;
         mPaint.setStyle(Paint.Style.FILL);
         mPaint.setColor(color);
-        int baseAlpha = Color.alpha(color) > 0 ? Color.alpha(color) : 255;
-        mPaint.setAlpha(Math.round(baseAlpha * clamp01(mCursorTrail.opacity())));
+        mPaint.setAlpha(Math.round(baseAlpha * opacity));
         canvas.drawPath(mSmearPath, mPaint);
-        if (didClip) canvas.restore();
+    }
+
+    private void drawParticles(@NonNull Canvas canvas, int mode, int color, int baseAlpha,
+                               float opacity) {
+        int count = mParticles.collect(mFrameSeconds, mode, mParticleBuf);
+        mPaint.setStyle(Paint.Style.FILL);
+        mPaint.setColor(color);
+        for (int i = 0; i < count; i++) {
+            int o = i * 4;
+            mPaint.setAlpha(Math.round(baseAlpha * opacity * mParticleBuf[o + 3]));
+            canvas.drawCircle(mParticleBuf[o], mParticleBuf[o + 1], mParticleBuf[o + 2], mPaint);
+        }
     }
 
     private static float clamp01(float value) {

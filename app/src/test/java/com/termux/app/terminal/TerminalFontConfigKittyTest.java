@@ -112,6 +112,35 @@ public class TerminalFontConfigKittyTest {
     }
 
     @Test
+    public void customShadersMapsOneCursorTrailName() throws Exception {
+        kittyConf("custom_shaders cursor-trail-railgun\n");
+        TerminalFontConfig.Result result = load();
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals("railgun", result.cursorTrailStyleId);
+    }
+
+    @Test
+    public void customShadersWithAnUnmappedNameLeavesTheStyleNull() throws Exception {
+        kittyConf("custom_shaders something-else.glsl\n");
+        TerminalFontConfig.Result result = load();
+        assertNull(result.cursorTrailStyleId);
+    }
+
+    @Test
+    public void customShadersTakesTheFirstMappedNameOfSeveral() throws Exception {
+        kittyConf("custom_shaders foo.glsl cursor-trail-torpedo cursor-trail-pixiedust\n");
+        TerminalFontConfig.Result result = load();
+        assertEquals("torpedo", result.cursorTrailStyleId);
+    }
+
+    @Test
+    public void noCustomShadersMeansNoStyle() throws Exception {
+        kittyConf("cursor_trail 3\n");
+        TerminalFontConfig.Result result = load();
+        assertNull(result.cursorTrailStyleId);
+    }
+
+    @Test
     public void cursorTrailColorNoneClearsAnEarlierValue() throws Exception {
         kittyConf("cursor_trail_color #00ff00\n");
         fontsConf("cursor_trail_color none\n");

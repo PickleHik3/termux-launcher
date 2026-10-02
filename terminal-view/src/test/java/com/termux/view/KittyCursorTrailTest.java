@@ -162,4 +162,48 @@ public class KittyCursorTrailTest {
         assertEquals(510f, trail.cornerX(0), 1e-4f);
         assertFalse(trail.needsRender());
     }
+
+    @Test
+    public void prevCornersHoldTheLastFramesCorners() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(0, 2, 2);
+        trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        // The first update is a snap: prev equals current.
+        assertEquals(trail.cornerX(0), trail.prevCornerX(0), 1e-6f);
+        trail.update(16L, 10 * CELL_W, 0f, 11 * CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        float afterFirst = trail.cornerX(0);
+        assertEquals(CELL_W, trail.prevCornerX(0), 1e-6f);
+        trail.update(32L, 10 * CELL_W, 0f, 11 * CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        assertEquals(afterFirst, trail.prevCornerX(0), 1e-6f);
+        assertTrue(trail.cornerX(0) > afterFirst);
+    }
+
+    @Test
+    public void moveStartedIsTrueOnceOnARealMove() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(0, 2, 2);
+        trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        assertFalse(trail.moveStartedOnLastUpdate());
+        trail.update(16L, 10 * CELL_W, 0f, 11 * CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        assertTrue(trail.moveStartedOnLastUpdate());
+        assertEquals(0f, trail.moveFromEdge(0), 1e-6f);
+        assertEquals(CELL_W, trail.moveFromEdge(2), 1e-6f);
+        assertEquals(10 * CELL_W, trail.moveToEdge(0), 1e-6f);
+        assertEquals(11 * CELL_W, trail.moveToEdge(2), 1e-6f);
+        trail.update(32L, 10 * CELL_W, 0f, 11 * CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        assertFalse(trail.moveStartedOnLastUpdate());
+    }
+
+    @Test
+    public void moveStartedIsFalseOnSnapAndWithinThreshold() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(0, 2, 2);
+        trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        trail.update(16L, CELL_W, 0f, 2 * CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        assertFalse(trail.moveStartedOnLastUpdate());
+        trail.requestSnapOnNextUpdate();
+        trail.update(32L, 20 * CELL_W, 0f, 21 * CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        assertFalse(trail.moveStartedOnLastUpdate());
+        assertEquals(trail.cornerX(0), trail.prevCornerX(0), 1e-6f);
+    }
 }

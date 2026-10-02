@@ -86,6 +86,16 @@ public final class KittyCursorTrail {
     // The quad's four corners, indexed as CORNER_X_EDGE/CORNER_Y_EDGE describe.
     private final float[] mCornerX = new float[CORNERS];
     private final float[] mCornerY = new float[CORNERS];
+    // The corners as they stood before the latest update; the motion-blur sweep starts here.
+    private final float[] mPrevCornerX = new float[CORNERS];
+    private final float[] mPrevCornerY = new float[CORNERS];
+    // The latest accepted move's from/to rects: left, top, right, bottom each.
+    private final float[] mMoveFrom = new float[4];
+    private final float[] mMoveTo = new float[4];
+    private boolean mMoveStarted;
+    // A target replacement waiting for updateCorners to say whether it snaps or smears.
+    private boolean mTargetReplaced;
+    private final float[] mReplacedFrom = new float[4];
     // Scratch for one frame's per-corner deltas and alignments; instance fields so a frame draws
     // no arrays of its own.
     private final float[] mScratchDx = new float[CORNERS];
@@ -140,6 +150,10 @@ public final class KittyCursorTrail {
                           long positionChangedAtMillis, boolean paused,
                           float cellWidthPx, float cellHeightPx, Config config) {
         boolean pendingDelay = false;
+        System.arraycopy(mCornerX, 0, mPrevCornerX, 0, CORNERS);
+        System.arraycopy(mCornerY, 0, mPrevCornerY, 0, CORNERS);
+        mMoveStarted = false;
+        mTargetReplaced = false;
         if (!paused) {
             long sinceMoved = nowMillis - positionChangedAtMillis;
             if (sinceMoved >= config.delayMs) {
@@ -159,6 +173,13 @@ public final class KittyCursorTrail {
         boolean forceSnap = mSnapPending;
         mSnapPending = false;
         updateCorners(dt, dectcemOn, cellWidthPx, cellHeightPx, config, forceSnap);
+        if (mMoveStarted) {
+            System.arraycopy(mReplacedFrom, 0, mMoveFrom, 0, 4);
+            mMoveTo[0] = mEdgeLeft;
+            mMoveTo[1] = mEdgeTop;
+            mMoveTo[2] = mEdgeRight;
+            mMoveTo[3] = mEdgeBottom;
+        }
         updateOpacity(dt, dectcemOn, config);
 
         boolean needsRenderPrev = mNeedsRender;
@@ -171,6 +192,14 @@ public final class KittyCursorTrail {
     }
 
     private void updateTarget(float left, float top, float right, float bottom) {
+        if (mCornersInitialized && (left != mEdgeLeft || top != mEdgeTop
+            || right != mEdgeRight || bottom != mEdgeBottom)) {
+            mReplacedFrom[0] = mEdgeLeft;
+            mReplacedFrom[1] = mEdgeTop;
+            mReplacedFrom[2] = mEdgeRight;
+            mReplacedFrom[3] = mEdgeBottom;
+            mTargetReplaced = true;
+        }
         mEdgeLeft = left;
         mEdgeTop = top;
         mEdgeRight = right;
@@ -202,8 +231,12 @@ public final class KittyCursorTrail {
                 mCornerY[i] = edgeY(CORNER_Y_EDGE[i]);
             }
             mCornersInitialized = true;
+            // A snap has no smear, so previous equals current.
+            System.arraycopy(mCornerX, 0, mPrevCornerX, 0, CORNERS);
+            System.arraycopy(mCornerY, 0, mPrevCornerY, 0, CORNERS);
             return;
         }
+        if (mTargetReplaced) mMoveStarted = true;
         if (dt <= 0f) return;
 
         float centerX = (mEdgeLeft + mEdgeRight) * 0.5f;
@@ -291,6 +324,30 @@ public final class KittyCursorTrail {
 
     public float cornerY(int corner) {
         return mCornerY[corner];
+    }
+
+    /** The corner's x before the latest {@link #update}; equals {@link #cornerX} after a snap. */
+    public float prevCornerX(int corner) {
+        return mPrevCornerX[corner];
+    }
+
+    public float prevCornerY(int corner) {
+        return mPrevCornerY[corner];
+    }
+
+    /** True only on the update where a target change was accepted as a real move (no snap/skip). */
+    public boolean moveStartedOnLastUpdate() {
+        return mMoveStarted;
+    }
+
+    /** The accepted move's source rect edge; index 0 left, 1 top, 2 right, 3 bottom. */
+    public float moveFromEdge(int index) {
+        return mMoveFrom[index];
+    }
+
+    /** The accepted move's destination rect edge; index 0 left, 1 top, 2 right, 3 bottom. */
+    public float moveToEdge(int index) {
+        return mMoveTo[index];
     }
 
     public float opacity() {
