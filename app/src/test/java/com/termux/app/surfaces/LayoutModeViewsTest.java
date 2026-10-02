@@ -12,6 +12,10 @@ import android.view.View;
 import android.view.ViewParent;
 import android.widget.FrameLayout;
 
+import androidx.constraintlayout.widget.ConstraintLayout;
+import androidx.constraintlayout.widget.Group;
+
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.slider.Slider;
@@ -26,7 +30,7 @@ import org.robolectric.RobolectricTestRunner;
 
 /**
  * Layout mode lives in the one editor (SPEC §3.5): its canvas in the frame
- * ({@code layout_editor_frame}), its orientation toggle and restore tray in the bottom area
+ * ({@code layout_editor_frame}), its orientation toggle and trash in the bottom area
  * ({@code appearance_editor_panel}). {@code SurfaceEditorController} looks each view up by id to
  * lend it to {@code LayoutEditorController}; a lost id would leave Layout mode with nothing to
  * draw into and no crash to say so. These inflate the real layouts and pin every id it asks for.
@@ -59,33 +63,30 @@ public class LayoutModeViewsTest {
     }
 
     @Test
-    public void theBottomAreaCarriesLayoutModesOneRowAndItStartsHidden() {
+    public void theBottomAreaCarriesLayoutModesRowsAndTheyStartHidden() {
         View panel = inflate(R.layout.appearance_editor_panel);
-        View row = panel.findViewById(R.id.appearance_editor_layout_row);
-        assertNotNull(row);
-        assertEquals("Appearance is the mode a plain open shows", View.GONE, row.getVisibility());
+        assertTrue("one ConstraintLayout, no weighted rows", panel instanceof ConstraintLayout);
+        View group = panel.findViewById(R.id.appearance_editor_layout_group);
+        assertTrue(group instanceof Group);
+        assertEquals("Appearance is the mode a plain open shows", View.GONE, group.getVisibility());
+        assertTrue(panel.findViewById(R.id.appearance_editor_appearance_group) instanceof Group);
         View orientation = panel.findViewById(R.id.layout_editor_orientation);
         assertTrue(orientation instanceof MaterialButtonToggleGroup);
         assertEquals("portrait and landscape",
             2, ((MaterialButtonToggleGroup) orientation).getChildCount());
         assertNotNull(panel.findViewById(R.id.layout_editor_orientation_portrait));
         assertNotNull(panel.findViewById(R.id.layout_editor_orientation_landscape));
-        assertNotNull(panel.findViewById(R.id.layout_editor_tray));
-        assertNotNull("the trash is the drop target and opens the hidden list",
-            panel.findViewById(R.id.layout_editor_tray_trash));
-        assertNotNull(panel.findViewById(R.id.appearance_editor_row2_controls));
+        assertTrue("the trash is an icon button: the drop target, the list's and the badge's anchor",
+            panel.findViewById(R.id.layout_editor_tray_trash) instanceof MaterialButton);
         // Layout mode also carries what no Look sets (2026-10-01): Style, Corners and Margin.
         View style = panel.findViewById(R.id.appearance_editor_style);
         assertTrue(style instanceof MaterialButtonToggleGroup);
         assertEquals("docked and floating",
             2, ((MaterialButtonToggleGroup) style).getChildCount());
-        assertTrue("Style lives in the Layout row", isInside(style, row));
         View corners = panel.findViewById(R.id.appearance_editor_corners);
         View margin = panel.findViewById(R.id.appearance_editor_margin);
         assertTrue(corners instanceof Slider);
         assertTrue(margin instanceof Slider);
-        assertTrue(isInside(corners, row));
-        assertTrue(isInside(margin, row));
         assertEquals(40f, ((Slider) corners).getValueTo(), 0f);
         assertEquals(48f, ((Slider) margin).getValueTo(), 0f);
         assertNotNull(panel.findViewById(R.id.appearance_editor_corners_label));
@@ -96,7 +97,7 @@ public class LayoutModeViewsTest {
         assertNotNull(panel.findViewById(R.id.appearance_editor_done));
     }
 
-    /** Legibility is the terminal's now: its own column in row 2, out of the first control's. */
+    /** Text contrast is the terminal's: its own column in Row B, out of the first control's. */
     @Test
     public void rowTwoCarriesLegibilityInAColumnOfItsOwn() {
         View panel = inflate(R.layout.appearance_editor_panel);
@@ -104,48 +105,86 @@ public class LayoutModeViewsTest {
         View column = panel.findViewById(R.id.appearance_editor_cl);
         View legibility = panel.findViewById(R.id.appearance_editor_legibility);
         assertNotNull(column);
-        assertTrue(legibility instanceof com.google.android.material.slider.Slider);
-        assertEquals(2f, ((com.google.android.material.slider.Slider) legibility).getValueTo(), 0f);
+        assertTrue(legibility instanceof Slider);
+        assertEquals(2f, ((Slider) legibility).getValueTo(), 0f);
         assertTrue(isInside(legibility, column));
         assertTrue(isInside(column, row2));
         assertFalse("not the first control's any more",
             isInside(legibility, panel.findViewById(R.id.appearance_editor_c1)));
-        assertNotNull(panel.findViewById(R.id.appearance_editor_row2_line));
-        assertFalse("Style left Appearance's row 1", isInside(
-            panel.findViewById(R.id.appearance_editor_style),
-            panel.findViewById(R.id.appearance_editor_row1)));
     }
 
     /**
-     * Corners and Margin mean the same under both Styles (SPEC section 3.7, 2026-10-01): the sliders
-     * stay up, so the bottom area keeps its height and the card does not jump when Style flips.
+     * The two modes are two Groups in one layout: a switch shows one and hides the other, and
+     * Corners and Margin stay up under both Styles (SPEC section 3.7), so Style never moves the
+     * sheet.
      */
     @Test
-    public void cornersAndMarginAreShownUnderBothStylesSoTheCardNeverJumps() {
+    public void aModeSwitchSwapsTheGroupsAndStyleLeavesCornersAndMarginUp() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ContextThemeWrapper themed = new ContextThemeWrapper(activity,
             R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
-        View row = panel.view().findViewById(R.id.appearance_editor_layout_sliders);
-        View corners = panel.view().findViewById(R.id.appearance_editor_corners);
-        View margin = panel.view().findViewById(R.id.appearance_editor_margin);
-        assertNotNull(row);
-        assertTrue(isInside(corners, row));
-        assertTrue(isInside(margin, row));
+        View root = panel.view();
+        View look = root.findViewById(R.id.appearance_editor_look);
+        View corners = root.findViewById(R.id.appearance_editor_corners);
+        View margin = root.findViewById(R.id.appearance_editor_margin);
 
+        assertEquals(View.VISIBLE, look.getVisibility());
+        assertEquals(View.GONE, corners.getVisibility());
+
+        panel.showLayoutMode();
+        assertTrue(panel.isLayoutMode());
+        assertEquals(View.GONE, look.getVisibility());
+        assertEquals(View.VISIBLE, corners.getVisibility());
+        assertEquals(View.VISIBLE, margin.getVisibility());
+
+        MaterialButtonToggleGroup style = root.findViewById(R.id.appearance_editor_style);
         panel.setFloating(true);
-        assertTrue(panel.shapeControlsShown());
-        assertEquals(View.VISIBLE, row.getVisibility());
-        MaterialButtonToggleGroup style = panel.view().findViewById(R.id.appearance_editor_style);
         assertEquals(R.id.appearance_editor_style_floating, style.getCheckedButtonId());
-
+        assertEquals(View.VISIBLE, corners.getVisibility());
         panel.setFloating(false);
-        assertTrue("shown under Docked too", panel.shapeControlsShown());
-        assertEquals(View.VISIBLE, row.getVisibility());
         assertEquals(R.id.appearance_editor_style_docked, style.getCheckedButtonId());
+        assertEquals("shown under Docked too", View.VISIBLE, corners.getVisibility());
+        assertEquals(View.VISIBLE, margin.getVisibility());
 
-        panel.setFloating(true);
-        assertTrue("and back under Floating", panel.shapeControlsShown());
+        panel.showAppearanceMode();
+        assertFalse(panel.isLayoutMode());
+        assertEquals(View.VISIBLE, look.getVisibility());
+        assertEquals(View.GONE, corners.getVisibility());
+    }
+
+    /** Row B keeps its place whether or not an element is tapped: alpha, never GONE. */
+    @Test
+    public void rowTwoFadesInPlaceAndKeepsItsStateAcrossLayoutMode() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ContextThemeWrapper themed = new ContextThemeWrapper(activity,
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
+        View row2 = panel.view().findViewById(R.id.appearance_editor_row2);
+        Slider blur = panel.view().findViewById(R.id.appearance_editor_c2_slider);
+        assertEquals(View.VISIBLE, row2.getVisibility());
+        assertEquals(0f, row2.getAlpha(), 0f);
+        assertFalse("a hidden Row B takes no touches", blur.isEnabled());
+
+        panel.showRow2(R.string.appearance_editor_target_dock);
+        panel.hideFirst();
+        panel.hideLegibility();
+        panel.setSecondSlider("Blur · 8 dp", 8, 32);
+        assertTrue(panel.isRow2Shown());
+        assertEquals(View.VISIBLE, row2.getVisibility());
+        assertEquals(1f, row2.getAlpha(), 0f);
+        assertTrue(blur.isEnabled());
+
+        panel.showLayoutMode();
+        assertTrue("kept while Layout is shown", panel.isRow2Shown());
+        panel.showAppearanceMode();
+        assertTrue(panel.isRow2Shown());
+        assertEquals(View.VISIBLE, row2.getVisibility());
+
+        panel.hideRow2();
+        assertFalse(panel.isRow2Shown());
+        assertEquals(View.VISIBLE, row2.getVisibility());
+        assertFalse(blur.isEnabled());
     }
 
     private static boolean isInside(View view, View ancestor) {

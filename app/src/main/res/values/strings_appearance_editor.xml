@@ -9,7 +9,11 @@
     <string name="appearance_editor_undo">Undo</string>
     <string name="appearance_editor_done">Done</string>
 
+    <string name="appearance_editor_mode_description">Editor mode</string>
     <string name="appearance_editor_look_description">Look</string>
+    <!-- Row B's sliders before an element names them; the label text replaces it in code. -->
+    <string name="appearance_editor_control_description">Element setting</string>
+    <string name="appearance_editor_legibility_description">Text contrast</string>
     <string name="appearance_editor_style_description">Style</string>
     <string name="appearance_editor_style_docked">Docked</string>
     <string name="appearance_editor_style_floating">Floating</string>

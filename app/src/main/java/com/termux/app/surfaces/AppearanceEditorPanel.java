@@ -2,48 +2,44 @@ package com.termux.app.surfaces;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
-import android.graphics.drawable.Drawable;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.constraintlayout.widget.Group;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
-import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.shape.MaterialShapeDrawable;
 import com.google.android.material.shape.ShapeAppearanceModel;
 import com.google.android.material.slider.Slider;
 
 import com.termux.R;
+import com.termux.app.terminal.Motion;
 
 /**
- * The Appearance editor's bottom area (SPEC §3.2–3.4): views only. It inflates
- * {@code appearance_editor_panel}, paints it as an M3 bottom sheet surface, places a label under
- * each tick of the Look slider, and reports what the user did through {@link Listener}. What any
- * of it means is {@link SurfaceEditorController}'s.
+ * The Appearance / Layout editor's bottom area (SPEC §3.2–3.6): views only. It inflates
+ * {@code appearance_editor_panel}, paints it as an M3 sheet surface, places a label under each
+ * stop of the Look slider, and reports what the user did through {@link Listener}. What any of it
+ * means is {@link SurfaceEditorController}'s and
+ * {@link com.termux.app.layouteditor.LayoutEditorController}'s.
+ *
+ * <p>The layout is one ConstraintLayout: the top row (mode pill, Undo, Done) is both modes'; each
+ * mode's rows are a {@link Group}, and a mode switch shows one and hides the other. Row B
+ * (the tapped element's controls) is always laid out in Appearance mode and shown with alpha, so
+ * the sheet has one height per mode, {@link #measureFor}, and never jumps.</p>
  *
  * <p>Every restatement from code runs with {@link #mRestating} set, so a value the controller
  * pushes in is never read back as the user's.</p>
- *
- * <p>Layout mode (SPEC §3.5) keeps the top row — the mode pill, Undo and Done, which are the whole
- * editor's — and swaps rows 1, 2 and the hint for the Layout rows: the orientation toggle, the
- * Style toggle and the restore tray, then the Corners and Margin sliders, which both Styles spend:
- * Corners is every card's and the Docked insert's radius, Margin the air round Floating cards or
- * the gutter round the Docked insert. The orientation toggle and the
- * tray are {@link com.termux.app.layouteditor.LayoutEditorController}'s to drive; Style, Corners
- * and Margin report here like every other control.</p>
  */
 final class AppearanceEditorPanel {
 
@@ -61,13 +57,13 @@ final class AppearanceEditorPanel {
         void onCorners(int value, boolean dragging);
         /** Layout mode's Margin slider, in dp. */
         void onMargin(int value, boolean dragging);
-        /** Row 2's first slider (Darkness or Key corners). */
+        /** Row B's first slider (Opacity or Key radius). */
         void onFirstSlider(int value, boolean dragging);
-        /** Row 2's first segmented control (Soft wallpaper), by segment index. */
+        /** Row B's first segmented control (Soften wallpaper), by segment index. */
         void onFirstSegment(int index);
         /** The terminal's Text contrast, by stop: 0 Low (Softer), 1 Normal (Default), 2 High (Harder). */
         void onLegibility(int index);
-        /** Row 2's last slider (Blur or Dim). */
+        /** Row B's last slider (Blur or Dim). */
         void onSecondSlider(int value, boolean dragging);
         /** A slider was released; deferred work settles here. */
         void onSliderReleased();
@@ -80,17 +76,27 @@ final class AppearanceEditorPanel {
         R.string.termux_surface_preset_solid,
         R.string.termux_surface_preset_custom};
 
+    /** Row B's fade in and out. */
+    private static final long ROW2_FADE_MS = 150L;
+
     @NonNull private final Context mContext;
     @NonNull private final View mRoot;
+    /** The bottom padding the layout declares; the controller adds the navigation inset to it. */
+    private final int mBasePaddingBottom;
+
     private final MaterialButtonToggleGroup mMode;
     private final MaterialButton mUndo;
     private final MaterialButton mDone;
+    private final Group mAppearanceGroup;
+    private final Group mLayoutGroup;
+
     private final Slider mLook;
     private final FrameLayout mLookLabels;
     private final TextView[] mLookLabelViews = new TextView[AppearanceLooks.STOP_COUNT];
-    private final MaterialButtonToggleGroup mStyle;
+
     private final View mRow2;
     private final TextView mRow2Name;
+    private final View mFirstColumn;
     private final TextView mFirstLabel;
     private final Slider mFirstSlider;
     private final MaterialButtonToggleGroup mSoft;
@@ -100,39 +106,21 @@ final class AppearanceEditorPanel {
     private final View mSecondColumn;
     private final TextView mSecondLabel;
     private final Slider mSecondSlider;
-    private final View mRow1;
-    private final View mLayoutRow;
-    /** Layout mode's Corners and Margin: shown under both Styles. */
-    private final View mLayoutSliders;
-    private final LinearLayout mRow2Controls;
-    private final LinearLayout mRow2Line;
-    private final View mFirstColumn;
+
+    private final MaterialButtonToggleGroup mOrientation;
+    private final MaterialButtonToggleGroup mStyle;
+    private final MaterialButton mTrash;
     private final TextView mCornersLabel;
     private final Slider mCorners;
     private final TextView mMarginLabel;
     private final Slider mMargin;
-    private final MaterialButtonToggleGroup mOrientation;
-    private final View mTray;
-    private final ImageView mTrayTrash;
-    /** Whether Layout mode's row is showing in place of rows 1, 2 and the hint. */
-    private boolean mLayoutMode;
-    /** Whether row 2 was up when Layout mode took its place, so Appearance gets it back. */
-    private boolean mRow2BeforeLayout;
-    /** Whether row 2 stacks its controls (a panel under {@link #NARROW_DP}). */
-    private boolean mNarrow;
 
-    /** Row 2's height with every control on one line, as appearance_editor_panel declares it. */
-    static final int ROW2_HEIGHT_DP = 88;
-    /** What each further line of controls adds on a narrow panel. */
-    static final int ROW2_LINE_DP = 64;
-    /** Row 2 with two lines of controls: 152, as the stacked row has always been. */
-    static final int ROW2_STACKED_HEIGHT_DP = ROW2_HEIGHT_DP + ROW2_LINE_DP;
-    /**
-     * Under this width row 2's controls stack rather than share the row. Every phone in portrait
-     * is under it: three Legibility words beside a slider ellipsised at 533dp on the review
-     * device, so side by side is for tablets and landscape only.
-     */
-    static final int NARROW_DP = 600;
+    /** Whether Layout mode's rows are showing in place of Appearance's. */
+    private boolean mLayoutMode;
+    /** Whether Row B is up (an element is tapped at the Custom stop); kept across Layout mode. */
+    private boolean mRow2Shown;
+    /** Whether Text contrast may be moved (the Material palette is on). */
+    private boolean mLegibilityEnabled = true;
 
     @Nullable private Listener mListener;
     private boolean mRestating;
@@ -144,14 +132,17 @@ final class AppearanceEditorPanel {
     private AppearanceEditorPanel(@NonNull Context context, @NonNull View root) {
         mContext = context;
         mRoot = root;
+        mBasePaddingBottom = root.getPaddingBottom();
         mMode = root.findViewById(R.id.appearance_editor_mode);
         mUndo = root.findViewById(R.id.appearance_editor_undo);
         mDone = root.findViewById(R.id.appearance_editor_done);
+        mAppearanceGroup = root.findViewById(R.id.appearance_editor_appearance_group);
+        mLayoutGroup = root.findViewById(R.id.appearance_editor_layout_group);
         mLook = root.findViewById(R.id.appearance_editor_look);
         mLookLabels = root.findViewById(R.id.appearance_editor_look_labels);
-        mStyle = root.findViewById(R.id.appearance_editor_style);
         mRow2 = root.findViewById(R.id.appearance_editor_row2);
         mRow2Name = root.findViewById(R.id.appearance_editor_row2_name);
+        mFirstColumn = root.findViewById(R.id.appearance_editor_c1);
         mFirstLabel = root.findViewById(R.id.appearance_editor_c1_label);
         mFirstSlider = root.findViewById(R.id.appearance_editor_c1_slider);
         mSoft = root.findViewById(R.id.appearance_editor_c1_soft);
@@ -161,19 +152,23 @@ final class AppearanceEditorPanel {
         mSecondColumn = root.findViewById(R.id.appearance_editor_c2);
         mSecondLabel = root.findViewById(R.id.appearance_editor_c2_label);
         mSecondSlider = root.findViewById(R.id.appearance_editor_c2_slider);
-        mRow1 = root.findViewById(R.id.appearance_editor_row1);
-        mLayoutRow = root.findViewById(R.id.appearance_editor_layout_row);
-        mLayoutSliders = root.findViewById(R.id.appearance_editor_layout_sliders);
-        mRow2Controls = root.findViewById(R.id.appearance_editor_row2_controls);
-        mRow2Line = root.findViewById(R.id.appearance_editor_row2_line);
-        mFirstColumn = root.findViewById(R.id.appearance_editor_c1);
+        mOrientation = root.findViewById(R.id.layout_editor_orientation);
+        mStyle = root.findViewById(R.id.appearance_editor_style);
+        mTrash = root.findViewById(R.id.layout_editor_tray_trash);
         mCornersLabel = root.findViewById(R.id.appearance_editor_corners_label);
         mCorners = root.findViewById(R.id.appearance_editor_corners);
         mMarginLabel = root.findViewById(R.id.appearance_editor_margin_label);
         mMargin = root.findViewById(R.id.appearance_editor_margin);
-        mOrientation = root.findViewById(R.id.layout_editor_orientation);
-        mTray = root.findViewById(R.id.layout_editor_tray);
-        mTrayTrash = root.findViewById(R.id.layout_editor_tray_trash);
+        // The groups' members, stated here as well as in the layout: a Group resolves its XML
+        // names lazily, and the mode is applied before the panel is ever measured or attached.
+        mAppearanceGroup.setReferencedIds(new int[] {R.id.appearance_editor_look,
+            R.id.appearance_editor_look_labels, R.id.appearance_editor_row2});
+        mLayoutGroup.setReferencedIds(new int[] {R.id.layout_editor_orientation,
+            R.id.appearance_editor_style, R.id.layout_editor_tray_trash,
+            R.id.appearance_editor_corners_label, R.id.appearance_editor_margin_label,
+            R.id.appearance_editor_corners, R.id.appearance_editor_margin});
+        applyGroups(false);
+        applyRow2(false, false);
         paintSheet();
         buildLookLabels();
         bind();
@@ -198,16 +193,16 @@ final class AppearanceEditorPanel {
 
     // ------------------------------------------------------------------------------ the sheet
 
-    /** colorSurfaceContainer under the large corner family, rounded along the top only. */
+    /** colorSurfaceContainer under the extra-large corner family, rounded along the top only. */
     private void paintSheet() {
         TypedValue shape = new TypedValue();
         ShapeAppearanceModel model;
         if (mContext.getTheme().resolveAttribute(
-                com.google.android.material.R.attr.shapeAppearanceCornerLarge, shape, true)
+                com.google.android.material.R.attr.shapeAppearanceCornerExtraLarge, shape, true)
             && shape.resourceId != 0) {
             model = ShapeAppearanceModel.builder(mContext, shape.resourceId, 0).build();
         } else {
-            model = ShapeAppearanceModel.builder().setAllCornerSizes(dp(16)).build();
+            model = ShapeAppearanceModel.builder().build();
         }
         model = model.toBuilder().setBottomLeftCornerSize(0f).setBottomRightCornerSize(0f).build();
         MaterialShapeDrawable sheet = new MaterialShapeDrawable(model);
@@ -218,6 +213,29 @@ final class AppearanceEditorPanel {
         mRoot.setElevation(dp(3));
     }
 
+    /** The bottom padding: the layout's own plus the navigation bar's inset under the sheet. */
+    void setNavInset(int navInsetPx) {
+        int bottom = mBasePaddingBottom + Math.max(0, navInsetPx);
+        if (mRoot.getPaddingBottom() != bottom)
+            mRoot.setPadding(mRoot.getPaddingLeft(), mRoot.getPaddingTop(),
+                mRoot.getPaddingRight(), bottom);
+    }
+
+    /**
+     * The sheet's one height for {@code layout} mode at {@code widthPx}, padding included: the top
+     * row plus that mode's rows. Appearance always counts Row B, which is laid out (and only
+     * faded) whether or not an element is tapped. The mode showing is restored before returning.
+     */
+    int measureFor(boolean layout, int widthPx) {
+        boolean shown = mLayoutMode;
+        applyGroups(layout);
+        mRoot.measure(View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int height = mRoot.getMeasuredHeight();
+        applyGroups(shown);
+        return height;
+    }
+
     // ------------------------------------------------------------------------- the Look slider
 
     private void buildLookLabels() {
@@ -225,12 +243,12 @@ final class AppearanceEditorPanel {
             TextView label = new TextView(mContext);
             label.setText(LOOK_LABELS[i]);
             label.setTextAppearance(resolveTextAppearance(
-                com.google.android.material.R.attr.textAppearanceLabelSmall));
+                com.google.android.material.R.attr.textAppearanceLabelMedium));
             label.setGravity(Gravity.CENTER);
             label.setMaxLines(1);
             label.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             final int stop = i;
-            // A label is a way onto its stop too: the ticks are small, the words are not.
+            // A label is a way onto its stop too: the stops are small, the words are not.
             label.setOnClickListener(view -> {
                 if (AppearanceLooks.stopForSliderValue(mLook.getValue()) == stop)
                     return;
@@ -238,7 +256,7 @@ final class AppearanceEditorPanel {
                 if (mListener != null) mListener.onLookStop(stop);
             });
             mLookLabels.addView(label, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
             mLookLabelViews[i] = label;
         }
         mLook.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> placeLookLabels());
@@ -247,7 +265,10 @@ final class AppearanceEditorPanel {
             LOOK_LABELS[AppearanceLooks.stopForSliderValue(value)]));
     }
 
-    /** Centres each label under its tick: ticks run from one track padding to the other. */
+    /**
+     * Centres each label under its stop: the stops run from one track padding to the other, in
+     * the slider's coordinates, which the label strip shares up to the two views' offset.
+     */
     private void placeLookLabels() {
         int width = mLook.getWidth();
         if (width <= 0)
@@ -255,6 +276,7 @@ final class AppearanceEditorPanel {
         int pad = mLook.getTrackSidePadding();
         float span = Math.max(0, width - 2 * pad);
         int last = AppearanceLooks.STOP_COUNT - 1;
+        int offset = mLook.getLeft() - mLookLabels.getLeft();
         for (int i = 0; i < mLookLabelViews.length; i++) {
             TextView label = mLookLabelViews[i];
             int labelWidth = label.getWidth();
@@ -263,7 +285,7 @@ final class AppearanceEditorPanel {
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
                 labelWidth = label.getMeasuredWidth();
             }
-            float centre = mLook.getLeft() + pad + span * i / last;
+            float centre = offset + pad + span * i / last;
             float x = Math.max(0, Math.min(mLookLabels.getWidth() - labelWidth,
                 centre - labelWidth / 2f));
             label.setTranslationX(x);
@@ -382,15 +404,19 @@ final class AppearanceEditorPanel {
         });
     }
 
-    // ------------------------------------------------------------------------- restatements
+    // ------------------------------------------------------------------------------ the modes
 
     void showAppearanceMode() {
         setMode(false);
     }
 
+    void showLayoutMode() {
+        setMode(true);
+    }
+
     /**
-     * Shows one mode's rows and checks its segment, without reporting it. Row 2's state is kept
-     * across a visit to Layout mode, so Appearance comes back as it was left.
+     * Shows one mode's rows and checks its segment, without reporting it. Row B keeps its state
+     * across a visit to Layout mode: it is Appearance's, so it goes and comes back with that group.
      */
     void setMode(boolean layout) {
         int id = layout ? R.id.appearance_editor_mode_layout
@@ -400,107 +426,17 @@ final class AppearanceEditorPanel {
             mMode.check(id);
             mRestating = false;
         }
-        if (layout == mLayoutMode)
-            return;
+        applyGroups(layout);
+    }
+
+    private void applyGroups(boolean layout) {
         mLayoutMode = layout;
-        if (layout) {
-            mRow2BeforeLayout = isRow2Shown();
-            mRow1.setVisibility(View.GONE);
-            mRow2.setVisibility(View.GONE);
-            mLayoutRow.setVisibility(View.VISIBLE);
-        } else {
-            mLayoutRow.setVisibility(View.GONE);
-            mRow1.setVisibility(View.VISIBLE);
-            mRow2.setVisibility(mRow2BeforeLayout ? View.VISIBLE : View.GONE);
-        }
+        mAppearanceGroup.setVisibility(layout ? View.GONE : View.VISIBLE);
+        mLayoutGroup.setVisibility(layout ? View.VISIBLE : View.GONE);
     }
 
     boolean isLayoutMode() {
         return mLayoutMode;
-    }
-
-    /** Whether Layout mode's Corners and Margin are showing: they are, under both Styles. */
-    boolean shapeControlsShown() {
-        return mLayoutSliders.getVisibility() == View.VISIBLE;
-    }
-
-    /**
-     * Row 2 side by side on a wide panel, stacked on a narrow one: three Legibility words and a
-     * slider do not share half a 333dp row each.
-     */
-    void setNarrow(boolean narrow) {
-        if (mNarrow == narrow)
-            return;
-        mNarrow = narrow;
-        layoutRow2();
-    }
-
-    /**
-     * Lays row 2's controls out for the width and for which of them the tapped element has. Wide:
-     * every shown control side by side on one line (the terminal's Darkness, Legibility, Blur).
-     * Narrow: Legibility takes a line of its own under the terminal's two sliders, which still
-     * share theirs; any other pair stacks, one control per line, as it always has.
-     */
-    private void layoutRow2() {
-        boolean legibilityLine = mNarrow && mLegibilityColumn.getVisibility() != View.GONE;
-        ViewGroup home = legibilityLine ? mRow2Controls : mRow2Line;
-        if (mLegibilityColumn.getParent() != home) {
-            if (mLegibilityColumn.getParent() instanceof ViewGroup)
-                ((ViewGroup) mLegibilityColumn.getParent()).removeView(mLegibilityColumn);
-            // Between the first control and the last on the line; after the line on its own.
-            if (home == mRow2Line)
-                mRow2Line.addView(mLegibilityColumn, mRow2Line.indexOfChild(mFirstColumn) + 1);
-            else
-                mRow2Controls.addView(mLegibilityColumn);
-        }
-        boolean stacked = mNarrow && !legibilityLine;
-        mRow2Line.setOrientation(stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
-        mRow2Line.setGravity(stacked ? Gravity.CENTER_HORIZONTAL : Gravity.CENTER_VERTICAL);
-        boolean first = true;
-        for (int i = 0; i < mRow2Line.getChildCount(); i++) {
-            View column = mRow2Line.getChildAt(i);
-            if (column.getVisibility() == View.GONE)
-                continue;
-            layoutColumn(column, stacked, stacked || first ? 0 : Math.round(dp(16)));
-            first = false;
-        }
-        if (legibilityLine)
-            layoutColumn(mLegibilityColumn, true, 0);
-        ViewGroup.LayoutParams row2 = mRow2.getLayoutParams();
-        int height = Math.round(dp(row2HeightDp()));
-        if (row2 != null && row2.height != height) {
-            row2.height = height;
-            mRow2.setLayoutParams(row2);
-        }
-    }
-
-    private static void layoutColumn(@NonNull View column, boolean ownLine, int startMarginPx) {
-        ViewGroup.LayoutParams params = column.getLayoutParams();
-        if (!(params instanceof LinearLayout.LayoutParams))
-            return;
-        LinearLayout.LayoutParams linear = (LinearLayout.LayoutParams) params;
-        linear.width = ownLine ? ViewGroup.LayoutParams.MATCH_PARENT : 0;
-        linear.weight = ownLine ? 0f : 1f;
-        linear.setMarginStart(startMarginPx);
-        column.setLayoutParams(linear);
-    }
-
-    /**
-     * Row 2's one height for the width the panel has and the controls it shows: one line on a
-     * wide panel; on a narrow one a line per stacked control, plus Legibility's own.
-     */
-    int row2HeightDp() {
-        if (!mNarrow)
-            return ROW2_HEIGHT_DP;
-        boolean legibilityLine = mLegibilityColumn.getVisibility() != View.GONE;
-        int onLine = 0;
-        for (int i = 0; i < mRow2Line.getChildCount(); i++) {
-            View column = mRow2Line.getChildAt(i);
-            if (column != mLegibilityColumn && column.getVisibility() != View.GONE)
-                onLine++;
-        }
-        int lines = legibilityLine ? Math.min(1, onLine) + 1 : onLine;
-        return ROW2_HEIGHT_DP + ROW2_LINE_DP * Math.max(0, lines - 1);
     }
 
     // ------------------------------------------------------------- Layout mode's views, lent
@@ -509,17 +445,16 @@ final class AppearanceEditorPanel {
         return mOrientation;
     }
 
-    @NonNull View tray() {
-        return mTray;
+    /** The trash: the drop target for hiding, the hidden list's anchor, the count badge's anchor. */
+    @NonNull MaterialButton trash() {
+        return mTrash;
     }
 
-    @NonNull ImageView trayTrash() {
-        return mTrayTrash;
-    }
+    // ------------------------------------------------------------------------- restatements
 
+    /** Undo shows only while there is something to undo; the pill → Undo gap absorbs it. */
     void setDirty(boolean dirty) {
-        // Invisible, never gone: Undo's slot is always reserved, so the row never re-measures.
-        int visibility = dirty ? View.VISIBLE : View.INVISIBLE;
+        int visibility = dirty ? View.VISIBLE : View.GONE;
         if (mUndo.getVisibility() != visibility)
             mUndo.setVisibility(visibility);
     }
@@ -535,12 +470,10 @@ final class AppearanceEditorPanel {
     }
 
     /**
-     * Checks the Style toggle's segment, without reporting it. Corners and Margin stay up under
-     * both Styles (SPEC §3.7, 2026-10-01), so the bottom area keeps its height and the card does
-     * not jump when Style flips: it never scrolls, and nothing in it moves.
+     * Checks the Style toggle's segment, without reporting it. Corners and Margin mean something
+     * under both Styles (SPEC §3.7), so nothing else in the sheet changes when Style flips.
      */
     void setFloating(boolean floating) {
-        mLayoutSliders.setVisibility(View.VISIBLE);
         int id = floating ? R.id.appearance_editor_style_floating
             : R.id.appearance_editor_style_docked;
         if (mStyle.getCheckedButtonId() == id)
@@ -550,66 +483,89 @@ final class AppearanceEditorPanel {
         mRestating = false;
     }
 
-    /** Whether row 2 is up in Appearance mode (kept, though hidden, while Layout is shown). */
+    /** Whether Row B is up (kept, though its group is hidden, while Layout is shown). */
     boolean isRow2Shown() {
-        return mLayoutMode ? mRow2BeforeLayout : mRow2.getVisibility() == View.VISIBLE;
+        return mRow2Shown;
     }
 
-    /** Row 2 down. */
+    /** Row B down: faded out and untouchable; it keeps its place, so the sheet does not move. */
     void hideRow2() {
-        if (mLayoutMode) {
-            mRow2BeforeLayout = false;
+        if (!mRow2Shown)
             return;
-        }
-        mRow2.setVisibility(View.GONE);
+        mRow2Shown = false;
+        applyRow2(false, true);
     }
 
-    /** Row 2 up, with the tapped element's name; the controls are set by the calls below. */
+    /** Row B up, with the tapped element's name; the controls are set by the calls below. */
     void showRow2(@StringRes int name) {
         mRow2Name.setText(name);
-        if (mLayoutMode) {
-            mRow2BeforeLayout = true;
+        if (mRow2Shown)
             return;
-        }
-        mRow2.setVisibility(View.VISIBLE);
+        mRow2Shown = true;
+        applyRow2(true, true);
     }
 
-    /** The first control as a slider: Darkness or Key corners. */
+    /**
+     * Row B's alpha, and whether its controls take touches and are read out. Alpha 0 is not
+     * enough on its own: an invisible slider would still be dragged.
+     */
+    private void applyRow2(boolean shown, boolean animate) {
+        mRow2.setImportantForAccessibility(shown ? View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
+            : View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+        mFirstSlider.setEnabled(shown);
+        for (int i = 0; i < mSoft.getChildCount(); i++)
+            mSoft.getChildAt(i).setEnabled(shown);
+        mLegibility.setEnabled(shown && mLegibilityEnabled);
+        mSecondSlider.setEnabled(shown);
+        float alpha = shown ? 1f : 0f;
+        mRow2.animate().cancel();
+        if (animate && mRow2.isAttachedToWindow() && mRow2.isShown()) {
+            mRow2.animate().alpha(alpha).setDuration(ROW2_FADE_MS)
+                .setInterpolator(Motion.settle()).start();
+        } else {
+            mRow2.setAlpha(alpha);
+        }
+    }
+
+    /** The first control as a slider: Opacity or Key radius. */
     void setFirstSlider(@NonNull CharSequence label, int value, int max) {
         mFirstLabel.setText(label);
+        mFirstSlider.setContentDescription(label);
         mFirstSlider.setVisibility(View.VISIBLE);
         mSoft.setVisibility(View.GONE);
         restateSlider(mFirstSlider, value, max);
-        showColumn(mFirstColumn, true);
+        mFirstColumn.setVisibility(View.VISIBLE);
     }
 
     void setFirstLabel(@NonNull CharSequence label) {
         mFirstLabel.setText(label);
+        mFirstSlider.setContentDescription(label);
     }
 
-    /** The first control as Soft wallpaper's Off / On. */
+    /** The first control as Soften wallpaper's Off / On. */
     void setSoft(@NonNull CharSequence label, boolean on) {
         mFirstLabel.setText(label);
         mFirstSlider.setVisibility(View.GONE);
         mSoft.setVisibility(View.VISIBLE);
         checkSegment(mSoft, on ? 1 : 0);
-        showColumn(mFirstColumn, true);
+        mFirstColumn.setVisibility(View.VISIBLE);
     }
 
     /** No first control: the status bar and the dock have Blur alone. */
     void hideFirst() {
-        showColumn(mFirstColumn, false);
+        mFirstColumn.setVisibility(View.GONE);
     }
 
     /**
-     * The terminal's Legibility, its three segments at {@code index}. Not {@code enabled} where
-     * the terminal palette is not the Material one it changes; the label then says so.
+     * The terminal's Text contrast at {@code index}. Not {@code enabled} where the terminal
+     * palette is not the Material one it changes; the label then says so.
      */
     void setLegibility(@NonNull CharSequence label, int index, boolean enabled) {
         mLegibilityLabel.setText(label);
         restateSlider(mLegibility, index, 2);
-        mLegibility.setEnabled(enabled);
-        showColumn(mLegibilityColumn, true);
+        mLegibilityEnabled = enabled;
+        mLegibility.setEnabled(enabled && mRow2Shown);
+        mLegibilityColumn.setVisibility(View.VISIBLE);
     }
 
     /** The label for a Text contrast stop: Low, Normal or High. */
@@ -621,22 +577,20 @@ final class AppearanceEditorPanel {
     }
 
     void hideLegibility() {
-        showColumn(mLegibilityColumn, false);
+        mLegibilityColumn.setVisibility(View.GONE);
     }
 
     /** The last control: Blur or Dim. */
     void setSecondSlider(@NonNull CharSequence label, int value, int max) {
         mSecondLabel.setText(label);
+        mSecondSlider.setContentDescription(label);
         restateSlider(mSecondSlider, value, max);
-        showColumn(mSecondColumn, true);
+        mSecondColumn.setVisibility(View.VISIBLE);
     }
 
-    private void showColumn(@NonNull View column, boolean shown) {
-        int visibility = shown ? View.VISIBLE : View.GONE;
-        if (column.getVisibility() == visibility)
-            return;
-        column.setVisibility(visibility);
-        layoutRow2();
+    void setSecondLabel(@NonNull CharSequence label) {
+        mSecondLabel.setText(label);
+        mSecondSlider.setContentDescription(label);
     }
 
     // ------------------------------------------------------------ Layout mode's own controls
@@ -659,10 +613,6 @@ final class AppearanceEditorPanel {
 
     void setMarginLabel(@NonNull CharSequence label) {
         mMarginLabel.setText(label);
-    }
-
-    void setSecondLabel(@NonNull CharSequence label) {
-        mSecondLabel.setText(label);
     }
 
     private void checkSegment(@NonNull MaterialButtonToggleGroup group, int index) {
@@ -691,7 +641,7 @@ final class AppearanceEditorPanel {
         TypedValue value = new TypedValue();
         if (mContext.getTheme().resolveAttribute(attr, value, true) && value.resourceId != 0)
             return value.resourceId;
-        return com.google.android.material.R.style.TextAppearance_Material3_LabelSmall;
+        return com.google.android.material.R.style.TextAppearance_Material3_LabelMedium;
     }
 
     private float dp(float value) {

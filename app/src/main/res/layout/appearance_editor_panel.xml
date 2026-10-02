@@ -1,441 +1,472 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The Appearance editor's bottom area (appearance-layout-editor SPEC §3.1–3.4): an M3 bottom
-     sheet surface under the scaled launcher, built from stock Material 3 components only. Its
-     fill and top corners are set in code (colorSurfaceContainer, shapeAppearanceCornerLarge), as is
-     its height: fixed at rest, one taller state while row 2 is up. Nothing in it scrolls.
+<!-- The Appearance / Layout editor's bottom area (appearance-layout-editor SPEC §3.1–3.6): a
+     non-modal M3 sheet docked at the foot of android.R.id.content. AppearanceEditorPanel paints
+     its fill (colorSurfaceContainer) and its top corners (shapeAppearanceCornerExtraLarge);
+     SurfaceEditorController adds the navigation inset to the bottom padding and sets the height,
+     which is AppearanceEditorPanel.measureFor(mode): one fixed height per mode, measured from the
+     rows that mode shows. Nothing in it scrolls, and nothing in it is weighted.
 
-     Top: the mode pill, Undo (while dirty) and Done. Row 1: the Look slider with a label under
-     each tick. Row 2 (Custom only, after a tap in the frame): the tapped element's name and its
-     controls (three for the terminal, otherwise at most two). The hint line closes the stack.
+     One ConstraintLayout. The top row is both modes'; each mode's rows are a Group
+     (appearance_editor_appearance_group / appearance_editor_layout_group), and a mode switch
+     shows one Group and hides the other.
 
-     Layout mode (SPEC §3.5) swaps rows 1, 2 and the hint for its own rows: the Portrait /
-     Landscape glyph toggle, the Docked / Floating Style toggle and the restore tray (§3.6), then
-     the global Corners and Margin sliders. The top row stays; the card grows a little upward for
-     the sliders. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+     Top row: the mode pill is the start anchor (wrap_content, never squeezed); Done is pinned to
+     the end and Undo to Done's start. Undo is GONE while there is nothing to undo; the gap between
+     the pill and Undo absorbs it, so neither the pill nor Done moves.
+
+     Appearance rows. Row A: the Look slider, a label centred under each of its five stops (placed
+     in code: the stops sit inside the slider's track padding, so equal-width labels would drift
+     off them). Row B: the tapped element's name and up to three equal columns, each a label above
+     its control. Row B is always laid out in Appearance mode and shown / hidden with alpha only,
+     so the sheet's height is Row A + Row B whether or not an element is tapped: the sheet never
+     jumps on a tap. Row B's labels always reserve two lines ("Text contrast · Normal" wraps in a
+     third of a phone's width), so Row B's height is the same for every element.
+
+     Layout rows. Row A: Orientation (two 48dp icon segments), Style (two 48dp icon segments), and
+     the trash at the end (drop target, opens the hidden list, carries the count badge). Row B:
+     Corner radius and Margin as two equal columns, each a label above its slider.
+
+     Width arithmetic, dp. Sheet padding 16 + 16, so the content width is W - 32.
+       Top row (LabelLarge 14sp, Roboto Medium): "Appearance" ≈ 77, "Layout" ≈ 43. A segment is
+       8 pad + 18 check slot + 4 icon padding + text + 8 pad, minWidth 0: 115 + 81 = 196 for the
+       pill. The 8dp segment padding is the one local padding override in this file (the brief's
+       sanctioned exception for the pill): the style's 12dp gives a 204dp pill, which does not fit.
+       Undo 48 (its own 4dp insets are the visual gaps on either side of it).
+       Done (Widget.Material3.Button, minWidth 0 over AppCompat's 88): 24 + "Done" ≈ 33 + 24 = 81.
+         360: 16 + 196 + 0 + 48 + 0 + 81 + 16 = 357 ≤ 360  (3 spare, in the pill → Undo gap)
+         411: 357 + 51 of gap;  533: 357 + 173 of gap.  Clean (Undo gone): 48 more gap.
+       Appearance Row A: the slider spans W - 32 (328 / 379 / 501); five LabelMedium words, the
+         widest "Custom" ≈ 44, under stops (W - 32 - 2 × track padding) / 4 apart: ≥ 70 at 360.
+       Appearance Row B: three columns, two 16dp gaps: (W - 64) / 3 = 98.7 / 115.7 / 156.3;
+         two columns: (W - 48) / 2 = 156 / 181.5 / 242.5; one column: W - 32.
+         The Soften toggle in a 156dp column: Off 12 + 18 + 4 + 20 + 12 = 66, On 66: 132 ≤ 156.
+       Layout Row A: 96 + 8 + 96 + gap + 48 = 248 + gap; gap 80 / 131 / 253.
+       Layout Row B: two columns, one 16dp gap: 156 / 181.5 / 242.5; "Corner radius · 40 dp"
+         (LabelMedium) ≈ 120 ≤ 156.
+
+     Heights, dp, without the navigation inset (the controller adds it to the bottom padding):
+       top row 48 (every button keeps its 48dp touch height).
+       Appearance: 12 + 48 + 8 + Row A (slider 48 + labels 16 = 64) + 8
+                   + Row B (name 20 + 4 + label 2 × 16 + control 48 = 104) + 16 = 260.
+       Layout:     12 + 48 + 8 + Row A 48 + 8 + Row B (label 16 + slider 48 = 64) + 16 = 204.
+     The controller uses the measured heights, not these numbers. -->
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/appearance_editor_panel"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:clickable="true"
     android:focusable="false"
-    android:orientation="vertical"
     android:paddingStart="16dp"
-    android:paddingTop="8dp"
+    android:paddingTop="12dp"
     android:paddingEnd="16dp"
-    android:paddingBottom="12dp">
+    android:paddingBottom="16dp">
 
-    <LinearLayout
-        android:id="@+id/appearance_editor_top_row"
-        android:layout_width="match_parent"
+    <!-- ===================================================================== top row -->
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/appearance_editor_mode"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:contentDescription="@string/appearance_editor_mode_description"
+        app:checkedButton="@+id/appearance_editor_mode_appearance"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:selectionRequired="true"
+        app:singleSelection="true">
 
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/appearance_editor_mode"
-            android:layout_width="0dp"
-            android:layout_weight="1"
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_editor_mode_appearance"
+            style="@style/Widget.Termux.Button.Segment"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:minWidth="0dp"
-            android:layout_height="wrap_content"
-            app:checkedButton="@+id/appearance_editor_mode_appearance"
-            app:selectionRequired="true"
-            app:singleSelection="true">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/appearance_editor_mode_appearance"
-                style="@style/Widget.Termux.Button.Segment"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:ellipsize="none"
-                android:maxLines="1"
-                android:text="@string/action_appearance_editor" />
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/appearance_editor_mode_layout"
-                style="@style/Widget.Termux.Button.Segment"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:ellipsize="none"
-                android:maxLines="1"
-                android:text="@string/action_layout_editor" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
-
-        <!-- The pill takes the leftover width (it may shrink); Undo's slot and Done keep their
-             intrinsic widths at the trailing edge, so nothing re-measures when Undo appears. -->
-        <Space
-            android:layout_width="8dp"
-            android:layout_height="0dp" />
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:ellipsize="none"
+            android:text="@string/action_appearance_editor" />
 
         <com.google.android.material.button.MaterialButton
-            android:id="@+id/appearance_editor_undo"
-            style="?attr/materialIconButtonStyle"
+            android:id="@+id/appearance_editor_mode_layout"
+            style="@style/Widget.Termux.Button.Segment"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:contentDescription="@string/appearance_editor_undo"
-            android:tooltipText="@string/appearance_editor_undo"
-            android:visibility="invisible"
-            app:icon="@drawable/ic_symbol_undo" />
+            android:minWidth="0dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:ellipsize="none"
+            android:text="@string/action_layout_editor" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/appearance_editor_done"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:maxLines="1"
-            android:text="@string/appearance_editor_done" />
-    </LinearLayout>
-
-    <!-- Layout mode's rows. First: the orientation the canvas in the frame shows, the Style
-         toggle (docked / floating, which belongs to no Look) and the tray. The tray is also the
-         drop target a lifted bar is put away in: LayoutEditorController hands the canvas this
-         view's rect, and swaps the chips for "Drop here to hide" while a bar is up. Second: the
-         global Corners and Margin, which no Look sets either (SPEC §3.5). They are Floating's:
-         AppearanceEditorPanel.setFloating makes them invisible, not gone, under Docked, so the
-         card keeps its height when Style flips. -->
-    <LinearLayout
-        android:id="@+id/appearance_editor_layout_row"
-        android:layout_width="match_parent"
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/appearance_editor_undo"
+        style="?attr/materialIconButtonStyle"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:orientation="vertical"
-        android:visibility="gone">
+        android:contentDescription="@string/appearance_editor_undo"
+        android:tooltipText="@string/appearance_editor_undo"
+        android:visibility="gone"
+        app:icon="@drawable/ic_symbol_undo"
+        app:layout_constraintBottom_toBottomOf="@id/appearance_editor_mode"
+        app:layout_constraintEnd_toStartOf="@id/appearance_editor_done"
+        app:layout_constraintTop_toTopOf="@id/appearance_editor_mode" />
 
-        <LinearLayout
-            android:id="@+id/appearance_editor_layout_toggles"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <com.google.android.material.button.MaterialButtonToggleGroup
-                android:id="@+id/layout_editor_orientation"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="@string/termux_layout_editor_orientation"
-                app:selectionRequired="true"
-                app:singleSelection="true">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/layout_editor_orientation_portrait"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="48dp"
-                    android:layout_height="wrap_content"
-                    android:minWidth="48dp"
-                    android:paddingStart="0dp"
-                    android:paddingEnd="0dp"
-                    android:contentDescription="@string/settings_layout_orientation_portrait"
-                    app:icon="@drawable/ic_symbol_phone_portrait"
-                    app:iconGravity="textStart"
-                    app:iconPadding="0dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/layout_editor_orientation_landscape"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="48dp"
-                    android:layout_height="wrap_content"
-                    android:minWidth="48dp"
-                    android:paddingStart="0dp"
-                    android:paddingEnd="0dp"
-                    android:contentDescription="@string/settings_layout_orientation_landscape"
-                    app:icon="@drawable/ic_symbol_phone_landscape"
-                    app:iconGravity="textStart"
-                    app:iconPadding="0dp" />
-            </com.google.android.material.button.MaterialButtonToggleGroup>
-
-            <com.google.android.material.button.MaterialButtonToggleGroup
-                android:id="@+id/appearance_editor_style"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:contentDescription="@string/appearance_editor_style_description"
-                app:selectionRequired="true"
-                app:singleSelection="true">
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/appearance_editor_style_docked"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="48dp"
-                    android:layout_height="wrap_content"
-                    android:minWidth="48dp"
-                    android:paddingStart="0dp"
-                    android:paddingEnd="0dp"
-                    android:contentDescription="@string/appearance_editor_style_docked"
-                    app:icon="@drawable/ic_style_docked"
-                    app:iconGravity="textStart"
-                    app:iconPadding="0dp" />
-
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/appearance_editor_style_floating"
-                    style="?attr/materialButtonOutlinedStyle"
-                    android:layout_width="48dp"
-                    android:layout_height="wrap_content"
-                    android:minWidth="48dp"
-                    android:paddingStart="0dp"
-                    android:paddingEnd="0dp"
-                    android:contentDescription="@string/appearance_editor_style_floating"
-                    app:icon="@drawable/ic_style_floating"
-                    app:iconGravity="textStart"
-                    app:iconPadding="0dp" />
-            </com.google.android.material.button.MaterialButtonToggleGroup>
-
-            <FrameLayout
-                android:id="@+id/layout_editor_tray"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:minHeight="48dp">
-
-                <!-- The trash: the drop target for hiding, and a tap lists what is hidden (the
-                     list itself is drawn by the canvas, above it). Outline while empty; filled and
-                     counted otherwise (LayoutEditorController). -->
-                <ImageView
-                    android:id="@+id/layout_editor_tray_trash"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_gravity="end|center_vertical"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/layout_editor_trash_empty"
-                    android:padding="12dp"
-                    android:scaleType="fitCenter"
-                    android:src="@drawable/ic_symbol_delete"
-                    android:tint="?attr/colorOnSurfaceVariant" />
-
-            </FrameLayout>
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/appearance_editor_layout_sliders"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/appearance_editor_corners_label"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textAppearance="?attr/textAppearanceLabelMedium"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
-
-                <com.google.android.material.slider.Slider
-                    android:id="@+id/appearance_editor_corners"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/appearance_editor_corners_description"
-                    android:stepSize="1"
-                    android:valueFrom="0"
-                    android:valueTo="40"
-                    app:labelBehavior="gone" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="16dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/appearance_editor_margin_label"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textAppearance="?attr/textAppearanceLabelMedium"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
-
-                <com.google.android.material.slider.Slider
-                    android:id="@+id/appearance_editor_margin"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:contentDescription="@string/appearance_editor_margin_description"
-                    android:stepSize="1"
-                    android:valueFrom="0"
-                    android:valueTo="48"
-                    app:labelBehavior="gone" />
-            </LinearLayout>
-        </LinearLayout>
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/appearance_editor_row1"
-        android:layout_width="match_parent"
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/appearance_editor_done"
+        style="@style/Widget.Material3.Button"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:minWidth="0dp"
+        android:maxLines="1"
+        android:text="@string/appearance_editor_done"
+        app:layout_constraintBottom_toBottomOf="@id/appearance_editor_mode"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/appearance_editor_mode" />
 
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+    <!-- ============================================================ Appearance mode -->
 
-            <com.google.android.material.slider.Slider
-                android:id="@+id/appearance_editor_look"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:contentDescription="@string/appearance_editor_look_description"
-                android:stepSize="1"
-                android:value="4"
-                android:valueFrom="0"
-                android:valueTo="4"
-                app:labelBehavior="gone"
-                app:tickVisible="true" />
+    <com.google.android.material.slider.Slider
+        android:id="@+id/appearance_editor_look"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:contentDescription="@string/appearance_editor_look_description"
+        android:stepSize="1"
+        android:value="4"
+        android:valueFrom="0"
+        android:valueTo="4"
+        app:labelBehavior="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/appearance_editor_mode"
+        app:tickVisibilityMode="hidden" />
 
-            <!-- One label per tick, placed in code under the tick it names: the ticks sit inside
-                 the slider's track padding, so evenly weighted labels would drift off them. -->
-            <FrameLayout
-                android:id="@+id/appearance_editor_look_labels"
-                android:layout_width="match_parent"
-                android:layout_height="20dp"
-                android:layout_marginTop="-10dp"
-                android:importantForAccessibility="no" />
-        </LinearLayout>
-    </LinearLayout>
+    <!-- One label per stop, centred under it in code. -->
+    <FrameLayout
+        android:id="@+id/appearance_editor_look_labels"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:importantForAccessibility="no"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/appearance_editor_look" />
 
-    <!-- Row 2: one fixed height, whichever element is tapped. -->
-    <LinearLayout
+    <!-- Row B: its own ConstraintLayout, so the columns' per-element visibility is not the
+         Appearance group's to restate. Shown and hidden with alpha only (see the header). -->
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/appearance_editor_row2"
-        android:layout_width="match_parent"
-        android:layout_height="88dp"
-        android:orientation="vertical"
-        android:visibility="gone">
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:alpha="0"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/appearance_editor_look_labels">
 
         <TextView
             android:id="@+id/appearance_editor_row2_name"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
             android:textAppearance="?attr/textAppearanceTitleSmall"
-            android:textColor="?attr/colorPrimary" />
+            android:textColor="?attr/colorPrimary"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- One line of controls side by side. On a narrow panel (AppearanceEditorPanel.setNarrow)
-             the first two stack, or, for the terminal, its two sliders share the line and
-             Legibility takes a line of its own under them. -->
+        <!-- Up to three equal columns in one chain. The 16dp gaps sit on the end of c1 and cl,
+             so whichever of c1 / cl is gone, the visible columns keep one gap between them:
+             c1's goneMarginEnd keeps it when cl is gone, and c2 has no start margin. -->
         <LinearLayout
-            android:id="@+id/appearance_editor_row2_controls"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_weight="1"
-            android:gravity="center_vertical"
-            android:orientation="vertical">
+            android:id="@+id/appearance_editor_c1"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="16dp"
+            android:orientation="vertical"
+            app:layout_constraintEnd_toStartOf="@id/appearance_editor_cl"
+            app:layout_constraintHorizontal_chainStyle="spread"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_name"
+            app:layout_goneMarginEnd="16dp">
 
-            <LinearLayout
-                android:id="@+id/appearance_editor_row2_line"
+            <TextView
+                android:id="@+id/appearance_editor_c1_label"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
+                android:ellipsize="end"
+                android:gravity="bottom|start"
+                android:maxLines="2"
+                android:minLines="2"
+                android:textAppearance="?attr/textAppearanceLabelMedium"
+                android:textColor="?attr/colorOnSurfaceVariant" />
 
-                <LinearLayout
-                    android:id="@+id/appearance_editor_c1"
-                    android:layout_width="0dp"
+            <com.google.android.material.slider.Slider
+                android:id="@+id/appearance_editor_c1_slider"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/appearance_editor_control_description"
+                android:stepSize="1"
+                android:valueFrom="0"
+                android:valueTo="100"
+                app:labelBehavior="gone"
+                app:tickVisibilityMode="hidden" />
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/appearance_editor_c1_soft"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/appearance_editor_soft"
+                android:visibility="gone"
+                app:selectionRequired="true"
+                app:singleSelection="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/appearance_editor_soft_off"
+                    style="@style/Widget.Termux.Button.Segment"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
+                    android:minWidth="0dp"
+                    android:text="@string/appearance_editor_soft_off" />
 
-                    <TextView
-                        android:id="@+id/appearance_editor_c1_label"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textAppearance="?attr/textAppearanceLabelMedium"
-                        android:textColor="?attr/colorOnSurfaceVariant" />
-
-                    <com.google.android.material.slider.Slider
-                        android:id="@+id/appearance_editor_c1_slider"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:stepSize="1"
-                        android:valueFrom="0"
-                        android:valueTo="100"
-                        app:labelBehavior="gone" />
-
-                    <com.google.android.material.button.MaterialButtonToggleGroup
-                        android:id="@+id/appearance_editor_c1_soft"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:visibility="gone"
-                        app:selectionRequired="true"
-                        app:singleSelection="true">
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/appearance_editor_soft_off"
-                            style="@style/Widget.Termux.Button.Segment"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:maxLines="1"
-                            android:text="@string/appearance_editor_soft_off" />
-
-                        <com.google.android.material.button.MaterialButton
-                            android:id="@+id/appearance_editor_soft_on"
-                            style="@style/Widget.Termux.Button.Segment"
-                            android:layout_width="0dp"
-                            android:layout_height="wrap_content"
-                            android:layout_weight="1"
-                            android:maxLines="1"
-                            android:text="@string/appearance_editor_soft_on" />
-                    </com.google.android.material.button.MaterialButtonToggleGroup>
-                </LinearLayout>
-
-                <!-- The terminal's Legibility: its palette's contrast (SPEC §2, §3.4). -->
-                <LinearLayout
-                    android:id="@+id/appearance_editor_cl"
-                    android:layout_width="0dp"
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/appearance_editor_soft_on"
+                    style="@style/Widget.Termux.Button.Segment"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
-                    android:layout_weight="1"
-                    android:orientation="vertical"
-                    android:visibility="gone">
-
-                    <TextView
-                        android:id="@+id/appearance_editor_cl_label"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/appearance_editor_legibility_normal"
-                        android:textAppearance="?attr/textAppearanceLabelMedium"
-                        android:textColor="?attr/colorOnSurfaceVariant" />
-
-                    <com.google.android.material.slider.Slider
-                        android:id="@+id/appearance_editor_legibility"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:stepSize="1"
-                        android:valueFrom="0"
-                        android:valueTo="2"
-                        app:labelBehavior="gone" />
-                </LinearLayout>
-
-                <LinearLayout
-                    android:id="@+id/appearance_editor_c2"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="16dp"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        android:id="@+id/appearance_editor_c2_label"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:textAppearance="?attr/textAppearanceLabelMedium"
-                        android:textColor="?attr/colorOnSurfaceVariant" />
-
-                    <com.google.android.material.slider.Slider
-                        android:id="@+id/appearance_editor_c2_slider"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:stepSize="1"
-                        android:valueFrom="0"
-                        android:valueTo="100"
-                        app:labelBehavior="gone" />
-                </LinearLayout>
-            </LinearLayout>
+                    android:minWidth="0dp"
+                    android:text="@string/appearance_editor_soft_on" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
         </LinearLayout>
-    </LinearLayout>
-</LinearLayout>
+
+        <!-- The terminal's Text contrast: its palette's contrast (SPEC §2, §3.4). -->
+        <LinearLayout
+            android:id="@+id/appearance_editor_cl"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="16dp"
+            android:orientation="vertical"
+            android:visibility="gone"
+            app:layout_constraintEnd_toStartOf="@id/appearance_editor_c2"
+            app:layout_constraintStart_toEndOf="@id/appearance_editor_c1"
+            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_name">
+
+            <TextView
+                android:id="@+id/appearance_editor_cl_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:gravity="bottom|start"
+                android:maxLines="2"
+                android:minLines="2"
+                android:text="@string/appearance_editor_legibility_normal"
+                android:textAppearance="?attr/textAppearanceLabelMedium"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/appearance_editor_legibility"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/appearance_editor_legibility_description"
+                android:stepSize="1"
+                android:valueFrom="0"
+                android:valueTo="2"
+                app:labelBehavior="gone"
+                app:tickVisibilityMode="hidden" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/appearance_editor_c2"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="vertical"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/appearance_editor_cl"
+            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_name">
+
+            <TextView
+                android:id="@+id/appearance_editor_c2_label"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:gravity="bottom|start"
+                android:maxLines="2"
+                android:minLines="2"
+                android:textAppearance="?attr/textAppearanceLabelMedium"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/appearance_editor_c2_slider"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/appearance_editor_control_description"
+                android:stepSize="1"
+                android:valueFrom="0"
+                android:valueTo="100"
+                app:labelBehavior="gone"
+                app:tickVisibilityMode="hidden" />
+        </LinearLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <androidx.constraintlayout.widget.Group
+        android:id="@+id/appearance_editor_appearance_group"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:constraint_referenced_ids="appearance_editor_look,appearance_editor_look_labels,appearance_editor_row2" />
+
+    <!-- ================================================================ Layout mode -->
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/layout_editor_orientation"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:contentDescription="@string/termux_layout_editor_orientation"
+        android:visibility="gone"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/appearance_editor_mode"
+        app:selectionRequired="true"
+        app:singleSelection="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/layout_editor_orientation_portrait"
+            style="@style/Widget.Termux.Button.Segment"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:contentDescription="@string/settings_layout_orientation_portrait"
+            android:tooltipText="@string/settings_layout_orientation_portrait"
+            app:icon="@drawable/ic_symbol_phone_portrait"
+            app:iconPadding="0dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/layout_editor_orientation_landscape"
+            style="@style/Widget.Termux.Button.Segment"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:contentDescription="@string/settings_layout_orientation_landscape"
+            android:tooltipText="@string/settings_layout_orientation_landscape"
+            app:icon="@drawable/ic_symbol_phone_landscape"
+            app:iconPadding="0dp" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+    <com.google.android.material.button.MaterialButtonToggleGroup
+        android:id="@+id/appearance_editor_style"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
+        android:contentDescription="@string/appearance_editor_style_description"
+        android:visibility="gone"
+        app:layout_constraintStart_toEndOf="@id/layout_editor_orientation"
+        app:layout_constraintTop_toTopOf="@id/layout_editor_orientation"
+        app:selectionRequired="true"
+        app:singleSelection="true">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_editor_style_docked"
+            style="@style/Widget.Termux.Button.Segment"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:contentDescription="@string/appearance_editor_style_docked"
+            android:tooltipText="@string/appearance_editor_style_docked"
+            app:icon="@drawable/ic_style_docked"
+            app:iconPadding="0dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_editor_style_floating"
+            style="@style/Widget.Termux.Button.Segment"
+            android:layout_width="48dp"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:contentDescription="@string/appearance_editor_style_floating"
+            android:tooltipText="@string/appearance_editor_style_floating"
+            app:icon="@drawable/ic_style_floating"
+            app:iconPadding="0dp" />
+    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+    <!-- The trash: the drop target a lifted bar is put away in (LayoutEditorController tells the
+         canvas this button's rect), and a tap lists what is hidden. Its count badge is attached
+         to this button, after it is laid out. -->
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/layout_editor_tray_trash"
+        style="?attr/materialIconButtonStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:contentDescription="@string/layout_editor_trash_empty"
+        android:visibility="gone"
+        app:icon="@drawable/ic_symbol_delete"
+        app:layout_constraintBottom_toBottomOf="@id/layout_editor_orientation"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/layout_editor_orientation" />
+
+    <TextView
+        android:id="@+id/appearance_editor_corners_label"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textAppearance="?attr/textAppearanceLabelMedium"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:visibility="gone"
+        app:layout_constraintEnd_toStartOf="@id/appearance_editor_margin_label"
+        app:layout_constraintHorizontal_chainStyle="spread"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/layout_editor_orientation" />
+
+    <TextView
+        android:id="@+id/appearance_editor_margin_label"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:textAppearance="?attr/textAppearanceLabelMedium"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toEndOf="@id/appearance_editor_corners_label"
+        app:layout_constraintTop_toTopOf="@id/appearance_editor_corners_label" />
+
+    <com.google.android.material.slider.Slider
+        android:id="@+id/appearance_editor_corners"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:contentDescription="@string/appearance_editor_corners_description"
+        android:stepSize="1"
+        android:valueFrom="0"
+        android:valueTo="40"
+        android:visibility="gone"
+        app:labelBehavior="gone"
+        app:layout_constraintEnd_toEndOf="@id/appearance_editor_corners_label"
+        app:layout_constraintStart_toStartOf="@id/appearance_editor_corners_label"
+        app:layout_constraintTop_toBottomOf="@id/appearance_editor_corners_label"
+        app:tickVisibilityMode="hidden" />
+
+    <com.google.android.material.slider.Slider
+        android:id="@+id/appearance_editor_margin"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:contentDescription="@string/appearance_editor_margin_description"
+        android:stepSize="1"
+        android:valueFrom="0"
+        android:valueTo="48"
+        android:visibility="gone"
+        app:labelBehavior="gone"
+        app:layout_constraintEnd_toEndOf="@id/appearance_editor_margin_label"
+        app:layout_constraintStart_toStartOf="@id/appearance_editor_margin_label"
+        app:layout_constraintTop_toBottomOf="@id/appearance_editor_margin_label"
+        app:tickVisibilityMode="hidden" />
+
+    <androidx.constraintlayout.widget.Group
+        android:id="@+id/appearance_editor_layout_group"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:constraint_referenced_ids="layout_editor_orientation,appearance_editor_style,layout_editor_tray_trash,appearance_editor_corners_label,appearance_editor_margin_label,appearance_editor_corners,appearance_editor_margin" />
+</androidx.constraintlayout.widget.ConstraintLayout>
