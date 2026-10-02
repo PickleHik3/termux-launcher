@@ -899,6 +899,13 @@ Applications may emit OSC 8 hyperlinks. Linked cells are visibly underlined and 
 the full target before anything opens. Only `http`, `https`, `mailto`, `tel`, `sms`, `geo`, `ftp`,
 and `ftps` can be opened. Other schemes, including `file`, can only be copied.
 
+While a program tracks the mouse (a TUI such as herdr or tmux with mouse on), a tap goes only to
+that program as its click, so the app opens no link of its own. The extra-keys row's Ctrl, Alt and
+Shift, and a hardware keyboard's, are sent along with the click the way xterm does; a latched Ctrl
+covers one click and is then spent, so Ctrl+tap lets such a program open its own links. Hold or
+latch Shift for the tap instead and nothing goes to the program: the app opens the OSC 8 link or the
+URL under your finger, as it does in a plain shell.
+
 The implementation bounds URI length and link-pool size. If the pool is exhausted, new links degrade
 to ordinary text instead of consuming unbounded memory.
 
