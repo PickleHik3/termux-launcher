@@ -247,6 +247,8 @@ public final class SurfaceEditorController {
 
     /** The gap between the frame and the status inset above it, and the bottom area below it. */
     private static final int FRAME_GAP_DP = 8;
+    /** The hide zone's height; it stands under the miniature, a gap clear of it and the sheet. */
+    private static final int HIDE_ZONE_DP = 48;
     /** The selection outline's stroke. */
     private static final int OUTLINE_STROKE_DP = 2;
     private static final long PANEL_MS = 240L;
@@ -396,6 +398,8 @@ public final class SurfaceEditorController {
     @Nullable private LayoutEditorController.Views mLayoutViews;
     /** The frame's rect in the content view, as {@code {left, top, right, bottom}}. */
     @Nullable private int[] mFrameRectInContent;
+    /** The hide zone under the frame, built with the frame host. */
+    @Nullable private TextView mHideZone;
     /** The frame's corner on screen: the device radius at the frame's scale. */
     private float mFrameCornerPx;
     private static final long LAYOUT_FADE_MS = 200L;
@@ -437,6 +441,30 @@ public final class SurfaceEditorController {
         frame.animate().cancel();
         frame.setAlpha(1f);
         frame.setVisibility(View.GONE);
+        // The hide zone is its own view beside the frame, not inside its clipped outline.
+        TextView zone = mHideZone;
+        if (zone == null) {
+            View inflated = LayoutInflater.from(mHost.context())
+                .inflate(R.layout.layout_editor_hide_zone, content, false);
+            if (inflated instanceof TextView) {
+                zone = (TextView) inflated;
+                mHideZone = zone;
+            }
+        }
+        if (zone != null) {
+            if (zone.getParent() != content) {
+                if (zone.getParent() instanceof ViewGroup)
+                    ((ViewGroup) zone.getParent()).removeView(zone);
+                FrameLayout.LayoutParams zoneParams = new FrameLayout.LayoutParams(0,
+                    dp(HIDE_ZONE_DP), Gravity.TOP | Gravity.START);
+                int panelIndex = content.indexOfChild(panel.view());
+                if (panelIndex >= 0) content.addView(zone, panelIndex, zoneParams);
+                else content.addView(zone, zoneParams);
+            }
+            zone.animate().cancel();
+            zone.setAlpha(1f);
+            zone.setVisibility(View.GONE);
+        }
         if (mLayoutViews == null) {
             LayoutCanvasView canvas = frame.findViewById(R.id.layout_editor_canvas);
             ChipGroup forms = frame.findViewById(R.id.layout_editor_keyboard_forms);
@@ -444,7 +472,7 @@ public final class SurfaceEditorController {
                 return;
             // One set of views per process, like the panel: the controller binds them once.
             mLayoutViews = new LayoutEditorController.Views(frame, canvas, forms,
-                panel.orientationToggle(), panel.trash());
+                panel.orientationToggle(), panel.trash(), zone);
         }
         layout.attach(mLayoutViews);
         positionLayoutFrame();
@@ -475,6 +503,30 @@ public final class SurfaceEditorController {
         LayoutCanvasView canvas = frame.findViewById(R.id.layout_editor_canvas);
         if (canvas != null)
             canvas.setFrameCornerRadiusPx(mFrameCornerPx);
+        positionHideZone();
+    }
+
+    /** Stands the hide zone under the frame, as wide as it and a gap clear of it. */
+    private void positionHideZone() {
+        TextView zone = mHideZone;
+        int[] rect = mFrameRectInContent;
+        if (zone == null || rect == null)
+            return;
+        ViewGroup.LayoutParams raw = zone.getLayoutParams();
+        if (!(raw instanceof FrameLayout.LayoutParams))
+            return;
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) raw;
+        int width = Math.max(1, rect[2] - rect[0]);
+        int top = rect[3] + dp(FRAME_GAP_DP);
+        if (params.width != width || params.height != dp(HIDE_ZONE_DP)
+            || params.leftMargin != rect[0] || params.topMargin != top) {
+            params.width = width;
+            params.height = dp(HIDE_ZONE_DP);
+            params.leftMargin = rect[0];
+            params.topMargin = top;
+            params.gravity = Gravity.TOP | Gravity.START;
+            zone.setLayoutParams(params);
+        }
     }
 
     private void setLayoutMode(boolean layout, boolean animate) {
@@ -507,7 +559,41 @@ public final class SurfaceEditorController {
         syncDirty();
     }
 
+    /** The hide zone shows and goes with Layout mode's frame. */
+    private void fadeHideZone(boolean shown, boolean instant, long delayMs) {
+        TextView zone = mHideZone;
+        if (zone == null)
+            return;
+        zone.animate().cancel();
+        if (shown) {
+            boolean wasShown = zone.getVisibility() == View.VISIBLE;
+            zone.setVisibility(View.VISIBLE);
+            if (instant) {
+                zone.setAlpha(1f);
+                return;
+            }
+            if (!wasShown) zone.setAlpha(0f);
+            zone.animate().alpha(1f).setStartDelay(delayMs).setDuration(LAYOUT_FADE_MS)
+                .setInterpolator(Motion.settle()).start();
+            return;
+        }
+        if (instant || zone.getVisibility() != View.VISIBLE) {
+            zone.setAlpha(1f);
+            zone.setVisibility(View.GONE);
+            return;
+        }
+        zone.animate().alpha(0f).setStartDelay(0L).setDuration(LAYOUT_FADE_MS)
+            .setInterpolator(Motion.settle())
+            .withEndAction(() -> {
+                if (mLayoutMode && mOpen)
+                    return;
+                zone.setVisibility(View.GONE);
+                zone.setAlpha(1f);
+            }).start();
+    }
+
     private void fadeLayoutFrame(boolean shown, boolean animate, long delayMs) {
+        fadeHideZone(shown, !animate || ReducedMotion.isEnabled(mHost.context()), delayMs);
         FrameLayout frame = mLayoutFrame;
         if (frame == null)
             return;
@@ -675,7 +761,9 @@ public final class SurfaceEditorController {
         int containerTop = parentOffset[1] + root.getTop();
         int containerLeft = parentOffset[0] + root.getLeft();
         int frameTop = Math.max(containerTop, statusInset) + dp(FRAME_GAP_DP);
-        int frameBottom = windowHeight - mRestHeightPx - dp(FRAME_GAP_DP);
+        // The hide zone and its gap stand between the miniature and the sheet.
+        int frameBottom = windowHeight - mRestHeightPx - dp(FRAME_GAP_DP)
+            - dp(HIDE_ZONE_DP) - dp(FRAME_GAP_DP);
         float scale = AppearanceEditorFrame.fitScale(root.getHeight(), frameTop, frameBottom);
         frame.show(scale, frameTop - containerTop, animate);
         // Where the scaled container lands (pivot at its top centre): the rect Layout mode's
