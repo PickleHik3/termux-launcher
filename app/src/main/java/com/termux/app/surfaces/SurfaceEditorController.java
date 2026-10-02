@@ -18,10 +18,11 @@ import android.view.ViewTreeObserver;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.PopupWindow;
-import android.widget.ScrollView;
+import android.widget.BaseAdapter;
+import android.widget.ListPopupWindow;
 import android.widget.TextView;
 
+import androidx.annotation.AttrRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
@@ -29,6 +30,8 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
@@ -37,6 +40,7 @@ import com.termux.R;
 import com.termux.app.ReducedMotion;
 import com.termux.app.chrome.GlassMotion;
 import com.termux.app.fragments.settings.LayoutCanvasView;
+import com.termux.app.layouteditor.EditorM3;
 import com.termux.app.layouteditor.LayoutEditorController;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.statusbar.TopPaneClockForm;
@@ -431,8 +435,7 @@ public final class SurfaceEditorController {
                 return;
             // One set of views per process, like the panel: the controller binds them once.
             mLayoutViews = new LayoutEditorController.Views(frame, canvas, forms,
-                panel.orientationToggle(), panel.tray(), panel.trayTrash(),
-                panel.trayBadge());
+                panel.orientationToggle(), panel.tray(), panel.trayTrash());
         }
         layout.attach(mLayoutViews);
         positionLayoutFrame();
@@ -1598,55 +1601,68 @@ public final class SurfaceEditorController {
         widget.setLazyMode(prefs().isLazyModeEnabled());
     }
 
-    @Nullable private PopupWindow mClockDropdown;
+    @Nullable private ListPopupWindow mClockDropdown;
 
-    /** The ▾'s drop-down: the six faces, drawn as themselves, right under the clock they replace. */
+    /**
+     * The drop-down's rows: the six faces, then one row for the face's place in the pane. A real
+     * list popup, so the theme's popup style gives it its surface, shape and elevation.
+     */
+    private final class ClockDropdownAdapter extends BaseAdapter {
+        private final String mCurrent;
+
+        ClockDropdownAdapter(@NonNull String current) {
+            mCurrent = current;
+        }
+
+        @Override public int getCount() { return CLOCK_STYLES.length + 1; }
+
+        @Override public Object getItem(int position) {
+            return position < CLOCK_STYLES.length ? CLOCK_STYLES[position] : null;
+        }
+
+        @Override public long getItemId(int position) { return position; }
+
+        @Override public int getViewTypeCount() { return 2; }
+
+        @Override public int getItemViewType(int position) {
+            return position < CLOCK_STYLES.length ? 0 : 1;
+        }
+
+        @Override public boolean areAllItemsEnabled() { return false; }
+
+        /** The position row is made of controls of its own; the list only takes the faces. */
+        @Override public boolean isEnabled(int position) { return position < CLOCK_STYLES.length; }
+
+        @Override public View getView(int position, @Nullable View convertView,
+                                      @NonNull ViewGroup parent) {
+            Context context = parent.getContext();
+            if (position >= CLOCK_STYLES.length)
+                return clockPositionRow(context);
+            return clockFaceRow(context, CLOCK_STYLES[position], mCurrent);
+        }
+    }
+
+    /** The ▾'s drop-down, right under the clock handle: the six faces, drawn as themselves. */
     private void showClockDropdown(@NonNull View anchor) {
         if (prefs() == null)
             return;
         dismissClockDropdown();
         Context context = mHost.context();
-        LinearLayout column = new LinearLayout(context);
-        column.setOrientation(LinearLayout.VERTICAL);
-        column.setPadding(dp(12), dp(6), dp(12), dp(6));
-        ScrollView scroller = new ScrollView(context);
-        scroller.addView(column);
-
-        GradientDrawable field = new GradientDrawable();
-        field.setCornerRadius(dpToPx(16));
-        field.setColor(mHost.themeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
-            R.color.termux_surface_panel_high));
-        field.setStroke(Math.max(1, dp(1)), mHost.themeColor(
-            com.termux.shared.R.attr.termuxColorOutlineVariant, R.color.termux_outline_variant));
-
-        int width = Math.min(dp(300),
-            getResources().getDisplayMetrics().widthPixels - dp(32));
-        PopupWindow popup = new PopupWindow(scroller, width,
-            ViewGroup.LayoutParams.WRAP_CONTENT, true);
-        popup.setBackgroundDrawable(field);
-        popup.setElevation(dpToPx(12));
-        popup.setOutsideTouchable(true);
+        ListPopupWindow popup = new ListPopupWindow(context);
+        popup.setAnchorView(anchor);
+        popup.setModal(true);
+        popup.setWidth(Math.min(anchor.getRootView().getWidth(),
+            getResources().getDisplayMetrics().widthPixels) * 3 / 4);
         popup.setOnDismissListener(() -> mClockDropdown = null);
-
-        String current = prefs().getTopPaneClockStyle();
-        for (String style : CLOCK_STYLES) {
-            final String picked = style;
-            column.addView(clockFaceRow(context, style, current, () -> {
-                pickClockStyle(picked);
+        popup.setAdapter(new ClockDropdownAdapter(prefs().getTopPaneClockStyle()));
+        popup.setOnItemClickListener((parent, view, position, id) -> {
+            if (position < CLOCK_STYLES.length) {
+                pickClockStyle(CLOCK_STYLES[position]);
                 popup.dismiss();
-            }));
-        }
-        View divider = new View(context);
-        divider.setBackgroundColor(mHost.themeColor(
-            com.termux.shared.R.attr.termuxColorOutlineVariant, R.color.termux_outline_variant));
-        LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, Math.max(1, dp(1)));
-        dividerParams.setMargins(0, dp(4), 0, dp(4));
-        divider.setLayoutParams(dividerParams);
-        column.addView(divider);
-        column.addView(clockPositionRow(context));
+            }
+        });
         mClockDropdown = popup;
-        popup.showAsDropDown(anchor, 0, dp(4), Gravity.START);
+        popup.show();
     }
 
     private void dismissClockDropdown() {
@@ -1656,29 +1672,32 @@ public final class SurfaceEditorController {
         mClockDropdown = null;
     }
 
+    /** Gives a text view the theme's text appearance behind {@code attr}. */
+    private static void applyTextAppearance(@NonNull TextView view, @AttrRes int attr) {
+        TypedValue value = new TypedValue();
+        if (view.getContext().getTheme().resolveAttribute(attr, value, true)
+            && value.resourceId != 0)
+            view.setTextAppearance(value.resourceId);
+    }
+
     /** One face in the drop-down: its name, the face itself, and a tick on the one in use. */
     @NonNull
     private View clockFaceRow(@NonNull Context context, @NonNull String style,
-                              @NonNull String current, @NonNull Runnable onPicked) {
+                              @NonNull String current) {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setMinimumHeight(dp(48));
-        TypedValue ripple = new TypedValue();
-        if (context.getTheme().resolveAttribute(
-                android.R.attr.selectableItemBackground, ripple, true))
-            row.setBackgroundResource(ripple.resourceId);
         boolean selected = style.equals(current);
 
         TextView name = new TextView(context);
         name.setText(clockStyleLabel(style));
-        name.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        applyTextAppearance(name, com.google.android.material.R.attr.textAppearanceLabelLarge);
         name.setMaxLines(2);
         name.setEllipsize(TextUtils.TruncateAt.END);
-        name.setTextColor(selected
-            ? mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary, R.color.termux_primary)
-            : mHost.themeColor(com.termux.shared.R.attr.termuxColorOnSurface,
-                R.color.termux_on_surface));
+        name.setTextColor(EditorM3.color(row, selected
+            ? com.google.android.material.R.attr.colorPrimary
+            : com.google.android.material.R.attr.colorOnSurface));
         name.setLayoutParams(new LinearLayout.LayoutParams(
             dp(84), ViewGroup.LayoutParams.WRAP_CONTENT));
         row.addView(name);
@@ -1691,10 +1710,9 @@ public final class SurfaceEditorController {
 
         TextView tick = new TextView(context);
         tick.setText(R.string.termux_surface_tuning_clock_selected);
-        tick.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+        applyTextAppearance(tick, com.google.android.material.R.attr.textAppearanceTitleMedium);
         tick.setGravity(Gravity.CENTER);
-        tick.setTextColor(mHost.themeColor(com.termux.shared.R.attr.termuxColorPrimary,
-            R.color.termux_primary));
+        tick.setTextColor(EditorM3.color(row, com.google.android.material.R.attr.colorPrimary));
         tick.setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
         tick.setLayoutParams(new LinearLayout.LayoutParams(
             dp(24), ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -1702,8 +1720,6 @@ public final class SurfaceEditorController {
 
         row.setContentDescription(getString(R.string.termux_surface_tuning_clock_face_description,
             getString(clockStyleLabel(style))));
-        row.setClickable(true);
-        row.setFocusable(true);
         final boolean isSelected = selected;
         androidx.core.view.ViewCompat.setAccessibilityDelegate(row,
             new androidx.core.view.AccessibilityDelegateCompat() {
@@ -1716,90 +1732,53 @@ public final class SurfaceEditorController {
                     info.setChecked(isSelected);
                 }
             });
-        row.setOnClickListener(view -> onPicked.run());
         return row;
     }
 
     /**
-     * Where the face sits in the pane — left, centre or right — as three pills under the faces.
-     * The row stays open for a second look instead of dismissing like a face pick does.
+     * Where the face sits in the pane, left, centre or right, as the theme's segmented buttons
+     * under the faces. The popup stays open for a second look instead of dismissing like a face
+     * pick does.
      */
     @NonNull
     private View clockPositionRow(@NonNull Context context) {
-        LinearLayout row = new LinearLayout(context);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setMinimumHeight(dp(48));
-        row.setPadding(0, dp(4), 0, dp(4));
-        row.setContentDescription(getString(R.string.settings_clock_alignment_title));
-        final TextView[] pills = new TextView[CLOCK_ALIGNMENTS.length];
-        for (int i = 0; i < CLOCK_ALIGNMENTS.length; i++) {
-            final String alignment = CLOCK_ALIGNMENTS[i];
-            TextView pill = new TextView(context);
-            pill.setText(clockAlignmentLabel(alignment));
-            pill.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            pill.setGravity(Gravity.CENTER);
-            pill.setMaxLines(1);
-            pill.setEllipsize(TextUtils.TruncateAt.END);
-            pill.setMinimumHeight(dp(36));
-            pill.setPadding(dp(8), 0, dp(8), 0);
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
-                ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-            params.setMargins(i == 0 ? 0 : dp(6), 0, 0, 0);
-            pill.setLayoutParams(params);
-            pill.setClickable(true);
-            pill.setFocusable(true);
-            pill.setContentDescription(getString(
-                R.string.termux_surface_tuning_clock_position_description,
-                getString(clockAlignmentLabel(alignment))));
-            pill.setOnClickListener(view -> {
-                pickClockAlignment(alignment);
-                for (int j = 0; j < pills.length; j++)
-                    styleClockPositionPill(pills[j], CLOCK_ALIGNMENTS[j].equals(alignment));
-            });
-            pills[i] = pill;
-            row.addView(pill);
-        }
+        MaterialButtonToggleGroup group = new MaterialButtonToggleGroup(context);
+        group.setSingleSelection(true);
+        group.setSelectionRequired(true);
+        group.setContentDescription(getString(R.string.settings_clock_alignment_title));
         String current = prefs() == null
             ? TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_ALIGNMENT
             : prefs().getTopPaneClockAlignment();
-        for (int i = 0; i < pills.length; i++)
-            styleClockPositionPill(pills[i], CLOCK_ALIGNMENTS[i].equals(current));
-        return row;
-    }
-
-    /** A pill is filled with the accent container when chosen and outlined when not. */
-    private void styleClockPositionPill(@NonNull TextView pill, boolean selected) {
-        GradientDrawable shape = new GradientDrawable();
-        shape.setCornerRadius(dpToPx(18));
-        if (selected) {
-            shape.setColor(mHost.themeColor(
-                com.termux.shared.R.attr.termuxColorAccentContainer,
-                R.color.termux_accent_container));
-            pill.setTextColor(mHost.themeColor(
-                com.termux.shared.R.attr.termuxColorOnAccentContainer,
-                R.color.termux_on_accent_container));
-        } else {
-            shape.setColor(0);
-            shape.setStroke(Math.max(1, dp(1)), mHost.themeColor(
-                com.termux.shared.R.attr.termuxColorOutlineVariant,
-                R.color.termux_outline_variant));
-            pill.setTextColor(mHost.themeColor(
-                com.termux.shared.R.attr.termuxColorOnSurface, R.color.termux_on_surface));
+        final java.util.Map<Integer, String> alignmentOf = new java.util.HashMap<>();
+        int currentId = View.NO_ID;
+        for (String alignment : CLOCK_ALIGNMENTS) {
+            MaterialButton button = new MaterialButton(context, null,
+                com.google.android.material.R.attr.materialButtonOutlinedStyle);
+            button.setId(View.generateViewId());
+            button.setText(clockAlignmentLabel(alignment));
+            button.setMaxLines(1);
+            button.setContentDescription(getString(
+                R.string.termux_surface_tuning_clock_position_description,
+                getString(clockAlignmentLabel(alignment))));
+            button.setLayoutParams(new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            group.addView(button);
+            alignmentOf.put(button.getId(), alignment);
+            if (alignment.equals(current))
+                currentId = button.getId();
         }
-        pill.setBackground(shape);
-        final boolean isSelected = selected;
-        androidx.core.view.ViewCompat.setAccessibilityDelegate(pill,
-            new androidx.core.view.AccessibilityDelegateCompat() {
-                @Override public void onInitializeAccessibilityNodeInfo(@NonNull View host,
-                        @NonNull androidx.core.view.accessibility
-                            .AccessibilityNodeInfoCompat info) {
-                    super.onInitializeAccessibilityNodeInfo(host, info);
-                    info.setClassName(Button.class.getName());
-                    info.setCheckable(true);
-                    info.setChecked(isSelected);
-                }
-            });
+        if (currentId != View.NO_ID)
+            group.check(currentId);
+        group.addOnButtonCheckedListener((g, checkedId, isChecked) -> {
+            String alignment = alignmentOf.get(checkedId);
+            if (isChecked && alignment != null)
+                pickClockAlignment(alignment);
+        });
+        FrameLayout holder = new FrameLayout(context);
+        holder.setPadding(dp(12), dp(4), dp(12), dp(4));
+        holder.addView(group, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return holder;
     }
 
     private void pickClockAlignment(@NonNull String alignment) {

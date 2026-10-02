@@ -1748,74 +1748,28 @@ public class LayoutCanvasViewTest {
     }
 
     @Test
-    public void tappingTheTrashWithNothingHiddenOpensNothing() {
+    public void hiddenElementsAreListedInOrderForTheEditorsPopup() {
         LayoutCanvasView view = sized();
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.BOTTOM, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        RectF trash = view.trashRect();
-        touch(view, MotionEvent.ACTION_DOWN, trash.centerX(), trash.centerY());
-        touch(view, MotionEvent.ACTION_UP, trash.centerX(), trash.centerY());
-        assertFalse(view.isHiddenPopupOpen());
-        assertNull(view.hiddenPopup());
-    }
-
-    @Test
-    public void tappingTheTrashListsWhatIsHiddenAndATapOutsideClosesIt() {
-        LayoutCanvasView view = sized();
-        view.setLegendVisible(false);
+        assertTrue(view.hiddenElements().isEmpty());
         view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
             PlaceOrientation.PORTRAIT);
-        RectF trash = view.trashRect();
-        touch(view, MotionEvent.ACTION_DOWN, trash.centerX(), trash.centerY());
-        touch(view, MotionEvent.ACTION_UP, trash.centerX(), trash.centerY());
-        assertTrue(view.isHiddenPopupOpen());
-        MiniatureDragPolicy.HiddenPopup popup = view.hiddenPopup();
-        assertNotNull(popup);
-        assertEquals("one chip for the hidden pinned apps", 1, popup.chipCount());
-        assertTrue("it stands above the icon", popup.bottom <= trash.top);
-
-        touch(view, MotionEvent.ACTION_DOWN, popup.left - 20f, popup.top);
-        assertFalse("a touch outside closes it", view.isHiddenPopupOpen());
+        assertEquals(java.util.Collections.singletonList(LayoutCanvasView.Block.APPS_ROW),
+            view.hiddenElements());
+        assertFalse(view.chipName(LayoutCanvasView.Block.APPS_ROW).isEmpty());
     }
 
     @Test
-    public void aTapOnAPopupChipRestoresThatElement() {
-        LayoutCanvasView view = sized();
-        view.setLegendVisible(false);
-        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
-            PlaceOrientation.PORTRAIT);
-        final LayoutCanvasView.Block[] tapped = new LayoutCanvasView.Block[1];
-        view.setOnCanvasEditListener(new LayoutCanvasView.OnCanvasEditListener() {
-            @Override public void onHiddenChipTapped(@NonNull LayoutCanvasView.Block block) {
-                tapped[0] = block;
-            }
-        });
-        view.toggleHiddenPopup();
-        float[] chip = view.hiddenPopup().chip(0);
-        float x = (chip[0] + chip[2]) / 2f;
-        float y = (chip[1] + chip[3]) / 2f;
-        touch(view, MotionEvent.ACTION_DOWN, x, y);
-        touch(view, MotionEvent.ACTION_UP, x, y);
-        assertEquals(LayoutCanvasView.Block.APPS_ROW, tapped[0]);
-    }
-
-    @Test
-    public void aChipPulledOutOfThePopupIsLiftedAndDroppedOnAnEdgeRestoresIt() {
+    public void aChipDraggedOutOfThePopupIsLiftedAndDroppedOnAnEdgeRestoresIt() {
         PlaceLayoutStore places = store();
         LayoutCanvasView view = inParent(parent(), 1000, 400);
         view.setLegendVisible(false);
         view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
             PlaceOrientation.LANDSCAPE);
         view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
-        view.toggleHiddenPopup();
-        assertTrue(view.isHiddenPopupOpen());
-        float[] chip = view.hiddenPopup().chip(0);
-        float x = (chip[0] + chip[2]) / 2f;
-        float y = (chip[1] + chip[3]) / 2f;
-        touch(view, MotionEvent.ACTION_DOWN, x, y);
-        touch(view, MotionEvent.ACTION_MOVE, x, y - 3f * slop(view));
-        assertFalse("lifting closes the popup", view.isHiddenPopupOpen());
+        assertTrue(view.beginHiddenDrag(LayoutCanvasView.Block.APPS_ROW));
         assertEquals(LayoutCanvasView.Block.APPS_ROW, view.draggedBar());
         for (MiniatureDragPolicy.Slot slot : view.slots())
             assertFalse("a hidden element is not dropped in the trash again", slot.isTray());
@@ -1824,9 +1778,24 @@ public class LayoutCanvasViewTest {
         assertNotNull(bottom);
         float dx = (bottom.left + bottom.right) / 2f;
         float dy = (bottom.top + bottom.bottom) / 2f;
-        touch(view, MotionEvent.ACTION_MOVE, dx, dy);
-        touch(view, MotionEvent.ACTION_UP, dx, dy);
+        view.hoverHiddenDrag(dx, dy);
+        assertTrue(view.dropHiddenDrag(dx, dy));
         assertEquals("bottom", prefs().getString("layout.landscape.apps_row", null));
+        assertNull(view.draggedBar());
+    }
+
+    @Test
+    public void aChipDroppedOverNoTargetLeavesTheElementHidden() {
+        PlaceLayoutStore places = store();
+        LayoutCanvasView view = inParent(parent(), 1000, 400);
+        view.setLegendVisible(false);
+        view.setLayout(layout(Edge.TOP, RowPlacement.HIDDEN, RowPlacement.BOTTOM),
+            PlaceOrientation.LANDSCAPE);
+        view.setOnBarDroppedListener(writer(places, PlaceOrientation.LANDSCAPE));
+        assertTrue(view.beginHiddenDrag(LayoutCanvasView.Block.APPS_ROW));
+        assertFalse(view.dropHiddenDrag(-50f, -50f));
+        assertNull(view.draggedBar());
+        view.endHiddenDrag();
     }
 
     @Test
@@ -1843,17 +1812,11 @@ public class LayoutCanvasViewTest {
                 restored[0] = true;
             }
         });
-        view.toggleHiddenPopup();
-        assertTrue(view.isHiddenPopupOpen());
-        float[] chip = view.hiddenPopup().chip(0);
-        float x = (chip[0] + chip[2]) / 2f;
-        float y = (chip[1] + chip[3]) / 2f;
-        touch(view, MotionEvent.ACTION_DOWN, x, y);
-        touch(view, MotionEvent.ACTION_MOVE, x, y - 3f * slop(view));
+        assertTrue(view.beginHiddenDrag(LayoutCanvasView.Block.KEYBOARD));
         assertEquals(LayoutCanvasView.Block.KEYBOARD, view.draggedBar());
         RectF frame = view.frameRect();
-        touch(view, MotionEvent.ACTION_MOVE, frame.centerX(), frame.centerY());
-        touch(view, MotionEvent.ACTION_UP, frame.centerX(), frame.centerY());
+        view.hoverHiddenDrag(frame.centerX(), frame.centerY());
+        assertTrue(view.dropHiddenDrag(frame.centerX(), frame.centerY()));
         assertTrue(restored[0]);
     }
 }

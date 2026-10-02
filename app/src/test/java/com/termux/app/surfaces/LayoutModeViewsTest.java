@@ -73,7 +73,6 @@ public class LayoutModeViewsTest {
         assertNotNull(panel.findViewById(R.id.layout_editor_tray));
         assertNotNull("the trash is the drop target and opens the hidden list",
             panel.findViewById(R.id.layout_editor_tray_trash));
-        assertNotNull(panel.findViewById(R.id.layout_editor_tray_badge));
         assertNotNull(panel.findViewById(R.id.appearance_editor_row2_controls));
         // Layout mode also carries what no Look sets (2026-10-01): Style, Corners and Margin.
         View style = panel.findViewById(R.id.appearance_editor_style);
