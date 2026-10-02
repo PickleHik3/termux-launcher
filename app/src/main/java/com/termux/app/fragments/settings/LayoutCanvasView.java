@@ -1643,8 +1643,10 @@ public final class LayoutCanvasView extends View {
                 float grow;
                 switch (edgeOfBlock(Block.APPS_ROW)) {
                     case TOP: grow = dy; break;
-                    case LEFT: grow = isRtl() ? -dx : dx; break;
-                    case RIGHT: grow = isRtl() ? dx : -dx; break;
+                    // The miniature's edges are physical in every layout direction, so a side
+                    // dock grows toward the middle whichever way the text runs.
+                    case LEFT: grow = dx; break;
+                    case RIGHT: grow = -dx; break;
                     case BOTTOM:
                     default: grow = -dy; break;
                 }
