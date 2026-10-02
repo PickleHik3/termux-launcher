@@ -219,18 +219,27 @@ public final class WidgetPaneFrame extends PaneContentFrame {
 
     private void applyRestingActions() {
         if (mControls == null) return;
-        mControls.setActions(PaneControlsView.Action.glyph(ACTION_EDIT, CornerTabGlyphs.EDIT),
-            PaneControlsView.Action.drawn(ACTION_ADD_PAGE, WidgetPaneFrame::drawPlusMark),
+        mControls.setActions(PaneControlsView.Action.glyph(ACTION_EDIT, CornerTabGlyphs.EDIT,
+                getContext().getString(R.string.pane_controls_edit_widgets)),
+            PaneControlsView.Action.drawn(ACTION_ADD_PAGE, WidgetPaneFrame::drawPlusMark,
+                PaneControlsView.TINT_PRIMARY,
+                getContext().getString(R.string.pane_controls_add_page)),
             PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE,
                 getContext().getString(R.string.appearance_editor_corner_tab_description)),
             PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT,
                 getContext().getString(R.string.corner_tab_layout_description)),
-            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.WALLPAPER),
+            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.WALLPAPER,
+                getContext().getString(R.string.pane_controls_change_wallpaper)),
             // Minimal mode is one mode for every place, so Home carries the same door in and
             // out as the terminal and the display; the mark reads the state as it draws.
             PaneControlsView.Action.drawn(ACTION_MINIMAL, com.termux.app.chrome.MinimalModeGlyph
-                .mark(getContext(), () -> mHost != null && mHost.isMinimalMode())),
-            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
+                .mark(getContext(), () -> mHost != null && mHost.isMinimalMode()),
+                PaneControlsView.TINT_PRIMARY, () -> getContext().getString(
+                    mHost != null && mHost.isMinimalMode()
+                        ? R.string.pane_controls_leave_minimal_mode
+                        : R.string.pane_controls_enter_minimal_mode)),
+            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
+                getContext().getString(R.string.pane_controls_help)));
     }
 
     /** Redraws the tab, whose minimal-mode glyph follows the launcher's state. */
@@ -247,10 +256,14 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         mControls.setActions(PaneControlsView.Action.label(ACTION_GRID_SIZE,
             getContext().getString(R.string.widget_grid_size_tab,
                 mHost.widgetGridColumns(), mHost.widgetGridRows())),
-            PaneControlsView.Action.drawn(ACTION_COMMIT, WidgetPaneFrame::drawTickMark),
+            PaneControlsView.Action.drawn(ACTION_COMMIT, WidgetPaneFrame::drawTickMark,
+                PaneControlsView.TINT_PRIMARY,
+                getContext().getString(R.string.pane_controls_keep_changes)),
             PaneControlsView.Action.drawn(ACTION_DISCARD, WidgetPaneFrame::drawCrossMark,
-                PaneControlsView.TINT_ERROR),
-            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
+                PaneControlsView.TINT_ERROR,
+                getContext().getString(R.string.pane_controls_discard_changes)),
+            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
+                getContext().getString(R.string.pane_controls_help)));
     }
 
     /** The tick, in the same hand-drawn family the panes' own close and maximise marks use. */

@@ -14,6 +14,7 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.animation.DecelerateInterpolator;
 
@@ -106,6 +107,15 @@ public final class PaneControlsView extends View {
     }
 
     /**
+     * A button's name read afresh each time a screen reader asks, for the buttons whose press
+     * does something different depending on state: minimal mode in or out, tiling on or off.
+     * It must name what a press does now, so a fixed string would go stale.
+     */
+    public interface Description {
+        @NonNull CharSequence get();
+    }
+
+    /**
      * One button of the tab: an id the page knows, and either a glyph, a short label, or a mark it
      * draws itself.
      */
@@ -117,9 +127,18 @@ public final class PaneControlsView extends View {
         final int tint;
         /** What the button is called to accessibility services; a glyph has no words of its own. */
         @Nullable final CharSequence description;
+        /** Names the button as it is now, when a fixed {@link #description} would go stale. */
+        @Nullable final Description describer;
 
         private Action(int id, @NonNull String text, boolean isGlyph, @Nullable Mark mark,
                        int tint, @Nullable CharSequence description) {
+            this(id, text, isGlyph, mark, tint, description, null);
+        }
+
+        private Action(int id, @NonNull String text, boolean isGlyph, @Nullable Mark mark,
+                       int tint, @Nullable CharSequence description,
+                       @Nullable Description describer) {
+            this.describer = describer;
             this.id = id;
             this.text = text;
             this.isGlyph = isGlyph;
@@ -131,7 +150,7 @@ public final class PaneControlsView extends View {
         /** A Nerd Font glyph in a square button. */
         @NonNull
         public static Action glyph(int id, @NonNull String glyph) {
-            return glyph(id, glyph, null);
+            return glyph(id, glyph, (CharSequence) null);
         }
 
         /** A Nerd Font glyph in a square button, named for TalkBack by {@code description}. */
@@ -141,10 +160,30 @@ public final class PaneControlsView extends View {
             return new Action(id, glyph, true, null, TINT_PRIMARY, description);
         }
 
+        /** A Nerd Font glyph whose name follows the state it is in. */
+        @NonNull
+        public static Action glyph(int id, @NonNull String glyph, @NonNull Description describer) {
+            return new Action(id, glyph, true, null, TINT_PRIMARY, null, describer);
+        }
+
+        /** What a screen reader says for this button right now; null when it has no name. */
+        @Nullable
+        CharSequence spokenDescription() {
+            if (describer != null) return describer.get();
+            return description;
+        }
+
         /** A short read-out — the grid's size, or the help question mark — as wide as its text. */
         @NonNull
         public static Action label(int id, @NonNull String text) {
             return new Action(id, text, false, null, TINT_PRIMARY, text);
+        }
+
+        /** A short read-out that a screen reader should name differently, such as the ? as Help. */
+        @NonNull
+        public static Action label(int id, @NonNull String text,
+                                   @NonNull CharSequence description) {
+            return new Action(id, text, false, null, TINT_PRIMARY, description);
         }
 
         /** A hand-drawn mark, in a square button the size a glyph's would be. */
@@ -157,6 +196,13 @@ public final class PaneControlsView extends View {
         @NonNull
         public static Action drawn(int id, @NonNull Mark mark, int tint) {
             return new Action(id, "", false, mark, tint, null);
+        }
+
+        /** As above, named by {@code describer} as the state is now. */
+        @NonNull
+        public static Action drawn(int id, @NonNull Mark mark, int tint,
+                                   @NonNull Description describer) {
+            return new Action(id, "", false, mark, tint, null, describer);
         }
 
         /** As above, named for TalkBack by {@code description}: a drawn mark has no words. */
@@ -199,6 +245,8 @@ public final class PaneControlsView extends View {
     private final RectF mBounds = new RectF();
     /** Scratch for the shape the tab is painted through; never allocated per frame. */
     private final RectF mClip = new RectF();
+    /** The keyboard focus ring around one button; scratch, never allocated per frame. */
+    private final RectF mFocusRing = new RectF();
     @Nullable private FrameSource mFrameSource;
     private final Frame mFrame = new Frame();
     /** One hit rectangle per action, in this view's coordinates; recomputed with the geometry. */
@@ -265,7 +313,11 @@ public final class PaneControlsView extends View {
         mMarkPaint.setStrokeWidth(dp(1.35f));
         setWillNotDraw(false);
         setClickable(false);
+        // Focusable only while the tab is out (see syncAccessibility), and never in touch mode:
+        // the tab is reachable by Tab and the arrow keys but never takes the terminal's focus
+        // off it by being touched or by appearing.
         setFocusable(false);
+        setFocusableInTouchMode(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         ViewCompat.setAccessibilityDelegate(this, mAccessibility);
     }
@@ -280,14 +332,15 @@ public final class PaneControlsView extends View {
 
         /**
          * What a screen reader says for a button: its description, else its label for a labelled
-         * button, else nothing. A bare glyph is a private-use character with no word behind it,
-         * so it is not offered as a virtual view at all: ExploreByTouchHelper throws on a node
-         * with neither text nor description, and a silent node would be no use anyway.
+         * button, else nothing. Every caller names its glyphs and marks, so the nothing is a
+         * guard, not a path: ExploreByTouchHelper throws on a node with neither text nor
+         * description, and a silent node would be no use anyway.
          */
         @Nullable
         private CharSequence spoken(@Nullable Action action) {
             if (action == null) return null;
-            if (action.description != null) return action.description;
+            CharSequence named = action.spokenDescription();
+            if (named != null && named.length() > 0) return named;
             if (!action.isGlyph && action.mark == null && !action.text.isEmpty()) return action.text;
             return null;
         }
@@ -330,7 +383,24 @@ public final class PaneControlsView extends View {
                                                         @Nullable android.os.Bundle arguments) {
             return action == AccessibilityNodeInfoCompat.ACTION_CLICK && activate(virtualViewId);
         }
+
+        @Override
+        protected void onVirtualViewKeyboardFocusChanged(int virtualViewId, boolean hasFocus) {
+            invalidate();
+        }
     };
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        return mAccessibility.dispatchKeyEvent(event) || super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    protected void onFocusChanged(boolean gainFocus, int direction,
+                                  @Nullable Rect previouslyFocusedRect) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect);
+        mAccessibility.onFocusChanged(gainFocus, direction, previouslyFocusedRect);
+    }
 
     @Override
     protected boolean dispatchHoverEvent(android.view.MotionEvent event) {
@@ -342,6 +412,10 @@ public final class PaneControlsView extends View {
         int wanted = mShown && !mRetracting && !mActions.isEmpty()
             ? IMPORTANT_FOR_ACCESSIBILITY_YES : IMPORTANT_FOR_ACCESSIBILITY_NO;
         if (getImportantForAccessibility() != wanted) setImportantForAccessibility(wanted);
+        // The same condition gates the keyboard: Tab and the arrows reach the buttons only while
+        // the tab is out; when it goes, focus (and the helper's virtual focus) goes with it.
+        boolean keyboardReachable = wanted == IMPORTANT_FOR_ACCESSIBILITY_YES;
+        if (isFocusable() != keyboardReachable) setFocusable(keyboardReachable);
         mAccessibility.invalidateRoot();
     }
 
@@ -626,6 +700,8 @@ public final class PaneControlsView extends View {
     public boolean activate(int id) {
         if (mListener == null || indexOf(id) < 0) return false;
         mListener.onPaneControlAction(id);
+        // A state-named button (minimal, tiling) may read differently now.
+        mAccessibility.invalidateRoot();
         return true;
     }
 
@@ -764,6 +840,14 @@ public final class PaneControlsView extends View {
                 : action.tint == TINT_ERROR ? error
                 : action.tint == TINT_TERTIARY ? tertiary : primary;
             int color = ColorUtils.setAlphaComponent(tint, alpha);
+            if (hasFocus() && mAccessibility.getKeyboardFocusedVirtualViewId() == action.id) {
+                mPaint.setStyle(Paint.Style.STROKE);
+                mPaint.setStrokeWidth(dp(1.5f));
+                mPaint.setColor(color);
+                mFocusRing.set(mButtons[i]);
+                mFocusRing.inset(dp(2), dp(2));
+                canvas.drawRoundRect(mFocusRing, dp(6), dp(6), mPaint);
+            }
             if (action.mark != null) {
                 mMarkPaint.setStyle(Paint.Style.STROKE);
                 mMarkPaint.setStrokeCap(Paint.Cap.ROUND);
