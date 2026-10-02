@@ -69,8 +69,12 @@ public class SettingsFragmentAliasesTest {
         PreferenceScreen screen = ((TermuxStylePreferencesFragment) fragment).getPreferenceScreen();
         assertNull("the Appearance editor is reached from the corner tab, not Settings",
             screen.findPreference("live_surface_editor"));
-        assertNotNull("keyboard look moved in from the old Keyboard page",
+        assertNotNull("keyboard look moved in from the old Keyboard page: one Keyboard theme row",
+            screen.findPreference("in_app_keyboard_color_scheme_editor"));
+        assertNull("the theme choice lives on the Keyboard theme page",
             screen.findPreference("in_app_keyboard_theme"));
+        assertNull("the typeface lives on the Keyboard theme page",
+            screen.findPreference("in_app_keyboard_font"));
         assertNotNull(screen.findPreference("customize_keyboard_surface"));
         assertNull("bottom padding is the Layout editor's keyboard handle now",
             screen.findPreference("in_app_keyboard_bottom_padding"));

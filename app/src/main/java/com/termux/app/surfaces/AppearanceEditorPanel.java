@@ -265,6 +265,14 @@ final class AppearanceEditorPanel {
         for (TextView label : labels)
             label.setMinLines(2);
         applyGroups(false);
+        // Row B at its fullest, whichever element (or none) is tapped now: the first and middle
+        // slots shown, so the anchor does not depend on what Row B happens to hold.
+        View[] slots = {mFirstLabel, mFirstSlider, mLegibilityLabel, mLegibility};
+        int[] slotVisibility = new int[slots.length];
+        for (int i = 0; i < slots.length; i++) {
+            slotVisibility[i] = slots[i].getVisibility();
+            slots[i].setVisibility(View.VISIBLE);
+        }
         int height = measureNow(widthPx);
         // The keyboard's "Keyboard theme" door may wrap to two lines in a narrow column, which
         // can stand taller than a slider: the tallest Row B is measured with it too.
@@ -275,6 +283,8 @@ final class AppearanceEditorPanel {
         height = Math.max(height, measureNow(widthPx));
         mSecondSlider.setVisibility(sliderVisibility);
         mSecondButton.setVisibility(buttonVisibility);
+        for (int i = 0; i < slots.length; i++)
+            slots[i].setVisibility(slotVisibility[i]);
         for (TextView label : labels)
             label.setMinLines(1);
         mRow2Shown = rowShown;
