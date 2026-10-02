@@ -285,14 +285,11 @@ final class AppearanceEditorPanel {
 
     private void bind() {
         mMode.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            syncCheckIcons(group);
             if (mRestating || !isChecked)
                 return;
             if (mListener != null)
                 mListener.onModeChanged(checkedId == R.id.appearance_editor_mode_layout);
         });
-        syncCheckIcons(mMode);
-        evenModeSegments();
         mUndo.setOnClickListener(view -> {
             if (mListener != null) mListener.onUndo();
         });
@@ -371,11 +368,7 @@ final class AppearanceEditorPanel {
                 if (mListener != null) mListener.onSliderReleased();
             }
         });
-        syncCheckIcons(mOrientation);
-        mOrientation.addOnButtonCheckedListener((group, checkedId, isChecked) ->
-            syncCheckIcons(group));
         mSoft.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            syncCheckIcons(group);
             if (mRestating || !isChecked || mListener == null)
                 return;
             mListener.onFirstSegment(group.indexOfChild(group.findViewById(checkedId)));
@@ -387,52 +380,6 @@ final class AppearanceEditorPanel {
             mLegibilityLabel.setText(legibilityLabel(index));
             mListener.onLegibility(index);
         });
-    }
-
-    /**
-     * The check icon on the chosen segment only. An unchecked segment carries no icon at all, so a
-     * narrow three-way row spends its width on the words.
-     */
-    private void syncCheckIcons(@NonNull MaterialButtonToggleGroup group) {
-        // Legibility's three words have no room for the icon on a narrow panel: its checked
-        // segment is told by the fill alone. The orientation and Style toggles are glyphs
-        // already.
-        if (group == mOrientation || group == mStyle)
-            return;
-        for (int i = 0; i < group.getChildCount(); i++) {
-            View child = group.getChildAt(i);
-            if (!(child instanceof MaterialButton))
-                continue;
-            MaterialButton button = (MaterialButton) child;
-            button.setIcon(button.isChecked()
-                ? ContextCompat.getDrawable(mContext, R.drawable.ic_symbol_check) : null);
-        }
-    }
-
-    /**
-     * The mode pill's two segments get the same width, the one the wider of them needs with the
-     * check icon on, so choosing the other mode moves nothing. Measured once, before the first
-     * frame; the pill is wrap_content and Undo's slot is reserved, so nothing else in the row
-     * depends on it afterwards.
-     */
-    private void evenModeSegments() {
-        MaterialButton appearance = mRoot.findViewById(R.id.appearance_editor_mode_appearance);
-        MaterialButton layout = mRoot.findViewById(R.id.appearance_editor_mode_layout);
-        if (appearance == null || layout == null)
-            return;
-        Drawable check = ContextCompat.getDrawable(mContext, R.drawable.ic_symbol_check);
-        int checkWidth = check == null ? 0 : check.getIntrinsicWidth();
-        int spec = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
-        int widest = 0;
-        for (MaterialButton button : new MaterialButton[] {appearance, layout}) {
-            button.measure(spec, spec);
-            int natural = button.getMeasuredWidth();
-            if (button.getIcon() == null)
-                natural += checkWidth + button.getIconPadding();
-            widest = Math.max(widest, natural);
-        }
-        appearance.setMinWidth(widest);
-        layout.setMinWidth(widest);
     }
 
     // ------------------------------------------------------------------------- restatements
@@ -453,7 +400,6 @@ final class AppearanceEditorPanel {
             mMode.check(id);
             mRestating = false;
         }
-        syncCheckIcons(mMode);
         if (layout == mLayoutMode)
             return;
         mLayoutMode = layout;
@@ -721,14 +667,11 @@ final class AppearanceEditorPanel {
 
     private void checkSegment(@NonNull MaterialButtonToggleGroup group, int index) {
         View child = group.getChildAt(Math.max(0, Math.min(group.getChildCount() - 1, index)));
-        if (child == null || group.getCheckedButtonId() == child.getId()) {
-            syncCheckIcons(group);
+        if (child == null || group.getCheckedButtonId() == child.getId())
             return;
-        }
         mRestating = true;
         group.check(child.getId());
         mRestating = false;
-        syncCheckIcons(group);
     }
 
     /** Range first, value inside it: a Slider throws for a value outside its range. */

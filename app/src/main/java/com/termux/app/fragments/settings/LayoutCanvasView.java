@@ -493,6 +493,16 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
+     * The real things the dock and the extra-keys bar draw: the pinned apps' icons and the first
+     * row's key texts. An empty list leaves that bar on the pack's glyphs.
+     */
+    public void setSlotContent(@NonNull java.util.List<android.graphics.drawable.Drawable> icons,
+                               @NonNull java.util.List<String> keyLabels) {
+        mArtwork.setSlotContent(icons, keyLabels);
+        invalidate();
+    }
+
+    /**
      * The status bar's stored state for the orientation on the canvas ({@code status_compact}):
      * collapsed to its one row, or expanded with the clock and the media tile. Until it is set the
      * canvas shows the launcher's rest: landscape collapsed, portrait expanded.

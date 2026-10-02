@@ -187,12 +187,27 @@ final class LayoutCanvasArtwork {
         float h = box.height() / k;
         float length = vertical ? h : w;
         float cross = vertical ? w : h;
-        int n = slotsFor(count, length, 20f);
+        int n = slotsForContent(mIcons.size(), count, length, 20f);
         if (n <= 0) return;
         float pitch = (length - 16f) / n;
         float size = Math.min(32f, Math.min(cross - 12f, pitch - 4f));
         if (size < 6f) return;
         int saved = begin(canvas, box, k);
+        if (!mIcons.isEmpty()) {
+            for (int i = 0; i < n; i++) {
+                float along = 8f + (i + 0.5f) * pitch;
+                float cx = vertical ? w / 2f : along;
+                float cy = vertical ? along : h / 2f;
+                android.graphics.drawable.Drawable icon = mIcons.get(i);
+                android.graphics.Rect old = icon.copyBounds();
+                icon.setBounds(Math.round(cx - size / 2f), Math.round(cy - size / 2f),
+                    Math.round(cx + size / 2f), Math.round(cy + size / 2f));
+                icon.draw(canvas);
+                icon.setBounds(old);
+            }
+            canvas.restoreToCount(saved);
+            return;
+        }
         for (int i = 0; i < n; i++) {
             int role = i % PACK_SLOTS;
             float along = 8f + (i + 0.5f) * pitch;
@@ -246,7 +261,8 @@ final class LayoutCanvasArtwork {
         float h = box.height() / k;
         float length = vertical ? h : w;
         float cross = vertical ? w : h;
-        int n = slotsFor(count, length, 18f);
+        boolean labels = !mKeyLabels.isEmpty();
+        int n = slotsForContent(mKeyLabels.size(), count, length, 18f);
         if (n <= 0) return;
         float pitch = (length - 16f) / n;
         float size = Math.min(22f, Math.min(cross - 12f, pitch - 4f));
@@ -254,6 +270,20 @@ final class LayoutCanvasArtwork {
         int active = Math.min(3, n - 1);
         int saved = begin(canvas, box, k);
         for (int i = 0; i < n; i++) {
+            if (labels) {
+                float along = 8f + (i + 0.5f) * pitch;
+                float cx = vertical ? w / 2f : along;
+                float cy = vertical ? along : h / 2f;
+                boolean lit = i == active;
+                if (lit) {
+                    rr(canvas, cx - size / 2f - 3f, cy - size / 2f - 3f, size + 6f, size + 6f, 5f,
+                        p.accentBg);
+                }
+                int maxChars = Math.max(1, (int) ((vertical ? cross - 8f : pitch) / 6f));
+                text(canvas, fitLabel(mKeyLabels.get(i), maxChars), cx, cy + 3.5f, 10f,
+                    lit ? p.accent : p.text, Paint.Align.CENTER);
+                continue;
+            }
             float along = 8f + (i + 0.5f) * pitch;
             float cx = vertical ? w / 2f : along;
             float cy = vertical ? along : h / 2f;
@@ -371,6 +401,33 @@ final class LayoutCanvasArtwork {
         int wanted = count < 0 ? PACK_SLOTS : count;
         int fit = Math.max(1, (int) Math.floor((length - 16f) / minPitch));
         return Math.min(wanted, fit);
+    }
+
+    /**
+     * What a bar draws: the supplied real items capped by how many fit, or, with none supplied,
+     * the pack's glyph count rule ({@link #slotsFor}).
+     */
+    static int slotsForContent(int supplied, int count, float length, float minPitch) {
+        if (supplied <= 0) return slotsFor(count, length, minPitch);
+        int fit = Math.max(1, (int) Math.floor((length - 16f) / minPitch));
+        return Math.min(supplied, fit);
+    }
+
+    /** A key label cut to {@code maxChars} so it stays inside its slot. */
+    @NonNull
+    static String fitLabel(@NonNull String label, int maxChars) {
+        if (maxChars < 1) return "";
+        return label.length() <= maxChars ? label : label.substring(0, maxChars);
+    }
+
+    private java.util.List<android.graphics.drawable.Drawable> mIcons = java.util.Collections.emptyList();
+    private java.util.List<String> mKeyLabels = java.util.Collections.emptyList();
+
+    /** The user's real dock icons and extra-key texts; an empty list keeps the pack's glyphs. */
+    void setSlotContent(@NonNull java.util.List<android.graphics.drawable.Drawable> icons,
+                        @NonNull java.util.List<String> keyLabels) {
+        mIcons = icons;
+        mKeyLabels = keyLabels;
     }
 
     /** Opens a frame whose origin is the box's corner and whose unit is {@code k} pixels. */
