@@ -45,11 +45,6 @@
             app:summary="@string/settings_osc52_clipboard_read_summary"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
-            app:key="terminal_trim_wrapped_trailing_spaces"
-            app:title="@string/settings_trim_wrapped_trailing_spaces_title"
-            app:summary="@string/settings_trim_wrapped_trailing_spaces_summary"
-            android:defaultValue="true" />
-        <SwitchPreferenceCompat
             app:key="terminal_clipboard_cleanup"
             app:title="@string/settings_clipboard_cleanup_title"
             app:summary="@string/settings_clipboard_cleanup_summary"

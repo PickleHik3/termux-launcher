@@ -629,10 +629,6 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = "terminal_osc52_clipboard_read_enabled";
         public static final boolean DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = true;
 
-        /** Whether copying a wrapped row trims its trailing padding spaces like an unwrapped row. */
-        public static final String KEY_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES = "terminal_trim_wrapped_trailing_spaces";
-        public static final boolean DEFAULT_TERMINAL_TRIM_WRAPPED_TRAILING_SPACES = true;
-
         /**
          * Whether copy drops a line's trailing spaces and tabs and trailing blank lines, and a
          * single-line paste drops its trailing whitespace and newline.

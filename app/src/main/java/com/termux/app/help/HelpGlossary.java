@@ -94,7 +94,7 @@ public final class HelpGlossary {
             R.string.help_term_look_definition, "appearance_editor"));
         terms.add(new Term("style", R.string.help_term_style_title,
             R.string.help_term_style_definition, "layout_editor"));
-        terms.add(new Term("restore_tray", R.string.help_term_tray_title,
+        terms.add(new Term("hidden_elements", R.string.help_term_tray_title,
             R.string.help_term_tray_definition, "layout_editor"));
         terms.add(new Term("keyboard_form", R.string.help_term_form_title,
             R.string.help_term_form_definition, "keyboard_layouts"));

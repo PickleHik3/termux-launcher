@@ -125,8 +125,8 @@ public class GlassStackTest {
         LayerDrawable tint = (LayerDrawable) stack.getDrawable(1);
         // base, light, grain, rim: the one rim the factory draws.
         assertEquals(4, tint.getNumberOfLayers());
-        GradientDrawable rim = (GradientDrawable) tint.getDrawable(3);
-        assertEquals(RADIUS_PX, rim.getCornerRadius(), 0f);
+        GradientRimDrawable rim = (GradientRimDrawable) tint.getDrawable(3);
+        assertEquals(RADIUS_PX, rim.radiusPx(), 0f);
         assertEquals(Math.round(255f * 50 / 100f), backdrop.getAlpha());
     }
 
@@ -156,7 +156,7 @@ public class GlassStackTest {
     @Test
     public void aRimAlongSomeEdgesLeavesTheOthersOpen() {
         assertSame(null, glass.rimDrawable(0f, ChromeEdgeRule.NONE));
-        assertTrue(glass.rimDrawable(0f, ChromeEdgeRule.ALL) instanceof GradientDrawable);
+        assertTrue(glass.rimDrawable(0f, ChromeEdgeRule.ALL) instanceof GradientRimDrawable);
         OpenEdgeDrawable bottomOnly =
             (OpenEdgeDrawable) glass.rimDrawable(0f, ChromeEdgeRule.BOTTOM);
         assertEquals(ChromeEdgeRule.LEFT | ChromeEdgeRule.TOP | ChromeEdgeRule.RIGHT,
@@ -188,7 +188,17 @@ public class GlassStackTest {
 
         assertEquals(2, stack.getNumberOfLayers());
         assertTrue(stack.getDrawable(0) instanceof android.graphics.drawable.ColorDrawable);
-        assertTrue(stack.getDrawable(1) instanceof GradientDrawable);
+        assertTrue(stack.getDrawable(1) instanceof GradientRimDrawable);
+    }
+
+    @Test
+    public void overGlassTheRimIsTheDocksVisibleStrengthAndUnderItTheFullGradient() {
+        // The dock's rim sits under its blurred backdrop, which lets about 0.4 of it through; a rim
+        // drawn over glass is matched to that, under every look.
+        assertEquals(GlassTokens.RIM_OVER_GLASS_START,
+            ((GradientRimDrawable) glass.rimDrawable(8f)).startColor());
+        assertEquals(GlassTokens.RIM_START,
+            ((GradientRimDrawable) glass.rimUnderGlass(8f)).startColor());
     }
 
     @Test

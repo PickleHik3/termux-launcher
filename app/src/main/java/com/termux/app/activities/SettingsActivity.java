@@ -454,6 +454,22 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         }
     }
 
+    /**
+     * Back with nothing to pop finishes Settings itself. From Android 12 a Back at the root of a
+     * task is handed to the system, which finishes only after it calls back; this activity is the
+     * root of its own task (singleTask, own affinity), and on some systems that call never comes,
+     * so Back and Up did nothing on the first screen. A screen pushed on top, or a fragment's own
+     * Back handler (the extra-keys editor's unsaved edits), still goes through the dispatcher.
+     */
+    @Override
+    public void onBackPressed() {
+        if (getOnBackPressedDispatcher().hasEnabledCallbacks()) {
+            super.onBackPressed();
+            return;
+        }
+        finish();
+    }
+
     @Override
     public boolean onSupportNavigateUp() {
         onBackPressed();

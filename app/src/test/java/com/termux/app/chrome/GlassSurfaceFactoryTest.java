@@ -53,22 +53,21 @@ public class GlassSurfaceFactoryTest {
         LayerDrawable surface = (LayerDrawable) glass.surface(0.5f, 0f, 1f, true, 30, 24f, true);
 
         assertEquals(4, surface.getNumberOfLayers());
-        GradientDrawable rim = (GradientDrawable) surface.getDrawable(3);
-        assertEquals(24f, rim.getCornerRadius(), 0f);
-        assertEquals(Color.TRANSPARENT, rim.getColor().getDefaultColor());
+        GradientRimDrawable rim = (GradientRimDrawable) surface.getDrawable(3);
+        assertEquals(24f, rim.radiusPx(), 0f);
     }
 
     @Test
     public void everyRimIsTheOneTheFactoryDraws() {
-        // The dock capsule's background, the keyboard and the under-keyboard card all take it from
-        // rim(), so the stroke is written once.
-        GradientDrawable rim = glass.rim(24f);
+        // The keyboard, the status bar and the under-keyboard card all take it from
+        // rimDrawable(), so the rim is written once.
+        GradientRimDrawable rim = (GradientRimDrawable) glass.rimDrawable(24f);
         LayerDrawable surface = (LayerDrawable) glass.surface(0.5f, 0f, 1f, true, 0, 24f, true);
-        GradientDrawable inSurface = (GradientDrawable) surface.getDrawable(2);
+        GradientRimDrawable inSurface = (GradientRimDrawable) surface.getDrawable(2);
 
-        assertEquals(24f, rim.getCornerRadius(), 0f);
-        assertEquals(inSurface.getCornerRadius(), rim.getCornerRadius(), 0f);
-        assertEquals(Color.TRANSPARENT, rim.getColor().getDefaultColor());
+        assertEquals(24f, rim.radiusPx(), 0f);
+        assertEquals(inSurface.radiusPx(), rim.radiusPx(), 0f);
+        assertEquals(inSurface.startColor(), rim.startColor());
     }
 
     @Test

@@ -21,9 +21,8 @@ public class TerminalIOPreferencesDataStoreClipboardCleanupTest {
 
     @Test
     public void clipboardCleanupRoundTripsThroughTheDataStore() {
-        // Same path as the trim-wrapped-trailing-spaces guard: data store -> shared preferences ->
-        // the accessor the app reads, except this switch also ships on, so the default has to
-        // read back true too.
+        // Data store -> shared preferences -> the accessor the app reads. This switch ships on, so
+        // the default has to read back true too.
         Context context = RuntimeEnvironment.getApplication();
         TerminalIOPreferencesDataStore store = TerminalIOPreferencesDataStore.getInstance(context);
 

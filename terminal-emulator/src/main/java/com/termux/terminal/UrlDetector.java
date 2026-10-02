@@ -18,11 +18,14 @@ import java.util.regex.Pattern;
  * <li>A row the emulator wrapped itself carries a wrap flag, and the next row is simply more of the
  * same line. Every terminal does this much.</li>
  * <li>A row a program wrapped for itself — a multiplexer pane, a TUI drawing into a box — carries no
- * flag. When such a row's address runs right up to the row's edge (the last cell, one cell of
- * padding short of it, or a pane border), and the row below opens with text after any border and
- * indentation, the address is tried with that text appended and kept if the match grows. Only an
- * address that reaches the edge is extended, so ordinary prose is never glued together, and only
- * the characters the URL grammar accepts are absorbed.</li>
+ * flag. Such rows are joined by pane window, the way iTerm2 restricts a scan to the column span
+ * between two dividers: a column holding a vertical line glyph on a run of consecutive rows is a
+ * divider, and the cells between two dividers (or a divider and the screen edge) are one window.
+ * Text is matched per window, so a sidebar or a neighbouring pane is never part of an address.
+ * When an address runs to its window's last cell (or one short of it at the screen's right edge),
+ * and the row below, in the same window, opens with text after any indentation, the address is
+ * tried with that text appended and kept if the match grows. Without dividers the window is the
+ * whole row, which is kitty's rule: join when the address fills the last column.</li>
  * <li>Trailing punctuation that closed a sentence rather than the address — {@code .,;:!?}, quotes,
  * and a closing bracket without its opener inside the address — is dropped, as kitty does.</li>
  * </ul>
@@ -40,6 +43,9 @@ public final class UrlDetector {
 
     /** How far a chain of wrap flags is followed beyond the context, so a long paragraph stays one line. */
     private static final int MAX_WRAP_CHAIN = 64;
+
+    /** Consecutive rows a vertical line glyph must fill in one column for it to be a pane divider. */
+    private static final int DIVIDER_RUN = 8;
 
     private UrlDetector() {
     }
@@ -127,25 +133,43 @@ public final class UrlDetector {
         firstRow = Math.max(minRow, firstRow);
         lastRow = Math.min(maxRow, lastRow);
 
-        int scanFirst = Math.max(minRow, firstRow - CONTEXT_ROWS);
-        for (int i = 0; i < MAX_WRAP_CHAIN && scanFirst > minRow && lineWraps(screen, scanFirst - 1); i++) scanFirst--;
-        // A program that wraps by hand sets no wrap flag, so the chain above has to be walked by
-        // sight: while the row above still runs to its edge it may carry the start of an address
-        // that reaches into the range, and without it the rows in view match nothing at all.
-        for (int i = 0; i < MAX_WRAP_CHAIN && scanFirst > minRow && rowReachesEdge(screen, scanFirst - 1); i++) scanFirst--;
-        int scanLast = Math.min(maxRow, lastRow + CONTEXT_ROWS);
-        for (int i = 0; i < MAX_WRAP_CHAIN && scanLast < maxRow && lineWraps(screen, scanLast); i++) scanLast++;
+        // Dividers are found once over every row the walks below may touch. A run is measured on
+        // the rows read, so a divider cut by the edge of that span can only be shorter than it is.
+        final int dividerFirst = Math.max(minRow, firstRow - CONTEXT_ROWS - 2 * MAX_WRAP_CHAIN);
+        final int dividerLast = Math.min(maxRow, lastRow + CONTEXT_ROWS + MAX_WRAP_CHAIN);
+        final Dividers dividers = new Dividers(screen, dividerFirst, dividerLast, Math.min(DIVIDER_RUN, screen.mScreenRows));
 
+        int scanFirst = Math.max(minRow, firstRow - CONTEXT_ROWS);
+        for (int i = 0; i < MAX_WRAP_CHAIN && scanFirst > dividerFirst && lineWraps(screen, scanFirst - 1); i++) scanFirst--;
+        // A program that wraps by hand sets no wrap flag, so the chain above has to be walked by
+        // sight: while the row above still runs to a window's edge it may carry the start of an
+        // address that reaches into the range, and without it the rows in view match nothing at all.
+        for (int i = 0; i < MAX_WRAP_CHAIN && scanFirst > dividerFirst && rowReachesEdge(screen, dividers, scanFirst - 1); i++) scanFirst--;
+        int scanLast = Math.min(maxRow, lastRow + CONTEXT_ROWS);
+        for (int i = 0; i < MAX_WRAP_CHAIN && scanLast < dividerLast && lineWraps(screen, scanLast); i++) scanLast++;
+
+        final int columns = screen.mColumns;
         List<Line> lines = new ArrayList<>();
         for (int row = scanFirst; row <= scanLast; ) {
-            Line line = new Line();
-            line.appendRow(screen, row);
-            while (lineWraps(screen, row) && row < scanLast) {
-                row++;
+            if (lineWraps(screen, row) && row < scanLast) {
+                // Rows the emulator wrapped are full-width by definition: one line, no windows.
+                Line line = new Line(0, columns);
                 line.appendRow(screen, row);
+                while (lineWraps(screen, row) && row < scanLast) {
+                    row++;
+                    line.appendRow(screen, row);
+                }
+                line.trimTrailingSpaces();
+                if (line.text.length() > 0) lines.add(line);
+            } else {
+                int[] windows = dividers.windows(row);
+                for (int w = 0; w < windows.length; w += 2) {
+                    Line line = new Line(windows[w], windows[w + 1]);
+                    line.appendRow(screen, row);
+                    line.trimTrailingSpaces();
+                    if (line.text.length() > 0) lines.add(line);
+                }
             }
-            line.trimTrailingSpaces();
-            lines.add(line);
             row++;
         }
 
@@ -159,14 +183,14 @@ public final class UrlDetector {
                 from = end;
                 Match match = new Match();
                 match.append(line, start, end);
-                // Follow the address into the rows below while it runs to a row's edge.
+                // Follow the address into the window's next row while it runs to the window's edge.
                 Line current = line;
-                int nextIndex = index + 1;
-                int minColumn = line.blockColumn(start);
-                while (end == current.text.length() && nextIndex < lines.size()
-                    && current.reachesEdge(screen, current.text.length())) {
+                int searchFrom = index + 1;
+                while (end == current.text.length() && current.endsAtWindowEdge(columns)) {
+                    int nextIndex = lineBelow(lines, searchFrom, current.lastRow() + 1, current.left, current.right);
+                    if (nextIndex < 0) break;
                     Line next = lines.get(nextIndex);
-                    int contStart = next.continuationStart(minColumn);
+                    int contStart = next.continuationStart();
                     if (contStart < 0) break;
                     String continuation = next.text.substring(contStart);
                     if (URL_PATTERN.matcher(continuation).lookingAt()) break;  // A new address, not more of this one.
@@ -178,7 +202,7 @@ public final class UrlDetector {
                     if (contStart + consumed < next.text.length()) break;  // Ended mid-row.
                     current = next;
                     end = next.text.length();
-                    nextIndex++;
+                    searchFrom = nextIndex + 1;
                 }
                 match.trimTrailingPunctuation();
                 if (match.length() == 0) continue;
@@ -189,20 +213,63 @@ public final class UrlDetector {
         return found;
     }
 
+    /** The index of the line that starts on {@code row} inside exactly the window {@code [left, right)}, or -1. */
+    private static int lineBelow(List<Line> lines, int from, int row, int left, int right) {
+        for (int i = from; i < lines.size(); i++) {
+            Line line = lines.get(i);
+            int first = line.rows.get(0);
+            if (first > row) return -1;
+            if (first == row && line.left == left && line.right == right) return i;
+        }
+        return -1;
+    }
+
     private static boolean lineWraps(TerminalBuffer screen, int row) {
         TerminalRow line = screen.mLines[screen.externalToInternalRow(row)];
         return line != null && line.mLineWrap;
     }
 
-    /** Whether a row's last cell carries text: what a wrapped or painted row looks like. */
-    private static boolean rowReachesEdge(TerminalBuffer screen, int externalRow) {
-        TerminalRow line = screen.mLines[screen.externalToInternalRow(externalRow)];
-        if (line == null) return false;
-        int last = screen.mColumns - 1;
-        int index = line.findStartOfColumn(last);
-        if (index >= line.getSpaceUsed()) return false;
-        char c = line.mText[index];
+    /**
+     * Whether some pane window of a row ends in text: a non-blank, non-border cell at the window's
+     * last column, or one short of it at the screen's right edge. Such a row may carry the start of
+     * an address that continues below.
+     */
+    private static boolean rowReachesEdge(TerminalBuffer screen, Dividers dividers, int externalRow) {
+        char[] cells = readCells(screen, externalRow);
+        int[] windows = dividers.windows(externalRow);
+        for (int w = 0; w < windows.length; w += 2) {
+            int left = windows[w];
+            int right = windows[w + 1];
+            if (isText(cells[right - 1])) return true;
+            if (right == cells.length && right - 2 >= left && isText(cells[right - 2])) return true;
+        }
+        return false;
+    }
+
+    private static boolean isText(char c) {
         return c != ' ' && !isBorderGlyph(c);
+    }
+
+    /** One char per cell of a row: blank where empty, the glyph in every cell a wide glyph covers. */
+    private static char[] readCells(TerminalBuffer screen, int externalRow) {
+        char[] cells = new char[screen.mColumns];
+        java.util.Arrays.fill(cells, ' ');
+        TerminalRow line = screen.mLines[screen.externalToInternalRow(externalRow)];
+        if (line == null) return cells;
+        final char[] chars = line.mText;
+        final int used = line.getSpaceUsed();
+        int column = 0;
+        for (int i = 0; i < used; ) {
+            char c = chars[i];
+            boolean high = Character.isHighSurrogate(c) && i + 1 < used;
+            int width = line.getDisplayWidthAt(i);
+            if (width > 0) {
+                for (int k = 0; k < width && column + k < cells.length; k++) cells[column + k] = high ? '\uFFFD' : c;
+                column += width;
+            }
+            i += high ? 2 : 1;
+        }
+        return cells;
     }
 
     /** Box-drawing and block glyphs: a multiplexer's pane edge or scrollbar, never part of an address. */
@@ -210,7 +277,105 @@ public final class UrlDetector {
         return c == '|' || (c >= '\u2500' && c <= '\u259F');
     }
 
-    /** The cell-by-cell text of one logical line: a row and the rows its wrap flags pull in. */
+    /**
+     * Glyphs that draw a vertical line through their cell: the candidates for a pane divider.
+     * Horizontal-only glyphs, corners and the down or up tees are not.
+     */
+    static boolean isDividerGlyph(char c) {
+        if (c == '|') return true;
+        return c == '\u2502' || c == '\u2503' || c == '\u2506' || c == '\u2507' || c == '\u250A' || c == '\u250B'
+            || (c >= '\u251C' && c <= '\u252B')   // Left and right tees and their weights.
+            || (c >= '\u253C' && c <= '\u254B')   // Crosses and their weights.
+            || c == '\u254E' || c == '\u254F'     // Dashed verticals.
+            || c == '\u2551'                       // Double vertical.
+            || (c >= '\u255E' && c <= '\u2563')   // Double-line left and right tees.
+            || (c >= '\u256A' && c <= '\u256C');  // Double-line crosses.
+    }
+
+    /**
+     * The vertical divider columns of a span of rows. A column is a divider on a row when divider
+     * glyphs fill it on a run of at least {@code minRun} consecutive rows that includes that row; a
+     * stray bar in prose, or the pane edge on a status row that lacks it, is not one. The runs are
+     * found in one top-to-bottom pass per column, so the cost is rows times columns.
+     */
+    private static final class Dividers {
+        private final int mFirst;
+        private final int mColumns;
+        /** Per row from {@code mFirst}: the divider columns, or null for a row without any candidate. */
+        private final boolean[][] mCells;
+
+        Dividers(TerminalBuffer screen, int first, int last, int minRun) {
+            mFirst = first;
+            mColumns = screen.mColumns;
+            int rows = Math.max(0, last - first + 1);
+            mCells = new boolean[rows][];
+            boolean any = false;
+            for (int r = 0; r < rows; r++) {
+                TerminalRow line = screen.mLines[screen.externalToInternalRow(first + r)];
+                if (line == null) continue;
+                final char[] chars = line.mText;
+                final int used = line.getSpaceUsed();
+                int column = 0;
+                for (int i = 0; i < used; ) {
+                    char c = chars[i];
+                    boolean high = Character.isHighSurrogate(c) && i + 1 < used;
+                    int width = line.getDisplayWidthAt(i);
+                    if (width > 0) {
+                        if (!high && column < mColumns && isDividerGlyph(c)) {
+                            if (mCells[r] == null) mCells[r] = new boolean[mColumns];
+                            mCells[r][column] = true;
+                            any = true;
+                        }
+                        column += width;
+                    }
+                    i += high ? 2 : 1;
+                }
+            }
+            if (!any) return;
+            for (int c = 0; c < mColumns; c++) {
+                int r = 0;
+                while (r < rows) {
+                    if (!has(r, c)) {
+                        r++;
+                        continue;
+                    }
+                    int runStart = r;
+                    while (r < rows && has(r, c)) r++;
+                    if (r - runStart < minRun) {
+                        for (int k = runStart; k < r; k++) mCells[k][c] = false;
+                    }
+                }
+            }
+        }
+
+        private boolean has(int r, int c) {
+            return mCells[r] != null && mCells[r][c];
+        }
+
+        /** The pane windows of a row as {@code left, rightExclusive} pairs, left to right; dividers belong to none. */
+        int[] windows(int externalRow) {
+            int r = externalRow - mFirst;
+            boolean[] d = r >= 0 && r < mCells.length ? mCells[r] : null;
+            if (d == null) return new int[] {0, mColumns};
+            int count = 0;
+            for (boolean b : d) if (b) count++;
+            int[] out = new int[2 * (count + 1)];
+            int n = 0;
+            int left = 0;
+            for (int c = 0; c <= mColumns; c++) {
+                if (c == mColumns || d[c]) {
+                    if (c > left) {
+                        out[n++] = left;
+                        out[n++] = c;
+                    }
+                    left = c + 1;
+                }
+            }
+            return java.util.Arrays.copyOf(out, n);
+        }
+    }
+
+    /** The cell-by-cell text of one logical line: a pane window of a row, or the rows its wrap flags pull in. */
     private static final class Line {
         final StringBuilder text = new StringBuilder();
         int[] row = new int[64];
@@ -220,6 +385,18 @@ public final class UrlDetector {
         final List<Integer> rows = new ArrayList<>(1);
         /** Characters an address from the line above already absorbed; matching starts after them. */
         int consumed;
+        /** The pane window {@code [left, right)} this line was read from; the full row for wrapped lines. */
+        final int left;
+        final int right;
+
+        Line(int left, int right) {
+            this.left = left;
+            this.right = right;
+        }
+
+        int lastRow() {
+            return rows.get(rows.size() - 1);
+        }
 
         void appendRow(TerminalBuffer screen, int externalRow) {
             rows.add(externalRow);
@@ -236,8 +413,11 @@ public final class UrlDetector {
                 if (width > 0) {
                     // Non-BMP glyphs and box drawing never belong to an address: a placeholder or a
                     // space keeps the cell mapping one char per cell and stops the grammar there.
-                    char out = high ? '\uFFFD' : isBorderGlyph(c) ? ' ' : c;
-                    add(out, externalRow, column, column + width);
+                    // Cells outside this line's pane window belong to another pane or a divider.
+                    if (column >= left && column + width <= right) {
+                        char out = high ? '\uFFFD' : isBorderGlyph(c) ? ' ' : c;
+                        add(out, externalRow, column, column + width);
+                    }
                     column += width;
                 }
                 i += charCount;
@@ -264,64 +444,27 @@ public final class UrlDetector {
         }
 
         /**
-         * Whether text ending at {@code index} runs to its row's edge: the last cell, one cell of
-         * padding short of it, or a pane border after at most one cell of padding.
+         * Whether the line's text ends where an address would be wrapped: in the window's last cell,
+         * or one short of it when the window ends at the screen's right edge.
          */
-        boolean reachesEdge(TerminalBuffer screen, int index) {
-            if (index == 0) return false;
-            int r = row[index - 1];
-            int column = columnEnd[index - 1];
-            TerminalRow line = screen.mLines[screen.externalToInternalRow(r)];
-            if (line == null) return false;
-            int columns = screen.mColumns;
-            if (column >= columns - 1) return true;
-            // Read the raw cells after the address: [ ]? border.
-            int probe = column;
-            if (cellChar(line, probe) == ' ') probe++;
-            return probe < columns && isBorderGlyph(cellChar(line, probe));
+        boolean endsAtWindowEdge(int columns) {
+            int n = text.length();
+            if (n == 0) return false;
+            int end = columnEnd[n - 1];
+            return end == right || (right == columns && end == right - 1);
         }
 
         /**
-         * Where text continuing an address from the row above would start: past leading spaces —
-         * which is where a pane border, blanked in {@link #appendRow}, its padding and any
-         * indentation all went — and past any block starting left of {@code minColumn}, which
-         * belongs to whatever else shares the row. -1 when the row offers nothing.
+         * Where text continuing an address from the row above would start: the first non-blank cell,
+         * which is the window's left edge or follows indentation only. -1 when the row offers nothing.
          */
-        int continuationStart(int minColumn) {
+        int continuationStart() {
             int i = 0;
             int n = text.length();
-            while (i < n) {
-                while (i < n && text.charAt(i) == ' ') i++;
-                if (i >= n) return -1;
-                int runEnd = i;
-                while (runEnd < n && text.charAt(runEnd) != ' ') runEnd++;
-                // Keep the run unless it ends clear of the address's own block: a pane's text
-                // column wanders by a column or two between a first row and its continuations,
-                // while another pane's sidebar stops well short of it.
-                if (columnEnd[runEnd - 1] > minColumn - 2) break;
-                i = runEnd;
-            }
+            while (i < n && text.charAt(i) == ' ') i++;
             if (i >= n || i < consumed) return -1;
             // Only the first row of this line can continue the row above; a wrapped tail cannot.
             return row[i] == rows.get(0) ? i : -1;
-        }
-
-        /**
-         * The column a continuation of the address at {@code index} may not start left of. An
-         * address with a gap of blank cells before it on its row opens a block of its own — a
-         * pane's text column — and whatever sits further left belongs to something else.
-         */
-        int blockColumn(int index) {
-            int r = row[index];
-            int gap = 0;
-            for (int i = index - 1; i >= 0 && row[i] == r && text.charAt(i) == ' '; i--) gap++;
-            return gap >= 2 ? columnStart[index] : 0;
-        }
-
-        private static char cellChar(TerminalRow line, int column) {
-            int index = line.findStartOfColumn(column);
-            if (index >= line.getSpaceUsed()) return ' ';
-            return line.mText[index];
         }
     }
 
@@ -451,10 +594,12 @@ public final class UrlDetector {
         regex_sb.append("(?:");
         // IP address (from http://www.regular-expressions.info/examples.html).
         regex_sb.append("(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)|");
-        // Host name or domain.
-        regex_sb.append("(?:(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)(?:(?:\\.(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)*(?:\\.(?:[a-z\\u00a1-\\uffff0-9]-*){1,}[a-z\\u00a1-\\uffff0-9]{1,}))?|");
+        // Host name or domain. Unicode letters, digits and marks for international names, but not
+        // symbols: fish's ⏎ after output without a newline, or a pane border, is not part of a host.
+        final String h = "[a-z0-9\\p{L}\\p{N}\\p{M}]";
+        regex_sb.append("(?:(?:" + h + "-*)*" + h + "+)(?:(?:\\.(?:" + h + "-*)*" + h + "+)*(?:\\.(?:" + h + "-*){1,}" + h + "{1,}))?|");
         // Just path. Used in case of 'file://' scheme.
-        regex_sb.append("/(?:(?:[a-z\\u00a1-\\uffff0-9]-*)*[a-z\\u00a1-\\uffff0-9]+)");
+        regex_sb.append("/(?:(?:" + h + "-*)*" + h + "+)");
         // End host group.
         regex_sb.append(")");
         // Port number.

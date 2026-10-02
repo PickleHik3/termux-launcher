@@ -21,6 +21,11 @@ import java.util.List;
  * <p>Layout mode's Corners and Margin (SPEC §3.5) are here too: the global shape, which no Look
  * sets (2026-10-01).</p>
  *
+ * <p>Layout editor v2 (DECISIONS items 13 to 15): at the Custom stop with nothing tapped row 2 is
+ * the global row, Blur, Opacity and Grain written as the base values ({@link #rowFor}); the
+ * keyboard's row is its Blur and the "Keyboard theme" door, and Key radius has moved to Layout
+ * mode.</p>
+ *
  * <p>No views and no {@code Context}, so the rules are held by JVM tests.</p>
  */
 public final class AppearanceLooks {
@@ -102,11 +107,32 @@ public final class AppearanceLooks {
         }
 
         /**
-         * Whether row 2 has a first control: Darkness, Key corners or Soft wallpaper. The status
-         * bar and the dock have Blur alone.
+         * Whether row 2 has a first control: Darkness, the keyboard's Blur or Soft wallpaper. The
+         * status bar and the dock have Blur alone, in the last column.
          */
         public boolean hasFirstControl() {
             return this != STATUS && this != DOCK;
+        }
+
+        /**
+         * Whether the first control is the shared Blur: the keyboard's, whose last column is the
+         * "Keyboard theme" door (DECISIONS item 15).
+         */
+        public boolean firstControlIsBlur() {
+            return this == KEYBOARD;
+        }
+
+        /** Whether the last column is the "Keyboard theme" button rather than a slider. */
+        public boolean secondControlIsKeyboardTheme() {
+            return this == KEYBOARD;
+        }
+
+        /**
+         * Whether row 2 has Key radius. It has none any more: Key radius is Layout mode's, beside
+         * the keyboard's type chips (DECISIONS item 6).
+         */
+        public boolean hasKeyRadius() {
+            return false;
         }
 
         /**
@@ -117,9 +143,12 @@ public final class AppearanceLooks {
             return this == TERMINAL;
         }
 
-        /** Whether the second control is the one shared Blur (every target but the wallpaper). */
+        /**
+         * Whether the last control is the one shared Blur: every target but the wallpaper (Dim)
+         * and the keyboard (its theme door; its Blur is the first control).
+         */
         public boolean secondControlIsBlur() {
-            return this != WALLPAPER;
+            return this != WALLPAPER && this != KEYBOARD;
         }
 
         @Nullable
@@ -134,7 +163,56 @@ public final class AppearanceLooks {
         }
     }
 
+    /** What row 2 holds (DECISIONS item 13). */
+    public enum Row {
+        /** Down: a Look stop. */
+        NONE,
+        /** The global Blur, Opacity and Grain: the Custom stop with nothing tapped. */
+        GLOBAL,
+        /** The tapped element's own controls. */
+        ELEMENT
+    }
+
+    /**
+     * Row 2 for a stop and a selection: nothing at a Look stop, the tapped element's controls at
+     * Custom with one tapped, and the global row at Custom with nothing tapped.
+     */
+    @NonNull
+    public static Row rowFor(int stop, @Nullable Target target) {
+        if (!isCustomStop(stop))
+            return Row.NONE;
+        return target == null ? Row.GLOBAL : Row.ELEMENT;
+    }
+
+    /**
+     * What a tap on the bare wallpaper selects at the Custom stop, given what is selected now:
+     * with an element tapped it is the empty canvas, which brings the global row back (null); with
+     * the global row up, or anywhere at a Look stop, it opens the wallpaper's own row.
+     */
+    @Nullable
+    public static Target afterWallpaperTap(int stop, @Nullable Target selected) {
+        if (!isCustomStop(stop))
+            return Target.WALLPAPER;
+        return selected == null ? Target.WALLPAPER : null;
+    }
+
     // ------------------------------------------------------------------------------ the controls
+
+    /**
+     * The global Opacity and Grain, in percent (DECISIONS item 13). Their ranges are the ones the
+     * stored values already have (the material curves' clamp and the keyboard grain's ceiling),
+     * and cover every Look: Clear 16 / 4, Mist 60 / 8, Tint 46 / 14, Solid 92 / 0.
+     */
+    public static final int OPACITY_MAX = 100;
+    public static final int GRAIN_MAX = 100;
+
+    public static int opacityPercent(int value) {
+        return clamp(value, 0, OPACITY_MAX);
+    }
+
+    public static int grainPercent(int value) {
+        return clamp(value, 0, GRAIN_MAX);
+    }
 
     /** Blur is one value for every surface, in dp. */
     public static final int BLUR_MAX_DP = 30;

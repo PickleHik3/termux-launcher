@@ -31,6 +31,13 @@ public interface TerminalViewClient {
      */
     default void onMouseTrackingTap(MotionEvent e) {}
 
+    /**
+     * A tap with Shift held or latched while a program tracks the mouse. Nothing was sent to the
+     * program for it, and {@link #onSingleTapUp} is not called: the app's own link handling is
+     * all that is owed.
+     */
+    default void onMouseTrackingBypassTap(MotionEvent e) {}
+
     boolean shouldBackButtonBeMappedToEscape();
 
     boolean shouldEnforceCharBasedInput();

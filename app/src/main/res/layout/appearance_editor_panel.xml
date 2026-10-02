@@ -26,9 +26,20 @@
      above the taller of the two so it never moves. The labels may wrap to two lines ("Contrast ·
      Normal" in a third of a phone's width); a Barrier under them keeps the sliders level.
 
-     Layout rows. Row A: Orientation (two 48dp icon segments), Style (two 48dp icon segments), and
-     the trash at the end (drop target, opens the hidden list, carries the count badge). Row B:
-     Corner radius and Margin as two equal columns, each a label above its slider.
+     Appearance Row B also carries, at the Custom stop with nothing tapped, the global row (layout
+     editor v2, DECISIONS item 13): Blur, Opacity and Grain in the three columns, the middle one a
+     slider of its own (appearance_editor_cl_slider). The keyboard's row is Blur and the
+     "Keyboard theme" button in the last column (item 15).
+
+     Layout rows (layout editor v2, DECISIONS items 2, 3 and 10). Row A: Orientation (two 48dp
+     icon segments), Style (two 48dp icon segments), and eye-off at the end: the only drop target
+     for hiding, the toggle of the hidden tiles, and the count badge's anchor. Behind it a 64dp
+     highlight, larger than its 48dp target, shows while a lifted bar may be dropped on it. Row B:
+     Corner radius and Margin as two equal columns, each a label above its slider; while the hidden
+     tiles are open they stand in Row B's place, one line of chips (it pans sideways when five
+     elements are hidden at 360dp), so the sheet never changes height. While the keyboard is
+     selected its tools take the same place: the three type chips, then Key radius (a label above
+     its slider) in the rest of the row. The tiles win while both would. No hint text anywhere.
 
      Width arithmetic, dp. Sheet padding 16 + 16, so the content width is W - 32.
        Top row (LabelLarge 14sp, Roboto Medium): "Look" ≈ 30, "Layout" ≈ 43. A segment is
@@ -45,9 +56,15 @@
        Appearance Row B: three columns, two 16dp gaps: (W - 64) / 3 = 98.7 / 115.7 / 156.3;
          two columns: (W - 48) / 2 = 156 / 181.5 / 242.5; one column: W - 32.
          The Soften toggle in a 156dp column: Off 12 + 18 + 4 + 20 + 12 = 66, On 66: 132 ≤ 156.
-       Layout Row A: 96 + 8 + 96 + gap + 48 = 248 + gap; gap 80 / 131 / 253.
+       Layout Row A: 96 + 8 + 96 + gap + 48 = 248 + gap; gap 80 / 131 / 253. The 64dp highlight
+         is centred on eye-off: 8dp of it stand past the button's end, inside the sheet's 16dp
+         padding.
        Layout Row B: two columns, one 16dp gap: 156 / 181.5 / 242.5; "Corner radius · 40 dp"
          (LabelMedium) ≈ 120 ≤ 156.
+       Keyboard tools in Row B: three 48dp-tall chips (24dp glyph + 4 + 4 + chip padding ≈ 50
+         each, 4dp apart) ≈ 158, 16 gap, Key radius in the rest: 154 / 205 / 327;
+         "Key radius · 24 dp" ≈ 105 ≤ 154. Height: label 16 + slider 48 = 64, the chips' 48
+         centred on the slider: the row's own 64.
 
      Heights, dp, without the navigation inset (the controller adds it to the bottom padding):
        top row 48 (every button keeps its 48dp touch height).
@@ -297,6 +314,42 @@
             app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier"
             app:tickVisibilityMode="hidden" />
 
+        <!-- The global row's middle control: Opacity (DECISIONS item 13). -->
+        <com.google.android.material.slider.Slider
+            android:id="@+id/appearance_editor_cl_slider"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/appearance_editor_control_description"
+            android:stepSize="1"
+            android:valueFrom="0"
+            android:valueTo="100"
+            android:visibility="gone"
+            app:labelBehavior="gone"
+            app:layout_constraintEnd_toEndOf="@id/appearance_editor_cl_label"
+            app:layout_constraintStart_toStartOf="@id/appearance_editor_cl_label"
+            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier"
+            app:tickVisibilityMode="hidden" />
+
+        <!-- The keyboard's door to its theme page (DECISIONS item 15), in the last column. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_editor_c2_button"
+            style="@style/Widget.Material3.Button.TonalButton.Icon"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:maxLines="2"
+            android:minWidth="0dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:text="@string/appearance_editor_keyboard_theme"
+            android:visibility="gone"
+            app:icon="@drawable/ic_settings_chevron_right"
+            app:iconGravity="end"
+            app:iconPadding="4dp"
+            app:iconSize="18dp"
+            app:layout_constraintEnd_toEndOf="@id/appearance_editor_c2_label"
+            app:layout_constraintStart_toStartOf="@id/appearance_editor_c2_label"
+            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier" />
+
         <com.google.android.material.slider.Slider
             android:id="@+id/appearance_editor_c2_slider"
             android:layout_width="0dp"
@@ -321,7 +374,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:barrierDirection="bottom"
-            app:constraint_referenced_ids="appearance_editor_c1_slider,appearance_editor_c1_soft,appearance_editor_legibility,appearance_editor_c2_slider" />
+            app:constraint_referenced_ids="appearance_editor_c1_slider,appearance_editor_c1_soft,appearance_editor_legibility,appearance_editor_cl_slider,appearance_editor_c2_button,appearance_editor_c2_slider" />
 
         <TextView
             android:id="@+id/appearance_editor_trail_label"
@@ -417,8 +470,9 @@
             android:minWidth="0dp"
             android:contentDescription="@string/settings_layout_orientation_portrait"
             android:tooltipText="@string/settings_layout_orientation_portrait"
-            app:icon="@drawable/ic_symbol_phone_portrait"
-            app:iconPadding="0dp" />
+            app:icon="@drawable/ic_layout_portrait"
+            app:iconPadding="0dp"
+            app:iconSize="24dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/layout_editor_orientation_landscape"
@@ -428,8 +482,9 @@
             android:minWidth="0dp"
             android:contentDescription="@string/settings_layout_orientation_landscape"
             android:tooltipText="@string/settings_layout_orientation_landscape"
-            app:icon="@drawable/ic_symbol_phone_landscape"
-            app:iconPadding="0dp" />
+            app:icon="@drawable/ic_layout_landscape"
+            app:iconPadding="0dp"
+            app:iconSize="24dp" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
     <com.google.android.material.button.MaterialButtonToggleGroup
@@ -452,8 +507,9 @@
             android:minWidth="0dp"
             android:contentDescription="@string/appearance_editor_style_docked"
             android:tooltipText="@string/appearance_editor_style_docked"
-            app:icon="@drawable/ic_style_docked"
-            app:iconPadding="0dp" />
+            app:icon="@drawable/ic_layout_docked"
+            app:iconPadding="0dp"
+            app:iconSize="24dp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_style_floating"
@@ -463,21 +519,37 @@
             android:minWidth="0dp"
             android:contentDescription="@string/appearance_editor_style_floating"
             android:tooltipText="@string/appearance_editor_style_floating"
-            app:icon="@drawable/ic_style_floating"
-            app:iconPadding="0dp" />
+            app:icon="@drawable/ic_layout_floating"
+            app:iconPadding="0dp"
+            app:iconSize="24dp" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
-    <!-- The trash: the drop target a lifted bar is put away in (LayoutEditorController tells the
-         canvas this button's rect), and a tap lists what is hidden. Its count badge is attached
-         to this button, after it is laid out. -->
+    <!-- Eye-off's drop highlight: 64dp, larger than the 48dp target it stands behind, shown
+         (INVISIBLE otherwise, so it never moves anything) only while a lifted element may be
+         put away. Its rect is the drop area LayoutEditorController gives the canvas. -->
+    <View
+        android:id="@+id/layout_editor_hidden_highlight"
+        android:layout_width="64dp"
+        android:layout_height="64dp"
+        android:importantForAccessibility="no"
+        android:visibility="invisible"
+        app:layout_constraintBottom_toBottomOf="@id/layout_editor_hidden"
+        app:layout_constraintEnd_toEndOf="@id/layout_editor_hidden"
+        app:layout_constraintStart_toStartOf="@id/layout_editor_hidden"
+        app:layout_constraintTop_toTopOf="@id/layout_editor_hidden" />
+
+    <!-- Eye-off (DECISIONS items 2 and 3): the only drop target a lifted bar is put away in, and
+         a tap opens or closes the hidden tiles. Its count badge is attached in code, after it is
+         laid out, and is absent while nothing is hidden. -->
     <com.google.android.material.button.MaterialButton
-        android:id="@+id/layout_editor_tray_trash"
+        android:id="@+id/layout_editor_hidden"
         style="?attr/materialIconButtonStyle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:contentDescription="@string/layout_editor_trash_empty"
+        android:contentDescription="@string/layout_editor_hidden_none"
         android:visibility="gone"
-        app:icon="@drawable/ic_symbol_delete"
+        app:icon="@drawable/ic_layout_hide"
+        app:iconSize="24dp"
         app:layout_constraintBottom_toBottomOf="@id/layout_editor_orientation"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="@id/layout_editor_orientation" />
@@ -549,10 +621,118 @@
         app:layout_constraintTop_toBottomOf="@id/appearance_editor_layout_barrier"
         app:tickVisibilityMode="hidden" />
 
+    <!-- The hidden tiles (DECISIONS item 3): one chip per hidden element, each with the restore
+         arrow; a tap brings it back to its last edge, a drag onto the canvas to the edge it is
+         dropped on. While open they stand where Corner radius and Margin are, which are hidden
+         meanwhile, so the sheet keeps its height. -->
+    <HorizontalScrollView
+        android:id="@+id/layout_editor_hidden_tiles"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:fillViewport="false"
+        android:scrollbars="none"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@id/appearance_editor_corners_label">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/layout_editor_hidden_tile_group"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/layout_editor_hidden_tiles_description"
+            app:chipSpacingHorizontal="8dp"
+            app:singleLine="true" />
+    </HorizontalScrollView>
+
+    <!-- The keyboard's tools (DECISIONS item 6): while the keyboard is selected they stand where
+         Corner radius and Margin are, which are hidden meanwhile (the hidden tiles' swap), so the
+         sheet keeps its height. The three type chips at the start, centred on Key radius's
+         slider; Key radius takes the rest of the row, a label above its slider. The row is pinned to
+         Corner radius's extent (the 48dp chips stand a little past the slider, unclipped), so the
+         sheet is the same height either way. -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/layout_editor_keyboard_tools"
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:clipChildren="false"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="@id/appearance_editor_corners"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@id/appearance_editor_corners_label">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/layout_editor_keyboard_forms"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:chipSpacingHorizontal="4dp"
+            app:chipSpacingVertical="4dp"
+            app:layout_constraintBottom_toBottomOf="@id/layout_editor_key_radius"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@id/layout_editor_key_radius"
+            app:selectionRequired="true"
+            app:singleLine="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/layout_editor_keyboard_form_docked"
+                style="@style/Widget.Termux.LayoutEditor.KeyboardFormChip"
+                android:contentDescription="@string/settings_layout_keyboard_form_docked"
+                app:chipIcon="@drawable/ic_symbol_keyboard_docked"
+                app:chipIconSize="24dp" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/layout_editor_keyboard_form_floating"
+                style="@style/Widget.Termux.LayoutEditor.KeyboardFormChip"
+                android:contentDescription="@string/settings_layout_keyboard_form_floating"
+                app:chipIcon="@drawable/ic_symbol_keyboard_floating"
+                app:chipIconSize="24dp" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/layout_editor_keyboard_form_split"
+                style="@style/Widget.Termux.LayoutEditor.KeyboardFormChip"
+                android:contentDescription="@string/settings_layout_keyboard_form_split"
+                app:chipIcon="@drawable/ic_symbol_keyboard_split"
+                app:chipIconSize="24dp" />
+        </com.google.android.material.chip.ChipGroup>
+
+        <!-- Key radius: the key caps' radius, moved here from Look mode (DECISIONS item 6). -->
+        <TextView
+            android:id="@+id/layout_editor_key_radius_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:ellipsize="end"
+            android:importantForAccessibility="no"
+            android:maxLines="1"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/layout_editor_keyboard_forms"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/layout_editor_key_radius"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/layout_editor_key_radius_description"
+            android:stepSize="1"
+            android:valueFrom="0"
+            android:valueTo="24"
+            app:labelBehavior="gone"
+            app:layout_constraintEnd_toEndOf="@id/layout_editor_key_radius_label"
+            app:layout_constraintStart_toStartOf="@id/layout_editor_key_radius_label"
+            app:layout_constraintTop_toBottomOf="@id/layout_editor_key_radius_label"
+            app:tickVisibilityMode="hidden" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Row A's members only: Row B (Corner radius and Margin, or the hidden tiles in their place)
+         is shown in code, since a Group restates its members' visibility on every layout pass. -->
     <androidx.constraintlayout.widget.Group
         android:id="@+id/appearance_editor_layout_group"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:visibility="gone"
-        app:constraint_referenced_ids="layout_editor_orientation,appearance_editor_style,layout_editor_tray_trash,appearance_editor_corners_label,appearance_editor_margin_label,appearance_editor_corners,appearance_editor_margin" />
+        app:constraint_referenced_ids="layout_editor_orientation,appearance_editor_style,layout_editor_hidden" />
 </androidx.constraintlayout.widget.ConstraintLayout>

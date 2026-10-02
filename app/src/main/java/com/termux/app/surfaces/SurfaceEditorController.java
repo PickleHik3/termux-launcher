@@ -32,12 +32,13 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
-import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.Snackbar;
 
 import com.termux.R;
 import com.termux.app.ReducedMotion;
+import com.termux.app.activities.SettingsActivity;
+import com.termux.app.fragments.settings.termux.KeyboardColorSchemeFragment;
 import com.termux.app.chrome.GlassMotion;
 import com.termux.app.fragments.settings.LayoutCanvasView;
 import com.termux.app.layouteditor.EditorM3;
@@ -62,7 +63,7 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
  * live, scaled into a frame at the device's corner radius, over a bottom area that never scrolls.
  * The mode pill picks what the frame and the bottom area are for: Appearance tunes the live
  * render; Layout cross-fades the frame to the layout canvas at the frame's full size (Layout is
- * not a miniature) with the orientation toggle and the restore tray below it.
+ * not a miniature) with the orientation toggle, the Style toggle and eye-off below it.
  *
  * <p>The frame is {@code terminal_root_container} scaled about a top-centre pivot
  * ({@link AppearanceEditorFrame}); the bottom area is an M3 sheet outside it
@@ -77,10 +78,14 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
  * at Custom saves the Custom look, so its stop comes back.</p>
  *
  * <p>Layout mode's bottom area carries what no Look sets: the Style toggle and the global Corners
- * and Margin (SPEC §3.5). Corners and Margin are Floating's and are hidden under Docked, which
- * spends neither (SPEC §3.7). They write through like every other control, and the one Undo, dirty
- * state and Discard cover them. The layout canvas is told the Style, Corners and Margin and draws
- * every shape from the shape model.</p>
+ * and Margin (SPEC §3.5), shown under both Styles (SPEC §3.7). They write through like every other
+ * control, and the one Undo, dirty state and Discard cover them. The layout canvas is told the
+ * Style, Corners and Margin and draws every shape from the shape model. Layout editor v2
+ * (DECISIONS items 2 to 15): eye-off in the sheet is the only hide target and opens the hidden
+ * tiles; the hide zone is gone and its room is the frame's again; Key radius is Layout's, beside
+ * the keyboard's type chips. At the Custom stop with nothing tapped row 2 is the global Blur,
+ * Opacity and Grain, each re-attaching every surface to the base; the keyboard's row is its Blur
+ * and a "Keyboard theme" door into Settings, from which Back returns to the same session.</p>
  *
  * <p>Everything writes through to preferences live, so the frame is the real thing; Undo and
  * Discard put back the state at open ({@link AppearanceSnapshot}) and the arrangement at open
@@ -253,8 +258,6 @@ public final class SurfaceEditorController {
 
     /** The gap between the frame and the status inset above it, and the bottom area below it. */
     private static final int FRAME_GAP_DP = 8;
-    /** The hide zone's height; it stands under the miniature, a gap clear of it and the sheet. */
-    private static final int HIDE_ZONE_DP = 48;
     /** The selection outline's stroke. */
     private static final int OUTLINE_STROKE_DP = 2;
     private static final long PANEL_MS = 240L;
@@ -267,6 +270,25 @@ public final class SurfaceEditorController {
         if (!mOpen)
             return;
         applyStatusPaneForSelection(false);
+    }
+
+    /**
+     * The activity came back to the front with the editor still open — from the Keyboard theme
+     * page, say (DECISIONS item 15). The session is the same one: nothing is reverted or closed,
+     * and the Undo still measures from the moment the editor opened. What the other page changed
+     * (the keyboard's colours and typeface) is read again so the frame shows it, and the bottom
+     * area is restated from preferences.
+     */
+    public void onActivityStarted() {
+        if (!mOpen)
+            return;
+        applyStatusPaneForSelection(false);
+        TermuxInAppKeyboard keyboard = keyboard();
+        if (keyboard != null)
+            keyboard.onPreferencesReloaded();
+        syncPanel();
+        if (mLayoutMode) syncLayoutCanvas();
+        else positionTargets();
     }
 
     // ------------------------------------------------------------------------------------ entry
@@ -402,17 +424,18 @@ public final class SurfaceEditorController {
     @Nullable private FrameLayout mLayoutFrame;
     /** The views lent to Layout mode, built with the frame host. */
     @Nullable private LayoutEditorController.Views mLayoutViews;
+    /** The move control, out of the frame into the editor round it (placeMoveControl). */
+    @Nullable private MaterialButton mLayoutMove;
     /** The frame's rect in the content view, as {@code {left, top, right, bottom}}. */
     @Nullable private int[] mFrameRectInContent;
-    /** The hide zone under the frame, built with the frame host. */
-    @Nullable private TextView mHideZone;
     /** The frame's corner on screen: the device radius at the frame's scale. */
     private float mFrameCornerPx;
     private static final long LAYOUT_FADE_MS = 200L;
 
     /**
      * Lends Layout mode its views: the canvas in a frame host of its own over the scaled launcher,
-     * and the bottom area's toggle and tray.
+     * with the move control and the keyboard's tools over it, and the bottom area's toggle, eye-off
+     * and hidden tiles.
      */
     private void attachLayoutViews(@NonNull ViewGroup content,
                                    @NonNull LayoutEditorController layout) {
@@ -444,45 +467,103 @@ public final class SurfaceEditorController {
             if (panelIndex >= 0) content.addView(frame, panelIndex, params);
             else content.addView(frame, params);
         }
+        placeMoveControl(content, frame);
         frame.animate().cancel();
         frame.setAlpha(1f);
         frame.setVisibility(View.GONE);
-        // The hide zone is its own view beside the frame, not inside its clipped outline.
-        TextView zone = mHideZone;
-        if (zone == null) {
-            View inflated = LayoutInflater.from(mHost.context())
-                .inflate(R.layout.layout_editor_hide_zone, content, false);
-            if (inflated instanceof TextView) {
-                zone = (TextView) inflated;
-                mHideZone = zone;
-            }
-        }
-        if (zone != null) {
-            if (zone.getParent() != content) {
-                if (zone.getParent() instanceof ViewGroup)
-                    ((ViewGroup) zone.getParent()).removeView(zone);
-                FrameLayout.LayoutParams zoneParams = new FrameLayout.LayoutParams(0,
-                    dp(HIDE_ZONE_DP), Gravity.TOP | Gravity.LEFT);
-                int panelIndex = content.indexOfChild(panel.view());
-                if (panelIndex >= 0) content.addView(zone, panelIndex, zoneParams);
-                else content.addView(zone, zoneParams);
-            }
-            zone.animate().cancel();
-            zone.setAlpha(1f);
-            zone.setVisibility(View.GONE);
-        }
+        LayoutCanvasView liftCanvas = frame.findViewById(R.id.layout_editor_canvas);
+        if (liftCanvas != null)
+            // The lifted copy follows the finger over the whole editor, the sheet included.
+            liftCanvas.setLiftOverlayHost(content);
         if (mLayoutViews == null) {
             LayoutCanvasView canvas = frame.findViewById(R.id.layout_editor_canvas);
-            ChipGroup forms = frame.findViewById(R.id.layout_editor_keyboard_forms);
-            if (canvas == null || forms == null)
+            MaterialButton move = mLayoutMove;
+            if (canvas == null || move == null)
                 return;
-            // One set of views per process, like the panel: the controller binds them once.
-            mLayoutViews = new LayoutEditorController.Views(frame, canvas, forms,
-                panel.orientationToggle(), panel.trash(), zone);
+            // One set of views per process, like the panel: the controller binds them once. The
+            // keyboard's tools are the sheet's: they take its Row B while the keyboard is selected.
+            mLayoutViews = new LayoutEditorController.Views(frame, canvas, panel.keyboardTools(),
+                panel.keyboardForms(), panel.keyRadiusLabel(), panel.keyRadius(), move,
+                panel.orientationToggle(), panel.hiddenControl(), panel.hiddenHighlight(),
+                panel.hiddenTileGroup(), new LayoutEditorController.TilesHost() {
+                    @Override public void setHiddenTilesOpen(boolean open) {
+                        SurfaceEditorController.this.setHiddenTilesOpen(open);
+                    }
+
+                    @Override public void setKeyboardToolsShown(boolean shown) {
+                        if (mPanel != null)
+                            mPanel.setKeyboardToolsShown(shown);
+                    }
+                });
         }
         layout.attach(mLayoutViews);
+        layout.setKeyRadius(mKeyRadius);
         positionLayoutFrame();
     }
+
+    /**
+     * The move control out of the frame, which clips to the phone's outline, into the editor round
+     * it, just above the frame: so it can stand in the gutter outside the phone and never covers
+     * the canvas (DECISIONS items 4 and 5). It stays under the bottom area.
+     */
+    private void placeMoveControl(@NonNull ViewGroup content, @NonNull FrameLayout frame) {
+        MaterialButton move = mLayoutMove;
+        if (move == null) {
+            move = frame.findViewById(R.id.layout_editor_move);
+            if (move == null)
+                return;
+            mLayoutMove = move;
+        }
+        if (move.getParent() == content
+            && content.indexOfChild(move) == content.indexOfChild(frame) + 1)
+            return;
+        ViewGroup.LayoutParams old = move.getLayoutParams();
+        int width = old != null ? old.width : ViewGroup.LayoutParams.WRAP_CONTENT;
+        int height = old != null ? old.height : ViewGroup.LayoutParams.WRAP_CONTENT;
+        if (move.getParent() instanceof ViewGroup)
+            ((ViewGroup) move.getParent()).removeView(move);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width, height,
+            Gravity.TOP | Gravity.LEFT);
+        content.addView(move, content.indexOfChild(frame) + 1, params);
+    }
+
+    /** The bottom area's Row B swapped for the hidden tiles, or back (DECISIONS item 3). */
+    private void setHiddenTilesOpen(boolean open) {
+        if (mPanel != null)
+            mPanel.setHiddenTilesOpen(open);
+    }
+
+    /**
+     * Key radius, as Layout mode shows it beside the keyboard's type chips (DECISIONS item 6): the
+     * key caps' radius alone, written through with the keyboard's live preview, and covered by
+     * the one Undo. Like Corners and Margin it belongs to no Look, so it never moves the slider.
+     */
+    private final LayoutEditorController.KeyRadius mKeyRadius =
+        new LayoutEditorController.KeyRadius() {
+            @Override public int value() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs == null ? 0
+                    : AppearanceLooks.keyCornersValueFor(prefs.getInAppKeyboardKeyCornerRadiusDp());
+            }
+
+            @Override public int max() {
+                return AppearanceLooks.KEY_CORNERS_MAX_DP;
+            }
+
+            @NonNull @Override public String label(int value) {
+                return getString(R.string.appearance_editor_key_corners,
+                    AppearanceLooks.keyCornersDp(value));
+            }
+
+            @Override public void onChanged(int value, boolean dragging) {
+                beginDrag(dragging);
+                writeKeyCorners(value);
+            }
+
+            @Override public void onReleased() {
+                endDrag();
+            }
+        };
 
     /** Stands the canvas's host exactly over the frame's rect, at the frame's corner. */
     private void positionLayoutFrame() {
@@ -509,30 +590,6 @@ public final class SurfaceEditorController {
         LayoutCanvasView canvas = frame.findViewById(R.id.layout_editor_canvas);
         if (canvas != null)
             canvas.setFrameCornerRadiusPx(mFrameCornerPx);
-        positionHideZone();
-    }
-
-    /** Stands the hide zone under the frame, as wide as it and a gap clear of it. */
-    private void positionHideZone() {
-        TextView zone = mHideZone;
-        int[] rect = mFrameRectInContent;
-        if (zone == null || rect == null)
-            return;
-        ViewGroup.LayoutParams raw = zone.getLayoutParams();
-        if (!(raw instanceof FrameLayout.LayoutParams))
-            return;
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) raw;
-        int width = Math.max(1, rect[2] - rect[0]);
-        int top = rect[3] + dp(FRAME_GAP_DP);
-        if (params.width != width || params.height != dp(HIDE_ZONE_DP)
-            || params.leftMargin != rect[0] || params.topMargin != top) {
-            params.width = width;
-            params.height = dp(HIDE_ZONE_DP);
-            params.leftMargin = rect[0];
-            params.topMargin = top;
-            params.gravity = Gravity.TOP | Gravity.LEFT;
-            zone.setLayoutParams(params);
-        }
     }
 
     private void setLayoutMode(boolean layout, boolean animate) {
@@ -560,46 +617,15 @@ public final class SurfaceEditorController {
             }
         } else {
             positionTargets();
+            // The move control stands outside the frame, so the frame's fade does not take it.
+            if (mLayoutMove != null)
+                mLayoutMove.setVisibility(View.GONE);
         }
         fadeLayoutFrame(layout, animate, delayMs);
         syncDirty();
     }
 
-    /** The hide zone shows and goes with Layout mode's frame. */
-    private void fadeHideZone(boolean shown, boolean instant, long delayMs) {
-        TextView zone = mHideZone;
-        if (zone == null)
-            return;
-        zone.animate().cancel();
-        if (shown) {
-            boolean wasShown = zone.getVisibility() == View.VISIBLE;
-            zone.setVisibility(View.VISIBLE);
-            if (instant) {
-                zone.setAlpha(1f);
-                return;
-            }
-            if (!wasShown) zone.setAlpha(0f);
-            zone.animate().alpha(1f).setStartDelay(delayMs).setDuration(LAYOUT_FADE_MS)
-                .setInterpolator(Motion.settle()).start();
-            return;
-        }
-        if (instant || zone.getVisibility() != View.VISIBLE) {
-            zone.setAlpha(1f);
-            zone.setVisibility(View.GONE);
-            return;
-        }
-        zone.animate().alpha(0f).setStartDelay(0L).setDuration(LAYOUT_FADE_MS)
-            .setInterpolator(Motion.settle())
-            .withEndAction(() -> {
-                if (mLayoutMode && mOpen)
-                    return;
-                zone.setVisibility(View.GONE);
-                zone.setAlpha(1f);
-            }).start();
-    }
-
     private void fadeLayoutFrame(boolean shown, boolean animate, long delayMs) {
-        fadeHideZone(shown, !animate || ReducedMotion.isEnabled(mHost.context()), delayMs);
         FrameLayout frame = mLayoutFrame;
         if (frame == null)
             return;
@@ -767,9 +793,9 @@ public final class SurfaceEditorController {
         int containerTop = parentOffset[1] + root.getTop();
         int containerLeft = parentOffset[0] + root.getLeft();
         int frameTop = Math.max(containerTop, statusInset) + dp(FRAME_GAP_DP);
-        // The hide zone and its gap stand between the miniature and the sheet.
-        int frameBottom = windowHeight - mRestHeightPx - dp(FRAME_GAP_DP)
-            - dp(HIDE_ZONE_DP) - dp(FRAME_GAP_DP);
+        // Nothing stands between the frame and the sheet any more (DECISIONS item 2): the hide
+        // zone's 56dp are the frame's.
+        int frameBottom = windowHeight - mRestHeightPx - dp(FRAME_GAP_DP);
         float scale = AppearanceEditorFrame.fitScale(root.getHeight(), frameTop, frameBottom);
         frame.show(scale, frameTop - containerTop, animate);
         // Where the scaled container lands (pivot at its top centre): the rect Layout mode's
@@ -863,13 +889,42 @@ public final class SurfaceEditorController {
         panel.setStop(mStop);
         panel.setFloating(mHost.isFloatingDock());
         syncLayoutControls();
-        if (mTarget != null && AppearanceLooks.isCustomStop(mStop)) {
-            showRow2(mTarget);
-        } else {
-            panel.hideRow2();
+        switch (AppearanceLooks.rowFor(mStop, mTarget)) {
+            case ELEMENT:
+                showRow2(mTarget);
+                break;
+            case GLOBAL:
+                showGlobalRow();
+                break;
+            case NONE:
+            default:
+                panel.hideRow2();
+                break;
         }
         applyPanelHeight(mFramed);
         syncDirty();
+    }
+
+    /**
+     * The global row (DECISIONS item 13): at the Custom stop with nothing tapped, Blur, Opacity and
+     * Grain, read off the base values. Margin is not here; it is Layout's alone.
+     */
+    private void showGlobalRow() {
+        AppearanceEditorPanel panel = mPanel;
+        TermuxAppSharedPreferences prefs = prefs();
+        if (panel == null || prefs == null)
+            return;
+        panel.showRow2(R.string.appearance_editor_target_all);
+        int blur = AppearanceLooks.blurDp(prefs.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        panel.setFirstSlider(getString(R.string.appearance_editor_blur, blur), blur,
+            AppearanceLooks.BLUR_MAX_DP);
+        int opacity = AppearanceLooks.opacityPercent(
+            prefs.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        panel.setMiddleSlider(getString(R.string.appearance_editor_opacity, opacity), opacity,
+            AppearanceLooks.OPACITY_MAX);
+        int grain = AppearanceLooks.grainPercent(prefs.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        panel.setSecondSlider(getString(R.string.appearance_editor_grain, grain), grain,
+            AppearanceLooks.GRAIN_MAX);
     }
 
     private void syncDirty() {
@@ -897,9 +952,9 @@ public final class SurfaceEditorController {
 
     /**
      * Row 2 for one element: its name and its controls, at the stored values. The terminal has
-     * five — Darkness, Legibility, Blur, and the Trail and Effect menus (Effect only on
-     * API 33 and up); the status bar and the dock Blur alone; the keyboard Key
-     * corners and Blur; the wallpaper Soft and Dim.
+     * five — Darkness, Legibility, Blur, and the Trail and Effect menus (Effect only on API 33
+     * and up); the status bar and the dock Blur alone; the keyboard Blur and its "Keyboard theme"
+     * door (Key radius is Layout's now); the wallpaper Soft and Dim.
      */
     private void showRow2(@NonNull Target target) {
         AppearanceEditorPanel panel = mPanel;
@@ -915,10 +970,9 @@ public final class SurfaceEditorController {
                 break;
             }
             case KEYBOARD: {
-                int corners = AppearanceLooks.keyCornersValueFor(
-                    prefs.getInAppKeyboardKeyCornerRadiusDp());
-                panel.setFirstSlider(getString(R.string.appearance_editor_key_corners, corners),
-                    corners, AppearanceLooks.KEY_CORNERS_MAX_DP);
+                int blur = AppearanceLooks.blurDp(prefs.getSurfaceBaseValue(SurfaceProperty.BLUR));
+                panel.setFirstSlider(getString(R.string.appearance_editor_blur, blur), blur,
+                    AppearanceLooks.BLUR_MAX_DP);
                 break;
             }
             case WALLPAPER:
@@ -951,6 +1005,8 @@ public final class SurfaceEditorController {
             int dim = AppearanceLooks.dimSliderValue(soft, prefs.getWallpaperBackdropDim());
             panel.setSecondSlider(getString(R.string.appearance_editor_dim, dim), dim,
                 AppearanceLooks.dimSliderMax(soft));
+        } else if (target.secondControlIsKeyboardTheme()) {
+            panel.setSecondButton(getString(R.string.appearance_editor_keyboard_theme));
         } else {
             int blur = AppearanceLooks.blurDp(prefs.getSurfaceBaseValue(SurfaceProperty.BLUR));
             panel.setSecondSlider(getString(R.string.appearance_editor_blur, blur), blur,
@@ -1014,7 +1070,16 @@ public final class SurfaceEditorController {
         @Override public void onFirstSlider(int value, boolean dragging) {
             beginDrag(dragging);
             if (mTarget == Target.TERMINAL) writeDarkness(value);
-            else if (mTarget == Target.KEYBOARD) writeKeyCorners(value);
+            else if (mTarget == null || mTarget.firstControlIsBlur()) writeBlur(value);
+        }
+
+        @Override public void onMiddleSlider(int value, boolean dragging) {
+            beginDrag(dragging);
+            if (mTarget == null) writeGlobal(SurfaceProperty.OPACITY, value);
+        }
+
+        @Override public void onSecondButton() {
+            if (mTarget != null && mTarget.secondControlIsKeyboardTheme()) openKeyboardTheme();
         }
 
         @Override public void onFirstSegment(int index) {
@@ -1035,8 +1100,9 @@ public final class SurfaceEditorController {
 
         @Override public void onSecondSlider(int value, boolean dragging) {
             beginDrag(dragging);
-            if (mTarget == Target.WALLPAPER) writeDim(value);
-            else if (mTarget != null) writeBlur(value);
+            if (mTarget == null) writeGlobal(SurfaceProperty.GRAIN, value);
+            else if (mTarget == Target.WALLPAPER) writeDim(value);
+            else if (mTarget.secondControlIsBlur()) writeBlur(value);
         }
 
         @Override public void onSliderReleased() {
@@ -1114,21 +1180,59 @@ public final class SurfaceEditorController {
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
     }
 
-    /** Blur: one value for every surface. */
+    /**
+     * Blur: one value for every surface, every surface re-attached to it. It stands in the first
+     * column of the global row and of the keyboard's, and in the last column elsewhere.
+     */
     private void writeBlur(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
-        int blur = AppearanceLooks.blurDp(value);
-        for (SurfaceSlot slot : SurfaceSlot.values())
-            prefs.setSurfaceInheriting(slot, SurfaceProperty.BLUR, true);
-        prefs.setInAppKeyboardBlurRadiusRaw(
-            TermuxPreferenceConstants.TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS);
-        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, blur);
-        if (mPanel != null)
-            mPanel.setSecondLabel(getString(R.string.appearance_editor_blur, blur));
+        int blur = GlobalGlass.write(prefs, SurfaceProperty.BLUR, value);
+        if (mPanel != null) {
+            String label = getString(R.string.appearance_editor_blur, blur);
+            if (mTarget == null || mTarget.firstControlIsBlur()) mPanel.setFirstLabel(label);
+            else mPanel.setSecondLabel(label);
+        }
         requestPreview(SurfaceEditorProperties.PREVIEW_BLUR
             | SurfaceEditorProperties.PREVIEW_SURFACES);
+    }
+
+    /**
+     * The global row's Opacity and Grain (DECISIONS item 14): the base value, every surface,
+     * terminal included, re-attached to it, as Blur has always done. The terminal's own Opacity
+     * detaches it again afterwards.
+     */
+    private void writeGlobal(@NonNull SurfaceProperty property, int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        int written = GlobalGlass.write(prefs, property, value);
+        if (mPanel != null) {
+            if (property == SurfaceProperty.OPACITY)
+                mPanel.setMiddleLabel(getString(R.string.appearance_editor_opacity, written));
+            else
+                mPanel.setSecondLabel(getString(R.string.appearance_editor_grain, written));
+        }
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD);
+    }
+
+    /**
+     * The keyboard's "Keyboard theme" door (DECISIONS item 15): the Keyboard theme page in
+     * Settings, over the editor. The session stays open under it — a stop is not a close
+     * (TermuxActivity's overlay registry keeps the editor across STOP) — and Back returns to it,
+     * where {@link #onActivityStarted} reads the page's changes into the frame. The editor's Undo
+     * does not cover what is changed on that page.
+     */
+    private void openKeyboardTheme() {
+        Context context = mHost.context();
+        try {
+            context.startActivity(SettingsActivity.createFragmentIntent(context,
+                KeyboardColorSchemeFragment.class, R.string.appearance_editor_keyboard_theme));
+        } catch (RuntimeException e) {
+            // No Settings to open (a stripped build): the editor stays as it is.
+        }
     }
 
     /**
@@ -1166,7 +1270,7 @@ public final class SurfaceEditorController {
         mHost.applyTerminalMotionLook();
     }
 
-    /** Key corners: the key caps' radius, and nothing else. */
+    /** Key radius: the key caps' radius, and nothing else; Layout mode's (DECISIONS item 6). */
     private void writeKeyCorners(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
@@ -1176,8 +1280,7 @@ public final class SurfaceEditorController {
         TermuxInAppKeyboard keyboard = keyboard();
         if (keyboard != null)
             keyboard.previewSurfaceEditorKeyCornerRadiusDp(radius);
-        if (mPanel != null)
-            mPanel.setFirstLabel(getString(R.string.appearance_editor_key_corners, radius));
+        // Its label is Layout mode's, beside the type chips, and is restated there.
         requestPreview(SurfaceEditorProperties.PREVIEW_KEYBOARD);
     }
 
@@ -1317,6 +1420,27 @@ public final class SurfaceEditorController {
         if (!AppearanceLooks.isCustomStop(mStop))
             mStop = AppearanceLooks.CUSTOM_STOP;
         mTarget = target;
+        afterSelection();
+    }
+
+    /**
+     * A tap on the bare wallpaper (DECISIONS item 13): with an element tapped it is the empty
+     * canvas, and the global row comes back; with the global row up it opens the wallpaper's own
+     * row (Soft wallpaper, Dim); at a Look stop it moves to Custom as any tap does.
+     */
+    private void tapWallpaper() {
+        if (!mOpen)
+            return;
+        Target next = AppearanceLooks.afterWallpaperTap(mStop, mTarget);
+        if (next != null) {
+            select(next);
+            return;
+        }
+        mTarget = null;
+        afterSelection();
+    }
+
+    private void afterSelection() {
         applyStatusPaneForSelection(true);
         syncPanel();
         positionOutline();
@@ -1361,7 +1485,10 @@ public final class SurfaceEditorController {
             final Target target = GROUP_TARGETS[i];
             group.setContentDescription(getString(R.string.appearance_editor_target_description,
                 getString(nameOf(target))));
-            group.setOnClickListener(view -> select(target));
+            group.setOnClickListener(view -> {
+                if (target == Target.WALLPAPER) tapWallpaper();
+                else select(target);
+            });
             group.setOnTouchListener((view, event) -> {
                 if (!mOpen)
                     return false;
@@ -1995,6 +2122,10 @@ public final class SurfaceEditorController {
      */
     public void requestClose() {
         if (!mOpen)
+            return;
+        // Back with a bar in the air cancels the lift and nothing else (DECISIONS item 4).
+        LayoutEditorController layoutEditor = mHost.layoutEditor();
+        if (mLayoutMode && layoutEditor != null && layoutEditor.cancelGesture())
             return;
         if (!isDirty()) {
             exitEditor();

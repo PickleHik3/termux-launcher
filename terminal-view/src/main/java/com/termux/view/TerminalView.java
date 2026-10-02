@@ -299,6 +299,16 @@ public final class TerminalView extends View {
      */
     private boolean mTouchMouseDragReported;
 
+    /**
+     * Shift was held (or latched) at this tap, so it is the app's own: a mouse-tracking program
+     * gets no click for it and the link under the finger opens instead, the xterm convention.
+     * Decided once at touch-up, because reading the latch consumes it.
+     */
+    private boolean mTapShiftBypass;
+
+    /** Modifier bits of the left press in flight, so its motion and release carry the same ones. */
+    private int mMousePressModifiers;
+
     /** The axis a finger drag scrolls along, decided once it has travelled; reset at each down. */
     private int mScrollAxis;
     private static final int SCROLL_AXIS_UNDECIDED = 0;
@@ -485,11 +495,17 @@ public final class TerminalView extends View {
                 if (mHoldConsumedGesture)
                     return true;
                 if (mEmulator != null && mRenderer != null && mEmulator.isMouseTrackingActive() && !event.isFromSource(InputDevice.SOURCE_MOUSE) && !isSelectingText() && !mScrollDelivery.delivered()) {
+                    if (takeShiftForTap(event)) {
+                        // Shift bypasses the program: no click goes to it, and the confirmed tap
+                        // that follows opens whatever link is there.
+                        mTapShiftBypass = true;
+                        return false;
+                    }
                     // Quick event processing when mouse tracking is active - do not wait for check of double tapping
                     // for zooming.
                     float[] at = TapPrecision.clickPointFor(mTouchDownX, mTouchDownY, event.getX(),
                         event.getY(), mRenderer.mFontLineSpacing);
-                    sendClickAt(getColumnForX(at[0]), getRowForY(at[1]));
+                    sendClickAt(getColumnForX(at[0]), getRowForY(at[1]), event);
                     mClient.onMouseTrackingTap(event);
                     return true;
                 }
@@ -508,6 +524,14 @@ public final class TerminalView extends View {
                     return true;
                 }
                 requestFocus();
+                if (mEmulator.isMouseTrackingActive()) {
+                    // The program already got this tap as its click (see onUp), so the app's own
+                    // link handling stays out of it - unless Shift sent the tap here instead.
+                    boolean bypass = mTapShiftBypass;
+                    mTapShiftBypass = false;
+                    if (bypass) mClient.onMouseTrackingBypassTap(event);
+                    return true;
+                }
                 mClient.onSingleTapUp(event);
                 return true;
             }
@@ -521,7 +545,7 @@ public final class TerminalView extends View {
                 // After a hold a drag is a mouse drag or a selection handle, never a scroll.
                 if (mHoldConsumedGesture)
                     return true;
-                if (mEmulator.isMouseTrackingActive() && e.isFromSource(InputDevice.SOURCE_MOUSE)) {
+                if (mEmulator.isMouseTrackingActive() && e.isFromSource(InputDevice.SOURCE_MOUSE) && !mTapShiftBypass) {
                     // If moving with mouse pointer while pressing button, report that instead of scroll.
                     // This means that we never report moving with button press-events for touch input,
                     // since we cannot just start sending these events without a starting press event,
@@ -1608,7 +1632,7 @@ public final class TerminalView extends View {
                     mTouchMouseModeLastRow, true);
                 break;
             case CLICK:
-                sendClickAt(mTouchMouseModeLastCol, mTouchMouseModeLastRow);
+                sendClickAt(mTouchMouseModeLastCol, mTouchMouseModeLastRow, null);
                 break;
             case RELEASE:
                 sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, mTouchMouseModeLastCol,
@@ -1687,6 +1711,7 @@ public final class TerminalView extends View {
      * Send a single mouse event code to the terminal.
      */
     void sendMouseEventCode(MotionEvent e, int button, boolean pressed) {
+        int modifiers = mouseModifiersFor(e, button, pressed);
         int[] columnAndRow = getColumnAndRow(e, false);
         int x = columnAndRow[0] + 1;
         int y = columnAndRow[1] + 1;
@@ -1700,7 +1725,50 @@ public final class TerminalView extends View {
                 mMouseScrollStartY = y;
             }
         }
-        mEmulator.sendMouseEvent(button, x, y, pressed);
+        mEmulator.sendMouseEvent(button, x, y, pressed, modifiers);
+    }
+
+    private static boolean isWheelButton(int button) {
+        return button >= TerminalEmulator.MOUSE_WHEELUP_BUTTON && button <= TerminalEmulator.MOUSE_WHEEL_RIGHT;
+    }
+
+    /**
+     * The modifier bits a mouse report owes. A left press reads the keyboard and the extra keys row
+     * (consuming a one-shot latch, which so covers the press and its release) and remembers the
+     * bits; motion and release repeat them. A wheel notch takes only what the hardware keyboard
+     * holds, so scrolling does not eat a latch meant for the next click.
+     */
+    private int mouseModifiersFor(MotionEvent e, int button, boolean pressed) {
+        if (isWheelButton(button)) return e == null ? 0 : modifiersOf(e, false, false, false);
+        if (button == TerminalEmulator.MOUSE_LEFT_BUTTON && pressed)
+            return mMousePressModifiers = takeMouseModifiers(e);
+        int modifiers = mMousePressModifiers;
+        if (!pressed) mMousePressModifiers = 0;
+        return modifiers;
+    }
+
+    /** Hardware keyboard modifiers on the event, plus any the extra keys row held. */
+    private static int modifiersOf(MotionEvent e, boolean ctrlLatched, boolean altLatched, boolean shiftLatched) {
+        int modifiers = 0;
+        if (shiftLatched || (e != null && (e.getMetaState() & KeyEvent.META_SHIFT_ON) != 0)) modifiers |= TerminalEmulator.MOUSE_MODIFIER_SHIFT;
+        if (altLatched || (e != null && (e.getMetaState() & KeyEvent.META_ALT_ON) != 0)) modifiers |= TerminalEmulator.MOUSE_MODIFIER_ALT;
+        if (ctrlLatched || (e != null && (e.getMetaState() & KeyEvent.META_CTRL_ON) != 0)) modifiers |= TerminalEmulator.MOUSE_MODIFIER_CTRL;
+        return modifiers;
+    }
+
+    /** Modifier bits for a click, reading (and so consuming) the extra keys row's latches. */
+    private int takeMouseModifiers(MotionEvent e) {
+        // Every read happens, so no latch is left over to leak into the next key.
+        boolean ctrl = mClient.readControlKey();
+        boolean alt = mClient.readAltKey();
+        boolean shift = mClient.readShiftKey();
+        return modifiersOf(e, ctrl, alt, shift);
+    }
+
+    /** Whether Shift is on for this tap, held on a keyboard or latched in the extra keys row. */
+    private boolean takeShiftForTap(MotionEvent e) {
+        boolean latched = mClient.readShiftKey();
+        return latched || (e.getMetaState() & KeyEvent.META_SHIFT_ON) != 0;
     }
 
     /**
@@ -1870,13 +1938,17 @@ public final class TerminalView extends View {
     }
 
     private void sendMouseEventAt(int button, int column, int row, boolean pressed) {
-        mEmulator.sendMouseEvent(button, column + 1, row + 1, pressed);
+        mEmulator.sendMouseEvent(button, column + 1, row + 1, pressed, mouseModifiersFor(null, button, pressed));
     }
 
-    /** Press and release the left button on one cell, which is the whole of a finger click. */
-    private void sendClickAt(int column, int row) {
-        sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, column, row, true);
-        sendMouseEventAt(TerminalEmulator.MOUSE_LEFT_BUTTON, column, row, false);
+    /**
+     * Press and release the left button on one cell, which is the whole of a finger click. The
+     * modifiers are read once, so a latched one-shot Ctrl covers both halves and is then spent.
+     */
+    private void sendClickAt(int column, int row, MotionEvent e) {
+        int modifiers = takeMouseModifiers(e);
+        mEmulator.sendMouseEvent(TerminalEmulator.MOUSE_LEFT_BUTTON, column + 1, row + 1, true, modifiers);
+        mEmulator.sendMouseEvent(TerminalEmulator.MOUSE_LEFT_BUTTON, column + 1, row + 1, false, modifiers);
     }
 
     /**
@@ -2003,7 +2075,7 @@ public final class TerminalView extends View {
                     float[] at = TapPrecision.clickPointFor(mHoldGesture.holdX(),
                         mHoldGesture.holdY(), mHoldGesture.x(), mHoldGesture.y(),
                         mRenderer.mFontLineSpacing);
-                    sendClickAt(getColumnForX(at[0]), getRowForY(at[1]));
+                    sendClickAt(getColumnForX(at[0]), getRowForY(at[1]), null);
                 }
                 break;
             case ABANDONED:
@@ -2098,6 +2170,7 @@ public final class TerminalView extends View {
             mScrollDelivery.reset();
             mTouchMouseDragActive = false;
             mTouchMouseDragReported = false;
+            mTapShiftBypass = false;
             mScrollAxis = SCROLL_AXIS_UNDECIDED;
         }
         handleHoldTouch(event);
@@ -2118,7 +2191,10 @@ public final class TerminalView extends View {
             } else if (event.isButtonPressed(MotionEvent.BUTTON_TERTIARY)) {
                 doPaste();
             } else if (mEmulator.isMouseTrackingActive()) { // BUTTON_PRIMARY.
-                switch (event.getAction()) {
+                // A pointer held with Shift is the app's, as for a finger tap: nothing is reported
+                // for the whole press, and the confirmed tap opens the link under it.
+                if (action == MotionEvent.ACTION_DOWN) mTapShiftBypass = (event.getMetaState() & KeyEvent.META_SHIFT_ON) != 0;
+                if (!mTapShiftBypass) switch (event.getAction()) {
                     case MotionEvent.ACTION_DOWN:
                     case MotionEvent.ACTION_UP:
                         sendMouseEventCode(event, TerminalEmulator.MOUSE_LEFT_BUTTON, event.getAction() == MotionEvent.ACTION_DOWN);

@@ -108,8 +108,6 @@
     <string name="settings_clipboard_header">Clipboard</string>
     <string name="settings_osc52_clipboard_read_title">Let programs read the clipboard</string>
     <string name="settings_osc52_clipboard_read_summary">Programs in the terminal can paste what you copied.</string>
-    <string name="settings_trim_wrapped_trailing_spaces_title">Trim trailing spaces on wrapped lines</string>
-    <string name="settings_trim_wrapped_trailing_spaces_summary">Copying text drops the extra spaces left at the end of a wrapped line instead of keeping them.</string>
     <string name="settings_clipboard_cleanup_title">Clipboard Cleanup</string>
     <string name="settings_clipboard_cleanup_summary">Drop trailing spaces from copied lines, and the trailing newline from a one-line paste.</string>
     <string name="settings_sessions_panes_header">Sessions and panes</string>
@@ -1885,11 +1883,22 @@
                 <string name="corner_tab_layout_description">Layout editor</string>
                 <string name="settings_destination_layout_editor">Layout</string>
                 <string name="settings_destination_layout_editor_summary">Move, hide and size the bars, the dock and the keyboard</string>
-                <!-- The trash under the phone, read aloud: nothing in it, or how many are hidden
-                     (a tap opens the list, a bar dropped on it is hidden). -->
-                <string name="layout_editor_trash_empty">Nothing hidden. Drag a bar to the zone above to hide it</string>
-                <string name="layout_editor_hide_zone_hint">Drag here to hide</string>
-                <string name="layout_editor_trash_filled">Hidden elements, %1$d. Tap to list them</string>
+                <!-- Eye-off in the Layout editor's sheet (layout editor v2), read aloud only: no
+                     visible hint names it. Nothing hidden, or how many are; a bar lifted onto it
+                     is hidden, and a tap opens the hidden tiles. -->
+                <string name="layout_editor_hidden_none">Hidden elements: none</string>
+                <plurals name="layout_editor_hidden_count">
+                    <item quantity="one">%1$d hidden element</item>
+                    <item quantity="other">%1$d hidden elements</item>
+                </plurals>
+                <string name="layout_editor_hidden_tiles_description">Hidden elements</string>
+                <!-- One hidden-element tile, read aloud: a tap brings the element back. -->
+                <string name="layout_editor_restore_tile">Restore %1$s</string>
+                <!-- The move control outside a selected bar, read aloud; its menu lists where the
+                     bar can go. -->
+                <string name="layout_editor_move_description">Move</string>
+                <string name="layout_editor_move_element">Move %1$s</string>
+                <string name="layout_editor_key_radius_description">Key radius</string>
                 <string name="layout_editor_keyboard">Keyboard</string>
                 <string name="layout_editor_keyboard_forms">Keyboard type</string>
                 <!-- What a resize handle shows while it is dragged, in the store's real units. The
@@ -2612,13 +2621,13 @@
     <string name="help_key_secondary">↑ %1$s</string>
     <string name="help_topic_dock_purpose">The dock holds your pinned apps, the A–Z index and the extra keys.</string>
     <string name="help_topic_dock_action">Pull the apps row away from its edge for the app drawer.</string>
-    <string name="help_topic_dock_reveal">Tap its chip in the Layout editor\'s restore tray to bring it back.</string>
+    <string name="help_topic_dock_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
     <string name="help_topic_az_purpose">The A–Z index picks an app by its first letter.</string>
     <string name="help_topic_az_action">Slide along it, then drag up to the app you want.</string>
-    <string name="help_topic_az_reveal">Tap its chip in the Layout editor\'s restore tray to bring it back.</string>
+    <string name="help_topic_az_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
     <string name="help_topic_status_purpose">The status bar starts with your session number, then your windows, and shows which place you are on.</string>
     <string name="help_topic_status_action">Swipe down from the page\'s top border, or drag the bar down, to open it.</string>
-    <string name="help_topic_status_reveal">Tap its chip in the Layout editor\'s restore tray to bring it back.</string>
+    <string name="help_topic_status_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
     <string name="help_topic_stats_purpose">The status widgets show how the phone is doing.</string>
     <string name="help_topic_stats_action">Tap one for details.</string>
     <string name="help_topic_stats_reveal">Turn a status widget on in Settings to see it.</string>
@@ -2626,10 +2635,10 @@
     <string name="help_topic_corners_action">Hold a corner of the page, then tap the ? button.</string>
     <string name="help_topic_corners_reveal">Hold any corner of a page to see its tab.</string>
     <string name="help_topic_sessions_action">Tap the session number, the status bar\'s first chip, to open the sessions manager.</string>
-    <string name="help_topic_sessions_reveal">Tap the status bar\'s chip in the Layout editor\'s restore tray to see the session number.</string>
+    <string name="help_topic_sessions_reveal">In the Layout editor, tap the eye-off button, then tap Status bar to see the session number.</string>
     <string name="help_topic_windows_purpose">Windows are tabs for your terminals: the chips after the session number.</string>
     <string name="help_topic_windows_action">Tap one to switch, or tap + for a new one.</string>
-    <string name="help_topic_windows_reveal">Tap the status bar\'s chip in the Layout editor\'s restore tray to see your windows.</string>
+    <string name="help_topic_windows_reveal">In the Layout editor, tap the eye-off button, then tap Status bar to see your windows.</string>
     <string name="help_topic_keys_purpose">The extra keys row carries the keys a phone keyboard leaves out.</string>
     <string name="help_topic_keys_action">Tap a key, or swipe up on it for its second key.</string>
     <string name="help_topic_keys_reveal">Show the keyboard to see this key.</string>
@@ -2834,15 +2843,15 @@
     <string name="help_topic_layout_title">Layout editor</string>
     <string name="help_topic_layout_summary">The Layout editor moves, resizes and puts away the launcher\'s own controls.</string>
     <string name="help_topic_layout_action">Hold a corner and tap the Layout button to open it.</string>
-    <string name="help_topic_layout_step1">Drag a bar to another edge, drop it in the restore tray to put it away, or tap it for its handle.</string>
-    <string name="help_topic_layout_step2">Docked or Floating: Docked joins the bars into one frame of glass; Floating gives each piece its own card. Corners and Margin set the shape.</string>
-    <string name="help_topic_layout_step3">Portrait and landscape are arranged separately, and minimal mode has its own layout.</string>
+    <string name="help_topic_layout_step1">Drag a bar to another edge, or drop it on the eye-off button to hide it. Tap a bar to see where it can go, then use its move button or its handle.</string>
+    <string name="help_topic_layout_step2">Tap the eye-off button to see what is hidden, then tap one to bring it back, or drag it to an edge.</string>
+    <string name="help_topic_layout_step3">Docked or Floating: Docked joins the bars into one frame of glass; Floating gives each piece its own card. Portrait, landscape and minimal mode each keep their own layout.</string>
     <string name="help_topic_layout_back">Undo steps back and Done keeps your changes. Back asks before it drops them.</string>
-    <string name="help_topic_layout_aliases">layout, move controls, hide controls, restore tray, arrange, docked, floating, corners, margin, editor</string>
+    <string name="help_topic_layout_aliases">layout, move controls, hide controls, hidden elements, eye-off, restore, arrange, docked, floating, corners, margin, key radius, editor</string>
     <string name="help_topic_appearance_title">Appearance editor</string>
     <string name="help_topic_appearance_summary">The Appearance editor changes how the launcher looks, with one Look for the whole of it.</string>
     <string name="help_topic_appearance_action">Hold a corner and tap the palette button to open it.</string>
-    <string name="help_topic_appearance_step1">Slide between Clear, Mist, Tint and Solid; the last stop, Custom, lets you tap anything in the frame to tune it.</string>
+    <string name="help_topic_appearance_step1">Slide between Clear, Mist, Tint and Solid. The last stop, Custom, sets Blur, Opacity and Grain for everything; tap anything in the frame to tune it on its own.</string>
     <string name="help_topic_appearance_step2">Changes preview as you make them.</string>
     <string name="help_topic_appearance_back">Undo returns to how it was; Done keeps it.</string>
     <string name="help_topic_appearance_aliases">appearance, look, clear, mist, tint, solid, custom, glass, blur, colours, colors, editor</string>
@@ -2915,9 +2924,9 @@
     <string name="help_fix_keyboard_action">Swipe up from the bottom border. If the wrong keyboard opens, check Settings, under Keyboard.</string>
     <string name="help_fix_keyboard_aliases">can\'t type, cannot type, no keyboard, keyboard missing, keyboard swipe, typing</string>
     <string name="help_fix_dock_title">A bar is missing</string>
-    <string name="help_fix_dock_summary">A bar put away in the Layout editor waits in the restore tray until you bring it back, the status bar included.</string>
-    <string name="help_fix_dock_action">Open the Layout editor and tap the bar\'s chip in the restore tray.</string>
-    <string name="help_fix_dock_aliases">dock missing, no dock, status bar missing, extra keys missing, a to z missing, hidden control, restore tray</string>
+    <string name="help_fix_dock_summary">A bar hidden in the Layout editor stays hidden until you bring it back, the status bar included.</string>
+    <string name="help_fix_dock_action">Open the Layout editor, tap the eye-off button, then tap the bar to put it back.</string>
+    <string name="help_fix_dock_aliases">dock missing, no dock, status bar missing, extra keys missing, a to z missing, hidden control, hidden elements, eye-off</string>
     <string name="help_fix_action_title">An action is unavailable</string>
     <string name="help_fix_action_summary">Some actions need a pane, a window or the display before they can run.</string>
     <string name="help_fix_action_action">Open the command palette; an action that is greyed out says what it needs.</string>
@@ -2978,8 +2987,8 @@
     <string name="help_term_look_definition">How the glass reads: Clear, Mist, Tint, Solid, or your own Custom.</string>
     <string name="help_term_style_title">Docked or Floating</string>
     <string name="help_term_style_definition">Docked joins the bars into one frame of glass; Floating gives each its own card.</string>
-    <string name="help_term_tray_title">Restore tray</string>
-    <string name="help_term_tray_definition">Where a bar put away in the Layout editor waits; tap its chip to bring it back.</string>
+    <string name="help_term_tray_title">Hidden elements</string>
+    <string name="help_term_tray_definition">What you hid in the Layout editor; tap the eye-off button, then tap one to put it back.</string>
     <string name="help_term_pinned_title">Pinned notification</string>
     <string name="help_term_pinned_definition">A notification card beside the clock, kept there by one of your rules.</string>
     <string name="help_term_dictation_title">Dictation</string>

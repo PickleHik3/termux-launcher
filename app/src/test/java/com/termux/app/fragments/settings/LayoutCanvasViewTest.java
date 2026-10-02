@@ -1587,7 +1587,7 @@ public class LayoutCanvasViewTest {
                 bottomBars(), sideBars(), keyboardIn(KeyboardForm.FLOATING),
                 keyboardIn(KeyboardForm.SPLIT)}) {
                 LayoutCanvasView view = styled(style, arrangement);
-                view.setSlotCounts(5, 4);
+                view.setExtraKeyCount(4);
                 view.draw(canvas);
                 view.setSelectedBlock(LayoutCanvasView.Block.APPS_ROW);
                 view.draw(canvas);
@@ -1744,7 +1744,7 @@ public class LayoutCanvasViewTest {
         assertFalse(view.trashRect().isEmpty());
         assertTrue("it sits on the tray's end", view.trashRect().right
             <= view.trayRect().right + 0.01f);
-        assertTrue(view.trashDescription().contains("2"));
+        assertTrue(view.hiddenDescription().contains("2"));
     }
 
     @Test

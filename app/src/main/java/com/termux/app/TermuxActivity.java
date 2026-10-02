@@ -2178,7 +2178,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshCalendarIconsIfDayChanged();
         refreshSuggestionBarIfLauncherCatalogChanged();
         getWindow().getDecorView().post(() -> LauncherCtlApiServer.getInstance().ensureStartedAsync(getApplicationContext()));
-        mSurfaceEditor.collapseStatusPaneIfLeftExpanded();
+        // An editor left open under another activity (the Keyboard theme page it opened) is the
+        // same session on the way back: restated, never closed or reverted.
+        mSurfaceEditor.onActivityStarted();
     }
 
     /**
@@ -2478,7 +2480,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.refreshMaterialTerminalColorsIfNeeded();
         if (mTermuxTerminalSessionActivityClient != null)
-            mTermuxTerminalSessionActivityClient.applyTrimWrappedTrailingSpacesPreference();
+            mTermuxTerminalSessionActivityClient.applyClipboardCleanupPreference();
         if (mTermuxTerminalViewClient != null)
             mTermuxTerminalViewClient.onResume();
         refreshLauncherIconsIfPreferencesChanged();
@@ -21874,7 +21876,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Apply font/colours (nerd-font typeface) to every populated pane.
         if (getTermuxTerminalSessionClient() != null) {
             getTermuxTerminalSessionClient().checkForFontAndColors();
-            getTermuxTerminalSessionClient().applyTrimWrappedTrailingSpacesPreference();
+            getTermuxTerminalSessionClient().applyClipboardCleanupPreference();
         }
         for (TerminalView v : getTerminalPaneViews())
             if (v.getCurrentSession() != null) v.onScreenUpdated();

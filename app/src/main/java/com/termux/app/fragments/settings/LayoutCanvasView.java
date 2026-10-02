@@ -84,13 +84,18 @@ import java.util.Map;
  * split. Each element paints its content inside the bounds the model gave it, glyphs keep their
  * size, and nothing is stretched. Colours come from the live Material scheme.
  *
- * <p>A bar is lifted by pressing it anywhere and moving past the touch slop; a tap selects it.
- * While a bar is lifted every edge it may legally stand on is outlined, the tray under the canvas
- * offers to put it away, and a release over either reports the new placement. The lifted copy keeps
- * its shape until it hovers a target, then takes the shape it would have there, which is the
- * shape of the dashed placeholder. A release anywhere else springs the bar back and reports
- * nothing. {@link MiniatureDragPolicy} owns which targets exist and which one the finger is over.
- * A selected element wears one outline, and the handle that resizes it.
+ * <p>A bar is lifted by pressing it anywhere and moving past the touch slop; a tap selects it
+ * (layout editor v2, DECISIONS items 2 to 5). While a bar is lifted every edge it may legally
+ * stand on is outlined, the editor's eye-off control (the tray, whose rect the host gives the
+ * canvas) is offered to put it away, and a release over either reports the new placement. The
+ * lifted copy keeps its shape until it hovers a target, then takes the shape it would have there,
+ * which is the shape of the dashed placeholder. A release anywhere else, or Back
+ * ({@link #cancelLift}), springs the bar back and reports nothing. {@link MiniatureDragPolicy}
+ * owns which targets exist and which one the finger is over. A selected element wears one outline
+ * along its own shape, the handle that resizes it, and its valid edge destinations outlined; the
+ * host stands a move control at {@link #moveControlRect} whose menu offers
+ * {@link #moveDestinations}, the accessibility move actions by another door. The app icons bar
+ * draws seven fixed placeholders; the extra keys are the real ones.
  *
  * <p>Everything a finger can do here a screen reader and a keyboard can do too ({@link
  * CanvasAccessibility}). Each element on the phone, and each hidden one, is a virtual view named
@@ -258,6 +263,11 @@ public final class LayoutCanvasView extends View {
     private static final int SLOT_HOVER_ALPHA = 60;
     /** The gaps of the hovered edge that the finger is not on; enough to read, not to compete. */
     private static final int GAP_LINE_ALPHA = 110;
+    /** A destination guide's dashed outline: quiet while selected, stronger while lifting. */
+    private static final float GUIDE_STROKE_DP = 1f;
+    private static final float GUIDE_LIFT_STROKE_DP = 1.5f;
+    /** A guide thinner than this, once the other elements are cut out of it, is not drawn. */
+    private static final float GUIDE_MIN_DP = 4f;
 
     /**
      * The strip under the phone: the hidden elements live there, and a lifted one can be put there.
@@ -315,6 +325,13 @@ public final class LayoutCanvasView extends View {
     private final LayoutCanvasArtwork mArtwork = new LayoutCanvasArtwork();
     private final LayoutCanvasArtwork.Palette mPalette = new LayoutCanvasArtwork.Palette();
     private final RectF mFrameRect = new RectF();
+    /** Where the move control may stand outside the phone; empty for nowhere. */
+    private final RectF mMoveControlRoom = new RectF();
+    /** The view spanning the editor whose overlay carries the lifted copy, or null for none. */
+    @Nullable private View mLiftHost;
+    /** The host the copy is in the overlay of now; null while it is not there. */
+    @Nullable private View mLiftOverlayHost;
+    @Nullable private final Drawable mLiftOverlay = new LiftOverlay();
     /** One design unit on this frame, in pixels. */
     private float mUnit = 1f;
     private final Path mClipPath = new Path();
@@ -353,8 +370,10 @@ public final class LayoutCanvasView extends View {
     private long mMorphStartMs;
     /** A progress a test holds the change at; negative follows the clock. */
     private float mMorphHeld = -1f;
-    /** How many pinned apps and extra keys the bars draw; negative draws the pack's seven. */
-    private int mPinnedAppCount = -1;
+    /**
+     * How many extra keys the extra-keys bar draws; negative draws the pack's seven. The app icons
+     * bar has no count: it always draws the pack's seven placeholders (DECISIONS item 8).
+     */
     private int mExtraKeyCount = -1;
 
     // ---- The drag: one gesture's worth of state, all of it cleared when it ends ----------------
@@ -365,7 +384,7 @@ public final class LayoutCanvasView extends View {
     @Nullable private Block mPressedBar;
     /** A press on the trash icon the canvas itself draws (a view that has no host tray). */
     private boolean mPressedTrash;
-    /** Told when the canvas's own trash (a view that has no host tray) is tapped. */
+    /** Told when the canvas's own hide target (a view that has no host tray) is tapped. */
     @Nullable private Runnable mTrashTapListener;
     /** The lifted element is a hidden one dragged in from the editor's popup, so it is hidden now and the tray is no target. */
     private boolean mFromPopup;
@@ -380,6 +399,12 @@ public final class LayoutCanvasView extends View {
      *  on the shared scratch rects. */
     private final RectF mGhostRect = new RectF();
     private final List<MiniatureDragPolicy.Slot> mSlots = new ArrayList<>();
+    /**
+     * The selected bar's destinations before anything is lifted (DECISIONS item 4): the targets a
+     * lift of it would be offered, drawn as edge highlights while it stays selected. Never the
+     * tray; the eye-off control in the sheet is that one.
+     */
+    private final List<MiniatureDragPolicy.Slot> mSelectionSlots = new ArrayList<>();
     @Nullable private MiniatureDragPolicy.Slot mHoverSlot;
     /** The shape the hovered target would give the lifted bar, which the placeholder wears too. */
     @Nullable private Piece mDropShape;
@@ -443,8 +468,8 @@ public final class LayoutCanvasView extends View {
     @NonNull private final Drawable mIconHomeGrid;
     @NonNull private final Drawable mIconDisplay;
     @NonNull private final Drawable mIconTerminal;
-    @NonNull private final Drawable mIconTrash;
-    @NonNull private final Drawable mIconTrashFilled;
+    /** The eye-off glyph the canvas's own hide target wears (a view with no host tray). */
+    @NonNull private final Drawable mIconHide;
 
     /** The elements and handles as virtual views, for a screen reader and the keyboard. */
     @NonNull private final CanvasAccessibility mAccessibility;
@@ -479,8 +504,7 @@ public final class LayoutCanvasView extends View {
         mIconHomeGrid = loadIcon(R.drawable.ic_symbol_grid_view);
         mIconDisplay = loadIcon(R.drawable.ic_symbol_desktop_windows);
         mIconTerminal = loadIcon(R.drawable.ic_symbol_terminal);
-        mIconTrash = loadIcon(R.drawable.ic_symbol_delete);
-        mIconTrashFilled = loadIcon(R.drawable.ic_trash_filled);
+        mIconHide = loadIcon(R.drawable.ic_layout_hide);
     }
 
     /**
@@ -521,24 +545,23 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * How many pinned apps and extra keys the dock and the extra-keys bar draw, so the symbols
-     * follow what the launcher really has. A negative count draws the pack's own seven, and a
-     * count that does not fit the bar's length draws as many as do.
+     * How many keys the extra-keys bar draws, so its glyphs follow the real bar. A negative count
+     * draws the pack's own seven, and a count that does not fit the bar's length draws as many as
+     * do. The app icons bar takes no count: it always draws seven placeholders (DECISIONS item 8).
      */
-    public void setSlotCounts(int pinnedApps, int extraKeys) {
-        if (pinnedApps == mPinnedAppCount && extraKeys == mExtraKeyCount) return;
-        mPinnedAppCount = pinnedApps;
+    public void setExtraKeyCount(int extraKeys) {
+        if (extraKeys == mExtraKeyCount) return;
         mExtraKeyCount = extraKeys;
         invalidate();
     }
 
     /**
-     * The real things the dock and the extra-keys bar draw: the pinned apps' icons and the first
-     * row's key texts. An empty list leaves that bar on the pack's glyphs.
+     * The extra keys' first row as the real bar draws it: each key's icon or text. An empty list
+     * leaves the bar on the pack's glyphs. Extra keys stay live; the app icons bar never draws the
+     * user's pinned apps.
      */
-    public void setSlotContent(@NonNull java.util.List<android.graphics.drawable.Drawable> icons,
-                               @NonNull java.util.List<KeySlot> keys) {
-        mArtwork.setSlotContent(icons, keys);
+    public void setExtraKeySlots(@NonNull java.util.List<KeySlot> keys) {
+        mArtwork.setKeySlots(keys);
         invalidate();
     }
 
@@ -1433,6 +1456,33 @@ public final class LayoutCanvasView extends View {
      * selected with its outline alone; it moves by being lifted.
      */
     private void computeHandles() {
+        computeHandlePills();
+        computeSelectionTargets();
+    }
+
+    /**
+     * Where the selected bar could go, read off the same legal set a lift is offered, without the
+     * tray: the edges it may move to, highlighted while it is selected. Empty while something is
+     * lifted (the lift draws its own) and for anything that is not a bar.
+     */
+    private void computeSelectionTargets() {
+        mSelectionSlots.clear();
+        Block selected = mSelected;
+        if (selected == null || mDraggedBar != null || barOf(selected) == null) return;
+        slotsFor(selected, false, mSelectionSlots);
+        for (int i = mSelectionSlots.size() - 1; i >= 0; i--) {
+            if (mSelectionSlots.get(i).isTray()) mSelectionSlots.remove(i);
+        }
+    }
+
+    /** The selected bar's edge destinations, as highlighted; empty with nothing selected. */
+    @NonNull
+    @VisibleForTesting
+    public List<MiniatureDragPolicy.Slot> selectionTargets() {
+        return new ArrayList<>(mSelectionSlots);
+    }
+
+    private void computeHandlePills() {
         mHandleRects.clear();
         if (mLayout == null || mSelected == null) return;
         switch (mSelected) {
@@ -1769,45 +1819,56 @@ public final class LayoutCanvasView extends View {
      * of them for a finger to fall into.
      */
     private void computeSlots() {
-        mSlots.clear();
         mHoverSlot = null;
-        if (mDraggedBar == Block.KEYBOARD) {
+        slotsFor(mDraggedBar, mFromPopup, mSlots);
+    }
+
+    /**
+     * Every target {@code lifted} would be offered, into {@code out}: what a lift computes, and
+     * what a selection highlights before anything is lifted (DECISIONS item 4). Only accepted
+     * drops are ever in it.
+     */
+    private void slotsFor(@Nullable Block lifted, boolean fromPopup,
+                          @NonNull List<MiniatureDragPolicy.Slot> out) {
+        out.clear();
+        if (lifted == Block.KEYBOARD) {
             // The keyboard has no edge to stand on: the tray, which switches it off, is its one
             // target, and a release anywhere else puts it back where it was.
-            if (mFromPopup) {
-                // Out of the popup the keyboard is hidden already: dropped anywhere on the phone
-                // it is switched back on.
+            if (fromPopup) {
+                // Out of the hidden row the keyboard is hidden already: dropped anywhere on the
+                // phone it is switched back on.
                 if (mLayout != null && !mFrameRect.isEmpty()) {
-                    mSlots.add(new MiniatureDragPolicy.Slot(Edge.BOTTOM, mFrameRect.left,
+                    out.add(new MiniatureDragPolicy.Slot(Edge.BOTTOM, mFrameRect.left,
                         mFrameRect.top, mFrameRect.right, mFrameRect.bottom));
                 }
             } else if (mLayout != null && !mTrayRect.isEmpty()) {
-                mSlots.add(new MiniatureDragPolicy.Slot(null, -1, 0f, mTrayRect.left,
+                out.add(new MiniatureDragPolicy.Slot(null, -1, 0f, mTrayRect.left,
                     mTrayRect.top, mTrayRect.right, mTrayRect.bottom));
             }
             return;
         }
-        MiniatureDragPolicy.Bar bar = mDraggedBar == null ? null : barOf(mDraggedBar);
+        MiniatureDragPolicy.Bar bar = lifted == null ? null : barOf(lifted);
         if (bar == null || mLayout == null) return;
         MiniatureDragPolicy.Targets targets =
             MiniatureDragPolicy.targets(mPlace, mOrientation, mLayout, bar);
         RectF free = mBlockRects.get(Block.CANVAS);
         if (free != null && !free.isEmpty()) {
             for (Edge edge : Edge.values())
-                addEdgeSlots(edge, targets.gapsOn(edge), free, bar.element());
+                addEdgeSlots(edge, targets.gapsOn(edge), free, bar.element(), out);
             // The gaps under the keyboard, only while there is a keyboard drawn to be under.
             if (keyboardInStack())
-                addUnderKeyboardSlots(targets.gapsUnderKeyboard(), free, bar.element());
+                addUnderKeyboardSlots(targets.gapsUnderKeyboard(), free, bar.element(), out);
         }
-        if (targets.tray && !mFromPopup && !mTrayRect.isEmpty()) {
-            mSlots.add(new MiniatureDragPolicy.Slot(null, -1, 0f, mTrayRect.left, mTrayRect.top,
+        if (targets.tray && !fromPopup && !mTrayRect.isEmpty()) {
+            out.add(new MiniatureDragPolicy.Slot(null, -1, 0f, mTrayRect.left, mTrayRect.top,
                 mTrayRect.right, mTrayRect.bottom));
         }
     }
 
     /** One slot per gap this edge offers, laid along it from the screen edge inwards. */
     private void addEdgeSlots(@NonNull Edge edge, int gaps, @NonNull RectF free,
-                              @NonNull Element dragged) {
+                              @NonNull Element dragged,
+                              @NonNull List<MiniatureDragPolicy.Slot> out) {
         if (gaps <= 0 || mLayout == null) return;
         // Along the bottom these are the gaps over the keyboard: they start from its middle, and
         // the half under that is the far side's (addUnderKeyboardSlots).
@@ -1816,7 +1877,7 @@ public final class LayoutCanvasView extends View {
             ? EdgeStackPolicy.overKeyboard(mLayout) : EdgeStackPolicy.stack(mLayout, edge);
         float[] gapDepths = gapDepths(edge, bands, gaps, depthOf(edge, free, true), dragged);
         addSlots(edge, gapDepths, overKeyboard ? keyboardMiddleDepth() : 0f, frameDepth(edge),
-            free, dragged, false);
+            free, dragged, false, out);
     }
 
     /**
@@ -1824,11 +1885,12 @@ public final class LayoutCanvasView extends View {
      * outside the outermost band standing there, one between each pair, one against the keyboard,
      * or the one a bare side has, which is the keyboard's own bottom.
      */
-    private void addUnderKeyboardSlots(int gaps, @NonNull RectF free, @NonNull Element dragged) {
+    private void addUnderKeyboardSlots(int gaps, @NonNull RectF free, @NonNull Element dragged,
+                                       @NonNull List<MiniatureDragPolicy.Slot> out) {
         if (gaps <= 0 || mLayout == null) return;
         float[] gapDepths = gapDepths(Edge.BOTTOM, EdgeStackPolicy.underKeyboard(mLayout), gaps,
             depthOf(Edge.BOTTOM, mKeyboardRect, true), dragged);
-        addSlots(Edge.BOTTOM, gapDepths, 0f, keyboardMiddleDepth(), free, dragged, true);
+        addSlots(Edge.BOTTOM, gapDepths, 0f, keyboardMiddleDepth(), free, dragged, true, out);
     }
 
     /**
@@ -1851,7 +1913,8 @@ public final class LayoutCanvasView extends View {
      * {@code limit}.
      */
     private void addSlots(@NonNull Edge edge, @NonNull float[] gapDepths, float start, float limit,
-                          @NonNull RectF free, @NonNull Element dragged, boolean underKeyboard) {
+                          @NonNull RectF free, @NonNull Element dragged, boolean underKeyboard,
+                          @NonNull List<MiniatureDragPolicy.Slot> out) {
         int gaps = gapDepths.length;
         float span = edge.isOnSide() ? free.width() : free.height();
         float thickness = Math.max(dp(9),
@@ -1863,7 +1926,7 @@ public final class LayoutCanvasView extends View {
                 : (gapDepths[index] + gapDepths[index + 1]) / 2f;
             if (underKeyboard && index == gaps - 1) to = limit;
             to = Math.min(limit, Math.max(to, from + dp(2)));
-            mSlots.add(new MiniatureDragPolicy.Slot(edge, index, coordinateAt(edge,
+            out.add(new MiniatureDragPolicy.Slot(edge, index, coordinateAt(edge,
                 gapDepths[index]), slotLeft(edge, free, from, to), slotTop(edge, free, from, to),
                 slotRight(edge, free, from, to), slotBottom(edge, free, from, to),
                 underKeyboard));
@@ -2274,6 +2337,7 @@ public final class LayoutCanvasView extends View {
         drawChrome(canvas);
         drawPlaceholder(canvas);
         drawSlots(canvas);
+        drawSelectionTargets(canvas);
         drawSelection(canvas);
         drawKeyboardFocus(canvas);
         canvas.restoreToCount(saved);
@@ -2286,7 +2350,7 @@ public final class LayoutCanvasView extends View {
         drawTray(canvas);
         drawTrash(canvas);
         drawLegend(canvas);
-        drawGhost(canvas);
+        if (mLiftOverlayHost == null) drawGhost(canvas);
         drawReadout(canvas);
     }
 
@@ -2521,7 +2585,7 @@ public final class LayoutCanvasView extends View {
                 else mArtwork.status(canvas, box, isStatusCompact(), p, k);
                 break;
             case APPS:
-                mArtwork.dock(canvas, box, vertical, mPinnedAppCount, p, k);
+                mArtwork.dock(canvas, box, vertical, p, k);
                 break;
             case AZ:
                 mArtwork.alphabet(canvas, box, vertical, p, k);
@@ -2950,10 +3014,11 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * Every edge the lifted bar may stand on, outlined as one region the way it always has been,
-     * and — on the edge under the finger — the gaps inside it: a thin line where each would put the
-     * band, the one being dropped into filled and drawn solid. Nothing here animates; the picture
-     * changes when the finger moves to another gap and not otherwise.
+     * Every destination the lifted bar is accepted on, outlined in the primary along its guide
+     * rect only ({@link #guideRect}: the part of the edge's zone no other element stands in), and
+     * — on the edge under the finger — the gaps inside it: the one being dropped into filled, the
+     * others a thin line, all clipped to that guide so nothing crosses another element. Nothing
+     * here animates; the picture changes when the finger moves to another gap and not otherwise.
      */
     private void drawSlots(@NonNull Canvas canvas) {
         if (mSlots.isEmpty()) return;
@@ -2961,18 +3026,24 @@ public final class LayoutCanvasView extends View {
         float radius = slotRadiusPx();
         MiniatureDragPolicy.Slot hoveredSlot = mHoverSlot;
         Edge hovered = hoveredSlot == null ? null : hoveredSlot.edge;
+        float stroke = dp(GUIDE_LIFT_STROKE_DP);
         mDashPaint.setPathEffect(mSlotDash);
-        mDashPaint.setStrokeWidth(dp(1f));
+        mDashPaint.setStrokeWidth(stroke);
+        mDashPaint.setColor(accent);
         // The bottom is two regions while the keyboard stands on it: the gaps over it, and the
         // ones under it, outlined apart so the keyboard between them is not a target.
         for (Edge edge : Edge.values()) {
             for (boolean underKeyboard : new boolean[] {false, true}) {
                 if (!edgeRegion(edge, underKeyboard, mScratchRectA)) continue;
-                mDashPaint.setColor(accent);
-                canvas.drawRoundRect(mScratchRectA, radius, radius, mDashPaint);
+                if (!guideRect(edge, mScratchRectA, mDraggedBar, mScratchRectA)) continue;
+                strokeGuide(canvas, mScratchRectA, radius, stroke, mDashPaint);
             }
         }
-        if (hovered == null) return;
+        if (hovered == null || hoveredSlot.isTray()) return;
+        if (!edgeRegion(hovered, hoveredSlot.underKeyboard, mScratchRectA)
+            || !guideRect(hovered, mScratchRectA, mDraggedBar, mScratchRectA)) return;
+        int saved = canvas.save();
+        canvas.clipRect(mScratchRectA);
         for (MiniatureDragPolicy.Slot slot : mSlots) {
             if (!slot.sameGroup(hoveredSlot)) continue;
             boolean under = slot == mHoverSlot;
@@ -2991,6 +3062,114 @@ public final class LayoutCanvasView extends View {
             else canvas.drawLine(slot.left, slot.line, slot.right, slot.line, mLinePaint);
         }
         mLinePaint.setAlpha(255);
+        canvas.restoreToCount(saved);
+    }
+
+    /**
+     * The selected bar's destinations while nothing is lifted: each edge it may move to outlined
+     * along its guide rect in the outline-variant, a quiet hint of where the bar can go before a
+     * drag or the move control's menu takes it there. Nothing is filled; nothing is under a
+     * finger; no line crosses another element.
+     */
+    private void drawSelectionTargets(@NonNull Canvas canvas) {
+        if (mSelectionSlots.isEmpty() || mDraggedBar != null) return;
+        float radius = slotRadiusPx();
+        float stroke = dp(GUIDE_STROKE_DP);
+        mDashPaint.setPathEffect(mSlotDash);
+        mDashPaint.setStrokeWidth(stroke);
+        mDashPaint.setColor(lineColor());
+        for (Edge edge : Edge.values()) {
+            for (boolean underKeyboard : new boolean[] {false, true}) {
+                if (!edgeRegion(mSelectionSlots, edge, underKeyboard, mScratchRectA)) continue;
+                if (!guideRect(edge, mScratchRectA, mSelected, mScratchRectA)) continue;
+                strokeGuide(canvas, mScratchRectA, radius, stroke, mDashPaint);
+            }
+        }
+    }
+
+    /** A guide stroked inside its own rect and clipped to it, so no part of it lies outside. */
+    private void strokeGuide(@NonNull Canvas canvas, @NonNull RectF guide, float radius,
+                             float stroke, @NonNull Paint paint) {
+        int saved = canvas.save();
+        canvas.clipRect(guide);
+        mScratchRectB.set(guide);
+        mScratchRectB.inset(stroke / 2f, stroke / 2f);
+        if (!mScratchRectB.isEmpty()) {
+            float r = Math.max(0f, radius - stroke / 2f);
+            canvas.drawRoundRect(mScratchRectB, r, r, paint);
+        }
+        canvas.restoreToCount(saved);
+    }
+
+    /**
+     * The guide a destination region is outlined along: the region cut, across its depth (y for
+     * the top and the bottom, x for the sides), to the widest stretch no other element stands in
+     * — the keyboard, the other bars — so the outline never crosses one. The pane is not an
+     * obstacle (a dropped bar takes its room from it), nor is {@code moving}, which leaves its own
+     * place. False where what is left is too thin to read as a guide.
+     */
+    @VisibleForTesting
+    boolean guideRect(@NonNull Edge edge, @NonNull RectF region, @Nullable Block moving,
+                      @NonNull RectF out) {
+        if (region.isEmpty()) return false;
+        boolean rows = !edge.isOnSide();
+        float lo = rows ? region.top : region.left;
+        float hi = rows ? region.bottom : region.right;
+        float crossLo = rows ? region.left : region.top;
+        float crossHi = rows ? region.right : region.bottom;
+        List<float[]> taken = new ArrayList<>(6);
+        for (Block block : Block.values()) {
+            if (block == Block.CANVAS || block == moving) continue;
+            RectF rect = block == Block.KEYBOARD ? mKeyboardRect : mBlockRects.get(block);
+            if (rect == null || rect.isEmpty()) continue;
+            float bLo = rows ? rect.top : rect.left;
+            float bHi = rows ? rect.bottom : rect.right;
+            float cLo = rows ? rect.left : rect.top;
+            float cHi = rows ? rect.right : rect.bottom;
+            if (cHi <= crossLo || cLo >= crossHi || bHi <= lo || bLo >= hi) continue;
+            taken.add(new float[] {Math.max(lo, bLo), Math.min(hi, bHi)});
+        }
+        java.util.Collections.sort(taken, (a, b) -> Float.compare(a[0], b[0]));
+        float bestLo = lo;
+        float bestHi = lo;
+        float at = lo;
+        for (float[] span : taken) {
+            if (span[0] - at > bestHi - bestLo) {
+                bestLo = at;
+                bestHi = span[0];
+            }
+            at = Math.max(at, span[1]);
+        }
+        if (hi - at > bestHi - bestLo) {
+            bestLo = at;
+            bestHi = hi;
+        }
+        if (bestHi - bestLo < dp(GUIDE_MIN_DP)) return false;
+        if (rows) out.set(region.left, bestLo, region.right, bestHi);
+        else out.set(bestLo, region.top, bestHi, region.bottom);
+        return true;
+    }
+
+    /**
+     * The guides drawn now, in view pixels: the lifted bar's accepted destinations while one is
+     * in the air, otherwise the selected bar's. For a test to read.
+     */
+    @NonNull
+    @VisibleForTesting
+    List<RectF> guideRects() {
+        List<RectF> out = new ArrayList<>();
+        boolean lifting = mDraggedBar != null;
+        List<MiniatureDragPolicy.Slot> slots = lifting ? mSlots : mSelectionSlots;
+        Block moving = lifting ? mDraggedBar : mSelected;
+        for (Edge edge : Edge.values()) {
+            for (boolean underKeyboard : new boolean[] {false, true}) {
+                RectF region = new RectF();
+                if (!edgeRegion(slots, edge, underKeyboard, region)) continue;
+                RectF guide = new RectF();
+                if (guideRect(edge, region, moving, guide)) out.add(guide);
+            }
+        }
+        return out;
     }
 
     /**
@@ -2998,8 +3177,14 @@ public final class LayoutCanvasView extends View {
      * that side offers none. Only the bottom has an under side.
      */
     private boolean edgeRegion(@NonNull Edge edge, boolean underKeyboard, @NonNull RectF out) {
+        return edgeRegion(mSlots, edge, underKeyboard, out);
+    }
+
+    private static boolean edgeRegion(@NonNull List<MiniatureDragPolicy.Slot> slots,
+                                      @NonNull Edge edge, boolean underKeyboard,
+                                      @NonNull RectF out) {
         boolean any = false;
-        for (MiniatureDragPolicy.Slot slot : mSlots) {
+        for (MiniatureDragPolicy.Slot slot : slots) {
             if (slot.edge != edge || slot.underKeyboard != underKeyboard) continue;
             if (!any) out.set(slot.left, slot.top, slot.right, slot.bottom);
             else out.union(slot.left, slot.top, slot.right, slot.bottom);
@@ -3093,12 +3278,16 @@ public final class LayoutCanvasView extends View {
         return out;
     }
 
-    /** The accessibility line for the icon: how many are hidden, or that none is. */
+    /**
+     * The accessibility line for the eye-off control: how many elements are hidden, or that none
+     * is. Said only to accessibility; nothing visible carries it (DECISIONS item 11).
+     */
     @NonNull
-    public String trashDescription() {
+    public String hiddenDescription() {
         int count = hiddenBlocks().size();
-        return count == 0 ? getContext().getString(R.string.layout_editor_trash_empty)
-            : getContext().getString(R.string.layout_editor_trash_filled, count);
+        return count == 0 ? getContext().getString(R.string.layout_editor_hidden_none)
+            : getContext().getResources().getQuantityString(R.plurals.layout_editor_hidden_count,
+                count, count);
     }
 
     /** The hidden elements, in the order the popup lists them. */
@@ -3113,18 +3302,6 @@ public final class LayoutCanvasView extends View {
         if (block == Block.KEYBOARD) return getContext().getString(R.string.layout_editor_keyboard);
         String name = barName(block);
         return name == null ? "" : name;
-    }
-
-    /** The glyph a hidden element's chip wears as its icon. */
-    @DrawableRes
-    public static int chipGlyph(@NonNull Block block) {
-        switch (block) {
-            case STATUS_BAR: return R.drawable.ic_symbol_notifications;
-            case APPS_ROW: return R.drawable.ic_symbol_apps;
-            case KEYBOARD:
-            case EXTRA_KEYS: return R.drawable.ic_symbol_keyboard;
-            default: return R.drawable.ic_symbol_visibility_off;
-        }
     }
 
     /**
@@ -3232,7 +3409,7 @@ public final class LayoutCanvasView extends View {
         RectF box = trashRect();
         int count = hiddenBlocks().size();
         boolean filled = count > 0;
-        Drawable icon = filled ? mIconTrashFilled : mIconTrash;
+        Drawable icon = mIconHide;
         DrawableCompat.setTint(icon, filled || isTrayOffered() ? accent() : onVariant());
         int half = Math.round(dp(TRASH_ICON_DP) / 2f);
         int cx = Math.round(box.centerX());
@@ -3407,6 +3584,104 @@ public final class LayoutCanvasView extends View {
         canvas.drawPath(mShapePath, mLinePaint);
     }
 
+    // ---- The lifted copy over the whole editor ----------------------------------------------------
+
+    /**
+     * Lends the canvas a view spanning the whole editor (the frame, the gutter round it and the
+     * sheet), in whose overlay the lifted copy is drawn while a bar is in the air: it follows the
+     * finger off the phone, over the sheet and onto eye-off, above everything the editor shows,
+     * instead of being clipped at the frame. Null draws the copy in this view as before.
+     */
+    public void setLiftOverlayHost(@Nullable View host) {
+        if (mLiftHost == host) return;
+        detachLiftOverlay();
+        mLiftHost = host;
+        if (mDraggedBar != null) attachLiftOverlay();
+        invalidate();
+    }
+
+    /** Whether the lifted copy is drawn in the host's overlay rather than in this view. */
+    private boolean liftsInOverlay() {
+        View host = mLiftHost;
+        return host != null && host.isAttachedToWindow() && isAttachedToWindow();
+    }
+
+    /** Whether the lifted copy is in the host's overlay now, for a test to read. */
+    @VisibleForTesting
+    boolean isLiftOverlayAttached() {
+        return mLiftOverlayHost != null;
+    }
+
+    private void attachLiftOverlay() {
+        View host = mLiftHost;
+        if (host == null || mLiftOverlayHost == host || !liftsInOverlay()) return;
+        detachLiftOverlay();
+        mLiftOverlay.setBounds(0, 0, Math.max(1, host.getWidth()), Math.max(1, host.getHeight()));
+        host.getOverlay().add(mLiftOverlay);
+        mLiftOverlayHost = host;
+    }
+
+    private void detachLiftOverlay() {
+        View host = mLiftOverlayHost;
+        mLiftOverlayHost = null;
+        if (host != null) {
+            host.getOverlay().remove(mLiftOverlay);
+            host.invalidate();
+        }
+    }
+
+    /**
+     * Every redraw of the canvas redraws the copy in the host's overlay too: the lift's frames,
+     * the finger's moves and the spring-back all come through here.
+     */
+    @Override
+    public void invalidate() {
+        super.invalidate();
+        Drawable overlay = mLiftOverlay;
+        if (overlay != null && mLiftOverlayHost != null) overlay.invalidateSelf();
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        detachLiftOverlay();
+        super.onDetachedFromWindow();
+    }
+
+    /**
+     * The lifted copy in the host's overlay: the canvas's own drawing of it, moved from this
+     * view's coordinates to the host's by their places in the window.
+     */
+    private final class LiftOverlay extends Drawable {
+        private final int[] mCanvasAt = new int[2];
+        private final int[] mHostAt = new int[2];
+
+        @Override
+        public void draw(@NonNull Canvas canvas) {
+            View host = mLiftOverlayHost;
+            if (host == null || mDraggedBar == null) return;
+            if (getBounds().width() != host.getWidth() || getBounds().height() != host.getHeight())
+                setBounds(0, 0, Math.max(1, host.getWidth()), Math.max(1, host.getHeight()));
+            getLocationInWindow(mCanvasAt);
+            host.getLocationInWindow(mHostAt);
+            int saved = canvas.save();
+            canvas.translate(mCanvasAt[0] - mHostAt[0], mCanvasAt[1] - mHostAt[1]);
+            drawGhost(canvas);
+            canvas.restoreToCount(saved);
+        }
+
+        @Override
+        public void setAlpha(int alpha) {}
+
+        @Override
+        public void setColorFilter(@Nullable android.graphics.ColorFilter colorFilter) {}
+
+        @Override
+        @SuppressWarnings("deprecation")
+        public int getOpacity() {
+            return android.graphics.PixelFormat.TRANSLUCENT;
+        }
+    }
+
     // ---- The drag ------------------------------------------------------------------------------
 
     /**
@@ -3444,6 +3719,7 @@ public final class LayoutCanvasView extends View {
             mDraggedBar = null;
             return false;
         }
+        mSelectionSlots.clear();
         mLiftOrigin.set(origin);
         mDownX = x;
         mDownY = y;
@@ -3461,6 +3737,7 @@ public final class LayoutCanvasView extends View {
         ViewParent parent = getParent();
         if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
         mHoverSlot = MiniatureDragPolicy.slotUnder(mSlots, x, y);
+        attachLiftOverlay();
         refreshDropShape();
         startMotion();
         invalidate();
@@ -3556,8 +3833,207 @@ public final class LayoutCanvasView extends View {
         mGhostMorph.reset(0f);
         mLastFrameNanos = 0L;
         removeCallbacks(mMotionTick);
-        if (lifted) invalidate();
+        detachLiftOverlay();
+        if (lifted) {
+            // The selection's destinations come back once nothing is in the air.
+            computeSelectionTargets();
+            invalidate();
+        }
         notifyTrayOffer();
+    }
+
+    /**
+     * Back while a bar is in the air (DECISIONS item 4): the lift is cancelled and the bar springs
+     * home, as a release outside the canvas does; nothing is written. False while nothing is
+     * lifted, so Back goes on to whatever else it closes.
+     */
+    public boolean cancelLift() {
+        if (mDraggedBar == null) {
+            mPressedBar = null;
+            return false;
+        }
+        if (mFromPopup) {
+            // A tile dragged in from the sheet has no home on the phone to spring back to.
+            endDrag();
+            return true;
+        }
+        if (!mSpringingBack) springBack();
+        return true;
+    }
+
+    /** Whether a bar is in the air now. */
+    public boolean isLifting() {
+        return mDraggedBar != null;
+    }
+
+    // ---- The move control (DECISIONS items 4 and 5) ---------------------------------------------
+
+    /** Where the move control's menu can send a selected element. */
+    public enum Destination { TOP, BOTTOM, LEFT, RIGHT, HIDE }
+
+    /** The move control's touch target, and the air between it and the bar it moves. */
+    private static final float MOVE_CONTROL_DP = 48f;
+    private static final float MOVE_CONTROL_GAP_DP = 4f;
+
+    /**
+     * Where the move menu can send {@code block}, in menu order: each edge the drag would offer it
+     * (the accessibility move actions' own rule), then Hide where it may be put away. Empty for
+     * the pane, for a hidden element and while a gesture is under way.
+     */
+    @NonNull
+    public List<Destination> moveDestinations(@NonNull Block block) {
+        List<Destination> out = new ArrayList<>(5);
+        PlaceLayout layout = mLayout;
+        if (layout == null || block == Block.CANVAS || mDraggedBar != null
+            || mDraggedHandle != null || isBlockHidden(block)) return out;
+        if (block == Block.KEYBOARD) {
+            if (!mKeyboardRect.isEmpty()) out.add(Destination.HIDE);
+            return out;
+        }
+        Element element = elementOf(block);
+        MiniatureDragPolicy.Targets targets = targetsFor(block);
+        if (element == null || targets == null) return out;
+        for (Edge edge : Edge.values()) {
+            if (LayoutCanvasA11yPolicy.toEdge(targets, layout, element, edge) != null)
+                out.add(destinationOf(edge));
+        }
+        if (LayoutCanvasA11yPolicy.canHide(targets, layout, element)) out.add(Destination.HIDE);
+        return out;
+    }
+
+    /**
+     * Sends {@code block} to one of its {@link #moveDestinations}: the same accessibility action a
+     * screen reader runs, so the write, the Undo and the announcement are a drop's.
+     */
+    public boolean moveTo(@NonNull Block block, @NonNull Destination destination) {
+        if (!moveDestinations(block).contains(destination)) return false;
+        return performVirtualAction(virtualIdOf(block), actionOf(destination), null);
+    }
+
+    /** The accessibility action a destination runs. */
+    @VisibleForTesting
+    static int actionOf(@NonNull Destination destination) {
+        switch (destination) {
+            case TOP: return R.id.layout_canvas_action_move_top;
+            case BOTTOM: return R.id.layout_canvas_action_move_bottom;
+            case LEFT: return R.id.layout_canvas_action_move_left;
+            case RIGHT: return R.id.layout_canvas_action_move_right;
+            case HIDE:
+            default: return R.id.layout_canvas_action_hide;
+        }
+    }
+
+    /** The words a destination's menu row carries: the accessibility action's own label. */
+    public static int labelOf(@NonNull Destination destination) {
+        switch (destination) {
+            case TOP: return R.string.layout_canvas_a11y_move_top;
+            case BOTTOM: return R.string.layout_canvas_a11y_move_bottom;
+            case LEFT: return R.string.layout_canvas_a11y_move_left;
+            case RIGHT: return R.string.layout_canvas_a11y_move_right;
+            case HIDE:
+            default: return R.string.layout_canvas_a11y_hide;
+        }
+    }
+
+    @NonNull
+    private static Destination destinationOf(@NonNull Edge edge) {
+        switch (edge) {
+            case TOP: return Destination.TOP;
+            case BOTTOM: return Destination.BOTTOM;
+            case LEFT: return Destination.LEFT;
+            case RIGHT:
+            default: return Destination.RIGHT;
+        }
+    }
+
+    /**
+     * Where the move control may stand outside the phone, in this view's coordinates: the
+     * editor's own area round the frame, past the system bars and above the sheet. It may reach
+     * past the view's bounds; the host stands the control in a parent that does. Null or empty
+     * leaves the control nothing outside the phone, and it falls back to the bar's outer edge.
+     */
+    public void setMoveControlRoom(@Nullable RectF roomInView) {
+        if (roomInView == null) mMoveControlRoom.setEmpty();
+        else mMoveControlRoom.set(roomInView);
+    }
+
+    /**
+     * The move control's square, in view pixels, while the selection has somewhere to go. It
+     * never stands on the selected element or any other: first choice is the gutter outside the
+     * phone's frame, level with the bar — left or right of the frame for a row (and the
+     * keyboard), above or below it for a rail — on whichever side has more room
+     * ({@link #setMoveControlRoom}); with no room out there, on the bar's outer edge at its
+     * trailing end, away from the pane. The canvas is pinned left to right, so "trailing" is the
+     * right end. Null with nothing selected, while a gesture is under way, or with no destination.
+     */
+    @Nullable
+    public RectF moveControlRect() {
+        Block block = mSelected;
+        if (block == null || moveDestinations(block).isEmpty()) return null;
+        RectF bar = blockRect(block);
+        if (bar == null || bar.isEmpty()) return null;
+        float size = dp(MOVE_CONTROL_DP);
+        float half = size / 2f;
+        float gap = dp(MOVE_CONTROL_GAP_DP);
+        boolean rail = block != Block.KEYBOARD && isBarVertical(block);
+        RectF frame = mFrameRect.isEmpty() ? new RectF(0f, 0f, getWidth(), getHeight())
+            : mFrameRect;
+        RectF room = mMoveControlRoom;
+        if (!room.isEmpty()) {
+            if (!rail) {
+                float before = frame.left - room.left;
+                float after = room.right - frame.right;
+                float cy = clampCentre(bar.centerY(), room.top, room.bottom, half);
+                boolean fitsAfter = after >= size + gap && room.height() >= size;
+                boolean fitsBefore = before >= size + gap && room.height() >= size;
+                if (fitsAfter && (after >= before || !fitsBefore))
+                    return square(frame.right + gap + half, cy, half);
+                if (fitsBefore) return square(frame.left - gap - half, cy, half);
+            } else {
+                float above = frame.top - room.top;
+                float below = room.bottom - frame.bottom;
+                float cx = clampCentre(bar.centerX(), room.left, room.right, half);
+                boolean fitsBelow = below >= size + gap && room.width() >= size;
+                boolean fitsAbove = above >= size + gap && room.width() >= size;
+                if (fitsBelow && (below >= above || !fitsAbove))
+                    return square(cx, frame.bottom + gap + half, half);
+                if (fitsAbove) return square(cx, frame.top - gap - half, half);
+            }
+        }
+        // No room outside the phone: on the bar's outer edge, its outer side flush with the bar's,
+        // at the trailing end, so it reaches away from the pane rather than over it.
+        Edge outer = block == Block.KEYBOARD ? Edge.BOTTOM : edgeOfBlock(block);
+        float cx;
+        float cy;
+        switch (outer) {
+            case TOP:
+                cx = bar.right - half;
+                cy = bar.top + half;
+                break;
+            case LEFT:
+                cx = bar.left + half;
+                cy = bar.bottom - half;
+                break;
+            case RIGHT:
+            case BOTTOM:
+            default:
+                cx = bar.right - half;
+                cy = bar.bottom - half;
+                break;
+        }
+        cx = Math.max(half, Math.min(getWidth() - half, cx));
+        cy = Math.max(half, Math.min(getHeight() - half, cy));
+        return square(cx, cy, half);
+    }
+
+    private static float clampCentre(float centre, float from, float to, float half) {
+        if (to - from < 2f * half) return (from + to) / 2f;
+        return Math.max(from + half, Math.min(to - half, centre));
+    }
+
+    @NonNull
+    private static RectF square(float cx, float cy, float half) {
+        return new RectF(cx - half, cy - half, cx + half, cy + half);
     }
 
     private void startMotion() {

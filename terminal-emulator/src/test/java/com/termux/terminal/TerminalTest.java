@@ -65,6 +65,27 @@ public class TerminalTest extends TerminalTestCase {
 		assertEquals("\033[<0;10;10m", mOutput.getOutputAndClear());
 	}
 
+	public void testMouseEventModifiers() {
+		withTerminalSized(10, 10);
+		enterString("\033[?1000h\033[?1002h\033[?1006h");
+		mTerminal.sendMouseEvent(TerminalEmulator.MOUSE_LEFT_BUTTON, 3, 4, true, TerminalEmulator.MOUSE_MODIFIER_CTRL);
+		assertEquals("\033[<16;3;4M", mOutput.getOutputAndClear());
+		mTerminal.sendMouseEvent(TerminalEmulator.MOUSE_LEFT_BUTTON, 3, 4, false, TerminalEmulator.MOUSE_MODIFIER_CTRL);
+		assertEquals("\033[<16;3;4m", mOutput.getOutputAndClear());
+		mTerminal.sendMouseEvent(TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, 3, 4, true,
+			TerminalEmulator.MOUSE_MODIFIER_SHIFT | TerminalEmulator.MOUSE_MODIFIER_ALT);
+		assertEquals("\033[<44;3;4M", mOutput.getOutputAndClear());
+
+		// Legacy X10 encoding: a release is button 3, and the modifiers still ride along.
+		enterString("\033[?1006l");
+		mTerminal.sendMouseEvent(TerminalEmulator.MOUSE_LEFT_BUTTON, 3, 4, true, TerminalEmulator.MOUSE_MODIFIER_CTRL);
+		assertEquals("\033[M" + (char) (32 + 16) + (char) (32 + 3) + (char) (32 + 4), mOutput.getOutputAndClear());
+		mTerminal.sendMouseEvent(TerminalEmulator.MOUSE_LEFT_BUTTON, 3, 4, false, TerminalEmulator.MOUSE_MODIFIER_CTRL);
+		assertEquals("\033[M" + (char) (32 + 3 + 16) + (char) (32 + 3) + (char) (32 + 4), mOutput.getOutputAndClear());
+		mTerminal.sendMouseEvent(TerminalEmulator.MOUSE_LEFT_BUTTON, 3, 4, true, TerminalEmulator.MOUSE_MODIFIER_SHIFT);
+		assertEquals("\033[M" + (char) (32 + 4) + (char) (32 + 3) + (char) (32 + 4), mOutput.getOutputAndClear());
+	}
+
 	public void testNormalization() throws UnsupportedEncodingException {
 		// int lowerCaseN = 0x006E;
 		// int combiningTilde = 0x0303;

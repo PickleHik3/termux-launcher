@@ -10,6 +10,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -21,6 +22,7 @@ import androidx.core.content.ContextCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.shape.MaterialShapeDrawable;
 import com.google.android.material.shape.ShapeAppearanceModel;
@@ -43,6 +45,13 @@ import com.termux.R;
  *
  * <p>Every restatement from code runs with {@link #mRestating} set, so a value the controller
  * pushes in is never read back as the user's.</p>
+ *
+ * <p>Layout editor v2 (DECISIONS items 2, 3, 10, 12, 13 and 15): Layout's Row A ends in eye-off,
+ * the only hide drop target, whose tap opens the hidden tiles in Row B's place; Appearance's Row B
+ * carries the global Blur, Opacity and Grain at the Custom stop with nothing tapped, and the
+ * keyboard's Blur with its "Keyboard theme" door. Selected segments wear primaryContainer and
+ * onPrimaryContainer. While the keyboard is selected its type chips and Key radius take Layout's
+ * Row B in the same way.</p>
  */
 final class AppearanceEditorPanel {
 
@@ -60,8 +69,12 @@ final class AppearanceEditorPanel {
         void onCorners(int value, boolean dragging);
         /** Layout mode's Margin slider, in dp. */
         void onMargin(int value, boolean dragging);
-        /** Row B's first slider (Opacity or Key radius). */
+        /** Row B's first slider (Opacity, the keyboard's Blur, or the global Blur). */
         void onFirstSlider(int value, boolean dragging);
+        /** Row B's middle slider: the global Opacity. */
+        void onMiddleSlider(int value, boolean dragging);
+        /** Row B's last column as a button: the keyboard's "Keyboard theme". */
+        void onSecondButton();
         /** Row B's first segmented control (Soften wallpaper), by segment index. */
         void onFirstSegment(int index);
         /** The terminal's Text contrast, by stop: 0 Low (Softer), 1 Normal (Default), 2 High (Harder). */
@@ -70,7 +83,7 @@ final class AppearanceEditorPanel {
         void onTrailStyle(@NonNull String id);
         /** The terminal's Effect menu: the retro effect id the user chose. */
         void onRetroEffect(@NonNull String id);
-        /** Row B's last slider (Blur or Dim). */
+        /** Row B's last slider (Blur, Dim or the global Grain). */
         void onSecondSlider(int value, boolean dragging);
         /** A slider was released; deferred work settles here. */
         void onSliderReleased();
@@ -111,14 +124,24 @@ final class AppearanceEditorPanel {
     private final TextView mEffectLabel;
     private final TextView mSecondLabel;
     private final Slider mSecondSlider;
+    private final Slider mMiddleSlider;
+    private final MaterialButton mSecondButton;
 
     private final MaterialButtonToggleGroup mOrientation;
     private final MaterialButtonToggleGroup mStyle;
-    private final MaterialButton mTrash;
+    private final MaterialButton mHidden;
+    private final View mHiddenHighlight;
+    private final HorizontalScrollView mHiddenTiles;
+    private final ChipGroup mHiddenTileGroup;
     private final TextView mCornersLabel;
     private final Slider mCorners;
     private final TextView mMarginLabel;
     private final Slider mMargin;
+    /** The keyboard's tools in Row B: its type chips and Key radius, lent to Layout mode. */
+    private final View mKeyboardTools;
+    private final ChipGroup mKeyboardForms;
+    private final TextView mKeyRadiusLabel;
+    private final Slider mKeyRadius;
 
     /** Whether Layout mode's rows are showing in place of Appearance's. */
     private boolean mLayoutMode;
@@ -128,11 +151,16 @@ final class AppearanceEditorPanel {
     private boolean mLegibilityEnabled = true;
     @NonNull private String mTrailId = "default";
     @NonNull private String mEffectId = "none";
+    /** Whether the hidden tiles stand in Layout's Row B, in Corner radius and Margin's place. */
+    private boolean mHiddenTilesOpen;
+    /** Whether the keyboard's tools stand there (the keyboard is selected); the tiles win. */
+    private boolean mKeyboardToolsShown;
 
     @Nullable private Listener mListener;
     private boolean mRestating;
     private boolean mFirstDragging;
     private boolean mSecondDragging;
+    private boolean mMiddleDragging;
     private boolean mCornersDragging;
     private boolean mMarginDragging;
 
@@ -160,24 +188,33 @@ final class AppearanceEditorPanel {
         mEffectLabel = root.findViewById(R.id.appearance_editor_effect_label);
         mSecondLabel = root.findViewById(R.id.appearance_editor_c2_label);
         mSecondSlider = root.findViewById(R.id.appearance_editor_c2_slider);
+        mMiddleSlider = root.findViewById(R.id.appearance_editor_cl_slider);
+        mSecondButton = root.findViewById(R.id.appearance_editor_c2_button);
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
         mStyle = root.findViewById(R.id.appearance_editor_style);
-        mTrash = root.findViewById(R.id.layout_editor_tray_trash);
+        mHidden = root.findViewById(R.id.layout_editor_hidden);
+        mHiddenHighlight = root.findViewById(R.id.layout_editor_hidden_highlight);
+        mHiddenTiles = root.findViewById(R.id.layout_editor_hidden_tiles);
+        mHiddenTileGroup = root.findViewById(R.id.layout_editor_hidden_tile_group);
         mCornersLabel = root.findViewById(R.id.appearance_editor_corners_label);
         mCorners = root.findViewById(R.id.appearance_editor_corners);
         mMarginLabel = root.findViewById(R.id.appearance_editor_margin_label);
         mMargin = root.findViewById(R.id.appearance_editor_margin);
+        mKeyboardTools = root.findViewById(R.id.layout_editor_keyboard_tools);
+        mKeyboardForms = root.findViewById(R.id.layout_editor_keyboard_forms);
+        mKeyRadiusLabel = root.findViewById(R.id.layout_editor_key_radius_label);
+        mKeyRadius = root.findViewById(R.id.layout_editor_key_radius);
         // The groups' members, stated here as well as in the layout: a Group resolves its XML
         // names lazily, and the mode is applied before the panel is ever measured or attached.
         mAppearanceGroup.setReferencedIds(new int[] {R.id.appearance_editor_look,
             R.id.appearance_editor_look_labels});
         mLayoutGroup.setReferencedIds(new int[] {R.id.layout_editor_orientation,
-            R.id.appearance_editor_style, R.id.layout_editor_tray_trash,
-            R.id.appearance_editor_corners_label, R.id.appearance_editor_margin_label,
-            R.id.appearance_editor_corners, R.id.appearance_editor_margin});
+            R.id.appearance_editor_style, R.id.layout_editor_hidden});
         applyGroups(false);
         applyRow2(false, false);
         paintSheet();
+        paintSelectedSegments(mOrientation);
+        paintSelectedSegments(mStyle);
         buildLookLabels();
         bind();
     }
@@ -249,7 +286,7 @@ final class AppearanceEditorPanel {
      */
     int measureTallest(boolean layout, int widthPx) {
         if (layout)
-            return measureFor(true, widthPx);
+            return measureLayoutTallest(widthPx);
         boolean shown = mLayoutMode;
         boolean rowShown = mRow2Shown;
         mRow2Shown = true;
@@ -260,7 +297,26 @@ final class AppearanceEditorPanel {
         int trailVisibility = mTrail.getVisibility();
         setTrailVisibility(View.VISIBLE);
         applyGroups(false);
+        // Row B at its fullest, whichever element (or none) is tapped now: the first and middle
+        // slots shown, so the anchor does not depend on what Row B happens to hold.
+        View[] slots = {mFirstLabel, mFirstSlider, mLegibilityLabel, mLegibility};
+        int[] slotVisibility = new int[slots.length];
+        for (int i = 0; i < slots.length; i++) {
+            slotVisibility[i] = slots[i].getVisibility();
+            slots[i].setVisibility(View.VISIBLE);
+        }
         int height = measureNow(widthPx);
+        // The keyboard's "Keyboard theme" door may wrap to two lines in a narrow column, which
+        // can stand taller than a slider: the tallest Row B is measured with it too.
+        int sliderVisibility = mSecondSlider.getVisibility();
+        int buttonVisibility = mSecondButton.getVisibility();
+        mSecondSlider.setVisibility(View.GONE);
+        mSecondButton.setVisibility(View.VISIBLE);
+        height = Math.max(height, measureNow(widthPx));
+        mSecondSlider.setVisibility(sliderVisibility);
+        mSecondButton.setVisibility(buttonVisibility);
+        for (int i = 0; i < slots.length; i++)
+            slots[i].setVisibility(slotVisibility[i]);
         setTrailVisibility(trailVisibility);
         for (TextView label : labels)
             label.setMinLines(1);
@@ -269,10 +325,60 @@ final class AppearanceEditorPanel {
         return height;
     }
 
+    /**
+     * Layout mode's height: Row B as Corner radius and Margin, and as the keyboard's tools in
+     * their place, whichever stands taller, so the sheet does not move when the keyboard is
+     * selected. The state showing is restored before returning.
+     */
+    private int measureLayoutTallest(int widthPx) {
+        boolean shown = mLayoutMode;
+        boolean tools = mKeyboardToolsShown;
+        boolean tiles = mHiddenTilesOpen;
+        mHiddenTilesOpen = false;
+        mKeyboardToolsShown = false;
+        applyGroups(true);
+        int height = measureNow(widthPx);
+        mKeyboardToolsShown = true;
+        applyLayoutRow2();
+        height = Math.max(height, measureNow(widthPx));
+        mKeyboardToolsShown = tools;
+        mHiddenTilesOpen = tiles;
+        applyGroups(shown);
+        return height;
+    }
+
     private int measureNow(int widthPx) {
         mRoot.measure(View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         return mRoot.getMeasuredHeight();
+    }
+
+    /**
+     * The selected segment of an icon toggle in primaryContainer with its glyph in
+     * onPrimaryContainer, the others clear with the glyph in onSurfaceVariant (DECISIONS item 12):
+     * theme roles only, resolved against the active scheme.
+     */
+    private void paintSelectedSegments(@NonNull MaterialButtonToggleGroup group) {
+        int container = MaterialColors.getColor(mRoot,
+            com.google.android.material.R.attr.colorPrimaryContainer,
+            ContextCompat.getColor(mContext, R.color.termux_primary));
+        int onContainer = MaterialColors.getColor(mRoot,
+            com.google.android.material.R.attr.colorOnPrimaryContainer,
+            ContextCompat.getColor(mContext, R.color.termux_on_surface));
+        int quiet = MaterialColors.getColor(mRoot,
+            com.google.android.material.R.attr.colorOnSurfaceVariant,
+            ContextCompat.getColor(mContext, R.color.termux_on_surface));
+        int[][] states = {{android.R.attr.state_checked}, {}};
+        ColorStateList fill = new ColorStateList(states, new int[] {container, 0});
+        ColorStateList ink = new ColorStateList(states, new int[] {onContainer, quiet});
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (!(child instanceof MaterialButton))
+                continue;
+            MaterialButton button = (MaterialButton) child;
+            button.setBackgroundTintList(fill);
+            button.setIconTint(ink);
+        }
     }
 
     // ------------------------------------------------------------------------- the Look slider
@@ -404,6 +510,24 @@ final class AppearanceEditorPanel {
                 mSecondDragging = false;
                 if (mListener != null) mListener.onSliderReleased();
             }
+        });
+        mMiddleSlider.addOnChangeListener((slider, value, fromUser) -> {
+            if (mRestating || !fromUser || mListener == null)
+                return;
+            mListener.onMiddleSlider(Math.round(value), mMiddleDragging);
+        });
+        mMiddleSlider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
+            @Override public void onStartTrackingTouch(@NonNull Slider slider) {
+                mMiddleDragging = true;
+            }
+
+            @Override public void onStopTrackingTouch(@NonNull Slider slider) {
+                mMiddleDragging = false;
+                if (mListener != null) mListener.onSliderReleased();
+            }
+        });
+        mSecondButton.setOnClickListener(view -> {
+            if (mListener != null) mListener.onSecondButton();
         });
         mCorners.addOnChangeListener((slider, value, fromUser) -> {
             if (mRestating || !fromUser || mListener == null)
@@ -577,6 +701,32 @@ final class AppearanceEditorPanel {
         mAppearanceGroup.setVisibility(layout ? View.GONE : View.VISIBLE);
         mLayoutGroup.setVisibility(layout ? View.VISIBLE : View.GONE);
         mRow2.setVisibility(!layout && mRow2Shown ? View.VISIBLE : View.GONE);
+        applyLayoutRow2();
+    }
+
+    /**
+     * Layout's Row B: Corner radius and Margin, or in their place the hidden tiles, or the
+     * keyboard's tools while the keyboard is selected (the tiles win while both would). Corner
+     * radius and Margin go INVISIBLE rather than GONE while either stands there, so the row keeps
+     * their height and the sheet never moves.
+     */
+    private void applyLayoutRow2() {
+        boolean tiles = mLayoutMode && mHiddenTilesOpen;
+        boolean tools = mLayoutMode && mKeyboardToolsShown && !tiles;
+        boolean swapped = tiles || tools;
+        int shape = !mLayoutMode ? View.GONE : swapped ? View.INVISIBLE : View.VISIBLE;
+        for (View view : new View[] {mCornersLabel, mMarginLabel, mCorners, mMargin}) {
+            if (view.getVisibility() != shape)
+                view.setVisibility(shape);
+        }
+        mCorners.setEnabled(mLayoutMode && !swapped);
+        mMargin.setEnabled(mLayoutMode && !swapped);
+        int tileVisibility = tiles ? View.VISIBLE : View.GONE;
+        if (mHiddenTiles.getVisibility() != tileVisibility)
+            mHiddenTiles.setVisibility(tileVisibility);
+        int toolsVisibility = tools ? View.VISIBLE : View.GONE;
+        if (mKeyboardTools.getVisibility() != toolsVisibility)
+            mKeyboardTools.setVisibility(toolsVisibility);
     }
 
     boolean isLayoutMode() {
@@ -589,9 +739,71 @@ final class AppearanceEditorPanel {
         return mOrientation;
     }
 
-    /** The trash: the drop target for hiding, the hidden list's anchor, the count badge's anchor. */
-    @NonNull MaterialButton trash() {
-        return mTrash;
+    /**
+     * Eye-off: the only drop target for hiding, the hidden tiles' toggle and the count badge's
+     * anchor (DECISIONS item 2).
+     */
+    @NonNull MaterialButton hiddenControl() {
+        return mHidden;
+    }
+
+    /** The 64dp highlight behind eye-off: its rect is the drop area the canvas is given. */
+    @NonNull View hiddenHighlight() {
+        return mHiddenHighlight;
+    }
+
+    /** The chips of the hidden tiles, filled by the layout controller. */
+    @NonNull ChipGroup hiddenTileGroup() {
+        return mHiddenTileGroup;
+    }
+
+    /**
+     * Opens or closes the hidden tiles in Row B's place (DECISIONS item 3). The sheet's height
+     * does not change either way.
+     */
+    void setHiddenTilesOpen(boolean open) {
+        if (mHiddenTilesOpen == open)
+            return;
+        mHiddenTilesOpen = open;
+        applyLayoutRow2();
+    }
+
+    boolean isHiddenTilesOpen() {
+        return mHiddenTilesOpen;
+    }
+
+    /**
+     * Puts the keyboard's tools in Row B's place while the keyboard is selected, or brings Corner
+     * radius and Margin back (DECISIONS item 6). The sheet's height does not change either way.
+     */
+    void setKeyboardToolsShown(boolean shown) {
+        if (mKeyboardToolsShown == shown)
+            return;
+        mKeyboardToolsShown = shown;
+        applyLayoutRow2();
+    }
+
+    /** Whether the keyboard's tools stand in Row B now. */
+    boolean isKeyboardToolsShown() {
+        return mKeyboardTools.getVisibility() == View.VISIBLE;
+    }
+
+    /** The keyboard's tools, the row holding its type chips and Key radius. */
+    @NonNull View keyboardTools() {
+        return mKeyboardTools;
+    }
+
+    /** The keyboard's type chips: Docked, Floating and Split. */
+    @NonNull ChipGroup keyboardForms() {
+        return mKeyboardForms;
+    }
+
+    @NonNull TextView keyRadiusLabel() {
+        return mKeyRadiusLabel;
+    }
+
+    @NonNull Slider keyRadius() {
+        return mKeyRadius;
     }
 
     // ------------------------------------------------------------------------- restatements
@@ -660,13 +872,15 @@ final class AppearanceEditorPanel {
         for (int i = 0; i < mSoft.getChildCount(); i++)
             mSoft.getChildAt(i).setEnabled(shown);
         mLegibility.setEnabled(shown && mLegibilityEnabled);
+        mMiddleSlider.setEnabled(shown);
         mSecondSlider.setEnabled(shown);
         mTrail.setEnabled(shown);
         mEffect.setEnabled(shown);
+        mSecondButton.setEnabled(shown);
         mRow2.setVisibility(shown && !mLayoutMode ? View.VISIBLE : View.GONE);
     }
 
-    /** The first control as a slider: Opacity or Key radius. */
+    /** The first control as a slider: Opacity, the keyboard's Blur, or the global Blur. */
     void setFirstSlider(@NonNull CharSequence label, int value, int max) {
         mFirstLabel.setText(label);
         mFirstSlider.setContentDescription(label);
@@ -708,6 +922,23 @@ final class AppearanceEditorPanel {
         mLegibility.setEnabled(enabled && mRow2Shown);
         mLegibilityLabel.setVisibility(View.VISIBLE);
         mLegibility.setVisibility(View.VISIBLE);
+        mMiddleSlider.setVisibility(View.GONE);
+    }
+
+    /** The middle column as a slider of its own: the global Opacity (DECISIONS item 13). */
+    void setMiddleSlider(@NonNull CharSequence label, int value, int max) {
+        mLegibilityLabel.setText(label);
+        mMiddleSlider.setContentDescription(label);
+        restateSlider(mMiddleSlider, value, max);
+        mMiddleSlider.setEnabled(mRow2Shown);
+        mLegibility.setVisibility(View.GONE);
+        mLegibilityLabel.setVisibility(View.VISIBLE);
+        mMiddleSlider.setVisibility(View.VISIBLE);
+    }
+
+    void setMiddleLabel(@NonNull CharSequence label) {
+        mLegibilityLabel.setText(label);
+        mMiddleSlider.setContentDescription(label);
     }
 
     /** The label for a Text contrast stop: Low, Normal or High. */
@@ -718,18 +949,44 @@ final class AppearanceEditorPanel {
             : R.string.appearance_editor_legibility_high);
     }
 
+    /** No middle column: neither Text contrast nor the global Opacity. */
     void hideLegibility() {
         mLegibilityLabel.setVisibility(View.GONE);
         mLegibility.setVisibility(View.GONE);
+        mMiddleSlider.setVisibility(View.GONE);
     }
 
-    /** The last control: Blur or Dim. */
+    /** The last control: Blur, Dim or the global Grain. */
     void setSecondSlider(@NonNull CharSequence label, int value, int max) {
         mSecondLabel.setText(label);
         mSecondSlider.setContentDescription(label);
         restateSlider(mSecondSlider, value, max);
         mSecondLabel.setVisibility(View.VISIBLE);
         mSecondSlider.setVisibility(View.VISIBLE);
+        mSecondButton.setVisibility(View.GONE);
+    }
+
+    /**
+     * The last column as a button: the keyboard's "Keyboard theme" door (DECISIONS item 15). Its
+     * label line stays, empty, so the button stands level with the slider beside it.
+     */
+    void setSecondButton(@NonNull CharSequence text) {
+        mSecondLabel.setText("");
+        mSecondButton.setText(text);
+        mSecondButton.setEnabled(mRow2Shown);
+        mSecondLabel.setVisibility(View.VISIBLE);
+        mSecondSlider.setVisibility(View.GONE);
+        mSecondButton.setVisibility(View.VISIBLE);
+    }
+
+    /** Whether the last column is the button, for a test to read. */
+    boolean isSecondButtonShown() {
+        return mSecondButton.getVisibility() == View.VISIBLE;
+    }
+
+    /** Whether the middle column is the global Opacity slider, for a test to read. */
+    boolean isMiddleSliderShown() {
+        return mMiddleSlider.getVisibility() == View.VISIBLE;
     }
 
     void setSecondLabel(@NonNull CharSequence label) {

@@ -312,22 +312,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     @Override
     public void onSingleTapUp(MotionEvent e) {
         TerminalEmulator term = mHost.currentSession().getEmulator();
-        int[] tappedColumnAndRow = mHost.focusedView().getColumnAndRow(e, true);
-        String hyperlink = term.getHyperlinkUriAt(tappedColumnAndRow[1], tappedColumnAndRow[0]);
-        if (hyperlink != null) {
-            // An OSC 8 link was tapped. Confirm before acting on it: unlike the URL regex below, the
-            // target is chosen by the application and need not resemble the text that was tapped.
-            showHyperlinkStrip(hyperlink, hyperlinkStripAnchor(e));
-            return;
-        }
-        if (mHost.properties().shouldOpenTerminalTranscriptURLOnClick()) {
-            int[] columnAndRow = mHost.focusedView().getColumnAndRow(e, true);
-            String url = urlAtTap(term, columnAndRow[0], columnAndRow[1]);
-            if (url != null) {
-                ShareUtils.openUrl(mContext, url);
-                return;
-            }
-        }
+        // A tap that went to a mouse-tracking program as its click is that program's alone.
+        if (!term.isMouseTrackingActive() && handleLinkTap(term, e)) return;
         if (!term.isMouseTrackingActive() && !e.isFromSource(InputDevice.SOURCE_MOUSE)) {
             // Switched off, a tap is only a tap: the keyboard waits for its own key.
             if (isKeyboardTurnedOff()) return;
@@ -340,6 +326,35 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             else
                 Logger.logVerbose(LOG_TAG, "Not showing soft keyboard onSingleTapUp since its disabled");
         }
+    }
+
+    /**
+     * Shift+tap on a program that tracks the mouse: the program got no click, so the app's own
+     * hyperlink and URL handling takes the tap, as on a plain shell.
+     */
+    @Override
+    public void onMouseTrackingBypassTap(MotionEvent e) {
+        handleLinkTap(mHost.currentSession().getEmulator(), e);
+    }
+
+    /** Open the OSC 8 link or the URL under a tap; false when there is neither. */
+    private boolean handleLinkTap(TerminalEmulator term, MotionEvent e) {
+        int[] tappedColumnAndRow = mHost.focusedView().getColumnAndRow(e, true);
+        String hyperlink = term.getHyperlinkUriAt(tappedColumnAndRow[1], tappedColumnAndRow[0]);
+        if (hyperlink != null) {
+            // An OSC 8 link was tapped. Confirm before acting on it: unlike the URL regex below, the
+            // target is chosen by the application and need not resemble the text that was tapped.
+            showHyperlinkStrip(hyperlink, hyperlinkStripAnchor(e));
+            return true;
+        }
+        if (mHost.properties().shouldOpenTerminalTranscriptURLOnClick()) {
+            String url = urlAtTap(term, tappedColumnAndRow[0], tappedColumnAndRow[1]);
+            if (url != null) {
+                ShareUtils.openUrl(mContext, url);
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

@@ -37,6 +37,16 @@ final class GradientRimDrawable extends Drawable {
         mPaint.setStrokeWidth(mStrokePx);
     }
 
+    /** The corner radius it strokes, in px. */
+    float radiusPx() {
+        return mRadiusPx;
+    }
+
+    /** The colour at the top-left end of the gradient. */
+    int startColor() {
+        return mStart;
+    }
+
     @Override
     protected void onBoundsChange(@NonNull Rect bounds) {
         mPaint.setShader(new LinearGradient(bounds.left, bounds.top, bounds.right, bounds.bottom,

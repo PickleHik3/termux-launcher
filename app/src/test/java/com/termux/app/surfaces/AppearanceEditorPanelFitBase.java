@@ -63,6 +63,107 @@ public abstract class AppearanceEditorPanelFitBase {
         assertFits();
     }
 
+    /** The global row at Custom with nothing tapped: Blur, Opacity and Grain (item 13). */
+    @Test
+    public void appearanceModeWithTheGlobalRowFits() {
+        mPanel.showAppearanceMode();
+        mPanel.showRow2(R.string.appearance_editor_target_all);
+        mPanel.setFirstSlider("Blur · 30 dp", 30, 30);
+        mPanel.setMiddleSlider("Opacity · 100%", 100, 100);
+        mPanel.setSecondSlider("Grain · 100%", 100, 100);
+        layOut(mPanel.measureFor(false, mWidthPx));
+        assertFits();
+        assertTrue(mPanel.measureFor(false, mWidthPx)
+            <= mPanel.measureTallest(false, mWidthPx));
+    }
+
+    /** The keyboard's row: Blur and the "Keyboard theme" door, whole and inside the sheet. */
+    @Test
+    public void appearanceModeWithTheKeyboardsThemeDoorFits() {
+        mPanel.showAppearanceMode();
+        mPanel.showRow2(R.string.appearance_editor_target_keyboard);
+        mPanel.setFirstSlider("Blur · 12 dp", 12, 30);
+        mPanel.hideLegibility();
+        mPanel.setSecondButton(mPanel.view().getContext()
+            .getString(R.string.appearance_editor_keyboard_theme));
+        layOut(mPanel.measureFor(false, mWidthPx));
+        assertFits();
+        TextView door = mPanel.view().findViewById(R.id.appearance_editor_c2_button);
+        assertEquals(View.VISIBLE, door.getVisibility());
+        Layout layout = door.getLayout();
+        assertNotNull(layout);
+        assertEquals("\"" + door.getText() + "\" is whole", 0,
+            layout.getEllipsisCount(layout.getLineCount() - 1));
+        assertTrue("a 48dp touch target", door.getHeight()
+            >= Math.round(48 * mPanel.view().getResources().getDisplayMetrics().density));
+        assertTrue(mPanel.measureFor(false, mWidthPx)
+            <= mPanel.measureTallest(false, mWidthPx));
+    }
+
+    /** Layout mode with the hidden tiles open: same height, nothing past the sheet's edge. */
+    @Test
+    public void layoutModeWithTheHiddenTilesOpenFits() {
+        mPanel.showLayoutMode();
+        mPanel.setCorners("Corner radius · 22 dp", 22, 40);
+        mPanel.setMargin("Margin · 6 dp", 6, 48);
+        int closed = mPanel.measureFor(true, mWidthPx);
+        mPanel.setHiddenTilesOpen(true);
+        assertEquals(closed, mPanel.measureFor(true, mWidthPx));
+        layOut(mPanel.measureFor(true, mWidthPx));
+        assertFits();
+        View eyeOff = mPanel.view().findViewById(R.id.layout_editor_hidden);
+        View highlight = mPanel.view().findViewById(R.id.layout_editor_hidden_highlight);
+        assertTrue("eye-off inside the sheet's padding", eyeOff.getRight()
+            <= mPanel.view().getWidth() - mPanel.view().getPaddingRight());
+        assertTrue("the highlight stays inside the sheet", highlight.getRight()
+            <= mPanel.view().getWidth());
+        mPanel.setHiddenTilesOpen(false);
+    }
+
+    /**
+     * Layout mode with the keyboard selected: its type chips and Key radius in Row B's place, the
+     * same height, nothing past the sheet's edge or over each other, the chips at their 48dp
+     * targets and Key radius's words whole.
+     */
+    @Test
+    public void layoutModeWithTheKeyboardsToolsFits() {
+        mPanel.showLayoutMode();
+        mPanel.setCorners("Corner radius · 40 dp", 40, 40);
+        mPanel.setMargin("Margin · 48 dp", 48, 48);
+        int closed = mPanel.measureFor(true, mWidthPx);
+        int tallest = mPanel.measureTallest(true, mWidthPx);
+        assertEquals("the anchor is Row B as it is", closed, tallest);
+        TextView label = mPanel.view().findViewById(R.id.layout_editor_key_radius_label);
+        label.setText("Key radius · 24 dp");
+        mPanel.setKeyboardToolsShown(true);
+        assertEquals("the sheet does not move", closed, mPanel.measureFor(true, mWidthPx));
+        assertEquals(tallest, mPanel.measureTallest(true, mWidthPx));
+        layOut(mPanel.measureFor(true, mWidthPx));
+        assertFits();
+        View root = mPanel.view();
+        View tools = root.findViewById(R.id.layout_editor_keyboard_tools);
+        View forms = root.findViewById(R.id.layout_editor_keyboard_forms);
+        View slider = root.findViewById(R.id.layout_editor_key_radius);
+        assertEquals(View.VISIBLE, tools.getVisibility());
+        assertTrue("the tools inside the sheet's padding",
+            tools.getRight() <= root.getWidth() - root.getPaddingRight());
+        assertTrue("the tools stand above the sheet's bottom padding",
+            tools.getBottom() <= root.getHeight() - root.getPaddingBottom());
+        assertTrue("the chips end before Key radius starts", forms.getRight() <= slider.getLeft());
+        int target = Math.round(48 * root.getResources().getDisplayMetrics().density);
+        ViewGroup chips = (ViewGroup) forms;
+        for (int i = 0; i < chips.getChildCount(); i++) {
+            assertTrue("a 48dp touch target", chips.getChildAt(i).getHeight() >= target);
+        }
+        assertTrue("Key radius has room for its slider", slider.getWidth() >= target * 2);
+        Layout layout = label.getLayout();
+        assertNotNull(layout);
+        assertEquals("\"" + label.getText() + "\" is whole", 0, layout.getEllipsisCount(0));
+        mPanel.setKeyboardToolsShown(false);
+        assertEquals(View.VISIBLE,
+            root.findViewById(R.id.appearance_editor_corners).getVisibility());
+    }
+
     @Test
     public void layoutModeFits() {
         mPanel.showLayoutMode();
