@@ -63,6 +63,63 @@ public abstract class AppearanceEditorPanelFitBase {
         assertFits();
     }
 
+    /** The global row at Custom with nothing tapped: Blur, Opacity and Grain (item 13). */
+    @Test
+    public void appearanceModeWithTheGlobalRowFits() {
+        mPanel.showAppearanceMode();
+        mPanel.showRow2(R.string.appearance_editor_target_all);
+        mPanel.setFirstSlider("Blur · 30 dp", 30, 30);
+        mPanel.setMiddleSlider("Opacity · 100%", 100, 100);
+        mPanel.setSecondSlider("Grain · 100%", 100, 100);
+        layOut(mPanel.measureFor(false, mWidthPx));
+        assertFits();
+        assertTrue(mPanel.measureFor(false, mWidthPx)
+            <= mPanel.measureTallest(false, mWidthPx));
+    }
+
+    /** The keyboard's row: Blur and the "Keyboard theme" door, whole and inside the sheet. */
+    @Test
+    public void appearanceModeWithTheKeyboardsThemeDoorFits() {
+        mPanel.showAppearanceMode();
+        mPanel.showRow2(R.string.appearance_editor_target_keyboard);
+        mPanel.setFirstSlider("Blur · 12 dp", 12, 30);
+        mPanel.hideLegibility();
+        mPanel.setSecondButton(mPanel.view().getContext()
+            .getString(R.string.appearance_editor_keyboard_theme));
+        layOut(mPanel.measureFor(false, mWidthPx));
+        assertFits();
+        TextView door = mPanel.view().findViewById(R.id.appearance_editor_c2_button);
+        assertEquals(View.VISIBLE, door.getVisibility());
+        Layout layout = door.getLayout();
+        assertNotNull(layout);
+        assertEquals("\"" + door.getText() + "\" is whole", 0,
+            layout.getEllipsisCount(layout.getLineCount() - 1));
+        assertTrue("a 48dp touch target", door.getHeight()
+            >= Math.round(48 * mPanel.view().getResources().getDisplayMetrics().density));
+        assertTrue(mPanel.measureFor(false, mWidthPx)
+            <= mPanel.measureTallest(false, mWidthPx));
+    }
+
+    /** Layout mode with the hidden tiles open: same height, nothing past the sheet's edge. */
+    @Test
+    public void layoutModeWithTheHiddenTilesOpenFits() {
+        mPanel.showLayoutMode();
+        mPanel.setCorners("Corner radius · 22 dp", 22, 40);
+        mPanel.setMargin("Margin · 6 dp", 6, 48);
+        int closed = mPanel.measureFor(true, mWidthPx);
+        mPanel.setHiddenTilesOpen(true);
+        assertEquals(closed, mPanel.measureFor(true, mWidthPx));
+        layOut(mPanel.measureFor(true, mWidthPx));
+        assertFits();
+        View eyeOff = mPanel.view().findViewById(R.id.layout_editor_hidden);
+        View highlight = mPanel.view().findViewById(R.id.layout_editor_hidden_highlight);
+        assertTrue("eye-off inside the sheet's padding", eyeOff.getRight()
+            <= mPanel.view().getWidth() - mPanel.view().getPaddingRight());
+        assertTrue("the highlight stays inside the sheet", highlight.getRight()
+            <= mPanel.view().getWidth());
+        mPanel.setHiddenTilesOpen(false);
+    }
+
     @Test
     public void layoutModeFits() {
         mPanel.showLayoutMode();

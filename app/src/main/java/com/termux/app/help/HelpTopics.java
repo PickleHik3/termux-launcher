@@ -491,7 +491,7 @@ public final class HelpTopics {
                 R.string.help_topic_layout_step3)
             .wayBack(R.string.help_topic_layout_back)
             .related("appearance_editor", "corners", "fix_dock")
-            .terms("editors", "style", "restore_tray")
+            .terms("editors", "style", "hidden_elements")
             .aliases(R.string.help_topic_layout_aliases)
             .doc("Launcher_Settings.md#layout-editor"));
         b.add(topic("themes", Group.YOURS, R.string.help_topic_themes_title,
@@ -559,7 +559,7 @@ public final class HelpTopics {
             .doc("Launcher_Troubleshooting.md#the-keyboard-is-missing-or-the-wrong-keyboard-opens"));
         b.add(fix("fix_dock", R.string.help_fix_dock_title,
                 R.string.help_fix_dock_summary, R.string.help_fix_dock_action)
-            .related("layout_editor", "dock", "keys").terms("editors", "restore_tray")
+            .related("layout_editor", "dock", "keys").terms("editors", "hidden_elements")
             .aliases(R.string.help_fix_dock_aliases)
             .doc("Launcher_Settings.md#layout-editor"));
         b.add(fix("fix_action", R.string.help_fix_action_title,

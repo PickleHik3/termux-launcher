@@ -76,8 +76,9 @@ public class AppearanceLooksTest {
     // ------------------------------------------------------------------------------ the targets
 
     /**
-     * Terminal: Darkness, Legibility, Blur. Status bar and dock: Blur alone. Keyboard: Key
-     * corners and Blur. Wallpaper: Soft and Dim (2026-10-01).
+     * Terminal: Darkness, Legibility, Blur. Status bar and dock: Blur alone. Keyboard: Blur and
+     * the "Keyboard theme" door; Key radius has moved to Layout mode (layout editor v2, items 6
+     * and 15). Wallpaper: Soft and Dim (2026-10-01).
      */
     @Test
     public void eachTargetHasItsControls() {
@@ -88,8 +89,65 @@ public class AppearanceLooksTest {
         assertTrue(Target.WALLPAPER.hasFirstControl());
         for (Target target : Target.values()) {
             assertEquals(target == Target.TERMINAL, target.hasLegibility());
-            assertEquals(target != Target.WALLPAPER, target.secondControlIsBlur());
+            assertEquals(target != Target.WALLPAPER && target != Target.KEYBOARD,
+                target.secondControlIsBlur());
+            assertEquals(target == Target.KEYBOARD, target.firstControlIsBlur());
+            assertEquals(target == Target.KEYBOARD, target.secondControlIsKeyboardTheme());
+            assertFalse("Key radius is Layout's now: " + target, target.hasKeyRadius());
         }
+    }
+
+    // ------------------------------------------------------------- layout editor v2: the global row
+
+    /** Row 2 is the global row only at Custom with nothing tapped (DECISIONS item 13). */
+    @Test
+    public void theGlobalRowShowsOnlyAtCustomWithNothingTapped() {
+        assertEquals(AppearanceLooks.Row.GLOBAL,
+            AppearanceLooks.rowFor(AppearanceLooks.CUSTOM_STOP, null));
+        for (Target target : Target.values()) {
+            assertEquals(AppearanceLooks.Row.ELEMENT,
+                AppearanceLooks.rowFor(AppearanceLooks.CUSTOM_STOP, target));
+        }
+        for (int stop = 0; stop < AppearanceLooks.CUSTOM_STOP; stop++) {
+            assertEquals("no global row on a Look stop", AppearanceLooks.Row.NONE,
+                AppearanceLooks.rowFor(stop, null));
+            assertEquals(AppearanceLooks.Row.NONE, AppearanceLooks.rowFor(stop, Target.DOCK));
+        }
+    }
+
+    /** The empty canvas brings the global row back; the bare wallpaper is still reachable. */
+    @Test
+    public void aWallpaperTapGoesBackToTheGlobalRowFromAnElement() {
+        int custom = AppearanceLooks.CUSTOM_STOP;
+        assertNull(AppearanceLooks.afterWallpaperTap(custom, Target.DOCK));
+        assertNull(AppearanceLooks.afterWallpaperTap(custom, Target.KEYBOARD));
+        assertNull("the wallpaper's own row closes too",
+            AppearanceLooks.afterWallpaperTap(custom, Target.WALLPAPER));
+        assertSame("from the global row it opens the wallpaper's", Target.WALLPAPER,
+            AppearanceLooks.afterWallpaperTap(custom, null));
+        assertSame("at a Look stop a tap moves to Custom as any does", Target.WALLPAPER,
+            AppearanceLooks.afterWallpaperTap(0, null));
+    }
+
+    /** The global Opacity and Grain ranges cover every Look's value (DECISIONS item 13). */
+    @Test
+    public void theGlobalOpacityAndGrainRangesCoverEveryLook() {
+        assertEquals(100, AppearanceLooks.OPACITY_MAX);
+        assertEquals(100, AppearanceLooks.GRAIN_MAX);
+        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
+            Object opacity = preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_OPACITY);
+            Object grain = preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_GRAIN);
+            if (opacity instanceof Number) {
+                int value = ((Number) opacity).intValue();
+                assertEquals(preset.id, value, AppearanceLooks.opacityPercent(value));
+            }
+            if (grain instanceof Number) {
+                int value = ((Number) grain).intValue();
+                assertEquals(preset.id, value, AppearanceLooks.grainPercent(value));
+            }
+        }
+        assertEquals(0, AppearanceLooks.opacityPercent(-5));
+        assertEquals(100, AppearanceLooks.grainPercent(140));
     }
 
     @Test

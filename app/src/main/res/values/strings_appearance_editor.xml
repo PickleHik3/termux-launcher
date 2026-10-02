@@ -26,6 +26,8 @@
     <string name="appearance_editor_target_dock">Dock</string>
     <string name="appearance_editor_target_keyboard">Keyboard</string>
     <string name="appearance_editor_target_wallpaper">Wallpaper</string>
+    <!-- Row 2's heading at the Custom stop with nothing tapped: the global glass row. -->
+    <string name="appearance_editor_target_all">All surfaces</string>
     <string name="appearance_editor_target_description">Tune %1$s</string>
 
     <!-- Row 2's controls; the number is the control's own read-out. -->
@@ -40,6 +42,11 @@
     <string name="appearance_editor_legibility_high">Contrast · High</string>
     <string name="appearance_editor_soft_off">Off</string>
     <string name="appearance_editor_soft_on">On</string>
+    <!-- The global row (layout editor v2): the base values every surface follows. -->
+    <string name="appearance_editor_opacity">Opacity · %1$d%%</string>
+    <string name="appearance_editor_grain">Grain · %1$d%%</string>
+    <!-- The keyboard's door to its theme page in Settings; also that page's title. -->
+    <string name="appearance_editor_keyboard_theme">Keyboard theme</string>
 
     <!-- Layout mode's global shape: no Look sets these. -->
     <string name="appearance_editor_corners">Corner radius · %1$d dp</string>

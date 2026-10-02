@@ -8,8 +8,9 @@ import com.termux.app.fragments.settings.LayoutCanvasView.Block;
 import org.junit.Test;
 
 /**
- * A chip in the trash's popup stands for one tray item: tapped, that item is restored (the plan
- * puts it back on the edge it was hidden from), and the canvas never offers the canvas block.
+ * A hidden-element tile in the sheet (layout editor v2, DECISIONS item 3) stands for one tray
+ * item: tapped, that item is restored (the plan puts it back on the edge it was hidden from), and
+ * the canvas never offers the canvas block.
  */
 public class HiddenChipRestoreMappingTest {
 
