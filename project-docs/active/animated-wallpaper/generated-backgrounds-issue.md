@@ -353,7 +353,8 @@ the two moment slots):
   `focus-highlight`, `spotlight`.
 - A shader-drawn cursor trail. It belongs to the backlog row for the AGSL glass experiment.
 - Animating the system lock screen or keyguard itself, and a system `WallpaperService`. The keyguard
-  shows the still, the rest pose.
+  shows the still, the rest pose. (Superseded for the lock screen on 2026-10-03 by
+  [`lock-live-wallpaper.md`](lock-live-wallpaper.md): a lock-only live wallpaper, API 34+.)
 - Devices below API 34, and any OpenGL ES path to reach them.
 - Video and GIF backgrounds (SPEC.md phase 2).
 - Pausing on user idle, as kitty does. SPEC.md §13 Q4 settled on "play whenever visible".

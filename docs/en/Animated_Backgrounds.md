@@ -5,8 +5,9 @@ and every glass surface (the status bar, the dock, the keyboard, the A–Z index
 the corner tabs) shows it blurred and in register, just as it does a photo.
 
 These are the launcher's own backgrounds, written for a portrait OLED screen: dark, low contrast and
-slow, so the panel stays mostly off and the battery cost stays small. They are not a system live
-wallpaper, and they are not a video.
+slow, so the panel stays mostly off and the battery cost stays small. On the home screen they are
+not a system live wallpaper, and they are never a video. The lock screen can play one as a live
+wallpaper (see [Lock screen](#lock-screen)).
 
 ## Requirements
 
@@ -38,6 +39,32 @@ launcherctl wallpaper set --builtin aurora
 `launcherctl wallpaper` also reports whether a background is animated and playing, and why not when
 it isn't: `api`, `fancier_glass_off`, `paused` or `killed`. See [LauncherCtl API](LauncherCtl_API.md).
 
+## Lock screen
+
+The wallpaper picker has two slots, **Home** and **Lock**. The Lock slot starts as **Same as Home**,
+which follows every home change. You can also give it a background of its own or a photo.
+
+- With **Motion** on (the default, Android 14 or later), an animated background plays on the lock
+  screen. It is the same background, calmer and dimmed by about a fifth so the clock and
+  notifications stay easy to read.
+- The first time, Android shows its live wallpaper preview. Choose **Lock screen** there. An app
+  cannot set a live wallpaper without asking you. Later lock choices change without asking again.
+- When you unlock, the lock animation settles to its rest pose, the home screen fades in on the same
+  picture, and the launcher's own animation picks up from there.
+- It draws nothing while the screen is off or showing the always-on display. It drops to 15 frames
+  per second when the phone is warm or the battery is low, and stops on a still under battery
+  saver or reduced motion.
+- With Motion off, the lock screen shows the background's rest-pose still instead.
+- A photo picked for the Lock slot replaces the live wallpaper. Picking an animated background again
+  brings back Android's one-time preview.
+
+Below Android 14 the Motion toggle is hidden, and the Lock slot takes stills and photos only.
+
+From the terminal, `launcherctl wallpaper` reports `lock_slot` (`same_as_home`, a background id or
+`photo`), `lock_motion`, and `lock_live` (whether the launcher's live wallpaper holds the lock
+screen). `launcherctl wallpaper set --builtin aurora` with the `lock` target puts that background's
+still on the lock screen, and `both` makes the Lock slot Same as Home.
+
 ## Colours
 
 A background always uses the colours it ships with, for example an aurora in its natural greens.
@@ -48,8 +75,8 @@ still accepted and ignored.
 ## Rest pose
 
 Each background has a rest pose: its picture with the motion at zero. That is the picture the
-launcher gives to the system, so your lock screen and other apps show exactly what the launcher
-settles on.
+launcher gives to the system, so your home screen in recents and other apps show exactly what the
+launcher settles on, and so does a lock screen with Motion off.
 
 ## Moments
 

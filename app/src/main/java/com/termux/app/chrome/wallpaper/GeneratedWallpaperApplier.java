@@ -16,6 +16,7 @@ import com.termux.app.chrome.ManagedWallpaper;
 import com.termux.app.wall.WallParallax;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -101,16 +102,37 @@ public final class GeneratedWallpaperApplier {
      * The background is always drawn with its own palette; the system theme follows the wallpaper.
      * Call it on the main thread; the render and set run on a worker that holds only the
      * application context. {@code cb} is called on the main thread.
+     *
+     * <p>Slots (lock-live-wallpaper.md): a target with the home screen records the Home slot;
+     * {@code lock} records the Lock slot as this background ({@code animated:<id>}) and
+     * {@code both} as Same as Home. A still set on the lock screen replaces the lock live
+     * wallpaper; the Motion toggle keeps its value.</p>
      */
     @RequiresApi(34)
     public static void apply(@NonNull Context ctx, @NonNull AnimatedWallpaper w,
                              @NonNull String target, @Nullable Callback cb) {
-        final Context app = ctx.getApplicationContext();
         final int flags = ManagedWallpaper.flagsForTarget(target);
         if (flags == 0) {
             finish(cb, false, "target must be home, lock or both");
             return;
         }
+        boolean home = (flags & WallpaperManager.FLAG_SYSTEM) != 0;
+        String lockRecord = (flags & WallpaperManager.FLAG_LOCK) == 0 ? null
+            : home ? TERMUX_APP.VALUE_WALLPAPER_LOCK_SAME_AS_HOME
+            : TERMUX_APP.VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX + w.id();
+        applyStill(ctx, w, flags, home, lockRecord, cb);
+    }
+
+    /**
+     * The still for {@code flags}. {@code recordHome} stores the Home slot (id, colours, target);
+     * {@code lockRecord}, when not null, is the {@code wallpaper_lock_choice} value stored after
+     * Android took the still.
+     */
+    @RequiresApi(34)
+    static void applyStill(@NonNull Context ctx, @NonNull AnimatedWallpaper w, final int flags,
+                           final boolean recordHome, @Nullable final String lockRecord,
+                           @Nullable Callback cb) {
+        final Context app = ctx.getApplicationContext();
         final int[] palette;
         try {
             palette = WallpaperPaletteCapture.own(w);
@@ -127,13 +149,26 @@ public final class GeneratedWallpaperApplier {
             }
             TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, false);
             if (prefs != null) {
-                prefs.setManagedWallpaperAnimatedId(w.id());
-                prefs.setManagedWallpaperAnimatedColors(palette);
-                prefs.setManagedWallpaperAnimatedTarget(ManagedWallpaper.targetName(flags));
+                if (recordHome) {
+                    prefs.setManagedWallpaperAnimatedId(w.id());
+                    prefs.setManagedWallpaperAnimatedColors(palette);
+                    prefs.setManagedWallpaperAnimatedTarget(ManagedWallpaper.targetName(flags));
+                }
+                if (lockRecord != null) prefs.setWallpaperLockChoice(lockRecord);
             }
-            notifyChanged();
+            if (recordHome) notifyChanged();
             finish(cb, true, null);
         });
+    }
+
+    /** Runs {@code job} on the apply worker, behind any render already queued. */
+    static void onWorker(@NonNull Runnable job) {
+        WORKER.execute(job);
+    }
+
+    /** Posts {@code cb}'s result to the main thread. */
+    static void post(@Nullable Callback cb, boolean ok, @Nullable String error) {
+        finish(cb, ok, error);
     }
 
     /** Forgets the generated background; a photo (or a {@code path} set) is the wallpaper now. */
