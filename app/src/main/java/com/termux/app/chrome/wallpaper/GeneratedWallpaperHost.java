@@ -100,7 +100,10 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
 
     private boolean mVisible;
     private boolean mScreenOn = true;
-    private boolean mWasScreenOff;
+    /** Kills and screen-off bookkeeping; static because the kill cap is per process life. */
+    @NonNull private static final WallpaperSession sSession = new WallpaperSession();
+    /** The background was re-applied (same id): an unhealthy one is rebuilt rather than kept. */
+    private boolean mReapplied;
     private boolean mPowerSave;
     private boolean mBatteryLowBroadcast;
     private int mBatteryPercent = -1;
@@ -137,7 +140,7 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
             switch (intent.getAction()) {
                 case Intent.ACTION_SCREEN_OFF:
                     mScreenOn = false;
-                    mWasScreenOff = true;
+                    sSession.onScreenOff();
                     mLockHandedOver = false;
                     mHandler.removeCallbacks(mLockRecover);
                     mHandler.removeCallbacks(mLockFallback);
@@ -146,16 +149,22 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
                     break;
                 case Intent.ACTION_SCREEN_ON:
                     mScreenOn = true;
+                    retryIfKilled();
+                    restartWarmup();
                     publishAndKick();
                     break;
                 case Intent.ACTION_USER_PRESENT:
                     // Only an unlock that follows a screen-off: this also fires for a swipe-away
                     // keyguard that was never up.
-                    if (!mWasScreenOff) break;
-                    mWasScreenOff = false;
+                    retryIfKilled();
+                    restartWarmup();
+                    if (!sSession.unlockOnUserPresent()) {
+                        publishAndKick();
+                        break;
+                    }
                     WallpaperDirector director = mDirector;
                     if (director != null) director.unlock(System.nanoTime());
-                    kick();
+                    publishAndKick();
                     break;
                 default:
                     break;
@@ -200,7 +209,7 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
     public void onCreate() {
         GeneratedWallpaperApplier.setStatusProvider(this);
         if (!mSupported) return;
-        GeneratedWallpaperApplier.setChangedListener(this::refresh);
+        GeneratedWallpaperApplier.setChangedListener(this::onWallpaperApplied);
         PowerManager pm = (PowerManager) mActivity.getSystemService(Context.POWER_SERVICE);
         mScreenOn = pm == null || pm.isInteractive();
         if (!mScreenReceiverRegistered) {
@@ -223,7 +232,9 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
         mVisible = true;
         registerDeviceListeners();
         recoverLock();
+        retryIfKilled();
         refresh();
+        leaveLockAfterScreenOff();
         AnimatedWallpaperClock clock = mClock;
         if (clock != null) clock.start();
     }
@@ -233,8 +244,44 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
         if (!mSupported) return;
         mVisible = true;
         refresh();
+        leaveLockAfterScreenOff();
         AnimatedWallpaperClock clock = mClock;
         if (clock != null) clock.start();
+    }
+
+    /**
+     * Some ROMs and face or smart unlock never send USER_PRESENT: when the activity starts or
+     * resumes with the screen on after a screen-off, give the Director the unlock now so the A-Z
+     * lock rest pose is left (once per screen-off, whichever signal comes first).
+     */
+    private void leaveLockAfterScreenOff() {
+        if (!sSession.unlockOnStart(mScreenOn)) return;
+        restartWarmup();
+        WallpaperDirector director = mDirector;
+        if (director != null) director.unlock(System.nanoTime());
+        kick();
+    }
+
+    /** A visible session begins: lift a kill (up to the cap) and rebuild from the top tier. */
+    private void retryIfKilled() {
+        if (!sSession.retryOnVisibleSession()) return;
+        Logger.logInfo(LOG_TAG, "Retrying the live background after a kill (" + sSession.kills()
+            + " so far)");
+        mRendererHealthy = true;
+        AnimatedWallpaperClock clock = mClock;
+        if (clock != null) clock.revive();
+        publishConditions();
+    }
+
+    private void restartWarmup() {
+        AnimatedWallpaperClock clock = mClock;
+        if (clock != null) clock.restartWarmup();
+    }
+
+    /** The picker or the API applied a background: an unhealthy one of the same id starts over. */
+    private void onWallpaperApplied() {
+        mReapplied = true;
+        refresh();
     }
 
     public void onStop() {
@@ -350,7 +397,9 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
             colors = prefs.getManagedWallpaperAnimatedColors();
             if (colors == null) colors = wallpaper.ownPalette();
         }
-        if (wallpaper == mWallpaper) {
+        boolean reapplied = mReapplied;
+        mReapplied = false;
+        if (wallpaper == mWallpaper && !(reapplied && !mRendererHealthy)) {
             if (mDirector != null && colors != null && !Arrays.equals(colors, mPalette)) {
                 mPalette = colors.clone();
                 mDirector.setPalette(colors);
@@ -362,6 +411,7 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
         if (wallpaper == null) return;
         // A new background gets a new clock, so an earlier render failure does not carry over.
         mRendererHealthy = true;
+        sSession.reset();
         mPalette = colors.clone();
         WallpaperDirector director = new WallpaperDirector(wallpaper.periodSeconds(), colors);
         AnimatedWallpaperClock clock = new AnimatedWallpaperClock(this, director, backdrop,
@@ -631,6 +681,11 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
     @Override
     public void onRendererUnhealthy() {
         mRendererHealthy = false;
+        sSession.onKill();
+        Logger.logWarn(LOG_TAG, "Live background killed (" + sSession.kills() + " of "
+            + WallpaperSession.MAX_KILLS + "); "
+            + (sSession.kills() >= WallpaperSession.MAX_KILLS ? "staying on the still"
+                : "retrying at the next screen-on, unlock or start"));
         publishConditions();
         applyLive();
         goStill();
@@ -647,6 +702,17 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
     @Override
     public String reason() {
         return mReason;
+    }
+
+    @Override
+    public int tier() {
+        WallpaperDirector director = mDirector;
+        return director == null ? 0 : director.tier();
+    }
+
+    @Override
+    public int kills() {
+        return sSession.kills();
     }
 
     // --- readers ---

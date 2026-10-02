@@ -339,8 +339,23 @@ Pong is a Nothing Phone (2), A065, API 36, 1080×2412. The Snapdragon 8+ Gen 1 c
 - A preference `animated_wallpaper_disabled`, not shown in Settings, settable through the
   existing preference route **(assumption: such a route exists)**. It pauses everything and shows
   the still.
-- A self-check: if the render's p90 over 120 frames is above 4 ms, or a render callback fails, the
-  clock pauses for the session and logs once. The user sees the still.
+- A self-check, in tiers. Renders are not counted during a warm-up (`RenderBudget.WARMUP_MS`, 2 s,
+  and at least `WARMUP_RENDERS`, 60 renders, whichever is later) after every clock start, renderer
+  (re)build, screen-on and unlock: those first renders queue behind the unlock's UI work, run at low
+  GPU clocks and carry the shader compile. After the warm-up, a window of 120 renders whose p90 is
+  above 4 ms steps the Director down a tier instead of killing: tier 0 is 30 fps, tier 1 is 15 fps,
+  tier 2 is 15 fps with the cheaper (÷4) source resolution, tier 3 is 10 fps. Each tier gets a
+  fresh renderer, a fresh window and the warm-up. Only the lowest tier failing a window, or a
+  render that throws, is a kill. Each window close logs p50, p90, tier and the warm-up renders
+  skipped; each step-down, kill and retry logs once.
+- A kill lasts until the next screen-on, unlock or `onStart`, when the renderer is rebuilt and tried
+  again from tier 0. After 3 kills in one process the still stays, and `GET /v1/wallpaper` keeps
+  reporting `killed`. Choosing a different background, or re-applying the same one while it is
+  killed, starts over.
+- `GET /v1/wallpaper` adds `tier` (0 is full) and `kills` (count this process).
+- The A-Z lock rest pose is left on `USER_PRESENT`, and also on `onStart` or `onResume` after a
+  screen-off (some ROMs and face or smart unlock never send `USER_PRESENT`); one unlock per
+  screen-off, whichever signal comes first.
 
 ## 10. Phased plan
 

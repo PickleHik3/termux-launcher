@@ -516,6 +516,8 @@ final class DeviceControlRoutes {
             .put("palette", animatedId == null ? JSONObject.NULL : "own")
             .put("playing", playing)
             .put("reason", reason == null ? JSONObject.NULL : reason)
+            .put("tier", status == null ? 0 : status.tier())
+            .put("kills", status == null ? 0 : status.kills())
             .put("desired_width", manager.getDesiredMinimumWidth())
             .put("desired_height", manager.getDesiredMinimumHeight());
     }

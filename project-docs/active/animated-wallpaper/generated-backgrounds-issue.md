@@ -163,8 +163,11 @@ Gradient flow under a shorter name.
     so that desktop settings never leak into the phone (`custom_shaders` is ignored).
 42. As a developer, I want every rule about when to play, how fast, which moment and which colours in
     one pure class, so that the rules are unit-tested without a device.
-43. As a developer, I want a hidden kill switch and a self-check that stops a slow renderer for the
-    session, so that a bad GPU driver shows a still instead of stutter.
+43. As a developer, I want a hidden kill switch and a self-check that ignores the post-wake warm-up,
+    steps a slow renderer down (30 to 15 fps, a cheaper resolution, then 10 fps) and kills it only
+    when the lowest tier still fails, with a new chance at the next screen-on, unlock or start
+    (at most 3 kills per process), so that a bad GPU driver shows a still instead of stutter and a
+    busy unlock does not cost the session.
 44. As a developer, I want the renderer released 30 s after the launcher stops and on low memory, so
     that a background costs no memory in the background.
 45. As a maintainer, I want every built-in written from scratch, so that `THIRD_PARTY_NOTICES.md` needs
@@ -242,6 +245,8 @@ the kill switch. Also:
   activity lives, not in the manifest.
 - A `USER_PRESENT` that follows a `SCREEN_OFF` sends `unlock` to the Director. It plays only if the
   launcher is the visible activity. Screen off also counts as not visible for the Director.
+- `onStart` and `onResume` after a screen-off also send `unlock` (once per screen-off, whichever
+  signal comes first), because some ROMs and face or smart unlock never send `USER_PRESENT`.
 
 **Moment hooks.** These are existing callbacks, with no new event bus:
 
@@ -297,6 +302,8 @@ the two moment slots):
   - `GET /v1/wallpaper/builtins` lists `palettes`;
   - `GET /v1/wallpaper` adds `"reason"` when a background is not playing, one of `api`,
     `fancier_glass_off`, `paused` or `killed`.
+  - `GET /v1/wallpaper` also reports `tier` (0 is full rate and resolution) and `kills` (self-check
+    kills this process).
 - `custom_shaders` in kitty.conf is not read.
 
 **Records.**

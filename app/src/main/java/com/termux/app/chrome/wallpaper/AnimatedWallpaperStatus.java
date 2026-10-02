@@ -15,4 +15,14 @@ public interface AnimatedWallpaperStatus {
     /** Why not, when {@link #playing()} is false: api, fancier_glass_off, paused, killed or inactive. Null while playing. */
     @Nullable
     String reason();
+
+    /** The self-check's step-down tier, 0 = full rate and resolution. */
+    default int tier() {
+        return 0;
+    }
+
+    /** How many times the renderer was killed by the self-check in this process. */
+    default int kills() {
+        return 0;
+    }
 }

@@ -13,6 +13,7 @@ import android.hardware.HardwareBuffer;
 import android.hardware.SyncFence;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.os.Trace;
 
 import androidx.annotation.NonNull;
@@ -44,9 +45,11 @@ import java.util.concurrent.atomic.AtomicInteger;
  * has finished drawing: the executor thread waits each result's fence first, so a slot is never
  * published half written whatever the queue ordering is.</p>
  *
- * <p>Self-check (SPEC §9.4): the wall time of a render, start to landed, is sampled; when the p90
- * of {@link RenderBudget#WINDOW} of them exceeds {@link RenderBudget#P90_LIMIT_MS}, or any render
- * fails, {@link #healthy()} turns false for good and the owner shows the still.</p>
+ * <p>Self-check (SPEC §9.4): the wall time of a render, start to landed, is sampled after a
+ * warm-up ({@link RenderBudget#WARMUP_MS}); when the p90 of {@link RenderBudget#WINDOW} of them
+ * exceeds {@link RenderBudget#P90_LIMIT_MS}, {@link #slow()} turns true and the renderer stops
+ * rendering: the owner steps down a tier and builds a new renderer. A render that fails or throws
+ * turns {@link #healthy()} false and the owner shows the still.</p>
  */
 @RequiresApi(34)
 public final class LiveWallpaperRenderer {
@@ -110,6 +113,9 @@ public final class LiveWallpaperRenderer {
     private float[] mLastRequest = new float[0];
     private int mLastRequestCount = -1;
     private final RenderBudget mBudget = new RenderBudget();
+    private final int mTier;
+    /** The cheaper source resolution (÷4 whatever the radius) is in force. */
+    private final boolean mLowRes;
     @NonNull private final LiveWallpaperFrames mFrames;
 
     @Nullable private ExecutorService mExecutor;
@@ -122,6 +128,7 @@ public final class LiveWallpaperRenderer {
     private boolean mReleased;
     private boolean mReleaseDeferred;
     private boolean mHealthy = true;
+    private boolean mSlow;
     private int mToken;
     private long mStartNanos;
     /** Set on the fence thread when the last radius' buffer is written; ends the timed span. */
@@ -135,18 +142,33 @@ public final class LiveWallpaperRenderer {
      * @param shader  this renderer's own wallpaper shader ({@code WallpaperUniforms.newShader});
      *                the backdrop draws its own, so no uniform is ever written under a draw
      * @param frames  where the rings' bitmaps are published; cleared before any ring is freed
+     * @param tier    the step-down tier this renderer runs at, for the log
+     * @param lowRes  draw every ring at the ÷4 source resolution
      */
     public LiveWallpaperRenderer(float density, @NonNull RuntimeShader shader,
-                                 @NonNull LiveWallpaperFrames frames) {
+                                 @NonNull LiveWallpaperFrames frames, int tier, boolean lowRes) {
+        mTier = tier;
+        mLowRes = lowRes;
+        mBudget.restartWarmup(SystemClock.uptimeMillis());
         mFrames = frames;
         mDensity = density;
         mShader = shader;
         mPaint.setShader(shader);
     }
 
-    /** False for good once a render failed or the p90 self-check tripped. */
+    /** False for good once a render failed or threw. */
     public boolean healthy() {
         return mHealthy;
+    }
+
+    /** True once a budget window failed: this renderer renders no more; the owner steps down. */
+    public boolean slow() {
+        return mSlow;
+    }
+
+    /** The screen came on or the device unlocked: ignore renders for the warm-up again. */
+    public void restartWarmup() {
+        mBudget.restartWarmup(SystemClock.uptimeMillis());
     }
 
     /** True while a render has not landed yet. */
@@ -176,7 +198,7 @@ public final class LiveWallpaperRenderer {
      */
     public boolean render(@NonNull WallpaperDirector.Frame f, @NonNull float[] radiiDp,
                           @NonNull Callback done) {
-        if (mReleased || !mHealthy || mInFlight || mFrameW <= 0 || mFrameH <= 0) return false;
+        if (mReleased || !mHealthy || mSlow || mInFlight || mFrameW <= 0 || mFrameH <= 0) return false;
         Trace.beginSection("LiveWallpaper.render");
         try {
             configure(radiiDp);
@@ -240,14 +262,21 @@ public final class LiveWallpaperRenderer {
         }
         if (mReleased) return;
         boolean ok = !mFailed;
-        if (ok) {
-            // The render work only (submit to the last fence), not the hop to the main thread.
-            ok = mBudget.add((mEndNanos - mStartNanos) / 1_000_000f);
-        }
         if (!ok) {
             mHealthy = false;
-            Logger.logWarn(TAG, "Live wallpaper render failed or too slow (p90 "
-                + mBudget.lastP90Ms() + " ms); showing the still for this session");
+            Logger.logWarn(TAG, "Live wallpaper render failed (tier " + mTier
+                + "); showing the still");
+        } else {
+            // The render work only (submit to the last fence), not the hop to the main thread.
+            boolean within = mBudget.add((mEndNanos - mStartNanos) / 1_000_000f,
+                SystemClock.uptimeMillis());
+            if (mBudget.windowClosed()) {
+                Logger.logInfo(TAG, "Render window closed: p50 " + mBudget.lastP50Ms() + " ms, p90 "
+                    + mBudget.lastP90Ms() + " ms, tier " + mTier + ", warm-up skipped "
+                    + mBudget.warmupSkipped() + " renders, " + (within ? "within" : "over")
+                    + " the " + RenderBudget.P90_LIMIT_MS + " ms limit");
+            }
+            if (!within) mSlow = true;
         }
         Callback callback = mCallback;
         mCallback = null;
@@ -356,6 +385,7 @@ public final class LiveWallpaperRenderer {
     @NonNull
     private Ring buildRing(float radiusDp) {
         int divisor = LiveRadii.divisor(radiusDp);
+        if (mLowRes) divisor = Math.max(divisor, 4);
         int bw = bufferSize(mFrameW, divisor);
         int bh = bufferSize(mFrameH, divisor);
         RenderNode source = source(divisor);
