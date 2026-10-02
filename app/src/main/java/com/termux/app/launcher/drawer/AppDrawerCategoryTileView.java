@@ -22,6 +22,7 @@ import androidx.core.graphics.ColorUtils;
 import com.termux.R;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.chrome.ChromeShade;
+import com.termux.app.chrome.GlassTokens;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
 import java.util.List;
@@ -43,9 +44,9 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
      * light band, where 5.5% white is a card with no card in it and the grid loses its structure
      * entirely.
      */
-    private static final int FILL_COLOR = 0x0EFFFFFF;
-    private static final int FILL_PRESSED_COLOR = 0x1CFFFFFF;
-    private static final int STROKE_COLOR = 0x21FFFFFF;
+    private static final int FILL_COLOR = GlassTokens.TILE_FILL;
+    private static final int FILL_PRESSED_COLOR = GlassTokens.TILE_FILL_PRESSED;
+    private static final int STROKE_COLOR = GlassTokens.TILE_STROKE;
     private static final float PRESSED_SCALE = 0.98f;
     /** Per-icon press dip for the three launch shortcuts, tighter than the card's own. */
     private static final float ICON_PRESSED_SCALE = 0.90f;
@@ -186,7 +187,8 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         heading.setText(label);
         heading.setClickable(true);
         // 90% of the launcher text colour, per the mock's card titles.
-        int headingColor = dock == null ? Color.WHITE : dock.getLauncherTextColor();
+        int headingColor = dock == null ? com.google.android.material.color.MaterialColors.getColor(heading,
+            com.google.android.material.R.attr.colorOnSurface, GlassTokens.HIGHLIGHT) : dock.getLauncherTextColor();
         heading.setTextColor(ColorUtils.setAlphaComponent(
             headingColor, 0xE6));
         String open = getResources().getString(R.string.app_drawer_category_open, label);

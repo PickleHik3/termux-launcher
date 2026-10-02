@@ -23,7 +23,6 @@ background stops on its still; when it ends, the background carries on.
 1. Open the wallpaper picker.
 2. Choose a tile in the **Animated** row. The tiles are still pictures, so the picker itself costs no
    battery.
-3. For each tile, choose the palette (below).
 
 The built-ins are **Aurora** (slow ribbons), **Mesh** (a four-colour gradient that drifts), **Tide**
 (soft waves) and **Rain** (sparse glyph-cell rain). Choosing a photo replaces a background in one
@@ -33,20 +32,18 @@ From the terminal:
 
 ```
 launcherctl wallpaper list-builtins
-launcherctl wallpaper set --builtin aurora --palette material
+launcherctl wallpaper set --builtin aurora
 ```
 
 `launcherctl wallpaper` also reports whether a background is animated and playing, and why not when
 it isn't: `api`, `fancier_glass_off`, `paused` or `killed`. See [LauncherCtl API](LauncherCtl_API.md).
 
-## Material or own palette
+## Colours
 
-- **Material** takes four colours from your launcher's Material palette, so the background matches
-  the status bar, dock and keyboard. If you set your own colours in `colors.properties`, they reach
-  the background too. The colours are taken when you choose the background and when you change the
-  launcher colour scheme, not at any other time.
-- **Own** uses the colours the background ships with, for example an aurora in its natural greens even
-  when your palette is blue.
+A background always uses the colours it ships with, for example an aurora in its natural greens.
+Colours flow from the wallpaper to the phone: Android derives its Material theme from the
+wallpaper, never the other way round. The `--palette` option and the API's `palette` field are
+still accepted and ignored.
 
 ## Rest pose
 

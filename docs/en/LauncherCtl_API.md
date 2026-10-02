@@ -477,9 +477,9 @@ the first time the new store opens.
 | POST | `/v1/volume` | `{"stream": "music", "volume": 7}` | `{"ok": true, "stream": "music", "volume": 7, "max_volume": 15}` |
 | POST | `/v1/toast` | `{"text": "hi", "short": false}` | `{"ok": true, "length": 2}` |
 | POST | `/v1/wallpaper` | `{"path": "/sdcard/a.jpg", "target": "both"}` (`target`: `home`, `lock`, `both`; default `both`) | `{"ok": true, "target": "both", "width": 2400, "height": 1080, "launcher_refresh": "live"}` |
-| POST | `/v1/wallpaper` | `{"builtin": "aurora", "palette": "material", "target": "both"}` (`palette`: `material` or `own`, default `material`; `path` and `builtin` are mutually exclusive) | `{"ok": true, "target": "both", "builtin": "aurora", "palette": "material", "animated": true, "reason": null, "launcher_refresh": "live"}` |
-| GET | `/v1/wallpaper/builtins` | none | `{"ok": true, "builtins": [{"id": "aurora", "label": "Aurora", "palettes": ["material", "own"]}, ...]}` |
-| GET | `/v1/wallpaper` | none | `{"ok": true, "home_id": 12, "lock_id": 13, "live": false, "managed": true, "animated": "aurora", "palette": "material", "playing": true, "reason": null, "desired_width": 1080, "desired_height": 2400}` |
+| POST | `/v1/wallpaper` | `{"builtin": "aurora", "target": "both"}` (`palette` is ignored; `path` and `builtin` are mutually exclusive) | `{"ok": true, "target": "both", "builtin": "aurora", "palette": "own", "animated": true, "reason": null, "launcher_refresh": "live"}` |
+| GET | `/v1/wallpaper/builtins` | none | `{"ok": true, "builtins": [{"id": "aurora", "label": "Aurora", "palettes": ["own"]}, ...]}` |
+| GET | `/v1/wallpaper` | none | `{"ok": true, "home_id": 12, "lock_id": 13, "live": false, "managed": true, "animated": "aurora", "palette": "own", "playing": true, "reason": null, "desired_width": 1080, "desired_height": 2400}` |
 
 These are the answers `termux-vibrate`, `termux-torch`, `termux-battery-status`, `termux-volume`
 and `termux-toast` give, so a compatibility script can pass them through. They need no pane and
@@ -519,9 +519,8 @@ vibrate and torch, 60 for toast and volume writes, 120 for battery and volume re
 - `wallpaper` with `builtin` sets one of the launcher's generated backgrounds (ids from
   `GET /v1/wallpaper/builtins`) instead of a photo. The still is its rest pose, rendered with the
   chosen palette at the size the photo cropper writes and applied through the same code as a
-  photo, so the exact copy and stored id follow. `palette` `material` uses the launcher colour
-  scheme's roles (primary container, tertiary container, surface dim, secondary) and is
-  re-rendered when the scheme changes; `own` uses the background's shipped colours. Rendering
+  photo, so the exact copy and stored id follow. `palette` is ignored; the wallpaper always uses
+  its own colours and the system theme follows it. Rendering
   needs Android 14 (API 34): below it the call is 409 `unsupported` with `"reason": "api"`. On API
   34 or later the still is always set, and `animated` says whether the live frames will play: they
   need Fancier Glass active, otherwise `"animated": false, "reason": "fancier_glass_off"` (or

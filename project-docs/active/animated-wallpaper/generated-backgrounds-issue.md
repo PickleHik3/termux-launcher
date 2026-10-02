@@ -150,7 +150,7 @@ Gradient flow under a shorter name.
     landscape works.
 36. As a launcher user, I want the background to resume on the next frame when I come back to the
     launcher, so that there is no warm-up flash.
-37. As a power user, I want `launcherctl wallpaper set --builtin aurora --palette material`, so that I
+37. As a power user, I want `launcherctl wallpaper set --builtin aurora`, so that I
     can script my setup.
 38. As a power user, I want `launcherctl wallpaper list-builtins` to list the backgrounds and their
     palettes, so that scripts can discover them.
@@ -292,8 +292,8 @@ the two moment slots):
 
 **Choosing.**
 - The picker sheet and the `launcherctl` routes are SPEC.md §7, extended:
-  - each tile has a palette toggle (Material / Own);
-  - `POST /v1/wallpaper` accepts `"palette": "material" | "own"`, default material;
+  - (superseded: the Material / Own toggle is gone; the wallpaper always uses its own palette);
+  - `POST /v1/wallpaper` accepts `"palette"` for compatibility and ignores it;
   - `GET /v1/wallpaper/builtins` lists `palettes`;
   - `GET /v1/wallpaper` adds `"reason"` when a background is not playing, one of `api`,
     `fancier_glass_off`, `paused` or `killed`.

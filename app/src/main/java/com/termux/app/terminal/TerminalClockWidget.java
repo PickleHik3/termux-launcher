@@ -26,6 +26,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
+import com.termux.app.chrome.GlassTokens;
 import com.termux.app.statusbar.TopPaneClockForm;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
@@ -369,38 +370,38 @@ public final class TerminalClockWidget extends View {
             pc, .22f);
         mFlipBase = alpha(leaf, .5f);
         if (mDarkFlipStock) {
-            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .08f), .5f);
+            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(leaf, GlassTokens.HIGHLIGHT, .08f), .5f);
             mUpperFlipColors[1] = alpha(leaf, .46f);
-            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(leaf, Color.BLACK, .16f), .5f);
-            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, Color.BLACK, .42f), .56f);
-            mLowerFlipColors[0] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .2f), .54f);
-            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .06f), .48f);
+            mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(leaf, GlassTokens.SHADE, .16f), .5f);
+            mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, GlassTokens.SHADE, .42f), .56f);
+            mLowerFlipColors[0] = alpha(ColorUtils.blendARGB(leaf, GlassTokens.HIGHLIGHT, .2f), .54f);
+            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(leaf, GlassTokens.HIGHLIGHT, .06f), .48f);
             mLowerFlipColors[2] = alpha(leaf, .46f);
-            mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, Color.BLACK, .16f), .5f);
-            mHingeFlipColors[0] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .45f);
-            mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfacePanelHighest, Color.WHITE, .25f);
+            mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, GlassTokens.SHADE, .16f), .5f);
+            mHingeFlipColors[0] = ColorUtils.blendARGB(mSurfacePanelHighest, GlassTokens.HIGHLIGHT, .45f);
+            mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfacePanelHighest, GlassTokens.HIGHLIGHT, .25f);
             mHingeFlipColors[2] = mSurfacePanelHighest;
             mHingeFlipColors[3] = mSurfacePanelHigh;
             mHingeFlipColors[4] = mSurfacePanel;
             mHingeFlipColors[5] = ColorUtils.blendARGB(mSurfacePanelHigh,
                 mSurfacePanelHighest, .35f);
-            mHingeFlipColors[6] = ColorUtils.blendARGB(mSurfaceBase, Color.BLACK, .35f);
+            mHingeFlipColors[6] = ColorUtils.blendARGB(mSurfaceBase, GlassTokens.SHADE, .35f);
             mFlipRim = alpha(mOutlineVariant, .6f);
-            mFlipSeam = alpha(Color.BLACK, .85f);
-            mFlipShadow = Color.argb(70, 0, 0, 0);
-            mFlipClipOutline = Color.BLACK;
-            mFlipClipShadow = Color.argb(128, 0, 0, 0);
+            mFlipSeam = alpha(GlassTokens.SHADE, .85f);
+            mFlipShadow = ColorUtils.setAlphaComponent(GlassTokens.SHADE, 70);
+            mFlipClipOutline = GlassTokens.SHADE;
+            mFlipClipShadow = ColorUtils.setAlphaComponent(GlassTokens.SHADE, 128);
         } else {
-            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .5f), .55f);
+            mUpperFlipColors[0] = alpha(ColorUtils.blendARGB(leaf, GlassTokens.HIGHLIGHT, .5f), .55f);
             mUpperFlipColors[1] = alpha(leaf, .5f);
             mUpperFlipColors[2] = alpha(ColorUtils.blendARGB(leaf, on, .05f), .52f);
             mUpperFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, on, .14f), .58f);
-            mLowerFlipColors[0] = alpha(Color.WHITE, .55f);
-            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(leaf, Color.WHITE, .35f), .5f);
+            mLowerFlipColors[0] = alpha(GlassTokens.HIGHLIGHT, .55f);
+            mLowerFlipColors[1] = alpha(ColorUtils.blendARGB(leaf, GlassTokens.HIGHLIGHT, .35f), .5f);
             mLowerFlipColors[2] = alpha(leaf, .5f);
             mLowerFlipColors[3] = alpha(ColorUtils.blendARGB(leaf, on, .05f), .52f);
-            mHingeFlipColors[0] = Color.WHITE;
-            mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfaceBase, Color.WHITE, .35f);
+            mHingeFlipColors[0] = GlassTokens.HIGHLIGHT;
+            mHingeFlipColors[1] = ColorUtils.blendARGB(mSurfaceBase, GlassTokens.HIGHLIGHT, .35f);
             mHingeFlipColors[2] = ColorUtils.blendARGB(mOutlineVariant, mSurfaceBase, .5f);
             mHingeFlipColors[3] = mOutlineVariant;
             mHingeFlipColors[4] = ColorUtils.blendARGB(mOutlineVariant, mOnSurface, .18f);
@@ -1035,8 +1036,8 @@ public final class TerminalClockWidget extends View {
             canvas.drawText(String.valueOf(digit), card.centerX(), digitBaseline, mPaint);
         }
         if (foldShade > 0f) {
-            mFillPaint.setColor(Color.argb(Math.round(255f * .22f * clamp01(foldShade)),
-                0, 0, 0));
+            mFillPaint.setColor(ColorUtils.setAlphaComponent(GlassTokens.SHADE,
+                Math.round(255f * .22f * clamp01(foldShade))));
             canvas.drawRoundRect(card, dp(1.5f), dp(1.5f), mFillPaint);
         }
         canvas.restore();
@@ -1258,8 +1259,8 @@ public final class TerminalClockWidget extends View {
             canvas.drawText(String.valueOf(digit), card.centerX(), digitBaseline, mPaint);
         }
         if (foldShade > 0f) {
-            mFillPaint.setColor(Color.argb(Math.round(255f * .22f * clamp01(foldShade)),
-                0, 0, 0));
+            mFillPaint.setColor(ColorUtils.setAlphaComponent(GlassTokens.SHADE,
+                Math.round(255f * .22f * clamp01(foldShade))));
             canvas.drawRoundRect(card, dp(1f), dp(1f), mFillPaint);
         }
         canvas.restore();

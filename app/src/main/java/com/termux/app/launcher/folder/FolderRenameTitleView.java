@@ -8,6 +8,8 @@ import android.view.View;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.chrome.GlassTokens;
+
 /** Drawn title/caret only: never an editor, focus owner or InputConnection provider. */
 public final class FolderRenameTitleView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -19,7 +21,8 @@ public final class FolderRenameTitleView extends View {
         paint.setTypeface(Typeface.DEFAULT_BOLD);
         paint.setTextSize(12f * getResources().getDisplayMetrics().scaledDensity);
         // Popups draw on a dark glass; the Paint default of black would vanish into it.
-        paint.setColor(0xFFFFFFFF);
+        paint.setColor(com.google.android.material.color.MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSurface, GlassTokens.HIGHLIGHT));
         setClickable(true);
         setFocusable(false);
         setMinimumHeight(Math.round(40f * getResources().getDisplayMetrics().density));
