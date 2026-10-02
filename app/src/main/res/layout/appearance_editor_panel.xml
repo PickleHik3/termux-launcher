@@ -37,7 +37,9 @@
      highlight, larger than its 48dp target, shows while a lifted bar may be dropped on it. Row B:
      Corner radius and Margin as two equal columns, each a label above its slider; while the hidden
      tiles are open they stand in Row B's place, one line of chips (it pans sideways when five
-     elements are hidden at 360dp), so the sheet never changes height. No hint text anywhere.
+     elements are hidden at 360dp), so the sheet never changes height. While the keyboard is
+     selected its tools take the same place: the three type chips, then Key radius (a label above
+     its slider) in the rest of the row. The tiles win while both would. No hint text anywhere.
 
      Width arithmetic, dp. Sheet padding 16 + 16, so the content width is W - 32.
        Top row (LabelLarge 14sp, Roboto Medium): "Look" ≈ 30, "Layout" ≈ 43. A segment is
@@ -59,6 +61,10 @@
          padding.
        Layout Row B: two columns, one 16dp gap: 156 / 181.5 / 242.5; "Corner radius · 40 dp"
          (LabelMedium) ≈ 120 ≤ 156.
+       Keyboard tools in Row B: three 48dp-tall chips (24dp glyph + 4 + 4 + chip padding ≈ 50
+         each, 4dp apart) ≈ 158, 16 gap, Key radius in the rest: 154 / 205 / 327;
+         "Key radius · 24 dp" ≈ 105 ≤ 154. Height: label 16 + slider 48 = 64, the chips' 48
+         centred on the slider: the row's own 64.
 
      Heights, dp, without the navigation inset (the controller adds it to the bottom padding):
        top row 48 (every button keeps its 48dp touch height).
@@ -561,6 +567,85 @@
             app:chipSpacingHorizontal="8dp"
             app:singleLine="true" />
     </HorizontalScrollView>
+
+    <!-- The keyboard's tools (DECISIONS item 6): while the keyboard is selected they stand where
+         Corner radius and Margin are, which are hidden meanwhile (the hidden tiles' swap), so the
+         sheet keeps its height. The three type chips at the start, centred on Key radius's
+         slider; Key radius takes the rest of the row, a label above its slider, as tall as the
+         row it stands in. -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/layout_editor_keyboard_tools"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@id/appearance_editor_corners_label">
+
+        <com.google.android.material.chip.ChipGroup
+            android:id="@+id/layout_editor_keyboard_forms"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:chipSpacingHorizontal="4dp"
+            app:chipSpacingVertical="4dp"
+            app:layout_constraintBottom_toBottomOf="@id/layout_editor_key_radius"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="@id/layout_editor_key_radius"
+            app:selectionRequired="true"
+            app:singleLine="true"
+            app:singleSelection="true">
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/layout_editor_keyboard_form_docked"
+                style="@style/Widget.Termux.LayoutEditor.KeyboardFormChip"
+                android:contentDescription="@string/settings_layout_keyboard_form_docked"
+                app:chipIcon="@drawable/ic_symbol_keyboard_docked"
+                app:chipIconSize="24dp" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/layout_editor_keyboard_form_floating"
+                style="@style/Widget.Termux.LayoutEditor.KeyboardFormChip"
+                android:contentDescription="@string/settings_layout_keyboard_form_floating"
+                app:chipIcon="@drawable/ic_symbol_keyboard_floating"
+                app:chipIconSize="24dp" />
+
+            <com.google.android.material.chip.Chip
+                android:id="@+id/layout_editor_keyboard_form_split"
+                style="@style/Widget.Termux.LayoutEditor.KeyboardFormChip"
+                android:contentDescription="@string/settings_layout_keyboard_form_split"
+                app:chipIcon="@drawable/ic_symbol_keyboard_split"
+                app:chipIconSize="24dp" />
+        </com.google.android.material.chip.ChipGroup>
+
+        <!-- Key radius: the key caps' radius, moved here from Look mode (DECISIONS item 6). -->
+        <TextView
+            android:id="@+id/layout_editor_key_radius_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="16dp"
+            android:ellipsize="end"
+            android:importantForAccessibility="no"
+            android:maxLines="1"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toEndOf="@id/layout_editor_keyboard_forms"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/layout_editor_key_radius"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/layout_editor_key_radius_description"
+            android:stepSize="1"
+            android:valueFrom="0"
+            android:valueTo="24"
+            app:labelBehavior="gone"
+            app:layout_constraintEnd_toEndOf="@id/layout_editor_key_radius_label"
+            app:layout_constraintStart_toStartOf="@id/layout_editor_key_radius_label"
+            app:layout_constraintTop_toBottomOf="@id/layout_editor_key_radius_label"
+            app:tickVisibilityMode="hidden" />
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
     <!-- Row A's members only: Row B (Corner radius and Margin, or the hidden tiles in their place)
          is shown in code, since a Group restates its members' visibility on every layout pass. -->

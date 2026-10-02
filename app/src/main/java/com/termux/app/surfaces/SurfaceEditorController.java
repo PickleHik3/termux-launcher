@@ -32,9 +32,7 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
-import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.google.android.material.slider.Slider;
 import com.google.android.material.snackbar.Snackbar;
 
 import com.termux.R;
@@ -420,6 +418,8 @@ public final class SurfaceEditorController {
     @Nullable private FrameLayout mLayoutFrame;
     /** The views lent to Layout mode, built with the frame host. */
     @Nullable private LayoutEditorController.Views mLayoutViews;
+    /** The move control, out of the frame into the editor round it (placeMoveControl). */
+    @Nullable private MaterialButton mLayoutMove;
     /** The frame's rect in the content view, as {@code {left, top, right, bottom}}. */
     @Nullable private int[] mFrameRectInContent;
     /** The frame's corner on screen: the device radius at the frame's scale. */
@@ -461,27 +461,64 @@ public final class SurfaceEditorController {
             if (panelIndex >= 0) content.addView(frame, panelIndex, params);
             else content.addView(frame, params);
         }
+        placeMoveControl(content, frame);
         frame.animate().cancel();
         frame.setAlpha(1f);
         frame.setVisibility(View.GONE);
+        LayoutCanvasView liftCanvas = frame.findViewById(R.id.layout_editor_canvas);
+        if (liftCanvas != null)
+            // The lifted copy follows the finger over the whole editor, the sheet included.
+            liftCanvas.setLiftOverlayHost(content);
         if (mLayoutViews == null) {
             LayoutCanvasView canvas = frame.findViewById(R.id.layout_editor_canvas);
-            View tools = frame.findViewById(R.id.layout_editor_keyboard_tools);
-            ChipGroup forms = frame.findViewById(R.id.layout_editor_keyboard_forms);
-            TextView radiusLabel = frame.findViewById(R.id.layout_editor_key_radius_label);
-            Slider radius = frame.findViewById(R.id.layout_editor_key_radius);
-            MaterialButton move = frame.findViewById(R.id.layout_editor_move);
-            if (canvas == null || tools == null || forms == null || radiusLabel == null
-                || radius == null || move == null)
+            MaterialButton move = mLayoutMove;
+            if (canvas == null || move == null)
                 return;
-            // One set of views per process, like the panel: the controller binds them once.
-            mLayoutViews = new LayoutEditorController.Views(frame, canvas, tools, forms,
-                radiusLabel, radius, move, panel.orientationToggle(), panel.hiddenControl(),
-                panel.hiddenHighlight(), panel.hiddenTileGroup(), this::setHiddenTilesOpen);
+            // One set of views per process, like the panel: the controller binds them once. The
+            // keyboard's tools are the sheet's: they take its Row B while the keyboard is selected.
+            mLayoutViews = new LayoutEditorController.Views(frame, canvas, panel.keyboardTools(),
+                panel.keyboardForms(), panel.keyRadiusLabel(), panel.keyRadius(), move,
+                panel.orientationToggle(), panel.hiddenControl(), panel.hiddenHighlight(),
+                panel.hiddenTileGroup(), new LayoutEditorController.TilesHost() {
+                    @Override public void setHiddenTilesOpen(boolean open) {
+                        SurfaceEditorController.this.setHiddenTilesOpen(open);
+                    }
+
+                    @Override public void setKeyboardToolsShown(boolean shown) {
+                        if (mPanel != null)
+                            mPanel.setKeyboardToolsShown(shown);
+                    }
+                });
         }
         layout.attach(mLayoutViews);
         layout.setKeyRadius(mKeyRadius);
         positionLayoutFrame();
+    }
+
+    /**
+     * The move control out of the frame, which clips to the phone's outline, into the editor round
+     * it, just above the frame: so it can stand in the gutter outside the phone and never covers
+     * the canvas (DECISIONS items 4 and 5). It stays under the bottom area.
+     */
+    private void placeMoveControl(@NonNull ViewGroup content, @NonNull FrameLayout frame) {
+        MaterialButton move = mLayoutMove;
+        if (move == null) {
+            move = frame.findViewById(R.id.layout_editor_move);
+            if (move == null)
+                return;
+            mLayoutMove = move;
+        }
+        if (move.getParent() == content
+            && content.indexOfChild(move) == content.indexOfChild(frame) + 1)
+            return;
+        ViewGroup.LayoutParams old = move.getLayoutParams();
+        int width = old != null ? old.width : ViewGroup.LayoutParams.WRAP_CONTENT;
+        int height = old != null ? old.height : ViewGroup.LayoutParams.WRAP_CONTENT;
+        if (move.getParent() instanceof ViewGroup)
+            ((ViewGroup) move.getParent()).removeView(move);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(width, height,
+            Gravity.TOP | Gravity.LEFT);
+        content.addView(move, content.indexOfChild(frame) + 1, params);
     }
 
     /** The bottom area's Row B swapped for the hidden tiles, or back (DECISIONS item 3). */
@@ -574,6 +611,9 @@ public final class SurfaceEditorController {
             }
         } else {
             positionTargets();
+            // The move control stands outside the frame, so the frame's fade does not take it.
+            if (mLayoutMove != null)
+                mLayoutMove.setVisibility(View.GONE);
         }
         fadeLayoutFrame(layout, animate, delayMs);
         syncDirty();

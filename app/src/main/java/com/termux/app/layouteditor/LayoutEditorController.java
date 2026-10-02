@@ -4,11 +4,11 @@ import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.RectF;
-import android.util.TypedValue;
 import android.view.Menu;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -16,6 +16,9 @@ import androidx.annotation.OptIn;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.widget.PopupMenu;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.google.android.material.badge.BadgeDrawable;
 import com.google.android.material.badge.BadgeUtils;
@@ -64,7 +67,7 @@ import java.util.Locale;
  * cancels. A tap selects an element: one outline along its own shape, its valid edges outlined,
  * the move control outside it, whose menu sends it to an edge or hides it, and on the dock, the
  * keyboard and Home's grid a handle that resizes it with a readout while it is held. The keyboard,
- * selected, shows its type chips and Key radius above it. Eye-off carries the count of hidden
+ * selected, shows its type chips and Key radius in the sheet's Row B. Eye-off carries the count of hidden
  * elements and opens their tiles in the sheet; a tile brings its element back to the edge it left,
  * or is dragged onto the canvas to an edge of the user's choosing. Every write goes straight
  * through, so the live place under the canvas follows every edit made in the orientation the phone
@@ -150,9 +153,16 @@ public final class LayoutEditorController {
         }
     }
 
-    /** The bottom area's half of the hidden tiles: Row B swapped for them, and back. */
+    /**
+     * The bottom area's half of Row B's swaps: the hidden tiles in Corner radius and Margin's
+     * place, and back; and the keyboard's tools (its type chips and Key radius) in the same place
+     * while the keyboard is selected. Either way the sheet keeps its height.
+     */
     public interface TilesHost {
         void setHiddenTilesOpen(boolean open);
+
+        /** The keyboard's tools in Row B's place while {@code shown}, Corner radius and Margin back otherwise. */
+        default void setKeyboardToolsShown(boolean shown) {}
     }
 
     /**
@@ -173,15 +183,16 @@ public final class LayoutEditorController {
     }
 
     /**
-     * The views the hosting editor lends Layout mode. The canvas, the move control and the
-     * keyboard's tools stand in the frame; the orientation toggle, eye-off with its highlight and
-     * the hidden tiles stand in the bottom area.
+     * The views the hosting editor lends Layout mode. The canvas stands in the frame and the move
+     * control over the editor round it, so it may stand in the gutter outside the phone; the
+     * orientation toggle, eye-off with its highlight, the hidden tiles and the keyboard's tools
+     * stand in the bottom area.
      */
     public static final class Views {
         /** What the canvas and what stands over it stand in: the frame's own rect. */
         @NonNull final ViewGroup canvasHost;
         @NonNull final LayoutCanvasView canvas;
-        /** The keyboard's tools: the type chips and Key radius, on one card. */
+        /** The keyboard's tools: the type chips and Key radius, in the sheet's Row B. */
         @NonNull final View keyboardTools;
         @NonNull final ChipGroup keyboardForms;
         @NonNull final TextView keyRadiusLabel;
@@ -384,7 +395,7 @@ public final class LayoutEditorController {
             views.canvas.cancelLift();
             views.canvas.setSelectedBlock(null);
             views.canvas.setHandleReadout(null);
-            views.keyboardTools.setVisibility(View.GONE);
+            views.tilesHost.setKeyboardToolsShown(false);
             views.moveControl.setVisibility(View.GONE);
             dismissMoveMenu();
             setTilesOpen(views, false);
@@ -436,6 +447,9 @@ public final class LayoutEditorController {
         views.canvas.setOnCanvasEditListener(new LayoutCanvasView.OnCanvasEditListener() {
             @Override public void onSelectionChanged(@Nullable LayoutCanvasView.Block selected) {
                 dismissMoveMenu();
+                // The keyboard's tools stand in Row B's place: the tiles give it up to them.
+                if (showsKeyRadius(selected) && mTilesOpen)
+                    setTilesOpen(views, false);
                 syncKeyboardTools(views);
                 syncMoveControl(views);
             }
@@ -689,9 +703,13 @@ public final class LayoutEditorController {
 
     /**
      * The move control (DECISIONS items 4 and 5): a 48dp icon button outside the selected element,
-     * while it has anywhere to go and nothing is in the air. Hidden otherwise.
+     * while it has anywhere to go and nothing is in the air. Hidden otherwise. It stands in the
+     * gutter outside the phone where there is room ({@link #syncMoveControlRoom}), so it covers
+     * neither the bar nor anything else on the canvas.
      */
     private void syncMoveControl(@NonNull Views views) {
+        if (mPlan != null && !views.canvas.isLifting())
+            syncMoveControlRoom(views);
         RectF rect = mPlan == null || views.canvas.isLifting() ? null
             : views.canvas.moveControlRect();
         MaterialButton control = views.moveControl;
@@ -705,11 +723,71 @@ public final class LayoutEditorController {
             control.setContentDescription(mHost.context().getString(
                 R.string.layout_editor_move_element, views.canvas.chipName(selected)));
         }
-        // The canvas fills the host from its origin, so its rect is the host's.
-        control.setTranslationX(rect.left + views.canvas.getLeft());
-        control.setTranslationY(rect.top + views.canvas.getTop());
+        // The control may stand in another parent than the canvas (the editor round the frame):
+        // the canvas's rect is taken there through their places in the window.
+        float[] at = canvasOriginIn(views.canvas, control);
+        control.setTranslationX(at[0] + rect.left - control.getLeft());
+        control.setTranslationY(at[1] + rect.top - control.getTop());
         if (control.getVisibility() != View.VISIBLE)
             control.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * Tells the canvas where the move control may stand outside the phone: the control's own
+     * parent (the editor round the frame) in the canvas's coordinates, past the system bars and
+     * above the sheet. While the control stands in the frame itself there is no such room.
+     */
+    private void syncMoveControlRoom(@NonNull Views views) {
+        LayoutCanvasView canvas = views.canvas;
+        ViewParent parent = views.moveControl.getParent();
+        if (!(parent instanceof View) || parent == views.canvasHost || !canvas.isAttachedToWindow()) {
+            canvas.setMoveControlRoom(null);
+            return;
+        }
+        View area = (View) parent;
+        int[] areaAt = new int[2];
+        int[] canvasAt = new int[2];
+        area.getLocationInWindow(areaAt);
+        canvas.getLocationInWindow(canvasAt);
+        float left = areaAt[0];
+        float top = areaAt[1];
+        float right = left + area.getWidth();
+        float bottom = top + area.getHeight();
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(area);
+        View root = area.getRootView();
+        if (insets != null && root != null) {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
+                | WindowInsetsCompat.Type.displayCutout());
+            left = Math.max(left, bars.left);
+            top = Math.max(top, bars.top);
+            right = Math.min(right, root.getWidth() - bars.right);
+            bottom = Math.min(bottom, root.getHeight() - bars.bottom);
+        }
+        ViewParent sheetParent = views.hiddenControl.getParent();
+        if (sheetParent instanceof View && ((View) sheetParent).isShown()) {
+            int[] sheetAt = new int[2];
+            ((View) sheetParent).getLocationInWindow(sheetAt);
+            bottom = Math.min(bottom, sheetAt[1]);
+        }
+        if (right <= left || bottom <= top) {
+            canvas.setMoveControlRoom(null);
+            return;
+        }
+        canvas.setMoveControlRoom(new RectF(left - canvasAt[0], top - canvasAt[1],
+            right - canvasAt[0], bottom - canvasAt[1]));
+    }
+
+    /** Where {@code canvas}'s origin stands in {@code view}'s parent, through the window. */
+    @NonNull
+    private static float[] canvasOriginIn(@NonNull View canvas, @NonNull View view) {
+        ViewParent parent = view.getParent();
+        if (parent == canvas.getParent() || !(parent instanceof View))
+            return new float[] {canvas.getLeft(), canvas.getTop()};
+        int[] canvasAt = new int[2];
+        int[] parentAt = new int[2];
+        canvas.getLocationInWindow(canvasAt);
+        ((View) parent).getLocationInWindow(parentAt);
+        return new float[] {canvasAt[0] - parentAt[0], canvasAt[1] - parentAt[1]};
     }
 
     /**
@@ -951,9 +1029,6 @@ public final class LayoutEditorController {
         PlaceLayout.KeyboardForm.DOCKED, PlaceLayout.KeyboardForm.FLOATING,
         PlaceLayout.KeyboardForm.SPLIT};
 
-    /** The air between the keyboard's card and its tools. */
-    private static final float TOOLS_GAP_DP = 6f;
-
     /** Whether Key radius shows: in Layout mode, with the keyboard selected (DECISIONS item 6). */
     @VisibleForTesting
     static boolean showsKeyRadius(@Nullable LayoutCanvasView.Block selected) {
@@ -961,14 +1036,11 @@ public final class LayoutEditorController {
     }
 
     /**
-     * The keyboard's tools card and its chips restyled (DECISIONS items 6 and 12): a tonal card
-     * at the theme's medium corner; a checked chip in primaryContainer with its glyph in
-     * onPrimaryContainer.
+     * The keyboard's type chips restyled (DECISIONS items 6 and 12): a checked chip in
+     * primaryContainer with its glyph in onPrimaryContainer. They stand on the sheet's own
+     * surface, in Row B, with no card of their own.
      */
     private void paintKeyboardTools(@NonNull Views views) {
-        views.keyboardTools.setBackground(EditorM3.surface(views.keyboardTools,
-            com.google.android.material.R.attr.shapeAppearanceCornerMedium,
-            com.google.android.material.R.attr.colorSurfaceContainerHigh));
         int container = EditorM3.color(views.keyboardForms,
             com.google.android.material.R.attr.colorPrimaryContainer);
         int onContainer = EditorM3.color(views.keyboardForms,
@@ -1011,9 +1083,10 @@ public final class LayoutEditorController {
     }
 
     /**
-     * The keyboard's tools (spec §3.5, DECISIONS item 6): shown above the keyboard while it is
-     * selected, with the shown orientation's form checked and Key radius at its stored value, and
-     * gone on deselect.
+     * The keyboard's tools (spec §3.5, DECISIONS item 6): while the keyboard is selected they take
+     * the sheet's Row B, in Corner radius and Margin's place (the hidden tiles' swap), with the
+     * shown orientation's form checked and Key radius at its stored value; on deselect the row
+     * comes back. The sheet's height never changes, and nothing stands over the canvas.
      */
     private void syncKeyboardTools(@NonNull Views views) {
         LayoutEditorPlan plan = mPlan;
@@ -1021,7 +1094,7 @@ public final class LayoutEditorController {
         boolean shown = plan != null && keyboard != null
             && showsKeyRadius(views.canvas.selectedBlock()) && !views.canvas.isLifting();
         if (!shown) {
-            views.keyboardTools.setVisibility(View.GONE);
+            views.tilesHost.setKeyboardToolsShown(false);
             return;
         }
         mRestatingToggle = true;
@@ -1049,42 +1122,7 @@ public final class LayoutEditorController {
         } finally {
             mRestatingToggle = false;
         }
-        views.keyboardTools.setVisibility(View.VISIBLE);
-        placeKeyboardTools(views, keyboard);
-    }
-
-    /**
-     * Above the keyboard's leading end, clear of the height handle on its middle and of the move
-     * control at its trailing end; over the keyboard's top where there is no room above it. Kept
-     * inside the frame.
-     */
-    private void placeKeyboardTools(@NonNull Views views, @NonNull RectF keyboard) {
-        View tools = views.keyboardTools;
-        int hostWidth = views.canvasHost.getWidth() > 0 ? views.canvasHost.getWidth()
-            : views.canvas.getWidth();
-        int hostHeight = views.canvasHost.getHeight() > 0 ? views.canvasHost.getHeight()
-            : views.canvas.getHeight();
-        int unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
-        views.keyboardForms.measure(unspecified, unspecified);
-        int chipsWidth = views.keyboardForms.getMeasuredWidth();
-        int width = chipsWidth + tools.getPaddingLeft() + tools.getPaddingRight();
-        ViewGroup.LayoutParams params = tools.getLayoutParams();
-        if (params != null && params.width != width) {
-            // The card is as wide as its chips; Key radius takes that width under them.
-            params.width = width;
-            tools.setLayoutParams(params);
-        }
-        tools.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-            unspecified);
-        float height = tools.getMeasuredHeight();
-        float gap = dpToPx(TOOLS_GAP_DP);
-        float x = keyboard.left + gap;
-        float y = keyboard.top - height - gap;
-        if (y < 0f) y = keyboard.top + gap;
-        float maxX = Math.max(0f, hostWidth - width);
-        float maxY = Math.max(0f, hostHeight - height);
-        tools.setTranslationX(Math.max(0f, Math.min(maxX, x)));
-        tools.setTranslationY(Math.max(0f, Math.min(maxY, y)));
+        views.tilesHost.setKeyboardToolsShown(true);
     }
 
     private void onKeyboardFormPicked(int checkedId) {
@@ -1097,10 +1135,5 @@ public final class LayoutEditorController {
                 return;
             }
         }
-    }
-
-    private float dpToPx(float dp) {
-        return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp,
-            mHost.context().getResources().getDisplayMetrics());
     }
 }

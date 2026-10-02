@@ -52,23 +52,12 @@ public class LayoutModeViewsTest {
     }
 
     @Test
-    public void theFrameCarriesTheCanvasTheMoveControlAndTheKeyboardsTools() {
+    public void theFrameCarriesTheCanvasAndTheMoveControl() {
         View frame = inflate(R.layout.layout_editor_frame);
         assertTrue("the frame is what the canvas stands in", frame instanceof FrameLayout);
         assertTrue(frame.findViewById(R.id.layout_editor_canvas) instanceof LayoutCanvasView);
-        View forms = frame.findViewById(R.id.layout_editor_keyboard_forms);
-        assertTrue(forms instanceof ChipGroup);
-        assertEquals("docked, floating, split", 3, ((ChipGroup) forms).getChildCount());
-        assertNotNull(frame.findViewById(R.id.layout_editor_keyboard_form_docked));
-        assertNotNull(frame.findViewById(R.id.layout_editor_keyboard_form_floating));
-        assertNotNull(frame.findViewById(R.id.layout_editor_keyboard_form_split));
-        // Key radius moved here from Look mode, beside the type chips (DECISIONS item 6).
-        View tools = frame.findViewById(R.id.layout_editor_keyboard_tools);
-        View radius = frame.findViewById(R.id.layout_editor_key_radius);
-        assertTrue(radius instanceof Slider);
-        assertTrue("Key radius stands with the chips", isInside(radius, tools));
-        assertTrue(isInside(forms, tools));
-        assertEquals("gone until the keyboard is selected", View.GONE, tools.getVisibility());
+        assertEquals("the keyboard's tools are the sheet's now, not a card over the canvas",
+            null, frame.findViewById(R.id.layout_editor_keyboard_tools));
         // The move control: a 48dp icon button, gone until a bar is selected (items 4 and 5).
         View move = frame.findViewById(R.id.layout_editor_move);
         assertTrue(move instanceof MaterialButton);
@@ -222,6 +211,61 @@ public class LayoutModeViewsTest {
         assertFalse(panel.isRow2Shown());
         assertEquals(View.GONE, row2.getVisibility());
         assertFalse(blur.isEnabled());
+    }
+
+    /** The keyboard's tools are in the sheet: its type chips and Key radius, gone until selected. */
+    @Test
+    public void theSheetCarriesTheKeyboardsTools() {
+        View panel = inflate(R.layout.appearance_editor_panel);
+        View forms = panel.findViewById(R.id.layout_editor_keyboard_forms);
+        assertTrue(forms instanceof ChipGroup);
+        assertEquals("docked, floating, split", 3, ((ChipGroup) forms).getChildCount());
+        assertNotNull(panel.findViewById(R.id.layout_editor_keyboard_form_docked));
+        assertNotNull(panel.findViewById(R.id.layout_editor_keyboard_form_floating));
+        assertNotNull(panel.findViewById(R.id.layout_editor_keyboard_form_split));
+        // Key radius moved here from Look mode, beside the type chips (DECISIONS item 6).
+        View tools = panel.findViewById(R.id.layout_editor_keyboard_tools);
+        View radius = panel.findViewById(R.id.layout_editor_key_radius);
+        assertTrue(radius instanceof Slider);
+        assertTrue("Key radius stands with the chips", isInside(radius, tools));
+        assertTrue(isInside(forms, tools));
+        assertEquals("gone until the keyboard is selected", View.GONE, tools.getVisibility());
+    }
+
+    /** The keyboard's tools take Row B's place while it is selected; the sheet keeps its height. */
+    @Test
+    public void theKeyboardsToolsStandInRowBsPlaceWithoutMovingTheSheet() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ContextThemeWrapper themed = new ContextThemeWrapper(activity,
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
+        View root = panel.view();
+        int width = Math.round(360 * root.getResources().getDisplayMetrics().density);
+        panel.showLayoutMode();
+        int closed = panel.measureFor(true, width);
+        View tools = root.findViewById(R.id.layout_editor_keyboard_tools);
+        View corners = root.findViewById(R.id.appearance_editor_corners);
+
+        panel.setKeyboardToolsShown(true);
+        assertTrue(panel.isKeyboardToolsShown());
+        assertEquals(View.VISIBLE, tools.getVisibility());
+        assertEquals("kept for its height, not shown", View.INVISIBLE, corners.getVisibility());
+        assertFalse(corners.isEnabled());
+        assertEquals("the sheet does not move", closed, panel.measureFor(true, width));
+        assertEquals(closed, panel.measureTallest(true, width));
+
+        panel.setHiddenTilesOpen(true);
+        assertEquals("the tiles win while both would", View.GONE, tools.getVisibility());
+        panel.setHiddenTilesOpen(false);
+        assertEquals(View.VISIBLE, tools.getVisibility());
+
+        panel.showAppearanceMode();
+        assertEquals("Appearance never shows them", View.GONE, tools.getVisibility());
+        panel.showLayoutMode();
+        panel.setKeyboardToolsShown(false);
+        assertEquals(View.GONE, tools.getVisibility());
+        assertEquals("the row comes back", View.VISIBLE, corners.getVisibility());
+        assertTrue(corners.isEnabled());
     }
 
     /** The hidden tiles stand in Corner radius and Margin's place, and the sheet keeps its height. */
