@@ -301,7 +301,7 @@ public class X11PaneFrameTapTest {
         List<String> log = new ArrayList<>();
         page.setHost(new X11PaneFrame.Host() {
             @Override public void startDisplay() {}
-            @Override public void openSurfaceEditor() { log.add("appearance"); }
+            @Override public void openWallpaperPicker() { log.add("wallpaper"); }
         });
         hold(page, WIDTH - 2f, 2f);
         assertTrue(page.isControlsTabShown());
@@ -311,14 +311,14 @@ public class X11PaneFrameTapTest {
         tab.tabBounds(bounds);
         float y = bounds.centerY();
         for (float x = bounds.left; x <= bounds.right; x += 1f) {
-            if (tab.actionAt(x, y) != X11PaneFrame.ACTION_EDITOR) continue;
+            if (tab.actionAt(x, y) != X11PaneFrame.ACTION_WALLPAPER) continue;
             touch(page, MotionEvent.ACTION_DOWN, x, y);
             touch(page, MotionEvent.ACTION_UP, x, y);
             settle();
-            assertEquals(Arrays.asList("appearance"), log);
+            assertEquals(Arrays.asList("wallpaper"), log);
             assertFalse(page.isControlsTabShown());
             return;
         }
-        throw new AssertionError("no sliders button on the tab");
+        throw new AssertionError("no wallpaper button on the tab");
     }
 }

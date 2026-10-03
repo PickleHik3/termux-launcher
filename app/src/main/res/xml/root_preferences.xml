@@ -14,27 +14,14 @@
 
     <PreferenceCategory app:title="@string/settings_root_launcher_header">
 
+        <!-- One door to wallpaper, Look, Layout and the icon pack: opens the wallpaper picker
+             over the live launcher, in code. The Look page rows stay searchable under it. -->
         <Preference
-            app:key="appearance"
-            app:icon="@drawable/ic_symbol_palette"
-            app:title="@string/settings_destination_appearance"
-            app:summary="@string/settings_destination_appearance_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment" />
-
-        <!-- The Appearance editor, over the live launcher (SPEC §3.1); opened in code. -->
-        <Preference
-            app:key="appearance_editor"
+            app:key="wallpaper_style"
             app:icon="@drawable/ic_symbol_palette"
             app:persistent="false"
-            app:title="@string/settings_appearance_editor_title"
-            app:summary="@string/settings_appearance_editor_summary" />
-        <!-- The Layout editor's Settings door (spec §3.1): no page of its own, it brings the
-             launcher forward with the editor over the place on screen. -->
-        <Preference
-            app:key="layout_editor"
-            app:icon="@drawable/ic_symbol_grid_view"
-            app:title="@string/settings_destination_layout_editor"
-            app:summary="@string/settings_destination_layout_editor_summary" />
+            app:title="@string/settings_destination_wallpaper_style"
+            app:summary="@string/settings_destination_wallpaper_style_summary" />
 
         <Preference
             app:key="terminal"

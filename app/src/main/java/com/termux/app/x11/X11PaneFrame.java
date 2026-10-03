@@ -70,11 +70,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/X11_Display.md#turn-it-on";
 
     private static final int ACTION_HELP = 2;
-    /** The sliders, which open Appearance; package-private so a test can find the button. */
-    @androidx.annotation.VisibleForTesting static final int ACTION_EDITOR = 3;
-    /** The grid beside them, which opens Layout. */
-    @androidx.annotation.VisibleForTesting static final int ACTION_LAYOUT = 4;
-    /** The wallpaper glyph, which opens the in-app wallpaper picker. */
+    /** "Wallpaper & style", which opens the wallpaper picker; package-private so a test can find it. */
     @androidx.annotation.VisibleForTesting static final int ACTION_WALLPAPER = 5;
     /** Minimal mode on or off for the Display place; the glyph shows which. */
     @androidx.annotation.VisibleForTesting static final int ACTION_MINIMAL = 6;
@@ -268,12 +264,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
                         : R.string.pane_controls_enter_minimal_mode)),
             PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS,
                 getContext().getString(R.string.pane_controls_open_settings)),
-            PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE,
-                getContext().getString(R.string.appearance_editor_corner_tab_description)),
-            PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT,
-                getContext().getString(R.string.corner_tab_layout_description)),
-            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.WALLPAPER,
-                getContext().getString(R.string.pane_controls_change_wallpaper)),
+            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.WALLPAPER_STYLE,
+                getContext().getString(R.string.pane_controls_wallpaper_style)),
             PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
                 getContext().getString(R.string.pane_controls_help)));
         mControls.setListener(id -> {
@@ -281,8 +273,6 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             // Help first, the tab second: help reads the ? it was opened from while it is still
             // out, and puts the tab away itself.
             if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
-            else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
-            else if (id == ACTION_LAYOUT) { dismissControls(); mHost.openLayoutEditor(); }
             else if (id == ACTION_WALLPAPER) { dismissControls(); mHost.openWallpaperPicker(); }
             else if (id == ACTION_POWER) mHost.toggleDisplayPower();
             else if (id == ACTION_MINIMAL) { dismissControls(); mHost.toggleMinimalMode(); }

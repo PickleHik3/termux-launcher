@@ -53,8 +53,8 @@ public class WidgetPaneFrameTapTest {
     private static final int HEIGHT = 800;
     /** The square each corner keeps, the same one a terminal pane holds. */
     private static final float CORNER_DP = CornerZones.PANE_SIZE_DP;
-    /** The resting tab: seven 30dp buttons 8dp apart, 5dp of padding, flush with the trailing edge. */
-    private static final float TAB_WIDTH_DP = 268f;
+    /** The resting tab: five 30dp buttons 8dp apart, 5dp of padding, flush with the trailing edge. */
+    private static final float TAB_WIDTH_DP = 192f;
     private static final float TAB_INSET_DP = 0f;
     /** One button and the gap after it. */
     private static final float TAB_STEP_DP = 38f;
@@ -128,24 +128,14 @@ public class WidgetPaneFrameTapTest {
         return buttonX(activity, 1);
     }
 
-    /** The third button: the sliders that open Appearance. */
-    private static float slidersX(Activity activity) {
+    /** The third button: "Wallpaper & style", which opens the wallpaper picker. */
+    private static float wallpaperX(Activity activity) {
         return buttonX(activity, 2);
     }
 
-    /** The fourth button: the grid that opens Layout, one button and gap further along. */
-    private static float layoutX(Activity activity) {
-        return buttonX(activity, 3);
-    }
-
-    /** The fifth button: the wallpaper glyph, one button and gap past Layout. */
-    private static float wallpaperX(Activity activity) {
-        return buttonX(activity, 4);
-    }
-
-    /** The sixth button: minimal mode, the same door every place's tab carries. */
+    /** The fourth button: minimal mode, the same door every place's tab carries. */
     private static float minimalX(Activity activity) {
-        return buttonX(activity, 5);
+        return buttonX(activity, 3);
     }
 
     private static float tabCentreY(Activity activity) {
@@ -383,7 +373,7 @@ public class WidgetPaneFrameTapTest {
     }
 
     @Test
-    public void theTabRunsTheEditPencilAndTheAppearanceSliders() {
+    public void theTabRunsTheEditPencilAndTheWallpaperAndStyleButton() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls();
@@ -392,9 +382,9 @@ public class WidgetPaneFrameTapTest {
         holdCorner(page);
         tap(page, pencilX(activity), tabCentreY(activity));
         holdCorner(page);
-        tap(page, slidersX(activity), tabCentreY(activity));
+        tap(page, wallpaperX(activity), tabCentreY(activity));
 
-        assertEquals(Arrays.asList("edit", "appearance"), calls.log);
+        assertEquals(Arrays.asList("edit", "wallpaper"), calls.log);
     }
 
     /**
@@ -452,12 +442,11 @@ public class WidgetPaneFrameTapTest {
     }
 
     /**
-     * The page's three editor doors, side by side: the sliders open Appearance, the grid beside
-     * them opens Layout, and the wallpaper glyph past that opens the wallpaper picker — each one
-     * puts the tab away behind it.
+     * The page's one editor door, "Wallpaper & style": it opens the wallpaper picker, which leads
+     * on to the Look and Layout editors, and puts the tab away behind it.
      */
     @Test
-    public void theSlidersOpenAppearanceAndTheGridOpensLayout() {
+    public void theWallpaperAndStyleButtonOpensThePicker() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls();
@@ -465,18 +454,8 @@ public class WidgetPaneFrameTapTest {
         holdCorner(page);
         RectF bounds = new RectF();
         page.controlsTab().tabBounds(bounds);
-        tap(page, slidersX(activity), bounds.centerY());
-        assertEquals(Collections.singletonList("appearance"), calls.log);
-        assertFalse(page.isControlsTabShown());
-
-        holdCorner(page);
-        tap(page, layoutX(activity), bounds.centerY());
-        assertEquals(Arrays.asList("appearance", "layout"), calls.log);
-        assertFalse(page.isControlsTabShown());
-
-        holdCorner(page);
         tap(page, wallpaperX(activity), bounds.centerY());
-        assertEquals(Arrays.asList("appearance", "layout", "wallpaper"), calls.log);
+        assertEquals(Collections.singletonList("wallpaper"), calls.log);
         assertFalse(page.isControlsTabShown());
     }
 
@@ -507,7 +486,7 @@ public class WidgetPaneFrameTapTest {
     }
 
     /**
-     * The + between the pencil and the sliders: another widgets page. Like the tick and the cross
+     * The + between the pencil and the wallpaper button: another widgets page. Like the tick and the cross
      * it is the grid's own coordinator that answers it, so the page's host hears nothing.
      */
     @Test
@@ -572,7 +551,7 @@ public class WidgetPaneFrameTapTest {
     }
 
     @Test
-    public void theEditingTabTakesTheCornerFromThePencilAndTheSliders() {
+    public void theEditingTabTakesTheCornerFromThePencilAndTheWallpaperButton() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         WidgetPaneFrame page = page(activity);
         Calls calls = new Calls();
@@ -582,8 +561,8 @@ public class WidgetPaneFrameTapTest {
         page.applyWidgetEditing(true);
         Shadows.shadowOf(Looper.getMainLooper()).idleFor(400, TimeUnit.MILLISECONDS);
         tap(page, pencilX(activity), tabCentreY(activity));
-        tap(page, slidersX(activity), tabCentreY(activity));
-        assertEquals("neither the pencil nor the sliders is on the editing tab",
+        tap(page, wallpaperX(activity), tabCentreY(activity));
+        assertEquals("neither the pencil nor the wallpaper button is on the editing tab",
             Collections.emptyList(), calls.log);
 
         // Leaving editing puts it away and gives the resting buttons back.

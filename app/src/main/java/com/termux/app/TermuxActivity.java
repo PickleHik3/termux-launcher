@@ -247,6 +247,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         "com.termux.app.extra.DOCK_TUNING";
     public static final String EXTRA_SURFACE_EDITOR_SECTION =
         "com.termux.app.extra.DOCK_TUNING_SECTION";
+    /** Opens the wallpaper picker page over the live launcher: Settings' one "Wallpaper & style" door. */
+    public static final String EXTRA_WALLPAPER_STYLE =
+        "com.termux.app.extra.WALLPAPER_STYLE";
     /** Opens the Layout editor over the live place, from any door that sends an intent. */
     public static final String EXTRA_LAYOUT_EDITOR =
         "com.termux.app.extra.LAYOUT_EDITOR";
@@ -1654,6 +1657,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             handleInAppKeyboardHeightAdjustIntent(getIntent());
             handleSurfaceEditorIntent(getIntent());
             handleLayoutEditorIntent(getIntent());
+            handleWallpaperStyleIntent(getIntent());
             handleEditExtraKeysIntent(getIntent());
             handleShowHelpIntent(getIntent());
             handleHelpScreenActionIntent(getIntent());
@@ -2073,6 +2077,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         handleInAppKeyboardHeightAdjustIntent(intent);
         handleSurfaceEditorIntent(intent);
         handleLayoutEditorIntent(intent);
+        handleWallpaperStyleIntent(intent);
         handleEditExtraKeysIntent(intent);
         handleShowHelpIntent(intent);
         handleHelpScreenActionIntent(intent);
@@ -10730,6 +10735,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSurfaceEditor.enter(initialSection);
     }
 
+    /** Settings' "Wallpaper & style" row: the launcher comes forward with the wallpaper picker open. */
+    private void handleWallpaperStyleIntent(@Nullable Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_WALLPAPER_STYLE, false))
+            return;
+        intent.removeExtra(EXTRA_WALLPAPER_STYLE);
+        openWallpaperPicker();
+    }
+
     /**
      * The place a Layout editor intent names, or null for none. Anything the wall does not have a
      * place for is not an error: the editor opens on the place on screen, which is what an unnamed
@@ -14066,17 +14079,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         items.add(new TerminalActionItem(CONTEXT_MENU_COMMAND_PALETTE_ID, getString(R.string.action_command_palette)));
         items.add(new TerminalActionItem(CONTEXT_MENU_SELECT_URL_ID, getString(R.string.action_select_url)));
         items.add(new TerminalActionItem(CONTEXT_MENU_SHARE_TRANSCRIPT_ID, getString(R.string.action_share_transcript)));
-        items.add(new TerminalActionItem(CONTEXT_MENU_SET_WALLPAPER_ID, getString(R.string.action_set_background_image)));
+        // One door to the wallpaper, the Look and the Layout, the same one the corner tab carries.
+        items.add(new TerminalActionItem(CONTEXT_MENU_SET_WALLPAPER_ID, getString(R.string.action_wallpaper_style)));
         items.add(new TerminalActionItem(
             CONTEXT_MENU_REMOVE_WALLPAPER_ID,
             getString(shouldUseWallpaperPassthroughMode()
                 ? R.string.action_disable_background_image
                 : R.string.action_enable_background_image)
         ));
-        // The two doors the corner tabs carry, for anyone who never found a corner: how the place
-        // looks, and where its things sit.
-        items.add(new TerminalActionItem(CONTEXT_MENU_SURFACE_EDITOR_ID, getString(R.string.action_appearance_editor)));
-        items.add(new TerminalActionItem(CONTEXT_MENU_LAYOUT_EDITOR_ID, getString(R.string.action_layout_editor)));
         // Only when the companion is installed: a row that opens the Appearance settings under the
         // name of a plugin the device does not have is a broken promise, not a shortcut.
         if (isTerminalStylingAvailable()) {

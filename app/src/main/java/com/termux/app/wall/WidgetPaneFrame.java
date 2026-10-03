@@ -77,8 +77,6 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private static final int ACTION_EDIT = 1;
     private static final int ACTION_GRID_SIZE = 2;
     private static final int ACTION_HELP = 3;
-    private static final int ACTION_EDITOR = 4;
-    private static final int ACTION_LAYOUT = 5;
     /** The tick: keep what editing did. */
     private static final int ACTION_COMMIT = 6;
     /** The cross: put it back the way it was. */
@@ -224,12 +222,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             PaneControlsView.Action.drawn(ACTION_ADD_PAGE, WidgetPaneFrame::drawPlusMark,
                 PaneControlsView.TINT_PRIMARY,
                 getContext().getString(R.string.pane_controls_add_page)),
-            PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE,
-                getContext().getString(R.string.appearance_editor_corner_tab_description)),
-            PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT,
-                getContext().getString(R.string.corner_tab_layout_description)),
-            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.WALLPAPER,
-                getContext().getString(R.string.pane_controls_change_wallpaper)),
+            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.WALLPAPER_STYLE,
+                getContext().getString(R.string.pane_controls_wallpaper_style)),
             // Minimal mode is one mode for every place, so Home carries the same door in and
             // out as the terminal and the display; the mark reads the state as it draws.
             PaneControlsView.Action.drawn(ACTION_MINIMAL, com.termux.app.chrome.MinimalModeGlyph
@@ -327,8 +321,6 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         }
         if (mHost == null) return;
         if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
-        else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
-        else if (id == ACTION_LAYOUT) { dismissControls(); mHost.openLayoutEditor(); }
         else if (id == ACTION_WALLPAPER) { dismissControls(); mHost.openWallpaperPicker(); }
         else if (id == ACTION_MINIMAL) { dismissControls(); mHost.toggleMinimalMode(); }
         else if (id == ACTION_EDIT) mHost.editWidgets();

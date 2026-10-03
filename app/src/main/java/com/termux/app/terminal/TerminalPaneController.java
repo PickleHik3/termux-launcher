@@ -189,11 +189,11 @@ public class TerminalPaneController {
         default void showHelpOverlay() {}
         /** Those controls are going away again, however the user asked for that. */
         default void onPaneControlsDismissed() {}
-        /** The lone pane's corner asked for the Appearance editor. */
+        /** The pane corner's old Appearance door; no tab carries it now, the picker leads there. */
         default void openSurfaceEditor() {}
-        /** The lone pane's corner asked for the Layout editor. */
+        /** The pane corner's old Layout door; no tab carries it now, the picker leads there. */
         default void openLayoutEditor() {}
-        /** The lone pane's corner asked for the in-app wallpaper picker. */
+        /** The lone pane's corner asked for "Wallpaper & style": the in-app wallpaper picker. */
         default void openWallpaperPicker() {}
         /** The launcher's settings, asked for from the pane corner's tab. */
         default void openSettings() {}
@@ -3573,15 +3573,11 @@ public class TerminalPaneController {
         private static final int ACTION_MOVE_PANE = 0;
         private static final int ACTION_MAXIMIZE = 1;
         private static final int ACTION_CLOSE = 2;
-        /** Open the Appearance editor on this place. */
-        private static final int ACTION_SURFACE_EDITOR = 3;
         private static final int ACTION_HELP = 4;
-        /** Open the Layout editor on this place. */
-        private static final int ACTION_LAYOUT_EDITOR = 5;
         private static final int ACTION_SETTINGS = 6;
         /** Turn automatic tiling on or off. */
         private static final int ACTION_AUTO_TILING = 7;
-        /** Open the in-app wallpaper picker. */
+        /** Open the wallpaper picker, the one door to wallpaper, Look and Layout. */
         private static final int ACTION_WALLPAPER = 8;
         /** Minimal mode on or off for the terminal place; the glyph shows which. */
         private static final int ACTION_MINIMAL = 9;
@@ -3681,25 +3677,19 @@ public class TerminalPaneController {
 
         /**
          * What the tab carries, for the pane it is out on. Alone, a pane has nothing to move,
-         * maximise or close, so it offers the editor doors instead — Appearance, Layout and
-         * Wallpaper, the trio every place on the wall carries — with minimal mode, the tiling
-         * switch, settings and help. In a split it is the three things a pane can do to itself
+         * maximise or close, so it offers the one "Wallpaper & style" door instead — the wallpaper
+         * picker, which leads on to the Look and Layout editors, as every place on the wall does —
+         * with minimal mode, the tiling switch, settings and help. In a split it is the three things a pane can do to itself
          * and nothing else ({@link #splitTabActions}); the editors are reached from a lone pane's
          * corner, the other places and the terminal long-press menu, not from here.
          */
         private void applyControlActions() {
-            List<PaneControlsView.Action> actions = new ArrayList<>(7);
+            List<PaneControlsView.Action> actions = new ArrayList<>(5);
             android.content.Context context = mHostView.getContext();
             if (isLonePane()) {
-                actions.add(PaneControlsView.Action.glyph(ACTION_SURFACE_EDITOR,
-                    CornerTabGlyphs.APPEARANCE, context.getString(
-                        R.string.appearance_editor_corner_tab_description)));
-                actions.add(PaneControlsView.Action.glyph(ACTION_LAYOUT_EDITOR,
-                    CornerTabGlyphs.LAYOUT, context.getString(
-                        R.string.corner_tab_layout_description)));
                 actions.add(PaneControlsView.Action.glyph(ACTION_WALLPAPER,
-                    CornerTabGlyphs.WALLPAPER,
-                    context.getString(R.string.pane_controls_change_wallpaper)));
+                    CornerTabGlyphs.WALLPAPER_STYLE,
+                    context.getString(R.string.pane_controls_wallpaper_style)));
                 actions.add(PaneControlsView.Action.drawn(ACTION_MINIMAL, mMinimalMark,
                     PaneControlsView.TINT_PRIMARY, () -> context.getString(
                         mHost.isMinimalMode() ? R.string.pane_controls_leave_minimal_mode
@@ -4048,12 +4038,6 @@ public class TerminalPaneController {
             } else if (action == ACTION_SETTINGS) {
                 dismissControls();
                 mHost.openSettings();
-            } else if (action == ACTION_SURFACE_EDITOR) {
-                dismissControls();
-                mHost.openSurfaceEditor();
-            } else if (action == ACTION_LAYOUT_EDITOR) {
-                dismissControls();
-                mHost.openLayoutEditor();
             } else if (action == ACTION_WALLPAPER) {
                 dismissControls();
                 mHost.openWallpaperPicker();

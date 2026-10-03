@@ -39,7 +39,7 @@ import org.robolectric.annotation.ConscryptMode;
 public class RootPreferencesSearchIndexTest {
 
     private static final String[] EXPECTED_LAUNCHER_ROW_ORDER = {
-        "appearance", "appearance_editor", "layout_editor", "terminal", "status_bar", "notifications", "keyboard_input",
+        "wallpaper_style", "terminal", "status_bar", "notifications", "keyboard_input",
         "launcher_apps", "display", "on_device_ai"
     };
 
@@ -99,13 +99,14 @@ public class RootPreferencesSearchIndexTest {
     }
 
     @Test
-    public void searchingALazyModeTermFindsTheAppearanceDestinationOnly() {
+    public void searchingALazyModeTermFindsTheWallpaperAndStyleDestinationOnly() {
         SettingsActivity.RootPreferencesFragment root = launch();
         SettingsSearchPreference search = root.findPreference("settings_search");
         assertTrue(search.getOnQueryChangedListener() != null);
         search.getOnQueryChangedListener().onQueryChanged("lazy mode");
 
-        assertTrue("appearance page contains lazy mode", isVisible(root, "appearance"));
+        assertTrue("the Look page under Wallpaper & style contains lazy mode",
+            isVisible(root, "wallpaper_style"));
         assertFalse("status bar page has no lazy mode row", isVisible(root, "status_bar"));
     }
 
@@ -125,8 +126,8 @@ public class RootPreferencesSearchIndexTest {
         SettingsSearchPreference search = root.findPreference("settings_search");
         search.getOnQueryChangedListener().onQueryChanged("typeface");
 
-        assertTrue("keyboard look moved onto the Look (appearance) page",
-            isVisible(root, "appearance"));
+        assertTrue("keyboard look moved onto the Look page, indexed under Wallpaper & style",
+            isVisible(root, "wallpaper_style"));
     }
 
     private static boolean isVisible(SettingsActivity.RootPreferencesFragment root, String key) {

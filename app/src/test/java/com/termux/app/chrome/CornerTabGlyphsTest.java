@@ -34,6 +34,8 @@ public class CornerTabGlyphsTest {
         assertGlyph(CornerTabGlyphs.LAYOUT, 0xF056E);
         // nf-md-wallpaper, in the same plane-15 block.
         assertGlyph(CornerTabGlyphs.WALLPAPER, 0xF0E09);
+        // The one "Wallpaper & style" button wears the wallpaper mark.
+        assertGlyph(CornerTabGlyphs.WALLPAPER_STYLE, 0xF0E09);
     }
 
     /** Layout, Appearance and Wallpaper are supplementary code points, so two chars each — and never cut in half. */
