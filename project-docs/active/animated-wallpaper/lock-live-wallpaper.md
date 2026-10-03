@@ -206,3 +206,12 @@ background copy only for sets that include the home screen.
 - If the user picks "Home and lock screens" in the preview, the home screen gets our engine, which
   draws the rest pose. The glass loses its blur there. This is a known risk, and the preview's
   choice cannot be preset.
+
+## Picker round 2 (2026-10-03, after the developer tried it on pong)
+
+- **Apply** is an M3 split button.
+  - Its main action puts the centred card's background on Home and makes Lock follow it (Same as Home).
+  - Its menu offers "Home screen only" and "Lock screen only".
+- **Icon pack** opens a menu on the page: "System icons" (or "Same as app icons" when a launcher-wide pack is set), then every installed pack. A choice applies at once, and the page stays open. The list and the apply action are shared with Settings through `launcher/data/IconPackChoices`.
+- **Look and Layout** reopen the page when their editor ends (`SurfaceEditorController.Host.onEditorClosed`). It comes back on the same centred slot with the same pending choices. Leaving the launcher (a HOME press, or onStop) drops that return.
+- The shortcut glyphs are centred in their buttons.
