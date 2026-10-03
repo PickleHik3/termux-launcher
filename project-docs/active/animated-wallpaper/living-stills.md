@@ -208,6 +208,27 @@ New package `com.termux.app.chrome.wallpaper.living`. Pure Java where possible, 
 7. Tests: `AnimatedWallpapersTest` contract for a living still, rest-pose test, `WallpaperSlotPlanTest`
    for `living:` ids, picker page tests for the button/progress/switch states (360/411 dp).
 
+### Part D as built (2026-10-04)
+
+- `LivingStill` (`chrome/wallpaper`) is one AGSL program for every photo; the recipe is uniforms
+  (`LivingStill.recipeUniforms`), the pictures are five `BitmapShader` children bound in
+  `WallpaperUniforms.newShader` from `LivingStillTextures` (decoded once, weakly cached, freed with the
+  shaders: the clock drops its backdrop shaders on the 30 s release and on trim). The photo covers
+  the frame (centre crop); at `uEnergy == 0` `scene` returns it before any effect. Not ported from the
+  prototype: the lock clock, the debug views, time of day, sheen, the BMO fish rings and the city's
+  flying lights (all tied to one wallpaper). `glowTrailAngleDeg` is screen degrees (0 = the prototype's
+  direction, else 0 = right, 90 = down).
+- `AnimatedWallpapers.byId(Context, id)` resolves `living:<hash>` from the manifest (one cached player
+  per recipe stamp); the slot plan only checks the id's shape (`isKnownId`), so a vanished manifest
+  falls back to no background at the next sync, not at read time.
+- Apply: `WallpaperSlots.applyLiving` sets `manifest.image()` through `applyPhotoNow(..., livingId)`
+  (rest = photo) and records `living:<hash>`; Home Motion off (`wallpaper_home_motion`) leaves that
+  photo, which the host simply does not animate.
+- Focus: `Environment.focus()` is polled every frame by the clock (`Host.focusWanted`), eased in
+  `WallpaperDirector` over 350 ms into `Frame.focus`; Lock reads 0.
+- Page: `LivingStillJob` (living package) is the process-owned job; the page attaches a listener.
+  A photo that already has a living still is adopted as one when chosen.
+
 ## Order of work
 
 Round 1, in parallel (disjoint files): A (menus), B (TAI vision), C (living package).
