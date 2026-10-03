@@ -3,6 +3,8 @@ package com.termux.app.chrome.wallpaper;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.io.File;
+
 /** Pure choices behind the wallpaper picker page, kept apart from views so they can be tested. */
 public final class WallpaperPickerLogic {
 
@@ -20,12 +22,26 @@ public final class WallpaperPickerLogic {
         return Math.max(1, Math.round(thumbHeightPx * (shortSide / (float) longSide)));
     }
 
-    /** Whether two slot choices name the same thing. Null equals only null. */
+    /**
+     * Whether two slot choices name the same thing. Null equals only null. Two photos are the same
+     * when they name the same picture file (or neither names one).
+     */
     public static boolean sameChoice(@Nullable WallpaperSlots.Choice a, @Nullable WallpaperSlots.Choice b) {
         if (a == b) return true;
         if (a == null || b == null) return false;
         if (a.sameAsHome != b.sameAsHome || a.photo != b.photo) return false;
+        if (a.photo && !samePicture(a.photoFile, b.photoFile)) return false;
         return a.animatedId == null ? b.animatedId == null : a.animatedId.equals(b.animatedId);
+    }
+
+    private static boolean samePicture(@Nullable File a, @Nullable File b) {
+        if (a == null || b == null) return a == b;
+        return a.getAbsolutePath().equals(b.getAbsolutePath());
+    }
+
+    /** A photo that carries its picture: it can be applied to any slot with no new crop. */
+    public static boolean photoWithPicture(@Nullable WallpaperSlots.Choice c) {
+        return c != null && c.photo && c.photoFile != null;
     }
 
     /** A pending choice that differs from what is stored, while nothing is running. */
@@ -62,13 +78,13 @@ public final class WallpaperPickerLogic {
 
     /**
      * Apply (both screens): enabled when putting {@code choice} on Home and Same as Home on Lock
-     * changes either slot. A photo reaches Home only through Photo…, so a Lock photo cannot.
+     * changes either slot. A photo needs its picture to reach Home, unless Home holds it already.
      */
     public static boolean applyBothEnabled(@Nullable WallpaperSlots.Choice choice,
                                            @NonNull WallpaperSlots.Choice storedHome,
                                            @NonNull WallpaperSlots.Choice storedLock, boolean busy) {
         if (busy || choice == null || choice.sameAsHome) return false;
-        if (choice.photo && !storedHome.photo) return false;
+        if (choice.photo && !photoWithPicture(choice) && !storedHome.photo) return false;
         return homeChanges(choice, storedHome) || !storedLock.sameAsHome;
     }
 
@@ -80,12 +96,13 @@ public final class WallpaperPickerLogic {
 
     /**
      * A one-slot menu item: enabled when {@code choice} differs from that slot's stored one. A
-     * photo goes through Photo…, and Home cannot follow itself.
+     * photo needs its picture, and Home cannot follow itself.
      */
     public static boolean applyOneEnabled(@NonNull WallpaperSlots.Slot target,
                                           @Nullable WallpaperSlots.Choice choice,
                                           @Nullable WallpaperSlots.Choice stored, boolean busy) {
-        if (busy || choice == null || choice.photo) return false;
+        if (busy || choice == null) return false;
+        if (choice.photo && !photoWithPicture(choice)) return false;
         if (choice.sameAsHome && target == WallpaperSlots.Slot.HOME) return false;
         return !sameChoice(choice, stored);
     }
@@ -103,6 +120,14 @@ public final class WallpaperPickerLogic {
     /** Whether the Motion row has a place on the page at all (it keeps its height on Home). */
     public static boolean motionRowExists(int sdkInt) {
         return WallpaperSlots.lockLiveSupported(sdkInt);
+    }
+
+    /**
+     * As above, on a page that may not offer the animated backgrounds (below API 34, or Fancier
+     * Glass off): with no animated tiles there is nothing for Motion to play.
+     */
+    public static boolean motionRowExists(int sdkInt, boolean animatedOffered) {
+        return animatedOffered && motionRowExists(sdkInt);
     }
 
     /**

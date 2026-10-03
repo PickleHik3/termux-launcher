@@ -156,4 +156,28 @@ public class WallpaperPickerLogicTest {
         assertEquals(2, themed.size());
         assertEquals("com.example.arcticons", themed.get(1).value);
     }
+
+    @Test
+    public void aPhotoWithItsPictureCanBeApplied() {
+        WallpaperSlots.Choice picked = WallpaperSlots.Choice.photo(new java.io.File("/p/1.png"));
+        WallpaperSlots.Choice kept = WallpaperSlots.Choice.photo(new java.io.File("/p/exact.png"));
+        assertTrue(WallpaperPickerLogic.photoWithPicture(picked));
+        assertFalse(WallpaperPickerLogic.photoWithPicture(PHOTO));
+        assertTrue("a picked photo reaches Home", WallpaperPickerLogic.applyBothEnabled(picked, AURORA, SAME, false));
+        assertTrue("a different picture", WallpaperPickerLogic.applyBothEnabled(picked, kept, SAME, false));
+        assertFalse("the same picture", WallpaperPickerLogic.applyBothEnabled(kept, kept, SAME, false));
+        assertTrue(WallpaperPickerLogic.applyOneEnabled(WallpaperSlots.Slot.LOCK, picked, TIDE, false));
+        assertTrue(WallpaperPickerLogic.applyOneEnabled(WallpaperSlots.Slot.HOME, picked, kept, false));
+        assertFalse(WallpaperPickerLogic.sameChoice(picked, kept));
+        assertTrue(WallpaperPickerLogic.sameChoice(picked,
+            WallpaperSlots.Choice.photo(new java.io.File("/p/1.png"))));
+        assertFalse(WallpaperPickerLogic.sameChoice(picked, PHOTO));
+    }
+
+    @Test
+    public void motionNeedsTheAnimatedBackgroundsOffered() {
+        assertTrue(WallpaperPickerLogic.motionRowExists(34, true));
+        assertFalse(WallpaperPickerLogic.motionRowExists(34, false));
+        assertFalse(WallpaperPickerLogic.motionRowExists(33, true));
+    }
 }

@@ -162,16 +162,20 @@ nothing to draw, it draws one plain frame.
 | Call | Does |
 |---|---|
 | `apply(HOME, animated)` | Still to `FLAG_SYSTEM`; adds `FLAG_LOCK` when Lock is Same as Home and the lock screen is not our live wallpaper with Motion on. Records the Home slot; the in-app animation follows as before. |
-| `apply(HOME, photo)` | Records nothing; the host's photo flow runs, then `notePhotoApplied(HOME)`. |
+| `apply(HOME, photo(file))` | Any API. Photo to `FLAG_SYSTEM`, plus `FLAG_LOCK` when Lock is Same as Home (the live engine cannot draw a photo). Clears the generated background; joins the recent photos. See "Photos". |
+| `apply(HOME, photo())` | No picture: records nothing. |
 | `apply(LOCK, animated or Same as Home)`, Motion on | Records the choice first. Opens the preview (`ACTION_CHANGE_LIVE_WALLPAPER`, falling back to `ACTION_LIVE_WALLPAPER_CHOOSER`) unless our service holds the lock screen already. The callback gets `ok` with error `null`, and the log has a `preview_shown` line. |
 | `apply(LOCK, …)`, Motion off | Still to `FLAG_LOCK`, then records the choice. |
 | `apply(LOCK, Same as Home)` with a home photo | Copies the launcher's exact home picture to `FLAG_LOCK` (`ManagedWallpaper.copyHomePictureToLock`). |
-| `apply(LOCK, photo)` | Records `photo`; the host's photo flow sets it with `FLAG_LOCK` (decision 2). |
-| `notePhotoApplied(HOME)` | `GeneratedWallpaperApplier.clear`; when Lock is Same as Home on our live wallpaper, copies the photo to the lock screen. |
-| `notePhotoApplied(LOCK)` | Records `photo`. |
+| `apply(LOCK, Same as Home)` while already Same as Home over a home photo, lock not live | Records only: the home photo's set already put it there (Apply's lock-follows step). |
+| `apply(LOCK, photo(file))` | Any API. Photo to `FLAG_LOCK` (decision 2), keeps `wallpaper/slots/lock.png`, records `photo`, joins the recent photos. |
+| `apply(LOCK, photo())` | No picture: records `photo`. |
+| `notePhotoApplied(HOME)` | Kept for outside callers. `GeneratedWallpaperApplier.clear`; when Lock is Same as Home on our live wallpaper, copies the photo to the lock screen. |
+| `notePhotoApplied(LOCK)` | Kept for outside callers. Records `photo`. |
 | `setLockMotion(on)` | Stores it. On: opens the preview if the lock screen is not ours. Off: still to `FLAG_LOCK`. A lock photo changes nothing. |
 
-Below API 34 Motion never plays, and animated choices answer `api`.
+Below API 34 Motion never plays, and animated choices answer `api`. Photo choices and Same as Home
+over a home photo work on every API level and never touch the lock live service.
 
 ### `launcherctl` targets and the slots
 
@@ -215,3 +219,76 @@ background copy only for sets that include the home screen.
 - **Icon pack** opens a menu on the page: "System icons" (or "Same as app icons" when a launcher-wide pack is set), then every installed pack. A choice applies at once, and the page stays open. The list and the apply action are shared with Settings through `launcher/data/IconPackChoices`.
 - **Look and Layout** reopen the page when their editor ends (`SurfaceEditorController.Host.onEditorClosed`). It comes back on the same centred slot with the same pending choices. Leaving the launcher (a HOME press, or onStop) drops that return.
 - The shortcut glyphs are centred in their buttons.
+
+## Photos (2026-10-03)
+
+The developer asked for user photos to be first-class on the page: previewed before they apply,
+shown in their card, the last three kept, and the page on every API level so the flow can be
+checked on Waydroid (Android 13).
+
+### The flow
+
+1. **Photo…** closes the page and hands the host a `ReturnState` (as Look and Layout do).
+2. Android's photo picker, then the existing crop (one and a half portrait screens wide). The
+   cropper writes `ManagedWallpaper.tempFile` as before.
+3. On the crop result, `WallpaperSlots.adoptCroppedPhoto` moves that file to
+   `files/wallpaper/pending/<timestamp>.png`, out of the way of any other set that stages through
+   the cropper's file. The host reopens the page with `ReturnState.withPhoto(back, slot, file, …)`:
+   the same centred slot, the other slot's pending choice kept, and `Choice.photo(file)` as the
+   centred card's pending choice. A cancelled pick or crop reopens the page with `back` itself.
+   The host keeps this return across `onStop` (the picker and the cropper are other activities);
+   after a recreate it has none, and the photo comes back on the Home card.
+4. The card previews the photo. Nothing is applied yet.
+5. **Apply** runs `apply(HOME, photo(file))`, then Lock follows (`apply(LOCK, Same as Home)`).
+   "Home screen only" and "Lock screen only" set one slot. After the set, the page's pending
+   choice becomes the stored one (the slot's kept copy, not the pending file).
+6. Back without Apply deletes the pending file. A fresh page (not a return) also clears
+   `wallpaper/pending/`, so a return that never came leaves nothing behind.
+
+### Where the pictures live (app-private files)
+
+| What | File |
+|---|---|
+| A cropped photo waiting for Apply | `files/wallpaper/pending/<timestamp>.png` |
+| Home slot's picture | the managed exact copy, `files/managed-wallpaper/system-wallpaper-exact.png`, while its stored system id matches the system's |
+| Lock slot's own photo | `files/wallpaper/slots/lock.png`, written when Lock is set to a photo |
+| The last three applied photos | `files/wallpaper/recent/<timestamp>.png`, order in `files/wallpaper/recent/index` |
+
+`WallpaperSlots.read` returns `Choice.photo(file)` for a slot whose picture is kept, else
+`Choice.photo()`. The Home card centre-crops the wide managed copy, which is the part the system
+shows.
+
+### Applying a photo: `WallpaperSlots.applyPhotoNow`
+
+The one path for photos; the picker's Apply (`SET_PHOTO` plan, on the applier's worker) and
+`POST /v1/wallpaper` with `path` both call it. It stages the picture through the cropper's file,
+suggests the display size for a home set, calls `ManagedWallpaper.apply` with the plan's flags,
+then: keeps the Lock copy (taken before the set, since the picture may be that copy), stores the
+Lock choice, and for Home clears the generated background (`GeneratedWallpaperApplier.clear`, whose
+changed listener re-dresses the live host). The page's `onApplied(HOME)` then refreshes the glass as
+the old `finishManagedWallpaperApply` did. A home-only set while Lock is Same as Home on our live
+wallpaper copies the photo to the lock screen, as `notePhotoApplied` did. The old host path
+(`startManagedWallpaperApply`, the Home / Lock / both prompt) is gone; the long-press "Set
+wallpaper" action opens the page.
+
+### Recent photos: `RecentWallpapers`
+
+A plain-Java store over one directory: `add(source, now)` copies the picture as
+`<timestamp>.png`, deduplicates by SHA-256 (a repeat moves to the front, no new copy), keeps
+newest first and trims to three (older files are deleted). `list()` skips an entry whose file has
+gone. The strip shows them after Same as Home (Lock card) and before the backgrounds, with a
+"Recent" label on the first; tapping one previews it, and Apply sets it with no new crop.
+
+### Thumbnails
+
+`WallpaperThumbs.requestPhoto` decodes on its own worker at a power-of-two step down that still
+covers the tile or card size. Every picture the page made (photos and background stills) is
+recycled when the page closes, after its views let go of them.
+
+### Below API 34, or Fancier Glass off
+
+`openWallpaperPicker` always shows the page. With the animated backgrounds not offered the page
+has no animated tiles, no Motion row and no live preview: Same as Home (Lock), the recent photos,
+Photo… and the current pictures. Apply's lock-follows step copies the home photo to the lock
+screen (`COPY_HOME_PHOTO_TO_LOCK`, `FLAG_LOCK`); `lockLiveActive` is always false there, so the
+plan never reaches the lock live service.

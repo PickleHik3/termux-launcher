@@ -47,8 +47,10 @@ import com.termux.app.launcher.data.IconPackChoices;
 import com.termux.app.layouteditor.EditorM3;
 import com.termux.shared.logger.Logger;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -63,9 +65,16 @@ import java.util.List;
  * centred card's background on Home and points Lock at it (Same as Home); its menu applies to one
  * slot only. Swiping keeps each slot's pending choice. Back closes without applying.</p>
  *
- * <p>Look and Layout close the page and hand the host a {@link ReturnState}; the host shows the
- * page again with it when that editor ends, on the same slot with the same pending choices. The
- * Icon pack button opens a menu on the page itself.</p>
+ * <p>Look, Layout and Photo… close the page and hand the host a {@link ReturnState}; the host
+ * shows the page again with it when that editor or the photo crop ends, on the same slot with the
+ * same pending choices. A cropped photo comes back as the centred slot's pending choice
+ * ({@link ReturnState#withPhoto}), previewed in its card and set only by Apply. Back without Apply
+ * discards a pending photo's file. The Icon pack button opens a menu on the page itself.</p>
+ *
+ * <p>Photos are first-class on every API level: a slot holding a photo shows it in its card, and
+ * the last three applied photos lead the strip as the Recent group. When the animated backgrounds
+ * are not offered (below API 34, or Fancier Glass off) the page has no animated tiles, no Motion
+ * toggle and no live preview: Recent, Photo… and the current pictures only.</p>
  *
  * <p>Hosted in a full-screen {@link AppCompatDialog} by {@link #show}; tests build the page on
  * its own with {@link #WallpaperPickerPage(Context, Slots, Listener, int, Runnable, ReturnState)}.</p>
@@ -80,6 +89,15 @@ public final class WallpaperPickerPage {
                    @Nullable WallpaperSlots.Callback cb);
 
         void setLockMotion(boolean on, @Nullable WallpaperSlots.Callback cb);
+
+        /** The recent photos, newest first. */
+        @NonNull
+        default List<File> recents() {
+            return Collections.emptyList();
+        }
+
+        /** A pending photo the page will not apply: its file goes (only a pending file ever does). */
+        default void discardPhoto(@NonNull File photo) {}
     }
 
     /** What the host does. Every call is on the main thread. */
@@ -87,8 +105,12 @@ public final class WallpaperPickerPage {
         /** The page covers the launcher (true) or has gone (false): pause or resume its backdrop. */
         void onPageShown(boolean shown);
 
-        /** Photo… was tapped for {@code slot}; the page has dismissed. Run the photo flow. */
-        void onPickPhoto(@NonNull WallpaperSlots.Slot slot);
+        /**
+         * Photo… was tapped for {@code slot}; the page has dismissed. Run the photo picker and the
+         * crop, then show the page again with {@link ReturnState#withPhoto}{@code (back, …)}, or
+         * with {@code back} itself when the pick or the crop was cancelled.
+         */
+        void onPickPhoto(@NonNull WallpaperSlots.Slot slot, @NonNull ReturnState back);
 
         /** Apply succeeded for {@code slot}; the page stays open. Home refreshes the glass. */
         void onApplied(@NonNull WallpaperSlots.Slot slot, @NonNull WallpaperSlots.Choice choice);
@@ -120,6 +142,22 @@ public final class WallpaperPickerPage {
             this.pendingHome = pendingHome;
             this.pendingLock = pendingLock;
         }
+
+        /**
+         * {@code back} with the cropped {@code photo} as {@code slot}'s pending choice, centred on
+         * that slot. With no {@code back} (the activity was recreated during the crop) the other
+         * slot keeps what {@code stored} has.
+         */
+        @NonNull
+        public static ReturnState withPhoto(@Nullable ReturnState back, @NonNull WallpaperSlots.Slot slot,
+                                            @NonNull File photo, @NonNull WallpaperSlots.State stored) {
+            WallpaperSlots.Choice home = back != null ? back.pendingHome : stored.home;
+            WallpaperSlots.Choice lock = back != null ? back.pendingLock : stored.lock;
+            WallpaperSlots.Choice picked = WallpaperSlots.Choice.photo(photo);
+            if (slot == WallpaperSlots.Slot.HOME) home = picked;
+            else lock = picked;
+            return new ReturnState(slot, home, lock);
+        }
     }
 
     /** {@link WallpaperSlots} for this activity. */
@@ -139,6 +177,14 @@ public final class WallpaperPickerPage {
             @Override public void setLockMotion(boolean on, @Nullable WallpaperSlots.Callback cb) {
                 WallpaperSlots.setLockMotion(activity, on, cb);
             }
+
+            @NonNull @Override public List<File> recents() {
+                return WallpaperSlots.recentPhotos(activity);
+            }
+
+            @Override public void discardPhoto(@NonNull File photo) {
+                WallpaperSlots.discardPendingPhoto(activity, photo);
+            }
         };
     }
 
@@ -153,9 +199,20 @@ public final class WallpaperPickerPage {
     @NonNull
     public static WallpaperPickerPage show(@NonNull AppCompatActivity activity, @NonNull Slots slots,
                                            @NonNull Listener listener, @Nullable ReturnState restore) {
+        return show(activity, slots, listener, WallpaperSlots.lockLiveSupported(Build.VERSION.SDK_INT), restore);
+    }
+
+    /**
+     * Shows the page full screen over {@code activity}, back at {@code restore} when given.
+     * {@code animatedOffered} false (below API 34, or Fancier Glass off) leaves the photos only.
+     */
+    @NonNull
+    public static WallpaperPickerPage show(@NonNull AppCompatActivity activity, @NonNull Slots slots,
+                                           @NonNull Listener listener, boolean animatedOffered,
+                                           @Nullable ReturnState restore) {
         AppCompatDialog dialog = new AppCompatDialog(activity, R.style.ThemeOverlay_Termux_WallpaperPickerPage);
         WallpaperPickerPage page = new WallpaperPickerPage(dialog.getContext(), slots, listener,
-            Build.VERSION.SDK_INT, dialog::dismiss, restore);
+            Build.VERSION.SDK_INT, animatedOffered, dialog::dismiss, restore, new WallpaperThumbs());
         dialog.setContentView(page.root());
         dialog.setCancelable(true);
         dialog.setOnDismissListener(d -> page.onDismissed());
@@ -201,9 +258,11 @@ public final class WallpaperPickerPage {
     private final Listener mListener;
     private final int mSdk;
     private final Runnable mDismiss;
+    /** Whether the animated backgrounds are offered: their tiles, Motion and the live preview. */
+    private final boolean mAnimatedOffered;
     private final float mDensity;
     private final Handler mMain = new Handler(Looper.getMainLooper());
-    private final WallpaperThumbs mThumbs = new WallpaperThumbs();
+    private final WallpaperThumbs mThumbs;
 
     private final View mRoot;
     private final TextView mTitle;
@@ -226,6 +285,8 @@ public final class WallpaperPickerPage {
     @NonNull private WallpaperSlots.Slot mCentred = WallpaperSlots.Slot.HOME;
     private boolean mBusy;
     private boolean mDismissed;
+    /** Closed for Look, Layout or Photo…: the host brings the page back, pending photos and all. */
+    private boolean mHandedOff;
     private boolean mSettingMotion;
     @Nullable private PopupMenu mIconPackMenu;
 
@@ -235,9 +296,11 @@ public final class WallpaperPickerPage {
     private final int mThumbW;
     private final int mThumbH;
 
-    /** The strip's tiles, in order: Same as Home first, then the backgrounds. */
+    /** The strip's tiles, in order: Same as Home first, then the recent photos, then the backgrounds. */
     private final List<Tile> mTiles = new ArrayList<>();
     @Nullable private Tile mSameAsHomeTile;
+    private int mRecentTiles;
+    private int mAnimatedTiles;
 
     private final Runnable mClockTick = new Runnable() {
         @Override public void run() {
@@ -267,10 +330,20 @@ public final class WallpaperPickerPage {
     @VisibleForTesting
     public WallpaperPickerPage(@NonNull Context context, @NonNull Slots slots, @NonNull Listener listener,
                                int sdkInt, @NonNull Runnable dismiss, @Nullable ReturnState restore) {
+        this(context, slots, listener, sdkInt, WallpaperSlots.lockLiveSupported(sdkInt), dismiss, restore,
+            new WallpaperThumbs());
+    }
+
+    @VisibleForTesting
+    public WallpaperPickerPage(@NonNull Context context, @NonNull Slots slots, @NonNull Listener listener,
+                               int sdkInt, boolean animatedOffered, @NonNull Runnable dismiss,
+                               @Nullable ReturnState restore, @NonNull WallpaperThumbs thumbs) {
         mContext = context;
         mSlots = slots;
         mListener = listener;
         mSdk = sdkInt;
+        mAnimatedOffered = animatedOffered;
+        mThumbs = thumbs;
         mDismiss = dismiss;
         mDensity = context.getResources().getDisplayMetrics().density;
         DisplayMetrics dm = context.getResources().getDisplayMetrics();
@@ -302,10 +375,12 @@ public final class WallpaperPickerPage {
         mApply.setOnClickListener(v -> applyBoth());
         mApplyMore.setOnClickListener(v -> showApplyMenu());
         mPhoto.setOnClickListener(v -> {
-            if (mBusy) return;
+            if (mBusy || mDismissed) return;
             WallpaperSlots.Slot slot = mCentred;
+            ReturnState back = returnState();
+            mHandedOff = true;
             dismiss();
-            mListener.onPickPhoto(slot);
+            mListener.onPickPhoto(slot, back);
         });
         mRoot.findViewById(R.id.wallpaper_picker_look).setOnClickListener(v -> openEditor(false));
         mIconPack.setOnClickListener(v -> showIconPackMenu());
@@ -434,7 +509,7 @@ public final class WallpaperPickerPage {
     private void applyCentred() {
         mTitle.setText(mCentred == WallpaperSlots.Slot.LOCK
             ? R.string.wallpaper_picker_slot_lock : R.string.wallpaper_picker_slot_home);
-        if (!WallpaperPickerLogic.motionRowExists(mSdk)) {
+        if (!WallpaperPickerLogic.motionRowExists(mSdk, mAnimatedOffered)) {
             mMotionRow.setVisibility(View.GONE);
         } else {
             mMotionRow.setVisibility(View.VISIBLE);
@@ -497,7 +572,8 @@ public final class WallpaperPickerPage {
         setBusy(true);
         final Runnable lockFollows = () -> runApply(WallpaperSlots.Slot.LOCK,
             WallpaperSlots.Choice.sameAsHome(), () -> {
-                mPending[WallpaperSlots.Slot.HOME.ordinal()] = choice;
+                // A photo is stored as the slot's own kept copy, not the pending file.
+                mPending[WallpaperSlots.Slot.HOME.ordinal()] = choice.photo ? mStored.home : choice;
                 mPending[WallpaperSlots.Slot.LOCK.ordinal()] = WallpaperSlots.Choice.sameAsHome();
                 onApplyFinished();
             });
@@ -516,7 +592,7 @@ public final class WallpaperPickerPage {
         if (!WallpaperPickerLogic.applyOneEnabled(target, choice, stored(target), false)) return;
         setBusy(true);
         runApply(target, choice, () -> {
-            mPending[target.ordinal()] = choice;
+            mPending[target.ordinal()] = choice.photo ? stored(target) : choice;
             onApplyFinished();
         });
     }
@@ -656,6 +732,7 @@ public final class WallpaperPickerPage {
     private void openEditor(boolean layout) {
         if (mBusy || mDismissed) return;
         ReturnState back = returnState();
+        mHandedOff = true;
         dismiss();
         if (layout) mListener.onOpenLayout(back);
         else mListener.onOpenLook(back);
@@ -676,9 +753,31 @@ public final class WallpaperPickerPage {
         PopupMenu iconPackMenu = mIconPackMenu;
         mIconPackMenu = null;
         if (iconPackMenu != null) iconPackMenu.dismiss();
-        for (WallpaperPreviewView card : mCards) if (card != null) card.setLive(false);
+        for (WallpaperPreviewView card : mCards) {
+            if (card == null) continue;
+            card.setLive(false);
+            card.show(null, null, false);
+        }
+        for (Tile tile : mTiles) tile.image.setImageDrawable(null);
+        // Every picture is recycled here, so no view may still hold one.
         mThumbs.release();
+        if (!mHandedOff) discardPendingPhotos();
         mListener.onPageShown(false);
+    }
+
+    /** Closed for good (back, or the arrow): a photo never applied loses its pending file. */
+    private void discardPendingPhotos() {
+        for (WallpaperSlots.Choice c : mPending) {
+            if (c == null || !WallpaperPickerLogic.photoWithPicture(c) || c.photoFile == null) continue;
+            if (WallpaperPickerLogic.sameChoice(c, mStored.home) || WallpaperPickerLogic.sameChoice(c, mStored.lock)) {
+                continue;
+            }
+            try {
+                mSlots.discardPhoto(c.photoFile);
+            } catch (RuntimeException e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Discarding a pending photo failed", e);
+            }
+        }
     }
 
     // --- pager ---
@@ -761,7 +860,7 @@ public final class WallpaperPickerPage {
     }
 
     private boolean liveFor(int position) {
-        if (mDismissed) return false;
+        if (mDismissed || !mAnimatedOffered) return false;
         int centred = mCentred == WallpaperSlots.Slot.LOCK ? POS_LOCK : POS_HOME;
         if (position != centred) return false;
         // A Lock with Motion off shows its still, as the lock screen will.
@@ -782,6 +881,10 @@ public final class WallpaperPickerPage {
         if (card == null) return;
         WallpaperSlots.Slot slot = position == POS_LOCK ? WallpaperSlots.Slot.LOCK : WallpaperSlots.Slot.HOME;
         WallpaperSlots.Choice c = shown(slot);
+        if (c.photo) {
+            bindPhotoCard(position, card, slot, c);
+            return;
+        }
         AnimatedWallpaper w = AnimatedWallpapers.byId(c.animatedId);
         Bitmap still = w == null ? null : mThumbs.cached(w, mCardW, mCardH);
         card.show(w, still, c.photo);
@@ -792,6 +895,20 @@ public final class WallpaperPickerPage {
                 if (now != null && now.id().equals(id) && mCards[position] == card) card.setStill(bmp);
             });
         }
+    }
+
+    /** A photo card: its picture centre-cropped, as the system shows it; the photo glyph while it loads. */
+    private void bindPhotoCard(int position, @NonNull WallpaperPreviewView card,
+                               @NonNull WallpaperSlots.Slot slot, @NonNull WallpaperSlots.Choice c) {
+        final File file = c.photoFile;
+        Bitmap still = file == null || mCardW <= 0 ? null : mThumbs.cachedPhoto(file, mCardW, mCardH);
+        card.show(null, still, true);
+        if (file == null || still != null || mCardW <= 0 || mCardH <= 0) return;
+        mThumbs.requestPhoto(file, mCardW, mCardH, bmp -> {
+            if (mDismissed || mCards[position] != card) return;
+            WallpaperSlots.Choice now = shown(slot);
+            if (now.photo && now.photoFile != null && now.photoFile.equals(file)) card.setStill(bmp);
+        });
     }
 
     // --- clock ---
@@ -814,7 +931,31 @@ public final class WallpaperPickerPage {
         mSameAsHomeTile = addTile(WallpaperSlots.Choice.sameAsHome(),
             mContext.getString(R.string.wallpaper_picker_same_as_home), true);
         refreshSameAsHomeThumb();
+        List<File> recents;
+        try {
+            recents = mSlots.recents();
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Reading the recent photos failed", e);
+            recents = Collections.emptyList();
+        }
+        mRecentTiles = 0;
+        for (File photo : recents) {
+            if (mRecentTiles >= RecentWallpapers.MAX) break;
+            mRecentTiles++;
+            Tile tile = addTile(WallpaperSlots.Choice.photo(photo),
+                mContext.getString(R.string.wallpaper_picker_recent_photo, mRecentTiles), false);
+            if (mRecentTiles == 1) addRecentBadge(tile);
+            final ShapeableImageView image = tile.image;
+            final String key = photo.getAbsolutePath();
+            image.setTag(key);
+            mThumbs.requestPhoto(photo, mThumbW, mThumbH, bmp -> {
+                if (key.equals(image.getTag())) image.setImageBitmap(bmp);
+            });
+        }
+        mAnimatedTiles = 0;
+        if (!mAnimatedOffered) return;
         for (AnimatedWallpaper w : AnimatedWallpapers.all()) {
+            mAnimatedTiles++;
             Tile tile = addTile(WallpaperSlots.Choice.animated(w.id()), w.label(), false);
             final ShapeableImageView image = tile.image;
             final String id = w.id();
@@ -869,11 +1010,57 @@ public final class WallpaperPickerPage {
         return tile;
     }
 
-    /** Same as Home is drawn as the Home slot's thumbnail. */
+    /**
+     * The Recent group's mark: a "Recent" label on its first tile, in the same tonal pill as
+     * Same as Home's link badge. The tiles say "Recent photo N" to TalkBack.
+     */
+    private void addRecentBadge(@NonNull Tile tile) {
+        if (!(tile.view instanceof FrameLayout)) return;
+        TextView label = new TextView(mContext);
+        label.setText(R.string.wallpaper_picker_recent);
+        label.setTextAppearance(resolveStyle(com.google.android.material.R.attr.textAppearanceLabelSmall));
+        label.setTextColor(MaterialColors.getColor(mContext,
+            com.google.android.material.R.attr.colorOnSecondaryContainer, 0));
+        label.setMaxLines(1);
+        label.setGravity(Gravity.CENTER);
+        label.setPadding(dp(8), dp(2), dp(8), dp(2));
+        label.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        label.setBackground(EditorM3.surface(label,
+            com.google.android.material.R.attr.shapeAppearanceCornerExtraLarge,
+            com.google.android.material.R.attr.colorSecondaryContainer));
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START);
+        lp.setMargins(dp(6), dp(6), dp(6), 0);
+        ((FrameLayout) tile.view).addView(label, lp);
+        mRecentBadge = label;
+    }
+
+    @Nullable private TextView mRecentBadge;
+
+    /** A theme attribute's style resource, or 0. */
+    private int resolveStyle(int attr) {
+        android.util.TypedValue tv = new android.util.TypedValue();
+        return mContext.getTheme().resolveAttribute(attr, tv, true) ? tv.resourceId : 0;
+    }
+
+    /** Same as Home is drawn as the Home slot's thumbnail: its background's still or its photo. */
     private void refreshSameAsHomeThumb() {
         if (mSameAsHomeTile == null) return;
         final ShapeableImageView image = mSameAsHomeTile.image;
         WallpaperSlots.Choice home = mPending[WallpaperSlots.Slot.HOME.ordinal()];
+        if (home.photo && home.photoFile != null) {
+            final File file = home.photoFile;
+            final String key = file.getAbsolutePath();
+            image.setTag(key);
+            Bitmap cached = mThumbs.cachedPhoto(file, mThumbW, mThumbH);
+            image.setImageBitmap(cached);
+            if (cached == null) {
+                mThumbs.requestPhoto(file, mThumbW, mThumbH, bmp -> {
+                    if (key.equals(image.getTag())) image.setImageBitmap(bmp);
+                });
+            }
+            return;
+        }
         AnimatedWallpaper w = AnimatedWallpapers.byId(home.animatedId);
         if (w == null) {
             image.setTag(null);
@@ -912,6 +1099,36 @@ public final class WallpaperPickerPage {
     @VisibleForTesting
     int tileCount() {
         return mTiles.size();
+    }
+
+    @VisibleForTesting
+    int recentTileCount() {
+        return mRecentTiles;
+    }
+
+    @VisibleForTesting
+    int animatedTileCount() {
+        return mAnimatedTiles;
+    }
+
+    /** The Recent group's label, or null with no recent photos. */
+    @VisibleForTesting
+    @Nullable
+    TextView recentBadge() {
+        return mRecentBadge;
+    }
+
+    /** {@code slot}'s preview card while it is bound, or null. */
+    @VisibleForTesting
+    @Nullable
+    WallpaperPreviewView card(@NonNull WallpaperSlots.Slot slot) {
+        return mCards[slot == WallpaperSlots.Slot.LOCK ? POS_LOCK : POS_HOME];
+    }
+
+    /** Back, as the arrow or the system back would close the page. */
+    @VisibleForTesting
+    void close() {
+        dismiss();
     }
 
     /** The Icon pack menu while it is open. */

@@ -131,10 +131,21 @@ public final class WallpaperPreviewView extends View {
         invalidate();
     }
 
-    /** The still arrived for what is shown now. */
+    /** The still (or the photo's picture) arrived for what is shown now. */
     public void setStill(@Nullable Bitmap still) {
         mStill = still;
         invalidate();
+    }
+
+    /** The picture drawn when not live: a background's still or a photo; null while it loads. */
+    @Nullable
+    public Bitmap still() {
+        return mStill;
+    }
+
+    /** Whether the card shows a photo (with or without its picture yet). */
+    public boolean showsPhoto() {
+        return mPhoto;
     }
 
     /** The Lock card: the cutout and the composed clock over the background. */

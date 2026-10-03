@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
 import android.app.Activity;
+import android.graphics.Bitmap;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Looper;
@@ -30,9 +31,12 @@ import org.junit.Before;
 import org.junit.Test;
 import org.robolectric.Robolectric;
 
+import java.io.File;
+import java.io.IOException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -40,8 +44,11 @@ import java.util.List;
  * follows the centred slot, Same as Home shows only for Lock, Apply is enabled only when the
  * pending choice differs, Apply puts the background on Home and points Lock at it while its menu
  * items apply one slot, Look and Layout hand back a state the page reopens at, the Icon pack menu
- * lists the packs on the page, the shortcut glyphs sit centred, and Motion is hidden below API 34. A fake {@link WallpaperPickerPage.Slots}
- * stands in for {@link WallpaperSlots}. Native graphics, so text has real metrics.
+ * lists the packs on the page, the shortcut glyphs sit centred, and Motion is hidden below API 34.
+ * Photos: a cropped photo comes back pending and Apply sets it, the current photo shows in its
+ * card, the recent photos lead the strip, below API 34 the page holds photos only, and back
+ * without Apply discards the pending file. A fake {@link WallpaperPickerPage.Slots} stands in for
+ * {@link WallpaperSlots}. Native graphics, so text has real metrics.
  */
 public abstract class WallpaperPickerPageTestBase {
 
@@ -52,6 +59,18 @@ public abstract class WallpaperPickerPageTestBase {
         final List<String> calls = new ArrayList<>();
         /** The choice of each apply, in {@link #calls}' order. */
         final List<WallpaperSlots.Choice> applied = new ArrayList<>();
+        List<File> recents = Collections.emptyList();
+        final List<File> discarded = new ArrayList<>();
+        /** Where an applied photo is "kept": the stored choice names this, not the pending file. */
+        @Nullable File keptPhoto;
+
+        @NonNull @Override public List<File> recents() {
+            return recents;
+        }
+
+        @Override public void discardPhoto(@NonNull File photo) {
+            discarded.add(photo);
+        }
 
         @NonNull @Override public WallpaperSlots.State read() {
             return state;
@@ -61,6 +80,9 @@ public abstract class WallpaperPickerPageTestBase {
                                     @Nullable WallpaperSlots.Callback cb) {
             calls.add("apply " + slot);
             applied.add(choice);
+            if (choice.photo && choice.photoFile != null && keptPhoto != null) {
+                choice = WallpaperSlots.Choice.photo(keptPhoto);
+            }
             state = slot == WallpaperSlots.Slot.HOME
                 ? new WallpaperSlots.State(choice, state.lock, state.lockMotion, state.lockLiveActive)
                 : new WallpaperSlots.State(state.home, choice, state.lockMotion, state.lockLiveActive);
@@ -78,7 +100,10 @@ public abstract class WallpaperPickerPageTestBase {
         final List<String> calls = new ArrayList<>();
 
         @Override public void onPageShown(boolean shown) { calls.add("shown " + shown); }
-        @Override public void onPickPhoto(@NonNull WallpaperSlots.Slot slot) { calls.add("photo " + slot); }
+        @Override public void onPickPhoto(@NonNull WallpaperSlots.Slot slot, @NonNull WallpaperPickerPage.ReturnState back) {
+            this.back = back;
+            calls.add("photo " + slot);
+        }
         @Override public void onApplied(@NonNull WallpaperSlots.Slot slot, @NonNull WallpaperSlots.Choice choice) {
             calls.add("applied " + slot);
         }
@@ -123,6 +148,35 @@ public abstract class WallpaperPickerPageTestBase {
         mActivity.setContentView(page.root());
         settle();
         return page;
+    }
+
+    /** Photos decode on the calling thread to a plain bitmap; {@link #mDecoded} lists the files. */
+    @NonNull
+    private WallpaperPickerPage openWithPhotos(int sdk, @Nullable WallpaperPickerPage.ReturnState restore) {
+        WallpaperThumbs thumbs = new WallpaperThumbs(Runnable::run, (file, w, h) -> {
+            mDecoded.add(file);
+            return Bitmap.createBitmap(Math.max(1, w), Math.max(1, h), Bitmap.Config.ARGB_8888);
+        });
+        WallpaperPickerPage page = new WallpaperPickerPage(mThemed, mSlots, mListener, sdk,
+            WallpaperSlots.lockLiveSupported(sdk), () -> {}, restore, thumbs);
+        mActivity.setContentView(page.root());
+        settle();
+        return page;
+    }
+
+    private final List<File> mDecoded = new ArrayList<>();
+
+    @NonNull
+    private File photoFile(@NonNull String name) {
+        try {
+            File dir = new File(mActivity.getCacheDir(), "picker-test");
+            if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("no dir");
+            File f = new File(dir, name);
+            if (!f.isFile() && !f.createNewFile()) throw new IOException("no file");
+            return f;
+        } catch (IOException e) {
+            throw new AssertionError(e);
+        }
     }
 
     /** Runs the posted card sizing and the frames that lay it out. */
@@ -375,6 +429,156 @@ public abstract class WallpaperPickerPageTestBase {
         page.root().findViewById(R.id.wallpaper_picker_photo).performClick();
         assertEquals("shown false", mListener.calls.get(mListener.calls.size() - 2));
         assertEquals("photo LOCK", mListener.calls.get(mListener.calls.size() - 1));
+    }
+
+    // --- photos ---
+
+    @Test
+    public void aCroppedPhotoComesBackPendingAndApplySetsIt() {
+        WallpaperPickerPage page = open(34);
+        page.root().findViewById(R.id.wallpaper_picker_photo).performClick();
+        assertEquals("photo HOME", mListener.calls.get(mListener.calls.size() - 1));
+        WallpaperPickerPage.ReturnState back = mListener.back;
+        assertTrue(back != null);
+
+        File cropped = photoFile("pending.png");
+        WallpaperPickerPage.ReturnState restore =
+            WallpaperPickerPage.ReturnState.withPhoto(back, WallpaperSlots.Slot.HOME, cropped, mSlots.state);
+        mSlots.keptPhoto = photoFile("exact.png");
+        WallpaperPickerPage again = open(34, restore);
+        assertEquals(WallpaperSlots.Slot.HOME, again.centredSlot());
+        assertEquals(cropped, again.pending(WallpaperSlots.Slot.HOME).photoFile);
+        assertTrue("previewed, not applied", mSlots.calls.isEmpty());
+        View apply = again.root().findViewById(R.id.wallpaper_picker_apply);
+        assertTrue("a pending photo enables Apply", apply.isEnabled());
+
+        apply.performClick();
+        assertEquals(Arrays.asList("apply HOME", "apply LOCK"), mSlots.calls);
+        assertTrue(mSlots.applied.get(0).photo);
+        assertEquals(cropped, mSlots.applied.get(0).photoFile);
+        assertTrue("Lock follows", mSlots.applied.get(1).sameAsHome);
+        assertEquals("the page now shows what is kept", mSlots.keptPhoto,
+            again.pending(WallpaperSlots.Slot.HOME).photoFile);
+        assertFalse(apply.isEnabled());
+    }
+
+    @Test
+    public void aLockOnlyPhotoSetsTheLockScreenAlone() {
+        File cropped = photoFile("lock-pending.png");
+        WallpaperPickerPage.ReturnState restore = WallpaperPickerPage.ReturnState.withPhoto(null,
+            WallpaperSlots.Slot.LOCK, cropped, mSlots.state);
+        WallpaperPickerPage page = open(34, restore);
+        assertEquals(WallpaperSlots.Slot.LOCK, page.centredSlot());
+        assertTrue(page.slotOnlyEnabled(WallpaperSlots.Slot.LOCK));
+        page.applySlotOnly(WallpaperSlots.Slot.LOCK);
+        assertEquals(Arrays.asList("apply LOCK"), mSlots.calls);
+        assertEquals(cropped, mSlots.applied.get(0).photoFile);
+        assertEquals("Home untouched", "aurora", mSlots.state.home.animatedId);
+    }
+
+    @Test
+    public void thePhotoReturnStateRoundTrips() {
+        WallpaperPickerPage page = open(34);
+        page.centre(WallpaperSlots.Slot.LOCK);
+        page.choose(WallpaperSlots.Choice.animated("rain"));
+        page.centre(WallpaperSlots.Slot.HOME);
+        page.root().findViewById(R.id.wallpaper_picker_photo).performClick();
+        WallpaperPickerPage.ReturnState back = mListener.back;
+        assertTrue(back != null);
+        assertEquals(WallpaperSlots.Slot.HOME, back.centred);
+        assertEquals("rain", back.pendingLock.animatedId);
+        assertTrue("Photo… is a hand-off: nothing is discarded", mSlots.discarded.isEmpty());
+
+        File cropped = photoFile("round-trip.png");
+        WallpaperPickerPage.ReturnState restore =
+            WallpaperPickerPage.ReturnState.withPhoto(back, WallpaperSlots.Slot.HOME, cropped, mSlots.state);
+        WallpaperPickerPage again = open(34, restore);
+        assertEquals("the other slot keeps its pending choice", "rain",
+            again.pending(WallpaperSlots.Slot.LOCK).animatedId);
+        WallpaperPickerPage.ReturnState out = again.returnState();
+        assertEquals(WallpaperSlots.Slot.HOME, out.centred);
+        assertEquals(cropped, out.pendingHome.photoFile);
+        assertEquals("rain", out.pendingLock.animatedId);
+
+        // A cancelled pick comes back with back itself: nothing changed.
+        WallpaperPickerPage cancelled = open(34, back);
+        assertEquals("aurora", cancelled.pending(WallpaperSlots.Slot.HOME).animatedId);
+    }
+
+    @Test
+    public void backWithoutApplyDiscardsThePendingPhoto() {
+        File cropped = photoFile("discard.png");
+        WallpaperPickerPage page = open(34, WallpaperPickerPage.ReturnState.withPhoto(null,
+            WallpaperSlots.Slot.HOME, cropped, mSlots.state));
+        page.close();
+        assertTrue(mSlots.calls.isEmpty());
+        assertEquals(Collections.singletonList(cropped), mSlots.discarded);
+    }
+
+    @Test
+    public void theCurrentPhotoShowsInItsCard() {
+        File exact = photoFile("current.png");
+        mSlots.state = new WallpaperSlots.State(WallpaperSlots.Choice.photo(exact),
+            WallpaperSlots.Choice.sameAsHome(), true, false);
+        WallpaperPickerPage page = openWithPhotos(34, null);
+        WallpaperPreviewView card = page.card(WallpaperSlots.Slot.HOME);
+        assertTrue("the Home card is bound", card != null);
+        assertTrue(card.showsPhoto());
+        assertTrue("the photo was decoded", mDecoded.contains(exact));
+        assertTrue("the card has the picture", card.still() != null);
+        WallpaperPreviewView lock = page.card(WallpaperSlots.Slot.LOCK);
+        if (lock != null) {
+            assertTrue("Same as Home shows Home's photo", lock.showsPhoto());
+        }
+    }
+
+    @Test
+    public void recentPhotosLeadTheStrip() {
+        File a = photoFile("recent-a.png");
+        File b = photoFile("recent-b.png");
+        mSlots.recents = Arrays.asList(a, b);
+        WallpaperPickerPage page = openWithPhotos(34, null);
+        assertEquals(2, page.recentTileCount());
+        assertEquals(AnimatedWallpapers.all().size(), page.animatedTileCount());
+        assertEquals(1 + 2 + AnimatedWallpapers.all().size(), page.tileCount());
+        assertTrue("the Recent label", page.recentBadge() != null);
+        assertTrue("thumbnails decoded", mDecoded.containsAll(Arrays.asList(a, b)));
+
+        page.choose(WallpaperSlots.Choice.photo(b));
+        View apply = page.root().findViewById(R.id.wallpaper_picker_apply);
+        assertTrue(apply.isEnabled());
+        apply.performClick();
+        assertEquals("no new crop: the recent file itself", b, mSlots.applied.get(0).photoFile);
+    }
+
+    @Test
+    public void below34ThePageHoldsPhotosOnly() {
+        mSlots.state = new WallpaperSlots.State(WallpaperSlots.Choice.photo(photoFile("home.png")),
+            WallpaperSlots.Choice.sameAsHome(), true, false);
+        mSlots.recents = Arrays.asList(photoFile("r1.png"), photoFile("r2.png"), photoFile("r3.png"));
+        WallpaperPickerPage page = openWithPhotos(33, null);
+        View root = page.root();
+        assertEquals("no animated tiles", 0, page.animatedTileCount());
+        assertEquals(3, page.recentTileCount());
+        assertEquals("Same as Home and the recents", 1 + 3, page.tileCount());
+        assertEquals("no Motion", View.GONE, root.findViewById(R.id.wallpaper_picker_motion_row).getVisibility());
+        View photo = root.findViewById(R.id.wallpaper_picker_photo);
+        assertTrue("Photo… is there", photo.isShown());
+        assertTrue(photo.getHeight() >= dp(48));
+        WallpaperPreviewView card = page.card(WallpaperSlots.Slot.HOME);
+        assertTrue(card != null);
+        assertFalse("no live preview", card.isLive());
+        assertInside(root, root);
+
+        // Same as Home still works for Lock.
+        page.centre(WallpaperSlots.Slot.LOCK);
+        assertEquals(View.VISIBLE, page.sameAsHomeTile().getVisibility());
+        page.choose(WallpaperSlots.Choice.photo(mSlots.recents.get(0)));
+        page.applySlotOnly(WallpaperSlots.Slot.LOCK);
+        page.choose(WallpaperSlots.Choice.sameAsHome());
+        page.applySlotOnly(WallpaperSlots.Slot.LOCK);
+        assertEquals(Arrays.asList("apply LOCK", "apply LOCK"), mSlots.calls);
+        assertTrue(mSlots.state.lock.sameAsHome);
     }
 
     /** Every shown view lies inside the root, and no shown text is cut short. */

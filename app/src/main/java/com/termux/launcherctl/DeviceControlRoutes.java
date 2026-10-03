@@ -386,29 +386,21 @@ final class DeviceControlRoutes {
         if (bounds == null) return error(415, "not_an_image", "The file is not an image Android can decode");
 
         Context app = context.getApplicationContext();
-        // The picker's cropper writes the pending file that apply() promotes to the exact copy;
-        // staging the picture there makes this path end in the same state.
-        Uri staged = ManagedWallpaper.stageSource(app, resolved);
-        if (staged == null) return error(500, "stage_failed", "The picture could not be copied for applying");
-        int[] portrait = ManagedWallpaper.portraitSize(app);
-        boolean applied = ManagedWallpaper.apply(app, WallpaperManager.getInstance(app), staged, flags,
-            portrait[0], portrait[1], TermuxAppSharedPreferences.build(app, false));
-        if (!applied) return error(500, "wallpaper_failed", "Android refused the wallpaper");
-
-        // A photo is the wallpaper now: forget any generated background. Slots: home or both
-        // records the Home slot (and both makes the Lock slot Same as Home); lock records the
-        // Lock slot as a photo.
-        if ((flags & WallpaperManager.FLAG_SYSTEM) != 0) {
-            WallpaperSlots.notePhotoApplied(app, WallpaperSlots.Slot.HOME);
-            TermuxAppSharedPreferences slotPrefs = (flags & WallpaperManager.FLAG_LOCK) != 0
-                ? TermuxAppSharedPreferences.build(app, false) : null;
-            if (slotPrefs != null) {
-                slotPrefs.setWallpaperLockChoice(
-                    com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.VALUE_WALLPAPER_LOCK_SAME_AS_HOME);
-            }
-        } else if ((flags & WallpaperManager.FLAG_LOCK) != 0) {
-            WallpaperSlots.notePhotoApplied(app, WallpaperSlots.Slot.LOCK);
+        // The picker's Apply runs the same helper: stage through the cropper's pending file (so
+        // the exact copy follows), set, then record the slots. Home or both records the Home slot
+        // (both makes the Lock slot Same as Home); lock records the Lock slot as a photo and keeps
+        // its copy. The picture joins the recent photos either way.
+        boolean home = (flags & WallpaperManager.FLAG_SYSTEM) != 0;
+        boolean lock = (flags & WallpaperManager.FLAG_LOCK) != 0;
+        String lockRecord = !lock ? null : home
+            ? com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.VALUE_WALLPAPER_LOCK_SAME_AS_HOME
+            : com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.VALUE_WALLPAPER_LOCK_PHOTO;
+        String failure = WallpaperSlots.applyPhotoNow(app, resolved, flags, home, lockRecord);
+        if ("stage_failed".equals(failure)) {
+            return error(500, "stage_failed", "The picture could not be copied for applying");
         }
+        if ("not_found".equals(failure)) return error(404, "not_found", "No such file: " + path);
+        if (failure != null) return error(500, "wallpaper_failed", "Android refused the wallpaper");
         boolean live = TerminalActionDispatcher.getInstance().isAttached();
         if ((flags & WallpaperManager.FLAG_SYSTEM) != 0) {
             // What the picker does once its apply finishes: the picture is ours again, so turn

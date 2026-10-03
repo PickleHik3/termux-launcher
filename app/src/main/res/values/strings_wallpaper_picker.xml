@@ -21,6 +21,10 @@
     <string name="wallpaper_picker_same_as_home">Same as Home</string>
     <string name="wallpaper_picker_photo">Photo…</string>
     <string name="wallpaper_picker_photo_preview">Your photo</string>
+    <!-- The Recent group's label on the first of the last three photos in the strip. -->
+    <string name="wallpaper_picker_recent">Recent</string>
+    <!-- A recent photo tile, for TalkBack: "Recent photo 1" is the newest. -->
+    <string name="wallpaper_picker_recent_photo">Recent photo %1$d</string>
     <string name="wallpaper_picker_apply_failed">Could not apply the background</string>
     <string name="wallpaper_picker_motion_failed">Could not change Motion</string>
 </resources>

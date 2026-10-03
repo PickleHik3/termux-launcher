@@ -177,6 +177,84 @@ public class WallpaperSlotPlanTest {
             WallpaperSlotPlan.forMotion(true, in(null, Choice.sameAsHome(), false, false)).kind);
     }
 
+    // --- photos with their picture (lock-live-wallpaper.md, "Photos"), the same at 33 and 34 ---
+
+    private static final java.io.File PICTURE = new java.io.File("/data/pending/1.png");
+
+    private static Inputs at(int sdk, String homeId, Choice lock, boolean motion, boolean live) {
+        return new Inputs(sdk, homeId, lock, motion, live);
+    }
+
+    @Test public void photoOnBothScreens() {
+        for (int sdk : new int[] {33, 34}) {
+            // Apply: Home first, with Lock already Same as Home: one set for both screens…
+            WallpaperSlotPlan home = WallpaperSlotPlan.forApply(Slot.HOME, Choice.photo(PICTURE),
+                at(sdk, "mesh", Choice.sameAsHome(), true, false));
+            assertEquals(sdk + "", Kind.SET_PHOTO, home.kind);
+            assertEquals(sdk + "", SYSTEM | LOCK, home.flags);
+            assertEquals(PICTURE, home.photo);
+            assertTrue(home.recordHome);
+            assertNull(home.recordLock);
+            // …then Lock follows, which has nothing left to set.
+            WallpaperSlotPlan follows = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.sameAsHome(),
+                at(sdk, null, Choice.sameAsHome(), true, false));
+            assertEquals(sdk + "", Kind.RECORD_ONLY, follows.kind);
+            assertEquals("same_as_home", follows.recordLock);
+
+            // Lock had its own choice: Home's set is Home's only, and Lock follows by copying it.
+            WallpaperSlotPlan homeOnly = WallpaperSlotPlan.forApply(Slot.HOME, Choice.photo(PICTURE),
+                at(sdk, "mesh", Choice.animated("rain"), false, false));
+            assertEquals(SYSTEM, homeOnly.flags);
+            WallpaperSlotPlan copy = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.sameAsHome(),
+                at(sdk, null, Choice.animated("rain"), false, false));
+            assertEquals(sdk + "", Kind.COPY_HOME_PHOTO_TO_LOCK, copy.kind);
+            assertEquals(LOCK, copy.flags);
+            assertEquals("same_as_home", copy.recordLock);
+        }
+    }
+
+    @Test public void photoOnBothScreensReplacesALiveLock() {
+        // At 34 with our live wallpaper on the lock screen and Motion on, Same as Home still
+        // takes the photo: the engine cannot draw one.
+        WallpaperSlotPlan home = WallpaperSlotPlan.forApply(Slot.HOME, Choice.photo(PICTURE),
+            at(34, "mesh", Choice.sameAsHome(), true, true));
+        assertEquals(Kind.SET_PHOTO, home.kind);
+        assertEquals(SYSTEM | LOCK, home.flags);
+        WallpaperSlotPlan follows = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.sameAsHome(),
+            at(34, null, Choice.sameAsHome(), true, true));
+        assertEquals("still live: copy the photo over it", Kind.COPY_HOME_PHOTO_TO_LOCK, follows.kind);
+    }
+
+    @Test public void photoOnHomeOnly() {
+        for (int sdk : new int[] {33, 34}) {
+            WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.HOME, Choice.photo(PICTURE),
+                at(sdk, "mesh", Choice.animated("tide"), true, true));
+            assertEquals(sdk + "", Kind.SET_PHOTO, p.kind);
+            assertEquals(sdk + "", SYSTEM, p.flags);
+            assertTrue(p.recordHome);
+            assertNull("the Lock slot is left alone", p.recordLock);
+        }
+    }
+
+    @Test public void photoOnLockOnly() {
+        for (int sdk : new int[] {33, 34}) {
+            WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.photo(PICTURE),
+                at(sdk, "mesh", Choice.sameAsHome(), true, sdk >= 34));
+            assertEquals(sdk + "", Kind.SET_PHOTO, p.kind);
+            assertEquals(sdk + "", LOCK, p.flags);
+            assertEquals(PICTURE, p.photo);
+            assertFalse("Home untouched", p.recordHome);
+            assertEquals("photo", p.recordLock);
+        }
+    }
+
+    @Test public void sameAsHomeOverAHomePhotoWorksBelow34() {
+        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.sameAsHome(),
+            at(33, null, Choice.photo(), true, false));
+        assertEquals(Kind.COPY_HOME_PHOTO_TO_LOCK, p.kind);
+        assertEquals("same_as_home", p.recordLock);
+    }
+
     @Test public void lockLiveSupportedFrom34() {
         assertFalse(WallpaperSlots.lockLiveSupported(26));
         assertFalse(WallpaperSlots.lockLiveSupported(33));
