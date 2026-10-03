@@ -512,7 +512,9 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             row = next;
             boundId = next.snapshot.id;
             TaiModelCentreRows.State state = next.state;
-            kind.setImageResource(next.speech ? R.drawable.ic_tai_wave : R.drawable.ic_tai_chat);
+            kind.setImageResource(next.speech ? R.drawable.ic_tai_wave
+                : TaiModelCatalog.visionEntries().containsKey(next.snapshot.modelId) ? R.drawable.ic_tai_image
+                : R.drawable.ic_tai_chat);
             setText(title, next.title);
             setText(subtitle, next.subtitle);
             setText(pill, state.pill);
