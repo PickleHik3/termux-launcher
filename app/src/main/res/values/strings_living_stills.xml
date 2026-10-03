@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Living stills (project-docs/active/animated-wallpaper/living-stills.md, Part C and D): the stage
+  labels the wallpaper page shows while a photo is brought to life. The page itself is Part D.
+-->
+<resources>
+    <string name="living_stage_depth">Reading depth…</string>
+    <string name="living_stage_scene">Finding sky and water…</string>
+    <string name="living_stage_subject">Finding the subject…</string>
+    <string name="living_stage_gemma">Asking Gemma…</string>
+    <string name="living_stage_recipe">Building…</string>
+</resources>
