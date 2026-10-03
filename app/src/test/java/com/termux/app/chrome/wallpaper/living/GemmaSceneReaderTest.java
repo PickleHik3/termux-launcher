@@ -54,13 +54,20 @@ public class GemmaSceneReaderTest {
         assertNull(GemmaSceneReader.parse("no json here", 10));
         assertNull(GemmaSceneReader.parse("{\"style\":\"painting\",\"regions\":{}}", 10));
         assertNull(GemmaSceneReader.parse("{\"style\":\"photo\"}", 10));
-        assertNull(GemmaSceneReader.parse("{\"style\":\"photo\",\"regions\":{\"sky\":[11]}}", 10));
-        assertNull(GemmaSceneReader.parse("{\"style\":\"photo\",\"regions\":{\"sky\":[0]}}", 10));
         assertNull(GemmaSceneReader.parse("{\"style\":\"photo\",\"regions\":{\"sky\":[\"a\"]}}", 10));
         assertNull(GemmaSceneReader.parse("{\"style\":\"photo\",\"regions\":{\"sky\":1}}", 10));
         assertNull(GemmaSceneReader.parse("{\"style\":\"photo\",\"regions\":{},\"water_style\":\"ocean\"}", 10));
         assertNull(GemmaSceneReader.parse("{\"style\":\"photo\",\"regions\":{},\"intensity\":3}", 10));
         assertNull(GemmaSceneReader.parse("{\"style\":\"photo\",\"regions\":{},\"trail_angle_deg\":\"left\"}", 10));
+    }
+
+    @Test
+    public void marksPastTheRegionsAreDropped() {
+        GemmaSceneReader.Plan p = GemmaSceneReader.parse(
+            "{\"style\":\"photo\",\"regions\":{\"sky\":[0,4,11],\"water\":[12]}}", 10);
+        assertNotNull(p);
+        assertArrayEquals(new int[] {4}, p.regions.get("sky"));
+        assertNull(p.regions.get("water"));
     }
 
     @Test

@@ -224,7 +224,10 @@ public final class GemmaSceneReader {
         return allowed.contains(s) ? s : null;
     }
 
-    /** Distinct integers in 1..count, or {@code null} when any entry is not one. */
+    /**
+     * Distinct integers in 1..count, or {@code null} when any entry is not a whole number. A number
+     * past the last region is dropped rather than failing the answer: a small model miscounts.
+     */
     @Nullable
     private static int[] marks(JSONArray a, int count) {
         int[] tmp = new int[a.length()];
@@ -233,7 +236,8 @@ public final class GemmaSceneReader {
             Object v = a.opt(i);
             if (!(v instanceof Number)) return null;
             double d = ((Number) v).doubleValue();
-            if (d != Math.rint(d) || d < 1 || d > count) return null;
+            if (d != Math.rint(d)) return null;
+            if (d < 1 || d > count) continue;
             int m = (int) d;
             boolean seen = false;
             for (int j = 0; j < n; j++) if (tmp[j] == m) seen = true;
