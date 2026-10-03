@@ -21,6 +21,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.chip.Chip;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.progressindicator.CircularProgressIndicator;
@@ -156,6 +157,10 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         boolean voiceOutput;
         /** A text-to-image model: the picture icon, and a menu with Delete only. */
         boolean image;
+        /** A wallpaper vision graph: the picture icon, and a menu with "Use for depth maps" and Delete only. */
+        boolean vision;
+        /** Brought into view from a deep link: ringed for a moment so the eye finds it. */
+        boolean highlighted;
 
         ModelRow(@NonNull String modelId, boolean speech, @Nullable TaiModelSpec installed,
                  @Nullable TaiModelCatalog.CatalogEntry entry) {
@@ -168,7 +173,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         @NonNull
         String signature() {
             return title + '|' + subtitle + '|' + pillPrimary + '|' + tonePrimary + '|' + pillSecondary + '|'
-                + pillBackend + '|' + pillSpeed + '|' + installable + '|' + installing + '|' + note + '|' + noteIsError + '|' + tokenAction;
+                + pillBackend + '|' + pillSpeed + '|' + installable + '|' + installing + '|' + note + '|' + noteIsError + '|' + tokenAction + '|' + highlighted;
         }
     }
 
@@ -288,6 +293,15 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             // on the item view, and two animators on one view cancel each other.
             if (target != null) TaiMotion.arrive(target);
         }
+    }
+
+    /** The list position of the model row for {@code modelId}, or -1 when this list has none. */
+    int positionOfModel(@NonNull String modelId) {
+        for (int i = 0; i < items.size(); i++) {
+            Item item = items.get(i);
+            if (item.type == TYPE_MODEL && item.key.equals(modelId)) return i;
+        }
+        return -1;
     }
 
     /** Lets a row that left and came back (a download cancelled and retried) arrive again. */
@@ -666,7 +680,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         void bind(@NonNull ModelRow next) {
             Context context = itemView.getContext();
             row = next;
-            kind.setImageResource(next.image ? R.drawable.ic_tai_image
+            kind.setImageResource(next.image || next.vision ? R.drawable.ic_tai_image
                 : next.speech ? R.drawable.ic_tai_wave : R.drawable.ic_tai_chat);
             setText(title, next.title);
             setText(subtitle, next.subtitle);
@@ -680,6 +694,11 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             ring.setVisibility(next.installing ? View.VISIBLE : View.GONE);
             more.setVisibility(next.installed != null ? View.VISIBLE : View.GONE);
             more.setContentDescription(context.getString(R.string.tai_centre_action_more, next.title));
+            if (core instanceof MaterialCardView) {
+                MaterialCardView card = (MaterialCardView) core;
+                card.setStrokeColor(role(context, androidx.appcompat.R.attr.colorPrimary));
+                card.setStrokeWidth(next.highlighted ? Math.round(2 * context.getResources().getDisplayMetrics().density) : 0);
+            }
             setText(note, next.note);
             note.setTextColor(role(context, next.noteIsError ? androidx.appcompat.R.attr.colorError
                 : com.google.android.material.R.attr.colorOnSurfaceVariant));

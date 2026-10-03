@@ -29,9 +29,9 @@ public class TaiModelCatalogTest {
             if (TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) mnnCount++;
         }
 
-        assertEquals(9, entries.size());
-        assertEquals(9, new HashSet<>(entries.keySet()).size());
-        assertEquals(9, liteRtCount);
+        assertEquals(13, entries.size());
+        assertEquals(13, new HashSet<>(entries.keySet()).size());
+        assertEquals(13, liteRtCount);
         assertEquals(0, mnnCount);
         assertTrue(entries.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
         assertTrue(entries.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT));
@@ -39,6 +39,7 @@ public class TaiModelCatalogTest {
         assertEquals(5, TaiModelCatalog.speechEntries().size());
         assertEquals(1, TaiModelCatalog.ttsEntries().size());
         assertEquals(1, TaiModelCatalog.embeddingEntries().size());
+        assertEquals(4, TaiModelCatalog.visionEntries().size());
         assertNull(TaiModelCatalog.get("qwen2.5-coder-1.5b-instruct-mnn"));
         assertNull(TaiModelCatalog.get("deepseek-r1-distill-qwen-1.5b-litert-lm"));
         assertNull(TaiModelCatalog.get(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M));
@@ -296,6 +297,34 @@ public class TaiModelCatalogTest {
         assertFalse(TaiModelCatalog.chatEntries().containsKey(entry.modelId));
         assertFalse(TaiModelCatalog.speechEntries().containsKey(entry.modelId));
         assertTrue(TaiModelCatalog.ttsEntries().containsKey(entry.modelId));
+    }
+
+    @Test
+    public void visionEntries_arePinnedToolModelsKeptOutOfChat() {
+        String[] ids = {TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID,
+            TaiModelCatalog.SEGFORMER_B0_ADE20K_ID, TaiModelCatalog.U2NET_ID};
+        for (String id : ids) {
+            TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(id);
+            assertNotNull(id, entry);
+            assertEquals(id, 64, entry.sha256.length());
+            assertEquals(id, 40, entry.revision.length());
+            assertTrue(id, entry.endpointCapabilities.size() == 1);
+            assertFalse(id, entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT));
+            assertFalse(id, entry.gated);
+            assertTrue(id, entry.sidecars.isEmpty());
+            assertTrue(id, TaiModelCatalog.visionEntries().containsKey(id));
+            assertFalse(id, TaiModelCatalog.chatEntries().containsKey(id));
+            assertFalse(id, TaiModelCatalog.ttsEntries().containsKey(id));
+            assertFalse(id, TaiModelCatalog.speechEntries().containsKey(id));
+            assertFalse(id, TaiModelCatalog.embeddingEntries().containsKey(id));
+        }
+        assertTrue(TaiModelCatalog.get(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID)
+            .endpointCapabilities.contains(TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION));
+        assertTrue(TaiModelCatalog.get(TaiModelCatalog.SEGFORMER_B0_ADE20K_ID)
+            .endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SCENE_SEGMENTATION));
+        assertTrue(TaiModelCatalog.get(TaiModelCatalog.U2NET_ID)
+            .endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SUBJECT_SEGMENTATION));
+        assertTrue(TaiModelCatalog.get(TaiModelCatalog.SEGFORMER_B0_ADE20K_ID).license.contains("non-commercial"));
     }
 
     @Test

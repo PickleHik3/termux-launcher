@@ -44,6 +44,8 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     private final KittenTtsRuntime tts;
     /** Text-to-image; serialises its own generation and close, and never takes the router lock. */
     private final MnnDiffusionRuntime image;
+    /** The one-shot wallpaper analysis (depth, scene, subject); one graph at a time, never under the router lock. */
+    private final WallpaperVisionRuntime vision;
     private final TaiResidency residency;
     /** Held across load, keep-warm and unload; never by a read, a cancel or a generation. */
     private final Object loadLock = new Object();
@@ -89,6 +91,7 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         parakeetStt = new ParakeetSttRuntime(residency, context);
         tts = new KittenTtsRuntime(residency, context);
         image = new MnnDiffusionRuntime(residency, context);
+        vision = new WallpaperVisionRuntime(residency, context);
         activeAssistant = liteRt;
     }
 
@@ -245,6 +248,22 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
 
     public boolean isImageActive() {
         return image.isActive();
+    }
+
+    /** One wallpaper analysis; see {@link WallpaperVisionRuntime#analyze}. No router lock: a cancel never queues behind it. */
+    @NonNull
+    public JSONObject analyzeWallpaper(@NonNull WallpaperVisionRuntime.Params params,
+                                       @NonNull WallpaperVisionRuntime.Progress progress) throws JSONException {
+        return vision.analyze(params, progress);
+    }
+
+    /** Stops the wallpaper analysis in flight; false when none is running. */
+    public boolean cancelWallpaperAnalysis() {
+        return vision.requestCancel();
+    }
+
+    public boolean isWallpaperAnalysisActive() {
+        return vision.isActive();
     }
 
     // Each embedding runtime serializes embed() and close() on its own monitor, so a running batch

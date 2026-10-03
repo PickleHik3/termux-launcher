@@ -36,6 +36,11 @@ public final class TaiModelSpec {
     // Text-to-image generation (mnn-diffusion packages). Image-only like speech_to_text: kept out of
     // chat catalogues, the installed chat list, /v1/models and `tai load`.
     public static final String CAPABILITY_IMAGE_GENERATION = "image_generation";
+    // Wallpaper vision graphs (depth, scene and subject segmentation, WallpaperVisionRuntime). Tool
+    // models like speech: run by the one-shot analysis job, never loaded, never chat or /v1/models.
+    public static final String CAPABILITY_DEPTH_ESTIMATION = "depth_estimation";
+    public static final String CAPABILITY_SCENE_SEGMENTATION = "scene_segmentation";
+    public static final String CAPABILITY_SUBJECT_SEGMENTATION = "subject_segmentation";
     public static final String CAPABILITY_IMAGE_INPUT = "image_input";
     public static final String CAPABILITY_AUDIO_INPUT = "audio_input";
     // Declared-only intent: no runtime processes video yet, so this rides on sourceCapabilities
@@ -317,6 +322,18 @@ public final class TaiModelSpec {
             || endpointCapabilities.contains(CAPABILITY_IMAGE_GENERATION);
     }
 
+    /** True for a wallpaper vision graph (depth, scene or subject): analysed on demand by the wallpaper
+     *  job, never loaded into the chat runtime or listed in chat lists, pickers and /v1/models. */
+    public boolean isVisionTool() {
+        return isVisionTool(capabilities) || isVisionTool(endpointCapabilities);
+    }
+
+    public static boolean isVisionTool(@NonNull Set<String> capabilities) {
+        return capabilities.contains(CAPABILITY_DEPTH_ESTIMATION)
+            || capabilities.contains(CAPABILITY_SCENE_SEGMENTATION)
+            || capabilities.contains(CAPABILITY_SUBJECT_SEGMENTATION);
+    }
+
     @NonNull
     private static String requireSupportedBackend(@Nullable String backend) {
         if (BACKEND_LITERT_LM.equals(backend) || BACKEND_MNN_LLM.equals(backend)
@@ -380,6 +397,13 @@ public final class TaiModelSpec {
         }
         if (source.contains(CAPABILITY_TEXT_TO_SPEECH)) {
             endpoint.add(CAPABILITY_TEXT_TO_SPEECH);
+            return endpoint;
+        }
+        // A vision graph is tool-only too: its one capability, nothing chat-like.
+        if (isVisionTool(source)) {
+            addIfPresent(endpoint, source, CAPABILITY_DEPTH_ESTIMATION, false);
+            addIfPresent(endpoint, source, CAPABILITY_SCENE_SEGMENTATION, false);
+            addIfPresent(endpoint, source, CAPABILITY_SUBJECT_SEGMENTATION, false);
             return endpoint;
         }
         if (localPath != null && localPath.toLowerCase(Locale.ROOT).endsWith(".tflite")) {
