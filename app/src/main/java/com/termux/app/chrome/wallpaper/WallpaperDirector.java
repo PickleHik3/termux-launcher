@@ -56,6 +56,8 @@ public final class WallpaperDirector {
     public static final long PAGE_MS = 600;
     public static final long TOUCH_MS = 1200;
     public static final long BELL_MS = 1500;
+    /** How long {@link Frame#focus} takes to go from 0 to 1 or back. */
+    public static final long FOCUS_EASE_MS = 350;
 
     /** A single frame delta is clamped to this, so a resume never makes the picture jump. */
     private static final long MAX_DELTA_NANOS = 100_000_000L;
@@ -157,9 +159,20 @@ public final class WallpaperDirector {
         public final Moment[] moments;
         /** True on exactly one frame per lock: the host should run the lock now. */
         public final boolean lockDue;
+        /**
+         * 0..1, eased: how far the launcher asks the picture to recede (the terminal sheet is open
+         * or the keyboard is up). Only a living still reads it, as a focus blur; 0 elsewhere.
+         */
+        public final float focus;
 
         Frame(int fps, float timeSeconds, float phaseSeconds, float energy, float dim, int[] palette,
               Moment[] moments, boolean lockDue) {
+            this(fps, timeSeconds, phaseSeconds, energy, dim, palette, moments, lockDue, 0f);
+        }
+
+        Frame(int fps, float timeSeconds, float phaseSeconds, float energy, float dim, int[] palette,
+              Moment[] moments, boolean lockDue, float focus) {
+            this.focus = focus;
             this.fps = fps;
             this.timeSeconds = timeSeconds;
             this.phaseSeconds = phaseSeconds;
@@ -187,6 +200,9 @@ public final class WallpaperDirector {
     private int mode = PLAY;
     private long lockStartNanos;
     private boolean lockForced;
+    /** The launcher wants the picture to recede, and how far the eased {@link Frame#focus} has got. */
+    private boolean focusWanted;
+    private float focusLevel;
     private long unlockStartNanos;
     private long unlockQueuedNanos;
     private float unlockFromDim;
@@ -217,6 +233,14 @@ public final class WallpaperDirector {
     /** Sets the phone's conditions; call whenever any of them changes. */
     public void setConditions(Conditions c, long nowNanos) {
         cond = c;
+    }
+
+    /**
+     * Whether the launcher wants the picture to recede (terminal sheet open, keyboard up). The
+     * clock calls it every frame; {@link Frame#focus} eases towards it over {@link #FOCUS_EASE_MS}.
+     */
+    public void setFocus(boolean wanted) {
+        focusWanted = wanted;
     }
 
     /** The step-down tier, 0 = full. */
@@ -339,6 +363,11 @@ public final class WallpaperDirector {
                 if (phase >= wrapSeconds) phase -= wrapSeconds;
             }
         }
+        if (playing && lastFramePlayed && lastFrameNanos >= 0) {
+            long delta = Math.min(frameTimeNanos - lastFrameNanos, MAX_DELTA_NANOS);
+            float step = delta <= 0 ? 0f : delta / (float) (FOCUS_EASE_MS * NANOS_PER_MS);
+            focusLevel = focusWanted ? Math.min(1f, focusLevel + step) : Math.max(0f, focusLevel - step);
+        }
         lastFramePlayed = playing;
         lastFrameNanos = frameTimeNanos;
 
@@ -413,7 +442,8 @@ public final class WallpaperDirector {
             moments[i] = new Moment(slotKind[i], slotX[i], slotY[i], slotW[i], slotH[i], p);
         }
 
-        return new Frame(fps, (float) time, (float) phase, energy, dim, palette, moments, lockDue);
+        return new Frame(fps, (float) time, (float) phase, energy, dim, palette, moments, lockDue,
+            smooth(focusLevel));
     }
 
     /**

@@ -455,4 +455,37 @@ public class WallpaperDirectorTest {
         d.setConditions(Conditions.playing().build(), T0);
         assertNull(d.reason());
     }
+
+    @Test
+    public void focusEasesInAndOutAndStaysInRange() {
+        WallpaperDirector d = playing();
+        assertEquals("no focus by default", 0f, at(d, 0).focus, EPS);
+        d.setFocus(true);
+        float last = 0f;
+        for (long t = 33; t <= 330; t += 33) {
+            Frame f = at(d, t);
+            assertTrue("rises monotonically", f.focus >= last);
+            assertTrue(f.focus <= 1f);
+            last = f.focus;
+        }
+        assertTrue("part way after 330 ms", last > 0.3f && last < 1f);
+        Frame full = run(d, 363, 800);
+        assertEquals("settled", 1f, full.focus, EPS);
+        d.setFocus(false);
+        Frame back = run(d, 833, 1400);
+        assertEquals("and back", 0f, back.focus, EPS);
+    }
+
+    @Test
+    public void focusHoldsWhileNotPlaying() {
+        WallpaperDirector d = playing();
+        d.setFocus(true);
+        run(d, 0, 600);
+        Conditions.Builder b = Conditions.playing();
+        b.visible = false;
+        d.setConditions(b.build(), T0);
+        d.setFocus(false);
+        Frame paused = run(d, 633, 1500);
+        assertEquals("a paused director does not ease", 1f, paused.focus, EPS);
+    }
 }

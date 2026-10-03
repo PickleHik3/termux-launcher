@@ -104,7 +104,7 @@ final class WallpaperSlotPlan {
         if (TERMUX_APP.VALUE_WALLPAPER_LOCK_PHOTO.equals(value)) return WallpaperSlots.Choice.photo();
         if (value != null && value.startsWith(TERMUX_APP.VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX)) {
             String id = value.substring(TERMUX_APP.VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX.length());
-            if (AnimatedWallpapers.byId(id) != null) return WallpaperSlots.Choice.animated(id);
+            if (AnimatedWallpapers.isKnownId(id)) return WallpaperSlots.Choice.animated(id);
         }
         return WallpaperSlots.Choice.sameAsHome();
     }
@@ -112,7 +112,7 @@ final class WallpaperSlotPlan {
     /** The Home slot as a Choice: a known generated id, else a photo. */
     @NonNull
     static WallpaperSlots.Choice homeChoice(@Nullable String homeAnimatedId) {
-        return homeAnimatedId != null && AnimatedWallpapers.byId(homeAnimatedId) != null
+        return AnimatedWallpapers.isKnownId(homeAnimatedId)
             ? WallpaperSlots.Choice.animated(homeAnimatedId) : WallpaperSlots.Choice.photo();
     }
 
@@ -123,10 +123,10 @@ final class WallpaperSlotPlan {
     @Nullable
     static String resolveLockId(@NonNull WallpaperSlots.Choice lock, @Nullable String homeAnimatedId) {
         if (lock.sameAsHome) {
-            return homeAnimatedId != null && AnimatedWallpapers.byId(homeAnimatedId) != null ? homeAnimatedId : null;
+            return AnimatedWallpapers.isKnownId(homeAnimatedId) ? homeAnimatedId : null;
         }
         if (lock.photo) return null;
-        return lock.animatedId != null && AnimatedWallpapers.byId(lock.animatedId) != null ? lock.animatedId : null;
+        return AnimatedWallpapers.isKnownId(lock.animatedId) ? lock.animatedId : null;
     }
 
     // --- plans ---

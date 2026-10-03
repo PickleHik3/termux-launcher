@@ -245,7 +245,7 @@ public final class LockLiveWallpaperService extends WallpaperService {
             }
             mMotion = motion;
             mKilled = killed;
-            AnimatedWallpaper w = AnimatedWallpapers.byId(id);
+            AnimatedWallpaper w = AnimatedWallpapers.byId(getApplicationContext(), id);
             if (w == mWallpaper && (w == null || mShader != null)) {
                 updateFps();
                 return;

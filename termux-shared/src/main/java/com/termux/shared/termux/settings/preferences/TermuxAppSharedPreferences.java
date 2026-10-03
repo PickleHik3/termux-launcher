@@ -3272,6 +3272,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_LOCK_MOTION, value, false);
     }
 
+    /** The Home slot's Motion toggle for a living still, on by default. */
+    public boolean isWallpaperHomeMotionEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_WALLPAPER_HOME_MOTION, TERMUX_APP.DEFAULT_VALUE_WALLPAPER_HOME_MOTION);
+    }
+
+    public void setWallpaperHomeMotionEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_HOME_MOTION, value, false);
+    }
+
     /** Hidden kill switch for generated backgrounds; no settings UI, set through the preference file. */
     public boolean isAnimatedWallpaperDisabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,

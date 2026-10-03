@@ -130,6 +130,53 @@ public final class WallpaperPickerLogic {
         return animatedOffered && motionRowExists(sdkInt);
     }
 
+    /** What the Motion row holds (living-stills.md, Part D.6). */
+    public enum MotionRow {
+        /** The Motion switch. */
+        SWITCH,
+        /** The switch's place, kept empty so the pager never jumps. */
+        SWITCH_HIDDEN,
+        /** The Bring to life button: a photo with no living still yet. */
+        OFFER,
+        /** The bar, the stage and a cancel: that photo is being analysed. */
+        WORKING,
+    }
+
+    /** A slot choice that is a living still ({@code living:<hash>}). */
+    public static boolean isLiving(@Nullable WallpaperSlots.Choice c) {
+        return c != null && !c.photo && !c.sameAsHome && AnimatedWallpapers.isLivingId(c.animatedId);
+    }
+
+    /**
+     * What the Motion row shows for the centred slot. A living still always has its switch. A photo
+     * with its picture, where living stills are offered (API 34+, animated backgrounds on), has the
+     * Bring to life button, or the working bar while that photo is being analysed. Anything else
+     * keeps the page's older rule: the switch on Lock from API 34, an empty place on Home.
+     *
+     * @param livingOffered the page can build living stills at all
+     * @param hasLiving     a photo choice whose photo already has one (the page adopts it as the choice)
+     * @param working       the job is analysing this photo right now
+     */
+    @NonNull
+    public static MotionRow motionRow(@NonNull WallpaperSlots.Slot centred, int sdkInt, boolean livingOffered,
+                                      @NonNull WallpaperSlots.Choice shown, boolean hasLiving, boolean working) {
+        if (isLiving(shown)) return MotionRow.SWITCH;
+        if (livingOffered && photoWithPicture(shown)) {
+            if (working) return MotionRow.WORKING;
+            return hasLiving ? MotionRow.SWITCH : MotionRow.OFFER;
+        }
+        return showsMotion(centred, sdkInt) ? MotionRow.SWITCH : MotionRow.SWITCH_HIDDEN;
+    }
+
+    /**
+     * The stage label's key: {@code depth}, {@code scene}, {@code subject}, {@code gemma} (the
+     * recipe stage while Gemma is asked) or {@code recipe}.
+     */
+    @NonNull
+    public static String stageKey(@NonNull String stage, boolean askingGemma) {
+        return "recipe".equals(stage) && askingGemma ? "gemma" : stage;
+    }
+
     /**
      * The lock preview's clock as the glyphs to draw: "9:05" in 12-hour time (no leading zero,
      * 12 for noon and midnight), "09:05" or "21:05" in 24-hour time. Only digits and ':'.

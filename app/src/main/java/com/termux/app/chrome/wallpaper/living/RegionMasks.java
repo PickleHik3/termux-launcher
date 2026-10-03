@@ -271,9 +271,14 @@ public final class RegionMasks {
         return Planes.smooth(Planes.boxMean(blob, w, h, 2), 0.05f, 0.4f);
     }
 
+    /** One end of a part must be this much thinner than the other to be called the tip. */
+    static final float TIP_RATIO = 1.3f;
+
     /**
-     * Sway weights: the foliage mask, strongest at the top of each connected part (the tips of
-     * plants growing up) and a quarter at its base, so roots and trunks stay put.
+     * Sway weights: the foliage mask, strongest at the thinner end of each connected part and a
+     * quarter at the other. Tips are thin and the anchored base or trunk is wide, so this holds
+     * for plants growing up (tips on top) and hanging foliage such as a willow (tips below). When
+     * neither end is clearly thinner the part sways toward both ends and least in the middle.
      */
     @NonNull
     private static float[] sway(float[] foliage, int w, int h) {
@@ -281,6 +286,32 @@ public final class RegionMasks {
         boolean[] on = new boolean[n];
         for (int i = 0; i < n; i++) on[i] = foliage[i] > 0.5f;
         Planes.Components c = Planes.components(on, w, h);
+        // Row widths per part, only for parts tall enough to have two ends.
+        int[][] widths = new int[c.count + 1][];
+        for (int id = 1; id <= c.count; id++) {
+            int rows = c.bottom[id] - c.top[id] + 1;
+            if (rows >= MIN_SWAY_ROWS) widths[id] = new int[rows];
+        }
+        for (int y = 0; y < h; y++) {
+            for (int x = 0; x < w; x++) {
+                int id = c.id[y * w + x];
+                if (id > 0 && widths[id] != null) widths[id][y - c.top[id]]++;
+            }
+        }
+        // End: +1 the top is thin, -1 the bottom is thin, 0 ambiguous.
+        int[] end = new int[c.count + 1];
+        for (int id = 1; id <= c.count; id++) {
+            int[] rw = widths[id];
+            if (rw == null) continue;
+            int third = Math.max(1, rw.length / 3);
+            double top = 0, bottom = 0;
+            for (int k = 0; k < third; k++) {
+                top += rw[k];
+                bottom += rw[rw.length - 1 - k];
+            }
+            if (bottom > top * TIP_RATIO) end[id] = 1;
+            else if (top > bottom * TIP_RATIO) end[id] = -1;
+        }
         float[] out = new float[n];
         for (int y = 0; y < h; y++) {
             for (int x = 0; x < w; x++) {
@@ -291,13 +322,19 @@ public final class RegionMasks {
                 if (id > 0) {
                     float span = Math.max(1, c.bottom[id] - c.top[id]);
                     float t = (y - c.top[id]) / span;
-                    weight = 0.25f + 0.75f * (1f - t);
+                    float near; // 1 at the tip, 0 at the far end
+                    if (end[id] > 0) near = 1f - t;
+                    else if (end[id] < 0) near = t;
+                    else near = Math.abs(2f * t - 1f);
+                    weight = 0.25f + 0.75f * near;
                 }
                 out[i] = foliage[i] * weight;
             }
         }
         return out;
     }
+
+    private static final int MIN_SWAY_ROWS = 6;
 
     private static float meanWhere(float[] v, float[] mask) {
         double s = 0, m = 0;

@@ -1696,6 +1696,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public boolean lazyMode() { return isLazyModeEnabled(); }
                 @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
+                @Override public boolean focus() { return isTerminalSheetOpen() || isImeVisible(); }
                 @Nullable @Override public WallpaperBackdropView backdrop() { return mWallpaperBackdropView; }
                 @NonNull @Override public Rect frameRect() { return getWallpaperCaptureFrameRect(); }
                 @Override public int blurRadiusDpOf(@Nullable Bitmap frame) {

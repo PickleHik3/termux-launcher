@@ -85,6 +85,14 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
 
         /** The blur radius in dp the resident frame was cut at, or -1 when it is not a resident frame. */
         int blurRadiusDpOf(@Nullable Bitmap frame);
+
+        /**
+         * The launcher's own content is up front: the terminal sheet is open or the keyboard is
+         * showing. A living still blurs its photo then (eased); nothing else reads it.
+         */
+        default boolean focus() {
+            return false;
+        }
     }
 
     @NonNull private final Activity mActivity;
@@ -403,7 +411,9 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
     private void syncWallpaper() {
         TermuxAppSharedPreferences prefs = prefs();
         AnimatedWallpaper wallpaper = prefs == null ? null
-            : AnimatedWallpapers.byId(prefs.getManagedWallpaperAnimatedId());
+            : AnimatedWallpapers.byId(mActivity, prefs.getManagedWallpaperAnimatedId());
+        // A living still with Home's Motion off is its photo and nothing more: no frames play.
+        if (wallpaper instanceof LivingStill && !prefs.isWallpaperHomeMotionEnabled()) wallpaper = null;
         WallpaperBackdropView backdrop = mEnv.backdrop();
         if (backdrop == null) wallpaper = null;
         int[] colors = null;
@@ -690,6 +700,11 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
     public float[] liveRadiiDp() {
         syncReaders(false);
         return mRadii;
+    }
+
+    @Override
+    public boolean focusWanted() {
+        return mWallpaper instanceof LivingStill && mEnv.focus();
     }
 
     @Override

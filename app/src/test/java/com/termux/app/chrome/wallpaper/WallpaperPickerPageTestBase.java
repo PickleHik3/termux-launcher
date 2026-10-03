@@ -2,6 +2,8 @@ package com.termux.app.chrome.wallpaper;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -23,13 +25,21 @@ import androidx.appcompat.widget.PopupMenu;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.google.android.material.button.MaterialButton;
+import com.google.android.material.materialswitch.MaterialSwitch;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.termux.R;
+import com.termux.ai.TaiVisionModels;
+import com.termux.app.chrome.wallpaper.living.LivingRecipe;
+import com.termux.app.chrome.wallpaper.living.LivingStillBuilder;
+import com.termux.app.chrome.wallpaper.living.LivingStillJob;
+import com.termux.app.chrome.wallpaper.living.Manifest;
 import com.termux.app.launcher.data.IconPackChoices;
 import com.termux.app.launcher.model.IconPackInfo;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.robolectric.Robolectric;
+import org.robolectric.shadows.ShadowToast;
 
 import java.io.File;
 import java.io.IOException;
@@ -84,16 +94,67 @@ public abstract class WallpaperPickerPageTestBase {
                 choice = WallpaperSlots.Choice.photo(keptPhoto);
             }
             state = slot == WallpaperSlots.Slot.HOME
-                ? new WallpaperSlots.State(choice, state.lock, state.lockMotion, state.lockLiveActive)
-                : new WallpaperSlots.State(state.home, choice, state.lockMotion, state.lockLiveActive);
+                ? new WallpaperSlots.State(choice, state.lock, state.lockMotion, state.lockLiveActive, state.homeMotion)
+                : new WallpaperSlots.State(state.home, choice, state.lockMotion, state.lockLiveActive, state.homeMotion);
             if (cb != null) cb.onDone(true, null);
         }
 
         @Override public void setLockMotion(boolean on, @Nullable WallpaperSlots.Callback cb) {
             calls.add("motion " + on);
-            state = new WallpaperSlots.State(state.home, state.lock, on, state.lockLiveActive);
+            state = new WallpaperSlots.State(state.home, state.lock, on, state.lockLiveActive, state.homeMotion);
             if (cb != null) cb.onDone(true, null);
         }
+
+        @Override public void setHomeMotion(boolean on, @Nullable WallpaperSlots.Callback cb) {
+            calls.add("home motion " + on);
+            state = new WallpaperSlots.State(state.home, state.lock, state.lockMotion, state.lockLiveActive, on);
+            if (cb != null) cb.onDone(true, null);
+        }
+
+        // --- living stills ---
+
+        /** The job the page attaches to; null leaves living stills off, as below API 34. */
+        @Nullable LivingStillJob job;
+        final java.util.Map<File, Manifest> livingByPhoto = new java.util.HashMap<>();
+        final java.util.Map<String, Manifest> livingById = new java.util.HashMap<>();
+        List<TaiVisionModels.Missing> missing = Collections.emptyList();
+
+        @Nullable @Override public LivingStillJob livingJob() { return job; }
+        @Nullable @Override public Manifest livingFor(@NonNull File photo) { return livingByPhoto.get(photo); }
+        @Nullable @Override public Manifest livingById(@NonNull String id) { return livingById.get(id); }
+        @NonNull @Override public List<TaiVisionModels.Missing> livingMissing() { return missing; }
+        @Override public void openModelCentre(@NonNull String modelId) { calls.add("model centre " + modelId); }
+        @Override public void openMoreSettings() { calls.add("more settings"); }
+    }
+
+    /** The two heavy halves of the job, scripted; the worker only runs when the test says. */
+    private static final class ScriptedEngine implements LivingStillJob.Engine {
+        Runnable duringAnalysis = () -> {};
+        LivingStillJob.Outcome outcome = new LivingStillJob.Outcome(true, false, null, "");
+        Manifest manifest;
+        File photoSeen;
+        int cancels;
+
+        @NonNull @Override
+        public LivingStillJob.Outcome analyze(@NonNull File photo, @NonNull File outDir,
+                                              @NonNull LivingStillJob.StageSink sink) {
+            photoSeen = photo;
+            sink.onStage(LivingStillJob.STAGE_DEPTH, 100);
+            sink.onStage(LivingStillJob.STAGE_SCENE, 100);
+            duringAnalysis.run();
+            sink.onStage(LivingStillJob.STAGE_SUBJECT, 100);
+            return outcome;
+        }
+
+        @NonNull @Override
+        public Manifest build(@NonNull File photo, @NonNull File outDir, @NonNull LivingStillBuilder.Progress progress) {
+            progress.onProgress(LivingStillJob.STAGE_RECIPE, 50);
+            return manifest;
+        }
+
+        @Override public void cancelAnalysis() { cancels++; }
+
+        @Override public boolean usesGemma() { return false; }
     }
 
     static final class RecordingListener implements WallpaperPickerPage.Listener {
@@ -579,6 +640,311 @@ public abstract class WallpaperPickerPageTestBase {
         page.applySlotOnly(WallpaperSlots.Slot.LOCK);
         assertEquals(Arrays.asList("apply LOCK", "apply LOCK"), mSlots.calls);
         assertTrue(mSlots.state.lock.sameAsHome);
+    }
+
+    // --- living stills (living-stills.md, Part D.6) ---
+
+    private final List<Runnable> mWorkerQueue = new ArrayList<>();
+    private ScriptedEngine mScript;
+    private Manifest mManifest;
+
+    /** A job on {@link #mWorkerQueue}: nothing runs until {@link #runWorker}, so the page can be seen mid-run. */
+    private void withLiving() {
+        mScript = new ScriptedEngine();
+        File dir = new File(mActivity.getCacheDir(), "living-test/0123456789abcdef");
+        if (!dir.isDirectory() && !dir.mkdirs()) throw new AssertionError("no dir");
+        mManifest = new Manifest(dir, new LivingRecipe());
+        try {
+            // Read again hashes the still's own photo, so it must exist.
+            java.nio.file.Files.write(mManifest.image().toPath(), new byte[] {1, 2, 3});
+        } catch (IOException e) {
+            throw new AssertionError(e);
+        }
+        mScript.manifest = mManifest;
+        mSlots.job = new LivingStillJob(mScript, mWorkerQueue::add, Runnable::run, Runnable::run,
+            new File(mActivity.getCacheDir(), "living-analysis"));
+        mSlots.livingById.put(mManifest.wallpaperId(), mManifest);
+    }
+
+    private void runWorker() {
+        while (!mWorkerQueue.isEmpty()) mWorkerQueue.remove(0).run();
+        settle();
+    }
+
+    @NonNull
+    private WallpaperPickerPage openOnPhoto(@NonNull WallpaperSlots.Slot slot, @NonNull File photo, int sdk) {
+        return openWithPhotos(sdk, WallpaperPickerPage.ReturnState.withPhoto(null, slot, photo, mSlots.state));
+    }
+
+    private <T extends View> T find(@NonNull WallpaperPickerPage page, int id) {
+        return page.root().findViewById(id);
+    }
+
+    @Test
+    public void aPhotoOnEitherCardOffersBringToLifeFromApi34() {
+        withLiving();
+        for (WallpaperSlots.Slot slot : WallpaperSlots.Slot.values()) {
+            WallpaperPickerPage page = openOnPhoto(slot, photoFile("offer-" + slot + ".png"), 34);
+            assertEquals(slot, page.centredSlot());
+            View offer = find(page, R.id.wallpaper_picker_living_offer);
+            assertEquals(slot + "", View.VISIBLE, offer.getVisibility());
+            assertTrue("a 48dp target", offer.getHeight() >= dp(48) && offer.getWidth() >= dp(48));
+            assertTrue("the button reads Bring to life",
+                ((MaterialButton) offer).getText().toString().equals(mThemed.getString(R.string.living_bring_to_life)));
+            assertNotNull("with the new glyph", ((MaterialButton) offer).getIcon());
+            assertFalse("no Motion switch yet", find(page, R.id.wallpaper_picker_motion).isShown());
+            assertEquals(View.GONE, find(page, R.id.wallpaper_picker_living_working).getVisibility());
+            assertInside(page.root(), page.root());
+        }
+    }
+
+    @Test
+    public void theOtherCardOffersItToo() {
+        withLiving();
+        WallpaperPickerPage page = openOnPhoto(WallpaperSlots.Slot.HOME, photoFile("both.png"), 34);
+        page.centre(WallpaperSlots.Slot.LOCK);
+        settle();
+        // Lock follows Home, so its card shows the pending photo and offers the same button.
+        assertEquals(View.VISIBLE, find(page, R.id.wallpaper_picker_living_offer).getVisibility());
+    }
+
+    @Test
+    public void nothingShowsBelowApi34() {
+        withLiving();
+        WallpaperPickerPage page = openOnPhoto(WallpaperSlots.Slot.HOME, photoFile("old.png"), 33);
+        assertEquals(View.GONE, find(page, R.id.wallpaper_picker_motion_row).getVisibility());
+        assertFalse(find(page, R.id.wallpaper_picker_living_offer).isShown());
+    }
+
+    @Test
+    public void aBackgroundOrNoJobKeepsTheOldRow() {
+        withLiving();
+        WallpaperPickerPage page = open(34);
+        assertFalse("no photo, no button", find(page, R.id.wallpaper_picker_living_offer).isShown());
+        page.centre(WallpaperSlots.Slot.LOCK);
+        assertEquals(View.VISIBLE, find(page, R.id.wallpaper_picker_motion).getVisibility());
+        mSlots.job = null;
+        WallpaperPickerPage noJob = openOnPhoto(WallpaperSlots.Slot.HOME, photoFile("nojob.png"), 34);
+        assertFalse(find(noJob, R.id.wallpaper_picker_living_offer).isShown());
+    }
+
+    @Test
+    public void missingModelsAskForTheModelCentreOnTheFirst() {
+        withLiving();
+        mSlots.missing = Arrays.asList(
+            new TaiVisionModels.Missing("depth-anything-3-small", "Depth Anything 3 Small", 55_035_456L),
+            new TaiVisionModels.Missing("u2net", "U-2-Net", 88_230_272L));
+        WallpaperPickerPage page = openOnPhoto(WallpaperSlots.Slot.HOME, photoFile("missing.png"), 34);
+        find(page, R.id.wallpaper_picker_living_offer).performClick();
+        settle();
+
+        androidx.appcompat.app.AlertDialog dialog = page.missingDialog();
+        assertNotNull(dialog);
+        assertTrue(dialog.isShowing());
+        String message = ((TextView) dialog.findViewById(android.R.id.message)).getText().toString();
+        assertTrue(message, message.contains("Depth Anything 3 Small") && message.contains("U-2-Net"));
+        assertTrue("with sizes", message.contains("MB"));
+        assertFalse("nothing started", mSlots.job.isRunning());
+        assertEquals(View.VISIBLE, find(page, R.id.wallpaper_picker_living_offer).getVisibility());
+
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_POSITIVE).performClick();
+        settle();
+        assertTrue(mSlots.calls.toString(), mSlots.calls.contains("model centre depth-anything-3-small"));
+        assertFalse("the first missing model only", mSlots.calls.contains("model centre u2net"));
+    }
+
+    @Test
+    public void notNowLeavesTheButtonAndStartsNothing() {
+        withLiving();
+        mSlots.missing = Arrays.asList(new TaiVisionModels.Missing("u2net", "U-2-Net", 88_230_272L));
+        WallpaperPickerPage page = openOnPhoto(WallpaperSlots.Slot.HOME, photoFile("notnow.png"), 34);
+        find(page, R.id.wallpaper_picker_living_offer).performClick();
+        settle();
+        androidx.appcompat.app.AlertDialog dialog = page.missingDialog();
+        assertNotNull(dialog);
+        dialog.getButton(androidx.appcompat.app.AlertDialog.BUTTON_NEGATIVE).performClick();
+        settle();
+        assertNull(page.missingDialog());
+        assertFalse(mSlots.job.isRunning());
+        assertTrue(mSlots.calls.isEmpty());
+    }
+
+    @Test
+    public void theButtonBecomesABarThenTheMotionSwitchAndThePendingStill() {
+        withLiving();
+        final File photo = photoFile("run.png");
+        final WallpaperPickerPage[] holder = new WallpaperPickerPage[1];
+        final List<String> midRun = new ArrayList<>();
+        mScript.duringAnalysis = () -> {
+            WallpaperPickerPage p = holder[0];
+            LinearProgressIndicator bar = find(p, R.id.wallpaper_picker_living_progress);
+            midRun.add(bar.getProgress() + " " + ((TextView) find(p, R.id.wallpaper_picker_living_stage)).getText());
+        };
+        WallpaperPickerPage page = openOnPhoto(WallpaperSlots.Slot.HOME, photo, 34);
+        holder[0] = page;
+        find(page, R.id.wallpaper_picker_living_offer).performClick();
+
+        // Started: the button is gone, a determinate bar with the first stage and a cancel are up.
+        assertTrue(mSlots.job.isRunning());
+        assertEquals(View.GONE, find(page, R.id.wallpaper_picker_living_offer).getVisibility());
+        assertEquals(View.VISIBLE, find(page, R.id.wallpaper_picker_living_working).getVisibility());
+        LinearProgressIndicator bar = find(page, R.id.wallpaper_picker_living_progress);
+        assertFalse("determinate", bar.isIndeterminate());
+        assertEquals(0, bar.getProgress());
+        assertEquals(mThemed.getString(R.string.living_stage_depth),
+            ((TextView) find(page, R.id.wallpaper_picker_living_stage)).getText().toString());
+        View cancel = find(page, R.id.wallpaper_picker_living_cancel);
+        assertTrue(cancel.getHeight() >= dp(48) && cancel.getWidth() >= dp(48));
+        assertInside(page.root(), page.root());
+
+        runWorker();
+        assertEquals("the bar at depth and scene done, and the scene label",
+            Arrays.asList("50 " + mThemed.getString(R.string.living_stage_scene)), midRun);
+
+        // Done: the pending choice is the living still, which plays in its card; the switch is on.
+        assertFalse(mSlots.job.isRunning());
+        assertEquals(View.GONE, find(page, R.id.wallpaper_picker_living_working).getVisibility());
+        assertEquals(mManifest.wallpaperId(), page.pending(WallpaperSlots.Slot.HOME).animatedId);
+        assertFalse(page.pending(WallpaperSlots.Slot.HOME).photo);
+        MaterialSwitch motion = find(page, R.id.wallpaper_picker_motion);
+        assertEquals(View.VISIBLE, motion.getVisibility());
+        assertTrue("Motion starts on", motion.isChecked());
+        assertTrue(motion.isShown());
+        assertEquals(View.VISIBLE, find(page, R.id.wallpaper_picker_living_again).getVisibility());
+        assertTrue("Apply puts it on the slot, as for every choice", find(page, R.id.wallpaper_picker_apply).isEnabled());
+        assertInside(page.root(), page.root());
+
+        find(page, R.id.wallpaper_picker_apply).performClick();
+        assertEquals(Arrays.asList("apply HOME", "apply LOCK"), mSlots.calls);
+        assertEquals(mManifest.wallpaperId(), mSlots.applied.get(0).animatedId);
+    }
+
+    @Test
+    public void cancelStopsTheRunAndBringsTheButtonBack() {
+        withLiving();
+        final WallpaperPickerPage[] holder = new WallpaperPickerPage[1];
+        mScript.outcome = new LivingStillJob.Outcome(false, true, "cancelled", "");
+        mScript.duringAnalysis = () -> find(holder[0], R.id.wallpaper_picker_living_cancel).performClick();
+        WallpaperPickerPage page = openOnPhoto(WallpaperSlots.Slot.HOME, photoFile("cancel.png"), 34);
+        holder[0] = page;
+        find(page, R.id.wallpaper_picker_living_offer).performClick();
+        runWorker();
+
+        assertEquals(1, mScript.cancels);
+        assertEquals(View.VISIBLE, find(page, R.id.wallpaper_picker_living_offer).getVisibility());
+        assertEquals(View.GONE, find(page, R.id.wallpaper_picker_living_working).getVisibility());
+        assertTrue("still the photo", page.pending(WallpaperSlots.Slot.HOME).photo);
+        assertNull("a cancel is not an error", ShadowToast.getTextOfLatestToast());
+    }
+
+    @Test
+    public void aFailedRunSaysSoAndKeepsThePhoto() {
+        withLiving();
+        mScript.outcome = new LivingStillJob.Outcome(false, false, "vision_failed", "boom");
+        WallpaperPickerPage page = openOnPhoto(WallpaperSlots.Slot.HOME, photoFile("fail.png"), 34);
+        find(page, R.id.wallpaper_picker_living_offer).performClick();
+        runWorker();
+        assertEquals(mThemed.getString(R.string.living_failed), ShadowToast.getTextOfLatestToast());
+        assertEquals(View.VISIBLE, find(page, R.id.wallpaper_picker_living_offer).getVisibility());
+        assertTrue(page.pending(WallpaperSlots.Slot.HOME).photo);
+    }
+
+    @Test
+    public void aPhotoThatAlreadyHasALivingStillIsAdoptedAsOne() {
+        withLiving();
+        File photo = photoFile("known.png");
+        mSlots.livingByPhoto.put(photo, mManifest);
+        WallpaperPickerPage page = openOnPhoto(WallpaperSlots.Slot.HOME, photo, 34);
+        assertEquals(mManifest.wallpaperId(), page.pending(WallpaperSlots.Slot.HOME).animatedId);
+        assertFalse(find(page, R.id.wallpaper_picker_living_offer).isShown());
+        assertTrue(find(page, R.id.wallpaper_picker_motion).isShown());
+
+        // Choosing it from the strip later does the same.
+        File other = photoFile("known-2.png");
+        mSlots.livingByPhoto.put(other, mManifest);
+        page.choose(WallpaperSlots.Choice.photo(other));
+        assertEquals(mManifest.wallpaperId(), page.pending(WallpaperSlots.Slot.HOME).animatedId);
+    }
+
+    @Test
+    public void homeMotionSwitchFollowsTheStoredToggleForALivingStill() {
+        withLiving();
+        mSlots.state = new WallpaperSlots.State(WallpaperSlots.Choice.animated(mManifest.wallpaperId()),
+            WallpaperSlots.Choice.sameAsHome(), true, false, false);
+        WallpaperPickerPage page = openWithPhotos(34, null);
+        MaterialSwitch motion = find(page, R.id.wallpaper_picker_motion);
+        assertEquals("Home shows it for a living still", View.VISIBLE, motion.getVisibility());
+        assertFalse("off as stored", motion.isChecked());
+
+        motion.performClick();
+        assertEquals(Arrays.asList("home motion true"), mSlots.calls);
+        assertTrue(mSlots.state.homeMotion);
+        assertTrue(motion.isChecked());
+
+        page.centre(WallpaperSlots.Slot.LOCK);
+        assertTrue("Lock shows Home's still with Lock's own toggle", motion.isChecked());
+        motion.performClick();
+        assertEquals(Arrays.asList("home motion true", "motion false"), mSlots.calls);
+    }
+
+    @Test
+    public void readAgainRunsTheJobOverTheStillsOwnPhoto() {
+        withLiving();
+        mSlots.state = new WallpaperSlots.State(WallpaperSlots.Choice.animated(mManifest.wallpaperId()),
+            WallpaperSlots.Choice.sameAsHome(), true, false);
+        WallpaperPickerPage page = openWithPhotos(34, null);
+        View again = find(page, R.id.wallpaper_picker_living_again);
+        assertEquals(View.VISIBLE, again.getVisibility());
+        assertTrue(again.getHeight() >= dp(48));
+        assertInside(page.root(), page.root());
+        again.performClick();
+        assertTrue(mSlots.job.isRunning());
+        assertFalse("one run at a time", again.isEnabled());
+        runWorker();
+        assertEquals(mManifest.image(), mScript.photoSeen);
+        assertEquals("the still stays the choice", mManifest.wallpaperId(),
+            page.pending(WallpaperSlots.Slot.HOME).animatedId);
+        assertFalse(mSlots.job.isRunning());
+    }
+
+    @Test
+    public void aPageOpenedMidRunShowsTheBarAndClosingItDoesNotStopTheRun() {
+        withLiving();
+        File photo = photoFile("midrun.png");
+        assertTrue(mSlots.job.start(photo));
+        WallpaperPickerPage page = openOnPhoto(WallpaperSlots.Slot.HOME, photo, 34);
+        assertEquals("re-attached to the run", View.VISIBLE, find(page, R.id.wallpaper_picker_living_working).getVisibility());
+        assertEquals(View.GONE, find(page, R.id.wallpaper_picker_living_offer).getVisibility());
+
+        page.close();
+        assertTrue("the run goes on without the page", mSlots.job.isRunning());
+        runWorker();
+        assertEquals(photo, mScript.photoSeen);
+        assertFalse(mSlots.job.isRunning());
+        assertNull("the closed page took no result", ShadowToast.getTextOfLatestToast());
+    }
+
+    @Test
+    public void anotherPhotosRunLeavesTheButtonWaiting() {
+        withLiving();
+        assertTrue(mSlots.job.start(photoFile("busy-other.png")));
+        WallpaperPickerPage page = openOnPhoto(WallpaperSlots.Slot.HOME, photoFile("busy-this.png"), 34);
+        View offer = find(page, R.id.wallpaper_picker_living_offer);
+        assertEquals(View.VISIBLE, offer.getVisibility());
+        assertFalse("one job at a time", offer.isEnabled());
+        assertEquals(View.GONE, find(page, R.id.wallpaper_picker_living_working).getVisibility());
+        runWorker();
+    }
+
+    @Test
+    public void moreSettingsOpensTheLookPage() {
+        WallpaperPickerPage page = open(34);
+        View more = find(page, R.id.wallpaper_picker_more_settings);
+        assertTrue("a 48dp target", more.getHeight() >= dp(48) && more.getWidth() >= dp(48));
+        assertInside(page.root(), more);
+        more.performClick();
+        assertEquals(Arrays.asList("more settings"), mSlots.calls);
+        assertFalse("the page stays open", page.root().findViewById(R.id.wallpaper_picker_apply) == null);
     }
 
     /** Every shown view lies inside the root, and no shown text is cut short. */
