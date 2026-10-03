@@ -11,6 +11,8 @@ import android.text.format.DateFormat;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -25,6 +27,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.app.AppCompatDialog;
+import androidx.appcompat.widget.PopupMenu;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowCompat;
@@ -40,6 +43,7 @@ import com.google.android.material.imageview.ShapeableImageView;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.termux.R;
+import com.termux.app.launcher.data.IconPackChoices;
 import com.termux.app.layouteditor.EditorM3;
 import com.termux.shared.logger.Logger;
 
@@ -50,16 +54,21 @@ import java.util.List;
 /**
  * The full-screen wallpaper picker page (lock-live-wallpaper.md, "The picker page"): two slot
  * previews (Lock, then Home) in a snap pager, the Lock slot's Motion toggle, the Look / Icon pack /
- * Layout shortcuts, the thumbnail strip and Apply. It replaces the old bottom sheet and its
- * home / lock / both dialog.
+ * Layout shortcuts, the thumbnail strip and the Apply split button. It replaces the old bottom
+ * sheet and its home / lock / both dialog.
  *
  * <p>The page reads and writes the slots only through {@link Slots}, which in the app wraps
  * {@link WallpaperSlots}; it never names WallpaperManager or a slot preference. Tapping a
- * thumbnail sets the centred slot's pending choice and previews it there, live; Apply commits it.
- * Swiping keeps each slot's pending choice. Back closes without applying.</p>
+ * thumbnail sets the centred slot's pending choice and previews it there, live. Apply puts the
+ * centred card's background on Home and points Lock at it (Same as Home); its menu applies to one
+ * slot only. Swiping keeps each slot's pending choice. Back closes without applying.</p>
+ *
+ * <p>Look and Layout close the page and hand the host a {@link ReturnState}; the host shows the
+ * page again with it when that editor ends, on the same slot with the same pending choices. The
+ * Icon pack button opens a menu on the page itself.</p>
  *
  * <p>Hosted in a full-screen {@link AppCompatDialog} by {@link #show}; tests build the page on
- * its own with {@link #WallpaperPickerPage(Context, Slots, Listener, int, Runnable)}.</p>
+ * its own with {@link #WallpaperPickerPage(Context, Slots, Listener, int, Runnable, ReturnState)}.</p>
  */
 public final class WallpaperPickerPage {
 
@@ -84,12 +93,33 @@ public final class WallpaperPickerPage {
         /** Apply succeeded for {@code slot}; the page stays open. Home refreshes the glass. */
         void onApplied(@NonNull WallpaperSlots.Slot slot, @NonNull WallpaperSlots.Choice choice);
 
-        /** A shortcut; the page has dismissed. */
-        void onOpenLook();
+        /**
+         * Look or Layout; the page has dismissed. Open that editor and, when it ends, show the page
+         * again with {@code back}.
+         */
+        void onOpenLook(@NonNull ReturnState back);
 
-        void onOpenIconPack();
+        void onOpenLayout(@NonNull ReturnState back);
 
-        void onOpenLayout();
+        /** The Icon pack menu's rows ({@link IconPackChoices#KEY_PINNED}), the one in force checked. */
+        @NonNull IconPackChoices.Listing iconPacks();
+
+        /** An Icon pack row was picked ("" for the default row); the page stays open. */
+        void onIconPackChosen(@NonNull String packageName);
+    }
+
+    /** What the page comes back to after Look or Layout: the centred slot and both pending choices. */
+    public static final class ReturnState {
+        @NonNull public final WallpaperSlots.Slot centred;
+        @NonNull public final WallpaperSlots.Choice pendingHome;
+        @NonNull public final WallpaperSlots.Choice pendingLock;
+
+        public ReturnState(@NonNull WallpaperSlots.Slot centred, @NonNull WallpaperSlots.Choice pendingHome,
+                           @NonNull WallpaperSlots.Choice pendingLock) {
+            this.centred = centred;
+            this.pendingHome = pendingHome;
+            this.pendingLock = pendingLock;
+        }
     }
 
     /** {@link WallpaperSlots} for this activity. */
@@ -116,9 +146,16 @@ public final class WallpaperPickerPage {
     @NonNull
     public static WallpaperPickerPage show(@NonNull AppCompatActivity activity, @NonNull Slots slots,
                                            @NonNull Listener listener) {
+        return show(activity, slots, listener, null);
+    }
+
+    /** Shows the page full screen over {@code activity}, back at {@code restore} when given. */
+    @NonNull
+    public static WallpaperPickerPage show(@NonNull AppCompatActivity activity, @NonNull Slots slots,
+                                           @NonNull Listener listener, @Nullable ReturnState restore) {
         AppCompatDialog dialog = new AppCompatDialog(activity, R.style.ThemeOverlay_Termux_WallpaperPickerPage);
         WallpaperPickerPage page = new WallpaperPickerPage(dialog.getContext(), slots, listener,
-            Build.VERSION.SDK_INT, dialog::dismiss);
+            Build.VERSION.SDK_INT, dialog::dismiss, restore);
         dialog.setContentView(page.root());
         dialog.setCancelable(true);
         dialog.setOnDismissListener(d -> page.onDismissed());
@@ -155,6 +192,10 @@ public final class WallpaperPickerPage {
     static final int POS_LOCK = 0;
     static final int POS_HOME = 1;
 
+    /** The Apply menu's item ids. */
+    private static final int MENU_HOME_ONLY = 1;
+    private static final int MENU_LOCK_ONLY = 2;
+
     private final Context mContext;
     private final Slots mSlots;
     private final Listener mListener;
@@ -167,6 +208,8 @@ public final class WallpaperPickerPage {
     private final View mRoot;
     private final TextView mTitle;
     private final MaterialButton mApply;
+    private final MaterialButton mApplyMore;
+    private final View mIconPack;
     private final LinearProgressIndicator mProgress;
     private final RecyclerView mPager;
     private final LinearLayoutManager mPagerLayout;
@@ -183,6 +226,7 @@ public final class WallpaperPickerPage {
     private boolean mBusy;
     private boolean mDismissed;
     private boolean mSettingMotion;
+    @Nullable private PopupMenu mIconPackMenu;
 
     private final WallpaperPreviewView[] mCards = new WallpaperPreviewView[2];
     private int mCardW;
@@ -216,6 +260,12 @@ public final class WallpaperPickerPage {
     @VisibleForTesting
     public WallpaperPickerPage(@NonNull Context context, @NonNull Slots slots, @NonNull Listener listener,
                                int sdkInt, @NonNull Runnable dismiss) {
+        this(context, slots, listener, sdkInt, dismiss, null);
+    }
+
+    @VisibleForTesting
+    public WallpaperPickerPage(@NonNull Context context, @NonNull Slots slots, @NonNull Listener listener,
+                               int sdkInt, @NonNull Runnable dismiss, @Nullable ReturnState restore) {
         mContext = context;
         mSlots = slots;
         mListener = listener;
@@ -229,10 +279,17 @@ public final class WallpaperPickerPage {
         mStored = readSafe();
         mPending[WallpaperSlots.Slot.HOME.ordinal()] = mStored.home;
         mPending[WallpaperSlots.Slot.LOCK.ordinal()] = mStored.lock;
+        if (restore != null) {
+            mPending[WallpaperSlots.Slot.HOME.ordinal()] = restore.pendingHome;
+            mPending[WallpaperSlots.Slot.LOCK.ordinal()] = restore.pendingLock;
+            mCentred = restore.centred;
+        }
 
         mRoot = LayoutInflater.from(context).inflate(R.layout.wallpaper_picker_page, null, false);
         mTitle = mRoot.findViewById(R.id.wallpaper_picker_title);
         mApply = mRoot.findViewById(R.id.wallpaper_picker_apply);
+        mApplyMore = mRoot.findViewById(R.id.wallpaper_picker_apply_more);
+        mIconPack = mRoot.findViewById(R.id.wallpaper_picker_icon_pack);
         mProgress = mRoot.findViewById(R.id.wallpaper_picker_progress);
         mPager = mRoot.findViewById(R.id.wallpaper_picker_pager);
         mMotionRow = mRoot.findViewById(R.id.wallpaper_picker_motion_row);
@@ -241,16 +298,17 @@ public final class WallpaperPickerPage {
         mPhoto = mRoot.findViewById(R.id.wallpaper_picker_photo);
 
         mRoot.findViewById(R.id.wallpaper_picker_back).setOnClickListener(v -> dismiss());
-        mApply.setOnClickListener(v -> applyPending());
+        mApply.setOnClickListener(v -> applyBoth());
+        mApplyMore.setOnClickListener(v -> showApplyMenu());
         mPhoto.setOnClickListener(v -> {
             if (mBusy) return;
             WallpaperSlots.Slot slot = mCentred;
             dismiss();
             mListener.onPickPhoto(slot);
         });
-        mRoot.findViewById(R.id.wallpaper_picker_look).setOnClickListener(v -> shortcut(mListener::onOpenLook));
-        mRoot.findViewById(R.id.wallpaper_picker_icon_pack).setOnClickListener(v -> shortcut(mListener::onOpenIconPack));
-        mRoot.findViewById(R.id.wallpaper_picker_layout).setOnClickListener(v -> shortcut(mListener::onOpenLayout));
+        mRoot.findViewById(R.id.wallpaper_picker_look).setOnClickListener(v -> openEditor(false));
+        mIconPack.setOnClickListener(v -> showIconPackMenu());
+        mRoot.findViewById(R.id.wallpaper_picker_layout).setOnClickListener(v -> openEditor(true));
 
         mMotion.setChecked(mStored.lockMotion);
         mMotion.setOnCheckedChangeListener((b, on) -> onMotionToggled(on));
@@ -298,6 +356,13 @@ public final class WallpaperPickerPage {
     @NonNull
     WallpaperSlots.Slot centredSlot() {
         return mCentred;
+    }
+
+    /** Where the page is now, for {@link Listener#onOpenLook} and {@link Listener#onOpenLayout}. */
+    @NonNull
+    ReturnState returnState() {
+        return new ReturnState(mCentred, mPending[WallpaperSlots.Slot.HOME.ordinal()],
+            mPending[WallpaperSlots.Slot.LOCK.ordinal()]);
     }
 
     /** The pending choice for {@code slot}. */
@@ -384,8 +449,29 @@ public final class WallpaperPickerPage {
     }
 
     private void refreshApply() {
-        mApply.setEnabled(WallpaperPickerLogic.applyEnabled(mPending[mCentred.ordinal()],
-            stored(mCentred), mBusy));
+        mApply.setEnabled(WallpaperPickerLogic.applyBothEnabled(primaryChoice(), mStored.home,
+            mStored.lock, mBusy));
+        mApplyMore.setEnabled(slotOnlyEnabled(WallpaperSlots.Slot.HOME)
+            || slotOnlyEnabled(WallpaperSlots.Slot.LOCK));
+    }
+
+    /** The centred card's background: what Apply puts on Home. */
+    @NonNull
+    private WallpaperSlots.Choice primaryChoice() {
+        return WallpaperPickerLogic.primaryChoice(mCentred, mPending[WallpaperSlots.Slot.HOME.ordinal()],
+            mPending[WallpaperSlots.Slot.LOCK.ordinal()]);
+    }
+
+    /** What "Home screen only" or "Lock screen only" puts on {@code target}. */
+    @NonNull
+    private WallpaperSlots.Choice slotOnlyChoice(@NonNull WallpaperSlots.Slot target) {
+        return WallpaperPickerLogic.slotOnlyChoice(target, mCentred,
+            mPending[WallpaperSlots.Slot.HOME.ordinal()], mPending[WallpaperSlots.Slot.LOCK.ordinal()]);
+    }
+
+    @VisibleForTesting
+    boolean slotOnlyEnabled(@NonNull WallpaperSlots.Slot target) {
+        return WallpaperPickerLogic.applyOneEnabled(target, slotOnlyChoice(target), stored(target), mBusy);
     }
 
     private void setBusy(boolean busy) {
@@ -398,35 +484,129 @@ public final class WallpaperPickerPage {
 
     // --- apply, motion, photo, shortcuts ---
 
-    private void applyPending() {
+    /**
+     * Apply: the centred card's background on Home, then Lock pointed at Home (Same as Home).
+     * Android's one-time live-wallpaper preview may open for the Lock half when Motion is on.
+     */
+    @VisibleForTesting
+    void applyBoth() {
         if (mBusy || mDismissed) return;
-        final WallpaperSlots.Slot slot = mCentred;
-        final WallpaperSlots.Choice choice = mPending[slot.ordinal()];
-        if (!WallpaperPickerLogic.applyEnabled(choice, stored(slot), false)) return;
+        final WallpaperSlots.Choice choice = primaryChoice();
+        if (!WallpaperPickerLogic.applyBothEnabled(choice, mStored.home, mStored.lock, false)) return;
         setBusy(true);
-        try {
-            mSlots.apply(slot, choice, (ok, error) -> onApplyDone(slot, choice, ok, error));
-        } catch (RuntimeException e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Applying to " + slot + " failed", e);
-            onApplyDone(slot, choice, false, e.getMessage());
+        final Runnable lockFollows = () -> runApply(WallpaperSlots.Slot.LOCK,
+            WallpaperSlots.Choice.sameAsHome(), () -> {
+                mPending[WallpaperSlots.Slot.HOME.ordinal()] = choice;
+                mPending[WallpaperSlots.Slot.LOCK.ordinal()] = WallpaperSlots.Choice.sameAsHome();
+                onApplyFinished();
+            });
+        if (WallpaperPickerLogic.homeChanges(choice, mStored.home)) {
+            runApply(WallpaperSlots.Slot.HOME, choice, lockFollows);
+        } else {
+            lockFollows.run();
         }
     }
 
-    private void onApplyDone(@NonNull WallpaperSlots.Slot slot, @NonNull WallpaperSlots.Choice choice,
-                             boolean ok, @Nullable String error) {
-        if (mDismissed) {
-            if (ok) mListener.onApplied(slot, choice);
-            return;
+    /** A one-slot menu item: {@code target} only. */
+    @VisibleForTesting
+    void applySlotOnly(@NonNull WallpaperSlots.Slot target) {
+        if (mBusy || mDismissed) return;
+        final WallpaperSlots.Choice choice = slotOnlyChoice(target);
+        if (!WallpaperPickerLogic.applyOneEnabled(target, choice, stored(target), false)) return;
+        setBusy(true);
+        runApply(target, choice, () -> {
+            mPending[target.ordinal()] = choice;
+            onApplyFinished();
+        });
+    }
+
+    /** Applies one slot; {@code next} runs on success, and a failure ends the run with an error. */
+    private void runApply(@NonNull WallpaperSlots.Slot slot, @NonNull WallpaperSlots.Choice choice,
+                          @NonNull Runnable next) {
+        WallpaperSlots.Callback done = (ok, error) -> {
+            if (!ok) {
+                Logger.logError(LOG_TAG, "Applying to " + slot + " failed: " + error);
+                if (mDismissed) return;
+                setBusy(false);
+                mStored = readSafe();
+                refreshApply();
+                showError(R.string.wallpaper_picker_apply_failed);
+                return;
+            }
+            mListener.onApplied(slot, choice);
+            mStored = readSafe();
+            next.run();
+        };
+        try {
+            mSlots.apply(slot, choice, done);
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Applying to " + slot + " failed", e);
+            done.onDone(false, e.getMessage());
         }
+    }
+
+    /** Every slot in the run applied: the page shows what is stored now. */
+    private void onApplyFinished() {
+        if (mDismissed) return;
         setBusy(false);
-        if (!ok) {
-            Logger.logError(LOG_TAG, "Applying to " + slot + " failed: " + error);
-            showError(R.string.wallpaper_picker_apply_failed);
+        refreshCards();
+        refreshSameAsHomeThumb();
+        refreshSelection();
+        refreshApply();
+    }
+
+    /** The split button's trailing half: Home screen only / Lock screen only. */
+    private void showApplyMenu() {
+        if (mBusy || mDismissed) {
+            mApplyMore.setChecked(false);
             return;
         }
-        mStored = readSafe();
-        refreshApply();
-        mListener.onApplied(slot, choice);
+        mApplyMore.setChecked(true);
+        PopupMenu menu = new PopupMenu(mContext, mApplyMore);
+        Menu items = menu.getMenu();
+        items.add(Menu.NONE, MENU_HOME_ONLY, 0, R.string.wallpaper_picker_apply_home_only)
+            .setEnabled(slotOnlyEnabled(WallpaperSlots.Slot.HOME));
+        items.add(Menu.NONE, MENU_LOCK_ONLY, 1, R.string.wallpaper_picker_apply_lock_only)
+            .setEnabled(slotOnlyEnabled(WallpaperSlots.Slot.LOCK));
+        menu.setOnMenuItemClickListener(item -> {
+            applySlotOnly(item.getItemId() == MENU_HOME_ONLY
+                ? WallpaperSlots.Slot.HOME : WallpaperSlots.Slot.LOCK);
+            return true;
+        });
+        menu.setOnDismissListener(m -> mApplyMore.setChecked(false));
+        menu.show();
+    }
+
+    /** The Icon pack menu: the default row and each installed pack, the one in force checked. */
+    private void showIconPackMenu() {
+        if (mBusy || mDismissed) return;
+        final IconPackChoices.Listing listing;
+        try {
+            listing = mListener.iconPacks();
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Listing icon packs failed", e);
+            return;
+        }
+        PopupMenu menu = new PopupMenu(mContext, mIconPack);
+        Menu items = menu.getMenu();
+        for (int i = 0; i < listing.entries.size(); i++) {
+            MenuItem item = items.add(Menu.NONE, i, i, listing.entries.get(i).label);
+            item.setCheckable(true);
+            item.setChecked(i == listing.checked);
+        }
+        items.setGroupCheckable(Menu.NONE, true, true);
+        menu.setOnMenuItemClickListener(item -> {
+            int at = item.getItemId();
+            if (at >= 0 && at < listing.entries.size() && at != listing.checked) {
+                mListener.onIconPackChosen(listing.entries.get(at).value);
+            }
+            return true;
+        });
+        mIconPackMenu = menu;
+        menu.setOnDismissListener(m -> {
+            if (mIconPackMenu == m) mIconPackMenu = null;
+        });
+        menu.show();
     }
 
     private void onMotionToggled(boolean on) {
@@ -471,10 +651,13 @@ public final class WallpaperPickerPage {
         mSettingMotion = false;
     }
 
-    private void shortcut(@NonNull Runnable open) {
-        if (mBusy) return;
+    /** Look or Layout: the page closes, and the host brings it back here when the editor ends. */
+    private void openEditor(boolean layout) {
+        if (mBusy || mDismissed) return;
+        ReturnState back = returnState();
         dismiss();
-        open.run();
+        if (layout) mListener.onOpenLayout(back);
+        else mListener.onOpenLook(back);
     }
 
     private void dismiss() {
@@ -484,11 +667,14 @@ public final class WallpaperPickerPage {
         onDismissed();
     }
 
-    /** The dialog went away (back, the arrow, a shortcut or Photo…). */
+    /** The dialog went away (back, the arrow, Look, Layout or Photo…). */
     void onDismissed() {
         if (mDismissed) return;
         mDismissed = true;
         mMain.removeCallbacks(mClockTick);
+        PopupMenu iconPackMenu = mIconPackMenu;
+        mIconPackMenu = null;
+        if (iconPackMenu != null) iconPackMenu.dismiss();
         for (WallpaperPreviewView card : mCards) if (card != null) card.setLive(false);
         mThumbs.release();
         mListener.onPageShown(false);
@@ -725,6 +911,13 @@ public final class WallpaperPickerPage {
     @VisibleForTesting
     int tileCount() {
         return mTiles.size();
+    }
+
+    /** The Icon pack menu while it is open. */
+    @VisibleForTesting
+    @Nullable
+    PopupMenu iconPackMenu() {
+        return mIconPackMenu;
     }
 
     private int dp(int v) {

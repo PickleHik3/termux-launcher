@@ -162,6 +162,11 @@ public final class SurfaceEditorController {
          * system wallpaper shows around the scaled frame; false hands passthrough back.
          */
         void setEditorWindowOpaque(boolean opaque);
+        /**
+         * The editor has ended, by any path (Done, Back, Discard, Save, a HOME press), in either
+         * mode. Called once per session, after the editor has let go of the chrome.
+         */
+        void onEditorClosed();
     }
 
     @NonNull private final Host mHost;
@@ -2225,6 +2230,7 @@ public final class SurfaceEditorController {
         }
         restoreExpandedStatusAfterSurfaceEditor();
         mHasEntryStatusCollapsed = false;
+        mHost.onEditorClosed();
     }
 
     /** Hands the status pane back the shape it had before the editor borrowed it. */

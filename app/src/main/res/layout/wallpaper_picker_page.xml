@@ -4,12 +4,13 @@
      it; the host shows it full screen and adds the system bar insets as padding.
 
      Top to bottom:
-       top bar 64: back (48), the centred slot's title, Apply (filled) at the end;
+       top bar 64: back (48), the centred slot's title, the Apply split button at the end;
        a 4dp progress bar, invisible until Apply runs;
        the pager (the rest of the height): Lock then Home, each card at the 360x800 aspect of the
          lock cutout, the neighbour peeking (WallpaperPickerPage sizes the cards and the padding);
        Motion 48: Lock centred only; INVISIBLE on Home so the pager never jumps, GONE below API 34;
-       the shortcut row: three 64dp tonal round buttons with a label under each;
+       the shortcut row: three 64dp tonal round buttons with a label under each, the 24dp glyph
+         centred both ways (no padding, textStart gravity: an icon-only button centres its icon);
        the thumbnail strip card: Same as Home (Lock only), the ten backgrounds, then Photo….
 
      Fixed heights, dp: 64 + 4 + 48 + (8 + 64 + 4 + 20 + 8) + (8 + 12 + 112 + 4 + 48 + 4 + 16) = 424,
@@ -58,20 +59,39 @@
             android:textAppearance="?attr/textAppearanceTitleLarge"
             android:textColor="?attr/colorOnSurface"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/wallpaper_picker_apply"
+            app:layout_constraintEnd_toStartOf="@id/wallpaper_picker_apply_split"
             app:layout_constraintStart_toEndOf="@id/wallpaper_picker_back"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/wallpaper_picker_apply"
-            style="@style/Widget.Material3.Button"
+        <!-- Apply: the leading half puts the centred card's background on Home and points Lock
+             at it; the trailing chevron opens Home screen only / Lock screen only. The group's
+             own 10dp top and bottom padding would not fit the 64dp bar. -->
+        <com.google.android.material.button.MaterialSplitButton
+            android:id="@+id/wallpaper_picker_apply_split"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:text="@string/wallpaper_picker_apply"
+            android:paddingTop="0dp"
+            android:paddingBottom="0dp"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintTop_toTopOf="parent">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/wallpaper_picker_apply"
+                style="?attr/materialSplitButtonLeadingFilledStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/wallpaper_picker_apply" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/wallpaper_picker_apply_more"
+                style="?attr/materialSplitButtonIconFilledStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:contentDescription="@string/wallpaper_picker_apply_more"
+                android:tooltipText="@string/wallpaper_picker_apply_more"
+                app:icon="@drawable/m3_split_button_chevron_avd" />
+        </com.google.android.material.button.MaterialSplitButton>
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <com.google.android.material.progressindicator.LinearProgressIndicator
@@ -132,8 +152,11 @@
                 android:insetTop="0dp"
                 android:insetRight="0dp"
                 android:insetBottom="0dp"
+                android:padding="0dp"
                 android:contentDescription="@string/wallpaper_picker_look"
                 app:icon="@drawable/ic_symbol_palette"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
                 app:iconSize="24dp"
                 app:shapeAppearance="?attr/shapeAppearanceCornerFull" />
 
@@ -165,8 +188,11 @@
                 android:insetTop="0dp"
                 android:insetRight="0dp"
                 android:insetBottom="0dp"
+                android:padding="0dp"
                 android:contentDescription="@string/wallpaper_picker_icon_pack"
                 app:icon="@drawable/ic_symbol_apps"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
                 app:iconSize="24dp"
                 app:shapeAppearance="?attr/shapeAppearanceCornerFull" />
 
@@ -198,8 +224,11 @@
                 android:insetTop="0dp"
                 android:insetRight="0dp"
                 android:insetBottom="0dp"
+                android:padding="0dp"
                 android:contentDescription="@string/wallpaper_picker_layout"
                 app:icon="@drawable/ic_symbol_grid_view"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
                 app:iconSize="24dp"
                 app:shapeAppearance="?attr/shapeAppearanceCornerFull" />
 

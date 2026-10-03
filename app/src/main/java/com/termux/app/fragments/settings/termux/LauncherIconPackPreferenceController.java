@@ -7,23 +7,21 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceFragmentCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
-import com.termux.app.TermuxActivity;
-import com.termux.app.launcher.data.LauncherAppDataProvider;
+import com.termux.app.launcher.data.IconPackChoices;
 import com.termux.app.launcher.data.IconPackRepository;
-import com.termux.app.launcher.model.IconPackInfo;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
-import java.util.ArrayList;
 import java.util.List;
 
+/** The Style page's two icon pack rows; the listing and the write live in {@link IconPackChoices}. */
 final class LauncherIconPackPreferenceController {
     private LauncherIconPackPreferenceController() {
     }
 
     static void configure(@NonNull PreferenceFragmentCompat fragment, @NonNull Context context) {
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context, false);
-        populateIconPackList(context, preferences, fragment.findPreference("app_launcher_icon_pack_package"), false);
-        populateIconPackList(context, preferences, fragment.findPreference("app_launcher_pinned_icon_pack_package"), false);
+        populateIconPackList(context, preferences, fragment.findPreference(IconPackChoices.KEY_GLOBAL), false);
+        populateIconPackList(context, preferences, fragment.findPreference(IconPackChoices.KEY_PINNED), false);
     }
 
     private static void populateIconPackList(
@@ -33,29 +31,14 @@ final class LauncherIconPackPreferenceController {
         boolean themedOnly
     ) {
         if (preference == null) return;
-        List<IconPackInfo> packs = new IconPackRepository(context).discoverIconPacks();
-        List<CharSequence> entries = new ArrayList<>();
-        List<CharSequence> values = new ArrayList<>();
-        entries.add("app_launcher_pinned_icon_pack_package".equals(preference.getKey())
-            ? "Use global icon pack"
-            : "System default");
-        values.add("");
-        for (IconPackInfo pack : packs) {
-            if (themedOnly && !pack.themed) continue;
-            entries.add(pack.label);
-            values.add(pack.packageName);
-        }
-        String currentValue = "";
-        if (preferences != null) {
-            if ("app_launcher_pinned_icon_pack_package".equals(preference.getKey())) {
-                currentValue = preferences.getAppLauncherPinnedIconPackPackage();
-            } else {
-                currentValue = preferences.getAppLauncherIconPackPackage();
-            }
-        }
-        preference.setSummary(labelForValue(entries, values, currentValue));
+        String key = preference.getKey();
+        List<IconPackChoices.Entry> entries = IconPackChoices.entries(
+            IconPackChoices.KEY_PINNED.equals(key) ? "Use global icon pack" : "System default",
+            new IconPackRepository(context).discoverIconPacks(), themedOnly);
+        preference.setSummary(entries.get(IconPackChoices.indexOf(entries,
+            IconPackChoices.current(preferences, key))).label);
         preference.setOnPreferenceClickListener(clickedPreference -> {
-            showIconPackDialog(context, preferences, preference, entries, values);
+            showIconPackDialog(context, preferences, preference, entries);
             return true;
         });
     }
@@ -64,67 +47,25 @@ final class LauncherIconPackPreferenceController {
         @NonNull Context context,
         TermuxAppSharedPreferences preferences,
         @NonNull Preference preference,
-        @NonNull List<CharSequence> entries,
-        @NonNull List<CharSequence> values
+        @NonNull List<IconPackChoices.Entry> entries
     ) {
-        String currentValue = "";
-        if (preferences != null) {
-            currentValue = "app_launcher_pinned_icon_pack_package".equals(preference.getKey())
-                ? preferences.getAppLauncherPinnedIconPackPackage()
-                : preferences.getAppLauncherIconPackPackage();
-        }
-        int selectedIndex = 0;
-        for (int i = 0; i < values.size(); i++) {
-            if (String.valueOf(values.get(i)).equals(currentValue)) {
-                selectedIndex = i;
-                break;
-            }
-        }
+        String key = preference.getKey();
+        int selectedIndex = IconPackChoices.indexOf(entries, IconPackChoices.current(preferences, key));
+        CharSequence[] labels = new CharSequence[entries.size()];
+        for (int i = 0; i < labels.length; i++) labels[i] = entries.get(i).label;
 
         new MaterialAlertDialogBuilder(context)
             .setTitle(preference.getTitle())
-            .setSingleChoiceItems(entries.toArray(new CharSequence[0]), selectedIndex, (dialog, which) -> {
-                if (which < 0 || which >= values.size()) return;
-                String selectedValue = String.valueOf(values.get(which));
-                if (preference.callChangeListener(selectedValue)) {
-                    saveIconPackPreference(context, preferences, preference.getKey(), selectedValue);
-                    preference.setSummary(entries.get(which));
+            .setSingleChoiceItems(labels, selectedIndex, (dialog, which) -> {
+                if (which < 0 || which >= entries.size()) return;
+                String selectedValue = entries.get(which).value;
+                if (key != null && preference.callChangeListener(selectedValue)) {
+                    IconPackChoices.apply(context, preferences, key, selectedValue);
+                    preference.setSummary(entries.get(which).label);
                 }
                 dialog.dismiss();
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
-    }
-
-    private static void saveIconPackPreference(
-        @NonNull Context context,
-        TermuxAppSharedPreferences preferences,
-        String key,
-        @NonNull String value
-    ) {
-        if (preferences == null || key == null) return;
-        if ("app_launcher_pinned_icon_pack_package".equals(key)) {
-            preferences.setAppLauncherPinnedIconPackPackage(value);
-        } else {
-            preferences.setAppLauncherIconPackPackage(value);
-        }
-        // Not invalidate(): that resets catalogue state only, and the artwork the launcher is
-        // still holding is the previous pack's.
-        LauncherAppDataProvider.getInstance(context).invalidateIconArtwork();
-        TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
-    }
-
-    @NonNull
-    private static CharSequence labelForValue(
-        @NonNull List<CharSequence> entries,
-        @NonNull List<CharSequence> values,
-        String value
-    ) {
-        for (int i = 0; i < values.size(); i++) {
-            if (String.valueOf(values.get(i)).equals(value)) {
-                return entries.get(i);
-            }
-        }
-        return entries.isEmpty() ? "" : entries.get(0);
     }
 }

@@ -28,10 +28,66 @@ public final class WallpaperPickerLogic {
         return a.animatedId == null ? b.animatedId == null : a.animatedId.equals(b.animatedId);
     }
 
-    /** Apply is enabled only when the centred slot's pending choice differs from what is stored. */
+    /** A pending choice that differs from what is stored, while nothing is running. */
     public static boolean applyEnabled(@Nullable WallpaperSlots.Choice pending,
                                        @Nullable WallpaperSlots.Choice stored, boolean busy) {
         return !busy && pending != null && !sameChoice(pending, stored);
+    }
+
+    /**
+     * The background the centred card shows, which Apply puts on Home (and so on Lock): its
+     * pending choice, Lock's Same as Home resolved to Home's pending choice.
+     */
+    @NonNull
+    public static WallpaperSlots.Choice primaryChoice(@NonNull WallpaperSlots.Slot centred,
+                                                      @NonNull WallpaperSlots.Choice pendingHome,
+                                                      @NonNull WallpaperSlots.Choice pendingLock) {
+        WallpaperSlots.Choice c = centred == WallpaperSlots.Slot.HOME ? pendingHome : pendingLock;
+        return c.sameAsHome ? pendingHome : c;
+    }
+
+    /**
+     * What "Home screen only" or "Lock screen only" puts on {@code target}: the centred card's
+     * background for Home; for Lock, the centred card's own pending choice (so Same as Home stays
+     * Same as Home).
+     */
+    @NonNull
+    public static WallpaperSlots.Choice slotOnlyChoice(@NonNull WallpaperSlots.Slot target,
+                                                       @NonNull WallpaperSlots.Slot centred,
+                                                       @NonNull WallpaperSlots.Choice pendingHome,
+                                                       @NonNull WallpaperSlots.Choice pendingLock) {
+        if (target == WallpaperSlots.Slot.HOME) return primaryChoice(centred, pendingHome, pendingLock);
+        return centred == WallpaperSlots.Slot.LOCK ? pendingLock : pendingHome;
+    }
+
+    /**
+     * Apply (both screens): enabled when putting {@code choice} on Home and Same as Home on Lock
+     * changes either slot. A photo reaches Home only through Photo…, so a Lock photo cannot.
+     */
+    public static boolean applyBothEnabled(@Nullable WallpaperSlots.Choice choice,
+                                           @NonNull WallpaperSlots.Choice storedHome,
+                                           @NonNull WallpaperSlots.Choice storedLock, boolean busy) {
+        if (busy || choice == null || choice.sameAsHome) return false;
+        if (choice.photo && !storedHome.photo) return false;
+        return homeChanges(choice, storedHome) || !storedLock.sameAsHome;
+    }
+
+    /** Whether Apply (both screens) writes the Home slot, rather than only pointing Lock at it. */
+    public static boolean homeChanges(@NonNull WallpaperSlots.Choice choice,
+                                      @NonNull WallpaperSlots.Choice storedHome) {
+        return !sameChoice(choice, storedHome);
+    }
+
+    /**
+     * A one-slot menu item: enabled when {@code choice} differs from that slot's stored one. A
+     * photo goes through Photo…, and Home cannot follow itself.
+     */
+    public static boolean applyOneEnabled(@NonNull WallpaperSlots.Slot target,
+                                          @Nullable WallpaperSlots.Choice choice,
+                                          @Nullable WallpaperSlots.Choice stored, boolean busy) {
+        if (busy || choice == null || choice.photo) return false;
+        if (choice.sameAsHome && target == WallpaperSlots.Slot.HOME) return false;
+        return !sameChoice(choice, stored);
     }
 
     /** The Same as Home tile leads the strip only while the Lock preview is centred. */

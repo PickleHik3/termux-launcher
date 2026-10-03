@@ -7,18 +7,24 @@ import static org.robolectric.Shadows.shadowOf;
 
 import android.app.Activity;
 import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.os.Looper;
 import android.text.Layout;
 import android.view.ContextThemeWrapper;
+import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.widget.PopupMenu;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.google.android.material.button.MaterialButton;
 import com.termux.R;
+import com.termux.app.launcher.data.IconPackChoices;
+import com.termux.app.launcher.model.IconPackInfo;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -26,12 +32,15 @@ import org.robolectric.Robolectric;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 /**
  * The wallpaper picker page at the subclass's width: it lays out with nothing cut off, the title
  * follows the centred slot, Same as Home shows only for Lock, Apply is enabled only when the
- * pending choice differs, and Motion is hidden below API 34. A fake {@link WallpaperPickerPage.Slots}
+ * pending choice differs, Apply puts the background on Home and points Lock at it while its menu
+ * items apply one slot, Look and Layout hand back a state the page reopens at, the Icon pack menu
+ * lists the packs on the page, the shortcut glyphs sit centred, and Motion is hidden below API 34. A fake {@link WallpaperPickerPage.Slots}
  * stands in for {@link WallpaperSlots}. Native graphics, so text has real metrics.
  */
 public abstract class WallpaperPickerPageTestBase {
@@ -41,6 +50,8 @@ public abstract class WallpaperPickerPageTestBase {
         WallpaperSlots.State state = new WallpaperSlots.State(
             WallpaperSlots.Choice.animated("aurora"), WallpaperSlots.Choice.sameAsHome(), true, false);
         final List<String> calls = new ArrayList<>();
+        /** The choice of each apply, in {@link #calls}' order. */
+        final List<WallpaperSlots.Choice> applied = new ArrayList<>();
 
         @NonNull @Override public WallpaperSlots.State read() {
             return state;
@@ -49,6 +60,7 @@ public abstract class WallpaperPickerPageTestBase {
         @Override public void apply(@NonNull WallpaperSlots.Slot slot, @NonNull WallpaperSlots.Choice choice,
                                     @Nullable WallpaperSlots.Callback cb) {
             calls.add("apply " + slot);
+            applied.add(choice);
             state = slot == WallpaperSlots.Slot.HOME
                 ? new WallpaperSlots.State(choice, state.lock, state.lockMotion, state.lockLiveActive)
                 : new WallpaperSlots.State(state.home, choice, state.lockMotion, state.lockLiveActive);
@@ -70,9 +82,21 @@ public abstract class WallpaperPickerPageTestBase {
         @Override public void onApplied(@NonNull WallpaperSlots.Slot slot, @NonNull WallpaperSlots.Choice choice) {
             calls.add("applied " + slot);
         }
-        @Override public void onOpenLook() { calls.add("look"); }
-        @Override public void onOpenIconPack() { calls.add("icon pack"); }
-        @Override public void onOpenLayout() { calls.add("layout"); }
+        @Nullable WallpaperPickerPage.ReturnState back;
+        IconPackChoices.Listing packs = new IconPackChoices.Listing(IconPackChoices.entries("System icons",
+            Arrays.asList(new IconPackInfo("com.example.arcticons", "Arcticons", 1, false),
+                new IconPackInfo("com.example.lines", "Lines", 1, false)), false), 2);
+
+        @Override public void onOpenLook(@NonNull WallpaperPickerPage.ReturnState back) {
+            this.back = back;
+            calls.add("look");
+        }
+        @Override public void onOpenLayout(@NonNull WallpaperPickerPage.ReturnState back) {
+            this.back = back;
+            calls.add("layout");
+        }
+        @NonNull @Override public IconPackChoices.Listing iconPacks() { return packs; }
+        @Override public void onIconPackChosen(@NonNull String packageName) { calls.add("icon pack " + packageName); }
     }
 
     private Activity mActivity;
@@ -90,7 +114,12 @@ public abstract class WallpaperPickerPageTestBase {
 
     @NonNull
     private WallpaperPickerPage open(int sdk) {
-        WallpaperPickerPage page = new WallpaperPickerPage(mThemed, mSlots, mListener, sdk, () -> {});
+        return open(sdk, null);
+    }
+
+    @NonNull
+    private WallpaperPickerPage open(int sdk, @Nullable WallpaperPickerPage.ReturnState restore) {
+        WallpaperPickerPage page = new WallpaperPickerPage(mThemed, mSlots, mListener, sdk, () -> {}, restore);
         mActivity.setContentView(page.root());
         settle();
         return page;
@@ -121,7 +150,7 @@ public abstract class WallpaperPickerPageTestBase {
         assertTrue("the card fits the pager", card.getHeight() <= pager.getHeight());
 
         for (int id : new int[] {R.id.wallpaper_picker_back, R.id.wallpaper_picker_apply,
-            R.id.wallpaper_picker_look, R.id.wallpaper_picker_icon_pack, R.id.wallpaper_picker_layout,
+            R.id.wallpaper_picker_apply_more, R.id.wallpaper_picker_look, R.id.wallpaper_picker_icon_pack, R.id.wallpaper_picker_layout,
             R.id.wallpaper_picker_photo, R.id.wallpaper_picker_motion}) {
             View v = root.findViewById(id);
             assertTrue(v.getResources().getResourceEntryName(id) + " is a 48dp target",
@@ -186,6 +215,137 @@ public abstract class WallpaperPickerPageTestBase {
     }
 
     @Test
+    public void applyPutsTheBackgroundOnHomeAndLockFollows() {
+        mSlots.state = new WallpaperSlots.State(WallpaperSlots.Choice.animated("aurora"),
+            WallpaperSlots.Choice.animated("rain"), true, false);
+        WallpaperPickerPage page = open(34);
+        page.centre(WallpaperSlots.Slot.HOME);
+        page.choose(WallpaperSlots.Choice.animated("tide"));
+        View apply = page.root().findViewById(R.id.wallpaper_picker_apply);
+        assertTrue(apply.isEnabled());
+
+        apply.performClick();
+        assertEquals(Arrays.asList("apply HOME", "apply LOCK"), mSlots.calls);
+        assertEquals("tide", mSlots.applied.get(0).animatedId);
+        assertTrue("Lock follows Home", mSlots.applied.get(1).sameAsHome);
+        assertTrue(mListener.calls.contains("applied HOME"));
+        assertTrue(mListener.calls.contains("applied LOCK"));
+        assertEquals("tide", mSlots.state.home.animatedId);
+        assertTrue(mSlots.state.lock.sameAsHome);
+        assertTrue(page.pending(WallpaperSlots.Slot.LOCK).sameAsHome);
+        assertFalse("both slots hold it now", apply.isEnabled());
+    }
+
+    @Test
+    public void applyFromLockPutsLocksPickOnHomeToo() {
+        WallpaperPickerPage page = open(34);
+        page.choose(WallpaperSlots.Choice.animated("mesh"));
+        page.root().findViewById(R.id.wallpaper_picker_apply).performClick();
+        assertEquals(Arrays.asList("apply HOME", "apply LOCK"), mSlots.calls);
+        assertEquals("mesh", mSlots.applied.get(0).animatedId);
+        assertTrue(mSlots.applied.get(1).sameAsHome);
+    }
+
+    @Test
+    public void theMenuItemsApplyOneSlotOnly() {
+        WallpaperPickerPage page = open(34);
+        page.centre(WallpaperSlots.Slot.HOME);
+        page.choose(WallpaperSlots.Choice.animated("tide"));
+        assertTrue(page.slotOnlyEnabled(WallpaperSlots.Slot.HOME));
+        assertTrue(page.slotOnlyEnabled(WallpaperSlots.Slot.LOCK));
+        assertTrue(page.root().findViewById(R.id.wallpaper_picker_apply_more).isEnabled());
+
+        page.applySlotOnly(WallpaperSlots.Slot.HOME);
+        assertEquals(Arrays.asList("apply HOME"), mSlots.calls);
+        assertEquals("tide", mSlots.applied.get(0).animatedId);
+        assertFalse("Home holds it now", page.slotOnlyEnabled(WallpaperSlots.Slot.HOME));
+
+        page.choose(WallpaperSlots.Choice.animated("rain"));
+        page.applySlotOnly(WallpaperSlots.Slot.LOCK);
+        assertEquals(Arrays.asList("apply HOME", "apply LOCK"), mSlots.calls);
+        assertEquals("rain", mSlots.applied.get(1).animatedId);
+        assertEquals("Home untouched", "tide", mSlots.state.home.animatedId);
+        assertEquals("rain", mSlots.state.lock.animatedId);
+    }
+
+    @Test
+    public void lookHandsBackAStateThePageReopensAt() {
+        WallpaperPickerPage page = open(34);
+        page.centre(WallpaperSlots.Slot.HOME);
+        page.choose(WallpaperSlots.Choice.animated("tide"));
+        page.centre(WallpaperSlots.Slot.LOCK);
+        page.choose(WallpaperSlots.Choice.animated("rain"));
+        page.centre(WallpaperSlots.Slot.HOME);
+        page.root().findViewById(R.id.wallpaper_picker_look).performClick();
+        assertEquals("shown false", mListener.calls.get(mListener.calls.size() - 2));
+        assertEquals("look", mListener.calls.get(mListener.calls.size() - 1));
+        WallpaperPickerPage.ReturnState back = mListener.back;
+        assertTrue(back != null);
+
+        WallpaperPickerPage again = open(34, back);
+        assertEquals(WallpaperSlots.Slot.HOME, again.centredSlot());
+        assertEquals("tide", again.pending(WallpaperSlots.Slot.HOME).animatedId);
+        assertEquals("rain", again.pending(WallpaperSlots.Slot.LOCK).animatedId);
+        TextView title = again.root().findViewById(R.id.wallpaper_picker_title);
+        assertEquals(mThemed.getString(R.string.wallpaper_picker_slot_home), title.getText().toString());
+        assertTrue("still pending, not applied", mSlots.calls.isEmpty());
+        assertTrue(again.root().findViewById(R.id.wallpaper_picker_apply).isEnabled());
+    }
+
+    @Test
+    public void layoutHandsBackAStateToo() {
+        WallpaperPickerPage page = open(34);
+        page.choose(WallpaperSlots.Choice.animated("mesh"));
+        page.root().findViewById(R.id.wallpaper_picker_layout).performClick();
+        assertEquals("layout", mListener.calls.get(mListener.calls.size() - 1));
+        WallpaperPickerPage again = open(34, mListener.back);
+        assertEquals(WallpaperSlots.Slot.LOCK, again.centredSlot());
+        assertEquals("mesh", again.pending(WallpaperSlots.Slot.LOCK).animatedId);
+        assertEquals("aurora", again.pending(WallpaperSlots.Slot.HOME).animatedId);
+    }
+
+    @Test
+    public void theIconPackMenuOpensOnThePage() {
+        WallpaperPickerPage page = open(34);
+        page.root().findViewById(R.id.wallpaper_picker_icon_pack).performClick();
+        assertFalse("the page stays open", mListener.calls.contains("shown false"));
+        PopupMenu popup = page.iconPackMenu();
+        assertTrue("a menu is up", popup != null);
+        Menu menu = popup.getMenu();
+        assertEquals(3, menu.size());
+        assertEquals("System icons", menu.getItem(0).getTitle().toString());
+        assertEquals("Arcticons", menu.getItem(1).getTitle().toString());
+        assertFalse(menu.getItem(0).isChecked());
+        assertTrue("the pack in force is checked", menu.getItem(2).isChecked());
+
+        assertTrue(menu.performIdentifierAction(menu.getItem(1).getItemId(), 0));
+        assertEquals("icon pack com.example.arcticons", mListener.calls.get(mListener.calls.size() - 1));
+        assertFalse("the page stays open", mListener.calls.contains("shown false"));
+    }
+
+    @Test
+    public void theShortcutGlyphsSitCentred() {
+        WallpaperPickerPage page = open(34);
+        for (int id : new int[] {R.id.wallpaper_picker_look, R.id.wallpaper_picker_icon_pack,
+            R.id.wallpaper_picker_layout}) {
+            MaterialButton button = page.root().findViewById(id);
+            String name = button.getResources().getResourceEntryName(id);
+            Drawable icon = button.getIcon();
+            assertTrue(name + " has a glyph", icon != null);
+            Rect b = icon.getBounds();
+            assertEquals(name + " glyph is 24dp", dp(24), b.width());
+            // Where TextView draws a start (left) compound drawable: across from the left padding,
+            // down from the top padding with the leftover height split evenly, then its bounds.
+            float cx = button.getPaddingLeft() + b.left + b.width() / 2f;
+            int top = button.getCompoundPaddingTop();
+            int vspace = button.getHeight() - top - button.getCompoundPaddingBottom();
+            float cy = top + (vspace - b.height()) / 2 + b.top + b.height() / 2f;
+            assertEquals(name + " centred across", button.getWidth() / 2f, cx, 1f);
+            assertEquals(name + " centred down", button.getHeight() / 2f, cy, 1f);
+        }
+    }
+
+    @Test
     public void motionShowsOnLockFromApi34() {
         WallpaperPickerPage page = open(34);
         View motion = page.root().findViewById(R.id.wallpaper_picker_motion);
@@ -203,7 +363,7 @@ public abstract class WallpaperPickerPageTestBase {
     }
 
     @Test
-    public void shortcutsAndPhotoCloseThePageFirst() {
+    public void photoClosesThePageFirst() {
         WallpaperPickerPage page = open(34);
         page.root().findViewById(R.id.wallpaper_picker_photo).performClick();
         assertEquals("shown false", mListener.calls.get(mListener.calls.size() - 2));
