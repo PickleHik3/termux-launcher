@@ -1565,6 +1565,14 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_WALLPAPER_LOCK_MOTION = "wallpaper_lock_motion";
         public static final boolean DEFAULT_VALUE_WALLPAPER_LOCK_MOTION = true;
 
+        /**
+         * The Home slot's Motion toggle, read only for a living still (a photo brought to life):
+         * on plays it in the launcher, off leaves its photo as a still. Generated backgrounds
+         * always play on Home.
+         */
+        public static final String KEY_WALLPAPER_HOME_MOTION = "wallpaper_home_motion";
+        public static final boolean DEFAULT_VALUE_WALLPAPER_HOME_MOTION = true;
+
         /** Hidden kill switch: true stops generated backgrounds animating. Not in the settings UI. */
         public static final String KEY_ANIMATED_WALLPAPER_DISABLED = "animated_wallpaper_disabled";
         public static final boolean DEFAULT_VALUE_ANIMATED_WALLPAPER_DISABLED = false;

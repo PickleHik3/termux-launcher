@@ -18,6 +18,8 @@ import androidx.annotation.WorkerThread;
 
 import com.termux.app.chrome.ManagedWallpaper;
 import com.termux.app.chrome.WallpaperPictureReader;
+import com.termux.app.chrome.wallpaper.living.LivingStills;
+import com.termux.app.chrome.wallpaper.living.Manifest;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
@@ -93,12 +95,20 @@ public final class WallpaperSlots {
         public final boolean lockMotion;
         /** Our live wallpaper is the system's lock wallpaper right now. */
         public final boolean lockLiveActive;
+        /** The Home slot's Motion toggle (on by default); read only for a living still. */
+        public final boolean homeMotion;
 
         public State(@NonNull Choice home, @NonNull Choice lock, boolean lockMotion, boolean lockLiveActive) {
+            this(home, lock, lockMotion, lockLiveActive, true);
+        }
+
+        public State(@NonNull Choice home, @NonNull Choice lock, boolean lockMotion, boolean lockLiveActive,
+                     boolean homeMotion) {
             this.home = home;
             this.lock = lock;
             this.lockMotion = lockMotion;
             this.lockLiveActive = lockLiveActive;
+            this.homeMotion = homeMotion;
         }
     }
 
@@ -132,8 +142,10 @@ public final class WallpaperSlots {
             }
         }
         File lockCopy = lockPhotoFile(app);
-        return stateFrom(homeId, lock, motion, lockLiveActive(app), homePhoto,
+        State state = stateFrom(homeId, lock, motion, lockLiveActive(app), homePhoto,
             lockCopy.isFile() ? lockCopy : null);
+        boolean homeMotion = prefs == null || prefs.isWallpaperHomeMotionEnabled();
+        return homeMotion ? state : new State(state.home, state.lock, state.lockMotion, state.lockLiveActive, false);
     }
 
     /**
@@ -181,6 +193,20 @@ public final class WallpaperSlots {
         if (prefs != null) prefs.setWallpaperLockMotionEnabled(on);
         Logger.logInfo(LOG_TAG, "Lock motion: " + (on ? "on" : "off"));
         execute(activity, WallpaperSlotPlan.forMotion(on, in), cb);
+    }
+
+    /**
+     * The Home slot's Motion toggle, for a living still: on plays it in the launcher, off leaves
+     * its photo, which is already the system's still. Nothing is re-applied; the live host hears
+     * the change and starts or stops the frames.
+     */
+    public static void setHomeMotion(@NonNull Activity activity, boolean on, @Nullable Callback cb) {
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(activity.getApplicationContext(), false);
+        if (prefs != null) prefs.setWallpaperHomeMotionEnabled(on);
+        Logger.logInfo(LOG_TAG, "Home motion: " + (on ? "on" : "off"));
+        GeneratedWallpaperApplier.notifyChanged();
+        GeneratedWallpaperApplier.Callback done = cb == null ? null : cb::onDone;
+        GeneratedWallpaperApplier.post(done, true, null);
     }
 
     // --- package-private helpers ---
@@ -250,6 +276,20 @@ public final class WallpaperSlots {
     @Nullable
     public static String applyPhotoNow(@NonNull Context ctx, @NonNull File picture, int flags,
                                        boolean recordHome, @Nullable String recordLock) {
+        return applyPhotoNow(ctx, picture, flags, recordHome, recordLock, null);
+    }
+
+    /**
+     * As above for a living still ({@code livingId} is {@code living:<hash>}, {@code picture} its
+     * manifest's image): the photo itself is the system still, as its rest pose is, and the Home
+     * slot records the living id instead of forgetting the generated background. The live host
+     * then plays the motion over it. With Lock on Same as Home and Motion on, our lock engine keeps
+     * the lock screen and plays the same still, so the photo is not copied over it.
+     */
+    @WorkerThread
+    @Nullable
+    static String applyPhotoNow(@NonNull Context ctx, @NonNull File picture, int flags,
+                                boolean recordHome, @Nullable String recordLock, @Nullable String livingId) {
         Context app = ctx.getApplicationContext();
         if (!picture.isFile()) return "not_found";
         boolean home = (flags & WallpaperManager.FLAG_SYSTEM) != 0;
@@ -288,10 +328,16 @@ public final class WallpaperSlots {
         }
         if (recordLock != null && prefs != null) prefs.setWallpaperLockChoice(recordLock);
         if (recordHome) {
-            // A photo replaces any generated background; the live host hears it and re-dresses.
-            GeneratedWallpaperApplier.clear(app);
-            Logger.logInfo(LOG_TAG, "Home slot: photo");
-            if (!lock && before.lock.sameAsHome && before.lockLiveActive
+            boolean lockEngineKeeps = livingId != null && before.lockMotion;
+            if (livingId != null) {
+                GeneratedWallpaperApplier.recordLiving(app, livingId, flags);
+                Logger.logInfo(LOG_TAG, "Home slot: " + livingId);
+            } else {
+                // A photo replaces any generated background; the live host hears it and re-dresses.
+                GeneratedWallpaperApplier.clear(app);
+                Logger.logInfo(LOG_TAG, "Home slot: photo");
+            }
+            if (!lock && before.lock.sameAsHome && before.lockLiveActive && !lockEngineKeeps
                 && !ManagedWallpaper.copyHomePictureToLock(app)) {
                 Logger.logError(LOG_TAG, "Copying the home photo to the lock screen failed");
             }
@@ -419,13 +465,25 @@ public final class WallpaperSlots {
             return;
         }
         State state = read(app);
-        AnimatedWallpaper w = state.home.animatedId == null ? null : AnimatedWallpapers.byId(state.home.animatedId);
+        AnimatedWallpaper w = state.home.animatedId == null ? null
+            : AnimatedWallpapers.byId(app, state.home.animatedId);
         if (w == null) {
             Logger.logWarn(LOG_TAG, "Our live wallpaper is on the home screen with no Home background to put back");
             return;
         }
         Logger.logInfo(LOG_TAG, "Our live wallpaper took the home screen too; putting the Home still back");
         sHealingHome = true;
+        if (w instanceof LivingStill) {
+            // The photo is the still: set it again as it is, and keep the living id recorded.
+            final File image = ((LivingStill) w).manifest().image();
+            final String id = w.id();
+            GeneratedWallpaperApplier.onWorker(() -> {
+                String error = applyPhotoNow(app, image, WallpaperManager.FLAG_SYSTEM, true, null, id);
+                if (error != null) Logger.logError(LOG_TAG, "Putting the Home photo back failed: " + error);
+                sHealingHome = false;
+            });
+            return;
+        }
         GeneratedWallpaperApplier.applyStill(app, w, WallpaperManager.FLAG_SYSTEM, true, null,
             (ok, error) -> sHealingHome = false);
     }
@@ -483,11 +541,15 @@ public final class WallpaperSlots {
             }
             case SET_STILL:
             default: {
-                AnimatedWallpaper w = AnimatedWallpapers.byId(plan.stillId);
                 if (Build.VERSION.SDK_INT < 34) {
                     GeneratedWallpaperApplier.post(done, false, "api");
                     return;
                 }
+                if (AnimatedWallpapers.isLivingId(plan.stillId)) {
+                    applyLiving(app, plan, done);
+                    return;
+                }
+                AnimatedWallpaper w = AnimatedWallpapers.byId(plan.stillId);
                 if (w == null) {
                     GeneratedWallpaperApplier.post(done, false, "not_found");
                     return;
@@ -498,6 +560,31 @@ public final class WallpaperSlots {
                 GeneratedWallpaperApplier.applyStill(activity, w, flags, plan.recordHome, plan.recordLock, done);
             }
         }
+    }
+
+    /**
+     * A living still's apply: its manifest's photo is set as the system still with the plan's
+     * flags (no rest-pose render: the photo is the rest pose) and the slots record the living id.
+     */
+    private static void applyLiving(@NonNull Context app, @NonNull WallpaperSlotPlan plan,
+                                    @Nullable GeneratedWallpaperApplier.Callback done) {
+        String id = plan.stillId;
+        Manifest manifest = id == null ? null
+            : LivingStills.findByHash(app, id.substring(LivingStill.ID_PREFIX.length()));
+        if (manifest == null) {
+            GeneratedWallpaperApplier.post(done, false, "not_found");
+            return;
+        }
+        int flags = (plan.flags & WallpaperSlotPlan.FLAG_SYSTEM) != 0 ? WallpaperManager.FLAG_SYSTEM : 0;
+        if ((plan.flags & WallpaperSlotPlan.FLAG_LOCK) != 0) flags |= WallpaperManager.FLAG_LOCK;
+        final int wmFlags = flags;
+        Logger.logInfo(LOG_TAG, "Living still " + id + " to " + ManagedWallpaper.targetName(wmFlags));
+        GeneratedWallpaperApplier.onWorker(() -> {
+            // The lock record of a Home apply (Same as Home) is untouched; a Lock apply stores
+            // animated:<id>. Home records the id itself (applyPhotoNow's livingId).
+            String error = applyPhotoNow(app, manifest.image(), wmFlags, plan.recordHome, plan.recordLock, id);
+            GeneratedWallpaperApplier.post(done, error == null, error);
+        });
     }
 
     private static void recordLock(@NonNull Context app, @Nullable String value) {

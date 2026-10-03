@@ -64,7 +64,7 @@ public final class GeneratedWallpaperApplier {
         sChangedListener = listener;
     }
 
-    private static void notifyChanged() {
+    static void notifyChanged() {
         MAIN.post(() -> {
             Runnable listener = sChangedListener;
             if (listener != null) listener.run();
@@ -169,6 +169,20 @@ public final class GeneratedWallpaperApplier {
     /** Posts {@code cb}'s result to the main thread. */
     static void post(@Nullable Callback cb, boolean ok, @Nullable String error) {
         finish(cb, ok, error);
+    }
+
+    /**
+     * Records the Home slot as the living still {@code livingId} whose photo was just set with
+     * {@code flags}: the id stays stored (the live host plays it over the photo) with no colours,
+     * so its own palette applies.
+     */
+    static void recordLiving(@NonNull Context ctx, @NonNull String livingId, int flags) {
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(ctx.getApplicationContext(), false);
+        if (prefs == null) return;
+        prefs.setManagedWallpaperAnimatedId(livingId);
+        prefs.setManagedWallpaperAnimatedColors(null);
+        prefs.setManagedWallpaperAnimatedTarget(ManagedWallpaper.targetName(flags));
+        notifyChanged();
     }
 
     /** Forgets the generated background; a photo (or a {@code path} set) is the wallpaper now. */

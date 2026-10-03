@@ -60,6 +60,14 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
          * {@link AnimatedWallpaperClock#revive}; the still shows.
          */
         void onRendererUnhealthy();
+
+        /**
+         * The launcher wants the picture to recede right now (terminal sheet open, keyboard up).
+         * Asked every frame; only a living still shows it, as a focus blur.
+         */
+        default boolean focusWanted() {
+            return false;
+        }
     }
 
     @NonNull private final Host mHost;
@@ -69,7 +77,7 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
     private final float mDensity;
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
     @NonNull private final Choreographer mChoreographer = Choreographer.getInstance();
-    @NonNull private final Runnable mRelease = this::releaseRenderer;
+    @NonNull private final Runnable mRelease = this::releaseAll;
 
     @Nullable private AnimatedWallpaper mWallpaper;
     @Nullable private LiveWallpaperRenderer mRenderer;
@@ -168,7 +176,21 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
     /** Low memory: let the renderer and its rings go now; the next frame rebuilds them. */
     public void trimMemory() {
         mHandler.removeCallbacks(mRelease);
+        releaseAll();
+    }
+
+    /**
+     * The renderer goes, and with it the backdrop shaders of a living still: they hold its decoded
+     * pictures, which the next frame decodes again. The other backgrounds' shaders are tiny.
+     */
+    private void releaseAll() {
         releaseRenderer();
+        if (mWallpaper instanceof LivingStill) {
+            mBackdropShaders[0] = null;
+            mBackdropShaders[1] = null;
+            mPendingShader = -1;
+            LivingStillTextures.trim();
+        }
     }
 
     /** True once the renderer was killed; nothing plays until {@link #revive}. */
@@ -186,6 +208,7 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
     public void doFrame(long frameTimeNanos) {
         mPosted = false;
         if (!mRunning || mDead || mWallpaper == null) return;
+        mDirector.setFocus(mHost.focusWanted());
         WallpaperDirector.Frame f = mDirector.frame(frameTimeNanos);
         if (f.lockDue) mHost.onLockDue();
         if (f.fps <= 0) {

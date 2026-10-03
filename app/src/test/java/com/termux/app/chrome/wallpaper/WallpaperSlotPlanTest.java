@@ -255,6 +255,63 @@ public class WallpaperSlotPlanTest {
         assertEquals("same_as_home", p.recordLock);
     }
 
+    // --- living stills: a photo with motion, id living:<hash> (living-stills.md, Part D.3) ---
+
+    private static final String LIVING = "living:0123456789abcdef";
+
+    @Test public void livingIdsAreStoredAndReadBack() {
+        assertEquals("animated:" + LIVING, WallpaperSlotPlan.lockValue(Choice.animated(LIVING)));
+        assertEquals(LIVING, WallpaperSlotPlan.lockChoice("animated:" + LIVING).animatedId);
+        assertEquals(LIVING, WallpaperSlotPlan.homeChoice(LIVING).animatedId);
+        assertTrue("a malformed living id reads as a photo", WallpaperSlotPlan.homeChoice("living:zz").photo);
+        assertTrue(WallpaperSlotPlan.lockChoice("animated:living:zz").sameAsHome);
+        assertEquals(LIVING, WallpaperSlotPlan.resolveLockId(Choice.sameAsHome(), LIVING));
+        assertEquals(LIVING, WallpaperSlotPlan.resolveLockId(Choice.animated(LIVING), null));
+    }
+
+    @Test public void homeLivingSetsTheHomeStillAndRecordsTheId() {
+        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.HOME, Choice.animated(LIVING),
+            in(null, Choice.sameAsHome(), true, true));
+        assertEquals("applied as its photo by WallpaperSlots, planned as any still", Kind.SET_STILL, p.kind);
+        assertEquals(LIVING, p.stillId);
+        assertEquals("our lock engine keeps the lock screen", SYSTEM, p.flags);
+        assertTrue(p.recordHome);
+        WallpaperSlotPlan off = WallpaperSlotPlan.forApply(Slot.HOME, Choice.animated(LIVING),
+            in(null, Choice.sameAsHome(), false, true));
+        assertEquals("Motion off: the lock screen gets the photo too", SYSTEM | LOCK, off.flags);
+    }
+
+    @Test public void homeLivingBelow34IsUnsupported() {
+        assertEquals(Kind.UNSUPPORTED, WallpaperSlotPlan.forApply(Slot.HOME, Choice.animated(LIVING),
+            new Inputs(33, null, Choice.sameAsHome(), true, false)).kind);
+    }
+
+    @Test public void lockLivingFollowsTheMotionToggle() {
+        WallpaperSlotPlan first = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.animated(LIVING),
+            in(null, Choice.sameAsHome(), true, false));
+        assertEquals(Kind.OPEN_PREVIEW, first.kind);
+        assertEquals("animated:" + LIVING, first.recordLock);
+        WallpaperSlotPlan live = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.animated(LIVING),
+            in(null, Choice.sameAsHome(), true, true));
+        assertEquals(Kind.RECORD_ONLY, live.kind);
+        WallpaperSlotPlan still = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.animated(LIVING),
+            in(null, Choice.sameAsHome(), false, true));
+        assertEquals("Motion off: the plain photo", Kind.SET_STILL, still.kind);
+        assertEquals(LIVING, still.stillId);
+        assertEquals(LOCK, still.flags);
+        assertFalse(still.recordHome);
+    }
+
+    @Test public void lockSameAsHomeFollowsAHomeLiving() {
+        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.sameAsHome(),
+            in(LIVING, Choice.photo(), true, false));
+        assertEquals(Kind.OPEN_PREVIEW, p.kind);
+        assertEquals(LIVING, p.stillId);
+        WallpaperSlotPlan off = WallpaperSlotPlan.forMotion(false, in(LIVING, Choice.sameAsHome(), true, true));
+        assertEquals(Kind.SET_STILL, off.kind);
+        assertEquals(LIVING, off.stillId);
+    }
+
     @Test public void lockLiveSupportedFrom34() {
         assertFalse(WallpaperSlots.lockLiveSupported(26));
         assertFalse(WallpaperSlots.lockLiveSupported(33));
