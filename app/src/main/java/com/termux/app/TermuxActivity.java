@@ -1303,14 +1303,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private View.OnLayoutChangeListener mAccessoryLayoutChangeListener;
     @Nullable private ActivityResultLauncher<PickVisualMediaRequest> mWallpaperPickerLauncher;
     @Nullable private ActivityResultLauncher<CropImageContractOptions> mWallpaperCropLauncher;
-    /** True while a picked wallpaper is being handed to Android on its own thread; a second pick waits. */
-    private boolean mWallpaperApplyInFlight;
     /**
-     * The slot the wallpaper picker page's Photo… named for the photo now being picked, or null for
-     * the older one-step path (the long-press action, and devices without animated backgrounds),
-     * which still asks Home / Lock / both after the crop.
+     * The slot the wallpaper picker page's Photo… named for the photo now being picked, and where
+     * the page goes back to when the pick and the crop end. Not dropped by onStop: the photo
+     * picker and the cropper are other activities. Null after a recreate; the crop then comes back
+     * as the Home card's pending photo.
      */
     @Nullable private com.termux.app.chrome.wallpaper.WallpaperSlots.Slot mWallpaperPhotoSlot;
+    @Nullable private com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState mWallpaperPhotoReturn;
     /** The help screen, launched for its result: what the reader asked the launcher to do. */
     @Nullable private ActivityResultLauncher<android.content.Intent> mHelpScreenLauncher;
     /** The page the reader was on when they asked, so closing the overlay lands them back on it. */
@@ -13678,6 +13678,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             uri -> {
                 if (uri != null) {
                     launchWallpaperCrop(uri);
+                } else {
+                    returnFromWallpaperPhoto(null);
                 }
             }
         );
@@ -13685,6 +13687,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new CropImageContract(),
             result -> {
                 if (result instanceof CropImage.CancelledResult) {
+                    returnFromWallpaperPhoto(null);
                     return;
                 }
                 handleWallpaperCropResult(result);
@@ -13692,20 +13695,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         );
     }
 
-    private void launchManagedWallpaperPicker() {
-        launchManagedWallpaperPicker(null);
-    }
-
     /**
-     * The photo + crop flow. {@code slot} non-null sends the photo straight to that slot (Home is
-     * {@code FLAG_SYSTEM}, Lock {@code FLAG_LOCK}) and tells {@code WallpaperSlots}; null asks
-     * Home / Lock / both after the crop, as before.
+     * The wallpaper page's Photo…: Android's photo picker, then the crop. The page comes back on
+     * {@code back}'s slot with the cropped photo as that card's pending choice; nothing is applied
+     * until the page's Apply.
      */
     private void launchManagedWallpaperPicker(
-            @Nullable com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot) {
+            @NonNull com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot,
+            @Nullable com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState back) {
         mWallpaperPhotoSlot = slot;
+        mWallpaperPhotoReturn = back;
         if (mWallpaperPickerLauncher == null) {
             showToast(getString(R.string.error_wallpaper_set_failed), true);
+            returnFromWallpaperPhoto(null);
             return;
         }
         mWallpaperPickerLauncher.launch(
@@ -13718,6 +13720,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void launchWallpaperCrop(@NonNull Uri sourceUri) {
         if (mWallpaperCropLauncher == null) {
             showToast(getString(R.string.error_wallpaper_set_failed), true);
+            returnFromWallpaperPhoto(null);
             return;
         }
 
@@ -13773,114 +13776,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 Logger.logStackTraceWithMessage(LOG_TAG, "Wallpaper crop failed", result.getError());
             }
             showToast(getString(R.string.error_wallpaper_set_failed), true);
+            returnFromWallpaperPhoto(null);
             return;
         }
-
-        Uri croppedUri = result.getUriContent();
-        if (croppedUri == null) {
+        // The cropper wrote the managed pending file; it becomes the page's pending photo.
+        File photo = com.termux.app.chrome.wallpaper.WallpaperSlots.adoptCroppedPhoto(this);
+        if (photo == null) {
             showToast(getString(R.string.error_wallpaper_set_failed), true);
+            returnFromWallpaperPhoto(null);
             return;
         }
-
-        com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot = mWallpaperPhotoSlot;
-        if (slot != null) {
-            // From the Home card a photo goes on both screens, as Apply does; only a photo
-            // started from the Lock card is the lock screen's alone.
-            startManagedWallpaperApply(croppedUri,
-                slot == com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME
-                    ? WallpaperManager.FLAG_SYSTEM | WallpaperManager.FLAG_LOCK : WallpaperManager.FLAG_LOCK);
-            return;
-        }
-        showWallpaperTargetPrompt(croppedUri);
-    }
-
-    private void showWallpaperTargetPrompt(@NonNull Uri croppedUri) {
-        String[] targets = new String[] {
-            getString(R.string.wallpaper_target_home_screen),
-            getString(R.string.wallpaper_target_lock_screen),
-            getString(R.string.wallpaper_target_home_and_lock_screen)
-        };
-        int[] flags = new int[] {
-            WallpaperManager.FLAG_SYSTEM,
-            WallpaperManager.FLAG_LOCK,
-            WallpaperManager.FLAG_SYSTEM | WallpaperManager.FLAG_LOCK
-        };
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, targets);
-        new MaterialAlertDialogBuilder(this)
-            .setAdapter(adapter, (dialogInterface, which) -> startManagedWallpaperApply(croppedUri, flags[which]))
-            .show();
+        returnFromWallpaperPhoto(photo);
     }
 
     /**
-     * Hands the cropped picture to Android on its own thread. {@code setStream} returns only after
-     * system_server has cropped and re-encoded the picture, which for a large one takes seconds:
-     * run on the main thread that was the launcher's "not responding" dialog after a wallpaper pick.
+     * The photo pick and crop ended: show the wallpaper page again where Photo… left it, with
+     * {@code photo} (when the crop finished) as that slot's pending choice. Nothing is applied here;
+     * the page's Apply sets it through {@code WallpaperSlots}.
      */
-    private void startManagedWallpaperApply(@NonNull Uri croppedUri, int selectedFlags) {
-        if (mWallpaperApplyInFlight) return;
-        mWallpaperApplyInFlight = true;
-        showToast(getString(R.string.msg_wallpaper_applying), false);
-        WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
-        // Reads the window's frame, so it stays on the main thread; it is one quick binder call.
-        if ((selectedFlags & WallpaperManager.FLAG_SYSTEM) != 0) {
-            suggestManagedWallpaperDimensions(wallpaperManager);
-        }
-        // The screen's portrait size, read here where the window is, decides which part of the
-        // wide picture the system is handed.
-        Rect screenRect = getSystemWallpaperFrameRect();
-        final int portraitWidth = Math.min(screenRect.width(), screenRect.height());
-        final int portraitHeight = Math.max(screenRect.width(), screenRect.height());
-        new Thread(() -> {
-            boolean applied = applyManagedWallpaper(wallpaperManager, croppedUri, selectedFlags,
-                portraitWidth, portraitHeight);
-            runOnUiThread(() -> finishManagedWallpaperApply(applied, selectedFlags));
-        }, "managed-wallpaper-apply").start();
-    }
-
-    private void finishManagedWallpaperApply(boolean applied, int selectedFlags) {
-        mWallpaperApplyInFlight = false;
-        com.termux.app.chrome.wallpaper.WallpaperSlots.Slot photoSlot = mWallpaperPhotoSlot;
+    private void returnFromWallpaperPhoto(@Nullable File photo) {
+        com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot = mWallpaperPhotoSlot;
+        com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState back = mWallpaperPhotoReturn;
         mWallpaperPhotoSlot = null;
-        if (isFinishing() || isDestroyed()) return;
-        if (!applied) {
-            showToast(getString(R.string.error_wallpaper_set_failed), true);
+        mWallpaperPhotoReturn = null;
+        if (isFinishing() || isDestroyed()) {
+            if (photo != null) com.termux.app.chrome.wallpaper.WallpaperSlots.discardPendingPhoto(this, photo);
             return;
         }
-        if (photoSlot != null) {
-            try {
-                if ((selectedFlags & WallpaperManager.FLAG_SYSTEM) != 0)
-                    com.termux.app.chrome.wallpaper.WallpaperSlots.notePhotoApplied(this,
-                        com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME);
-                if ((selectedFlags & WallpaperManager.FLAG_LOCK) != 0)
-                    com.termux.app.chrome.wallpaper.WallpaperSlots.notePhotoApplied(this,
-                        com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.LOCK);
-            } catch (RuntimeException e) {
-                Logger.logStackTraceWithMessage(LOG_TAG, "Recording the photo slot failed", e);
-            }
-        }
-
-        if ((selectedFlags & WallpaperManager.FLAG_SYSTEM) != 0) {
-            // A photo replaces any generated background: forget it before the glass is told.
-            if (mLiveWallpaperHost != null) mLiveWallpaperHost.onPhotoApplied();
-            // The picture is ours again now that its id is stored, so the glass must be told
-            // before the sync below re-dresses it.
-            refreshWallpaperPicture();
-            setWallpaperModeEnabled(this, true);
-            updateWindowBackgroundForCurrentSession();
-            View rootView = findViewById(R.id.activity_termux_root_view);
-            if (rootView != null) {
-                rootView.post(this::applyWallpaperOffsetFixIfNeeded);
-            }
-            mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-        }
-    }
-
-    /** The file and system half of a wallpaper pick; runs off the main thread, touches no view. */
-    private boolean applyManagedWallpaper(@NonNull WallpaperManager wallpaperManager,
-                                          @NonNull Uri croppedUri, int wallpaperFlags,
-                                          int portraitWidth, int portraitHeight) {
-        return com.termux.app.chrome.ManagedWallpaper.apply(this, wallpaperManager, croppedUri,
-            wallpaperFlags, portraitWidth, portraitHeight, mPreferences);
+        com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState restore = photo == null ? back
+            : com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState.withPhoto(back,
+                slot != null ? slot : com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME, photo,
+                com.termux.app.chrome.wallpaper.WallpaperSlots.read(this));
+        if (restore == null) return;
+        // Posted: results arrive while the activity is still coming back to the front.
+        View root = findViewById(R.id.activity_termux_root_view);
+        Runnable reopen = () -> {
+            if (!isFinishing() && !isDestroyed()) openWallpaperPicker(restore);
+        };
+        if (root != null) root.post(reopen);
+        else reopen.run();
     }
 
     private int getCurrentSystemWallpaperId() {
@@ -13910,15 +13844,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getPackageName() + ".cropper.fileprovider",
             file
         );
-    }
-
-    private void suggestManagedWallpaperDimensions(@NonNull WallpaperManager wallpaperManager) {
-        try {
-            Rect frameRect = getSystemWallpaperFrameRect();
-            wallpaperManager.suggestDesiredDimensions(frameRect.width(), frameRect.height());
-        } catch (Exception e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to suggest wallpaper dimensions; continuing with wallpaper apply", e);
-        }
     }
 
     @NonNull
@@ -14025,7 +13950,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mTermuxTerminalViewClient.shareSessionTranscript();
                 return true;
             case CONTEXT_MENU_SET_WALLPAPER_ID:
-                launchManagedWallpaperPicker();
+                // The wallpaper page on every API level: Photo… there, previewed before Apply.
+                openWallpaperPicker();
                 return true;
             case CONTEXT_MENU_REMOVE_WALLPAPER_ID:
                 setWallpaperModeEnabled(this, !shouldUseWallpaperPassthroughMode());
@@ -16972,14 +16898,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void openWallpaperPicker(
             @Nullable com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState restore) {
-        boolean animatedOffered = com.termux.app.chrome.wallpaper.GeneratedWallpaperApplier.offeredFor(
-            Build.VERSION.SDK_INT, mPreferences.isFancierGlassEnabled());
-        // With no backgrounds to offer the page would only hold Photo…, so keep the one-step photo
-        // path (it asks Home / Lock / both after the crop).
-        if (!animatedOffered) {
-            launchManagedWallpaperPicker();
-            return;
-        }
+        // The page on every API level. Without the animated backgrounds (below API 34, or Fancier
+        // Glass off) it holds the recent photos, Photo… and the current pictures only.
+        boolean animatedOffered = mPreferences != null
+            && com.termux.app.chrome.wallpaper.GeneratedWallpaperApplier.offeredFor(
+                Build.VERSION.SDK_INT, mPreferences.isFancierGlassEnabled());
+        // A fresh page has no pending photo: any left were from a return that never came.
+        if (restore == null) com.termux.app.chrome.wallpaper.WallpaperSlots.clearPendingPhotos(this);
         com.termux.app.chrome.wallpaper.WallpaperPickerPage.show(this,
             com.termux.app.chrome.wallpaper.WallpaperPickerPage.systemSlots(this),
             new com.termux.app.chrome.wallpaper.WallpaperPickerPage.Listener() {
@@ -16989,8 +16914,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
 
                 @Override public void onPickPhoto(
-                        @NonNull com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot) {
-                    launchManagedWallpaperPicker(slot);
+                        @NonNull com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot,
+                        @NonNull com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState back) {
+                    launchManagedWallpaperPicker(slot, back);
                 }
 
                 @Override public void onApplied(
@@ -16998,11 +16924,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         @NonNull com.termux.app.chrome.wallpaper.WallpaperSlots.Choice choice) {
                     // The applier's changed listener has already told the live host; the glass
                     // still has to pick up the new still as its managed picture.
+                    // A photo's set has already forgotten any generated background (the same
+                    // listener heard it).
                     if (slot != com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME) return;
                     if (isFinishing() || isDestroyed()) return;
                     refreshWallpaperPicture();
                     setWallpaperModeEnabled(TermuxActivity.this, true);
                     updateWindowBackgroundForCurrentSession();
+                    if (choice.photo) {
+                        View rootView = findViewById(R.id.activity_termux_root_view);
+                        if (rootView != null) rootView.post(TermuxActivity.this::applyWallpaperOffsetFixIfNeeded);
+                    }
                     mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
                 }
 
@@ -17038,7 +16970,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.launcher.data.IconPackChoices.apply(TermuxActivity.this, mPreferences,
                         com.termux.app.launcher.data.IconPackChoices.KEY_PINNED, packageName);
                 }
-            }, restore);
+            }, animatedOffered, restore);
     }
 
     /**

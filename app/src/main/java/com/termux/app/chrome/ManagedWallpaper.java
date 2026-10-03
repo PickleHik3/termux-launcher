@@ -24,9 +24,10 @@ import java.io.InputStream;
 /**
  * The file and system half of setting the launcher's "managed" wallpaper: hand the picture to
  * Android, keep the launcher's exact-picture copy and the stored wallpaper id in step. Runs off
- * the main thread and touches no view, so both the in-app picker
- * ({@code TermuxActivity.startManagedWallpaperApply}) and {@code POST /v1/wallpaper} share it and
- * a wallpaper set either way is the same wallpaper to the glass.
+ * the main thread and touches no view, so the picker page's Apply and {@code POST /v1/wallpaper}
+ * (both through {@code WallpaperSlots.applyPhotoNow}, and the generated backgrounds through
+ * {@code GeneratedWallpaperApplier}) share it and a wallpaper set any way is the same wallpaper to
+ * the glass.
  */
 public final class ManagedWallpaper {
 
@@ -275,7 +276,11 @@ public final class ManagedWallpaper {
         }
     }
 
-    /** Where the picker's cropper writes the picture before it is applied. */
+    /**
+     * Where the picker's cropper writes the picture, and where every set stages its picture
+     * before {@link #apply}. A crop is moved out at once ({@code WallpaperSlots.adoptCroppedPhoto})
+     * so a later set cannot overwrite a photo still waiting for Apply.
+     */
     @NonNull
     public static File tempFile(@NonNull Context context) {
         File directory = new File(context.getFilesDir(), "managed-wallpaper");

@@ -102,6 +102,22 @@ public class WallpaperSlotsTest {
     }
 
     @Test
+    public void aSlotHoldingAPhotoCarriesItsKeptPicture() {
+        java.io.File exact = new java.io.File("/files/managed-wallpaper/system-wallpaper-exact.png");
+        java.io.File lockCopy = new java.io.File("/files/wallpaper/slots/lock.png");
+        WallpaperSlots.State s = WallpaperSlots.stateFrom(null, "photo", true, false, exact, lockCopy);
+        assertEquals(exact, s.home.photoFile);
+        assertEquals(lockCopy, s.lock.photoFile);
+        // Any shipped id: the set of backgrounds may change.
+        String someId = AnimatedWallpapers.all().get(0).id();
+        WallpaperSlots.State animated = WallpaperSlots.stateFrom(someId, "same_as_home", true, false, exact, lockCopy);
+        assertNull("an animated Home has no photo", animated.home.photoFile);
+        assertTrue(animated.lock.sameAsHome);
+        assertNull("unknown picture", WallpaperSlots.stateFrom(null, "photo", true, false).home.photoFile);
+        assertEquals("photo", WallpaperSlots.lockSlotName(s.lock));
+    }
+
+    @Test
     public void lockSlotNamesForTheStatusRoute() {
         assertEquals("same_as_home", WallpaperSlots.lockSlotName(WallpaperSlots.Choice.sameAsHome()));
         assertEquals("photo", WallpaperSlots.lockSlotName(WallpaperSlots.Choice.photo()));

@@ -15,9 +15,9 @@ wallpaper (see [Lock screen](#lock-screen)).
   mode, battery saver and reduced motion must be off.
 - Android 14 or later.
 
-The wallpaper picker page offers the backgrounds only when both hold. Otherwise **Wallpaper**
-goes straight to your photos, as before. On Android 13 the extra glass works but the backgrounds
-are not offered. While Lazy mode, battery saver or reduced motion is on, the background stops on
+The wallpaper picker page offers the backgrounds only when both hold. Otherwise the page still
+opens, with your photos only: the recent photos, **Photo…** and what each screen shows now. On
+Android 13 the extra glass works but the backgrounds are not offered. While Lazy mode, battery saver or reduced motion is on, the background stops on
 its still; when it ends, the background carries on.
 
 ## Pick one
@@ -33,8 +33,13 @@ Hold a page's corner and tap **Wallpaper**. The wallpaper picker page opens full
   while you swipe, and back closes the page without applying anything.
 - **Same as Home** comes first in the strip while the Lock preview is in the middle. It is the
   default: the lock screen follows every Home change.
-- **Photo…** opens your photos for the slot in the middle: Home sets the home wallpaper, Lock the
-  lock screen.
+- **Photo…** opens your photos, then the crop. When the crop is done the page comes back on the
+  same slot, with the photo previewed in that card. Nothing changes until you tap **Apply**, which
+  puts it on both screens; the menu next to Apply has **Home screen only** and **Lock screen
+  only**. Back without Apply leaves your wallpaper as it was.
+- **Recent** photos lead the strip (after Same as Home on the Lock card): the last three photos you
+  applied, newest first. Tap one to preview it and Apply to set it again, with no new crop.
+- A slot that holds a photo shows that photo in its card, as the screen shows it.
 - **Motion** sits under the Lock preview (Android 14 and later). On, the lock screen animates the
   background through the launcher's live wallpaper; the first time, Android asks you to confirm it
   in its own live-wallpaper preview, where you pick "Lock screen". Off, the lock screen shows the

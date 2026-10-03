@@ -11,7 +11,8 @@
        Motion 48: Lock centred only; INVISIBLE on Home so the pager never jumps, GONE below API 34;
        the shortcut row: three 64dp tonal round buttons with a label under each, the 24dp glyph
          centred both ways (no padding, textStart gravity: an icon-only button centres its icon);
-       the thumbnail strip card: Same as Home (Lock only), the ten backgrounds, then Photo….
+       the thumbnail strip card: Same as Home (Lock only), the Recent group (the last three
+         photos, labelled "Recent" on the first), the backgrounds (none below API 34), then Photo….
 
      Fixed heights, dp: 64 + 4 + 48 + (8 + 64 + 4 + 20 + 8) + (8 + 12 + 112 + 4 + 48 + 4 + 16) = 424,
      so the pager gets 356 at 780 tall and about 290 under real system bars. No hint text. The page

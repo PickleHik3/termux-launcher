@@ -5,10 +5,15 @@ import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
+import java.io.File;
+
 /**
  * What {@link WallpaperSlots} does for a choice or a Motion toggle, decided from plain inputs so
  * every case is a unit test (project-docs/active/animated-wallpaper/lock-live-wallpaper.md).
  * Nothing here touches Android; {@link WallpaperSlots} carries the plan out.
+ *
+ * <p>Photos work on every API level and never need the lock live wallpaper: below API 34 only
+ * the animated choices answer {@link Kind#UNSUPPORTED}.</p>
  */
 final class WallpaperSlotPlan {
 
@@ -24,7 +29,9 @@ final class WallpaperSlotPlan {
         OPEN_PREVIEW,
         /** Copy the Home slot's photo (the launcher's exact copy) to the lock screen. */
         COPY_HOME_PHOTO_TO_LOCK,
-        /** Only the stored slot changes; the screens already show it (or the host's photo flow will). */
+        /** Set {@link #photo} with {@link #flags}, then record the slots. */
+        SET_PHOTO,
+        /** Only the stored slot changes; the screens already show it. */
         RECORD_ONLY,
         /** The choice needs API 34 (a generated still) on a phone below it. */
         UNSUPPORTED,
@@ -63,14 +70,22 @@ final class WallpaperSlotPlan {
     @Nullable final String recordLock;
     /** Whether the Home slot's id is recorded as {@link #stillId} (Home animated) or cleared (Home photo). */
     final boolean recordHome;
+    /** The picture {@link Kind#SET_PHOTO} sets. */
+    @Nullable final File photo;
 
     private WallpaperSlotPlan(@NonNull Kind kind, int flags, @Nullable String stillId,
                               @Nullable String recordLock, boolean recordHome) {
+        this(kind, flags, stillId, recordLock, recordHome, null);
+    }
+
+    private WallpaperSlotPlan(@NonNull Kind kind, int flags, @Nullable String stillId,
+                              @Nullable String recordLock, boolean recordHome, @Nullable File photo) {
         this.kind = kind;
         this.flags = flags;
         this.stillId = stillId;
         this.recordLock = recordLock;
         this.recordHome = recordHome;
+        this.photo = photo;
     }
 
     // --- choices as stored values ---
@@ -121,8 +136,15 @@ final class WallpaperSlotPlan {
     static WallpaperSlotPlan forApply(@NonNull WallpaperSlots.Slot slot, @NonNull WallpaperSlots.Choice choice,
                                       @NonNull Inputs in) {
         if (slot == WallpaperSlots.Slot.HOME) {
+            if (choice.photo && choice.photoFile != null) {
+                // Any API. Same as Home follows a photo on every phone: the live engine has
+                // nothing to draw for one, and a still lock screen should match.
+                int flags = FLAG_SYSTEM;
+                if (in.lock.sameAsHome) flags |= FLAG_LOCK;
+                return new WallpaperSlotPlan(Kind.SET_PHOTO, flags, null, null, true, choice.photoFile);
+            }
             if (choice.photo || choice.sameAsHome || choice.animatedId == null) {
-                // The host's photo flow sets the picture and calls notePhotoApplied.
+                // A photo with no picture: the slot is recorded by whoever set it.
                 return new WallpaperSlotPlan(Kind.RECORD_ONLY, 0, null, null, false);
             }
             if (in.sdkInt < 34) return new WallpaperSlotPlan(Kind.UNSUPPORTED, 0, null, null, false);
@@ -134,11 +156,20 @@ final class WallpaperSlotPlan {
         }
 
         // Lock.
+        if (choice.photo && choice.photoFile != null) {
+            return new WallpaperSlotPlan(Kind.SET_PHOTO, FLAG_LOCK, null,
+                TERMUX_APP.VALUE_WALLPAPER_LOCK_PHOTO, false, choice.photoFile);
+        }
         if (choice.photo) {
             return new WallpaperSlotPlan(Kind.RECORD_ONLY, 0, null, TERMUX_APP.VALUE_WALLPAPER_LOCK_PHOTO, false);
         }
         String record = lockValue(choice);
         String id = resolveLockId(choice, in.homeAnimatedId);
+        if (id == null && choice.sameAsHome && in.lock.sameAsHome && !in.lockLiveActive) {
+            // Already Same as Home over a home photo, and the lock screen is not our live
+            // wallpaper: the photo set put it there with FLAG_LOCK (Apply's lock-follows step).
+            return new WallpaperSlotPlan(Kind.RECORD_ONLY, 0, null, record, false);
+        }
         return lockShows(id, record, in, true);
     }
 

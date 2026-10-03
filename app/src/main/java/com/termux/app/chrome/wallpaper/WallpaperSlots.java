@@ -7,15 +7,25 @@ import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
+import android.util.DisplayMetrics;
+import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.WorkerThread;
 
 import com.termux.app.chrome.ManagedWallpaper;
+import com.termux.app.chrome.WallpaperPictureReader;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+
+import java.io.File;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
 
 /**
  * The Home and Lock wallpaper slots (project-docs/active/animated-wallpaper/lock-live-wallpaper.md):
@@ -27,6 +37,12 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
  * the Lock slot is {@code wallpaper_lock_choice} ({@code same_as_home}, {@code animated:<id>} or
  * {@code photo}) and {@code wallpaper_lock_motion}. What each call does is decided by
  * {@link WallpaperSlotPlan}.</p>
+ *
+ * <p>Photos (lock-live-wallpaper.md, "Photos"), all under the app's private files: a cropped
+ * photo waits in {@code wallpaper/pending/<timestamp>.png} until the picker page closes; the Home
+ * slot's picture is the managed exact copy ({@code managed-wallpaper/system-wallpaper-exact.png});
+ * the Lock slot's own photo is kept as {@code wallpaper/slots/lock.png}; the last three applied
+ * photos are {@link RecentWallpapers} in {@code wallpaper/recent/}.</p>
  */
 public final class WallpaperSlots {
 
@@ -41,20 +57,32 @@ public final class WallpaperSlots {
     public static final class Choice {
         /** An {@link AnimatedWallpapers} id, or null. */
         @Nullable public final String animatedId;
-        /** A photo the user picked (the managed copy), shown as a still. */
+        /** A photo the user picked, shown as a still. */
         public final boolean photo;
+        /** The photo's picture when known; null for {@link #photo()} ("a photo, picture unknown"). */
+        @Nullable public final File photoFile;
         /** Lock only: follows the Home slot. */
         public final boolean sameAsHome;
 
-        private Choice(@Nullable String animatedId, boolean photo, boolean sameAsHome) {
+        private Choice(@Nullable String animatedId, boolean photo, @Nullable File photoFile, boolean sameAsHome) {
             this.animatedId = animatedId;
             this.photo = photo;
+            this.photoFile = photoFile;
             this.sameAsHome = sameAsHome;
         }
 
-        @NonNull public static Choice animated(@NonNull String id) { return new Choice(id, false, false); }
-        @NonNull public static Choice photo() { return new Choice(null, true, false); }
-        @NonNull public static Choice sameAsHome() { return new Choice(null, false, true); }
+        @NonNull public static Choice animated(@NonNull String id) { return new Choice(id, false, null, false); }
+        /** The slot holds a photo whose picture is not known here; applying it records the slot only. */
+        @NonNull public static Choice photo() { return new Choice(null, true, null, false); }
+        /** The photo in {@code file}: applying it sets that picture, with no new crop. */
+        @NonNull public static Choice photo(@NonNull File file) { return new Choice(null, true, file, false); }
+        @NonNull public static Choice sameAsHome() { return new Choice(null, false, null, true); }
+
+        @Override @NonNull public String toString() {
+            if (sameAsHome) return "same_as_home";
+            if (photo) return photoFile == null ? "photo" : "photo:" + photoFile.getName();
+            return "animated:" + animatedId;
+        }
     }
 
     /** Both slots as they are now. */
@@ -93,20 +121,38 @@ public final class WallpaperSlots {
         String lock = prefs == null ? TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE : prefs.getWallpaperLockChoice();
         boolean motion = prefs == null ? TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_MOTION
             : prefs.isWallpaperLockMotionEnabled();
-        return stateFrom(homeId, lock, motion, lockLiveActive(app));
+        // Home's photo is the managed exact copy while the system still shows it; Lock's is its
+        // own kept copy.
+        File homePhoto = null;
+        if (prefs != null) {
+            int stored = prefs.getManagedWallpaperSystemId();
+            File exact = WallpaperPictureReader.managedWallpaperExactFile(app);
+            if (stored > 0 && stored == ManagedWallpaper.currentSystemWallpaperId(app) && exact.isFile()) {
+                homePhoto = exact;
+            }
+        }
+        File lockCopy = lockPhotoFile(app);
+        return stateFrom(homeId, lock, motion, lockLiveActive(app), homePhoto,
+            lockCopy.isFile() ? lockCopy : null);
     }
 
     /**
-     * Applies {@code choice} to {@code slot}. A photo choice is recorded only: the host runs its photo
-     * flow for that slot and calls {@link #notePhotoApplied}. An animated or Same-as-Home Lock choice
-     * with Motion on may open Android's live-wallpaper preview the first time.
+     * Applies {@code choice} to {@code slot}. A photo with its picture ({@link Choice#photo(File)})
+     * is set on a worker through {@link #applyPhotoNow}: Home with {@code FLAG_SYSTEM} (plus
+     * {@code FLAG_LOCK} when Lock is Same as Home), Lock with {@code FLAG_LOCK}. {@link Choice#photo()}
+     * with no picture is recorded only. An animated or Same-as-Home Lock choice with Motion on may
+     * open Android's live-wallpaper preview the first time.
      */
     public static void apply(@NonNull Activity activity, @NonNull Slot slot, @NonNull Choice choice,
                              @Nullable Callback cb) {
         execute(activity, WallpaperSlotPlan.forApply(slot, choice, inputs(activity)), cb);
     }
 
-    /** The host's photo flow set a photo on {@code slot}. */
+    /**
+     * A photo was set on {@code slot} some other way. Kept for callers outside the picker; the
+     * picker and {@code POST /v1/wallpaper} go through {@link #applyPhotoNow}, which records the
+     * slots itself.
+     */
     public static void notePhotoApplied(@NonNull Context ctx, @NonNull Slot slot) {
         Context app = ctx.getApplicationContext();
         if (slot == Slot.LOCK) {
@@ -143,9 +189,18 @@ public final class WallpaperSlots {
     @NonNull
     static State stateFrom(@Nullable String homeAnimatedId, @Nullable String lockValue, boolean lockMotion,
                            boolean lockLiveActive) {
-        return new State(WallpaperSlotPlan.homeChoice(homeAnimatedId),
-            WallpaperSlotPlan.lockChoice(TermuxAppSharedPreferences.normaliseWallpaperLockChoice(lockValue)),
-            lockMotion, lockLiveActive);
+        return stateFrom(homeAnimatedId, lockValue, lockMotion, lockLiveActive, null, null);
+    }
+
+    /** As above, with each slot's kept picture for a slot that holds a photo. */
+    @NonNull
+    static State stateFrom(@Nullable String homeAnimatedId, @Nullable String lockValue, boolean lockMotion,
+                           boolean lockLiveActive, @Nullable File homePhoto, @Nullable File lockPhoto) {
+        Choice home = WallpaperSlotPlan.homeChoice(homeAnimatedId);
+        if (home.photo && homePhoto != null) home = Choice.photo(homePhoto);
+        Choice lock = WallpaperSlotPlan.lockChoice(TermuxAppSharedPreferences.normaliseWallpaperLockChoice(lockValue));
+        if (lock.photo && lockPhoto != null) lock = Choice.photo(lockPhoto);
+        return new State(home, lock, lockMotion, lockLiveActive);
     }
 
     /** A Lock choice as {@code GET /v1/wallpaper}'s {@code lock_slot}: same_as_home, a background id, or photo. */
@@ -173,6 +228,176 @@ public final class WallpaperSlots {
         } catch (RuntimeException e) {
             Logger.logWarn(LOG_TAG, "Reading the lock wallpaper failed: " + e.getMessage());
             return false;
+        }
+    }
+
+    // --- photos ---
+
+    /**
+     * Sets {@code picture} as a photo wallpaper with {@code flags} (WallpaperManager flags) and
+     * records it: {@code recordHome} makes it the Home slot (any generated background is
+     * forgotten, and the live host told); {@code recordLock}, when not null, is the stored Lock
+     * choice ({@code photo} also keeps a copy as the Lock slot's picture). The picture joins the
+     * recent photos. A Home-only set while Lock is Same as Home on our live wallpaper also copies
+     * it to the lock screen, which the live engine cannot draw.
+     *
+     * <p>Blocking ({@code setStream} waits for system_server): call it off the main thread. The
+     * picker's Apply and {@code POST /v1/wallpaper} both end here.</p>
+     *
+     * @return null on success, else {@code not_found}, {@code stage_failed} or {@code wallpaper_failed}
+     */
+    @WorkerThread
+    @Nullable
+    public static String applyPhotoNow(@NonNull Context ctx, @NonNull File picture, int flags,
+                                       boolean recordHome, @Nullable String recordLock) {
+        Context app = ctx.getApplicationContext();
+        if (!picture.isFile()) return "not_found";
+        boolean home = (flags & WallpaperManager.FLAG_SYSTEM) != 0;
+        boolean lock = (flags & WallpaperManager.FLAG_LOCK) != 0;
+        WallpaperSlotPlan.Inputs before = inputs(app);
+        boolean keepLockCopy = lock && TERMUX_APP.VALUE_WALLPAPER_LOCK_PHOTO.equals(recordLock);
+        // The Lock copy is taken before the set: the picture may be the Lock copy itself.
+        File lockCopy = lockPhotoFile(app);
+        File lockStaged = new File(lockCopy.getParentFile(), lockCopy.getName() + ".tmp");
+        if (keepLockCopy) {
+            try {
+                RecentWallpapers.copy(picture, lockStaged);
+            } catch (IOException e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Keeping the lock photo failed", e);
+                keepLockCopy = false;
+            }
+        }
+        Uri staged = ManagedWallpaper.stageSource(app, picture);
+        if (staged == null) {
+            //noinspection ResultOfMethodCallIgnored
+            lockStaged.delete();
+            return "stage_failed";
+        }
+        WallpaperManager wm = WallpaperManager.getInstance(app);
+        if (home) suggestDimensions(app, wm);
+        int[] portrait = ManagedWallpaper.portraitSize(app);
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, false);
+        boolean ok = ManagedWallpaper.apply(app, wm, staged, flags, portrait[0], portrait[1], prefs);
+        if (!ok) {
+            //noinspection ResultOfMethodCallIgnored
+            lockStaged.delete();
+            return "wallpaper_failed";
+        }
+        if (keepLockCopy && !lockStaged.renameTo(lockCopy)) {
+            Logger.logError(LOG_TAG, "Promoting the lock photo copy failed");
+        }
+        if (recordLock != null && prefs != null) prefs.setWallpaperLockChoice(recordLock);
+        if (recordHome) {
+            // A photo replaces any generated background; the live host hears it and re-dresses.
+            GeneratedWallpaperApplier.clear(app);
+            Logger.logInfo(LOG_TAG, "Home slot: photo");
+            if (!lock && before.lock.sameAsHome && before.lockLiveActive
+                && !ManagedWallpaper.copyHomePictureToLock(app)) {
+                Logger.logError(LOG_TAG, "Copying the home photo to the lock screen failed");
+            }
+        }
+        if (recordLock != null) Logger.logInfo(LOG_TAG, "Lock slot: " + recordLock);
+        try {
+            recents(app).add(picture, System.currentTimeMillis());
+        } catch (IOException | RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Keeping the recent photo failed", e);
+        }
+        return null;
+    }
+
+    /** The recent photos, newest first (reads a small index). */
+    @NonNull
+    public static List<File> recentPhotos(@NonNull Context ctx) {
+        try {
+            return recents(ctx.getApplicationContext()).list();
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Listing the recent photos failed", e);
+            return Collections.emptyList();
+        }
+    }
+
+    @NonNull
+    static RecentWallpapers recents(@NonNull Context app) {
+        return new RecentWallpapers(new File(photoRoot(app), "recent"));
+    }
+
+    @NonNull
+    private static File photoRoot(@NonNull Context app) {
+        return new File(app.getFilesDir(), "wallpaper");
+    }
+
+    /** Where the Lock slot's own photo is kept. */
+    @NonNull
+    static File lockPhotoFile(@NonNull Context app) {
+        File dir = new File(photoRoot(app), "slots");
+        if (!dir.isDirectory()) {
+            //noinspection ResultOfMethodCallIgnored
+            dir.mkdirs();
+        }
+        return new File(dir, "lock.png");
+    }
+
+    @NonNull
+    private static File pendingDir(@NonNull Context app) {
+        return new File(photoRoot(app), "pending");
+    }
+
+    /**
+     * The photo cropper's output ({@link ManagedWallpaper#tempFile}) becomes a pending photo for
+     * the picker to preview, out of the way of any other set that writes the cropper's file.
+     *
+     * @return the pending photo, or null when there is no crop to take
+     */
+    @Nullable
+    public static File adoptCroppedPhoto(@NonNull Context ctx) {
+        Context app = ctx.getApplicationContext();
+        File crop = ManagedWallpaper.tempFile(app);
+        if (!crop.isFile() || crop.length() == 0) return null;
+        File dir = pendingDir(app);
+        if (!dir.isDirectory() && !dir.mkdirs()) return null;
+        long stamp = System.currentTimeMillis();
+        File target = new File(dir, stamp + ".png");
+        while (target.exists()) target = new File(dir, (++stamp) + ".png");
+        if (crop.renameTo(target)) return target;
+        try {
+            RecentWallpapers.copy(crop, target);
+            //noinspection ResultOfMethodCallIgnored
+            crop.delete();
+            return target;
+        } catch (IOException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Taking the cropped photo failed", e);
+            return null;
+        }
+    }
+
+    /** Deletes {@code file} when it is a pending photo; any other file is left alone. */
+    public static void discardPendingPhoto(@NonNull Context ctx, @NonNull File file) {
+        File dir = pendingDir(ctx.getApplicationContext());
+        File parent = file.getParentFile();
+        if (parent == null || !parent.getAbsolutePath().equals(dir.getAbsolutePath())) return;
+        //noinspection ResultOfMethodCallIgnored
+        file.delete();
+    }
+
+    /** Deletes every pending photo: a fresh page has none, so these were left by a lost return. */
+    public static void clearPendingPhotos(@NonNull Context ctx) {
+        File[] files = pendingDir(ctx.getApplicationContext()).listFiles();
+        if (files == null) return;
+        for (File f : files) {
+            //noinspection ResultOfMethodCallIgnored
+            f.delete();
+        }
+    }
+
+    private static void suggestDimensions(@NonNull Context app, @NonNull WallpaperManager wm) {
+        try {
+            DisplayMetrics real = new DisplayMetrics();
+            WindowManager windows = (WindowManager) app.getSystemService(Context.WINDOW_SERVICE);
+            if (windows == null) return;
+            windows.getDefaultDisplay().getRealMetrics(real);
+            wm.suggestDesiredDimensions(Math.max(1, real.widthPixels), Math.max(1, real.heightPixels));
+        } catch (RuntimeException e) {
+            Logger.logWarn(LOG_TAG, "Suggesting wallpaper dimensions failed: " + e.getMessage());
         }
     }
 
@@ -240,6 +465,22 @@ public final class WallpaperSlots {
                     GeneratedWallpaperApplier.post(done, false, "preview_unavailable");
                 }
                 return;
+            case SET_PHOTO: {
+                final File photo = plan.photo;
+                if (photo == null) {
+                    GeneratedWallpaperApplier.post(done, false, "not_found");
+                    return;
+                }
+                int photoFlags = (plan.flags & WallpaperSlotPlan.FLAG_SYSTEM) != 0 ? WallpaperManager.FLAG_SYSTEM : 0;
+                if ((plan.flags & WallpaperSlotPlan.FLAG_LOCK) != 0) photoFlags |= WallpaperManager.FLAG_LOCK;
+                final int wmFlags = photoFlags;
+                Logger.logInfo(LOG_TAG, "Photo " + photo.getName() + " to " + ManagedWallpaper.targetName(wmFlags));
+                GeneratedWallpaperApplier.onWorker(() -> {
+                    String error = applyPhotoNow(app, photo, wmFlags, plan.recordHome, plan.recordLock);
+                    GeneratedWallpaperApplier.post(done, error == null, error);
+                });
+                return;
+            }
             case SET_STILL:
             default: {
                 AnimatedWallpaper w = AnimatedWallpapers.byId(plan.stillId);
