@@ -91,4 +91,55 @@ public class RegionMasksTest {
         RegionMasks.Result dropped = RegionMasks.compute(in, clusters(in), new HashMap<>());
         assertEquals(0f, dropped.stats.water, 0f);
     }
+
+    /** A foliage part: a wide band (trunk or canopy edge) at one end narrowing to thin strands at the other. */
+    private static RegionMasks.Inputs foliageScene(boolean wideAtTop, boolean taper) {
+        int n = W * H;
+        int[] rgb = new int[n];
+        float[] depth = new float[n];
+        float[] foliage = new float[n];
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                int i = y * W + x;
+                rgb[i] = 0x205030;
+                depth[i] = 0.4f;
+                if (y >= 8 && y < 56) {
+                    float t = (y - 8) / 47f; // 0 top .. 1 bottom
+                    float k = wideAtTop ? 1f - t : t; // 1 at the wide end
+                    int half = taper ? 2 + Math.round(k * 16f) : 10;
+                    if (Math.abs(x - W / 2) <= half) foliage[i] = 0.9f;
+                }
+            }
+        }
+        Map<String, float[]> g = new HashMap<>();
+        g.put("foliage", foliage);
+        g.put("sky", new float[n]);
+        g.put("water", new float[n]);
+        return new RegionMasks.Inputs(W, H, rgb, depth, new float[n], g);
+    }
+
+    @Test
+    public void swayFollowsTheThinEndOfHangingFoliage() {
+        RegionMasks.Inputs in = foliageScene(true, true); // wide at the top, strands hang down
+        RegionMasks.Result r = RegionMasks.compute(in, clusters(in), null);
+        float tips = r.sway[54 * W + W / 2];
+        float base = r.sway[10 * W + W / 2];
+        assertTrue("hanging tips sway more than the anchored top", tips > base + 0.3f);
+    }
+
+    @Test
+    public void swayStillFollowsTheThinEndOfUpwardFoliage() {
+        RegionMasks.Inputs in = foliageScene(false, true); // wide at the bottom, tips up
+        RegionMasks.Result r = RegionMasks.compute(in, clusters(in), null);
+        assertTrue(r.sway[10 * W + W / 2] > r.sway[54 * W + W / 2] + 0.3f);
+    }
+
+    @Test
+    public void swayFavoursBothEndsWhenNeitherIsThinner() {
+        RegionMasks.Inputs in = foliageScene(true, false); // a uniform band
+        RegionMasks.Result r = RegionMasks.compute(in, clusters(in), null);
+        float mid = r.sway[32 * W + W / 2];
+        assertTrue(r.sway[10 * W + W / 2] > mid + 0.2f);
+        assertTrue(r.sway[54 * W + W / 2] > mid + 0.2f);
+    }
 }
