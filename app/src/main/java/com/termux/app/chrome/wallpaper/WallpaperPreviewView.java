@@ -118,10 +118,12 @@ public final class WallpaperPreviewView extends View {
 
     /** What the card shows: a preshipped background (with its still, if rendered), a photo, or nothing. */
     public void show(@Nullable AnimatedWallpaper wallpaper, @Nullable Bitmap still, boolean photo) {
+        // The same player keeps its shader; a living still read again is a new player under the same id.
+        boolean samePlayer = wallpaper != null && wallpaper == mWallpaper;
         mWallpaper = wallpaper;
         mStill = still;
         mPhoto = photo && wallpaper == null;
-        if (wallpaper == null || !wallpaper.id().equals(mShaderFor)) {
+        if (!samePlayer || !wallpaper.id().equals(mShaderFor)) {
             mShader = null;
             mShaderFor = null;
             mPalette = null;

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Living stills (project-docs/active/animated-wallpaper/living-stills.md, Part C and D): the stage
-  labels the wallpaper page shows while a photo is brought to life. The page itself is Part D.
+  Living stills (project-docs/active/animated-wallpaper/living-stills.md, Part C and D): what the
+  wallpaper page says while a photo is brought to life: the button, the stage labels, the
+  missing-models dialog and the failure message.
 -->
 <resources>
     <string name="living_stage_depth">Reading depth…</string>
@@ -9,4 +10,17 @@
     <string name="living_stage_subject">Finding the subject…</string>
     <string name="living_stage_gemma">Asking Gemma…</string>
     <string name="living_stage_recipe">Building…</string>
+    <string name="living_bring_to_life">Bring to life</string>
+    <string name="living_cancel">Cancel</string>
+    <string name="living_read_again">Read again</string>
+    <string name="living_busy">Another photo is being brought to life</string>
+    <!-- TalkBack: the progress bar while a photo is analysed. %1$s the stage, %2$d percent. -->
+    <string name="living_progress_description">%1$s %2$d percent</string>
+    <string name="living_missing_title">Models needed</string>
+    <!-- %1$s: one line per missing model, "name (size)". -->
+    <string name="living_missing_message">Bringing a photo to life needs these models on this phone first:\n%1$s</string>
+    <string name="living_missing_item">• %1$s (%2$s)</string>
+    <string name="living_missing_open">Open model centre</string>
+    <string name="living_missing_not_now">Not now</string>
+    <string name="living_failed">Could not bring the photo to life</string>
 </resources>
