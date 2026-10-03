@@ -35,9 +35,11 @@ public final class TaiResidency {
     /**
      * {@code TTS} is speech output ({@link KittenTtsRuntime}); like STT it is given up before idle
      * chat and closed after its own idle limit, and nothing it loads is ever credited against
-     * another kind's load.
+     * another kind's load. {@code VISION} is one wallpaper-analysis graph ({@link WallpaperVisionRuntime}):
+     * resident only while its stage runs (busy throughout), closed before the next stage loads, so it
+     * is never an eviction candidate and has no idle limit.
      */
-    public enum Kind { CHAT, EMBEDDING, STT, RUNTIME, TTS, IMAGE }
+    public enum Kind { CHAT, EMBEDDING, STT, RUNTIME, TTS, IMAGE, VISION }
 
     private static final long MIB = 1024L * 1024L;
 
@@ -77,6 +79,12 @@ public final class TaiResidency {
      * deliberate over-estimate (2×) until the load meter has measured one on a phone.
      */
     static final long TTS_FACTOR_TENTHS = 20L;
+    /**
+     * Wallpaper-vision footprint per byte of one graph's file until a measured load is on record:
+     * the mapped flatbuffer plus the tensor arena and the XNNPACK-packed weights. A deliberate
+     * over-estimate (2x) until the load meter has measured the four graphs on a phone.
+     */
+    static final long VISION_FACTOR_TENTHS = 20L;
     /**
      * Image-generation footprint per byte of the package's peak working set (every graph for
      * Stable Diffusion, the larger of the prompt LLM and the diffusion graphs for Sana, which never
@@ -155,6 +163,13 @@ public final class TaiResidency {
         public static Entry tts(@NonNull TaiModelSpec spec) {
             return new Entry(spec.id, Kind.TTS, spec.backend, "cpu", 0,
                 ttsEstimateBytes(spec), null, System.currentTimeMillis(), false);
+        }
+
+        /** One wallpaper-vision graph (depth, scene or subject) on the CPU. */
+        @NonNull
+        public static Entry vision(@NonNull TaiModelSpec spec) {
+            return new Entry(spec.id, Kind.VISION, spec.backend, "cpu", 0,
+                visionEstimateBytes(spec), null, System.currentTimeMillis(), false);
         }
 
         /**
@@ -394,6 +409,11 @@ public final class TaiResidency {
     /** What a speech-output load of this spec costs: the package size times {@link #TTS_FACTOR_TENTHS}. */
     public static long ttsEstimateBytes(@NonNull TaiModelSpec spec) {
         return fileBytes(spec) * TTS_FACTOR_TENTHS / 10L;
+    }
+
+    /** What loading one wallpaper-vision graph costs: its file times {@link #VISION_FACTOR_TENTHS}. */
+    public static long visionEstimateBytes(@NonNull TaiModelSpec spec) {
+        return fileBytes(spec) * VISION_FACTOR_TENTHS / 10L;
     }
 
     /**
