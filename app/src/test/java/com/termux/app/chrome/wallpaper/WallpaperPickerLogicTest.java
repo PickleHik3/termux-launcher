@@ -180,4 +180,75 @@ public class WallpaperPickerLogicTest {
         assertFalse(WallpaperPickerLogic.motionRowExists(34, false));
         assertFalse(WallpaperPickerLogic.motionRowExists(33, true));
     }
+
+    // --- the Motion row for living stills (living-stills.md, Part D.6) ---
+
+    private static final java.io.File PHOTO = new java.io.File("/data/pending/1.png");
+    private static final String LIVING = "living:0123456789abcdef";
+
+    private static WallpaperPickerLogic.MotionRow row(WallpaperSlots.Slot centred, int sdk, boolean offered,
+                                                      WallpaperSlots.Choice shown, boolean hasLiving, boolean working) {
+        return WallpaperPickerLogic.motionRow(centred, sdk, offered, shown, hasLiving, working);
+    }
+
+    @Test
+    public void aPhotoOffersBringToLifeOnBothCardsWhereLivingStillsAreOffered() {
+        for (WallpaperSlots.Slot slot : WallpaperSlots.Slot.values()) {
+            assertEquals(WallpaperPickerLogic.MotionRow.OFFER,
+                row(slot, 34, true, WallpaperSlots.Choice.photo(PHOTO), false, false));
+            assertEquals(WallpaperPickerLogic.MotionRow.WORKING,
+                row(slot, 34, true, WallpaperSlots.Choice.photo(PHOTO), false, true));
+            assertEquals("a photo with its still is that still's switch", WallpaperPickerLogic.MotionRow.SWITCH,
+                row(slot, 34, true, WallpaperSlots.Choice.photo(PHOTO), true, false));
+        }
+    }
+
+    @Test
+    public void aLivingStillAlwaysHasItsSwitch() {
+        for (WallpaperSlots.Slot slot : WallpaperSlots.Slot.values()) {
+            assertEquals(WallpaperPickerLogic.MotionRow.SWITCH,
+                row(slot, 34, true, WallpaperSlots.Choice.animated(LIVING), false, false));
+        }
+        assertTrue(WallpaperPickerLogic.isLiving(WallpaperSlots.Choice.animated(LIVING)));
+        assertFalse(WallpaperPickerLogic.isLiving(WallpaperSlots.Choice.animated("aurora")));
+        assertFalse(WallpaperPickerLogic.isLiving(WallpaperSlots.Choice.photo(PHOTO)));
+        assertFalse(WallpaperPickerLogic.isLiving(WallpaperSlots.Choice.sameAsHome()));
+        assertFalse(WallpaperPickerLogic.isLiving(null));
+    }
+
+    @Test
+    public void everythingElseKeepsTheOlderMotionRule() {
+        // No living stills offered (below API 34, no job): a photo is just a photo.
+        assertEquals(WallpaperPickerLogic.MotionRow.SWITCH,
+            row(WallpaperSlots.Slot.LOCK, 34, false, WallpaperSlots.Choice.photo(PHOTO), false, false));
+        assertEquals(WallpaperPickerLogic.MotionRow.SWITCH_HIDDEN,
+            row(WallpaperSlots.Slot.HOME, 34, false, WallpaperSlots.Choice.photo(PHOTO), false, false));
+        // A generated background: Lock's switch, nothing on Home.
+        assertEquals(WallpaperPickerLogic.MotionRow.SWITCH,
+            row(WallpaperSlots.Slot.LOCK, 34, true, WallpaperSlots.Choice.animated("aurora"), false, false));
+        assertEquals(WallpaperPickerLogic.MotionRow.SWITCH_HIDDEN,
+            row(WallpaperSlots.Slot.HOME, 34, true, WallpaperSlots.Choice.animated("aurora"), false, false));
+        // A photo whose picture is not known cannot be analysed.
+        assertEquals(WallpaperPickerLogic.MotionRow.SWITCH_HIDDEN,
+            row(WallpaperSlots.Slot.HOME, 34, true, WallpaperSlots.Choice.photo(), false, false));
+    }
+
+    @Test
+    public void theStageLabelAsksGemmaOnlyInTheRecipeStage() {
+        assertEquals("depth", WallpaperPickerLogic.stageKey("depth", false));
+        assertEquals("depth", WallpaperPickerLogic.stageKey("depth", true));
+        assertEquals("recipe", WallpaperPickerLogic.stageKey("recipe", false));
+        assertEquals("gemma", WallpaperPickerLogic.stageKey("recipe", true));
+    }
+
+    @Test
+    public void aLivingChoiceIsComparedById() {
+        assertTrue(WallpaperPickerLogic.sameChoice(WallpaperSlots.Choice.animated(LIVING),
+            WallpaperSlots.Choice.animated(LIVING)));
+        assertFalse(WallpaperPickerLogic.sameChoice(WallpaperSlots.Choice.animated(LIVING),
+            WallpaperSlots.Choice.animated("living:fedcba9876543210")));
+        assertTrue("Apply is offered for a living still over a stored photo",
+            WallpaperPickerLogic.applyBothEnabled(WallpaperSlots.Choice.animated(LIVING),
+                WallpaperSlots.Choice.photo(PHOTO), WallpaperSlots.Choice.sameAsHome(), false));
+    }
 }
