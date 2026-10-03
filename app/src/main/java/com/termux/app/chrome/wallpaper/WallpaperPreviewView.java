@@ -330,13 +330,26 @@ public final class WallpaperPreviewView extends View {
     private void loadLockGlyphs() {
         if (mOverlay != null) return;
         Context ctx = getContext();
-        mOverlay = AppCompatResources.getDrawable(ctx, R.drawable.lock_preview_overlay);
-        mColon = AppCompatResources.getDrawable(ctx, R.drawable.lock_digit_colon);
+        mOverlay = glyph(ctx, R.drawable.lock_preview_overlay);
+        if (mOverlay == null) mOverlay = new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT);
+        mColon = glyph(ctx, R.drawable.lock_digit_colon);
         int[] ids = {R.drawable.lock_digit_0, R.drawable.lock_digit_1, R.drawable.lock_digit_2,
             R.drawable.lock_digit_3, R.drawable.lock_digit_4, R.drawable.lock_digit_5,
             R.drawable.lock_digit_6, R.drawable.lock_digit_7, R.drawable.lock_digit_8,
             R.drawable.lock_digit_9};
         mDigits = new Drawable[ids.length];
-        for (int i = 0; i < ids.length; i++) mDigits[i] = AppCompatResources.getDrawable(ctx, ids[i]);
+        for (int i = 0; i < ids.length; i++) mDigits[i] = glyph(ctx, ids[i]);
+    }
+
+    /** A cutout glyph, or null: a glyph that will not inflate costs the clock a digit, not the app. */
+    @Nullable
+    private static Drawable glyph(@NonNull Context ctx, int id) {
+        try {
+            return AppCompatResources.getDrawable(ctx, id);
+        } catch (RuntimeException e) {
+            com.termux.shared.logger.Logger.logWarn("WallpaperPreviewView",
+                "Lock cutout glyph failed to load: " + e.getMessage());
+            return null;
+        }
     }
 }
