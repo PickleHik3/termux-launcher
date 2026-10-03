@@ -13784,9 +13784,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot = mWallpaperPhotoSlot;
         if (slot != null) {
+            // From the Home card a photo goes on both screens, as Apply does; only a photo
+            // started from the Lock card is the lock screen's alone.
             startManagedWallpaperApply(croppedUri,
                 slot == com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME
-                    ? WallpaperManager.FLAG_SYSTEM : WallpaperManager.FLAG_LOCK);
+                    ? WallpaperManager.FLAG_SYSTEM | WallpaperManager.FLAG_LOCK : WallpaperManager.FLAG_LOCK);
             return;
         }
         showWallpaperTargetPrompt(croppedUri);
@@ -13846,7 +13848,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (photoSlot != null) {
             try {
-                com.termux.app.chrome.wallpaper.WallpaperSlots.notePhotoApplied(this, photoSlot);
+                if ((selectedFlags & WallpaperManager.FLAG_SYSTEM) != 0)
+                    com.termux.app.chrome.wallpaper.WallpaperSlots.notePhotoApplied(this,
+                        com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME);
+                if ((selectedFlags & WallpaperManager.FLAG_LOCK) != 0)
+                    com.termux.app.chrome.wallpaper.WallpaperSlots.notePhotoApplied(this,
+                        com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.LOCK);
             } catch (RuntimeException e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "Recording the photo slot failed", e);
             }

@@ -222,7 +222,8 @@ public final class WallpaperPickerPage {
     @NonNull private WallpaperSlots.State mStored;
     /** Pending choices by {@link WallpaperSlots.Slot#ordinal()}. */
     private final WallpaperSlots.Choice[] mPending = new WallpaperSlots.Choice[2];
-    @NonNull private WallpaperSlots.Slot mCentred = WallpaperSlots.Slot.LOCK;
+    /** The page opens on Home: what the user does first goes to the home screen (and Apply's both). */
+    @NonNull private WallpaperSlots.Slot mCentred = WallpaperSlots.Slot.HOME;
     private boolean mBusy;
     private boolean mDismissed;
     private boolean mSettingMotion;

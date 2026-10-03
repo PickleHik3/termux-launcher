@@ -166,6 +166,8 @@ public abstract class WallpaperPickerPageTestBase {
     @Test
     public void theTitleFollowsTheCentredSlot() {
         WallpaperPickerPage page = open(34);
+        assertEquals("the page opens on Home", WallpaperSlots.Slot.HOME, page.centredSlot());
+        page.centre(WallpaperSlots.Slot.LOCK);
         TextView title = page.root().findViewById(R.id.wallpaper_picker_title);
         assertEquals(mThemed.getString(R.string.wallpaper_picker_slot_lock), title.getText().toString());
         page.centre(WallpaperSlots.Slot.HOME);
@@ -177,6 +179,7 @@ public abstract class WallpaperPickerPageTestBase {
     @Test
     public void sameAsHomeShowsOnlyForLock() {
         WallpaperPickerPage page = open(34);
+        page.centre(WallpaperSlots.Slot.LOCK);
         assertEquals(View.VISIBLE, page.sameAsHomeTile().getVisibility());
         page.centre(WallpaperSlots.Slot.HOME);
         assertEquals(View.GONE, page.sameAsHomeTile().getVisibility());
@@ -188,6 +191,7 @@ public abstract class WallpaperPickerPageTestBase {
     @Test
     public void applyIsEnabledOnlyWhenThePendingChoiceDiffers() {
         WallpaperPickerPage page = open(34);
+        page.centre(WallpaperSlots.Slot.LOCK);
         View apply = page.root().findViewById(R.id.wallpaper_picker_apply);
         assertFalse("Lock holds what is stored", apply.isEnabled());
         page.choose(WallpaperSlots.Choice.animated("mesh"));
@@ -295,6 +299,7 @@ public abstract class WallpaperPickerPageTestBase {
     @Test
     public void layoutHandsBackAStateToo() {
         WallpaperPickerPage page = open(34);
+        page.centre(WallpaperSlots.Slot.LOCK);
         page.choose(WallpaperSlots.Choice.animated("mesh"));
         page.root().findViewById(R.id.wallpaper_picker_layout).performClick();
         assertEquals("layout", mListener.calls.get(mListener.calls.size() - 1));
@@ -348,6 +353,7 @@ public abstract class WallpaperPickerPageTestBase {
     @Test
     public void motionShowsOnLockFromApi34() {
         WallpaperPickerPage page = open(34);
+        page.centre(WallpaperSlots.Slot.LOCK);
         View motion = page.root().findViewById(R.id.wallpaper_picker_motion);
         assertEquals(View.VISIBLE, motion.getVisibility());
         page.centre(WallpaperSlots.Slot.HOME);
@@ -365,6 +371,7 @@ public abstract class WallpaperPickerPageTestBase {
     @Test
     public void photoClosesThePageFirst() {
         WallpaperPickerPage page = open(34);
+        page.centre(WallpaperSlots.Slot.LOCK);
         page.root().findViewById(R.id.wallpaper_picker_photo).performClick();
         assertEquals("shown false", mListener.calls.get(mListener.calls.size() - 2));
         assertEquals("photo LOCK", mListener.calls.get(mListener.calls.size() - 1));
