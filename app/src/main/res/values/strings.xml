@@ -72,6 +72,9 @@
     <string name="settings_layout_miniature_display_overlay">Display, keyboard floats</string>
     <string name="settings_layout_miniature_hidden_format">%1$s, hidden</string>
     <string name="az_pull_tab_description">A–Z index. Slide along it to find and open apps.</string>
+    <!-- The one Settings row and corner button for wallpaper, Look, Layout and the icon pack. -->
+    <string name="settings_destination_wallpaper_style">Wallpaper &amp; style</string>
+    <string name="settings_destination_wallpaper_style_summary">Wallpaper, look, layout and icon pack</string>
     <string name="settings_destination_appearance">Look</string>
     <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons and keyboard look</string>
     <string name="settings_destination_terminal">Terminal</string>
@@ -739,7 +742,7 @@
     <string name="shell_notification_channel_urgent">Urgent terminal messages</string>
     <string name="shell_notification_channel_urgent_description">Messages a program in the terminal marks as urgent.</string>
     <string name="action_open_settings">Settings</string>
-    <string name="action_appearance_editor">Appearance</string>
+    <string name="action_wallpaper_style">Wallpaper &amp; style</string>
     <string name="action_layout_editor">Layout</string>
     <string name="msg_generating_report">Generating Report</string>
     <string name="msg_add_termux_debug_info">Add &TERMUX_APP_NAME; debug info to report?</string>
@@ -1878,11 +1881,6 @@
                 <!-- The line over the header's title: which editor this is. The title under it
                      says which layout, so the two never say the same word twice. -->
                 <string name="termux_layout_editor_eyebrow">Layout editor</string>
-                <!-- The corner tab's Layout glyph, read aloud, and the Settings row that is the
-                     same door. -->
-                <string name="corner_tab_layout_description">Layout editor</string>
-                <string name="settings_destination_layout_editor">Layout</string>
-                <string name="settings_destination_layout_editor_summary">Move, hide and size the bars, the dock and the keyboard</string>
                 <!-- Eye-off in the Layout editor's sheet (layout editor v2), read aloud only: no
                      visible hint names it. Nothing hidden, or how many are; a bar lifted onto it
                      is hidden, and a tap opens the hidden tiles. -->
@@ -2555,7 +2553,7 @@
     <string name="tour_closing_shortcuts_heading">Shortcuts</string>
     <string name="tour_closing_shortcuts_copy">Tap Ctrl, then Alt. While both are latched, a strip in the top-right corner shows what every other key does.</string>
     <string name="tour_closing_customize_heading">Make it yours</string>
-    <string name="tour_closing_customize_copy">Hold a page\'s corner: Appearance picks a Look, Layout moves the bars, Wallpaper picks a picture and ? opens help. A split pane\'s corner holds Close, Move and Maximise.</string>
+    <string name="tour_closing_customize_copy">Hold a page\'s corner: Wallpaper &amp; style picks a picture, a Look and where the bars sit, and ? opens help. A split pane\'s corner holds Close, Move and Maximise.</string>
     <string name="tour_closing_minimal_heading">Minimal mode</string>
     <string name="tour_closing_minimal_copy">The four-corners button on a corner tab gives every place the whole screen.</string>
     <string name="tour_closing_voice_heading">Speak instead of typing</string>
@@ -2696,9 +2694,9 @@
     <string name="help_topic_places_back">Hold the border and drag back to return to where you were.</string>
     <string name="help_topic_places_aliases">places, switch place, home, terminal, widgets, display, border, drag, mode</string>
     <string name="help_topic_corners_back">Tap away from the controls to put them away.</string>
-    <string name="help_topic_corners_step1">A page of its own has Appearance, Layout, Wallpaper, Minimal mode and ?, and Settings on Terminal and Display.</string>
+    <string name="help_topic_corners_step1">A page of its own has Wallpaper &amp; style, Minimal mode and ?, and Settings on Terminal and Display.</string>
     <string name="help_topic_corners_step2">A split pane\'s tab has Close, Move and Maximise instead; hold its corner, then drag the move icon to move the pane.</string>
-    <string name="help_topic_corners_aliases">corner, corner tab, pane controls, appearance, layout, wallpaper, help</string>
+    <string name="help_topic_corners_aliases">corner, corner tab, pane controls, wallpaper and style, appearance, layout, wallpaper, help</string>
     <!-- Help centre: minimal mode (CONTEXT.md), the corner tab's four-corners button. -->
     <string name="help_topic_minimal_title">Minimal mode</string>
     <string name="help_topic_minimal_purpose">Minimal mode is a second saved layout. It starts with only the content showing: the status bar, the dock and the keyboard go away until you turn it off, and you can still pull the keyboard up. Open the Layout editor while it is on to choose what stays; everything else, splits included, works as in your normal layout.</string>
@@ -2842,7 +2840,7 @@
     <!-- Help centre: Make it yours. -->
     <string name="help_topic_layout_title">Layout editor</string>
     <string name="help_topic_layout_summary">The Layout editor moves, resizes and puts away the launcher\'s own controls.</string>
-    <string name="help_topic_layout_action">Hold a corner and tap the Layout button to open it.</string>
+    <string name="help_topic_layout_action">Hold a corner, tap Wallpaper &amp; style, then Layout.</string>
     <string name="help_topic_layout_step1">Drag a bar to another edge, or drop it on the eye-off button to hide it. Tap a bar to see where it can go, then use its move button or its handle.</string>
     <string name="help_topic_layout_step2">Tap the eye-off button to see what is hidden, then tap one to bring it back, or drag it to an edge.</string>
     <string name="help_topic_layout_step3">Docked or Floating: Docked joins the bars into one frame of glass; Floating gives each piece its own card. Portrait, landscape and minimal mode each keep their own layout.</string>
@@ -2850,14 +2848,14 @@
     <string name="help_topic_layout_aliases">layout, move controls, hide controls, hidden elements, eye-off, restore, arrange, docked, floating, corners, margin, key radius, editor</string>
     <string name="help_topic_appearance_title">Appearance editor</string>
     <string name="help_topic_appearance_summary">The Appearance editor changes how the launcher looks, with one Look for the whole of it.</string>
-    <string name="help_topic_appearance_action">Hold a corner and tap the palette button to open it.</string>
+    <string name="help_topic_appearance_action">Hold a corner, tap Wallpaper &amp; style, then Look.</string>
     <string name="help_topic_appearance_step1">Slide between Clear, Mist, Tint and Solid. The last stop, Custom, sets Blur, Opacity and Grain for everything; tap anything in the frame to tune it on its own.</string>
     <string name="help_topic_appearance_step2">Changes preview as you make them.</string>
     <string name="help_topic_appearance_back">Undo returns to how it was; Done keeps it.</string>
     <string name="help_topic_appearance_aliases">appearance, look, clear, mist, tint, solid, custom, glass, blur, colours, colors, editor</string>
     <string name="help_topic_themes_title">Colours, fonts and wallpaper</string>
     <string name="help_topic_themes_summary">Colour mode, fonts and icons are in Settings; the wallpaper is picked from the corner tab.</string>
-    <string name="help_topic_themes_action">Open Settings, under Look, for colours, fonts and icons; hold a corner and tap Wallpaper to pick a wallpaper.</string>
+    <string name="help_topic_themes_action">Open Settings, under Look, for colours, fonts and icons; hold a corner and tap Wallpaper &amp; style to pick a wallpaper.</string>
     <string name="help_topic_themes_aliases">theme, wallpaper, font, colour scheme, color scheme, material you, icons</string>
 
     <!-- Help centre: Linux display. -->
@@ -2972,7 +2970,7 @@
     <string name="help_term_mouse_title">Mouse mode</string>
     <string name="help_term_mouse_definition">Sends your touches to the program as mouse input. On Display it opens the touchpad.</string>
     <string name="help_term_editors_title">Layout and Appearance editors</string>
-    <string name="help_term_editors_definition">One editor with two modes: Appearance changes how the launcher looks, Layout arranges its parts.</string>
+    <string name="help_term_editors_definition">Open Wallpaper &amp; style, then Look to change how the launcher looks or Layout to arrange its parts.</string>
     <string name="help_term_border_drag_title">Border drag</string>
     <string name="help_term_border_drag_definition">Hold a page\'s border, then drag sideways to change place.</string>
     <string name="help_term_keyboard_swipe_title">Keyboard swipe</string>

@@ -507,7 +507,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
          */
         private static final Map<String, int[]> CHILD_XML_RESOURCES = new HashMap<>();
         static {
-            CHILD_XML_RESOURCES.put("appearance", new int[]{
+            CHILD_XML_RESOURCES.put("wallpaper_style", new int[]{
                 R.xml.termux_style_preferences, R.xml.termux_fonts_preferences});
             CHILD_XML_RESOURCES.put("terminal", new int[]{
                 R.xml.terminal_preferences});
@@ -551,6 +551,9 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         /** The usage mode row, which is the one root row that writes a preference. */
         private static final String KEY_USE_AS = "app_launcher_use_case_mode";
 
+        /** The one door to wallpaper, Look and Layout; the Look page rows are indexed under it. */
+        private static final String KEY_WALLPAPER_STYLE = "wallpaper_style";
+
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             Context context = getContext();
@@ -565,39 +568,25 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             // A build made without the X server has no display to set up.
             Preference display = findPreference("display");
             if (display != null && !com.termux.BuildConfig.X11_SERVER) display.setVisible(false);
-            configureLayoutEditorRow(context);
+            configureWallpaperStyleRow(context);
             SettingsLayoutUtils.applyRootLayout(this);
             configureUseAsRow(context);
-            configureAppearanceEditorRow(context);
             configureSearch();
         }
 
         /**
-         * The Layout row opens no page: it brings the launcher forward with the Layout editor over
-         * the place on screen, the same door the corner tab's Layout glyph is.
+         * The "Wallpaper & style" row opens no page of its own: it brings the launcher forward with
+         * the wallpaper picker over it, the same door the corner tab's button is. While a search hit
+         * comes from a Look page row it carries that page's fragment instead (see
+         * {@link #filterDestinationRow}), and the default handling opens the page.
          */
-        private void configureLayoutEditorRow(@NonNull Context context) {
-            Preference row = findPreference("layout_editor");
+        private void configureWallpaperStyleRow(@NonNull Context context) {
+            Preference row = findPreference(KEY_WALLPAPER_STYLE);
             if (row == null) return;
             row.setOnPreferenceClickListener(preference -> {
+                if (preference.getFragment() != null) return false;
                 Intent intent = new Intent(context, com.termux.app.TermuxActivity.class);
-                intent.putExtra(com.termux.app.TermuxActivity.EXTRA_LAYOUT_EDITOR, true);
-                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                startActivity(intent);
-                return true;
-            });
-        }
-
-        /**
-         * The "Appearance" row: the Appearance editor over the live launcher, through the same
-         * intent every other door sends (SPEC §3.1). It navigates away rather than to a page.
-         */
-        private void configureAppearanceEditorRow(@NonNull Context context) {
-            Preference row = findPreference("appearance_editor");
-            if (row == null) return;
-            row.setOnPreferenceClickListener(preference -> {
-                Intent intent = new Intent(context, com.termux.app.TermuxActivity.class);
-                intent.putExtra(com.termux.app.TermuxActivity.EXTRA_SURFACE_EDITOR, true);
+                intent.putExtra(com.termux.app.TermuxActivity.EXTRA_WALLPAPER_STYLE, true);
                 intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 startActivity(intent);
                 return true;
@@ -762,6 +751,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             String key = row.getKey();
             CharSequence originalSummary = key == null ? row.getSummary() : mOriginalSummaries.get(key);
 
+            if (KEY_WALLPAPER_STYLE.equals(key)) row.setFragment(null);
+
             if (needle.isEmpty()) {
                 row.setSummary(originalSummary);
                 row.setVisible(true);
@@ -791,6 +782,11 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                     }
                 }
                 if (anyChildMatch) {
+                    // A hit on a Look page row opens that page rather than the picker.
+                    if (KEY_WALLPAPER_STYLE.equals(key)) {
+                        row.setFragment(com.termux.app.fragments.settings.termux
+                            .TermuxStylePreferencesFragment.class.getName());
+                    }
                     row.setSummary(row.getContext().getString(R.string.settings_search_contains,
                         TextUtils.join(", ", matchedTitles)));
                     row.setVisible(true);

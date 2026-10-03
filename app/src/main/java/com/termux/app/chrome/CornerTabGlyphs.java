@@ -62,6 +62,12 @@ public final class CornerTabGlyphs {
      */
     public static final String WALLPAPER = "󰸉";
 
+    /**
+     * The one "Wallpaper & style" button: it opens the wallpaper picker, which leads on to the Look
+     * and Layout editors. The wallpaper mark stands for the whole page.
+     */
+    public static final String WALLPAPER_STYLE = WALLPAPER;
+
     /** The question mark the help button wears, in the tab's text font rather than the symbols one. */
     @NonNull
     public static String help(@NonNull Context context) {

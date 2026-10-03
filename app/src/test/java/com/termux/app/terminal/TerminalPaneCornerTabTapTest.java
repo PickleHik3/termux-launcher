@@ -87,49 +87,41 @@ public class TerminalPaneCornerTabTapTest {
     // ---------------------------------------------------------------- the four actions
 
     /**
-     * A pane on its own has nothing to move, maximise or close: it offers the three editor doors —
-     * Appearance, Layout and Wallpaper — minimal mode, the tiling switch, settings and help.
+     * A pane on its own has nothing to move, maximise or close: it offers "Wallpaper & style" — the
+     * one door to the wallpaper picker and the editors behind it — minimal mode, the tiling switch,
+     * settings and help.
      */
     @Test
-    public void aLonePanesTabOffersBothEditorsAndHelp() {
+    public void aLonePanesTabOffersWallpaperAndStyleAndHelp() {
         Fixture fixture = fixture();
         fixture.showTab();
-        assertEquals("seven buttons on a lone pane", 7, fixture.slots().length);
+        assertEquals("five buttons on a lone pane", 5, fixture.slots().length);
 
         fixture.tapSlot(0);
-        assertEquals(Arrays.asList("appearance"), fixture.host.log);
-
-        fixture.showTab();
-        fixture.tapSlot(1);
-        assertEquals(Arrays.asList("appearance", "layout"), fixture.host.log);
-
-        fixture.showTab();
-        fixture.tapSlot(2);
-        assertEquals(Arrays.asList("appearance", "layout", "wallpaper"), fixture.host.log);
+        assertEquals(Arrays.asList("wallpaper"), fixture.host.log);
 
         // Minimal mode re-lays the whole place out around the pane, so the tab goes with the tap;
         // opened again, the same slot is the way back.
         fixture.showTab();
-        fixture.tapSlot(3);
+        fixture.tapSlot(1);
         fixture.showTab();
-        fixture.tapSlot(3);
-        assertEquals(Arrays.asList("appearance", "layout", "wallpaper", "minimal on",
-            "minimal off"), fixture.host.log);
+        fixture.tapSlot(1);
+        assertEquals(Arrays.asList("wallpaper", "minimal on", "minimal off"), fixture.host.log);
 
         // The tiling button flips the setting and leaves the tab up for a second tap.
         fixture.host.log.clear();
         fixture.showTab();
-        fixture.tapSlot(4);
-        fixture.tapSlot(4);
+        fixture.tapSlot(2);
+        fixture.tapSlot(2);
         assertEquals(Arrays.asList("tiling on", "tiling off"), fixture.host.log);
 
         fixture.host.log.clear();
         fixture.showTab();
-        fixture.tapSlot(5);
+        fixture.tapSlot(3);
         assertEquals(Arrays.asList("settings"), fixture.host.log);
 
         fixture.showTab();
-        fixture.tapSlot(6);
+        fixture.tapSlot(4);
         assertEquals(Arrays.asList("settings", "help"), fixture.host.log);
     }
 
@@ -199,9 +191,9 @@ public class TerminalPaneCornerTabTapTest {
         Fixture fixture = fixtureOnAWindow();
         fixture.host.afterToggle = fixture::layout;
         fixture.showTab();
-        RectF minimalSlot = new RectF(fixture.slots()[3]);
+        RectF minimalSlot = new RectF(fixture.slots()[1]);
 
-        fixture.tapSlot(3);
+        fixture.tapSlot(1);
         assertEquals(Arrays.asList("minimal on"), fixture.host.log);
         assertFalse("the tab went with the tap", fixture.controls.isControlsShown());
         assertEquals("and none of its buttons answers", PaneControlsView.ACTION_NONE,
@@ -211,7 +203,7 @@ public class TerminalPaneCornerTabTapTest {
         fixture.tap(WIDTH / 2f, HEIGHT / 2f);
         assertFalse(fixture.controls.isControlsShown());
         fixture.showTab();
-        fixture.tapSlot(3);
+        fixture.tapSlot(1);
         assertEquals(Arrays.asList("minimal on", "minimal off"), fixture.host.log);
         assertFalse("and goes again on the way out", fixture.controls.isControlsShown());
     }
