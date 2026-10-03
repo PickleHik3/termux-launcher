@@ -107,7 +107,11 @@ public class RegionMasksTest {
                     float t = (y - 8) / 47f; // 0 top .. 1 bottom
                     float k = wideAtTop ? 1f - t : t; // 1 at the wide end
                     int half = taper ? 2 + Math.round(k * 16f) : 10;
-                    if (Math.abs(x - W / 2) <= half) foliage[i] = 0.9f;
+                    // The leaves are their own colour, as in a picture, so the guided filter has an edge to keep.
+                    if (Math.abs(x - W / 2) <= half) {
+                        foliage[i] = 0.9f;
+                        rgb[i] = 0x58B048;
+                    }
                 }
             }
         }

@@ -783,6 +783,7 @@ public abstract class WallpaperPickerPageTestBase {
         WallpaperPickerPage page = openOnPhoto(WallpaperSlots.Slot.HOME, photo, 34);
         holder[0] = page;
         find(page, R.id.wallpaper_picker_living_offer).performClick();
+        settle(); // a layout pass for the bar row; the job itself waits on the worker queue
 
         // Started: the button is gone, a determinate bar with the first stage and a cancel are up.
         assertTrue(mSlots.job.isRunning());
