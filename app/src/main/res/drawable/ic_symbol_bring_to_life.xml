@@ -1,0 +1,7 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="960" android:viewportHeight="960">
+    <group android:translateY="960">
+        <path android:fillColor="?attr/termuxColorPrimary" android:pathData="M200,-840H480Q520,-840 520,-800Q520,-760 480,-760H200V-200H760V-480Q760,-520 800,-520Q840,-520 840,-480V-200Q840,-167 816.5,-143.5T760,-120H200Q167,-120 143.5,-143.5T120,-200V-760Q120,-793 143.5,-816.5T200,-840Z M250,-280Q232,-280 243,-295L322,-402Q330,-413 338,-402L400,-320L514,-518Q530,-540 546,-518L677,-296Q688,-280 670,-280Z" />
+        <path android:fillColor="?attr/termuxColorPrimary" android:pathData="M730,-872Q740,-888 750,-872L787,-801Q791,-791 801,-787L872,-750Q888,-740 872,-730L801,-693Q791,-689 787,-679L750,-608Q740,-592 730,-608L693,-679Q689,-689 679,-693L608,-730Q592,-740 608,-750L679,-787Q689,-791 693,-801Z" />
+    </group>
+</vector>
