@@ -66,6 +66,19 @@ public final class AnalysisMaps {
                 return out;
             }
             JSONObject root = new JSONObject(t);
+            // The analysis job's own layout: one entry per scene image, its channels named in order
+            // (a null channel is a gap, kept as "" so later names stay on their channel).
+            JSONArray images = root.optJSONArray("images");
+            if (images != null) {
+                for (int i = 0; i < images.length(); i++) {
+                    JSONObject image = images.optJSONObject(i);
+                    JSONArray channels = image == null ? null : image.optJSONArray("channels");
+                    for (int c = 0; c < 3; c++) {
+                        out.add(channels == null || channels.isNull(c) ? "" : channels.optString(c, ""));
+                    }
+                }
+                if (!out.isEmpty()) return out;
+            }
             if (root.has("scene0")) {
                 for (int i = 0; i < 3; i++) {
                     JSONArray a = root.optJSONArray("scene" + i);

@@ -125,6 +125,20 @@ public class ManifestTest {
     }
 
     @Test
+    public void groupNamesFollowTheAnalysisJobLayout() {
+        // What WallpaperVisionRuntime writes: classes is a count, groups maps names to class ids,
+        // and images names each file's channels, with null for an unused channel.
+        String json = "{\"width\":128,\"height\":128,\"classes\":150,"
+            + "\"images\":[{\"file\":\"scene0.png\",\"channels\":[\"water\",\"falling_water\",\"sky\"]},"
+            + "{\"file\":\"scene1.png\",\"channels\":[\"foliage\",\"lights\",\"signs\"]},"
+            + "{\"file\":\"scene2.png\",\"channels\":[\"subject_like\",null,null]}],"
+            + "\"groups\":{\"water\":[21,26],\"sky\":[2]}}";
+        List<String> names = AnalysisMaps.parseGroupNames(json);
+        assertEquals(Arrays.asList("water", "falling_water", "sky", "foliage", "lights", "signs",
+            "subject_like", "", ""), names);
+    }
+
+    @Test
     public void modelIdsComeFromAnalysisJson() {
         assertEquals("u2net", AnalysisMaps.parseModels("{\"models\":{\"subject\":\"u2net\"}}").get("subject"));
         assertTrue(AnalysisMaps.parseModels("{}").isEmpty());

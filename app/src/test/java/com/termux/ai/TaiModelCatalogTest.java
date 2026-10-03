@@ -224,7 +224,7 @@ public class TaiModelCatalogTest {
             assertTrue(entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
         }
         assertEquals(TaiModelCatalog.entries().size() - speech.size() - TaiModelCatalog.ttsEntries().size()
-            - TaiModelCatalog.embeddingEntries().size(), chat.size());
+            - TaiModelCatalog.embeddingEntries().size() - TaiModelCatalog.visionEntries().size(), chat.size());
     }
 
     @Test
