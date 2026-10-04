@@ -88,7 +88,12 @@ public class SettingsFragmentAliasesTest {
         Fragment fragment = launch(KeyboardPreferencesFragment.class);
         PreferenceScreen screen = ((KeyboardPreferencesFragment) fragment).getPreferenceScreen();
         assertNotNull(screen.findPreference("keyboard_input_method"));
-        assertNotNull(screen.findPreference("in_app_keyboard_extra_keys"));
+        assertNotNull(screen.findPreference("keyboard_sub_layout"));
+        assertEquals(KeyboardLayoutPreferencesFragment.class.getName(),
+            screen.findPreference("keyboard_sub_layout").getFragment());
+        Fragment layout = launch(KeyboardLayoutPreferencesFragment.class);
+        assertNotNull(((KeyboardLayoutPreferencesFragment) layout).getPreferenceScreen()
+            .findPreference("in_app_keyboard_extra_keys"));
         assertTrue("moved to the Look page", screen.findPreference("in_app_keyboard_theme") == null);
         assertTrue("moved to the Look page", screen.findPreference("customize_keyboard_surface") == null);
     }

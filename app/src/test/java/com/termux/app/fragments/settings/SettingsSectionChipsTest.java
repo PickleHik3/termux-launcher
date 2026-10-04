@@ -21,7 +21,7 @@ import com.google.android.material.chip.Chip;
 import com.google.android.material.chip.ChipGroup;
 import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
-import com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment;
+import com.termux.app.fragments.settings.termux.KeyboardHardwarePreferencesFragment;
 import com.termux.app.fragments.settings.termux.TerminalPreferencesFragment;
 
 import org.junit.Test;
@@ -105,8 +105,8 @@ public class SettingsSectionChipsTest {
     }
 
     @Test
-    public void chipsAreAbsentOnASingleSectionPage() {
-        StatusBarPreferencesFragment fragment = launch(StatusBarPreferencesFragment.class);
+    public void chipsAreAbsentOnAShortSectionPage() {
+        KeyboardHardwarePreferencesFragment fragment = launch(KeyboardHardwarePreferencesFragment.class);
         PreferenceScreen screen = fragment.getPreferenceScreen();
         assertTrue(SettingsSectionChips.visibleSections(screen).size() < 3);
 
