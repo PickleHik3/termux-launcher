@@ -14,15 +14,15 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
- * The real {@link GemmaSceneReader.Chat}: one non-streaming call through
+ * The real {@link SceneReader.Chat}: one non-streaming call through
  * {@link TaiManager#openAiChatCompletions(String, long)}. The only place the living-still code
  * touches the TAI. Blocking; call it off the main thread.
  */
-public final class TaiGemmaChat implements GemmaSceneReader.Chat {
+public final class TaiGemmaChat implements SceneReader.Chat {
     @NonNull private final TaiManager mManager;
     @Nullable private volatile String mLastAccelerator;
     @Nullable private volatile String mLastFallbackReason;
@@ -31,15 +31,18 @@ public final class TaiGemmaChat implements GemmaSceneReader.Chat {
         mManager = TaiManager.getInstance(context.getApplicationContext());
     }
 
-    /** True when the Gemma 4 E4B files are on the phone (downloaded or imported). */
-    public static boolean installed(@NonNull Context context) {
+    /** The ids of the installed models (downloaded or imported), without any vision suffix. */
+    @NonNull
+    public static Set<String> installedIds(@NonNull Context context) {
         TaiModelStore store = new TaiModelStore(context.getApplicationContext());
-        Map<String, TaiModelSpec> models = new LinkedHashMap<>(store.getDownloadedReadableModels());
-        models.putAll(store.getInstalledUserModels());
-        for (TaiModelSpec spec : models.values()) {
-            if (GemmaSceneReader.MODEL_ID.equals(spec.id)) return true;
-        }
-        return false;
+        Set<String> ids = new HashSet<>(store.getDownloadedReadableModels().keySet());
+        for (TaiModelSpec spec : store.getInstalledUserModels().values()) ids.add(spec.id);
+        return ids;
+    }
+
+    /** True when the Gemma 4 E4B or E2B files are on the phone, so the director can run. */
+    public static boolean installed(@NonNull Context context) {
+        return SceneReader.modelId(installedIds(context)) != null;
     }
 
     @NonNull

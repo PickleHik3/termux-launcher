@@ -19,10 +19,11 @@ import java.util.concurrent.CancellationException;
 
 /**
  * Builds one living still from a photo and the raw model maps (living-stills.md, Part C): colour
- * clusters, region masks, the optional Gemma step, the rule recipe, then the manifest folder
- * {@code files/wallpaper/living/<hash>/}. The whole run is the {@code recipe} stage; its percent
- * climbs 0..100 across clustering (0-15), Gemma (15-75, skipped when absent), masks (75-92) and
- * writing (92-100). Blocking: run it on a background executor.
+ * clusters, the optional director ({@link SceneReader}, one reading of the photo), the masks (from
+ * the plan's boxes, or from the vision maps when there is no plan) and the recipe, then the
+ * manifest folder {@code files/wallpaper/living/<hash>/}. The whole run is the {@code recipe}
+ * stage; its percent climbs 0..100 across clustering (0-15), the director (15-75, skipped when
+ * absent), masks (75-92) and writing (92-100). Blocking: run it on a background executor.
  */
 public final class LivingStillBuilder {
     private LivingStillBuilder() {}
@@ -54,14 +55,26 @@ public final class LivingStillBuilder {
     @NonNull
     public static Manifest build(@NonNull Context context, @NonNull File photo, @NonNull File analysisDir,
                                  @Nullable Progress progress) throws IOException {
-        GemmaSceneReader.Chat chat = TaiGemmaChat.installed(context) ? new TaiGemmaChat(context) : null;
-        return build(context, photo, analysisDir, progress, chat);
+        SceneReader.Chat chat = TaiGemmaChat.installed(context) ? new TaiGemmaChat(context) : null;
+        return build(context, photo, analysisDir, progress, chat, chat == null ? null : SceneReader.modelId(TaiGemmaChat.installedIds(context)));
     }
 
-    /** As above with the Gemma call given (or {@code null} for rules only). */
+    /** As above with the call given, asking the E4B vision model (or {@code null} chat for rules only). */
     @NonNull
     public static Manifest build(@NonNull Context context, @NonNull File photo, @NonNull File analysisDir,
-                                 @Nullable Progress progress, @Nullable GemmaSceneReader.Chat chat) throws IOException {
+                                 @Nullable Progress progress, @Nullable SceneReader.Chat chat) throws IOException {
+        return build(context, photo, analysisDir, progress, chat, SceneReader.E4B_ID + SceneReader.VISION_SUFFIX);
+    }
+
+    /**
+     * As above with the model call given (or {@code null} for rules only).
+     *
+     * @param modelId the vision model id the call asks for; {@code null} also means rules only
+     */
+    @NonNull
+    public static Manifest build(@NonNull Context context, @NonNull File photo, @NonNull File analysisDir,
+                                 @Nullable Progress progress, @Nullable SceneReader.Chat chat,
+                                 @Nullable String modelId) throws IOException {
         long t0 = SystemClock.elapsedRealtime();
         Map<String, Long> timings = new LinkedHashMap<>();
         report(progress, 0);
@@ -86,26 +99,24 @@ public final class LivingStillBuilder {
         checkCancel(progress);
         report(progress, 15);
 
-        // Gemma
-        GemmaSceneReader.Plan plan = null;
-        if (chat != null) {
+        // director: one reading of the photo at 768 long side, in words and boxes
+        ScenePlan plan = null;
+        long directorMs = 0;
+        if (chat != null && modelId != null) {
             t = SystemClock.elapsedRealtime();
-            Bitmap marked = null;
             try {
                 int gw = size[0] >= size[1] ? Math.min(size[0], GEMMA_LONG_SIDE)
                     : Math.min(size[0], Math.round(GEMMA_LONG_SIDE * size[0] / (float) size[1]));
                 Bitmap big = LivingBitmaps.decodeToWidth(photo, Math.max(1, gw));
-                marked = LivingBitmaps.markedCopy(big, clusters, GEMMA_LONG_SIDE);
                 String photoUrl = LivingBitmaps.jpegDataUrl(big, GEMMA_LONG_SIDE);
-                String markedUrl = LivingBitmaps.jpegDataUrl(marked, GEMMA_LONG_SIDE);
                 big.recycle();
-                plan = GemmaSceneReader.read(chat, photoUrl, markedUrl, clusters);
+                plan = SceneReader.read(chat, modelId, photoUrl);
             } catch (IOException | RuntimeException e) {
                 plan = null;
-            } finally {
-                if (marked != null) marked.recycle();
             }
-            timings.put("gemma", SystemClock.elapsedRealtime() - t);
+            directorMs = SystemClock.elapsedRealtime() - t;
+            // The key keeps its old name: the picker weighs its progress by it.
+            timings.put("gemma", directorMs);
             checkCancel(progress);
         }
         small.recycle();
@@ -124,27 +135,55 @@ public final class LivingStillBuilder {
         RegionMasks.Inputs in = new RegionMasks.Inputs(pw, ph, rgb,
             Planes.resize(maps.depth, maps.depthW, maps.depthH, pw, ph),
             Planes.resize(maps.subject, maps.subjectW, maps.subjectH, pw, ph), groups);
-        RegionMasks.Result masks = RegionMasks.compute(in, clusters, plan == null ? null : plan.regions);
+        float[] zero = new float[pw * ph];
+        float[] maskAR, maskAG, maskAB, maskBR, maskBG, maskBB, maskCR, maskCG, maskCB, maskDR, maskDG;
+        LivingRecipe recipe;
+        if (plan != null) {
+            ElementMasks.Result em = ElementMasks.compute(plan, in, clusters, pw, ph);
+            // ElementMasks has no bob plane: its subject is the figure the plan marks still, and
+            // a figure that bobs in water is a rules-only reading, so bob stays off here. Its
+            // warnings (dropped boxes and the like) have no recipe field and are not kept.
+            recipe = RecipeRules.fromPlan(plan, em.stats);
+            maskAR = em.water; maskAG = em.sway; maskAB = em.sky;
+            maskBR = em.fall; maskBG = em.subject; maskBB = em.glow;
+            maskCR = zero; maskCG = em.mist; maskCB = em.particles;
+            maskDR = em.wind; maskDG = em.still;
+        } else {
+            RegionMasks.Result masks = RegionMasks.compute(in, clusters, null);
+            recipe = RecipeRules.make(masks.stats);
+            maskAR = masks.water; maskAG = masks.sway; maskAB = masks.sky;
+            maskBR = masks.fall; maskBG = masks.subject; maskBB = masks.glow;
+            maskCR = masks.bob; maskCG = masks.mist; maskCB = masks.particles;
+            // The rules know no wind and protect no still pixels: a black maskD is what a
+            // version 2 manifest needs to load, and the shader reads it as nothing.
+            maskDR = zero; maskDG = zero;
+        }
         timings.put("masks", SystemClock.elapsedRealtime() - t);
         checkCancel(progress);
         report(progress, 92);
 
         // recipe
-        LivingRecipe recipe = RecipeRules.make(masks.stats, plan);
+        recipe.version = LivingRecipe.VERSION;
         recipe.models.putAll(maps.models);
         if (plan != null) {
-            recipe.gemmaModel = GemmaSceneReader.visionModelId();
+            recipe.gemmaModel = modelId;
             recipe.gemmaAccelerator = chat.lastAccelerator();
             recipe.gemmaFallbackReason = chat.lastFallbackReason();
-            recipe.models.put("gemma", GemmaSceneReader.MODEL_ID);
+            recipe.director.model = modelId;
+            recipe.director.accelerator = chat.lastAccelerator();
+            recipe.director.fallbackReason = chat.lastFallbackReason();
+            recipe.director.ms = directorMs;
+            recipe.models.put("gemma", modelId.endsWith(SceneReader.VISION_SUFFIX)
+                ? modelId.substring(0, modelId.length() - SceneReader.VISION_SUFFIX.length()) : modelId);
         }
 
         // files
         copy(photo, new File(dir, Manifest.IMAGE));
         copy(new File(analysisDir, "depth.png"), new File(dir, Manifest.DEPTH));
-        LivingBitmaps.writeRgbPng(new File(dir, Manifest.MASK_A), masks.water, masks.sway, masks.sky, pw, ph);
-        LivingBitmaps.writeRgbPng(new File(dir, Manifest.MASK_B), masks.fall, masks.subject, masks.glow, pw, ph);
-        LivingBitmaps.writeRgbPng(new File(dir, Manifest.MASK_C), masks.bob, masks.mist, masks.particles, pw, ph);
+        LivingBitmaps.writeRgbPng(new File(dir, Manifest.MASK_A), maskAR, maskAG, maskAB, pw, ph);
+        LivingBitmaps.writeRgbPng(new File(dir, Manifest.MASK_B), maskBR, maskBG, maskBB, pw, ph);
+        LivingBitmaps.writeRgbPng(new File(dir, Manifest.MASK_C), maskCR, maskCG, maskCB, pw, ph);
+        LivingBitmaps.writeRgbPng(new File(dir, Manifest.MASK_D), maskDR, maskDG, zero, pw, ph);
         timings.put("total", SystemClock.elapsedRealtime() - t0);
         recipe.timingsMs.putAll(timings);
         Manifest.writeRecipe(dir, recipe);

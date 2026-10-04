@@ -17,7 +17,7 @@ import java.util.Set;
  * The v2 director (living-stills-part-c-v2.md, piece A). The set-of-mark prompt made Gemma match
  * meaning to numbered colour blobs, and that is where it failed; here it is asked in words for the
  * scene's elements, each with a kind, a box, a depth and a motion, from the one photo. The model call
- * sits behind {@link GemmaSceneReader.Chat}, so tests fake it. Any error, timeout or unusable answer
+ * sits behind {@link Chat}, so tests fake it. Any error, timeout or unusable answer
  * gives {@code null}.
  */
 public final class SceneReader {
@@ -25,9 +25,30 @@ public final class SceneReader {
 
     public static final String E4B_ID = "gemma-4-e4b-it-litert-lm";
     public static final String E2B_ID = "gemma-4-e2b-it-litert-lm";
+    /** The suffix the TAI gives a model id for its vision-enabled load. */
+    public static final String VISION_SUFFIX = "-vision";
     public static final long TIMEOUT_MS = 60_000L;
     static final int CONTEXT_WINDOW = 2048;
     static final int MAX_TOKENS = 700;
+
+    /** The single call out to the model: a chat-completions body in, the reply text out. */
+    public interface Chat {
+        /** @throws IOException on any failure or when {@code timeoutMs} passes */
+        @NonNull
+        String complete(@NonNull String requestBody, long timeoutMs) throws IOException;
+
+        /** The backend the latest successful {@link #complete} ran on, or {@code null} when unknown. */
+        @Nullable
+        default String lastAccelerator() {
+            return null;
+        }
+
+        /** Why that backend was not the model's first choice, or {@code null} when it was or is unknown. */
+        @Nullable
+        default String lastFallbackReason() {
+            return null;
+        }
+    }
 
     /** The Gallery prompt, minus the {@code note} (about 40% of the output tokens). */
     public static final String PROMPT =
@@ -59,8 +80,8 @@ public final class SceneReader {
      */
     @Nullable
     public static String modelId(@NonNull Set<String> installedIds) {
-        if (installedIds.contains(E4B_ID)) return E4B_ID + GemmaSceneReader.VISION_SUFFIX;
-        if (installedIds.contains(E2B_ID)) return E2B_ID + GemmaSceneReader.VISION_SUFFIX;
+        if (installedIds.contains(E4B_ID)) return E4B_ID + VISION_SUFFIX;
+        if (installedIds.contains(E2B_ID)) return E2B_ID + VISION_SUFFIX;
         return null;
     }
 
@@ -93,7 +114,7 @@ public final class SceneReader {
     /** {@link #buildRequest(String, String)} for the E4B vision model. */
     @NonNull
     public static String buildRequest(@NonNull String photoDataUrl) throws JSONException {
-        return buildRequest(E4B_ID + GemmaSceneReader.VISION_SUFFIX, photoDataUrl);
+        return buildRequest(E4B_ID + VISION_SUFFIX, photoDataUrl);
     }
 
     /**
@@ -102,13 +123,13 @@ public final class SceneReader {
      * @return the plan, or {@code null} on any error, timeout or unusable answer
      */
     @Nullable
-    public static ScenePlan read(@NonNull GemmaSceneReader.Chat chat, @NonNull String photoUrl) {
-        return read(chat, E4B_ID + GemmaSceneReader.VISION_SUFFIX, photoUrl);
+    public static ScenePlan read(@NonNull Chat chat, @NonNull String photoUrl) {
+        return read(chat, E4B_ID + VISION_SUFFIX, photoUrl);
     }
 
-    /** As {@link #read(GemmaSceneReader.Chat, String)} with the model id from {@link #modelId}. */
+    /** As {@link #read(Chat, String)} with the model id from {@link #modelId}. */
     @Nullable
-    public static ScenePlan read(@NonNull GemmaSceneReader.Chat chat, @NonNull String modelId,
+    public static ScenePlan read(@NonNull Chat chat, @NonNull String modelId,
                                  @NonNull String photoUrl) {
         try {
             return parse(chat.complete(buildRequest(modelId, photoUrl), TIMEOUT_MS));

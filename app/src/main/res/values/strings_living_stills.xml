@@ -8,7 +8,7 @@
     <string name="living_stage_depth">Reading depth…</string>
     <string name="living_stage_scene">Finding sky and water…</string>
     <string name="living_stage_subject">Finding the subject…</string>
-    <string name="living_stage_gemma">Asking Gemma…</string>
+    <string name="living_stage_gemma">Reading the scene…</string>
     <string name="living_stage_recipe">Building…</string>
     <string name="living_bring_to_life">Bring to life</string>
     <string name="living_cancel">Cancel</string>
