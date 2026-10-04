@@ -422,6 +422,43 @@ public class TaiLoadBudgetTest {
             null, 0, explicitContext, threshold, history, evictable);
     }
 
+    private static TaiLoadBudget.Plan momentaryPlan(long total, long available, long threshold, boolean momentary) {
+        return TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E4B, false,
+            total, available, GPU_THEN_CPU, 4096, null, 0, false, threshold, TaiLoadBudget.NO_HISTORY, NOTHING,
+            momentary));
+    }
+
+    @Test
+    public void aMomentaryLoadFitsTheGpuWhereTheFullReserveFallsToTheCpu() {
+        TaiLoadBudget.Plan normal = momentaryPlan(PONG_TOTAL, 5_300_000_000L, 0L, false);
+        assertEquals("cpu", normal.accelerator);
+        TaiLoadBudget.Plan momentary = momentaryPlan(PONG_TOTAL, 5_300_000_000L, 0L, true);
+        assertTrue(momentary.fits);
+        assertEquals("gpu", momentary.accelerator);
+        assertEquals(TaiLoadBudget.MOMENTARY_RESERVE_BYTES, momentary.reserveBytes);
+        assertEquals(GIB, momentary.reserveBytes);
+    }
+
+    @Test
+    public void aMomentaryLoadKeepsASmallerNormalReserve() {
+        TaiLoadBudget.Plan normal = momentaryPlan(PONG_TOTAL, 5_300_000_000L, PONG_THRESHOLD, false);
+        TaiLoadBudget.Plan momentary = momentaryPlan(PONG_TOTAL, 5_300_000_000L, PONG_THRESHOLD, true);
+        assertEquals(PONG_FLOOR, normal.reserveBytes);
+        assertEquals(PONG_FLOOR, momentary.reserveBytes);
+    }
+
+    @Test
+    public void aMomentaryLoadNeverDropsBelowTheMinimumFloor() {
+        TaiLoadBudget.Plan momentary = momentaryPlan(PONG_TOTAL, 5_300_000_000L, 1_000_000L, true);
+        assertEquals(TaiLoadBudget.MIN_FLOOR_BYTES, momentary.reserveBytes);
+    }
+
+    @Test
+    public void anOrdinaryLoadKeepsItsFullReserve() {
+        TaiLoadBudget.Plan normal = momentaryPlan(PONG_TOTAL, 5_300_000_000L, 0L, false);
+        assertEquals(TaiLoadBudget.reserveBytes(PONG_TOTAL), normal.reserveBytes);
+    }
+
     private static TaiResidency.Entry resident(String id, TaiResidency.Kind kind, long bytes, boolean busy) {
         return new TaiResidency.Entry(id, kind, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 0, bytes, null, 1L, busy);
     }

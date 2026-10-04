@@ -79,6 +79,16 @@ public final class TaiLoadBudget {
     /** The floor never drops below this, whatever the threshold says. */
     public static final long MIN_FLOOR_BYTES = 512L * MIB;
     public static final int FLOOR_THRESHOLD_MULTIPLIER = 2;
+    /**
+     * The most a momentary load keeps free for the rest of the phone. The reserve exists because a
+     * 32k window held for a whole session froze the launcher on 2026-09-23, but a 2k-window job
+     * that is unloaded right after one answer, such as the living-still director, holds its memory
+     * for about forty seconds and never grows. On a 12 GB phone with 4.6 GB free, gemma-4-e4b on
+     * the GPU costs 2.76–3.07 GB; the full reserve asked for 5.0–5.7 GB free and pushed the load
+     * to the CPU (40–50 s instead of about 15 s). A momentary load keeps the smaller of the normal
+     * reserve and this, and never less than {@link #MIN_FLOOR_BYTES}.
+     */
+    public static final long MOMENTARY_RESERVE_BYTES = GIB;
     /** Added to a ratio estimate on top of the floor; a measured estimate carries none. */
     public static final int RATIO_MARGIN_PERCENT = 25;
     /** Added to the largest measured drop before it is used as the estimate. */
@@ -203,6 +213,8 @@ public final class TaiLoadBudget {
         final long thresholdBytes;
         @NonNull final History history;
         @NonNull final List<TaiResidency.Entry> evictable;
+        /** The caller unloads within a minute, so the load keeps a smaller reserve. */
+        final boolean momentary;
 
         /**
          * @param accelerators       in the order to try them; one entry when the caller chose
@@ -232,6 +244,17 @@ public final class TaiLoadBudget {
                        long availableBytes, @NonNull List<String> accelerators, int capContext,
                        @Nullable String crashedAccelerator, int crashedContext, boolean explicitContext,
                        long thresholdBytes, @NonNull History history, @NonNull List<TaiResidency.Entry> evictable) {
+            this(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
+                crashedAccelerator, crashedContext, explicitContext, thresholdBytes, history, evictable, false);
+        }
+
+        /** @param momentary whether the load is unloaded within a minute and may keep a smaller reserve */
+        public Request(@NonNull String backend, long fileBytes, boolean encoders, long physicalBytes,
+                       long availableBytes, @NonNull List<String> accelerators, int capContext,
+                       @Nullable String crashedAccelerator, int crashedContext, boolean explicitContext,
+                       long thresholdBytes, @NonNull History history, @NonNull List<TaiResidency.Entry> evictable,
+                       boolean momentary) {
+            this.momentary = momentary;
             this.backend = backend;
             this.fileBytes = fileBytes;
             this.encoders = encoders;
@@ -314,6 +337,7 @@ public final class TaiLoadBudget {
         int floor = floor(r.capContext);
         int cap = Math.max(floor, r.capContext);
         long reserve = floorBytes(r.thresholdBytes, r.physicalBytes);
+        if (r.momentary) reserve = Math.max(MIN_FLOOR_BYTES, Math.min(reserve, MOMENTARY_RESERVE_BYTES));
         String first = r.accelerators.isEmpty() ? null : r.accelerators.get(0);
         List<TaiResidency.Entry> none = Collections.emptyList();
         if (r.availableBytes <= 0L || r.physicalBytes <= 0L || r.fileBytes <= 0L) {
