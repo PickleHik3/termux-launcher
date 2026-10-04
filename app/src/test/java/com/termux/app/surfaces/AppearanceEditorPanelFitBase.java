@@ -309,8 +309,13 @@ public abstract class AppearanceEditorPanelFitBase {
         View undo = root.findViewById(R.id.appearance_editor_undo);
         View done = root.findViewById(R.id.appearance_editor_done);
         assertEquals(View.VISIBLE, undo.getVisibility());
-        assertTrue("the pill ends before Undo: " + pill.getRight() + " > " + undo.getLeft(),
-            pill.getRight() <= undo.getLeft());
+        // One row when it fits; when side insets leave too little width, Undo and Done wrap to a
+        // row of their own under the pill. Either way the pill and Undo never overlap.
+        assertTrue("the pill ends before Undo, or Undo wraps under it: " + pill.getRight() + " > "
+                + undo.getLeft(),
+            pill.getRight() <= undo.getLeft() || pill.getBottom() <= undo.getTop());
+        assertEquals("Undo and Done share a row", undo.getTop() < done.getBottom()
+            && done.getTop() < undo.getBottom(), true);
         assertTrue("Undo ends before Done", undo.getRight() <= done.getLeft());
         assertTrue("Done inside the sheet's padding",
             done.getRight() <= root.getWidth() - root.getPaddingRight());
