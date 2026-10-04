@@ -27,6 +27,11 @@
             app:key="in_app_keyboard_hide_on_hardware"
             app:title="@string/settings_hide_keyboard_hardware_title"
             app:summary="@string/settings_hide_keyboard_hardware_summary" />
+        <SwitchPreferenceCompat
+            app:key="pass_ctrl_space_to_android"
+            app:title="@string/settings_pass_ctrl_space_title"
+            app:summary="@string/settings_pass_ctrl_space_summary"
+            android:defaultValue="false" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="keyboard_layout" app:title="@string/settings_layout_header">

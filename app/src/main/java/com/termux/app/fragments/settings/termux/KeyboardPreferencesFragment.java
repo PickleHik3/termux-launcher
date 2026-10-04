@@ -384,6 +384,9 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "in_app_keyboard_hide_on_hardware":
                 mPreferences.setSoftKeyboardEnabledOnlyIfNoHardware(value);
                 break;
+            case "pass_ctrl_space_to_android":
+                mPreferences.setPassCtrlSpaceToAndroidEnabled(value);
+                break;
             case "in_app_keyboard_enabled":
                 mPreferences.setInAppKeyboardEnabled(value);
                 break;
@@ -427,6 +430,8 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
         switch (key) {
             case "in_app_keyboard_hide_on_hardware":
                 return mPreferences.isSoftKeyboardEnabledOnlyIfNoHardware();
+            case "pass_ctrl_space_to_android":
+                return mPreferences.isPassCtrlSpaceToAndroidEnabled();
             case "in_app_keyboard_enabled":
                 return mPreferences.isInAppKeyboardEnabled();
             case "in_app_keyboard_haptics_enabled":

@@ -399,6 +399,8 @@
     <string name="settings_keyboard_input_none">None</string>
     <string name="settings_hide_keyboard_hardware_title">Hide the on-screen keyboard</string>
     <string name="settings_hide_keyboard_hardware_summary">Hides the on-screen keyboard while a hardware keyboard is connected.</string>
+    <string name="settings_pass_ctrl_space_title">Pass Ctrl+Space to Android</string>
+    <string name="settings_pass_ctrl_space_summary">Let Android handle Ctrl+Space for hardware keyboard language switching instead of sending it to the terminal</string>
     <string name="settings_typeface_title">Typeface</string>
     <string name="settings_keyboard_bottom_padding_title">Bottom padding</string>
     <string name="settings_keyboard_bottom_padding_summary">Lift the bottom key row away from the edge of the screen.</string>

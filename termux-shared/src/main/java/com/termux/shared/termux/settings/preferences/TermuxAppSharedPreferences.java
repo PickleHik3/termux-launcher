@@ -2145,6 +2145,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_SOFT_KEYBOARD_ENABLED_ONLY_IF_NO_HARDWARE, value, false);
     }
 
+    public boolean isPassCtrlSpaceToAndroidEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_PASS_CTRL_SPACE_TO_ANDROID, TERMUX_APP.DEFAULT_VALUE_KEY_PASS_CTRL_SPACE_TO_ANDROID);
+    }
+
+    public void setPassCtrlSpaceToAndroidEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_PASS_CTRL_SPACE_TO_ANDROID, value, false);
+    }
+
     public boolean isRemoveTaskOnActivityFinishEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_ACTIVITY_FINISH_REMOVE_TASK, TERMUX_APP.DEFAULT_VALUE_KEY_ACTIVITY_FINISH_REMOVE_TASK);
     }

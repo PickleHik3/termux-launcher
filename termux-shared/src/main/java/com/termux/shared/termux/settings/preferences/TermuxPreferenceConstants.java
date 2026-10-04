@@ -1156,6 +1156,14 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_KEY_SOFT_KEYBOARD_ENABLED_ONLY_IF_NO_HARDWARE = false;
 
         /**
+         * Defines the key for whether a hardware keyboard Ctrl+Space is passed to Android instead
+         * of being sent to the terminal, so the system can switch the hardware keyboard language.
+         */
+        public static final String KEY_PASS_CTRL_SPACE_TO_ANDROID = "pass_ctrl_space_to_android";
+
+        public static final boolean DEFAULT_VALUE_KEY_PASS_CTRL_SPACE_TO_ANDROID = false;
+
+        /**
          * Defines the key for whether termux will remove itself from the recent apps screen when
          * it closes itself.
          */

@@ -1,6 +1,7 @@
 package com.termux.app.fragments.settings.termux;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -107,6 +108,21 @@ public class KeyboardPreferencesFragmentTest {
         Preference polishModel = fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model");
         assertNotNull(polishModel);
         assertEquals("Automatic", polishModel.getSummary().toString());
+    }
+
+    @Test
+    public void thePassCtrlSpaceRowRoundTripsThroughTheStore() {
+        KeyboardPreferencesDataStore.resetForTesting();
+        KeyboardPreferencesDataStore store = store();
+        TermuxAppSharedPreferences prefs =
+            TermuxAppSharedPreferences.build(RuntimeEnvironment.getApplication(), true);
+
+        assertFalse(store.getBoolean("pass_ctrl_space_to_android", false));
+        store.putBoolean("pass_ctrl_space_to_android", true);
+        assertTrue(prefs.isPassCtrlSpaceToAndroidEnabled());
+        assertTrue(store.getBoolean("pass_ctrl_space_to_android", false));
+        store.putBoolean("pass_ctrl_space_to_android", false);
+        assertFalse(prefs.isPassCtrlSpaceToAndroidEnabled());
     }
 
     @Test
