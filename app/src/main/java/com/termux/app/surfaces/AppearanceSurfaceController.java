@@ -673,6 +673,9 @@ public final class AppearanceSurfaceController {
             return;
         }
         mTransitioning = true;
+        // The session ends (the launcher is dressed again, its wallpaper and opaque window put
+        // back) while the Overview still covers it fully; the fade then shows a finished launcher.
+        mEditor.endSession();
         fadeHost(0f, this::closeNow);
     }
 
