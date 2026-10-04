@@ -257,19 +257,35 @@ public abstract class AppearanceEditorPanelFitBase {
     }
 
     @Test
-    public void theChosenLookLabelIsSelectedAndNamedForAccessibility() {
+    public void theChosenLookLabelIsSelectedAndKeepsItsFamily() {
         mPanel.showAppearanceMode();
         mPanel.setStop(2);
         layOut(mPanel.measureFor(false, mWidthPx));
         FrameLayout labels = mPanel.view().findViewById(R.id.appearance_editor_look_labels);
         int selected = 0;
         for (int i = 0; i < labels.getChildCount(); i++) {
-            View label = labels.getChildAt(i);
+            TextView label = (TextView) labels.getChildAt(i);
             if (label.isSelected()) selected++;
-            assertNotNull(label.getContentDescription());
+            assertNotNull("typeface kept", label.getTypeface());
+            assertEquals("labels stay out of accessibility; the slider is the route",
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO, label.getImportantForAccessibility());
         }
         assertEquals(1, selected);
         assertTrue(labels.getChildAt(2).isSelected());
+        assertTrue(((TextView) labels.getChildAt(2)).getTypeface().isBold());
+    }
+
+    @Test
+    public void orientationAndStyleKeepTheOriginalBoundedSegmentStyle() {
+        View root = mPanel.view();
+        for (int id : new int[] {R.id.layout_editor_orientation_portrait,
+                R.id.layout_editor_orientation_landscape, R.id.appearance_editor_style_docked,
+                R.id.appearance_editor_style_floating}) {
+            MaterialButton button = root.findViewById(id);
+            assertTrue("outlined segment keeps its boundary", button.getStrokeWidth() > 0);
+        }
+        MaterialButton mode = root.findViewById(R.id.appearance_editor_mode_appearance);
+        assertEquals("mode segment is the stroke-free tonal one", 0, mode.getStrokeWidth());
     }
 
     @Test
