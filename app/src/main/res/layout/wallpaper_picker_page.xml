@@ -1,26 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The wallpaper picker page (lock-live-wallpaper.md, "The picker page"), modelled on
+<!-- The Appearance surface's Overview (appearance-round-2026-10-04.md; it was the wallpaper picker
+     page of lock-live-wallpaper.md, "The picker page"), modelled on
      project-docs/reference/lock-wallpaper/reference-nothing-picker.png. WallpaperPickerPage fills
-     it; the host shows it full screen and adds the system bar insets as padding.
+     it; the surface adds it to the activity's content and sets the system bar insets as padding.
 
      Top to bottom:
-       top bar 64: back (48), the centred slot's title, the Apply split button at the end;
+       top bar 64: back (48), the fixed heading Appearance, the Apply split button at the end;
        a 4dp progress bar, invisible until Apply runs;
-       the pager (the rest of the height): Lock then Home, each card at the 360x800 aspect of the
-         lock cutout, the neighbour peeking (WallpaperPickerPage sizes the cards and the padding);
+       the pager (the rest of the height): Lock then Home, each a small label ("Lock screen",
+         "Home screen") over a card at the 360x800 aspect of the lock cutout, the neighbour peeking
+         (WallpaperPickerPage sizes the cards, less the label, and the padding);
        Motion 48: Lock centred only; INVISIBLE on Home so the pager never jumps, GONE below API 34.
          For a photo it holds the living-still control instead (living-stills.md, Part D): the Bring
          to life button, then a determinate bar with the stage and a cancel while it runs, then the
-         Motion switch for that slot with a small Read again;
+         Motion switch for that slot with an AI-star icon button, Read again;
        the shortcut row: three 64dp tonal round buttons with a label under each, the 24dp glyph
          centred both ways (no padding, textStart gravity: an icon-only button centres its icon);
-       the thumbnail strip card: Same as Home (Lock only), the Recent group (the last three
-         photos, labelled "Recent" on the first), the backgrounds (none below API 34), then Photo…
-         beside More settings (the old Look page).
+       the thumbnail strip card: Same as Home (Lock only) then the photos last applied, in equal
+         cells across the row (no heading, no pre-made backgrounds), then Photo… beside More
+         settings (the old Look page).
 
      Fixed heights, dp: 64 + 4 + 48 + (8 + 64 + 4 + 20 + 8) + (8 + 12 + 112 + 4 + 48 + 4 + 16) = 424,
-     so the pager gets 356 at 780 tall and about 290 under real system bars. No hint text. The page
-     follows the locale's direction; the cards' content does not mirror. -->
+     so the pager gets 356 at 780 tall and about 290 under real system bars, 24 + 2 of it the label.
+     No hint text. The page follows the locale's direction; the cards' content does not mirror. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/wallpaper_picker_page"
@@ -137,16 +139,20 @@
                 android:textAppearance="?attr/textAppearanceLabelLarge"
                 android:textColor="?attr/colorOnSurface" />
 
+            <!-- Read again: the same analysis over the living still's own copy. An icon button
+                 with the AI star, not a text one: the switch says what it is beside. -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/wallpaper_picker_living_again"
-                style="@style/Widget.Material3.Button.TextButton"
-                android:layout_width="wrap_content"
+                style="?attr/materialIconButtonStyle"
+                android:layout_width="48dp"
                 android:layout_height="48dp"
                 android:layout_marginStart="8dp"
-                android:insetTop="0dp"
-                android:insetBottom="0dp"
-                android:text="@string/living_read_again"
-                android:visibility="gone" />
+                android:contentDescription="@string/living_read_again"
+                android:tooltipText="@string/living_read_again"
+                android:visibility="gone"
+                app:icon="@drawable/ic_symbol_ai_star"
+                app:iconSize="24dp"
+                app:iconTint="?attr/colorOnSurface" />
         </LinearLayout>
 
         <!-- A photo with no living still yet: the Bring to life button (API 34+). -->
@@ -349,21 +355,15 @@
             android:paddingTop="12dp"
             android:paddingBottom="4dp">
 
-            <HorizontalScrollView
-                android:id="@+id/wallpaper_picker_strip_scroll"
+            <!-- Equal cells across the row, each tile centred in its share: evenly spaced. -->
+            <LinearLayout
+                android:id="@+id/wallpaper_picker_strip"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:clipToPadding="false"
+                android:baselineAligned="false"
+                android:orientation="horizontal"
                 android:paddingStart="12dp"
-                android:paddingEnd="12dp"
-                android:scrollbars="none">
-
-                <LinearLayout
-                    android:id="@+id/wallpaper_picker_strip"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal" />
-            </HorizontalScrollView>
+                android:paddingEnd="12dp" />
 
             <LinearLayout
                 android:layout_width="wrap_content"

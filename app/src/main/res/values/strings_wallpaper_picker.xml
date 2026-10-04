@@ -5,6 +5,8 @@
   Apply. No hint text.
 -->
 <resources>
+    <!-- The Overview's fixed heading: the entry is Appearance, not a wallpaper changer. -->
+    <string name="wallpaper_picker_title">Appearance</string>
     <string name="wallpaper_picker_slot_lock">Lock screen</string>
     <string name="wallpaper_picker_slot_home">Home screen</string>
     <string name="wallpaper_picker_back">Back</string>
@@ -23,8 +25,6 @@
     <!-- Opens the old Look page, for everything the wallpaper page does not carry. -->
     <string name="wallpaper_picker_more_settings">More settings</string>
     <string name="wallpaper_picker_photo_preview">Your photo</string>
-    <!-- The Recent group's label on the first of the last three photos in the strip. -->
-    <string name="wallpaper_picker_recent">Recent</string>
     <!-- A recent photo tile, for TalkBack: "Recent photo 1" is the newest. -->
     <string name="wallpaper_picker_recent_photo">Recent photo %1$d</string>
     <string name="wallpaper_picker_apply_failed">Could not apply the background</string>

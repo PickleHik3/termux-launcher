@@ -197,4 +197,30 @@ public final class WallpaperPickerLogic {
         long rem = 60_000L - (((nowMs % 60_000L) + 60_000L) % 60_000L);
         return Math.max(1L, rem);
     }
+
+    /**
+     * A preview card's size in a pager {@code pagerW} x {@code pagerH}: the pager's height less the
+     * card's own vertical padding (twice) and the label standing over it ({@code labelBlockPx},
+     * label and gap), at the overlay's aspect, narrowed to {@code maxWidthFraction} of the pager
+     * where the height would make it wider. Returns {@code {width, height}}, at least 1 x 1.
+     */
+    public static int[] cardSize(int pagerW, int pagerH, int verticalPadPx, int labelBlockPx,
+                                 float aspectW, float aspectH, float maxWidthFraction) {
+        int cardH = Math.max(1, pagerH - 2 * verticalPadPx - labelBlockPx);
+        int cardW = Math.round(cardH * aspectW / aspectH);
+        int maxW = Math.round(pagerW * maxWidthFraction);
+        if (cardW > maxW) {
+            cardW = maxW;
+            cardH = Math.round(cardW * aspectH / aspectW);
+        }
+        return new int[] {Math.max(1, cardW), Math.max(1, cardH)};
+    }
+
+    /**
+     * How many tiles the strip holds: Same as Home (it shows for Lock only, but is always built)
+     * and the recently applied photos, at most {@code maxRecents}. There are no other tiles.
+     */
+    public static int stripTileCount(int recentPhotos, int maxRecents) {
+        return 1 + Math.max(0, Math.min(recentPhotos, maxRecents));
+    }
 }
