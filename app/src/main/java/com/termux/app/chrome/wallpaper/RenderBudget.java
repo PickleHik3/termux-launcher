@@ -16,12 +16,22 @@ import java.util.Arrays;
 final class RenderBudget {
 
     static final int WINDOW = 120;
+    /** The floor of the limit: what a 60 Hz-or-slower screen, or an unknown one, is held to. */
     static final float P90_LIMIT_MS = 4f;
+    /**
+     * The limit in display frames once the frame period is known. Submit to fence includes waiting
+     * for the GPU, which is busy with the launcher's own frames, so on a 120 Hz screen even a tiny
+     * render lands about one frame (8.3 ms) later: measured on pong, p90 9.0 ms at ÷2 and 9.1 ms
+     * at ÷4. A render that lands within the next vsync with a quarter to spare keeps up; one that
+     * needs a second frame does not.
+     */
+    static final float VSYNC_FACTOR = 1.25f;
     /** Renders ignored for at least this long after a warm-up restart... */
     static final long WARMUP_MS = 2_000L;
     /** ...and for at least this many renders; the later of the two ends the warm-up. */
     static final int WARMUP_RENDERS = 60;
 
+    private float mLimitMs = P90_LIMIT_MS;
     private final float[] mSamples = new float[WINDOW];
     private final float[] mSorted = new float[WINDOW];
     private int mCount;
@@ -77,7 +87,17 @@ final class RenderBudget {
         Arrays.sort(mSorted);
         mLastP90 = mSorted[(int) Math.ceil(WINDOW * 0.9) - 1];
         mLastP50 = mSorted[(int) Math.ceil(WINDOW * 0.5) - 1];
-        return mLastP90 <= P90_LIMIT_MS;
+        return mLastP90 <= mLimitMs;
+    }
+
+    /** The display's frame period as measured from vsync; the limit becomes {@link #VSYNC_FACTOR} of it, never under the floor. */
+    void setFramePeriodMs(float periodMs) {
+        mLimitMs = Math.max(P90_LIMIT_MS, VSYNC_FACTOR * periodMs);
+    }
+
+    /** The p90 limit in force. */
+    float limitMs() {
+        return mLimitMs;
     }
 
     /** True when the last {@link #add} completed a window. */

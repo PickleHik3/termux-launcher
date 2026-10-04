@@ -156,6 +156,11 @@ public final class LiveWallpaperRenderer {
         mPaint.setShader(shader);
     }
 
+    /** The display's frame period from vsync, which sets the self-check's limit ({@link RenderBudget#setFramePeriodMs}). */
+    public void setFramePeriodMs(float periodMs) {
+        mBudget.setFramePeriodMs(periodMs);
+    }
+
     /** False for good once a render failed or threw. */
     public boolean healthy() {
         return mHealthy;
@@ -274,7 +279,7 @@ public final class LiveWallpaperRenderer {
                 Logger.logInfo(TAG, "Render window closed: p50 " + mBudget.lastP50Ms() + " ms, p90 "
                     + mBudget.lastP90Ms() + " ms, tier " + mTier + ", warm-up skipped "
                     + mBudget.warmupSkipped() + " renders, " + (within ? "within" : "over")
-                    + " the " + RenderBudget.P90_LIMIT_MS + " ms limit");
+                    + " the " + mBudget.limitMs() + " ms limit");
             }
             if (!within) mSlow = true;
         }

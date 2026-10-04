@@ -102,7 +102,7 @@ public final class RecipeRules {
         // mist
         r.mistColour = s.farColour.clone();
         if (s.depthSpread > MIST_SPREAD) {
-            r.mistAmount = 0.3f + 0.3f * Math.min(1f, (s.depthSpread - MIST_SPREAD) / 0.3f);
+            r.mistAmount = 0.12f + 0.13f * Math.min(1f, (s.depthSpread - MIST_SPREAD) / 0.3f);
         }
 
         // particles

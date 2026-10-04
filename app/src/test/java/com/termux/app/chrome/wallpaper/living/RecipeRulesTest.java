@@ -76,7 +76,8 @@ public class RecipeRulesTest {
         LivingRecipe r = RecipeRules.make(s, null);
         assertTrue(r.swayAmp > 0f);
         assertEquals(1f, r.pour, 0f);
-        assertTrue(r.mistAmount > 0.3f);
+        assertTrue(r.mistAmount > 0.1f);
+        assertTrue("a haze, not a fog that washes the picture out", r.mistAmount <= 0.25f);
     }
 
     @Test

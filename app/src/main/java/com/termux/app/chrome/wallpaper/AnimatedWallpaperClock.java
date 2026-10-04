@@ -75,6 +75,9 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
     @NonNull private final WallpaperBackdropView mBackdrop;
     @NonNull private final LiveWallpaperFrames mFrames;
     private final float mDensity;
+    /** The last vsync callback's time, and the shortest gap between two seen (the frame period). */
+    private long mPrevVsyncNanos;
+    private long mFramePeriodNanos;
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
     @NonNull private final Choreographer mChoreographer = Choreographer.getInstance();
     @NonNull private final Runnable mRelease = this::releaseAll;
@@ -207,6 +210,7 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
     @Override
     public void doFrame(long frameTimeNanos) {
         mPosted = false;
+        noteVsync(frameTimeNanos);
         if (!mRunning || mDead || mWallpaper == null) return;
         mDirector.setFocus(mHost.focusWanted());
         WallpaperDirector.Frame f = mDirector.frame(frameTimeNanos);
@@ -232,6 +236,21 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
         }
     }
 
+    /**
+     * The shortest gap between back-to-back vsync callbacks seen so far is the display's frame
+     * period (a skipped vsync only ever makes a gap longer). It sets the renderer's self-check limit.
+     */
+    private void noteVsync(long frameTimeNanos) {
+        long gap = frameTimeNanos - mPrevVsyncNanos;
+        mPrevVsyncNanos = frameTimeNanos;
+        if (gap < 2_000_000L || gap > 50_000_000L) return;
+        if (mFramePeriodNanos == 0L || gap < mFramePeriodNanos) {
+            mFramePeriodNanos = gap;
+            LiveWallpaperRenderer renderer = mRenderer;
+            if (renderer != null) renderer.setFramePeriodMs(gap / 1_000_000f);
+        }
+    }
+
     @Nullable
     private LiveWallpaperRenderer ensureRenderer() {
         LiveWallpaperRenderer renderer = mRenderer;
@@ -252,6 +271,7 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
             return null;
         }
         renderer.rebuild(mFrameW, mFrameH);
+        if (mFramePeriodNanos != 0L) renderer.setFramePeriodMs(mFramePeriodNanos / 1_000_000f);
         mRenderer = renderer;
         return renderer;
     }

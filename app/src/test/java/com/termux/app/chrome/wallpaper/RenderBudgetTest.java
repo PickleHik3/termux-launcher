@@ -36,6 +36,23 @@ public class RenderBudgetTest {
     }
 
     @Test
+    public void onA120HzScreenRendersLandingWithinTheNextVsyncPass() {
+        // pong: p90 9.0 ms whether the shader ran at ÷2 or ÷4, one 120 Hz frame of GPU queueing.
+        RenderBudget budget = new RenderBudget();
+        budget.setFramePeriodMs(8.33f);
+        assertEquals(10.41f, budget.limitMs(), 0.01f);
+        assertTrue(fill(budget, RenderBudget.WINDOW, 9.1f));
+        assertFalse("a render that needs a second frame does not keep up", fill(budget, RenderBudget.WINDOW, 16.7f));
+    }
+
+    @Test
+    public void theFrameLimitNeverDropsUnderTheFloor() {
+        RenderBudget budget = new RenderBudget();
+        budget.setFramePeriodMs(2f);
+        assertEquals(RenderBudget.P90_LIMIT_MS, budget.limitMs(), 0f);
+    }
+
+    @Test
     public void tenPercentSlowOutliersDoNotTripTheLimit() {
         RenderBudget budget = new RenderBudget();
         boolean ok = true;

@@ -125,20 +125,16 @@ public final class RegionMasks {
         float[] skyM = group(in, lum, lab, picks, "sky", "sky", MIN_SKY, gemma);
         float[] foliage = group(in, lum, lab, picks, "foliage", "foliage", MIN_FOLIAGE, gemma);
 
-        // subject: saliency gated by near depth or subject-like labels
+        // subject: saliency, less whatever SegFormer calls sky (U-2-Net often takes in bright clouds)
         float[] subject;
         int[] subjPick = pick(picks, "subject");
         if (subjPick != null) {
             subject = clusterMask(in, lum, lab, subjPick);
         } else {
             float[] sal = GuidedFilter.filter(lum, in.saliency, w, h, GUIDE_RADIUS, GUIDE_EPS);
-            float[] like = in.groups.get("subject_like");
+            float[] skyP = in.groups.get("sky");
             subject = new float[n];
-            for (int i = 0; i < n; i++) {
-                float near = Planes.smoothstep(0.45f, 0.65f, in.depth[i]);
-                float lk = like == null ? 0f : like[i];
-                subject[i] = sal[i] * Math.max(near, lk);
-            }
+            for (int i = 0; i < n; i++) subject[i] = sal[i] * (1f - (skyP == null ? 0f : skyP[i]));
             subject = Planes.smooth(subject, 0.3f, 0.7f);
         }
 
@@ -226,9 +222,20 @@ public final class RegionMasks {
     private static float[] group(Inputs in, float[] lum, int[] lab, @Nullable Map<String, int[]> picks,
                                  String pickKey, String groupName, float minCoverage, boolean gemma) {
         int[] p = pick(picks, pickKey);
-        if (p != null) return clusterMask(in, lum, lab, p);
         int n = in.w * in.h;
         float[] raw = in.groups.get(groupName);
+        if (p != null) {
+            float[] picked = clusterMask(in, lum, lab, p);
+            // Gemma names colour regions, and a region can run across the line between two things
+            // (a blue mountain against a blue sky). Where SegFormer found the group, keep Gemma's
+            // pick only where SegFormer agrees at least a little; where it found nothing (flat
+            // graphic art), Gemma's pick stands alone.
+            if (raw == null) return picked;
+            float[] seg = GuidedFilter.filter(lum, raw, in.w, in.h, GUIDE_RADIUS, GUIDE_EPS);
+            if (Planes.coverage(seg, 0.5f) < minCoverage) return picked;
+            for (int i = 0; i < n; i++) picked[i] *= Planes.smoothstep(0.05f, 0.3f, seg[i]);
+            return picked;
+        }
         if (raw == null) return new float[n];
         float[] m = Planes.smooth(GuidedFilter.filter(lum, raw, in.w, in.h, GUIDE_RADIUS, GUIDE_EPS), 0.3f, 0.7f);
         float cov = Planes.coverage(m, 0.5f);
