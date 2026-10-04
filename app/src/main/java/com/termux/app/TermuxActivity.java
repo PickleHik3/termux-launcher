@@ -845,6 +845,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new SurfaceEditorController(new SurfaceEditorHost());
 
     /**
+     * The one Appearance surface (appearance-round-2026-10-04.md): Overview, Look, Layout and Icons
+     * as pages of a host view in the content, with the editor above lent to it. Every door opens
+     * it through {@link #openAppearanceSurface}.
+     */
+    private final com.termux.app.surfaces.AppearanceSurfaceController mAppearance =
+        new com.termux.app.surfaces.AppearanceSurfaceController(new AppearanceSurfaceHost(), mSurfaceEditor);
+
+    /**
+     * What the Overview opens with when the surface is opened again after Photo…: the centred slot
+     * and both pending choices, the cropped photo among them. Read once, by the next Overview.
+     */
+    @Nullable private com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState mOverviewRestore;
+
+    /**
      * Layout mode of the one editor: where a place's elements sit rather than how its surfaces
      * look. {@link #mSurfaceEditor} hosts it, lending it the frame's canvas and the bottom area's
      * tray; its session opens and closes with that editor.
@@ -8132,9 +8146,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     protected void onStop() {
         super.onStop();
         Logger.logDebug(LOG_TAG, "onStop");
-        // Leaving the launcher (an app switch, the screen off) while Look or Layout is up: the
-        // wallpaper page does not reappear later out of context when that editor ends.
-        mWallpaperPickerReturn = null;
+        // The Appearance surface survives a stop (the overlay registry's STOP keeps it, as it kept
+        // the editor); only a HOME press closes it.
         // Deliberately not detached here: this Activity is stopped, not gone, and the pane routes
         // an agent drives from a shell (TerminalActionDispatcher.backgroundSafe) need to keep
         // reaching it while the user is elsewhere. isHostAlive() still answers true — only
@@ -10733,15 +10746,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         String initialSection = intent.getStringExtra(EXTRA_SURFACE_EDITOR_SECTION);
         intent.removeExtra(EXTRA_SURFACE_EDITOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR_SECTION);
-        mSurfaceEditor.enter(initialSection);
+        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.LOOK,
+            initialSection, null, null);
     }
 
-    /** Settings' "Appearance" row: the launcher comes forward with the wallpaper picker open. */
+    /** Settings' "Appearance" row: the launcher comes forward with the Appearance surface open. */
     private void handleWallpaperStyleIntent(@Nullable Intent intent) {
         if (intent == null || !intent.getBooleanExtra(EXTRA_WALLPAPER_STYLE, false))
             return;
         intent.removeExtra(EXTRA_WALLPAPER_STYLE);
-        openWallpaperPicker();
+        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
     }
 
     /**
@@ -10780,9 +10794,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void openLayoutEditor(@Nullable com.termux.app.wall.PaneWallPage place) {
         // The wall has to be built before the editor can be held on a place, and a cold start
         // delivers the intent while the root view is still being laid out.
-        View root = findViewById(R.id.activity_termux_root_view);
-        if (root != null) root.post(() -> mSurfaceEditor.enterLayout(place));
-        else mSurfaceEditor.enterLayout(place);
+        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.LAYOUT,
+            null, place, null);
     }
 
     /** The activity's half of the Layout editor's seam: its views, the places, the chrome pass. */
@@ -10906,14 +10919,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final class SurfaceEditorHost implements SurfaceEditorController.Host {
         @NonNull @Override public Context context() {
             return TermuxActivity.this;
-        }
-
-        @Override public void onEditorClosed() {
-            if (mWallpaperPickerReturn == null) return;
-            // Posted: the editor may be ending from inside its own Save / Discard dialog.
-            View root = findViewById(R.id.activity_termux_root_view);
-            if (root != null) root.post(TermuxActivity.this::returnToWallpaperPicker);
-            else returnToWallpaperPicker();
         }
 
         @Nullable @Override public <T extends View> T findView(int viewId) {
@@ -13804,7 +13809,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The photo pick and crop ended: show the wallpaper page again where Photo… left it, with
+     * The photo pick and crop ended: open the Appearance surface on its Overview again where Photo… left it, with
      * {@code photo} (when the crop finished) as that slot's pending choice. Nothing is applied here;
      * the page's Apply sets it through {@code WallpaperSlots}.
      */
@@ -13822,13 +13827,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 slot != null ? slot : com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME, photo,
                 com.termux.app.chrome.wallpaper.WallpaperSlots.read(this));
         if (restore == null) return;
-        // Posted: results arrive while the activity is still coming back to the front.
-        View root = findViewById(R.id.activity_termux_root_view);
-        Runnable reopen = () -> {
-            if (!isFinishing() && !isDestroyed()) openWallpaperPicker(restore);
-        };
-        if (root != null) root.post(reopen);
-        else reopen.run();
+        // Posted by the opener: results arrive while the activity is still coming back to the front.
+        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW,
+            null, null, restore);
     }
 
     private int getCurrentSystemWallpaperId() {
@@ -13964,8 +13965,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mTermuxTerminalViewClient.shareSessionTranscript();
                 return true;
             case CONTEXT_MENU_SET_WALLPAPER_ID:
-                // The wallpaper page on every API level: Photo… there, previewed before Apply.
-                openWallpaperPicker();
+                // The Overview on every API level: Photo… there, previewed before Apply.
+                openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
                 return true;
             case CONTEXT_MENU_REMOVE_WALLPAPER_ID:
                 setWallpaperModeEnabled(this, !shouldUseWallpaperPassthroughMode());
@@ -14730,22 +14731,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
-                if (!mSurfaceEditor.isActive()) return false;
-                mSurfaceEditor.requestClose();
-                return true;
+                // Icons to Overview, an editor to Overview (after its unsaved-changes question),
+                // Overview to the launcher; spent on a hop that is playing.
+                return mAppearance.onBack();
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
                 switch (reason) {
                     case STOP:
-                        // The editor survives a stop; only its borrowed status-pane shape goes back.
-                        mSurfaceEditor.restoreExpandedStatusAfterSurfaceEditor();
+                        // The surface survives a stop; only the editor's borrowed status-pane
+                        // shape goes back.
+                        mAppearance.onStop();
                         break;
                     case HOME:
-                        // Back to the home screen means leaving the editor — through its own
-                        // unsaved-changes rule, never by discarding. It also means leaving the
-                        // wallpaper page the editor was opened from: it does not come back.
-                        mWallpaperPickerReturn = null;
-                        mSurfaceEditor.requestExit();
+                        // Back to the home screen means leaving the surface: the editor through
+                        // its own unsaved-changes rule, never by discarding.
+                        mAppearance.requestExit();
                         break;
                     default:
                         break;
@@ -16896,114 +16896,157 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * wraps a private handler that the terminal action sheet already invokes, so
      * the palette, a keybind, and a remote caller reach the same code.
      */
-    void openWallpaperPicker() {
-        openWallpaperPicker(null);
+    // Opens the Appearance surface on {@code page}: the Overview, or straight into Look or Layout.
+    // Every door calls this: the Settings row, the terminal menu, the corner tabs, a deep link, and
+    // the remote appearance.* actions.
+    void openAppearanceSurface(@NonNull com.termux.app.surfaces.AppearanceSurfaceController.PageId page) {
+        openAppearanceSurface(page, null, null, null);
     }
 
-    /**
-     * Where the wallpaper page goes back to when the Look or Layout editor it opened ends; null
-     * when no editor was opened from the page. Dropped when the activity stops or a HOME press
-     * ends the editor, so the page never comes back out of context.
-     */
-    @Nullable private com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState mWallpaperPickerReturn;
-
-    private void openWallpaperPicker(
+    private void openAppearanceSurface(
+            @NonNull com.termux.app.surfaces.AppearanceSurfaceController.PageId page,
+            @Nullable String section, @Nullable com.termux.app.wall.PaneWallPage place,
             @Nullable com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState restore) {
-        // The page on every API level. Without the animated backgrounds (below API 34, or Fancier
-        // Glass off) it holds the recent photos, Photo… and the current pictures only.
-        boolean animatedOffered = mPreferences != null
-            && com.termux.app.chrome.wallpaper.GeneratedWallpaperApplier.offeredFor(
-                Build.VERSION.SDK_INT, mPreferences.isFancierGlassEnabled());
-        // A fresh page has no pending photo: any left were from a return that never came.
-        if (restore == null) com.termux.app.chrome.wallpaper.WallpaperSlots.clearPendingPhotos(this);
-        com.termux.app.chrome.wallpaper.WallpaperPickerPage.show(this,
-            com.termux.app.chrome.wallpaper.WallpaperPickerPage.systemSlots(this),
-            new com.termux.app.chrome.wallpaper.WallpaperPickerPage.Listener() {
-                @Override public void onPageShown(boolean shown) {
-                    // The page hides the launcher's own backdrop: pause it while the page is up.
-                    if (mLiveWallpaperHost != null) mLiveWallpaperHost.setCovered(shown);
-                }
-
-                @Override public void onPickPhoto(
-                        @NonNull com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot,
-                        @NonNull com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState back) {
-                    launchManagedWallpaperPicker(slot, back);
-                }
-
-                @Override public void onApplied(
-                        @NonNull com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot,
-                        @NonNull com.termux.app.chrome.wallpaper.WallpaperSlots.Choice choice) {
-                    // The applier's changed listener has already told the live host; the glass
-                    // still has to pick up the new still as its managed picture.
-                    // A photo's set has already forgotten any generated background (the same
-                    // listener heard it).
-                    if (slot != com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME) return;
-                    if (isFinishing() || isDestroyed()) return;
-                    refreshWallpaperPicture();
-                    setWallpaperModeEnabled(TermuxActivity.this, true);
-                    updateWindowBackgroundForCurrentSession();
-                    if (choice.photo) {
-                        View rootView = findViewById(R.id.activity_termux_root_view);
-                        if (rootView != null) rootView.post(TermuxActivity.this::applyWallpaperOffsetFixIfNeeded);
-                    }
-                    mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-                }
-
-                @Override public void onOpenLook(
-                        @NonNull com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState back) {
-                    mWallpaperPickerReturn = back;
-                    openSurfaceEditor();
-                    returnToWallpaperPickerIfEditorDidNotOpen();
-                }
-
-                @Override public void onOpenLayout(
-                        @NonNull com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState back) {
-                    mWallpaperPickerReturn = back;
-                    openLayoutEditor(null);
-                    returnToWallpaperPickerIfEditorDidNotOpen();
-                }
-
-                @NonNull @Override
-                public com.termux.app.launcher.data.IconPackChoices.Listing iconPacks() {
-                    // The dock and pinned pages' pack; its empty value follows the launcher-wide
-                    // pack, which is the system's icons unless one is set there.
-                    String global = com.termux.app.launcher.data.IconPackChoices.current(mPreferences,
-                        com.termux.app.launcher.data.IconPackChoices.KEY_GLOBAL);
-                    return com.termux.app.launcher.data.IconPackChoices.listing(TermuxActivity.this,
-                        mPreferences, com.termux.app.launcher.data.IconPackChoices.KEY_PINNED,
-                        getString(global.isEmpty() ? R.string.wallpaper_picker_icon_pack_system
-                            : R.string.wallpaper_picker_icon_pack_global));
-                }
-
-                @Override public void onIconPackChosen(@NonNull String packageName) {
-                    // As the Style settings row does: the icon cache drops the old artwork and
-                    // the launcher restyles now, under the page.
-                    com.termux.app.launcher.data.IconPackChoices.apply(TermuxActivity.this, mPreferences,
-                        com.termux.app.launcher.data.IconPackChoices.KEY_PINNED, packageName);
-                }
-            }, animatedOffered, restore);
-    }
-
-    /**
-     * Look and Layout open the editor at once or on the next frame (Layout waits for the wall);
-     * if it did not open at all, nothing will end it, so bring the page straight back.
-     */
-    private void returnToWallpaperPickerIfEditorDidNotOpen() {
-        Runnable check = () -> {
-            if (mWallpaperPickerReturn != null && !mSurfaceEditor.isActive())
-                returnToWallpaperPicker();
-        };
+        mOverviewRestore = restore;
+        // The wall has to be built before the editor can be held on a place, and a cold start
+        // delivers the intent while the root view is still being laid out.
         View root = findViewById(R.id.activity_termux_root_view);
-        if (root != null) root.post(check);
-        else check.run();
+        Runnable open = () -> {
+            if (!isFinishing() && !isDestroyed()) mAppearance.open(page, section, place);
+        };
+        if (root != null) root.post(open);
+        else open.run();
     }
 
-    /** The editor the wallpaper page opened has ended: show the page again where it was. */
-    private void returnToWallpaperPicker() {
-        com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState back = mWallpaperPickerReturn;
-        mWallpaperPickerReturn = null;
-        if (back == null || isFinishing() || isDestroyed()) return;
-        openWallpaperPicker(back);
+    /** The activity's half of the Appearance surface's seam: its content, its backdrop, its pages. */
+    private final class AppearanceSurfaceHost
+            implements com.termux.app.surfaces.AppearanceSurfaceController.Host {
+        @NonNull @Override public Context context() {
+            return TermuxActivity.this;
+        }
+
+        @Nullable @Override public ViewGroup content() {
+            return findViewById(android.R.id.content);
+        }
+
+        @Override public void setCovered(boolean covered) {
+            // The surface hides the launcher's own backdrop: paused for the session, once.
+            if (mLiveWallpaperHost != null) mLiveWallpaperHost.setCovered(covered);
+        }
+
+        @Override public void createOverview(
+                @NonNull com.termux.app.surfaces.AppearanceSurfaceController.Navigator navigator,
+                @NonNull java.util.function.Consumer<com.termux.app.surfaces.AppearanceSurfaceController.OverviewPage> ready) {
+            // On every API level. Without the animated backgrounds (below API 34, or Fancier Glass
+            // off) the page holds the recent photos, Photo… and the current pictures only.
+            final boolean animatedOffered = mPreferences != null
+                && com.termux.app.chrome.wallpaper.GeneratedWallpaperApplier.offeredFor(
+                    Build.VERSION.SDK_INT, mPreferences.isFancierGlassEnabled());
+            final com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState restore = mOverviewRestore;
+            mOverviewRestore = null;
+            final com.termux.app.chrome.wallpaper.WallpaperPickerPage.Slots slots =
+                com.termux.app.chrome.wallpaper.WallpaperPickerPage.systemSlots(TermuxActivity.this);
+            final com.termux.app.chrome.wallpaper.WallpaperPickerPage.Io io =
+                com.termux.app.chrome.wallpaper.WallpaperPickerPage.Io.background();
+            // Everything the page opens with is read here, off the main thread: the slots (binder
+            // calls), the recent photos, the manifest of each photo's living still (a SHA-256).
+            io.run(() -> {
+                // A fresh page has no pending photo: any left were from a return that never came.
+                if (restore == null) {
+                    com.termux.app.chrome.wallpaper.WallpaperSlots.clearPendingPhotos(TermuxActivity.this);
+                }
+                return com.termux.app.chrome.wallpaper.WallpaperPickerPage.load(slots,
+                    animatedOffered && Build.VERSION.SDK_INT >= 34, restore);
+            }, loaded -> {
+                if (loaded == null || isFinishing() || isDestroyed()) {
+                    io.shutdown();
+                    navigator.close();
+                    return;
+                }
+                ready.accept(new com.termux.app.chrome.wallpaper.WallpaperPickerPage(TermuxActivity.this,
+                    slots, overviewListener(), Build.VERSION.SDK_INT, animatedOffered, navigator::close,
+                    restore, new com.termux.app.chrome.wallpaper.WallpaperThumbs(), loaded, io));
+            });
+        }
+
+        @Nullable @Override public com.termux.app.surfaces.AppearanceSurfaceController.Page createIconsPage(
+                @NonNull com.termux.app.surfaces.AppearanceSurfaceController.Navigator navigator) {
+            // TODO(icons): the standalone Icon pack page (a home-screen preview, a scrolling row of
+            // pack tiles, "Pinned app icons only") is built by another worker. When it lands,
+            // construct it here instead of the stand-in:
+            //   return new IconPackPage(TermuxActivity.this, <its Host over mPreferences>, ...);
+            // with root()/title() and a Host that applies a pack the way iconPackChosen does below,
+            // adapted to AppearanceSurfaceController.Page (onShown/onHidden/release).
+            return new com.termux.app.surfaces.AppearanceIconsPlaceholderPage(TermuxActivity.this,
+                new com.termux.app.surfaces.AppearanceIconsPlaceholderPage.Packs() {
+                    @NonNull @Override
+                    public com.termux.app.launcher.data.IconPackChoices.Listing listing() {
+                        // The dock and pinned pages' pack; its empty value follows the launcher-wide
+                        // pack, which is the system's icons unless one is set there.
+                        String global = com.termux.app.launcher.data.IconPackChoices.current(mPreferences,
+                            com.termux.app.launcher.data.IconPackChoices.KEY_GLOBAL);
+                        return com.termux.app.launcher.data.IconPackChoices.listing(TermuxActivity.this,
+                            mPreferences, com.termux.app.launcher.data.IconPackChoices.KEY_PINNED,
+                            getString(global.isEmpty() ? R.string.wallpaper_picker_icon_pack_system
+                                : R.string.wallpaper_picker_icon_pack_global));
+                    }
+
+                    @Override public void choose(@NonNull String packageName) {
+                        // As the Style settings row does: the icon cache drops the old artwork and
+                        // the launcher restyles now, under the page.
+                        com.termux.app.launcher.data.IconPackChoices.apply(TermuxActivity.this, mPreferences,
+                            com.termux.app.launcher.data.IconPackChoices.KEY_PINNED, packageName);
+                    }
+                }, navigator);
+        }
+
+        @Override public void onClosed() {
+            mOverviewRestore = null;
+        }
+    }
+
+    /** What the Overview asks of the activity. */
+    @NonNull
+    private com.termux.app.chrome.wallpaper.WallpaperPickerPage.Listener overviewListener() {
+        return new com.termux.app.chrome.wallpaper.WallpaperPickerPage.Listener() {
+            @Override public void onPickPhoto(
+                    @NonNull com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot,
+                    @NonNull com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState back) {
+                // The surface goes away while Android's photo picker and the crop run; it opens
+                // again on the Overview with the cropped photo as that card's pending choice.
+                mAppearance.closeNow();
+                launchManagedWallpaperPicker(slot, back);
+            }
+
+            @Override public void onApplied(
+                    @NonNull com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot,
+                    @NonNull com.termux.app.chrome.wallpaper.WallpaperSlots.Choice choice) {
+                // The applier's changed listener has already told the live host; the glass
+                // still has to pick up the new still as its managed picture.
+                if (slot != com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.HOME) return;
+                if (isFinishing() || isDestroyed()) return;
+                refreshWallpaperPicture();
+                setWallpaperModeEnabled(TermuxActivity.this, true);
+                updateWindowBackgroundForCurrentSession();
+                if (choice.photo) {
+                    View rootView = findViewById(R.id.activity_termux_root_view);
+                    if (rootView != null) rootView.post(TermuxActivity.this::applyWallpaperOffsetFixIfNeeded);
+                }
+                mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+            }
+
+            @Override public void onOpenLook() {
+                mAppearance.open(com.termux.app.surfaces.AppearanceSurfaceController.PageId.LOOK);
+            }
+
+            @Override public void onOpenLayout() {
+                mAppearance.open(com.termux.app.surfaces.AppearanceSurfaceController.PageId.LAYOUT);
+            }
+
+            @Override public void onOpenIcons() {
+                mAppearance.open(com.termux.app.surfaces.AppearanceSurfaceController.PageId.ICONS);
+            }
+        };
     }
 
     /** Flips wallpaper passthrough mode and reports the value it moved to. */
@@ -17076,7 +17119,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     void openSurfaceEditor() {
         // The look is every place's, so the editor opens over whatever place is on screen and
         // what it moves lands everywhere.
-        mSurfaceEditor.enter();
+        openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.LOOK);
     }
 
     void openSettings() {
@@ -18769,7 +18812,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 TermuxActivity.this.openLayoutEditor(com.termux.app.wall.PaneWallPage.WIDGETS);
             }
             @Override public void openWallpaperPicker() {
-                TermuxActivity.this.openWallpaperPicker();
+                TermuxActivity.this.openAppearanceSurface(
+                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
             }
             @Override public boolean isMinimalMode() {
                 return TermuxActivity.this.isMinimalMode();
@@ -18835,7 +18879,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 setMinimalMode(!TermuxActivity.this.isMinimalMode());
             }
             @Override public void openWallpaperPicker() {
-                TermuxActivity.this.openWallpaperPicker();
+                TermuxActivity.this.openAppearanceSurface(
+                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
             }
             @Override public void startDisplay() { startEmbeddedDisplay(); }
             @Override public void turnOnDisplay() { turnOnEmbeddedDisplay(); }
@@ -22445,7 +22490,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void openWallpaperPicker() {
-            TermuxActivity.this.openWallpaperPicker();
+            TermuxActivity.this.openAppearanceSurface(
+                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
         }
 
         @Override public void openSettings() {
@@ -23134,7 +23180,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void openWallpaperPicker() {
-            TermuxActivity.this.openWallpaperPicker();
+            TermuxActivity.this.openAppearanceSurface(
+                    com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
         }
 
         @Override public boolean toggleWallpaperMode() {

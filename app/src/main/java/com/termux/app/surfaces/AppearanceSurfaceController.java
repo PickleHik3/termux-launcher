@@ -109,6 +109,9 @@ public final class AppearanceSurfaceController {
 
         /** Closes the surface (the Overview's own back arrow). */
         void close();
+
+        /** One page back: Icons to the Overview. Spent as a Back press is. */
+        void back();
     }
 
     /**
@@ -215,6 +218,10 @@ public final class AppearanceSurfaceController {
         @Override public void close() {
             closeAnimated();
         }
+
+        @Override public void back() {
+            onBack();
+        }
     };
 
     private boolean mOpen;
@@ -266,13 +273,23 @@ public final class AppearanceSurfaceController {
 
     // -------------------------------------------------------------------------------------- open
 
+    /** {@link #open(PageId, String, PaneWallPage)} with no section and no place. */
+    public void open(@NonNull PageId page) {
+        open(page, null, null);
+    }
+
     /**
      * Opens the surface on {@code page}: the Overview, or straight into Look or Layout (a corner
-     * tab's door). Open already, it goes to that page.
+     * tab's door, a settings deep link naming {@code section}, a Layout door naming {@code place}).
+     * Open already, it goes to that page; an editor already up moves to that mode and place.
      */
-    public void open(@NonNull PageId page) {
+    public void open(@NonNull PageId page, @Nullable String section, @Nullable PaneWallPage place) {
+        boolean editorPage = page == PageId.LOOK || page == PageId.LAYOUT;
         if (mOpen) {
-            go(page);
+            if (editorPage && mEditor.isPresented() && !mTransitioning)
+                mEditor.present(page == PageId.LAYOUT, place, section, 0f, 0f, null);
+            else
+                go(page);
             return;
         }
         ViewGroup content = mHost.content();
@@ -286,7 +303,7 @@ public final class AppearanceSurfaceController {
         if (page == PageId.LOOK || page == PageId.LAYOUT) {
             mDirect = true;
             mShown = page;
-            mEditor.present(page == PageId.LAYOUT, null, null, 0f, 0f, null);
+            mEditor.present(page == PageId.LAYOUT, place, section, 0f, 0f, null);
             return;
         }
         mDirect = false;
@@ -660,7 +677,7 @@ public final class AppearanceSurfaceController {
     }
 
     /** Closes at once: the pages let go, the backdrop shows again, the session ends. */
-    void closeNow() {
+    public void closeNow() {
         if (!mOpen)
             return;
         mOpen = false;
