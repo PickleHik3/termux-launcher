@@ -19,6 +19,8 @@ public final class TaiRuntimeOptions {
     @Nullable public final Boolean thinkingEnabled;
     @Nullable public final Boolean speculativeDecodingEnabled;
     @Nullable public final Integer idleUnloadMinutes;
+    /** A load the caller will unload within a minute; the memory budget gives it a smaller reserve. */
+    @Nullable public final Boolean momentary;
 
     public TaiRuntimeOptions(
         @Nullable Integer maxTokens,
@@ -63,6 +65,25 @@ public final class TaiRuntimeOptions {
         @Nullable Boolean speculativeDecodingEnabled,
         @Nullable Integer idleUnloadMinutes
     ) {
+        this(maxTokens, topK, topP, temperature, accelerator, contextWindow, threadCount, precision,
+            memoryMode, thinkingEnabled, speculativeDecodingEnabled, idleUnloadMinutes, null);
+    }
+
+    public TaiRuntimeOptions(
+        @Nullable Integer maxTokens,
+        @Nullable Integer topK,
+        @Nullable Double topP,
+        @Nullable Double temperature,
+        @Nullable String accelerator,
+        @Nullable Integer contextWindow,
+        @Nullable Integer threadCount,
+        @Nullable String precision,
+        @Nullable String memoryMode,
+        @Nullable Boolean thinkingEnabled,
+        @Nullable Boolean speculativeDecodingEnabled,
+        @Nullable Integer idleUnloadMinutes,
+        @Nullable Boolean momentary
+    ) {
         this.maxTokens = maxTokens;
         this.topK = topK;
         this.topP = topP;
@@ -75,6 +96,7 @@ public final class TaiRuntimeOptions {
         this.thinkingEnabled = thinkingEnabled;
         this.speculativeDecodingEnabled = speculativeDecodingEnabled;
         this.idleUnloadMinutes = idleUnloadMinutes;
+        this.momentary = momentary;
     }
 
     @NonNull
@@ -92,6 +114,7 @@ public final class TaiRuntimeOptions {
         putNullable(json, "thinkingEnabled", thinkingEnabled);
         putNullable(json, "speculativeDecodingEnabled", speculativeDecodingEnabled);
         putNullable(json, "idleUnloadMinutes", idleUnloadMinutes);
+        putNullable(json, "momentary", momentary);
         json.put("usesGalleryGenerationDefaultsForNulls", true);
         return json;
     }
@@ -110,7 +133,8 @@ public final class TaiRuntimeOptions {
             nullableString(json, "memoryMode"),
             nullableBoolean(json, "thinkingEnabled"),
             nullableBoolean(json, "speculativeDecodingEnabled"),
-            nullableInteger(json, "idleUnloadMinutes")
+            nullableInteger(json, "idleUnloadMinutes"),
+            nullableBoolean(json, "momentary")
         );
     }
 
@@ -129,7 +153,28 @@ public final class TaiRuntimeOptions {
             memoryMode,
             thinkingEnabled,
             speculativeDecodingEnabled,
-            idleUnloadMinutes
+            idleUnloadMinutes,
+            momentary
+        );
+    }
+
+    /** Declares this load momentary (or not): the budget keeps a smaller reserve for a load that ends within a minute. */
+    @NonNull
+    public TaiRuntimeOptions withMomentary(@Nullable Boolean overrideMomentary) {
+        return new TaiRuntimeOptions(
+            maxTokens,
+            topK,
+            topP,
+            temperature,
+            accelerator,
+            contextWindow,
+            threadCount,
+            precision,
+            memoryMode,
+            thinkingEnabled,
+            speculativeDecodingEnabled,
+            idleUnloadMinutes,
+            overrideMomentary
         );
     }
 
@@ -147,7 +192,8 @@ public final class TaiRuntimeOptions {
             memoryMode,
             thinkingEnabled,
             speculativeDecodingEnabled,
-            idleUnloadMinutes
+            idleUnloadMinutes,
+            momentary
         );
     }
 
@@ -177,7 +223,8 @@ public final class TaiRuntimeOptions {
             overrideMemoryMode != null ? overrideMemoryMode : memoryMode,
             overrideThinkingEnabled != null ? overrideThinkingEnabled : thinkingEnabled,
             overrideSpeculativeDecodingEnabled != null ? overrideSpeculativeDecodingEnabled : speculativeDecodingEnabled,
-            idleUnloadMinutes
+            idleUnloadMinutes,
+            momentary
         );
     }
 

@@ -3072,7 +3072,8 @@ public final class TaiManager {
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, fileBytes, encoders,
             device.physicalMemoryBytes, available, accelerators, cap,
             crashedAccelerator, crashedContext, options.contextWindow != null, device.memoryThresholdBytes,
-            measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend)));
+            measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend),
+            options.momentary == Boolean.TRUE));
         if (!plan.fits) {
             TaiEventLog.log(appContext, TaiEventLog.OOM_GUARD, spec.id, spec.backend, plan.accelerator,
                 plan.contextWindow, 0L, plan.neededFreeBytes(),
@@ -3080,7 +3081,8 @@ public final class TaiManager {
                     + plan.availableBytes / (1024L * 1024L) + " MB available");
             return new LoadDecision(null, insufficientMemory(spec.displayName, plan), plan, Collections.<String>emptyList());
         }
-        String fallbackReason = acceleratorFallbackReason(spec, device, preflight, plan, fileBytes, encoders, available);
+        String fallbackReason = acceleratorFallbackReason(spec, device, preflight, plan, fileBytes, encoders, available,
+            options.momentary == Boolean.TRUE);
         TaiAcceleratorFallback.set(spec.id, fallbackReason);
         if (!fallbackReason.isEmpty()) {
             TaiEventLog.log(appContext, TaiEventLog.ACCEL_FALLBACK, spec.id, spec.backend, plan.accelerator,
@@ -3109,7 +3111,8 @@ public final class TaiManager {
         @NonNull TaiLoadBudget.Plan plan,
         long fileBytes,
         boolean encoders,
-        long available
+        long available,
+        boolean momentary
     ) {
         if (!"auto".equals(preflight.requestedAccelerator) || TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) return "";
         if (plan.accelerator == null) return "";
@@ -3129,7 +3132,7 @@ public final class TaiManager {
             TaiLoadBudget.FLOOR_CONTEXT, measuredHistory(spec, device));
         long needed = estimate.nonReclaimableBytes + TaiLoadBudget.marginBytes(estimate, device.memoryThresholdBytes)
             + plan.reserveBytes;
-        return "budget: needs " + needed / (1024L * 1024L) + " MB free, "
+        return (momentary ? "budget(momentary): needs " : "budget: needs ") + needed / (1024L * 1024L) + " MB free, "
             + available / (1024L * 1024L) + " MB available";
     }
 
@@ -3919,8 +3922,16 @@ public final class TaiManager {
         }
         Boolean thinking = booleanOverride(request, "thinking");
         Boolean speculative = booleanOverride(request, "speculative_decoding");
-        return options.withGenerationOverrides(maxTokens, topK, topP, temperature, accelerator,
-            contextWindow, threadCount, precision, memoryMode, thinking, speculative);
+        // "load_class": "momentary" declares a load the caller will unload within a minute, such as
+        // the living-still director; the budget then keeps a 1 GiB reserve instead of the full one.
+        // The field rides in the request body to the runtime process, which resolves it here again,
+        // so the decision made there sees the flag. Any other value leaves the load ordinary.
+        TaiRuntimeOptions overridden = options.withGenerationOverrides(maxTokens, topK, topP, temperature,
+            accelerator, contextWindow, threadCount, precision, memoryMode, thinking, speculative);
+        if (request.has("load_class") && "momentary".equals(request.optString("load_class", "").trim())) {
+            overridden = overridden.withMomentary(Boolean.TRUE);
+        }
+        return overridden;
     }
 
     @Nullable

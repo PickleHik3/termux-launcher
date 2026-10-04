@@ -84,6 +84,8 @@ public class GemmaSceneReaderTest {
         JSONObject o = new JSONObject(body);
         assertEquals("gemma-4-e4b-it-litert-lm-vision", o.getString("model"));
         assertEquals(3, o.getJSONArray("messages").getJSONObject(0).getJSONArray("content").length());
+        assertEquals("momentary", o.getString("load_class"));
+        assertEquals(2048, o.getInt("context_window"));
     }
 
     @Test

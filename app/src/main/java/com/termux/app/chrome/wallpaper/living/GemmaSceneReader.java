@@ -152,6 +152,9 @@ public final class GemmaSceneReader {
         // Two images, the prompt and a 400-token answer fit in about 1.5k tokens; the automatic
         // window (4096) only made the KV cache bigger.
         body.put("context_window", CONTEXT_WINDOW);
+        // The model is unloaded right after this one answer, so the budget may keep a smaller
+        // reserve; a remote provider's body sanitiser must strip it like context_window.
+        body.put("load_class", "momentary");
         return body.toString();
     }
 
