@@ -274,8 +274,10 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         Preference layout = findPreference("keyboard_layout");
         Preference shapes = findPreference("keyboard_shapes");
         Preference feedback = findPreference("keyboard_feedback");
-        Preference builtIn = findPreference("keyboard_built_in");
-        if (builtIn != null) builtIn.setEnabled(enabled);
+        for (String key : new String[] {"keyboard_sub_layout", "keyboard_sub_size", "keyboard_sub_typing"}) {
+            Preference row = findPreference(key);
+            if (row != null) row.setEnabled(enabled);
+        }
         if (layout != null) layout.setEnabled(enabled);
         if (shapes != null) shapes.setEnabled(enabled);
         if (feedback != null) feedback.setEnabled(enabled);

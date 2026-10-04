@@ -14,7 +14,6 @@
     android:background="?attr/colorSurface"
     android:fadingEdgeLength="@dimen/settings_chips_fade"
     android:fillViewport="true"
-    android:horizontalScrollBarEnabled="false"
     android:requiresFadingEdge="horizontal"
     android:scrollbars="none"
     android:visibility="gone">
