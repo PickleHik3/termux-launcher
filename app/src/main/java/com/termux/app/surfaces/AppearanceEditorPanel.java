@@ -423,9 +423,12 @@ final class AppearanceEditorPanel {
     }
 
     private int measureNow(int widthPx) {
+        int width = View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY);
+        int height = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        // Relative compound icons contribute width after inherited direction is resolved.
+        mRoot.measure(width, height);
         adaptHeader(widthPx);
-        mRoot.measure(View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        mRoot.measure(width, height);
         return mRoot.getMeasuredHeight();
     }
 

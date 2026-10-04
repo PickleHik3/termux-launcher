@@ -7,6 +7,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
@@ -23,8 +24,10 @@ import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -47,6 +50,17 @@ import java.util.concurrent.TimeUnit;
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class KeyboardPreferencesFragmentTest {
+
+    @Before
+    public void seedPreferencesFileBeforeMultiProcessReaders() throws Exception {
+        Context context = RuntimeEnvironment.getApplication().createPackageContext(
+            TermuxConstants.TERMUX_PACKAGE_NAME, Context.CONTEXT_RESTRICTED);
+        SharedPreferences prefs = context.getSharedPreferences(
+            TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+            Context.MODE_PRIVATE);
+        assertTrue(prefs.edit().putBoolean("keyboard_test_seed", true).commit());
+        assertTrue(prefs.edit().remove("keyboard_test_seed").commit());
+    }
 
     private KeyboardPreferencesFragment launch() {
         return launch(KeyboardPreferencesFragment.class);
