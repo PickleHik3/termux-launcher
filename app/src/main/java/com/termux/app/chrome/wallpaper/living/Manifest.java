@@ -14,12 +14,12 @@ import java.nio.charset.StandardCharsets;
 
 /**
  * One living still on disk (living-stills.md, Part C.5): a folder named by the photo's hash with
- * the image, the depth map, three RGB mask PNGs and {@code recipe.json}. The renderer reads
+ * the image, the depth map, three RGB mask PNGs (four from recipe v2) and {@code recipe.json}. The renderer reads
  * these files by name. {@code recipe.json} is written last, so a folder without it is a build
  * that did not finish and {@link #load} refuses it.
  *
  * <p>Masks (all RGB, never alpha): {@code maskA} R water, G sway, B sky; {@code maskB} R falling
- * water, G subject, B glow; {@code maskC} R bob, G mist, B particles.</p>
+ * water, G subject, B glow; {@code maskC} R bob, G mist, B particles; {@code maskD} (v2) R wind, G still, B spare.</p>
  */
 public final class Manifest {
     public static final String IMAGE = "image.png";
@@ -27,6 +27,8 @@ public final class Manifest {
     public static final String MASK_A = "maskA.png";
     public static final String MASK_B = "maskB.png";
     public static final String MASK_C = "maskC.png";
+    /** v2 only: R wind, G still, B spare. */
+    public static final String MASK_D = "maskD.png";
     public static final String RECIPE = "recipe.json";
 
     @NonNull private final File mDir;
@@ -45,6 +47,7 @@ public final class Manifest {
     @NonNull public File maskA() { return new File(mDir, MASK_A); }
     @NonNull public File maskB() { return new File(mDir, MASK_B); }
     @NonNull public File maskC() { return new File(mDir, MASK_C); }
+    @NonNull public File maskD() { return new File(mDir, MASK_D); }
     @NonNull public File recipeFile() { return new File(mDir, RECIPE); }
     @NonNull public LivingRecipe recipe() { return mRecipe; }
 
@@ -72,8 +75,7 @@ public final class Manifest {
     public static Manifest load(@NonNull File dir) {
         File recipeFile = new File(dir, RECIPE);
         for (String name : new String[] {IMAGE, DEPTH, MASK_A, MASK_B, MASK_C}) {
-            File f = new File(dir, name);
-            if (!f.isFile() || f.length() == 0) return null;
+            if (!present(new File(dir, name))) return null;
         }
         if (!recipeFile.isFile()) return null;
         try (InputStream in = new FileInputStream(recipeFile)) {
@@ -81,9 +83,15 @@ public final class Manifest {
             byte[] buf = new byte[4096];
             int n;
             while ((n = in.read(buf)) > 0) bos.write(buf, 0, n);
-            return new Manifest(dir, LivingRecipe.fromJson(new String(bos.toByteArray(), StandardCharsets.UTF_8)));
+            LivingRecipe recipe = LivingRecipe.fromJson(new String(bos.toByteArray(), StandardCharsets.UTF_8));
+            if (recipe.version >= 2 && !present(new File(dir, MASK_D))) return null;
+            return new Manifest(dir, recipe);
         } catch (IOException | JSONException e) {
             return null;
         }
+    }
+
+    private static boolean present(@NonNull File f) {
+        return f.isFile() && f.length() > 0;
     }
 }
