@@ -16973,38 +16973,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Nullable @Override public com.termux.app.surfaces.AppearanceSurfaceController.Page createIconsPage(
                 @NonNull com.termux.app.surfaces.AppearanceSurfaceController.Navigator navigator) {
-            // TODO(icons): the standalone Icon pack page (a home-screen preview, a scrolling row of
-            // pack tiles, "Pinned app icons only") is built by another worker. When it lands,
-            // construct it here instead of the stand-in:
-            //   return new IconPackPage(TermuxActivity.this, <its Host over mPreferences>, ...);
-            // with root()/title() and a Host that applies a pack the way iconPackChosen does below,
-            // adapted to AppearanceSurfaceController.Page (onShown/onHidden/release).
-            return new com.termux.app.surfaces.AppearanceIconsPlaceholderPage(TermuxActivity.this,
-                new com.termux.app.surfaces.AppearanceIconsPlaceholderPage.Packs() {
-                    @NonNull @Override
-                    public com.termux.app.launcher.data.IconPackChoices.Listing listing() {
-                        // The dock and pinned pages' pack; its empty value follows the launcher-wide
-                        // pack, which is the system's icons unless one is set there.
-                        String global = com.termux.app.launcher.data.IconPackChoices.current(mPreferences,
-                            com.termux.app.launcher.data.IconPackChoices.KEY_GLOBAL);
-                        return com.termux.app.launcher.data.IconPackChoices.listing(TermuxActivity.this,
-                            mPreferences, com.termux.app.launcher.data.IconPackChoices.KEY_PINNED,
-                            getString(global.isEmpty() ? R.string.wallpaper_picker_icon_pack_system
-                                : R.string.wallpaper_picker_icon_pack_global));
-                    }
-
-                    @Override public void choose(@NonNull String packageName) {
-                        // As the Style settings row does: the icon cache drops the old artwork and
-                        // the launcher restyles now, under the page.
-                        com.termux.app.launcher.data.IconPackChoices.apply(TermuxActivity.this, mPreferences,
-                            com.termux.app.launcher.data.IconPackChoices.KEY_PINNED, packageName);
-                    }
-                }, navigator);
+            // The Icon pack page: a home-screen preview with the dock's apps in the previewed pack,
+            // the row of packs and "Pinned app icons only". It applies a pack itself; its preview
+            // still is a small copy of the Home photo, decoded off the main thread, and the page
+            // re-reads once it lands.
+            final android.graphics.Bitmap[] still = new android.graphics.Bitmap[1];
+            final com.termux.app.chrome.appearance.IconPackPage page =
+                new com.termux.app.chrome.appearance.IconPackPage(TermuxActivity.this,
+                    new com.termux.app.chrome.appearance.IconPackPage.Host() {
+                        @Nullable @Override public android.graphics.Bitmap homeStill() {
+                            return still[0];
+                        }
+                    });
+            new Thread(() -> {
+                android.graphics.Bitmap decoded = decodeIconPreviewStill();
+                if (decoded == null) return;
+                runOnUiThread(() -> {
+                    still[0] = decoded;
+                    if (page.root().isShown()) page.onShown();
+                });
+            }, "appearance-icons-still").start();
+            return new com.termux.app.surfaces.AppearanceSurfaceController.Page() {
+                @NonNull @Override public View root() { return page.root(); }
+                @NonNull @Override public CharSequence title() { return page.title(); }
+                @Override public void onShown() { page.onShown(); }
+                @Override public void onHidden() { page.onHidden(); }
+                @Override public void release() { page.release(); }
+            };
         }
 
         @Override public void onClosed() {
             mOverviewRestore = null;
         }
+    }
+
+    /**
+     * The Home photo at about the Icon pack preview's size (the managed exact copy, sampled down to
+     * a 540 px wide decode), or null when there is none. Call it off the main thread.
+     */
+    @Nullable
+    private android.graphics.Bitmap decodeIconPreviewStill() {
+        java.io.File file = com.termux.app.chrome.WallpaperPictureReader.managedWallpaperExactFile(this);
+        if (!file.isFile()) return null;
+        android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        android.graphics.BitmapFactory.decodeFile(file.getPath(), bounds);
+        if (bounds.outWidth <= 0) return null;
+        android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
+        options.inSampleSize = Math.max(1, Integer.highestOneBit(bounds.outWidth / 540));
+        return android.graphics.BitmapFactory.decodeFile(file.getPath(), options);
     }
 
     /** What the Overview asks of the activity. */

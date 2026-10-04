@@ -507,6 +507,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** Whether the frame is showing the layout canvas. */
     private boolean mLayoutMode;
+
+    /** The session is on the Layout page rather than Look. */
+    @Override
+    public boolean isLayoutMode() {
+        return mLayoutMode;
+    }
     /** A Layout door opened the editor; Layout mode is shown once the frame is placed. */
     private boolean mOpenInLayout;
     /** The layout canvas's host: the frame's rect, over the scaled launcher. */

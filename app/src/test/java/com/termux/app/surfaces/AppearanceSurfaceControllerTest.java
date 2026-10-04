@@ -159,7 +159,7 @@ public class AppearanceSurfaceControllerTest {
         @Override public void setBackgroundAlpha(float alpha) { background = alpha; }
     }
 
-    private static final class FakeHost implements AppearanceSurfaceController.Host {
+    private static class FakeHost implements AppearanceSurfaceController.Host {
         final Activity activity;
         final List<Boolean> covered = new ArrayList<>();
         FakeOverview overview;

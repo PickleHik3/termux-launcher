@@ -36,8 +36,8 @@ public class DockAppearancePreferencesTest {
         preferences.setExtraKeysBlurRadius(-4);
         assertEquals(0, preferences.getExtraKeysBlurRadius());
 
-        preferences.setExtraKeysBlurRadius(31);
-        assertEquals(30, preferences.getExtraKeysBlurRadius());
+        preferences.setExtraKeysBlurRadius(49);
+        assertEquals(48, preferences.getExtraKeysBlurRadius());
     }
 
     @Test
@@ -116,7 +116,7 @@ public class DockAppearancePreferencesTest {
         preferences.setStatusBarGrain(101);
         preferences.setStatusBarCornerRadius(44);
 
-        assertEquals(30, preferences.getStatusBarBlurRadius());
+        assertEquals(48, preferences.getStatusBarBlurRadius());
         assertEquals(0, preferences.getStatusBarOpacity());
         assertEquals(100, preferences.getStatusBarGrain());
         assertEquals(40, preferences.getStatusBarCornerRadius());
