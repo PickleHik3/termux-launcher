@@ -5,6 +5,7 @@ import android.content.SharedPreferences;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.content.pm.PackageInfoCompat;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -208,8 +209,8 @@ public final class TaiRuntimeHistory {
     static long appVersionCode(@Nullable Context context) {
         if (context == null) return 0L;
         try {
-            return context.getApplicationContext().getPackageManager()
-                .getPackageInfo(context.getPackageName(), 0).getLongVersionCode();
+            return PackageInfoCompat.getLongVersionCode(context.getApplicationContext().getPackageManager()
+                .getPackageInfo(context.getPackageName(), 0));
         } catch (Exception e) {
             return 0L;
         }
