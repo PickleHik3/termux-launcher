@@ -161,3 +161,19 @@ JVM: the four packages' tests after each merge, then the full `testDebugUnitTest
 AGSL device test, the Bring to life flow with rules only (API 33, no Gemma). pong, on the
 developer's cue: the samurai picture and the dark lake through the new director; read `recipe.json`
 (`plan`, `director`, timings) and compare the masks with the boxes overlay in the evidence folder.
+
+## As built, 2026-10-04 evening (rounds 1 and 2, dev 4bc4da486)
+
+- A `SceneReader`/`ScenePlan`, B `ElementMasks`, C recipe v2 + `RecipeRules.fromPlan` + `Manifest.MASK_D`,
+  D shader (`uMaskD`, cloud warp with a three-tap curl, wind, `still`, particle kinds 7–10) merged, then
+  the builder wired: one 768 px decode, `SceneReader.read` with the installed model (E4B, else E2B),
+  `ElementMasks` + `fromPlan` on a plan, `RegionMasks` + `make(stats)` on none; maskD written on both
+  paths (black on the fallback); recipes are version 2. `GemmaSceneReader`, `markedCopy` and the marks
+  prompt are gone; `Chat` lives in `SceneReader`.
+- Seams fixed at integration: the two-element floor applies to model answers only (a persisted plan may
+  hold one); recipes serialise to the text they were read from (no back-fill of the v1 keys from the
+  director record); protected pixels get no particles; the guided-filter radius is capped at a quarter
+  of the element box so small elements are not blurred below one half.
+- Known gaps: no `bob` plane on the plan path (maskC red is zero there); `ElementMasks.warnings` are not
+  persisted; the progress weights still name the stage `gemma`; the AGSL device test for the new
+  uniforms has not run yet (Waydroid pass owed).
