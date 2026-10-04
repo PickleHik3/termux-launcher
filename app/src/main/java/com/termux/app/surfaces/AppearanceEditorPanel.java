@@ -595,6 +595,9 @@ final class AppearanceEditorPanel {
         String text = label.toString();
         int cut = text.indexOf(" \u00b7 ");
         if (cut <= 0) return label;
+        // The value is one word ("24\u00a0dp"): a label that wraps breaks after the dot, never
+        // between a number and its unit.
+        text = text.substring(0, cut + 3) + text.substring(cut + 3).replace(' ', '\u00a0');
         int quiet = MaterialColors.getColor(mRoot,
             com.google.android.material.R.attr.colorOnSurfaceVariant,
             ContextCompat.getColor(mContext, R.color.termux_on_surface));

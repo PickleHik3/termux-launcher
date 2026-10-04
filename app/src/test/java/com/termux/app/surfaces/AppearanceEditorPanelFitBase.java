@@ -405,6 +405,12 @@ public abstract class AppearanceEditorPanelFitBase {
             assertNotNull(name(label), layout);
             assertEquals("\"" + label.getText() + "\" is whole", 0,
                 layout.getEllipsisCount(layout.getLineCount() - 1));
+            String text = label.getText().toString();
+            int value = text.indexOf(" \u00b7 ") + 3;
+            if (value > 2 && value < text.length()) {
+                assertEquals("\"" + text + "\" keeps its value on one line",
+                    layout.getLineForOffset(value), layout.getLineForOffset(text.length() - 1));
+            }
             assertTrue("\"" + label.getText() + "\" fits its own height: " + layout.getHeight()
                     + " > " + label.getHeight(),
                 layout.getHeight() + label.getTotalPaddingTop() + label.getTotalPaddingBottom()
