@@ -205,9 +205,12 @@ public final class LivingRecipe {
         r.gemmaFallbackReason = o.has("gemmaFallbackReason") ? o.optString("gemmaFallbackReason") : null;
         // v1 recipes: skyFlow > 0 played the clouds as a scroll.
         r.cloudMode = r.skyFlow > 0 ? CLOUDS_SCROLL : CLOUDS_NONE;
-        r.director.model = r.gemmaModel;
-        r.director.accelerator = r.gemmaAccelerator;
-        r.director.fallbackReason = r.gemmaFallbackReason;
+        if (version < 2) {
+            // A v1 recipe has only the gemma* keys; they become the director record.
+            r.director.model = r.gemmaModel;
+            r.director.accelerator = r.gemmaAccelerator;
+            r.director.fallbackReason = r.gemmaFallbackReason;
+        }
         if (version >= 2) {
             JSONObject plan = o.optJSONObject("plan");
             r.plan = plan;
@@ -231,9 +234,8 @@ public final class LivingRecipe {
                 r.director.accelerator = dir.has("accelerator") ? dir.optString("accelerator") : r.director.accelerator;
                 r.director.fallbackReason = dir.has("fallbackReason") ? dir.optString("fallbackReason") : r.director.fallbackReason;
                 r.director.ms = dir.optLong("ms", 0);
-                if (r.gemmaModel == null) r.gemmaModel = r.director.model;
-                if (r.gemmaAccelerator == null) r.gemmaAccelerator = r.director.accelerator;
-                if (r.gemmaFallbackReason == null) r.gemmaFallbackReason = r.director.fallbackReason;
+                // The v1 keys are not back-filled from the record: a recipe must serialise to the
+                // same text it was read from, so each field keeps its own source.
             }
         }
         JSONObject models = o.optJSONObject("models");

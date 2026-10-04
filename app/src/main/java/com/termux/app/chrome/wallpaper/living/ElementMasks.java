@@ -190,7 +190,10 @@ public final class ElementMasks {
                 int i = y * w + x;
                 float far = Planes.clamp01((0.75f - in.depth[i]) / 0.6f);
                 mist[i] = far * (0.4f + 0.6f * low) * (1f - subject[i]);
-                particles[i] = (1f - subject[i]) * (1f - glow[i]) * (0.35f + 0.65f * (1f - in.depth[i]))
+                // Protected pixels get no particles at all: a soft subject edge of 0.6 would still
+                // let a third of them through, and a petal across a face is exactly the complaint.
+                particles[i] = still[i] > 0.5f ? 0f
+                    : (1f - subject[i]) * (1f - glow[i]) * (0.35f + 0.65f * (1f - in.depth[i]))
                     * (1f - Planes.clamp01(still[i]));
             }
         }
@@ -277,7 +280,10 @@ public final class ElementMasks {
             boolean colour = !anyWanted || want[id];
             ind[i] = band && colour ? inside[i] : 0f;
         }
-        float[] m = Planes.smooth(GuidedFilter.filter(lum, ind, w, h, RegionMasks.GUIDE_RADIUS, RegionMasks.GUIDE_EPS),
+        // The filter radius never exceeds a quarter of the box's shorter side: at the full radius a
+        // small element is blurred below one half and loses every overlap it should have won.
+        int radius = Math.max(1, Math.min(RegionMasks.GUIDE_RADIUS, Math.min(l.x1 - l.x0, l.y1 - l.y0) / 4));
+        float[] m = Planes.smooth(GuidedFilter.filter(lum, ind, w, h, radius, RegionMasks.GUIDE_EPS),
             0.3f, 0.7f);
         for (int i = 0; i < n; i++) m[i] *= inside[i];
         return m;

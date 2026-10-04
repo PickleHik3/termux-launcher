@@ -131,7 +131,10 @@ public final class SceneReader {
         String body = text.substring(a, b + 1);
         for (int missing = 0; missing <= 2; missing++) {
             try {
-                return parseObject(new JSONObject(body));
+                ScenePlan plan = parseObject(new JSONObject(body));
+                // Two elements is the floor for a model answer; a persisted plan (ScenePlan.fromJson)
+                // may legitimately hold one, so the rule lives here and not in parseObject.
+                return plan == null || plan.elements.size() < 2 ? null : plan;
             } catch (JSONException e) {
                 body += "}";
             }
@@ -172,7 +175,7 @@ public final class SceneReader {
             if (name.isEmpty()) name = kind;
             elements.add(new ScenePlan.Element(name, kind, box, depth, motion, dnaLower.contains(ScenePlan.lower(name))));
         }
-        if (elements.size() < 2) return null;
+        if (elements.isEmpty()) return null;
 
         String particles = enumValue(sceneJson.opt("particles"), ScenePlan.PARTICLES);
         ScenePlan.Scene scene = new ScenePlan.Scene(
