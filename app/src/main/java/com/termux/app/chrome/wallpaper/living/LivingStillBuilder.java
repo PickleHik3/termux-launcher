@@ -134,6 +134,8 @@ public final class LivingStillBuilder {
         recipe.models.putAll(maps.models);
         if (plan != null) {
             recipe.gemmaModel = GemmaSceneReader.visionModelId();
+            recipe.gemmaAccelerator = chat.lastAccelerator();
+            recipe.gemmaFallbackReason = chat.lastFallbackReason();
             recipe.models.put("gemma", GemmaSceneReader.MODEL_ID);
         }
 

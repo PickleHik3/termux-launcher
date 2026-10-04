@@ -65,6 +65,10 @@ public final class LivingRecipe {
     /** Gemma picked regions or styles for this recipe. */
     public boolean gemma;
     @Nullable public String gemmaModel;
+    /** The backend Gemma's step ran on ("gpu", "cpu"), when the TAI said. */
+    @Nullable public String gemmaAccelerator;
+    /** Why that was not the model's first choice (a recorded failure or the memory budget), when it was not. */
+    @Nullable public String gemmaFallbackReason;
     /** Model ids the analysis used, by role. */
     @NonNull public Map<String, String> models = new LinkedHashMap<>();
     /** Wall-clock timings of the build, by stage, in milliseconds. */
@@ -90,6 +94,8 @@ public final class LivingRecipe {
         o.put("intensity", intensity);
         o.put("gemma", gemma);
         if (gemmaModel != null) o.put("gemmaModel", gemmaModel);
+        if (gemmaAccelerator != null) o.put("gemmaAccelerator", gemmaAccelerator);
+        if (gemmaFallbackReason != null) o.put("gemmaFallbackReason", gemmaFallbackReason);
         JSONObject m = new JSONObject();
         for (Map.Entry<String, String> e : models.entrySet()) m.put(e.getKey(), e.getValue());
         o.put("models", m);
@@ -150,6 +156,8 @@ public final class LivingRecipe {
         r.intensity = (float) o.optDouble("intensity", 1);
         r.gemma = o.optBoolean("gemma", false);
         r.gemmaModel = o.has("gemmaModel") ? o.optString("gemmaModel") : null;
+        r.gemmaAccelerator = o.has("gemmaAccelerator") ? o.optString("gemmaAccelerator") : null;
+        r.gemmaFallbackReason = o.has("gemmaFallbackReason") ? o.optString("gemmaFallbackReason") : null;
         JSONObject models = o.optJSONObject("models");
         if (models != null) {
             Iterator<String> keys = models.keys();

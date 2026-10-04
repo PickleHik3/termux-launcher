@@ -3004,19 +3004,32 @@ public final class TaiManager {
         @NonNull final TaiLoadBudget.Plan plan;
         /** Residents closed to make room, in order; empty when the load fit as is. */
         @NonNull final List<String> evicted;
+        /** Why the plan's accelerator is not the model's first choice; empty when it is. */
+        @NonNull final String acceleratorFallbackReason;
 
         LoadDecision(@Nullable TaiRuntimeOptions options, @Nullable JSONObject refusal,
                      @NonNull TaiLoadBudget.Plan plan, @NonNull List<String> evicted) {
+            this(options, refusal, plan, evicted, "");
+        }
+
+        LoadDecision(@Nullable TaiRuntimeOptions options, @Nullable JSONObject refusal,
+                     @NonNull TaiLoadBudget.Plan plan, @NonNull List<String> evicted,
+                     @NonNull String acceleratorFallbackReason) {
             this.options = options;
             this.refusal = refusal;
             this.plan = plan;
             this.evicted = evicted;
+            this.acceleratorFallbackReason = acceleratorFallbackReason;
         }
 
         /** Stamps the load result with the budget and what was evicted for it. */
         void describe(@NonNull JSONObject result) throws JSONException {
             result.put("memoryBudget", planJson(plan));
             result.put("evicted", new JSONArray(evicted));
+            if (!acceleratorFallbackReason.isEmpty()) {
+                result.put("acceleratorFallbackReason", acceleratorFallbackReason);
+                if (result.isNull("backendFallbackReason")) result.put("backendFallbackReason", acceleratorFallbackReason);
+            }
         }
     }
 
@@ -3067,13 +3080,57 @@ public final class TaiManager {
                     + plan.availableBytes / (1024L * 1024L) + " MB available");
             return new LoadDecision(null, insufficientMemory(spec.displayName, plan), plan, Collections.<String>emptyList());
         }
+        String fallbackReason = acceleratorFallbackReason(spec, device, preflight, plan, fileBytes, encoders, available);
+        TaiAcceleratorFallback.set(spec.id, fallbackReason);
+        if (!fallbackReason.isEmpty()) {
+            TaiEventLog.log(appContext, TaiEventLog.ACCEL_FALLBACK, spec.id, spec.backend, plan.accelerator,
+                plan.contextWindow, 0L, 0L, fallbackReason);
+        }
         List<String> evicted = evict(plan);
         TaiRuntimeOptions loadOptions = optionsForPreflight(spec, options, preflight);
         if (!TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend) && plan.accelerator != null
                 && !plan.accelerator.equals(preflight.effectiveAccelerator)) {
             loadOptions = loadOptions.withAccelerator(plan.accelerator);
         }
-        return new LoadDecision(loadOptions.withContextWindow(plan.contextWindow), null, plan, evicted);
+        return new LoadDecision(loadOptions.withContextWindow(plan.contextWindow), null, plan, evicted, fallbackReason);
+    }
+
+    /**
+     * Why a load goes ahead on other than the model's first compatible accelerator, or an empty
+     * string when it does not: either the first one carries an unexpired failure record, or the
+     * memory budget could not afford it at the floor window. Only automatic loads of LiteRT models
+     * choose; an explicit accelerator is the caller's.
+     */
+    @NonNull
+    private String acceleratorFallbackReason(
+        @NonNull TaiModelSpec spec,
+        @NonNull TaiDeviceCapabilities device,
+        @NonNull TaiLoadPreflight.Result preflight,
+        @NonNull TaiLoadBudget.Plan plan,
+        long fileBytes,
+        boolean encoders,
+        long available
+    ) {
+        if (!"auto".equals(preflight.requestedAccelerator) || TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) return "";
+        if (plan.accelerator == null) return "";
+        String first = null;
+        for (String accelerator : preflight.profile.compatibleAccelerators) {
+            if (device.supportsAccelerator(accelerator)) {
+                first = accelerator;
+                break;
+            }
+        }
+        if (first == null || first.equals(plan.accelerator)) return "";
+        JSONObject failed = TaiRuntimeHistory.failedEntry(appContext, spec, device, first);
+        if (failed != null) {
+            return "history_failure: " + failed.optString("reason", "load failed");
+        }
+        TaiLoadBudget.Estimate estimate = TaiLoadBudget.estimate(spec.backend, first, fileBytes, encoders,
+            TaiLoadBudget.FLOOR_CONTEXT, measuredHistory(spec, device));
+        long needed = estimate.nonReclaimableBytes + TaiLoadBudget.marginBytes(estimate, device.memoryThresholdBytes)
+            + plan.reserveBytes;
+        return "budget: needs " + needed / (1024L * 1024L) + " MB free, "
+            + available / (1024L * 1024L) + " MB available";
     }
 
     /**
@@ -3818,8 +3875,18 @@ public final class TaiManager {
             TaiRuntimeHistory.recordSuccess(appContext, spec, preflight.device, spec.backend, accelerator);
             return;
         }
+        if (!shouldRecordFailure(result)) return;
         TaiRuntimeHistory.recordFailure(appContext, spec, preflight.device, spec.backend, accelerator,
             result.optString("message", result.optString("error", "load_failed")));
+    }
+
+    /**
+     * Whether a non-ok load result is a verdict on its accelerator. A cancelled load once wrote
+     * "Model load cancelled." as a GPU failure and demoted the GPU for good; see
+     * {@link TaiRuntimeHistory#isRuntimeVerdict}.
+     */
+    static boolean shouldRecordFailure(@NonNull JSONObject result) {
+        return !result.optBoolean("ok", false) && TaiRuntimeHistory.isRuntimeVerdict(result.optString("error", ""));
     }
 
     @NonNull

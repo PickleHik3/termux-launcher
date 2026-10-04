@@ -66,6 +66,8 @@ public final class TaiEventLog {
     public static final String BENCH_START = "bench_start";
     public static final String BENCH_DONE = "bench_done";
     public static final String OOM_GUARD = "oom_guard";
+    /** A load went ahead on a different accelerator than the model's first choice; the reason says why. */
+    public static final String ACCEL_FALLBACK = "accel_fallback";
 
     /** Serialises the threads of this process; the file lock covers the other process. */
     private static final Object PROCESS_MONITOR = new Object();

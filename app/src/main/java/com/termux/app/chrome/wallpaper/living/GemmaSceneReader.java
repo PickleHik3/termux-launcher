@@ -47,6 +47,18 @@ public final class GemmaSceneReader {
         /** @throws IOException on any failure or when {@code timeoutMs} passes */
         @NonNull
         String complete(@NonNull String requestBody, long timeoutMs) throws IOException;
+
+        /** The backend the latest successful {@link #complete} ran on, or {@code null} when unknown. */
+        @Nullable
+        default String lastAccelerator() {
+            return null;
+        }
+
+        /** Why that backend was not the model's first choice, or {@code null} when it was or is unknown. */
+        @Nullable
+        default String lastFallbackReason() {
+            return null;
+        }
     }
 
     /** What Gemma decided. Style fields are {@code null} when it left them out. */
