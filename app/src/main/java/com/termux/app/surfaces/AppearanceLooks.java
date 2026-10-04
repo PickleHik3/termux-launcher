@@ -215,7 +215,7 @@ public final class AppearanceLooks {
     }
 
     /** Blur is one value for every surface, in dp. */
-    public static final int BLUR_MAX_DP = 30;
+    public static final int BLUR_MAX_DP = 48;
 
     public static int blurDp(int value) {
         return clamp(value, 0, BLUR_MAX_DP);

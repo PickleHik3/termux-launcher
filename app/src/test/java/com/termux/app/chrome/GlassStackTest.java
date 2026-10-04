@@ -4,6 +4,7 @@ import android.app.Application;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
+import com.termux.app.DockGlassRendering;
 import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.LayerDrawable;
@@ -182,6 +183,7 @@ public class GlassStackTest {
 
     @Test
     public void aSchemeColourStandsInForTheTintAndKeepsTheRim() {
+        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 0);
         GlassStack.Spec spec = keyboardSpec(null).withTintColor(0x80112233);
 
         LayerDrawable stack = (LayerDrawable) GlassStack.build(glass, spec, 2f, null);
@@ -189,6 +191,21 @@ public class GlassStackTest {
         assertEquals(2, stack.getNumberOfLayers());
         assertTrue(stack.getDrawable(0) instanceof android.graphics.drawable.ColorDrawable);
         assertTrue(stack.getDrawable(1) instanceof GradientRimDrawable);
+    }
+
+    @Test
+    public void aSchemeColourStackWearsTheSurfacesGrainBetweenTheTintAndTheRim() {
+        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 14);
+        GlassStack.Spec spec = keyboardSpec(null).withTintColor(0x80112233);
+
+        LayerDrawable stack = (LayerDrawable) GlassStack.build(glass, spec, 2f, null);
+
+        assertEquals(3, stack.getNumberOfLayers());
+        assertTrue(stack.getDrawable(0) instanceof android.graphics.drawable.ColorDrawable);
+        assertTrue("grain is a tiled bitmap",
+            stack.getDrawable(1) instanceof android.graphics.drawable.BitmapDrawable);
+        assertEquals(DockGlassRendering.grainAlpha(14), stack.getDrawable(1).getAlpha());
+        assertTrue(stack.getDrawable(2) instanceof GradientRimDrawable);
     }
 
     @Test

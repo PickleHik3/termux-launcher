@@ -259,6 +259,16 @@ public final class AnchoredMenu {
             blurView.setBlurRadius(Math.max(0f, (float) dp(theme.blurRadiusDp())));
             blurView.setOverlayColor(overlayColor);
             popupRoot.addView(blurView, new FrameLayout.LayoutParams(desiredWidth, desiredHeight));
+            // The dock's grain over the blur and under the rows, the same static tile every glass
+            // surface lays (the plate's outline clips it).
+            int grain = theme.grainPercent();
+            if (grain > 0) {
+                View grainView = new View(host.getContext());
+                grainView.setBackground(com.termux.app.DockGlassRendering.createGrainLayer(
+                    host.getResources(), grain));
+                popupRoot.addView(grainView,
+                    new FrameLayout.LayoutParams(desiredWidth, desiredHeight));
+            }
             popupRoot.addView(scrollView, new FrameLayout.LayoutParams(desiredWidth, desiredHeight));
             popup.setContentView(popupRoot);
             popup.setBackgroundDrawable(null);

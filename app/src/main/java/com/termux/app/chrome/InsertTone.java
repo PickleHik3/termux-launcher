@@ -26,8 +26,18 @@ public final class InsertTone {
      *     one {@link #STEP} darker than {@code frameGlass} once laid over it
      */
     public static int floorTint(int tint, int frameGlass) {
+        return floorTint(tint, frameGlass, 1f);
+    }
+
+    /**
+     * {@link #floorTint(int, int)} with the step scaled by {@code keep} (0..1, see
+     * {@link LowOpacityGlass#keep}): a Look whose glass is nearly clear leaves the insert as
+     * clear, instead of laying a fifth of the frame's light over it as black.
+     */
+    public static int floorTint(int tint, int frameGlass, float keep) {
+        if (!(keep > 0f)) return tint;
         float frame = luma(frameGlass | 0xFF000000);
-        float target = frame * (1f - STEP);
+        float target = frame * (1f - STEP * Math.min(1f, keep));
         float now = luma(over(tint, frameGlass | 0xFF000000));
         if (now <= target || now <= 0f) return tint;
         // Black at alpha a laid over the tint scales the result's luminance by (1 - a).

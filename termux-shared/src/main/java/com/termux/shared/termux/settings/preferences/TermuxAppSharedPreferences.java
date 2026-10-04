@@ -314,12 +314,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public int getStatusBarBlurRadius() {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
-            TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS), 0, 30);
+            TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS), 0, 48);
     }
 
     public void setStatusBarBlurRadius(int value) {
         writeSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
-            TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, DataUtils.clamp(value, 0, 30));
+            TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS, DataUtils.clamp(value, 0, 48));
     }
 
     public int getStatusBarOpacity() {
@@ -390,15 +390,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getTerminalGlassBlurRadius() {
-        // The 30dp ceiling is the terminal's own; a larger inherited Base narrows here rather than
+        // The 48dp ceiling is the terminal's own; a larger inherited Base narrows here rather than
         // leaking a value the pane cannot render.
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.BLUR,
-            TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS, TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS), 0, 30);
+            TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS, TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS), 0, 48);
     }
 
     public void setTerminalGlassBlurRadius(int value) {
         writeSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.BLUR,
-            TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS, DataUtils.clamp(value, 0, 30));
+            TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS, DataUtils.clamp(value, 0, 48));
     }
 
     /** Film-grain strength (percent) of the terminal's bordered glass pane; 0 disables. */
@@ -578,6 +578,32 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT,
             DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_EDGE_LIGHT,
                 TERMUX_APP.MAX_FANCIER_GLASS_EDGE_LIGHT), false);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_SPECULAR}. Clamped, a percentage. */
+    public int getFancierGlassSpecularPercent() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR, TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_SPECULAR),
+            TERMUX_APP.MIN_FANCIER_GLASS_SPECULAR, TERMUX_APP.MAX_FANCIER_GLASS_SPECULAR);
+    }
+
+    public void setFancierGlassSpecularPercent(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR,
+            DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_SPECULAR,
+                TERMUX_APP.MAX_FANCIER_GLASS_SPECULAR), false);
+    }
+
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_DISPERSION}. Clamped, a percentage. */
+    public int getFancierGlassDispersionPercent() {
+        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
+                TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION, TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_DISPERSION),
+            TERMUX_APP.MIN_FANCIER_GLASS_DISPERSION, TERMUX_APP.MAX_FANCIER_GLASS_DISPERSION);
+    }
+
+    public void setFancierGlassDispersionPercent(int value) {
+        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION,
+            DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_DISPERSION,
+                TERMUX_APP.MAX_FANCIER_GLASS_DISPERSION), false);
     }
 
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_SHOW_KEY_HINTS}. */
@@ -2995,7 +3021,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     /**
      * The number a surface should actually use: its own override when detached, Base otherwise.
      * Callers still apply their own clamp, so a Base value outside one surface's range (the
-     * terminal's 30dp blur ceiling, say) narrows there instead of leaking.
+     * terminal's 48dp blur ceiling, say) narrows there instead of leaking.
      */
     private int resolveSurfaceValue(SurfaceSlot slot, SurfaceProperty property,
                                     String overrideKey, int overrideDefault) {
@@ -3065,12 +3091,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public int getExtraKeysBlurRadius() {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.BLUR,
-            TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS), 0, 30);
+            TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS), 0, 48);
     }
 
     public void setExtraKeysBlurRadius(int value) {
         writeSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.BLUR,
-            TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, DataUtils.clamp(value, 0, 30));
+            TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS, DataUtils.clamp(value, 0, 48));
     }
 
     public int getDockGlassGrain() {

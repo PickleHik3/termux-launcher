@@ -185,7 +185,7 @@ public final class GlassStack {
         List<Drawable> layers = new ArrayList<>(3);
         if (backdrop != null) {
             // The content-aware light scatter every glass surface's frame wears.
-            backdrop.setColorFilter(GlassFilters.frost());
+            backdrop.setColorFilter(GlassFilters.frost(Math.round(spec.tintAlpha * 100f)));
             backdrop.setRefraction(spec.look, density, spec.cornerRadiusPx, spec.seams);
             layers.add(backdrop);
         }
@@ -196,6 +196,8 @@ public final class GlassStack {
             int veil = glass.bandVeil(spec.band);
             if (android.graphics.Color.alpha(veil) > 0)
                 layers.add(new android.graphics.drawable.ColorDrawable(veil));
+            // The scheme tint wears the surface's grain like every other glass stack.
+            if (spec.grainPercent > 0) layers.add(glass.grainLayer(spec.grainPercent));
             if (spec.rim) layers.add(glass.rimDrawable(spec.cornerRadiusPx));
         } else {
             layers.add(glass.surface(spec.tintAlpha, 0f, spec.sliceEnd, spec.foot,

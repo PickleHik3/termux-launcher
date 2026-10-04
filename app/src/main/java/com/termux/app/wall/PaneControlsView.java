@@ -68,11 +68,12 @@ public final class PaneControlsView extends View {
     /**
      * The tab's one material, the same on every screen: the theme's panel colour as a scrim,
      * over the app's shared wallpaper blur when it has one. Two strengths, both fixed — the tab
-     * does not follow the page's own tint, blur or grain. Following them put a pane's film grain
-     * on a 40dp tab, where it read as static (pong, 2026-09-20), and a pane's faint tint left the
-     * buttons on bare terminal text. Fancier Glass is the one thing it does follow: the blur is
-     * then drawn through the same refraction as the slab it grows out of, rimmed along the tab's
-     * own free edge, with the scrim over it unchanged.
+     * does not follow the page's own tint or blur. Following them left the buttons on bare
+     * terminal text when a pane's tint was faint. Fancier Glass is the one thing it does follow:
+     * the blur is then drawn through the same refraction as the slab it grows out of, rimmed along
+     * the tab's own free edge, with the scrim over it unchanged. The grain is the dock's own, laid
+     * once and static ({@link #setGrainPercent}): a glass surface without it read as a different
+     * material beside the ones that wear it.
      */
     /** The scrim's alpha, out of 255, over the wallpaper blur: enough to read on any picture. */
     public static final int SCRIM_ON_FROST_ALPHA = 184;
@@ -245,6 +246,9 @@ public final class PaneControlsView extends View {
     private final RectF mBounds = new RectF();
     /** Scratch for the shape the tab is painted through; never allocated per frame. */
     private final RectF mClip = new RectF();
+    /** The static grain tile over the scrim, or null for none. */
+    @Nullable private android.graphics.drawable.Drawable mGrain;
+    private int mGrainPercent;
     /** The keyboard focus ring around one button; scratch, never allocated per frame. */
     private final RectF mFocusRing = new RectF();
     @Nullable private FrameSource mFrameSource;
@@ -927,7 +931,25 @@ public final class PaneControlsView extends View {
         mPaint.setColor(scaleAlpha(ColorUtils.setAlphaComponent(surface,
             frosted ? SCRIM_ON_FROST_ALPHA : SCRIM_ALPHA)));
         canvas.drawRect(mClip, mPaint);
+        if (mGrain != null) {
+            mGrain.setBounds((int) Math.floor(mClip.left), (int) Math.floor(mClip.top),
+                (int) Math.ceil(mClip.right), (int) Math.ceil(mClip.bottom));
+            mGrain.draw(canvas);
+        }
         canvas.restoreToCount(save);
+    }
+
+    /**
+     * The dock's grain over the tab's scrim, 0..100; 0 draws none. Static: the shared seeded tile,
+     * so a tab at rest costs nothing more than before.
+     */
+    public void setGrainPercent(int percent) {
+        int clamped = Math.max(0, Math.min(100, percent));
+        if (clamped == mGrainPercent) return;
+        mGrainPercent = clamped;
+        mGrain = clamped > 0
+            ? com.termux.app.DockGlassRendering.createGrainLayer(getResources(), clamped) : null;
+        invalidate();
     }
 
     /** The colour at its own alpha scaled by the slide, so the material fades in with the tab. */

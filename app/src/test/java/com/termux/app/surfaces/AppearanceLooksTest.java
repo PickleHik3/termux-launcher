@@ -268,6 +268,8 @@ public class AppearanceLooksTest {
         assertEquals(0, AppearanceLooks.blurDp(-4));
         assertEquals(12, AppearanceLooks.blurDp(12));
         assertEquals(AppearanceLooks.BLUR_MAX_DP, AppearanceLooks.blurDp(80));
+        assertEquals("the cap is 48 dp, which Clear's 44 sits under", 48, AppearanceLooks.BLUR_MAX_DP);
+        assertEquals(44, AppearanceLooks.blurDp(44));
     }
 
     @Test

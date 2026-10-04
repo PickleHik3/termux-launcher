@@ -160,7 +160,7 @@ public final class PaneGlass {
     /**
      * Hand a frame's corner tab the app's wallpaper blur, so the tab is glass wherever it comes
      * out. The tab's material is its own fixed recipe — the blur under a panel scrim — and
-     * follows none of the frame's tint, grain or radius; this passes only the shared frame, its
+     * follows none of the frame's tint or radius (its grain is the dock's, set here); this passes the shared frame, its
      * filter and Fancier Glass's look — the slab's own refraction, which the tab rims along its
      * own shape — or nothing while the app has no frame. Runs wherever {@link #apply} runs, so a
      * frost refresh or a new look reaches the tab in the same pass as the slab.
@@ -168,6 +168,10 @@ public final class PaneGlass {
     public static void dressTab(@Nullable PaneSurfaceStyle style,
                                 @Nullable com.termux.app.wall.PaneControlsView tab) {
         if (tab == null) return;
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(
+                tab.getContext(), false);
+        tab.setGrainPercent(preferences == null ? 0 : preferences.getDockGlassGrain());
         if (style == null) {
             tab.setPaneGlass(null, EMPTY_RECT, null);
             return;

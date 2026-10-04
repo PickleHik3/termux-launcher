@@ -51,8 +51,10 @@ public final class GlassRefraction {
     // ------------------------------------------------------------------------------ the look
 
     /**
-     * The three knobs the Appearance editor offers, as one value: how far the picture is bent
-     * under the rim, how far in from the rim the bend reaches, and how bright the rim's light is.
+     * The knobs the Appearance editor offers, as one value: how far the picture is bent
+     * under the rim, how far in from the rim the bend reaches, how bright the rim's light is, and
+     * two optional extras for the clearest glass, a bevel highlight and a chromatic split at the
+     * rim, both off unless a Look sets them.
      * Stored in dp and percent so two reads compare equal whatever the screen's density; the
      * program converts when it is handed one.
      */
@@ -67,22 +69,41 @@ public final class GlassRefraction {
         /** The brightest the rim can be, added to every channel where the light catches; 100% lands here. */
         static final float MAX_RIM = 0.5f;
 
+        /** The brightest the bevel's lit side can be; 100% lands here. */
+        static final float MAX_SPEC = 0.6f;
+
+        /** The widest the red/blue split gets at the rim, in dp; 100% lands here. */
+        static final float MAX_DISPERSION_DP = 6f;
+
         public final int bendDp;
         public final int edgeWidthDp;
         public final int edgeLightPercent;
+        /** The bevel highlight, a percentage; 0 draws none. */
+        public final int specularPercent;
+        /** The chromatic split at the rim, a percentage; 0 samples r, g and b alike. */
+        public final int dispersionPercent;
 
         public Look(int bendDp, int edgeWidthDp, int edgeLightPercent) {
+            this(bendDp, edgeWidthDp, edgeLightPercent, 0, 0);
+        }
+
+        public Look(int bendDp, int edgeWidthDp, int edgeLightPercent,
+                    int specularPercent, int dispersionPercent) {
             this.bendDp = bendDp;
             this.edgeWidthDp = edgeWidthDp;
             this.edgeLightPercent = edgeLightPercent;
+            this.specularPercent = specularPercent;
+            this.dispersionPercent = dispersionPercent;
         }
 
-        /** The user's three knobs, already clamped by their accessors. */
+        /** The user's knobs, already clamped by their accessors. */
         @NonNull
         public static Look of(@NonNull TermuxAppSharedPreferences preferences) {
             return new Look(preferences.getFancierGlassBendDp(),
                 preferences.getFancierGlassEdgeWidthDp(),
-                preferences.getFancierGlassEdgeLightPercent());
+                preferences.getFancierGlassEdgeLightPercent(),
+                preferences.getFancierGlassSpecularPercent(),
+                preferences.getFancierGlassDispersionPercent());
         }
 
         /** {@code uStrength}: how far a rim pixel's sample is pulled inward, in px. */
@@ -100,24 +121,38 @@ public final class GlassRefraction {
             return Math.max(0, Math.min(100, edgeLightPercent)) / 100f * MAX_RIM;
         }
 
+        /** {@code uSpec}: the bevel highlight's strength, 0..{@link #MAX_SPEC}. */
+        public float specular() {
+            return Math.max(0, Math.min(100, specularPercent)) / 100f * MAX_SPEC;
+        }
+
+        /** {@code uDisp}: how far red and blue part from green at the rim, in px; 100% is {@link #MAX_DISPERSION_DP}. */
+        public float dispersionPx(float density) {
+            return Math.max(0, Math.min(100, dispersionPercent)) / 100f * MAX_DISPERSION_DP * density;
+        }
+
         @Override
         public boolean equals(@Nullable Object other) {
             if (this == other) return true;
             if (!(other instanceof Look)) return false;
             Look that = (Look) other;
             return bendDp == that.bendDp && edgeWidthDp == that.edgeWidthDp
-                && edgeLightPercent == that.edgeLightPercent;
+                && edgeLightPercent == that.edgeLightPercent
+                && specularPercent == that.specularPercent
+                && dispersionPercent == that.dispersionPercent;
         }
 
         @Override
         public int hashCode() {
-            return (bendDp * 31 + edgeWidthDp) * 31 + edgeLightPercent;
+            return (((bendDp * 31 + edgeWidthDp) * 31 + edgeLightPercent) * 31 + specularPercent) * 31
+                + dispersionPercent;
         }
 
         @NonNull
         @Override
         public String toString() {
-            return "Look{bend=" + bendDp + "dp, edge=" + edgeWidthDp + "dp, light=" + edgeLightPercent + "%}";
+            return "Look{bend=" + bendDp + "dp, edge=" + edgeWidthDp + "dp, light=" + edgeLightPercent + "%, specular="
+                + specularPercent + "%, dispersion=" + dispersionPercent + "%}";
         }
     }
 
@@ -176,6 +211,8 @@ public final class GlassRefraction {
         "uniform float uBand;\n" +
         "uniform float uStrength;\n" +
         "uniform float uRim;\n" +
+        "uniform float uSpec;\n" +
+        "uniform float uDisp;\n" +
         "uniform float uDensity;\n" +
         // Active extra-key "lens": a rounded-rect that MAGNIFIES (bends) the backdrop strongest from
         // the middle and eases to nothing at its rim, so a pressed key reads as a thick glass pill
@@ -218,11 +255,27 @@ public final class GlassRefraction {
         "    }\n" +
         // The bent sample, read from the content in its own pixels: the aim undone.
         "    half4 col = content.eval((sampleCoord - uFrameOffset) / uFrameScale);\n" +
+        // Dispersion: red is bent a little less than green and blue a little more, so the rim
+        // fringes the way a thick edge does. Off, and the one sample above is the whole picture.
+        "    if (uDisp > 0.0) {\n" +
+        "        float2 split = n * (e * uDisp);\n" +
+        "        col.r = content.eval((sampleCoord + split - uFrameOffset) / uFrameScale).r;\n" +
+        "        col.b = content.eval((sampleCoord - split - uFrameOffset) / uFrameScale).b;\n" +
+        "    }\n" +
         // One clean, sharp hairline rim where the light catches the glass edge. No dark contour, no
         // wide bevel band, no inner shadow — minimal/zen: a crisp pane with slight edge refraction.
         "    float rim = 1.0 - smoothstep(0.0, 2.0 * uDensity, inside);\n" +
         "    col.rgb = col.rgb + half3(rim * uRim);\n" +
         "    col.rgb = col.rgb + half3(lensGlow * uRim * 0.6);\n" +
+        // The bevel: a soft band along the rim, bright where the normal faces the light (top-left)
+        // and a faint shade where it faces away (bottom-right).
+        "    if (uSpec > 0.0) {\n" +
+        "        float bevel = 1.0 - smoothstep(0.0, 7.0 * uDensity, inside);\n" +
+        "        float facing = dot(n, float2(-0.7071, -0.7071));\n" +
+        "        float lit = facing > 0.0 ? facing * facing : 0.0;\n" +
+        "        float shade = facing < 0.0 ? -facing : 0.0;\n" +
+        "        col.rgb = col.rgb + half3(bevel * uSpec * (lit - 0.25 * shade));\n" +
+        "    }\n" +
         "    return col;\n" +
         "}\n";
 
@@ -340,6 +393,8 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uBand", look.bandPx(mDensity));
             mShader.setFloatUniform("uStrength", look.strengthPx(mDensity));
             mShader.setFloatUniform("uRim", look.rim());
+            mShader.setFloatUniform("uSpec", look.specular());
+            mShader.setFloatUniform("uDisp", look.dispersionPx(mDensity));
         }
 
         /**

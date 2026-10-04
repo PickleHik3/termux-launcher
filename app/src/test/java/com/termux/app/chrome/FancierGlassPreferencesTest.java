@@ -86,4 +86,35 @@ public class FancierGlassPreferencesTest {
         preferences.setFancierGlassEdgeLightPercent(-1);
         assertEquals(0, preferences.getFancierGlassEdgeLightPercent());
     }
+
+    @Test
+    public void theBevelAndTheDispersionDefaultToOffAndStayInsideTheirTracks() {
+        assertEquals(0, preferences.getFancierGlassSpecularPercent());
+        assertEquals(0, preferences.getFancierGlassDispersionPercent());
+        assertEquals(GlassRefraction.Look.DEFAULT, GlassRefraction.Look.of(preferences));
+
+        preferences.setFancierGlassSpecularPercent(70);
+        preferences.setFancierGlassDispersionPercent(40);
+        assertEquals(70, preferences.getFancierGlassSpecularPercent());
+        assertEquals(40, preferences.getFancierGlassDispersionPercent());
+        assertEquals(new GlassRefraction.Look(9, 20, 18, 70, 40), GlassRefraction.Look.of(preferences));
+        preferences.setFancierGlassSpecularPercent(500);
+        assertEquals(100, preferences.getFancierGlassSpecularPercent());
+        preferences.setFancierGlassDispersionPercent(-3);
+        assertEquals(0, preferences.getFancierGlassDispersionPercent());
+    }
+
+    @Test
+    public void everyBlurSettingTakesUpToFortyEightDp() {
+        preferences.setStatusBarBlurRadius(99);
+        assertEquals(48, preferences.getStatusBarBlurRadius());
+        preferences.setTerminalGlassBlurRadius(99);
+        assertEquals(48, preferences.getTerminalGlassBlurRadius());
+        preferences.setExtraKeysBlurRadius(99);
+        assertEquals(48, preferences.getExtraKeysBlurRadius());
+        preferences.setInAppKeyboardBlurRadius(99);
+        assertEquals(48, preferences.getInAppKeyboardBlurRadius());
+        preferences.setExtraKeysBlurRadius(44);
+        assertEquals(44, preferences.getExtraKeysBlurRadius());
+    }
 }

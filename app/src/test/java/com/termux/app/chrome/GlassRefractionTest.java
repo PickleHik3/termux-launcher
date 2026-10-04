@@ -48,6 +48,39 @@ public class GlassRefractionTest {
     }
 
     @Test
+    public void theEdgeTermsAreOffByDefaultSoExistingLooksAreUnchanged() {
+        GlassRefraction.Look look = GlassRefraction.Look.DEFAULT;
+        assertEquals(0, look.specularPercent);
+        assertEquals(0, look.dispersionPercent);
+        assertEquals(0f, look.specular(), 0f);
+        assertEquals(0f, look.dispersionPx(DENSITY), 0f);
+        assertEquals("the three-knob constructor leaves them off",
+            new GlassRefraction.Look(12, 30, 50), new GlassRefraction.Look(12, 30, 50, 0, 0));
+    }
+
+    @Test
+    public void specularAndDispersionMapToUniformsAndAreClamped() {
+        GlassRefraction.Look look = new GlassRefraction.Look(28, 40, 85, 70, 40);
+        assertEquals(0.7f * GlassRefraction.Look.MAX_SPEC, look.specular(), 1e-4f);
+        assertEquals(0.4f * GlassRefraction.Look.MAX_DISPERSION_DP * DENSITY,
+            look.dispersionPx(DENSITY), 1e-4f);
+        assertEquals(GlassRefraction.Look.MAX_SPEC,
+            new GlassRefraction.Look(0, 1, 0, 400, 0).specular(), 1e-4f);
+        assertEquals(0f, new GlassRefraction.Look(0, 1, 0, -5, -5).specular(), 0f);
+        assertEquals(0f, new GlassRefraction.Look(0, 1, 0, -5, -5).dispersionPx(DENSITY), 0f);
+    }
+
+    @Test
+    public void theEdgeTermsAreInTheLooksValueIdentity() {
+        GlassRefraction.Look base = new GlassRefraction.Look(9, 20, 18, 0, 0);
+        assertEquals(base, GlassRefraction.Look.DEFAULT);
+        assertNotEquals(base, new GlassRefraction.Look(9, 20, 18, 1, 0));
+        assertNotEquals(base, new GlassRefraction.Look(9, 20, 18, 0, 1));
+        assertNotEquals(new GlassRefraction.Look(9, 20, 18, 1, 0).hashCode(),
+            new GlassRefraction.Look(9, 20, 18, 0, 1).hashCode());
+    }
+
+    @Test
     public void aBandNeverCollapsesToNothing() {
         // The shader divides by the band; a zero would push every pixel to the rim.
         assertTrue(new GlassRefraction.Look(9, 0, 32).bandPx(DENSITY) >= 1f);
