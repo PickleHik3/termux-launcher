@@ -3,6 +3,7 @@ package com.termux.app.surfaces;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Typeface;
+import android.text.StaticLayout;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
@@ -36,6 +37,9 @@ import com.google.android.material.shape.ShapeAppearanceModel;
 import com.google.android.material.slider.Slider;
 
 import com.termux.R;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * The Appearance / Layout editor's bottom area (SPEC §3.2–3.6): views only. It inflates
@@ -156,6 +160,14 @@ final class AppearanceEditorPanel {
     private final View mKeyboardTools;
     private final ChipGroup mKeyboardForms;
     private final TextView mKeyRadiusLabel;
+    /**
+     * What each readout label may say while its control moves (the current value and the widest
+     * one). The label is measured to the widest, so a drag never adds a line and moves the slider
+     * under the finger: the sheet's height is measured once, not per tick.
+     */
+    private final Map<TextView, CharSequence[]> mReadoutRange = new HashMap<>();
+    /** Row B's label lines while measureTallest sizes the frame's anchor: 2, otherwise 1. */
+    private int mRow2MinLines = 1;
     private final Slider mKeyRadius;
 
     /** Whether Layout mode's rows are showing in place of Appearance's. */
@@ -326,9 +338,7 @@ final class AppearanceEditorPanel {
         boolean shown = mLayoutMode;
         boolean rowShown = mRow2Shown;
         mRow2Shown = true;
-        TextView[] labels = {mFirstLabel, mLegibilityLabel, mThirdLabel, mSecondLabel};
-        for (TextView label : labels)
-            label.setMinLines(2);
+        mRow2MinLines = 2;
         // The terminal's Trail row is the tallest Row B gets, so the frame stands above it.
         int trailVisibility = mTrail.getVisibility();
         setTrailVisibility(View.VISIBLE);
@@ -355,8 +365,7 @@ final class AppearanceEditorPanel {
         for (int i = 0; i < slots.length; i++)
             slots[i].setVisibility(slotVisibility[i]);
         setTrailVisibility(trailVisibility);
-        for (TextView label : labels)
-            label.setMinLines(1);
+        mRow2MinLines = 1;
         mRow2Shown = rowShown;
         applyGroups(shown);
         return height;
@@ -427,9 +436,61 @@ final class AppearanceEditorPanel {
         int height = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
         // Relative compound icons contribute width after inherited direction is resolved.
         mRoot.measure(width, height);
+        reserveReadoutLines();
         adaptHeader(widthPx);
         mRoot.measure(width, height);
         return mRoot.getMeasuredHeight();
+    }
+
+    /**
+     * Each readout label's lines, from the column width the first measure gave it: as many as
+     * the widest thing it may say needs (see mReadoutRange), at least mRow2MinLines in Row B.
+     */
+    private void reserveReadoutLines() {
+        TextView[] labels = {mFirstLabel, mLegibilityLabel, mThirdLabel, mSecondLabel,
+            mCornersLabel, mMarginLabel};
+        for (TextView label : labels) {
+            int lines = label == mCornersLabel || label == mMarginLabel ? 1 : mRow2MinLines;
+            CharSequence[] range = mReadoutRange.get(label);
+            int available = label.getMeasuredWidth() - label.getCompoundPaddingLeft()
+                - label.getCompoundPaddingRight();
+            if (range != null && label.getVisibility() != View.GONE && available > 0) {
+                for (CharSequence text : range) {
+                    StaticLayout layout = StaticLayout.Builder.obtain(text, 0, text.length(),
+                        label.getPaint(), available).build();
+                    lines = Math.max(lines, layout.getLineCount());
+                }
+            }
+            label.setMinLines(Math.min(lines, label.getMaxLines()));
+        }
+    }
+
+    /**
+     * {@code label} and the same readout with its number at {@code max}'s digit count (Roboto's
+     * figures are all one width, so 0s stand for any value up to {@code max}).
+     */
+    private CharSequence[] readoutRange(@NonNull CharSequence label, int max) {
+        String text = label.toString();
+        int cut = text.indexOf(" \u00b7 ");
+        if (cut <= 0)
+            return new CharSequence[] {readout(label)};
+        int digits = String.valueOf(Math.max(0, max)).length();
+        StringBuilder widest = new StringBuilder(text.substring(0, cut + 3));
+        String value = text.substring(cut + 3);
+        for (int i = 0; i < value.length(); ) {
+            if (!Character.isDigit(value.charAt(i))) {
+                widest.append(value.charAt(i++));
+                continue;
+            }
+            int run = 0;
+            while (i < value.length() && Character.isDigit(value.charAt(i))) {
+                i++;
+                run++;
+            }
+            for (int d = Math.max(run, digits); d > 0; d--)
+                widest.append('0');
+        }
+        return new CharSequence[] {readout(label), readout(widest)};
     }
 
     /**
@@ -710,7 +771,7 @@ final class AppearanceEditorPanel {
             if (mRestating || !fromUser || mListener == null)
                 return;
             int index = Math.round(value);
-            mLegibilityLabel.setText(legibilityLabel(index));
+            mLegibilityLabel.setText(readout(legibilityLabel(index)));
             mListener.onLegibility(index);
         });
     }
@@ -1012,6 +1073,7 @@ final class AppearanceEditorPanel {
     /** The first control as a slider: Opacity, the keyboard's Blur, or the global Blur. */
     void setFirstSlider(@NonNull CharSequence label, int value, int max) {
         mFirstLabel.setText(readout(label));
+        mReadoutRange.put(mFirstLabel, readoutRange(label, max));
         mFirstSlider.setContentDescription(label);
         mFirstSlider.setVisibility(View.VISIBLE);
         mSoft.setVisibility(View.GONE);
@@ -1027,6 +1089,7 @@ final class AppearanceEditorPanel {
     /** The first control as Soften wallpaper's Off / On. */
     void setSoft(@NonNull CharSequence label, boolean on) {
         mFirstLabel.setText(readout(label));
+        mReadoutRange.remove(mFirstLabel);
         mFirstSlider.setVisibility(View.GONE);
         mSoft.setVisibility(View.VISIBLE);
         checkSegment(mSoft, on ? 1 : 0);
@@ -1046,6 +1109,8 @@ final class AppearanceEditorPanel {
      */
     void setLegibility(@NonNull CharSequence label, int index, boolean enabled) {
         mLegibilityLabel.setText(readout(label));
+        mReadoutRange.put(mLegibilityLabel, new CharSequence[] {readout(label),
+            readout(legibilityLabel(0)), readout(legibilityLabel(1)), readout(legibilityLabel(2))});
         restateSlider(mLegibility, index, 2);
         mLegibilityEnabled = enabled;
         mLegibility.setEnabled(enabled && mRow2Shown);
@@ -1057,6 +1122,7 @@ final class AppearanceEditorPanel {
     /** The middle column as a slider of its own: the global Opacity (DECISIONS item 13). */
     void setMiddleSlider(@NonNull CharSequence label, int value, int max) {
         mLegibilityLabel.setText(readout(label));
+        mReadoutRange.put(mLegibilityLabel, readoutRange(label, max));
         mMiddleSlider.setContentDescription(label);
         restateSlider(mMiddleSlider, value, max);
         mMiddleSlider.setEnabled(mRow2Shown);
@@ -1088,6 +1154,7 @@ final class AppearanceEditorPanel {
     /** The last control: Blur, Dim or the global Grain. */
     void setSecondSlider(@NonNull CharSequence label, int value, int max) {
         mSecondLabel.setText(readout(label));
+        mReadoutRange.put(mSecondLabel, readoutRange(label, max));
         mSecondSlider.setContentDescription(label);
         restateSlider(mSecondSlider, value, max);
         mSecondLabel.setVisibility(View.VISIBLE);
@@ -1101,6 +1168,7 @@ final class AppearanceEditorPanel {
      */
     void setSecondButton(@NonNull CharSequence text) {
         mSecondLabel.setText("");
+        mReadoutRange.remove(mSecondLabel);
         mSecondButton.setText(text);
         mSecondButton.setEnabled(mRow2Shown);
         mSecondLabel.setVisibility(View.VISIBLE);
@@ -1121,6 +1189,7 @@ final class AppearanceEditorPanel {
     /** The fourth column as a slider: the terminal's Grain. */
     void setThirdSlider(@NonNull CharSequence label, int value, int max) {
         mThirdLabel.setText(readout(label));
+        mReadoutRange.put(mThirdLabel, readoutRange(label, max));
         mThirdSlider.setContentDescription(label);
         restateSlider(mThirdSlider, value, max);
         mThirdSlider.setEnabled(mRow2Shown);
@@ -1149,6 +1218,7 @@ final class AppearanceEditorPanel {
     /** Layout mode's Corners, at {@code value} dp of {@code max}. */
     void setCorners(@NonNull CharSequence label, int value, int max) {
         mCornersLabel.setText(readout(label));
+        mReadoutRange.put(mCornersLabel, readoutRange(label, max));
         restateSlider(mCorners, value, max);
     }
 
@@ -1159,6 +1229,7 @@ final class AppearanceEditorPanel {
     /** Layout mode's Margin, at {@code value} dp of {@code max}. */
     void setMargin(@NonNull CharSequence label, int value, int max) {
         mMarginLabel.setText(readout(label));
+        mReadoutRange.put(mMarginLabel, readoutRange(label, max));
         restateSlider(mMargin, value, max);
     }
 
