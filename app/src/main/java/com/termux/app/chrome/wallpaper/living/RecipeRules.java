@@ -127,6 +127,127 @@ public final class RecipeRules {
         return r;
     }
 
+    /**
+     * The recipe a director's scene plan asks for (living-stills Part C v2). Elements the plan
+     * marks {@code still} do not animate. {@code stats} supplies the measured numbers the plan
+     * cannot (sky luminance, depth spread, far colour).
+     */
+    @NonNull
+    public static LivingRecipe fromPlan(@NonNull ScenePlan plan, @NonNull RegionMasks.Stats stats) {
+        LivingRecipe r = new LivingRecipe();
+        r.gemma = true;
+        r.plan = plan.toJson();
+        r.stillProtected = true;
+        r.intensity = 1f;
+        r.drift = plan.has("figure") ? 0.35f : 0.6f;
+        ScenePlan.Scene scene = plan.scene;
+        String time = scene == null ? null : scene.time;
+        String weather = scene == null ? null : scene.weather;
+
+        // sky: clouds
+        boolean hasCloudElement = plan.has("clouds");
+        if (firstMoving(plan, "clouds", "drift", "wind_wave", "flow") != null) {
+            r.cloudMode = LivingRecipe.CLOUDS_WARP;
+            r.cloudWarpAmount = 0.6f;
+            r.cloudWarpPeriod = 90f;
+        }
+        if (plan.has("sky") || hasCloudElement) {
+            r.skyStars = "night".equals(time) || stats.skyLum < DARK_SKY;
+        }
+
+        // water
+        ScenePlan.Element water = firstMoving(plan, "water");
+        if (water != null) {
+            String mode;
+            switch (water.motion) {
+                case "ripple": mode = LivingRecipe.WATER_LAKE; break;
+                case "flow": mode = LivingRecipe.WATER_NOISE; break;
+                case "none": case "still": mode = LivingRecipe.WATER_REFLECTION; break;
+                default: mode = LivingRecipe.WATER_LAKE; break;
+            }
+            r.waterMode = mode;
+            r.waterParams = waterParams(mode);
+        }
+        if (firstMoving(plan, "falling_water") != null) r.pour = 1f;
+
+        // sway: trees and flowers
+        if (firstMoving(plan, "trees", "sway") != null || firstMoving(plan, "flowers", "sway") != null) {
+            r.swaySpeed = 1.0f;
+            r.swayAmp = 0.005f;
+        }
+
+        // wind: grass and ground
+        if (firstMoving(plan, "grass", "sway", "wind_wave") != null
+            || firstMoving(plan, "ground", "sway", "wind_wave") != null) {
+            String light = scene == null || scene.lightDirection == null ? ""
+                : scene.lightDirection.toLowerCase(java.util.Locale.ROOT);
+            r.windDirDeg = light.contains("left") ? 0f : light.contains("right") ? 180f : 20f;
+            r.windSpeed = 1f;
+            r.windAmp = 0.006f;
+        }
+
+        // glow: lights
+        for (ScenePlan.Element e : plan.elementsOfKind("lights")) {
+            if (e.still) continue;
+            if ("glow".equals(e.motion)) {
+                r.glowMode = LivingRecipe.GLOW_BREATHE;
+                r.glowGain = 1.0f;
+                break;
+            } else if ("flicker".equals(e.motion)) {
+                r.glowMode = LivingRecipe.GLOW_FLICKER;
+                r.glowGain = 1.0f;
+                break;
+            } else if ("twinkle".equals(e.motion)) {
+                r.glowMode = LivingRecipe.GLOW_FLICKER;
+                r.glowGain = 0.5f;
+                break;
+            }
+        }
+
+        // particles
+        String p = scene == null ? null : scene.particles;
+        r.particles = LivingRecipe.PARTICLES_NONE;
+        if (p != null) {
+            switch (p) {
+                case "dust": r.particles = LivingRecipe.PARTICLES_DUST; break;
+                case "petals": r.particles = LivingRecipe.PARTICLES_PETALS; break;
+                case "leaves": r.particles = LivingRecipe.PARTICLES_LEAVES; break;
+                case "fireflies": r.particles = LivingRecipe.PARTICLES_FIREFLIES; break;
+                case "snow": r.particles = LivingRecipe.PARTICLES_SNOW; break;
+                case "rain": r.particles = LivingRecipe.PARTICLES_RAIN; break;
+                case "embers": r.particles = LivingRecipe.PARTICLES_EMBERS; break;
+                case "sparks": r.particles = LivingRecipe.PARTICLES_SPARKS; break;
+                case "glints":
+                    if (plan.has("water")) r.particles = LivingRecipe.PARTICLES_GLINTS;
+                    break;
+                default: break;
+            }
+        }
+
+        // mist
+        r.mistColour = stats.farColour.clone();
+        if ("misty".equals(weather) || stats.depthSpread > MIST_SPREAD) {
+            float amount = 0.12f + 0.13f * Math.min(1f, Math.max(0f, stats.depthSpread - MIST_SPREAD) / 0.3f);
+            r.mistAmount = hasCloudElement ? 0.12f : amount;
+        }
+        return r;
+    }
+
+    /**
+     * The first element of {@code kind} that is not still and whose motion is one of {@code motions}
+     * (any motion when none are given), or null.
+     */
+    @Nullable
+    private static ScenePlan.Element firstMoving(@NonNull ScenePlan plan, @NonNull String kind,
+                                                 @NonNull String... motions) {
+        for (ScenePlan.Element e : plan.elementsOfKind(kind)) {
+            if (e.still) continue;
+            if (motions.length == 0) return e;
+            for (String m : motions) if (m.equals(e.motion)) return e;
+        }
+        return null;
+    }
+
     @NonNull
     static Map<String, Float> waterParams(@NonNull String mode) {
         Map<String, Float> p = new LinkedHashMap<>();
