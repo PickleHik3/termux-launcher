@@ -1,3 +1,7 @@
+> **2026-10-04:** the built-in AGSL backgrounds (Aurora, Tide, Rain and the rest) this research fed
+> were removed; living stills replace them. The licence and translation findings below still hold for
+> any future shader port.
+
 # kitty custom shaders: research for termux-launcher
 
 Date: 2026-09-30. Status: research only. Nothing is built, and no decision is recorded here.

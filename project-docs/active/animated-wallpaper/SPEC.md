@@ -1,5 +1,10 @@
 # In-app animated wallpapers: spec (draft)
 
+> **Superseded on the built-in parts, 2026-10-04.** The ten pre-made AGSL backgrounds this spec describes
+> were removed in the Appearance round (`appearance-round-2026-10-04.md`, "Removal of the pre-made
+> backgrounds"); living stills (`living-stills.md`) are the only animated backgrounds now. The moments,
+> the rest pose, the Director and the Fancier Glass gate below still apply.
+
 Written 2026-09-29. Status: draft; open questions 1–4 settled 2026-09-30 (§13), the rest open.
 Nothing is built. Target: the next release (decided 2026-09-30); tracked in
 `project-docs/backlog.md`.
