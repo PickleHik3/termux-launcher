@@ -260,8 +260,12 @@ Fixes, in the layer the developer asked for (all small, `com.termux.ai`). **Appr
   measured load above a limit) and the caller falls back to the smaller model or to rules, instead
   of grinding for a minute. Interactive chat keeps the slow-but-safe fallback.
 - **Momentary loads (built 2026-10-04, dev 14a964c00).** A request with `"load_class": "momentary"` keeps a
-  1 GiB reserve instead of the full one; the director sends it. On pong (4.6 GB free) that admits E4B on
-  the GPU for the 40-second step. Device check owed after the next install.
+  1 GiB reserve instead of the full one; the director sends it. Device-checked 2026-10-04 15:22 on pong: the
+  event line read `budget(momentary): needs 5160 MB free, 3552 MB available`; E4B on the GPU needs
+  4.4–5.2 GB free, so it is a bonus on an idle phone, not the normal case.
+- **Runtime history is its own locked file** (dev 189f0e6ba): the shared-preferences copy was rewritten
+  by the runtime process's cached map, which resurrected a cleared record and can clobber TAI settings.
+  `TaiRuntimeCrashMarker` still writes the shared preferences from the runtime process (open).
 - **Keep the ladder.** Forcing GPU unconditionally is the 2026-09-23 freeze again. The rule is
   "prefer the model that fits the GPU", not "force the GPU".
 

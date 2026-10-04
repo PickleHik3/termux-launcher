@@ -35,6 +35,22 @@ developer's go. Raw answers, scores, scripts and the marked images:
   daily-driver phone E4B rarely gets the GPU. E2B on the GPU fits with 2.5 GB to spare.
 - E4B's time is the CPU vision encoder plus prefill of two images; the load itself is ~1.3 s.
 
+### Follow-up, 15:22, build 189f0e6ba (GPU-demotion fix, momentary reserve, file-backed history)
+
+With the history cleared for real and the director's request marked `load_class: momentary`, E4B still
+went to the CPU, and the new event line says exactly why:
+
+```
+accel_fallback model=gemma-4-e4b-it-litert-lm-vision accel=cpu ctx=2048
+  reason="budget(momentary): needs 5160 MB free, 3552 MB available"
+```
+
+The phone was in use and had 3.5–3.8 GB free. The 5160 MB is the ratio estimate (3/4 of the file +
+encoders + KV, +25% because no GPU load was measured after the clear) plus the 1 GiB momentary
+reserve; with a measured GPU drop (3.07 GB + 10%) the ask would be about 4.4 GB. So E4B on the GPU
+needs 4.4–5.2 GB free, which a 12 GB phone has only when fairly idle. The momentary reserve helps at
+the margin; it does not make E4B a reliable GPU load for the step.
+
 ## Reading quality
 
 | Photo | SegFormer finds | E2B | E2B strict | E4B |
@@ -67,7 +83,8 @@ Patterns:
    `RegionMasks` (Gemma's picks stand where SegFormer found nothing), and it skips the style choices
    the recipe needs.
 2. **E4B stays the director when installed.** Its cost is the CPU, and the CPU is the budget's choice,
-   not the history's: freeing the GPU for E4B means ~5.7 GB free, which pong does not have in use.
+   not the history's: even with the momentary reserve the GPU needs 4.4–5.2 GB free, which pong has
+   only when idle. Expect 40–50 s on the CPU as the normal case and the GPU as a bonus.
 3. **E2B as the fallback director** when E4B is absent (8 GB phones), with two guards: drop a group
    pick that covers more than 60% of the picture (over-listing), and keep the parser fix. Prompt
    wording alone does not fix E2B.
