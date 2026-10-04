@@ -920,6 +920,7 @@ public final class SurfaceEditorController {
         if (panel == null || prefs == null)
             return;
         panel.showRow2(R.string.appearance_editor_target_all);
+        panel.hideThird();
         int blur = AppearanceLooks.blurDp(prefs.getSurfaceBaseValue(SurfaceProperty.BLUR));
         panel.setFirstSlider(getString(R.string.appearance_editor_blur, blur), blur,
             AppearanceLooks.BLUR_MAX_DP);
@@ -974,6 +975,14 @@ public final class SurfaceEditorController {
                     darkness, 100);
                 break;
             }
+            case STATUS:
+            case DOCK: {
+                // Their first column is otherwise empty: Grain stands in it.
+                int grain = grainOf(prefs, target.slot);
+                panel.setFirstSlider(getString(R.string.appearance_editor_grain, grain), grain,
+                    AppearanceLooks.GRAIN_MAX);
+                break;
+            }
             case KEYBOARD: {
                 int blur = AppearanceLooks.blurDp(prefs.getSurfaceBaseValue(SurfaceProperty.BLUR));
                 panel.setFirstSlider(getString(R.string.appearance_editor_blur, blur), blur,
@@ -988,6 +997,7 @@ public final class SurfaceEditorController {
                 panel.hideFirst();
                 break;
         }
+        panel.hideThird();
         if (target.hasLegibility()) {
             // The palette Legibility changes is the Material one; with wallpaper colours off the
             // terminal wears a scheme file, which no contrast level moves (as in Settings).
@@ -998,6 +1008,16 @@ public final class SurfaceEditorController {
                 stop, palette);
         } else {
             panel.hideLegibility();
+            if (target.grainColumn() == 2) {
+                int grain = grainOf(prefs, target.slot);
+                panel.setMiddleSlider(getString(R.string.appearance_editor_grain, grain), grain,
+                    AppearanceLooks.GRAIN_MAX);
+            }
+        }
+        if (target.grainColumn() == 4) {
+            int grain = grainOf(prefs, target.slot);
+            panel.setThirdSlider(getString(R.string.appearance_editor_grain, grain), grain,
+                AppearanceLooks.GRAIN_MAX);
         }
         if (target == Target.TERMINAL) {
             panel.setTerminalLooks(prefs.getTerminalCursorTrailStyle(),
@@ -1076,11 +1096,18 @@ public final class SurfaceEditorController {
             beginDrag(dragging);
             if (mTarget == Target.TERMINAL) writeDarkness(value);
             else if (mTarget == null || mTarget.firstControlIsBlur()) writeBlur(value);
+            else if (mTarget.grainColumn() == 1) writeGrain(mTarget, value);
         }
 
         @Override public void onMiddleSlider(int value, boolean dragging) {
             beginDrag(dragging);
             if (mTarget == null) writeGlobal(SurfaceProperty.OPACITY, value);
+            else if (mTarget.grainColumn() == 2) writeGrain(mTarget, value);
+        }
+
+        @Override public void onThirdSlider(int value, boolean dragging) {
+            beginDrag(dragging);
+            if (mTarget != null && mTarget.grainColumn() == 4) writeGrain(mTarget, value);
         }
 
         @Override public void onSecondButton() {
@@ -1183,6 +1210,41 @@ public final class SurfaceEditorController {
         if (mPanel != null)
             mPanel.setFirstLabel(getString(R.string.appearance_editor_darkness, opacity));
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
+    }
+
+    /** The grain a surface draws with now, in percent. */
+    private static int grainOf(@NonNull TermuxAppSharedPreferences prefs, @Nullable SurfaceSlot slot) {
+        if (slot == null)
+            return 0;
+        switch (slot) {
+            case STATUS: return AppearanceLooks.grainPercent(prefs.getStatusBarGrain());
+            case CANVAS: return AppearanceLooks.grainPercent(prefs.getTerminalGlassGrain());
+            case KEYBOARD: return AppearanceLooks.grainPercent(prefs.getInAppKeyboardGrain());
+            case DOCK: return AppearanceLooks.grainPercent(prefs.getDockGlassGrain());
+            default: return 0;
+        }
+    }
+
+    /**
+     * Grain on one surface: the surface's own value, which leaves the shared base so the other
+     * surfaces keep theirs (as Darkness does for the terminal's opacity).
+     */
+    private void writeGrain(@NonNull Target target, int value) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null || target.slot == null)
+            return;
+        int grain = AppearanceLooks.grainPercent(value);
+        prefs.detachSurfaceValue(target.slot, SurfaceProperty.GRAIN, grain);
+        if (mPanel != null) {
+            String label = getString(R.string.appearance_editor_grain, grain);
+            switch (target.grainColumn()) {
+                case 1: mPanel.setFirstLabel(label); break;
+                case 2: mPanel.setMiddleLabel(label); break;
+                default: mPanel.setThirdLabel(label); break;
+            }
+        }
+        requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES
+            | SurfaceEditorProperties.PREVIEW_KEYBOARD);
     }
 
     /**
