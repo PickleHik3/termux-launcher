@@ -360,4 +360,14 @@ public class LayoutModeViewsTest {
         }
         return false;
     }
+
+    /** The terminal's Grain stands in a fourth column of Row B, hidden until the terminal is tapped. */
+    @Test
+    public void rowBHasAFourthColumnForTheTerminalsGrain() {
+        View panel = inflate(R.layout.appearance_editor_panel);
+        assertTrue(panel.findViewById(R.id.appearance_editor_c3_label) instanceof android.widget.TextView);
+        assertTrue(panel.findViewById(R.id.appearance_editor_c3_slider) instanceof Slider);
+        assertEquals(View.GONE, panel.findViewById(R.id.appearance_editor_c3_label).getVisibility());
+        assertEquals(View.GONE, panel.findViewById(R.id.appearance_editor_c3_slider).getVisibility());
+    }
 }
