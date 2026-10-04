@@ -75,7 +75,7 @@
     <!-- The one Settings row and corner button for wallpaper, Look, Layout and the icon pack. -->
     <string name="settings_destination_wallpaper_style">Appearance</string>
     <string name="settings_destination_wallpaper_style_summary">Wallpaper, theme and layout</string>
-    <string name="settings_destination_appearance">Look</string>
+    <string name="settings_destination_appearance">Theme &amp; fonts</string>
     <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons and keyboard look</string>
     <string name="settings_destination_terminal">Terminal</string>
     <string name="settings_destination_terminal_summary">Panes, clipboard and effects</string>
