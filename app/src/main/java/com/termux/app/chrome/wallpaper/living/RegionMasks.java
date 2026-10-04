@@ -225,16 +225,15 @@ public final class RegionMasks {
         int n = in.w * in.h;
         float[] raw = in.groups.get(groupName);
         if (p != null) {
-            float[] picked = clusterMask(in, lum, lab, p);
-            // Gemma names colour regions, and a region can run across the line between two things
-            // (a blue mountain against a blue sky). Where SegFormer found the group, keep Gemma's
-            // pick only where SegFormer agrees at least a little; where it found nothing (flat
-            // graphic art), Gemma's pick stands alone.
-            if (raw == null) return picked;
-            float[] seg = GuidedFilter.filter(lum, raw, in.w, in.h, GUIDE_RADIUS, GUIDE_EPS);
-            if (Planes.coverage(seg, 0.5f) < minCoverage) return picked;
-            for (int i = 0; i < n; i++) picked[i] *= Planes.smoothstep(0.05f, 0.3f, seg[i]);
-            return picked;
+            // SegFormer leads and Gemma fills gaps. Gemma names colour regions, and a region runs
+            // across the line between two things (on pong it put a pale-blue mountain in the sky
+            // and left the deep-blue sky out). So where SegFormer found the group, its mask is
+            // used; Gemma's pick stands only where SegFormer found nothing (flat graphic art).
+            if (raw != null) {
+                float[] seg = Planes.smooth(GuidedFilter.filter(lum, raw, in.w, in.h, GUIDE_RADIUS, GUIDE_EPS), 0.3f, 0.7f);
+                if (Planes.coverage(seg, 0.5f) >= minCoverage) return seg;
+            }
+            return clusterMask(in, lum, lab, p);
         }
         if (raw == null) return new float[n];
         float[] m = Planes.smooth(GuidedFilter.filter(lum, raw, in.w, in.h, GUIDE_RADIUS, GUIDE_EPS), 0.3f, 0.7f);
