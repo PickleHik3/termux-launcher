@@ -2,6 +2,7 @@
 <!-- TAI main screen: the one "Model centre" row, a settings row with a thin live progress line
      under it while anything downloads. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:background="?attr/selectableItemBackground"
@@ -48,7 +49,7 @@
             android:layout_marginStart="16dp"
             android:importantForAccessibility="no"
             android:src="@drawable/ic_settings_chevron_right"
-            android:tint="?attr/colorOnSurface" />
+            app:tint="?attr/colorOnSurface" />
     </LinearLayout>
 
     <com.google.android.material.progressindicator.LinearProgressIndicator
