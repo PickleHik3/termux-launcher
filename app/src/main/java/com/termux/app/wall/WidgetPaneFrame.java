@@ -222,7 +222,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             PaneControlsView.Action.drawn(ACTION_ADD_PAGE, WidgetPaneFrame::drawPlusMark,
                 PaneControlsView.TINT_PRIMARY,
                 getContext().getString(R.string.pane_controls_add_page)),
-            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.WALLPAPER_STYLE,
+            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.APPEARANCE,
                 getContext().getString(R.string.pane_controls_wallpaper_style)),
             // Minimal mode is one mode for every place, so Home carries the same door in and
             // out as the terminal and the display; the mark reads the state as it draws.

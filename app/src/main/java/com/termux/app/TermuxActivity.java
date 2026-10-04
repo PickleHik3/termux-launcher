@@ -247,7 +247,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         "com.termux.app.extra.DOCK_TUNING";
     public static final String EXTRA_SURFACE_EDITOR_SECTION =
         "com.termux.app.extra.DOCK_TUNING_SECTION";
-    /** Opens the wallpaper picker page over the live launcher: Settings' one "Wallpaper & style" door. */
+    /** Opens the wallpaper picker page over the live launcher: Settings' one "Appearance" door. */
     public static final String EXTRA_WALLPAPER_STYLE =
         "com.termux.app.extra.WALLPAPER_STYLE";
     /** Opens the Layout editor over the live place, from any door that sends an intent. */
@@ -10736,7 +10736,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSurfaceEditor.enter(initialSection);
     }
 
-    /** Settings' "Wallpaper & style" row: the launcher comes forward with the wallpaper picker open. */
+    /** Settings' "Appearance" row: the launcher comes forward with the wallpaper picker open. */
     private void handleWallpaperStyleIntent(@Nullable Intent intent) {
         if (intent == null || !intent.getBooleanExtra(EXTRA_WALLPAPER_STYLE, false))
             return;
