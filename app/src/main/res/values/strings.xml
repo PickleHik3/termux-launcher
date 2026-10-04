@@ -1108,7 +1108,7 @@
 
 
         <!-- Termux Style Preferences -->
-        <string name="termux_style_preferences_title">Appearance</string>
+        <string name="termux_style_preferences_title">Theme &amp; fonts</string>
 
 
         <string name="termux_theme_mode_system">System</string>
