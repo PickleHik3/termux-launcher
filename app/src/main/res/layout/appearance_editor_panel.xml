@@ -101,7 +101,7 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_mode_appearance"
             app:icon="@drawable/segment_icon_look"
-            style="@style/Widget.Termux.Button.Segment"
+            style="@style/Widget.Termux.Editor.Segment"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
@@ -111,7 +111,7 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_mode_layout"
             app:icon="@drawable/segment_icon_layout"
-            style="@style/Widget.Termux.Button.Segment"
+            style="@style/Widget.Termux.Editor.Segment"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
@@ -305,7 +305,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_editor_soft_off"
-                style="@style/Widget.Termux.Button.Segment"
+                style="@style/Widget.Termux.Editor.Segment"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minWidth="0dp"
@@ -313,7 +313,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_editor_soft_on"
-                style="@style/Widget.Termux.Button.Segment"
+                style="@style/Widget.Termux.Editor.Segment"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minWidth="0dp"
@@ -500,7 +500,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/layout_editor_orientation_portrait"
-            style="@style/Widget.Termux.Button.Segment"
+            style="@style/Widget.Termux.Editor.Segment"
             android:layout_width="48dp"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
@@ -512,7 +512,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/layout_editor_orientation_landscape"
-            style="@style/Widget.Termux.Button.Segment"
+            style="@style/Widget.Termux.Editor.Segment"
             android:layout_width="48dp"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
@@ -537,7 +537,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_style_docked"
-            style="@style/Widget.Termux.Button.Segment"
+            style="@style/Widget.Termux.Editor.Segment"
             android:layout_width="48dp"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
@@ -549,7 +549,7 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_style_floating"
-            style="@style/Widget.Termux.Button.Segment"
+            style="@style/Widget.Termux.Editor.Segment"
             android:layout_width="48dp"
             android:layout_height="wrap_content"
             android:minWidth="0dp"

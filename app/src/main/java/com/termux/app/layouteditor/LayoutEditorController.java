@@ -854,6 +854,8 @@ public final class LayoutEditorController {
             mTrayShown = new ArrayList<>(items);
             showHiddenBadge(views, items.size());
             views.hiddenControl.setContentDescription(views.canvas.hiddenDescription());
+            androidx.appcompat.widget.TooltipCompat.setTooltipText(views.hiddenControl,
+                views.canvas.hiddenDescription());
         }
         if (mTiles != null) {
             mTiles.update();
