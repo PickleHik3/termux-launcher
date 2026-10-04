@@ -27,8 +27,10 @@ import java.io.IOException;
 
 /**
  * The AGSL programs on a real device compiler (unit tests only read the source): every built-in
- * background compiles, and a living still compiles, binds its five children, draws the photo
- * unchanged at rest and draws a moving frame for each water mode without the driver refusing it.
+ * background compiles, and a living still compiles both its programs, binds the composite's six
+ * children, draws the photo unchanged at rest (without an effects map), draws a moving frame for
+ * each water mode without the driver refusing it, draws the effects program, and draws the moving
+ * composite again with that map bound, which changes the picture.
  */
 @RunWith(AndroidJUnit4.class)
 @SdkSuppress(minSdkVersion = 33)
@@ -66,6 +68,23 @@ public class LivingStillAgslInstrumentationTest {
             Bitmap live = draw(shader);
             float liveDiff = meanDiff(live, photo);
             assertTrue(water + ": a moving frame differs from the photo, mean diff " + liveDiff, liveDiff > 0.5f);
+
+            // The effects program compiles, draws something other than the neutral map, and the
+            // composite with that map bound (a quarter-size copy, as the renderer's) is not the
+            // composite with the neutral one.
+            RuntimeShader effects = WallpaperUniforms.newEffectsShader(still);
+            WallpaperUniforms.applyEffects(effects, moving, W, H);
+            Bitmap map = draw(effects);
+            assertTrue(water + ": the effects map is not neutral", maxDeviationFromNeutral(map) > 3);
+            Bitmap quarter = Bitmap.createScaledBitmap(map, W / 4, H / 4, true);
+            WallpaperUniforms.setEffects(shader, WallpaperUniforms.linearShader(quarter), W / 4, H / 4);
+            float mapDiff = meanDiff(draw(shader), live);
+            assertTrue(water + ": the effects map changes the composite, mean diff " + mapDiff, mapDiff > 0.02f);
+
+            // A non-neutral map is ignored at rest: the photo exactly.
+            WallpaperUniforms.applyRest(shader, palette, W, H);
+            float restWithMap = meanDiff(draw(shader), photo);
+            assertTrue(water + ": rest ignores the map, mean diff " + restWithMap, restWithMap < 2f);
         }
     }
 
@@ -78,6 +97,19 @@ public class LivingStillAgslInstrumentationTest {
         canvas.drawRect(0, 0, W, H, paint);
         picture.endRecording();
         return Bitmap.createBitmap(picture).copy(Bitmap.Config.ARGB_8888, false);
+    }
+
+    /** The largest distance of any pixel's rgb from the neutral map (128, 128, 0), in 0..255 units. */
+    private static int maxDeviationFromNeutral(Bitmap b) {
+        int max = 0;
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                int p = b.getPixel(x, y);
+                max = Math.max(max, Math.max(Math.abs(Color.red(p) - 128),
+                    Math.max(Math.abs(Color.green(p) - 128), Color.blue(p))));
+            }
+        }
+        return max;
     }
 
     /** Mean absolute channel difference in 0..255 units. */

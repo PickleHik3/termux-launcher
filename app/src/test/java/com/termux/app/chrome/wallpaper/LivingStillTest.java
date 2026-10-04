@@ -17,8 +17,9 @@ import java.io.File;
 import java.util.Map;
 
 /**
- * The living still's AGSL contract, the rest-pose rule, the cover mapping and how a recipe becomes
- * uniforms. The shader itself needs a GPU; these check what the JVM can: the source's shape.
+ * The living still's AGSL contract for both programs (the composite and the effects program), the
+ * rest-pose rule, the cover mapping and how a recipe becomes uniforms. The shaders themselves need a
+ * GPU; these check what the JVM can: the sources' shape.
  */
 public class LivingStillTest {
 
@@ -83,30 +84,67 @@ public class LivingStillTest {
         String src = still(new LivingRecipe()).agsl();
         for (String u : UNIFORMS) assertTrue("lacks " + u, src.contains(u));
         assertTrue(src.contains("float3 scene(float2 p)"));
-        for (String child : new String[] {"uImage", "uDepth", "uMaskA", "uMaskB", "uMaskC"}) {
+        for (String child : new String[] {"uImage", "uDepth", "uMaskA", "uMaskB", "uMaskC", "uEffects"}) {
             assertTrue(child, src.contains("uniform shader " + child + ";"));
         }
+        assertTrue(src.contains("uniform float2 uEffectsSize;"));
+    }
+
+    @Test public void theEffectsProgramDeclaresTheContractAndNoChildren() {
+        String src = still(new LivingRecipe()).effectsAgsl();
+        for (String u : UNIFORMS) assertTrue("lacks " + u, src.contains(u));
+        assertFalse("it samples no picture", src.contains("uniform shader"));
+        for (String u : new String[] {"uCover", "uIntensity", "uWaterMode", "uWater", "uMist"}) {
+            assertTrue(u, src.contains(" " + u + ";"));
+        }
+        assertFalse("scene stays the composite's", src.contains("float3 scene(float2 p)"));
+    }
+
+    @Test public void theNoiseLoopsLiveInTheEffectsProgramOnly() {
+        String composite = still(new LivingRecipe()).agsl();
+        String effects = still(new LivingRecipe()).effectsAgsl();
+        for (String heavy : new String[] {"fbm4", "caustic", "for ("}) {
+            assertFalse("the composite has no " + heavy, composite.contains(heavy));
+        }
+        assertTrue(effects.contains("float fbm4(float2 p)"));
+        assertTrue("the pool, the noise water and the mist all use it", effects.contains("fbm4(q0"));
+    }
+
+    @Test public void theEffectsMapEncodingMatchesBetweenTheTwoPrograms() {
+        assertEquals(4, LivingStill.EFFECTS_DIVISOR);
+        assertEquals(25f, LivingStill.EFFECTS_GAIN, 0f);
+        String composite = still(new LivingRecipe()).agsl();
+        String effects = still(new LivingRecipe()).effectsAgsl();
+        assertTrue("displacement is written as 0.5 + d * 25.0", effects.contains("0.5 + d * 25.0"));
+        assertTrue("and read back as (rg - 0.5) / 25.0", composite.contains("(fx.rg - 0.5) / 25.0"));
+        assertTrue("alpha is always 1; the data is in rgb", effects.contains("half3(clamp(float3(0.5 + d * 25.0, b)"));
+        assertTrue(effects.contains("float waveH = ") && composite.contains("float waveH = fx.b * 2.0 - 1.0;"));
+        assertTrue("the focus blur is the 3 tap disc", composite.contains("float3 sampleLite(") && !composite.contains("sampleImg"));
     }
 
     @Test public void sourceAvoidsUnsupportedAgslConstructs() {
-        String src = still(new LivingRecipe()).agsl();
-        for (String b : new String[] {"uint", "<<", ">>", "#define", "^", "textureLod", "texture("}) {
-            assertFalse("contains " + b, src.contains(b));
+        LivingStill s = still(new LivingRecipe());
+        for (String src : new String[] {s.agsl(), s.effectsAgsl()}) {
+            for (String b : new String[] {"uint", "<<", ">>", "#define", "^", "textureLod", "texture("}) {
+                assertFalse("contains " + b, src.contains(b));
+            }
         }
     }
 
     @Test public void everyLoopHasAConstantBound() {
-        String src = still(new LivingRecipe()).agsl();
-        int at = 0;
+        LivingStill still = still(new LivingRecipe());
         int loops = 0;
-        while ((at = src.indexOf("for (", at)) >= 0) {
-            int end = src.indexOf(')', at);
-            String head = src.substring(at, end);
-            assertTrue(head, head.matches("for \\(int \\w+ = 0; \\w+ < \\d+; \\w+\\+\\+"));
-            loops++;
-            at = end;
+        for (String src : new String[] {still.agsl(), still.effectsAgsl()}) {
+            int at = 0;
+            while ((at = src.indexOf("for (", at)) >= 0) {
+                int end = src.indexOf(')', at);
+                String head = src.substring(at, end);
+                assertTrue(head, head.matches("for \\(int \\w+ = 0; \\w+ < \\d+; \\w+\\+\\+"));
+                loops++;
+                at = end;
+            }
         }
-        assertTrue("the noise and caustic loops", loops >= 2);
+        assertEquals("the one noise loop, in the effects program", 1, loops);
     }
 
     @Test public void restPoseIsThePhotoBeforeAnyUseOfTime() {
@@ -123,6 +161,20 @@ public class LivingStillTest {
         assertTrue(scene.contains("float I = e * uIntensity;"));
         assertTrue(scene.contains("(1.0 - 0.03 * e)"));
         assertTrue(scene.contains("float focus = clamp(uFocus, 0.0, 1.0) * e;"));
+        assertTrue("the effects map is not read at rest", scene.indexOf("effectsAt(p)") > early);
+        assertEquals("depth is read once", scene.indexOf("depthAt(", scene.indexOf("depthAt(") + 1), -1);
+    }
+
+    @Test public void effectsProgramIsNeutralAtRestBeforeAnyUseOfTime() {
+        String effects = still(new LivingRecipe()).effectsAgsl();
+        String main = effects.substring(effects.indexOf("half4 main(float2 p)"));
+        int early = main.indexOf("if (e <= 0.0005) return half4(0.5, 0.5, 0.0, 1.0);");
+        assertTrue("the neutral map at zero energy", early > 0);
+        int firstTime = main.indexOf("uTime");
+        assertTrue(firstTime > early);
+        assertEquals(firstTime, main.lastIndexOf("uTime"));
+        assertFalse(main.contains("uPhase"));
+        assertTrue(main.contains("float I = e * uIntensity;"));
     }
 
     @Test public void theTailKeepsThePhotosFullRange() {

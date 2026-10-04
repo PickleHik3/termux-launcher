@@ -24,6 +24,11 @@ import com.termux.shared.logger.Logger;
  * the shader whose uniforms were written for that very frame, and asks the host to re-record the
  * frame readers. The backdrop and the glass therefore change in the same window frame.
  *
+ * <p>For a living still the backdrop shaders are the cheap composite program, drawn at full
+ * resolution; the expensive noise terms are drawn off the UI by the renderer into the effects map,
+ * which the landing binds to the backdrop shader together with the glass frames. The backdrop
+ * redraws only when a tick lands.</p>
+ *
  * <p>Two backdrop shaders alternate: the uniforms for render N are written into the one that is
  * not on screen, and it goes on screen when N lands. That keeps the clock independent of whether
  * the director reuses its {@code Frame} object.</p>
@@ -270,8 +275,10 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
                 mBackdropShaders[1] = WallpaperUniforms.newShader(wallpaper);
             }
             int tier = mDirector.tier();
+            RuntimeShader effects = wallpaper instanceof LivingStill
+                ? WallpaperUniforms.newEffectsShader((LivingStill) wallpaper) : null;
             renderer = new LiveWallpaperRenderer(mDensity, WallpaperUniforms.newShader(wallpaper),
-                mFrames, tier, WallpaperDirector.tierLowRes(tier));
+                effects, mFrames, tier, WallpaperDirector.tierLowRes(tier));
         } catch (Throwable t) {
             Logger.logStackTraceWithMessage(TAG, "Live wallpaper shader failed", t);
             die();
@@ -301,6 +308,9 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
         Trace.beginSection("LiveWallpaper.publish");
         try {
             mFrames.publish(radiiDp, frames, count);
+            // A living still's backdrop shader samples the effects map of this very tick; the shader
+            // is not the one on screen, so rebinding its child here is safe.
+            renderer.bindEffectsTo(mBackdropShaders[shader]);
             mBackdrop.setLiveShader(mBackdropShaders[shader]);
             mNextShader = 1 - shader;
             mPendingShader = -1;
