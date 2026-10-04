@@ -98,7 +98,7 @@ public class SurfacePresetsGlassTest {
     @Test
     public void clearIsTheFanciestGlassWithTheCanvasDetachedAtEight() {
         SurfacePresets.Preset clear = preset("minimal");
-        assertEquals(45, clear.values.get(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR));
+        assertEquals("one hairline, no second line inside it", 0, clear.values.get(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR));
         assertEquals(40, clear.values.get(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION));
         assertEquals("a sharp, even hairline, no gradient wash into the pane",
             TERMUX_APP.GLASS_RIM_HAIRLINE, clear.values.get(TERMUX_APP.KEY_SURFACE_GLASS_RIM));
@@ -110,7 +110,7 @@ public class SurfacePresetsGlassTest {
         SurfacePresets.apply(preferences, clear);
         assertEquals(2, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
         assertEquals(8, preferences.getTerminalBackgroundOpacity());
-        assertEquals(45, preferences.getFancierGlassSpecularPercent());
+        assertEquals(0, preferences.getFancierGlassSpecularPercent());
         assertEquals(40, preferences.getFancierGlassDispersionPercent());
         assertTrue(SurfacePresets.matches(preferences, clear));
     }

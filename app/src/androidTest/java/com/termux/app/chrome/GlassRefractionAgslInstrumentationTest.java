@@ -19,8 +19,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 /**
- * The glass edge program on a real device compiler: it compiles with the bevel and dispersion
- * terms, and Clear's look (bend 28, edge 32, light 85, specular 45, dispersion 40) changes the
+ * The glass edge program on a real device compiler: it compiles with the dispersion
+ * terms, and Clear's look (bend 28, edge 32, light 85, specular 0, dispersion 40) changes the
  * rim while leaving the middle of the pane as it was.
  */
 @RunWith(AndroidJUnit4.class)
@@ -39,7 +39,7 @@ public class GlassRefractionAgslInstrumentationTest {
     public void clearBendsAndLightsTheRimAndLeavesTheMiddle() {
         Bitmap content = checker();
         Bitmap plain = draw(new GlassRefraction.Look(0, 1, 0, 0, 0), content);
-        Bitmap clear = draw(new GlassRefraction.Look(28, 32, 85, 45, 40), content);
+        Bitmap clear = draw(new GlassRefraction.Look(28, 32, 85, 0, 40), content);
         float rim = meanDiff(plain, clear, 2, 2, 30, H - 4);
         float middle = meanDiff(plain, clear, W / 2 - 20, H / 2 - 20, W / 2 + 20, H / 2 + 20);
         assertTrue("the rim changes, mean diff " + rim, rim > 4f);

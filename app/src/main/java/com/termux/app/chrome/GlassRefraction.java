@@ -121,7 +121,7 @@ public final class GlassRefraction {
             return Math.max(0, Math.min(100, edgeLightPercent)) / 100f * MAX_RIM;
         }
 
-        /** {@code uSpec}: the bevel highlight's strength, 0..{@link #MAX_SPEC}. */
+        /** The edge highlight once drawn inside the hairline (removed: it read as a double rim); kept as a stored value only. */
         public float specular() {
             return Math.max(0, Math.min(100, specularPercent)) / 100f * MAX_SPEC;
         }
@@ -211,7 +211,6 @@ public final class GlassRefraction {
         "uniform float uBand;\n" +
         "uniform float uStrength;\n" +
         "uniform float uRim;\n" +
-        "uniform float uSpec;\n" +
         "uniform float uDisp;\n" +
         "uniform float uDensity;\n" +
         // Active extra-key "lens": a rounded-rect that MAGNIFIES (bends) the backdrop strongest from
@@ -267,14 +266,6 @@ public final class GlassRefraction {
         "    float rim = 1.0 - smoothstep(0.0, 2.0 * uDensity, inside);\n" +
         "    col.rgb = col.rgb + half3(rim * uRim);\n" +
         "    col.rgb = col.rgb + half3(lensGlow * uRim * 0.6);\n" +
-        // The cut edge: a second, fainter line of light just inside the hairline, the same all the
-        // way round (no light direction, no band washing into the pane), so the edge reads as a
-        // sharp, thick piece of glass. The bending in the band above does the rest.
-        "    if (uSpec > 0.0) {\n" +
-        "        float d = uDensity;\n" +
-        "        float inner = smoothstep(1.5 * d, 2.5 * d, inside) * (1.0 - smoothstep(2.5 * d, 3.5 * d, inside));\n" +
-        "        col.rgb = col.rgb + half3(inner * uSpec * 0.6);\n" +
-        "    }\n" +
         "    return col;\n" +
         "}\n";
 
@@ -392,7 +383,6 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uBand", look.bandPx(mDensity));
             mShader.setFloatUniform("uStrength", look.strengthPx(mDensity));
             mShader.setFloatUniform("uRim", look.rim());
-            mShader.setFloatUniform("uSpec", look.specular());
             mShader.setFloatUniform("uDisp", look.dispersionPx(mDensity));
         }
 

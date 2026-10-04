@@ -74,12 +74,12 @@ public final class SurfacePresets {
     private static final List<Preset> PRESETS = Collections.unmodifiableList(Arrays.asList(
         // Clear (id minimal): the most transparent, fanciest glass. Blur at 44 dp (the cap is 48),
         // opacity 2 on every surface with the terminal canvas detached at 8 so text keeps something
-        // to sit on, grain 14. The edge is sharp real glass: a deep bend in a 32 dp band, an even
-        // bright hairline with a fainter cut line inside it (no directional bevel, no gradient wash
-        // into the pane: the developer saw both on pong as a milky, lopsided rim), and a moderate
-        // chromatic split. Scheme tint, hairline rim, classic motion.
+        // to sit on, grain 14. The edge is sharp real glass: a deep bend in a 32 dp band, one even
+        // bright hairline (no directional bevel, no gradient wash into the pane, no second line
+        // inside it: the developer saw each on pong as a milky, lopsided or double rim), and a
+        // moderate chromatic split. Scheme tint, hairline rim, classic motion.
         preset("minimal", R.string.termux_surface_preset_minimal,
-            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 44, 2, 14, 28, 32, 85, 45, 40,
+            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 44, 2, 14, 28, 32, 85, 0, 40,
             look -> look.put(TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, 8)),
         // Mist: Obsidian-Music's glass and motion (Apache-2.0; see
         // project-docs/reference/launcher/mist-preset-obsidian-values.md). Blur 25
@@ -88,7 +88,7 @@ public final class SurfacePresets {
         // 60/255 of the percentage, so a literal match (about 68) would read as sand. 8 is the
         // same faint tooth.
         preset("frost", R.string.termux_surface_preset_frost,
-            TERMUX_APP.SURFACE_MATERIAL_FROST, 50, 25, 60, 8, 9, 20, 18, 20, 0,
+            TERMUX_APP.SURFACE_MATERIAL_FROST, 50, 25, 60, 8, 9, 20, 18, 0, 0,
             look -> {
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_OBSIDIAN);
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.GLASS_RIM_GRADIENT);
