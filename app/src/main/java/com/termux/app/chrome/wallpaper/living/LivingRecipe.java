@@ -14,7 +14,7 @@ import java.util.Map;
 /**
  * Which effects a living still plays and in what style (living-stills.md, Part C.4 and C.5): the
  * parsed form of {@code recipe.json}. A plain data holder; {@link RecipeRules} fills it and
- * {@link GemmaSceneReader} may steer it. The numbers are the ones the developer approved in the
+ * a {@link ScenePlan} may steer it. The numbers are the ones the developer approved in the
  * browser prototype ({@code wall-alive/page.html}, {@code RECIPES}); the renderer reads them as
  * uniforms. The file is versioned: a reader refuses a version it does not know.
  */

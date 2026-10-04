@@ -158,14 +158,14 @@ public class SceneReaderTest {
 
     @Test
     public void failuresGiveNull() throws Exception {
-        GemmaSceneReader.Chat boom = (body, timeout) -> { throw new IOException("timeout"); };
+        SceneReader.Chat boom = (body, timeout) -> { throw new IOException("timeout"); };
         assertNull(SceneReader.read(boom, "x"));
-        GemmaSceneReader.Chat junk = (body, timeout) -> "I cannot see";
+        SceneReader.Chat junk = (body, timeout) -> "I cannot see";
         assertNull(SceneReader.read(junk, "x"));
-        GemmaSceneReader.Chat crash = (body, timeout) -> { throw new IllegalStateException(); };
+        SceneReader.Chat crash = (body, timeout) -> { throw new IllegalStateException(); };
         assertNull(SceneReader.read(crash, "x"));
         String good = fixture("e4b-round2-speculative.json");
-        GemmaSceneReader.Chat ok = (body, timeout) -> {
+        SceneReader.Chat ok = (body, timeout) -> {
             assertEquals(60_000L, timeout);
             return good;
         };

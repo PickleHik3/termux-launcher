@@ -2,9 +2,6 @@ package com.termux.app.chrome.wallpaper.living;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.Paint;
 import android.util.Base64;
 
 import androidx.annotation.NonNull;
@@ -174,49 +171,5 @@ final class LivingBitmaps {
         float f = longSide / (float) Math.max(w, h);
         if (f >= 1f) return src;
         return Bitmap.createScaledBitmap(src, Math.max(1, Math.round(w * f)), Math.max(1, Math.round(h * f)), true);
-    }
-
-    /** The picture with each cluster outlined and its number drawn on its largest part. */
-    @NonNull
-    static Bitmap markedCopy(@NonNull Bitmap photo, @NonNull ColourClusters.Result clusters, int longSide) {
-        Bitmap base = scaleLongSide(photo, longSide);
-        Bitmap out = base.copy(Bitmap.Config.ARGB_8888, true);
-        if (base != photo) base.recycle();
-        int w = out.getWidth(), h = out.getHeight();
-        int[] lab = new int[w * h];
-        for (int y = 0; y < h; y++) {
-            int sy = Math.min(clusters.h - 1, y * clusters.h / h);
-            for (int x = 0; x < w; x++) {
-                lab[y * w + x] = clusters.labels[sy * clusters.w + Math.min(clusters.w - 1, x * clusters.w / w)];
-            }
-        }
-        int[] px = pixels(out);
-        for (int y = 0; y < h - 1; y++) {
-            for (int x = 0; x < w - 1; x++) {
-                int i = y * w + x;
-                if (lab[i] != lab[i + 1] || lab[i] != lab[i + w]) px[i] = Color.WHITE;
-            }
-        }
-        out.setPixels(px, 0, w, 0, 0, w, h);
-        Canvas canvas = new Canvas(out);
-        float size = Math.max(14f, w / 14f);
-        Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
-        fill.setTextSize(size);
-        fill.setTextAlign(Paint.Align.CENTER);
-        fill.setFakeBoldText(true);
-        fill.setColor(Color.WHITE);
-        Paint stroke = new Paint(fill);
-        stroke.setStyle(Paint.Style.STROKE);
-        stroke.setStrokeWidth(size / 5f);
-        stroke.setColor(Color.BLACK);
-        for (int i = 0; i < clusters.k; i++) {
-            if (clusters.area[i] <= 0f) continue;
-            float x = (clusters.markX[i] + 0.5f) * w / clusters.w;
-            float y = (clusters.markY[i] + 0.5f) * h / clusters.h + size / 3f;
-            String t = String.valueOf(i + 1);
-            canvas.drawText(t, x, y, stroke);
-            canvas.drawText(t, x, y, fill);
-        }
-        return out;
     }
 }
