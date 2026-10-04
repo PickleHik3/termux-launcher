@@ -16993,8 +16993,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (page.root().isShown()) page.onShown();
                 });
             }, "appearance-icons-still").start();
+            // The page brings no bar of its own: the Overview's back-and-title bar over it.
+            final View frame = getLayoutInflater().inflate(R.layout.appearance_page_frame, null, false);
+            ((TextView) frame.findViewById(R.id.appearance_page_title)).setText(page.title());
+            frame.findViewById(R.id.appearance_page_back).setOnClickListener(v -> navigator.back());
+            ((ViewGroup) frame.findViewById(R.id.appearance_page_content)).addView(page.root(),
+                new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT));
             return new com.termux.app.surfaces.AppearanceSurfaceController.Page() {
-                @NonNull @Override public View root() { return page.root(); }
+                @NonNull @Override public View root() { return frame; }
                 @NonNull @Override public CharSequence title() { return page.title(); }
                 @Override public void onShown() { page.onShown(); }
                 @Override public void onHidden() { page.onHidden(); }

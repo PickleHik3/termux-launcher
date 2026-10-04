@@ -348,6 +348,13 @@ public final class AppearanceSurfaceController {
             padPages(host, insets);
             return insets;
         });
+        // The launcher's window consumes insets before they reach a child of the content view, so
+        // dispatch alone leaves the pages under the status and navigation bars (seen at 411 dp):
+        // read the window's own insets each time the host is laid out as well.
+        host.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            WindowInsetsCompat root = ViewCompat.getRootWindowInsets(host);
+            if (root != null) padPages(host, root);
+        });
         mView = view;
         return view;
     }
@@ -360,6 +367,8 @@ public final class AppearanceSurfaceController {
             view.addView(root, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         ViewCompat.requestApplyInsets(view);
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(view);
+        if (insets != null) padPages(view, insets);
     }
 
     /**
