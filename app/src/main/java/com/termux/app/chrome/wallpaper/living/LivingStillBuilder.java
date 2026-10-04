@@ -161,11 +161,22 @@ public final class LivingStillBuilder {
         if (p != null && p.isCancelled()) throw new CancellationException("Living still cancelled");
     }
 
+    /**
+     * Copies through a temporary file renamed into place. "Read again" hands the builder the
+     * still's own image.png as the photo, and opening the target first would empty the source.
+     */
     private static void copy(File from, File to) throws IOException {
-        try (InputStream in = new FileInputStream(from); OutputStream out = new FileOutputStream(to)) {
+        if (from.getCanonicalPath().equals(to.getCanonicalPath())) return;
+        File tmp = new File(to.getParentFile(), to.getName() + ".tmp");
+        try (InputStream in = new FileInputStream(from); OutputStream out = new FileOutputStream(tmp)) {
             byte[] buf = new byte[16 * 1024];
             int n;
             while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        }
+        if (!tmp.renameTo(to)) {
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+            throw new IOException("Cannot move " + tmp + " to " + to);
         }
     }
 }

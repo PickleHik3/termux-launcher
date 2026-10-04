@@ -30,6 +30,8 @@ public final class GemmaSceneReader {
     public static final String MODEL_ID = "gemma-4-e4b-it-litert-lm";
     public static final String VISION_SUFFIX = "-vision";
     public static final long TIMEOUT_MS = 60_000L;
+    /** The engine window the call asks for: two images, the prompt and the answer, with room to spare. */
+    static final int CONTEXT_WINDOW = 2048;
 
     public static final List<String> STYLES = Arrays.asList("photo", "illustration", "flat_graphic");
     public static final List<String> WATER_STYLES = Arrays.asList("lake", "pool", "reflection", "stream", "none");
@@ -135,6 +137,9 @@ public final class GemmaSceneReader {
         body.put("temperature", 0);
         body.put("max_tokens", 400);
         body.put("stream", false);
+        // Two images, the prompt and a 400-token answer fit in about 1.5k tokens; the automatic
+        // window (4096) only made the KV cache bigger.
+        body.put("context_window", CONTEXT_WINDOW);
         return body.toString();
     }
 

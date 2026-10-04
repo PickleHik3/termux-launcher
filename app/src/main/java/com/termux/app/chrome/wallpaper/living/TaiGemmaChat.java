@@ -3,6 +3,7 @@ package com.termux.app.chrome.wallpaper.living;
 import android.content.Context;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelSpec;
@@ -42,6 +43,45 @@ public final class TaiGemmaChat implements GemmaSceneReader.Chat {
     @NonNull
     @Override
     public String complete(@NonNull String requestBody, long timeoutMs) throws IOException {
+        String visionId = null;
+        String before = null;
+        try {
+            visionId = new JSONObject(requestBody).optString("model", null);
+            before = loadedModelId();
+        } catch (JSONException ignored) {
+            // the call below reports a malformed body
+        }
+        try {
+            return ask(requestBody, timeoutMs);
+        } finally {
+            // Gemma 4 E4B with its vision encoder held about 3.9 GB on pong (CPU, 4096 window).
+            // When this step loaded it, free it now instead of at the idle unload ten minutes on.
+            if (visionId != null && !visionId.equals(before)) unloadIfLoaded(visionId);
+        }
+    }
+
+    @Nullable
+    private String loadedModelId() {
+        try {
+            JSONObject runtime = mManager.runtimeStatus().optJSONObject("runtime");
+            String id = runtime == null ? null : runtime.optString("loadedModelId", null);
+            return id == null || id.isEmpty() || "null".equals(id) ? null : id;
+        } catch (JSONException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    private void unloadIfLoaded(@NonNull String modelId) {
+        if (!modelId.equals(loadedModelId())) return;
+        try {
+            mManager.unloadModel();
+        } catch (JSONException | RuntimeException ignored) {
+            // the idle unload still frees it
+        }
+    }
+
+    @NonNull
+    private String ask(@NonNull String requestBody, long timeoutMs) throws IOException {
         try {
             JSONObject response = mManager.openAiChatCompletions(requestBody, timeoutMs);
             JSONObject error = response.optJSONObject("error");
