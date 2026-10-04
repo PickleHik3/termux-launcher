@@ -257,6 +257,21 @@ public class AppearanceSurfaceControllerTest {
     }
 
     @Test
+    public void onAnEditorPageTheHostLetsTapsThroughToTheEditorsOverlay() {
+        // On pong a tap on a launcher element in the Look editor never reached the editor: the
+        // host, clickable for the Overview, sat over the editor's overlay and took it.
+        mSurface.open(PageId.OVERVIEW);
+        ViewGroup content = mActivity.findViewById(android.R.id.content);
+        View host = content.findViewById(R.id.appearance_surface_host);
+        assertTrue("the Overview takes the touches it does not use", host.isClickable());
+        mNavigator.openLook();
+        mEditor.settle();
+        assertFalse("Look: taps go through to the launcher", host.isClickable());
+        mNavigator.back();
+        assertTrue("back on the Overview it takes them again", host.isClickable());
+    }
+
+    @Test
     public void lookLayoutAndTheOverviewShareOneSession() {
         toLook();
         // Layout while the editor is up: the mode changes, no second session and no second hop.

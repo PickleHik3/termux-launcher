@@ -64,10 +64,12 @@ public final class RecipeRules {
         // sky
         if (s.sky > MIN_SKY) {
             String asked = plan == null ? null : plan.skyMotion;
-            boolean stars = asked != null ? asked.equals("stars") : s.skyLum < DARK_SKY;
-            boolean none = asked != null && asked.equals("none");
+            // A night sky twinkles whatever Gemma said, and its clouds still drift: on pong a night
+            // sky with clouds round a full moon was better for both than for either.
+            boolean stars = "stars".equals(asked) || s.skyLum < DARK_SKY;
+            boolean none = "none".equals(asked) && !stars;
             r.skyStars = stars;
-            r.skyFlow = none ? 0f : stars ? 0.01f : 0.035f;
+            r.skyFlow = none ? 0f : 0.03f;
         }
 
         if (s.fall > 0f) r.pour = 1f;
@@ -83,7 +85,12 @@ public final class RecipeRules {
                     case "lamps": mode = LivingRecipe.GLOW_BREATHE; gain = 1.0f; break;
                     case "trails": mode = LivingRecipe.GLOW_TRAILS; gain = 1.2f; break;
                     case "sun": mode = LivingRecipe.GLOW_FLICKER; gain = 0.25f; break;
-                    default: mode = LivingRecipe.GLOW_NONE; gain = 0f; break;
+                    default:
+                        // A bright blob in a dark picture (a moon, a lamp) breathes gently even
+                        // when Gemma named no light style.
+                        mode = darkScene ? LivingRecipe.GLOW_BREATHE : LivingRecipe.GLOW_NONE;
+                        gain = darkScene ? 0.6f : 0f;
+                        break;
                 }
             } else if (s.lightsInSigns > 0.5f) {
                 mode = LivingRecipe.GLOW_FLICKER;

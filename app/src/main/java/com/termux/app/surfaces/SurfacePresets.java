@@ -74,14 +74,13 @@ public final class SurfacePresets {
     private static final List<Preset> PRESETS = Collections.unmodifiableList(Arrays.asList(
         // Clear (id minimal): the most transparent, fanciest glass. Blur at 44 dp (the cap is 48),
         // opacity 2 on every surface with the terminal canvas detached at 8 so text keeps something
-        // to sit on, grain 14, a deep bend, a wide bright rim with a strong bevel highlight and a
-        // moderate chromatic split, scheme tint, gradient rim, classic motion.
+        // to sit on, grain 14. The edge is sharp real glass: a deep bend in a 32 dp band, an even
+        // bright hairline with a fainter cut line inside it (no directional bevel, no gradient wash
+        // into the pane: the developer saw both on pong as a milky, lopsided rim), and a moderate
+        // chromatic split. Scheme tint, hairline rim, classic motion.
         preset("minimal", R.string.termux_surface_preset_minimal,
-            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 44, 2, 14, 28, 40, 85, 70, 40,
-            look -> {
-                look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.GLASS_RIM_GRADIENT);
-                look.put(TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, 8);
-            }),
+            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 44, 2, 14, 28, 32, 85, 45, 40,
+            look -> look.put(TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, 8)),
         // Mist: Obsidian-Music's glass and motion (Apache-2.0; see
         // project-docs/reference/launcher/mist-preset-obsidian-values.md). Blur 25
         // and opacity 60 are Obsidian's own numbers. Grain 8 is not its 0.08 noise carried over:

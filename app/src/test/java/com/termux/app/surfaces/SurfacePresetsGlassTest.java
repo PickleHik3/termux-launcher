@@ -78,7 +78,7 @@ public class SurfacePresetsGlassTest {
 
     @Test
     public void clearTintAndSolidCarryTheRecipesOfTheSpec() {
-        assertRecipe(preset("minimal"), 44, 2, 14, 28, 40, 85);
+        assertRecipe(preset("minimal"), 44, 2, 14, 28, 32, 85);
         assertRecipe(preset("stock"), 6, 46, 14, 4, 10, 18);
         assertRecipe(preset("solid"), 0, 92, 0, 0, 1, 0);
         assertRecipe(preset("frost"), 25, 60, 8, 9, 20, 18);
@@ -98,9 +98,10 @@ public class SurfacePresetsGlassTest {
     @Test
     public void clearIsTheFanciestGlassWithTheCanvasDetachedAtEight() {
         SurfacePresets.Preset clear = preset("minimal");
-        assertEquals(70, clear.values.get(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR));
+        assertEquals(45, clear.values.get(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR));
         assertEquals(40, clear.values.get(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION));
-        assertEquals(TERMUX_APP.GLASS_RIM_GRADIENT, clear.values.get(TERMUX_APP.KEY_SURFACE_GLASS_RIM));
+        assertEquals("a sharp, even hairline, no gradient wash into the pane",
+            TERMUX_APP.GLASS_RIM_HAIRLINE, clear.values.get(TERMUX_APP.KEY_SURFACE_GLASS_RIM));
         assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, clear.values.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
         assertEquals(TERMUX_APP.GLASS_MOTION_CLASSIC,
             clear.values.get(TERMUX_APP.KEY_SURFACE_GLASS_MOTION));
@@ -109,7 +110,7 @@ public class SurfacePresetsGlassTest {
         SurfacePresets.apply(preferences, clear);
         assertEquals(2, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
         assertEquals(8, preferences.getTerminalBackgroundOpacity());
-        assertEquals(70, preferences.getFancierGlassSpecularPercent());
+        assertEquals(45, preferences.getFancierGlassSpecularPercent());
         assertEquals(40, preferences.getFancierGlassDispersionPercent());
         assertTrue(SurfacePresets.matches(preferences, clear));
     }

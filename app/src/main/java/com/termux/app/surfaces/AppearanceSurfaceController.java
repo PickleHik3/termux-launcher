@@ -359,6 +359,15 @@ public final class AppearanceSurfaceController {
         return view;
     }
 
+    /** Whether the host swallows the touches its pages do not use; off while an editor page shows. */
+    private void setTakesTouches(boolean takes) {
+        FrameLayout view = mView;
+        if (view == null)
+            return;
+        view.setClickable(takes);
+        view.setFocusable(takes);
+    }
+
     private void addPage(@NonNull View root) {
         FrameLayout view = mView;
         if (view == null)
@@ -484,6 +493,9 @@ public final class AppearanceSurfaceController {
                 overview.onHidden();
                 mShown = layout ? PageId.LAYOUT : PageId.LOOK;
                 mTransitioning = false;
+                // The editor's own overlay lies under this host: with no page of ours showing the
+                // host must not take touches, or a tap on a launcher element never reaches it.
+                setTakesTouches(false);
             };
             mEditor.present(layout, null, null, pose == null ? 0f : pose[0],
                 pose == null ? 0f : pose[1], done);
@@ -521,6 +533,7 @@ public final class AppearanceSurfaceController {
             else
                 restore.run();
         };
+        setTakesTouches(true);
         overview.root().setVisibility(View.VISIBLE);
         overview.onShown();
         applyAway(overview, 1f, 1f);

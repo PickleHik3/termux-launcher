@@ -125,18 +125,24 @@ public final class RegionMasks {
         float[] skyM = group(in, lum, lab, picks, "sky", "sky", MIN_SKY, gemma);
         float[] foliage = group(in, lum, lab, picks, "foliage", "foliage", MIN_FOLIAGE, gemma);
 
-        // subject: saliency, less whatever SegFormer calls sky (U-2-Net often takes in bright clouds)
-        float[] subject;
-        int[] subjPick = pick(picks, "subject");
-        if (subjPick != null) {
-            subject = clusterMask(in, lum, lab, subjPick);
-        } else {
-            float[] sal = GuidedFilter.filter(lum, in.saliency, w, h, GUIDE_RADIUS, GUIDE_EPS);
-            float[] skyP = in.groups.get("sky");
-            subject = new float[n];
-            for (int i = 0; i < n; i++) subject[i] = sal[i] * (1f - (skyP == null ? 0f : skyP[i]));
-            subject = Planes.smooth(subject, 0.3f, 0.7f);
+        // subject: U-2-Net's saliency, less whatever SegFormer calls sky (U-2-Net often takes in
+        // bright clouds). Never Gemma's colour regions: a dark figure and a dark night sky share a
+        // region, and on pong a picked "subject" covered nine tenths of the picture and left every
+        // other effect nowhere to go.
+        float[] sal = GuidedFilter.filter(lum, in.saliency, w, h, GUIDE_RADIUS, GUIDE_EPS);
+        float[] skyP = in.groups.get("sky");
+        float[] subject = new float[n];
+        for (int i = 0; i < n; i++) subject[i] = sal[i] * (1f - (skyP == null ? 0f : skyP[i]));
+        subject = Planes.smooth(subject, 0.3f, 0.7f);
+        if (Planes.coverage(subject, 0.5f) > MAX_SUBJECT) {
+            // Saliency spread over most of the picture names no subject; keep only its near part.
+            for (int i = 0; i < n; i++) subject[i] *= Planes.smoothstep(0.55f, 0.75f, in.depth[i]);
         }
+        boolean skyFromGemma = fromGemma(in, picks, "sky", MIN_SKY);
+        boolean foliageFromGemma = fromGemma(in, picks, "foliage", MIN_FOLIAGE);
+
+        // lights
+        float[] glow = glow(in, lum, sat, lab, picks);
 
         float[] fall = new float[n];
         float[] water = new float[n];
@@ -146,9 +152,31 @@ public final class RegionMasks {
             water[i] = waterRaw[i] * (1f - fall[i]) * (1f - subject[i]);
             sky[i] = skyM[i] * (1f - subject[i]);
         }
-
-        // lights
-        float[] glow = glow(in, lum, sat, lab, picks);
+        // A colour region picked by Gemma also takes in whatever shares its colour elsewhere, and
+        // depth is no guide in a painting (on pong the depth model put a painted night sky at middle
+        // distance). Shape is: the sky is what of the pick reaches the top edge, plants are what of
+        // theirs lies mostly in the lower half, off the sky and the subject.
+        if (skyFromGemma) {
+            sky = keepParts(sky, w, h, true);
+            sky = fillEnclosed(sky, subject, glow, w, h);
+        }
+        if (foliageFromGemma) {
+            for (int i = 0; i < n; i++) foliage[i] *= (1f - sky[i]) * (1f - subject[i]);
+            foliage = keepParts(foliage, w, h, false);
+            // A bed of small flowers is many colours, so the picks catch only patches of it. Gemma
+            // saw plants and SegFormer found none: the near, low, finely textured part joins them.
+            float[] texture = localContrast(lum, w, h);
+            for (int y = 0; y < h; y++) {
+                float low = Planes.smoothstep(0.55f, 0.8f, y / (float) Math.max(1, h - 1));
+                for (int x = 0; x < w; x++) {
+                    int i = y * w + x;
+                    float bed = low * Planes.smoothstep(0.45f, 0.65f, in.depth[i])
+                        * Planes.smoothstep(0.04f, 0.1f, texture[i]) * (1f - subject[i]) * (1f - sky[i]);
+                    foliage[i] = Math.max(foliage[i], bed);
+                }
+            }
+            foliage = Planes.smooth(Planes.boxMean(foliage, w, h, 2), 0.3f, 0.6f);
+        }
 
         // bob: the subject where it stands in or beside water
         float[] nearWater = Planes.boxMean(waterRaw, w, h, 12);
@@ -166,7 +194,7 @@ public final class RegionMasks {
                 int i = y * w + x;
                 float far = Planes.clamp01((0.75f - in.depth[i]) / 0.6f);
                 mist[i] = far * (0.4f + 0.6f * low) * (1f - subject[i]);
-                particles[i] = (1f - subject[i]) * (0.35f + 0.65f * (1f - in.depth[i]));
+                particles[i] = (1f - subject[i]) * (1f - glow[i]) * (0.35f + 0.65f * (1f - in.depth[i]));
             }
         }
 
@@ -197,6 +225,95 @@ public final class RegionMasks {
         }
         s.farColour = farColour(in.rgb, in.depth);
         return new Result(w, h, water, sway, sky, fall, subject, glow, bob, mist, particles, s);
+    }
+
+    /** Local luminance standard deviation over a small box: high where the picture is busy with detail. */
+    @NonNull
+    static float[] localContrast(@NonNull float[] lum, int w, int h) {
+        int n = w * h;
+        float[] sq = new float[n];
+        for (int i = 0; i < n; i++) sq[i] = lum[i] * lum[i];
+        float[] mean = Planes.boxMean(lum, w, h, 2);
+        float[] meanSq = Planes.boxMean(sq, w, h, 2);
+        float[] out = new float[n];
+        for (int i = 0; i < n; i++) out[i] = (float) Math.sqrt(Math.max(0f, meanSq[i] - mean[i] * mean[i]));
+        return out;
+    }
+
+    /**
+     * The connected parts of {@code mask} (above one half) that reach the top rows ({@code top}
+     * true) or whose middle lies in the lower half ({@code top} false); the rest is cleared.
+     */
+    @NonNull
+    static float[] keepParts(@NonNull float[] mask, int w, int h, boolean top) {
+        int n = w * h;
+        boolean[] on = new boolean[n];
+        for (int i = 0; i < n; i++) on[i] = mask[i] > 0.5f;
+        Planes.Components c = Planes.components(on, w, h);
+        boolean[] keep = new boolean[c.count + 1];
+        int topRows = Math.max(1, h / 12);
+        for (int id = 1; id <= c.count; id++) {
+            keep[id] = top ? c.top[id] < topRows : (c.top[id] + c.bottom[id]) / 2 > h / 2;
+        }
+        float[] out = new float[n];
+        for (int i = 0; i < n; i++) {
+            int id = c.id[i];
+            // Soft edges below one half belong to whichever kept part they border; keep them where
+            // a kept part is within reach, judged cheaply by the part at the same pixel.
+            if (id > 0 ? keep[id] : mask[i] > 0f && nearKept(c, keep, i, w, h)) out[i] = mask[i];
+        }
+        return out;
+    }
+
+    /**
+     * Adds to the sky every part of the rest of the picture (not the subject, not a light) that lies
+     * wholly above the sky's lowest band: clouds of another colour round a moon, a band of haze.
+     */
+    @NonNull
+    static float[] fillEnclosed(@NonNull float[] sky, @NonNull float[] subject, @NonNull float[] glow, int w, int h) {
+        int n = w * h;
+        int lowest = -1;
+        for (int y = h - 1; y >= 0 && lowest < 0; y--) {
+            int on = 0;
+            for (int x = 0; x < w; x++) if (sky[y * w + x] > 0.5f) on++;
+            if (on > w * 3 / 10) lowest = y;
+        }
+        if (lowest < 0) return sky;
+        boolean[] rest = new boolean[n];
+        for (int i = 0; i < n; i++) rest[i] = sky[i] <= 0.5f && subject[i] <= 0.5f && glow[i] <= 0.5f;
+        Planes.Components c = Planes.components(rest, w, h);
+        float[] out = sky.clone();
+        for (int i = 0; i < n; i++) {
+            int id = c.id[i];
+            if (id > 0 && c.bottom[id] < lowest) out[i] = Math.max(out[i], 1f - Math.max(subject[i], glow[i]));
+        }
+        return out;
+    }
+
+    private static boolean nearKept(Planes.Components c, boolean[] keep, int i, int w, int h) {
+        int x = i % w, y = i / w;
+        for (int dy = -2; dy <= 2; dy++) {
+            int yy = y + dy;
+            if (yy < 0 || yy >= h) continue;
+            for (int dx = -2; dx <= 2; dx++) {
+                int xx = x + dx;
+                if (xx < 0 || xx >= w) continue;
+                int id = c.id[yy * w + xx];
+                if (id > 0 && keep[id]) return true;
+            }
+        }
+        return false;
+    }
+
+    /** Saliency covering more than this share of the picture is not one subject. */
+    static final float MAX_SUBJECT = 0.45f;
+
+    /** True when {@code key}'s mask comes from Gemma's picks: it picked, and SegFormer did not find the group. */
+    private static boolean fromGemma(Inputs in, @Nullable Map<String, int[]> picks, String key, float minCoverage) {
+        if (pick(picks, key) == null) return false;
+        float[] raw = in.groups.get(key);
+        if (raw == null) return true;
+        return Planes.coverage(raw, 0.5f) < minCoverage;
     }
 
     @Nullable

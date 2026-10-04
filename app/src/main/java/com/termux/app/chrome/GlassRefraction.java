@@ -267,14 +267,13 @@ public final class GlassRefraction {
         "    float rim = 1.0 - smoothstep(0.0, 2.0 * uDensity, inside);\n" +
         "    col.rgb = col.rgb + half3(rim * uRim);\n" +
         "    col.rgb = col.rgb + half3(lensGlow * uRim * 0.6);\n" +
-        // The bevel: a soft band along the rim, bright where the normal faces the light (top-left)
-        // and a faint shade where it faces away (bottom-right).
+        // The cut edge: a second, fainter line of light just inside the hairline, the same all the
+        // way round (no light direction, no band washing into the pane), so the edge reads as a
+        // sharp, thick piece of glass. The bending in the band above does the rest.
         "    if (uSpec > 0.0) {\n" +
-        "        float bevel = 1.0 - smoothstep(0.0, 7.0 * uDensity, inside);\n" +
-        "        float facing = dot(n, float2(-0.7071, -0.7071));\n" +
-        "        float lit = facing > 0.0 ? facing * facing : 0.0;\n" +
-        "        float shade = facing < 0.0 ? -facing : 0.0;\n" +
-        "        col.rgb = col.rgb + half3(bevel * uSpec * (lit - 0.25 * shade));\n" +
+        "        float d = uDensity;\n" +
+        "        float inner = smoothstep(1.5 * d, 2.5 * d, inside) * (1.0 - smoothstep(2.5 * d, 3.5 * d, inside));\n" +
+        "        col.rgb = col.rgb + half3(inner * uSpec * 0.6);\n" +
         "    }\n" +
         "    return col;\n" +
         "}\n";

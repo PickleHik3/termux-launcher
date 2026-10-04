@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A sub-page of the Appearance surface (Icon pack): the Overview's top bar (back, centred title)
-     over the page's own content. The end spacer matches the back button so the title stays centred. -->
+<!-- A sub-page of the Appearance surface (Icon pack): the Overview's top bar (back, then the title
+     straight after it) over the page's own content. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -35,14 +35,10 @@
             android:layout_weight="1"
             android:accessibilityHeading="true"
             android:ellipsize="end"
-            android:gravity="center"
+            android:gravity="start|center_vertical"
             android:maxLines="1"
             android:textAppearance="?attr/textAppearanceTitleLarge"
             android:textColor="?attr/colorOnSurface" />
-
-        <Space
-            android:layout_width="48dp"
-            android:layout_height="48dp" />
     </LinearLayout>
 
     <FrameLayout
