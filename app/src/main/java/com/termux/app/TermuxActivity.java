@@ -3440,7 +3440,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override @Nullable public ColorFilter paneGlassFrostFilter() {
-                return com.termux.app.chrome.GlassFilters.frost();
+                return com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getAppBarOpacity() : 100);
             }
 
             @Override @Nullable public Bitmap wallBehindFrame() {
@@ -3467,7 +3467,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     : Color.TRANSPARENT;
                 // The Docked insert stands at least one tone step darker than the frame glass.
                 return isRoundedDockStyle() ? tint
-                    : com.termux.app.chrome.InsertTone.floorTint(tint, frameGlassEstimate());
+                    : com.termux.app.chrome.InsertTone.floorTint(tint, frameGlassEstimate(),
+                        com.termux.app.chrome.LowOpacityGlass.keep(mPreferences != null
+                            ? mPreferences.getTerminalBackgroundOpacity() / 100f : 1f));
             }
 
             @Override public int paneGlassVeil(@NonNull Rect rootRect) {
@@ -6667,7 +6669,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         // Same content-aware light scatter the dock and keyboard backdrops apply, so the
         // under-pill strip reads as the same glass material rather than a plain blur.
-        backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost());
+        backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getAppBarOpacity() : 100));
         backdrop.setVisibility(View.VISIBLE);
         mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, stripRadiusDp,
             usingManagedWallpaperSource, targetRect);
@@ -7219,7 +7221,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             backdrop.setRenderEffect(glass);
         }
         // Content-aware light scatter — the frost that makes the blur read as glass, not plastic.
-        backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost());
+        backdrop.setColorFilter(com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getAppBarOpacity() : 100));
         backdrop.setVisibility(View.VISIBLE);
         mChrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.ACCESSORY, state.blurRadiusDp,
             usingManagedWallpaperSource, backdropTargetRect);
@@ -14233,7 +14235,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
         // Floored well above the dock's opacity: a sheet has body text over a live blur, and at the
         // dock's own tint the terminal behind it reads straight through the words.
-        return mChrome.glass().surface(Math.max(0.92f, barAlpha), 0f, 1f, false, grain,
+        return mChrome.glass().surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.92f), 0f, 1f, false, grain,
             dpToPx(com.termux.app.terminal.TerminalSheetController.cornerRadiusDp()), true);
     }
 
@@ -15027,7 +15029,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
             // Half the chip's 40dp height: a full pill, with the same containing rim the other
             // floating glass surfaces carry.
-            return mChrome.glass().surface(Math.max(0.88f, barAlpha), 0f, 1f, false, grain,
+            return mChrome.glass().surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.88f), 0f, 1f, false, grain,
                 dpToPx(20f), true);
         }
 
@@ -21855,7 +21857,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.graphics.Paint paint =
             new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
         paint.setShader(shader);
-        paint.setColorFilter(com.termux.app.chrome.GlassFilters.frost());
+        paint.setColorFilter(com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getAppBarOpacity() : 100));
         paint.setAntiAlias(true);
         return (canvas, slabs) -> canvas.drawPath(slabs, paint);
     }

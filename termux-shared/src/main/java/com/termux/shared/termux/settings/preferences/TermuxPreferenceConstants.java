@@ -1117,7 +1117,7 @@ public final class TermuxPreferenceConstants {
 
         public static final int MIN_IN_APP_KEYBOARD_BLUR_RADIUS = 0;
 
-        public static final int MAX_IN_APP_KEYBOARD_BLUR_RADIUS = 30;
+        public static final int MAX_IN_APP_KEYBOARD_BLUR_RADIUS = 48;
 
         /**
          * The keyboard's own film-grain strength (percent), read only while the KEYBOARD slot's
@@ -1228,6 +1228,25 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_VALUE_FANCIER_GLASS_EDGE_LIGHT = 18;
         public static final int MIN_FANCIER_GLASS_EDGE_LIGHT = 0;
         public static final int MAX_FANCIER_GLASS_EDGE_LIGHT = 100;
+
+        /**
+         * The bevel: a specular band along the rim, lit from the top-left with a faint shade at the
+         * bottom-right, as a percentage of the strongest it can be. 0 (the default, and every Look
+         * but Clear and Mist) draws nothing, so the rim is the plain hairline it always was.
+         */
+        public static final String KEY_FANCIER_GLASS_SPECULAR = "fancier_glass_specular";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_SPECULAR = 0;
+        public static final int MIN_FANCIER_GLASS_SPECULAR = 0;
+        public static final int MAX_FANCIER_GLASS_SPECULAR = 100;
+
+        /**
+         * Chromatic dispersion at the rim: red, green and blue are bent by slightly different
+         * amounts, as a percentage of the widest split. 0 (the default) samples all three alike.
+         */
+        public static final String KEY_FANCIER_GLASS_DISPERSION = "fancier_glass_dispersion";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_DISPERSION = 0;
+        public static final int MIN_FANCIER_GLASS_DISPERSION = 0;
+        public static final int MAX_FANCIER_GLASS_DISPERSION = 100;
 
         /**
          * Whether holding a keybind prefix (Ctrl+Alt) automatically shows the key-hint strip.

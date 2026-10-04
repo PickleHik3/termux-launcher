@@ -84,7 +84,7 @@ public final class SurfaceEditorRows {
 
     private static final List<Row> ROWS = Collections.unmodifiableList(Arrays.asList(
         new Row(SurfaceSlot.DOCK, SurfaceProperty.BLUR,
-            R.string.termux_dock_tuning_blur, true, 30,
+            R.string.termux_dock_tuning_blur, true, 48,
             TermuxAppSharedPreferences::getExtraKeysBlurRadius,
             TermuxAppSharedPreferences::setExtraKeysBlurRadius),
         new Row(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
@@ -108,7 +108,7 @@ public final class SurfaceEditorRows {
             TermuxAppSharedPreferences::setDockHorizontalInset),
 
         new Row(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR,
-            R.string.termux_dock_tuning_blur, true, 30,
+            R.string.termux_dock_tuning_blur, true, 48,
             TermuxAppSharedPreferences::getInAppKeyboardBlurRadius,
             TermuxAppSharedPreferences::setInAppKeyboardBlurRadius),
         new Row(SurfaceSlot.KEYBOARD, SurfaceProperty.GRAIN,
@@ -127,7 +127,7 @@ public final class SurfaceEditorRows {
             TermuxAppSharedPreferences::setInAppKeyboardHorizontalInset),
 
         new Row(SurfaceSlot.STATUS, SurfaceProperty.BLUR,
-            R.string.termux_dock_tuning_blur, true, 30,
+            R.string.termux_dock_tuning_blur, true, 48,
             TermuxAppSharedPreferences::getStatusBarBlurRadius,
             TermuxAppSharedPreferences::setStatusBarBlurRadius),
         new Row(SurfaceSlot.STATUS, SurfaceProperty.OPACITY,
@@ -151,7 +151,7 @@ public final class SurfaceEditorRows {
             TermuxAppSharedPreferences::setStatusBarHorizontalInset),
 
         new Row(SurfaceSlot.CANVAS, SurfaceProperty.BLUR,
-            R.string.termux_dock_tuning_blur, true, 30,
+            R.string.termux_dock_tuning_blur, true, 48,
             TermuxAppSharedPreferences::getTerminalGlassBlurRadius,
             TermuxAppSharedPreferences::setTerminalGlassBlurRadius),
         new Row(SurfaceSlot.CANVAS, SurfaceProperty.GRAIN,

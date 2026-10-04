@@ -41,6 +41,8 @@ final class AppearanceSnapshot {
     private final int mBend;
     private final int mEdgeWidth;
     private final int mEdgeLight;
+    private final int mSpecular;
+    private final int mDispersion;
     private final int mKeyboardBlurRaw;
     private final int mKeyOpacity;
     /** The stored radius, or NaN when the key is absent and the style's default applies. */
@@ -81,6 +83,8 @@ final class AppearanceSnapshot {
         mBend = prefs.getFancierGlassBendDp();
         mEdgeWidth = prefs.getFancierGlassEdgeWidthDp();
         mEdgeLight = prefs.getFancierGlassEdgeLightPercent();
+        mSpecular = prefs.getFancierGlassSpecularPercent();
+        mDispersion = prefs.getFancierGlassDispersionPercent();
         mKeyboardBlurRaw = prefs.getInAppKeyboardBlurRadiusRaw();
         mKeyOpacity = prefs.getInAppKeyboardKeyOpacity();
         mKeyRadiusRaw = rawKeyRadius(prefs);
@@ -125,6 +129,8 @@ final class AppearanceSnapshot {
         prefs.setFancierGlassBendDp(mBend);
         prefs.setFancierGlassEdgeWidthDp(mEdgeWidth);
         prefs.setFancierGlassEdgeLightPercent(mEdgeLight);
+        prefs.setFancierGlassSpecularPercent(mSpecular);
+        prefs.setFancierGlassDispersionPercent(mDispersion);
         prefs.setInAppKeyboardBlurRadiusRaw(mKeyboardBlurRaw);
         prefs.setInAppKeyboardKeyOpacity(mKeyOpacity);
         restoreKeyRadius(prefs, mKeyRadiusRaw);
@@ -150,6 +156,7 @@ final class AppearanceSnapshot {
             .append('|').append(mWallpaperTerminalOpacity)
             .append('|').append(mTint).append('|').append(mRim).append('|').append(mMotion)
             .append('|').append(mBend).append('|').append(mEdgeWidth).append('|').append(mEdgeLight)
+            .append('|').append(mSpecular).append('|').append(mDispersion)
             .append('|').append(mKeyboardBlurRaw).append('|').append(mKeyOpacity)
             .append('|').append(mKeyRadiusRaw).append('|').append(mDim).append('|').append(mSoft)
             .append('|').append(mContrast).append('|').append(mTrailStyle)

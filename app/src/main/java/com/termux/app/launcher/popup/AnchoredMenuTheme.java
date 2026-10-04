@@ -23,4 +23,10 @@ public interface AnchoredMenuTheme {
 
     /** Blur radius in dp; blur is skipped when this is not positive. */
     int blurRadiusDp();
+
+    /**
+     * The glass plate's grain, 0..100: the dock's own, so a menu carries the same tooth as the
+     * surface it opened from. Static, laid once. 0 (the default) draws none.
+     */
+    default int grainPercent() { return 0; }
 }

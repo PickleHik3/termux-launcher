@@ -118,4 +118,19 @@ public class AppearanceSnapshotTest {
         preferences.setFancierGlassBendDp(preferences.getFancierGlassBendDp() + 3);
         assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
     }
+
+    @Test
+    public void theSpecularAndDispersionAreSnapshottedAndRestored() {
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        String before = AppearanceSnapshot.signatureOf(preferences);
+
+        preferences.setFancierGlassSpecularPercent(70);
+        assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
+        preferences.setFancierGlassDispersionPercent(40);
+        entry.restore(preferences);
+
+        assertEquals(0, preferences.getFancierGlassSpecularPercent());
+        assertEquals(0, preferences.getFancierGlassDispersionPercent());
+        assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
+    }
 }

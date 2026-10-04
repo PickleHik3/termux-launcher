@@ -322,6 +322,10 @@ public final class SuggestionBarView extends GridLayout
         @Override public int opacityPercent() { return appBarOpacity; }
         @Override public boolean blurEnabled() { return blurEnabled; }
         @Override public int blurRadiusDp() { return blurRadiusDp; }
+        @Override public int grainPercent() {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(getContext(), false);
+            return preferences == null ? 0 : preferences.getDockGlassGrain();
+        }
     };
     private final MenuRowFactory menuRows = new MenuRowFactory(getContext(), menuTheme);
     /** The app/folder context menu, and the shortcuts menu that opens beside it. */

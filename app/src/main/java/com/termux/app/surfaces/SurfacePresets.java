@@ -46,9 +46,10 @@ public final class SurfacePresets {
 
     /**
      * Bumped when a key's meaning changes; unknown keys are already ignored without it. 2 added the
-     * glass tint, rim and motion keys; a stored look without them reads as the defaults.
+     * glass tint, rim and motion keys; a stored look without them reads as the defaults. 3 added
+     * the glass edge's specular and dispersion keys, which a stored look without them reads as 0.
      */
-    public static final int FORMAT_VERSION = 2;
+    public static final int FORMAT_VERSION = 3;
 
     /** The fifth card: whatever look the user last saved, rather than one this build ships. */
     public static final String CUSTOM_ID = "custom";
@@ -71,10 +72,16 @@ public final class SurfacePresets {
     }
 
     private static final List<Preset> PRESETS = Collections.unmodifiableList(Arrays.asList(
-        // Clear (id minimal): wallpaper forward, the thinnest glass that still reads as a surface.
+        // Clear (id minimal): the most transparent, fanciest glass. Blur at 44 dp (the cap is 48),
+        // opacity 2 on every surface with the terminal canvas detached at 8 so text keeps something
+        // to sit on, grain 14, a deep bend, a wide bright rim with a strong bevel highlight and a
+        // moderate chromatic split, scheme tint, gradient rim, classic motion.
         preset("minimal", R.string.termux_surface_preset_minimal,
-            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 3, 16, 4, 4, 10, 18,
-            look -> { }),
+            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 44, 2, 14, 28, 40, 85, 70, 40,
+            look -> {
+                look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.GLASS_RIM_GRADIENT);
+                look.put(TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, 8);
+            }),
         // Mist: Obsidian-Music's glass and motion (Apache-2.0; see
         // project-docs/reference/launcher/mist-preset-obsidian-values.md). Blur 25
         // and opacity 60 are Obsidian's own numbers. Grain 8 is not its 0.08 noise carried over:
@@ -82,7 +89,7 @@ public final class SurfacePresets {
         // 60/255 of the percentage, so a literal match (about 68) would read as sand. 8 is the
         // same faint tooth.
         preset("frost", R.string.termux_surface_preset_frost,
-            TERMUX_APP.SURFACE_MATERIAL_FROST, 50, 25, 60, 8, 9, 20, 18,
+            TERMUX_APP.SURFACE_MATERIAL_FROST, 50, 25, 60, 8, 9, 20, 18, 20, 0,
             look -> {
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_OBSIDIAN);
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.GLASS_RIM_GRADIENT);
@@ -90,11 +97,11 @@ public final class SurfacePresets {
             }),
         // Tint (id stock): tinted, low blur, denser; for loud wallpapers and a dark terminal.
         preset("stock", R.string.termux_surface_preset_stock,
-            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 6, 46, 14, 4, 10, 18,
+            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 6, 46, 14, 4, 10, 18, 0, 0,
             look -> look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_OBSIDIAN)),
         // Solid: opaque, no blur cost.
         preset("solid", R.string.termux_surface_preset_solid,
-            TERMUX_APP.SURFACE_MATERIAL_SOLID, 78, 0, 92, 0, 0, 1, 0,
+            TERMUX_APP.SURFACE_MATERIAL_SOLID, 78, 0, 92, 0, 0, 1, 0, 0, 0,
             look -> { })
     ));
 
@@ -103,14 +110,15 @@ public final class SurfacePresets {
     }
 
     /**
-     * Material point, the Base triple and the three Fancier Glass depth keys; the default glass
+     * Material point, the Base triple and the five Fancier Glass keys; the default glass
      * tint, rim and motion; then the extras, whose puts replace any of those in place. The dock
      * style is deliberately absent — a Look never changes Style — and so are corners and margins,
      * which are Layout's ({@link #isLayoutOwned}).
      */
     private static Preset preset(String id, @StringRes int nameRes, String material,
                                  int intensity, int blur, int opacity, int grain,
-                                 int bend, int edgeWidth, int edgeLight, Extras extras) {
+                                 int bend, int edgeWidth, int edgeLight,
+                                 int specular, int dispersion, Extras extras) {
         LinkedHashMap<String, Object> look = new LinkedHashMap<>();
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL, material);
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, intensity);
@@ -120,6 +128,8 @@ public final class SurfacePresets {
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_BEND, bend);
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, edgeWidth);
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, edgeLight);
+        look.put(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR, specular);
+        look.put(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION, dispersion);
         putGlassDefaults(look);
         extras.addTo(look);
         return new Preset(id, nameRes, look);
@@ -212,6 +222,8 @@ public final class SurfacePresets {
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_BEND, prefs.getFancierGlassBendDp());
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, prefs.getFancierGlassEdgeWidthDp());
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, prefs.getFancierGlassEdgeLightPercent());
+        look.put(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR, prefs.getFancierGlassSpecularPercent());
+        look.put(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION, prefs.getFancierGlassDispersionPercent());
         putCustomOnly(prefs, look);
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (isLayoutOwned(row.property) || prefs.isSurfaceInheriting(row.slot, row.property))
@@ -277,6 +289,11 @@ public final class SurfacePresets {
         if (!look.isEmpty()) {
             for (Map.Entry<String, Object> glass : glassDefaults().entrySet())
                 if (!look.containsKey(glass.getKey())) look.put(glass.getKey(), glass.getValue());
+            // Format 3 added the edge's specular and dispersion; before it there were none.
+            if (!look.containsKey(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR))
+                look.put(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR, 0);
+            if (!look.containsKey(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION))
+                look.put(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION, 0);
         }
         return look;
     }
@@ -322,6 +339,12 @@ public final class SurfacePresets {
                 return;
             case TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT:
                 prefs.setFancierGlassEdgeLightPercent(intOf(value));
+                return;
+            case TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR:
+                prefs.setFancierGlassSpecularPercent(intOf(value));
+                return;
+            case TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION:
+                prefs.setFancierGlassDispersionPercent(intOf(value));
                 return;
             case TERMUX_APP.KEY_SURFACE_MATERIAL:
                 prefs.setSurfaceMaterial((String) value);
@@ -408,6 +431,10 @@ public final class SurfacePresets {
                 return prefs.getFancierGlassEdgeWidthDp();
             case TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT:
                 return prefs.getFancierGlassEdgeLightPercent();
+            case TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR:
+                return prefs.getFancierGlassSpecularPercent();
+            case TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION:
+                return prefs.getFancierGlassDispersionPercent();
             case TERMUX_APP.KEY_SURFACE_MATERIAL:
                 return prefs.getSurfaceMaterial();
             case TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY:

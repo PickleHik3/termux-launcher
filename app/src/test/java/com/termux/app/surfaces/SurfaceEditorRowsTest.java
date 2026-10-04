@@ -35,6 +35,14 @@ public class SurfaceEditorRowsTest {
     }
 
     @Test
+    public void everyBlurRowRunsToTheSharedFortyEightDpCap() {
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            SurfaceEditorRows.Row row = SurfaceEditorRows.forCell(slot, SurfaceProperty.BLUR);
+            if (row != null) assertEquals(slot.name(), AppearanceLooks.BLUR_MAX_DP, row.max);
+        }
+    }
+
+    @Test
     public void everySlotHasAPageNamingIt() {
         Set<Integer> seen = new HashSet<>();
         for (SurfaceSlot slot : SurfaceSlot.values()) {
