@@ -243,7 +243,9 @@ public final class GemmaSceneReader {
 
     /**
      * Distinct integers in 1..count, or {@code null} when any entry is not a whole number. A number
-     * past the last region is dropped rather than failing the answer: a small model miscounts.
+     * past the last region is dropped rather than failing the answer: a small model miscounts. A
+     * whole number written as a string ({@code "3"}) counts: on pong, Gemma 4 E2B quoted every mark
+     * in four answers out of six (2026-10-04), and rejecting those threw the whole reading away.
      */
     @Nullable
     private static int[] marks(JSONArray a, int count) {
@@ -251,6 +253,13 @@ public final class GemmaSceneReader {
         int n = 0;
         for (int i = 0; i < a.length(); i++) {
             Object v = a.opt(i);
+            if (v instanceof String) {
+                try {
+                    v = Double.valueOf(((String) v).trim());
+                } catch (NumberFormatException e) {
+                    return null;
+                }
+            }
             if (!(v instanceof Number)) return null;
             double d = ((Number) v).doubleValue();
             if (d != Math.rint(d)) return null;

@@ -111,4 +111,12 @@ public class GemmaSceneReaderTest {
         };
         assertNotNull(GemmaSceneReader.read(ok, "a", "b", c));
     }
+
+    @Test
+    public void quotedMarksCount() {
+        GemmaSceneReader.Plan p = GemmaSceneReader.parse(GOOD.replace("[3,4]", "[\"3\", \" 4\"]"), 10);
+        assertNotNull(p);
+        assertArrayEquals(new int[] {3, 4}, p.regions.get("water"));
+        assertNull(GemmaSceneReader.parse(GOOD.replace("[3,4]", "[\"three\"]"), 10));
+    }
 }
