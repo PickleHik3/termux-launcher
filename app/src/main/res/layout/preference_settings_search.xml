@@ -5,10 +5,10 @@
     android:layout_height="wrap_content"
     android:focusable="true"
     android:focusableInTouchMode="true"
-    android:paddingStart="16dp"
-    android:paddingTop="8dp"
-    android:paddingEnd="16dp"
-    android:paddingBottom="8dp">
+    android:paddingStart="@dimen/settings_gutter"
+    android:paddingTop="@dimen/settings_space_s"
+    android:paddingEnd="@dimen/settings_gutter"
+    android:paddingBottom="@dimen/settings_space_s">
 
     <requestFocus />
 
@@ -16,8 +16,9 @@
         style="?attr/textInputOutlinedStyle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="@string/settings_search_hint"
+        app:hintEnabled="false"
         app:endIconMode="clear_text"
+        app:hintTextColor="?attr/colorPrimary"
         app:shapeAppearance="?attr/shapeAppearanceCornerFull"
         app:startIconContentDescription="@null"
         app:startIconDrawable="@drawable/ic_symbol_search">
@@ -26,6 +27,7 @@
             android:id="@+id/settings_search_input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:hint="@string/settings_search_hint"
             android:imeOptions="actionDone"
             android:inputType="text"
             android:maxLines="1" />

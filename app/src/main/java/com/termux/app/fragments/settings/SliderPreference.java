@@ -30,6 +30,7 @@ public final class SliderPreference extends Preference {
     private int mMax = 100;
     private int mValue;
     private boolean mShowValue;
+    @Nullable private String mValueSuffix;
 
     public SliderPreference(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -70,6 +71,27 @@ public final class SliderPreference extends Preference {
 
     public int getMax() {
         return mMax;
+    }
+
+    /**
+     * Unit text shown after the readout (for example {@code "dp"} or {@code " ms"}); only the
+     * display changes, the persisted int is untouched. Null or empty clears it.
+     */
+    public void setValueSuffix(@Nullable String suffix) {
+        mValueSuffix = suffix == null || suffix.isEmpty() ? null : suffix;
+        notifyChanged();
+    }
+
+    @Nullable
+    public String getValueSuffix() {
+        return mValueSuffix;
+    }
+
+    /** The readout text for a value: the number plus the suffix, if any. */
+    @VisibleForTesting
+    @NonNull
+    String formatValue(int value) {
+        return mValueSuffix == null ? String.valueOf(value) : value + mValueSuffix;
     }
 
     public int getValue() {
@@ -126,7 +148,7 @@ public final class SliderPreference extends Preference {
         slider.setContentDescription(getTitle());
         if (readout != null) {
             readout.setVisibility(mShowValue ? View.VISIBLE : View.GONE);
-            readout.setText(String.valueOf(mValue));
+            readout.setText(formatValue(mValue));
         }
         slider.addOnChangeListener((s, value, fromUser) -> {
             if (!fromUser) return;
@@ -139,7 +161,7 @@ public final class SliderPreference extends Preference {
             // No notifyChanged here: rebinding the row mid-drag would cancel the gesture.
             mValue = next;
             persistInt(next);
-            if (readout != null) readout.setText(String.valueOf(next));
+            if (readout != null) readout.setText(formatValue(next));
         });
     }
 }

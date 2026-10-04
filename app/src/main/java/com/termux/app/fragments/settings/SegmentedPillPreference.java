@@ -2,8 +2,11 @@ package com.termux.app.fragments.settings;
 
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.text.Layout;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.ViewGroup;
+import android.widget.LinearLayout;
 
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
@@ -48,6 +51,9 @@ public final class SegmentedPillPreference extends Preference {
     private CharSequence[] mLabelText = {null, null};
     private static final int MAX_SEGMENTS = 4;
     private String mValue = VALUE_DEFAULT;
+    /** True once a label did not fit on two lines side by side: the segments then stack full-width
+     *  so no label is cut or shrunk. Reset when the segment set changes. */
+    private boolean mStacked;
 
     public SegmentedPillPreference(@NonNull Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -100,6 +106,7 @@ public final class SegmentedPillPreference extends Preference {
         mValues = values;
         mLabelResIds = labelResIds;
         mLabelText = new CharSequence[values.length];
+        mStacked = false;
         mValue = normalize(getPersistedString(mValues[0]));
         notifyChanged();
     }
@@ -117,6 +124,7 @@ public final class SegmentedPillPreference extends Preference {
         mValues = values;
         mLabelResIds = new int[values.length];
         mLabelText = labels;
+        mStacked = false;
         mValue = normalize(getPersistedString(mValues[0]));
         notifyChanged();
     }
@@ -177,6 +185,8 @@ public final class SegmentedPillPreference extends Preference {
             button.setEnabled(isEnabled());
         }
         group.setContentDescription(getTitle());
+        applyStacking(group, buttons, mStacked);
+        if (!mStacked) group.post(() -> stackIfLabelsDoNotFit(group, buttons));
         int selected = selectedIndex();
         if (selected < 0) group.clearChecked();
         else group.check(buttons[selected].getId());
@@ -201,6 +211,46 @@ public final class SegmentedPillPreference extends Preference {
         };
         group.addOnButtonCheckedListener(listener);
         group.setTag(R.id.segmented_pill_track, listener);
+    }
+
+    /** Full-width stacked segments (vertical) or the weighted single row. */
+    private static void applyStacking(@NonNull MaterialButtonToggleGroup group,
+                                      @NonNull MaterialButton[] buttons, boolean stacked) {
+        int orientation = stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL;
+        if (group.getOrientation() == orientation) return;
+        group.setOrientation(orientation);
+        for (MaterialButton button : buttons) {
+            ViewGroup.LayoutParams raw = button.getLayoutParams();
+            if (!(raw instanceof LinearLayout.LayoutParams)) continue;
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) raw;
+            lp.width = stacked ? ViewGroup.LayoutParams.MATCH_PARENT : 0;
+            lp.weight = stacked ? 0f : 1f;
+            button.setLayoutParams(lp);
+        }
+    }
+
+    /** Whether a label that went through layout was cut off or wrapped too much to read well. */
+    @VisibleForTesting
+    static boolean labelsDoNotFit(@NonNull MaterialButton[] buttons, int segmentCount) {
+        for (int i = 0; i < buttons.length && i < segmentCount; i++) {
+            Layout layout = buttons[i].getLayout();
+            if (layout == null) continue;
+            int lines = layout.getLineCount();
+            if (lines > 2) return true;
+            if (lines > 1 && segmentCount > 2) return true;
+            for (int line = 0; line < lines; line++) {
+                if (layout.getEllipsisCount(line) > 0) return true;
+            }
+        }
+        return false;
+    }
+
+    private void stackIfLabelsDoNotFit(@NonNull MaterialButtonToggleGroup group,
+                                       @NonNull MaterialButton[] buttons) {
+        if (mStacked || group.getWidth() == 0) return;
+        if (!labelsDoNotFit(buttons, mValues.length)) return;
+        mStacked = true;
+        applyStacking(group, buttons, true);
     }
 
     private MaterialButton[] findButtons(@NonNull PreferenceViewHolder holder) {

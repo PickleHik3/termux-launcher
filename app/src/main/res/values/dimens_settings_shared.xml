@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared 8dp-family spacing for the Settings menu rows. Specialized editors keep their own. -->
+<resources>
+    <dimen name="settings_gutter">16dp</dimen>
+    <dimen name="settings_space_xs">4dp</dimen>
+    <dimen name="settings_space_s">8dp</dimen>
+    <dimen name="settings_space_m">12dp</dimen>
+    <dimen name="settings_space_l">16dp</dimen>
+    <dimen name="settings_space_xl">24dp</dimen>
+    <dimen name="settings_category_top">24dp</dimen>
+    <dimen name="settings_category_first_top">8dp</dimen>
+    <dimen name="settings_category_bottom">8dp</dimen>
+    <dimen name="settings_chips_fade">24dp</dimen>
+    <dimen name="settings_status_min_height">72dp</dimen>
+    <dimen name="settings_touch_target">48dp</dimen>
+    <dimen name="settings_segment_min_height">48dp</dimen>
+</resources>

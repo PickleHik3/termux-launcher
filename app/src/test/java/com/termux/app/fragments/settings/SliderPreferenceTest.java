@@ -55,4 +55,17 @@ public class SliderPreferenceTest {
         slider.setMax(60);
         assertEquals(60, slider.getValue());
     }
+
+    @Test
+    public void valueSuffixOnlyChangesTheReadout() {
+        SliderPreference slider = new SliderPreference(RuntimeEnvironment.getApplication());
+        slider.setMin(0);
+        slider.setMax(100);
+        assertEquals("40", slider.formatValue(40));
+        slider.setValueSuffix("dp");
+        assertEquals("40dp", slider.formatValue(40));
+        slider.setValueSuffix("");
+        assertEquals("40", slider.formatValue(40));
+        assertEquals(null, slider.getValueSuffix());
+    }
 }
