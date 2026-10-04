@@ -61,11 +61,10 @@ public class LivingStillTest {
         return r;
     }
 
-    @Test public void idIsTheManifestsAndTheStillStaysOutOfTheRegistry() {
+    @Test public void idIsTheManifestsAndTheStillIsNotResolvedUntilTheDiskIsRead() {
         LivingStill s = still(new LivingRecipe());
         assertEquals("living:0123456789abcdef", s.id());
         assertTrue(AnimatedWallpapers.isLivingId(s.id()));
-        for (AnimatedWallpaper w : AnimatedWallpapers.all()) assertFalse(w.id().startsWith("living:"));
         assertNull("not resolvable without a context until one was resolved", AnimatedWallpapers.byId(s.id()));
         assertEquals(4, s.ownPalette().length);
         assertTrue(s.periodSeconds() >= 60f);
@@ -73,7 +72,7 @@ public class LivingStillTest {
 
     @Test public void livingIdsAreWellFormedOrUnknown() {
         assertTrue(AnimatedWallpapers.isKnownId("living:0123456789abcdef"));
-        assertTrue(AnimatedWallpapers.isKnownId("mesh"));
+        assertFalse(AnimatedWallpapers.isKnownId("mesh"));
         assertFalse(AnimatedWallpapers.isKnownId("living:xyz"));
         assertFalse(AnimatedWallpapers.isKnownId("living:0123456789ABCDEF"));
         assertFalse(AnimatedWallpapers.isKnownId("living:"));

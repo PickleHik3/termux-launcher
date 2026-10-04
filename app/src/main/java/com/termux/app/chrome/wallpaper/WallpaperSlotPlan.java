@@ -13,7 +13,11 @@ import java.io.File;
  * Nothing here touches Android; {@link WallpaperSlots} carries the plan out.
  *
  * <p>Photos work on every API level and never need the lock live wallpaper: below API 34 only
- * the animated choices answer {@link Kind#UNSUPPORTED}.</p>
+ * the animated choices (living stills) answer {@link Kind#UNSUPPORTED}.</p>
+ *
+ * <p>Ids are living-still ids only. A stored id of a retired pre-made background reads as a photo
+ * (Home) or Same as Home (Lock); {@link WallpaperSlots#dropRetiredBackgrounds} then heals the
+ * stored values.</p>
  */
 final class WallpaperSlotPlan {
 
@@ -23,7 +27,7 @@ final class WallpaperSlotPlan {
     static final int FLAG_LOCK = 2;
 
     enum Kind {
-        /** Render {@link #stillId}'s rest-pose still and set it with {@link #flags}. */
+        /** Set {@link #stillId}'s photo (its rest pose) with {@link #flags}. */
         SET_STILL,
         /** Open Android's live-wallpaper preview for our lock service. */
         OPEN_PREVIEW,
@@ -33,14 +37,14 @@ final class WallpaperSlotPlan {
         SET_PHOTO,
         /** Only the stored slot changes; the screens already show it. */
         RECORD_ONLY,
-        /** The choice needs API 34 (a generated still) on a phone below it. */
+        /** The choice needs API 34 (a living still) on a phone below it. */
         UNSUPPORTED,
     }
 
     /** The stored state and the system's, as {@link WallpaperSlots#read} has it. */
     static final class Inputs {
         final int sdkInt;
-        /** The Home slot's generated background id, or null for a photo. */
+        /** The Home slot's living still id, or null for a photo. */
         @Nullable final String homeAnimatedId;
         @NonNull final WallpaperSlots.Choice lock;
         final boolean lockMotion;
@@ -64,7 +68,7 @@ final class WallpaperSlotPlan {
     @NonNull final Kind kind;
     /** {@link #FLAG_SYSTEM} and/or {@link #FLAG_LOCK} for {@link Kind#SET_STILL}, else 0. */
     final int flags;
-    /** The background {@link Kind#SET_STILL} renders. */
+    /** The living still {@link Kind#SET_STILL} sets as the system still. */
     @Nullable final String stillId;
     /** The lock choice to store (a {@code wallpaper_lock_choice} value), or null to keep it. */
     @Nullable final String recordLock;
@@ -98,7 +102,7 @@ final class WallpaperSlotPlan {
         return TERMUX_APP.VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX + c.animatedId;
     }
 
-    /** A stored {@code wallpaper_lock_choice} value as a Choice; unknown ids and junk read as Same as Home. */
+    /** A stored {@code wallpaper_lock_choice} value as a Choice; unknown ids (retired backgrounds too) and junk read as Same as Home. */
     @NonNull
     static WallpaperSlots.Choice lockChoice(@Nullable String value) {
         if (TERMUX_APP.VALUE_WALLPAPER_LOCK_PHOTO.equals(value)) return WallpaperSlots.Choice.photo();
@@ -109,7 +113,7 @@ final class WallpaperSlotPlan {
         return WallpaperSlots.Choice.sameAsHome();
     }
 
-    /** The Home slot as a Choice: a known generated id, else a photo. */
+    /** The Home slot as a Choice: a living still id, else a photo (a retired background's id included). */
     @NonNull
     static WallpaperSlots.Choice homeChoice(@Nullable String homeAnimatedId) {
         return AnimatedWallpapers.isKnownId(homeAnimatedId)
@@ -117,7 +121,7 @@ final class WallpaperSlotPlan {
     }
 
     /**
-     * The generated background the lock screen shows for {@code lock}, Same as Home resolved
+     * The living still the lock screen shows for {@code lock}, Same as Home resolved
      * against {@code homeAnimatedId}; null when it shows a photo.
      */
     @Nullable

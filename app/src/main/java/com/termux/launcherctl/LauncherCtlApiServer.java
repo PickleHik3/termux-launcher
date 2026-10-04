@@ -1891,7 +1891,6 @@ public class LauncherCtlApiServer {
         // memory; a script changes it now and then, so the limit is tight.
         rateLimiters.put("POST:/v1/wallpaper", new SimpleRateLimiter(6, 60_000));
         rateLimiters.put("GET:/v1/wallpaper", new SimpleRateLimiter(30, 60_000));
-        rateLimiters.put("GET:/v1/wallpaper/builtins", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/ai/status", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/runtime", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/models", new SimpleRateLimiter(120, 60_000));
@@ -2709,8 +2708,6 @@ public class LauncherCtlApiServer {
             "  launcherctl volume [STREAM VALUE]\n" +
             "  launcherctl toast [--short] <text>\n" +
             "  launcherctl wallpaper set FILE [--home|--lock|--both]\n" +
-            "  launcherctl wallpaper set --builtin ID [--palette material|own] [--home|--lock|--both]\n" +
-            "  launcherctl wallpaper list-builtins\n" +
             "  launcherctl wallpaper get\n" +
             "  launcherctl x11 gpu [--env]\n" +
             "\n" +
@@ -3045,34 +3042,23 @@ public class LauncherCtlApiServer {
             "  api POST /v1/volume \"{\\\"stream\\\":$(printf '%s' \"$1\" | json_str),\\\"volume\\\":$2}\"\n" +
             "}\n" +
             "wallpaper_cmd() {\n" +
-            "  usage='usage: launcherctl wallpaper set FILE [--home|--lock|--both] | set --builtin ID [--palette material|own] [--home|--lock|--both] | list-builtins | get'\n" +
+            "  usage='usage: launcherctl wallpaper set FILE [--home|--lock|--both] | get'\n" +
             "  case \"${1:-}\" in\n" +
             "    get) api GET /v1/wallpaper; return ;;\n" +
-            "    list-builtins) api GET /v1/wallpaper/builtins; return ;;\n" +
             "    set) shift ;;\n" +
             "    *) echo \"$usage\" >&2; exit 2 ;;\n" +
             "  esac\n" +
-            "  target=both file='' builtin='' palette=''\n" +
+            "  target=both file=''\n" +
             "  while [ \"$#\" -gt 0 ]; do\n" +
             "    case \"$1\" in\n" +
             "      --home) target=home; shift ;;\n" +
             "      --lock) target=lock; shift ;;\n" +
             "      --both) target=both; shift ;;\n" +
-            "      --builtin) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; builtin=\"$2\"; shift 2 ;;\n" +
-            "      --palette) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; palette=\"$2\"; shift 2 ;;\n" +
             "      --) shift; file=\"${1:-}\"; break ;;\n" +
             "      -*) echo \"launcherctl wallpaper: unknown option $1\" >&2; exit 2 ;;\n" +
             "      *) [ -z \"$file\" ] || { echo \"$usage\" >&2; exit 2; }; file=\"$1\"; shift ;;\n" +
             "    esac\n" +
             "  done\n" +
-            "  if [ -n \"$builtin\" ]; then\n" +
-            "    [ -z \"$file\" ] || { echo 'launcherctl wallpaper: FILE and --builtin are mutually exclusive' >&2; exit 2; }\n" +
-            "    body=\"{\\\"builtin\\\":$(printf '%s' \"$builtin\" | json_str),\\\"target\\\":\\\"$target\\\"\"\n" +
-            "    [ -z \"$palette\" ] || body=\"$body,\\\"palette\\\":$(printf '%s' \"$palette\" | json_str)\"\n" +
-            "    api POST /v1/wallpaper \"$body}\"\n" +
-            "    return\n" +
-            "  fi\n" +
-            "  [ -z \"$palette\" ] || { echo 'launcherctl wallpaper: --palette needs --builtin' >&2; exit 2; }\n" +
             "  [ -n \"$file\" ] || { echo \"$usage\" >&2; exit 2; }\n" +
             "  case \"$file\" in /*) ;; *) file=\"$PWD/$file\" ;; esac\n" +
             "  [ -f \"$file\" ] || { echo \"launcherctl wallpaper: no such file: $file\" >&2; exit 2; }\n" +

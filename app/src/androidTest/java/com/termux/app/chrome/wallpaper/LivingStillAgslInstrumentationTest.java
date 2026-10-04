@@ -26,8 +26,8 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 
 /**
- * The AGSL programs on a real device compiler (unit tests only read the source): every built-in
- * background compiles, and a living still compiles both its programs, binds the composite's six
+ * The AGSL programs on a real device compiler (unit tests only read the source): a living still
+ * compiles both its programs, binds the composite's six
  * children, draws the photo unchanged at rest (without an effects map), draws a moving frame for
  * each water mode without the driver refusing it, draws the effects program, and draws the moving
  * composite again with that map bound, which changes the picture.
@@ -37,13 +37,6 @@ import java.io.IOException;
 public class LivingStillAgslInstrumentationTest {
 
     private static final int W = 216, H = 482;
-
-    @Test
-    public void everyBuiltInBackgroundCompiles() {
-        for (AnimatedWallpaper w : AnimatedWallpapers.all()) {
-            assertNotNull(w.id(), new RuntimeShader(w.agsl()));
-        }
-    }
 
     @Test
     public void aLivingStillIsThePhotoAtRestAndMovesForEveryWaterMode() throws IOException {

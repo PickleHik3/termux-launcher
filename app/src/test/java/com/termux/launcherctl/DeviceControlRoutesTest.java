@@ -28,8 +28,7 @@ public class DeviceControlRoutesTest {
         assertTrue(DeviceControlRoutes.handles("POST", "/v1/volume"));
         assertTrue(DeviceControlRoutes.handles("POST", "/v1/wallpaper"));
         assertTrue(DeviceControlRoutes.handles("GET", "/v1/wallpaper"));
-        assertTrue(DeviceControlRoutes.handles("GET", "/v1/wallpaper/builtins"));
-        assertFalse(DeviceControlRoutes.handles("POST", "/v1/wallpaper/builtins"));
+        assertFalse(DeviceControlRoutes.handles("GET", "/v1/wallpaper/builtins"));
         assertFalse(DeviceControlRoutes.handles("DELETE", "/v1/wallpaper"));
         assertFalse(DeviceControlRoutes.handles("GET", "/v1/vibrate"));
         assertFalse(DeviceControlRoutes.handles("POST", "/v1/battery"));
@@ -60,9 +59,10 @@ public class DeviceControlRoutesTest {
         Map<?, ?> limiters = (Map<?, ?>) field.get(server);
         for (String key : new String[]{"POST:/v1/vibrate", "POST:/v1/torch", "GET:/v1/battery",
                 "GET:/v1/volume", "POST:/v1/volume", "POST:/v1/toast", "POST:/v1/wallpaper",
-                "GET:/v1/wallpaper", "GET:/v1/wallpaper/builtins"}) {
+                "GET:/v1/wallpaper"}) {
             assertTrue(key, limiters.containsKey(key));
         }
+        assertFalse(limiters.containsKey("GET:/v1/wallpaper/builtins"));
     }
 
     @Test
@@ -96,27 +96,16 @@ public class DeviceControlRoutesTest {
     }
 
     @Test
-    public void builtinWallpaper_rejectsBadRequestsBeforeTouchingTheSystem() throws Exception {
+    public void wallpaperBuiltin_isRemoved() throws Exception {
         org.json.JSONObject both = DeviceControlRoutes.handle(null, "POST", "/v1/wallpaper",
             "{\"path\":\"/sdcard/a.jpg\",\"builtin\":\"aurora\"}");
         assertEquals(400, both.getInt("_statusCode"));
         assertEquals("bad_request", both.getString("error"));
-        org.json.JSONObject unknown = DeviceControlRoutes.handle(null, "POST", "/v1/wallpaper",
-            "{\"builtin\":\"nope\"}");
-        assertEquals(404, unknown.getInt("_statusCode"));
-        assertEquals("not_found", unknown.getString("error"));
-        org.json.JSONObject badTarget = DeviceControlRoutes.handle(null, "POST", "/v1/wallpaper",
-            "{\"builtin\":\"aurora\",\"target\":\"sideways\"}");
-        assertEquals(400, badTarget.getInt("_statusCode"));
-    }
-
-    @Test
-    public void builtinList_namesEveryBackgroundWithItsOwnPalette() throws Exception {
-        org.json.JSONArray list = DeviceControlRoutes.handle(null, "GET", "/v1/wallpaper/builtins", null)
-            .getJSONArray("builtins");
-        assertEquals(com.termux.app.chrome.wallpaper.AnimatedWallpapers.all().size(), list.length());
-        // The wallpaper always uses its own colours; the system theme follows it.
-        assertEquals(1, list.getJSONObject(0).getJSONArray("palettes").length());
-        assertEquals("own", list.getJSONObject(0).getJSONArray("palettes").getString(0));
+        org.json.JSONObject alone = DeviceControlRoutes.handle(null, "POST", "/v1/wallpaper",
+            "{\"builtin\":\"aurora\",\"target\":\"home\"}");
+        assertEquals(400, alone.getInt("_statusCode"));
+        assertEquals("bad_request", alone.getString("error"));
+        org.json.JSONObject none = DeviceControlRoutes.handle(null, "POST", "/v1/wallpaper", "{}");
+        assertEquals(400, none.getInt("_statusCode"));
     }
 }

@@ -16,9 +16,9 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 /**
- * Binds the uniform contract every built-in declares (see {@link MomentAgsl#HEAD}). The one place
- * that names {@link RuntimeShader} for the generated backgrounds, so the registry and the
- * background classes stay loadable on API 26.
+ * Binds the uniform contract every living still declares (see {@link MomentAgsl#HEAD}). The one
+ * place that names {@link RuntimeShader} for the animated backgrounds, so the registry and
+ * {@link LivingStill} stay loadable on API 26.
  *
  * <p>Moment mapping: for PANE_OPEN, PANE_CLOSE and BELL the rect is (x, y, x + w, y + h); for
  * TOUCH the point is (x, y) in rect.xy; for PAGE_CHANGE the direction x goes in rect.x. State is
