@@ -22,10 +22,6 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   `terminal-emulator/.../KittyImageStore.java` also follows kitty's `graphics.c`. These are
   adaptations shipped inside the APK, separate from the external `kitten` tool below. The original
   port commits did not record an exact upstream revision; the Java files document local changes.
-- **[Android-AGSL-Shader-Playground](https://github.com/mejdi14/Android-AGSL-Shader-Playground)** —
-  MIT — Copyright (c) 2025 Mejdi Hafiene. The `Chrome` generated background
-  (`app/.../chrome/wallpaper/Chrome.java`) follows the sine warp and sheen of its
-  `LiquidChromeEffect`, rewritten to bend a palette instead of an input picture and to loop.
 - **[herdr](https://github.com/herdrdev/herdr)** — Apache-2.0 — herdr contributors.
   `AgentTitleRules.java` and `AgentScreenRules.java` adapt the agent-detection manifests recorded
   on 2026-09-11 into ordered Java rules. The original work is credited here separately from the

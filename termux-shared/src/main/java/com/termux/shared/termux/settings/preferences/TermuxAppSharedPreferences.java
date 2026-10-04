@@ -3207,7 +3207,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         );
     }
     
-    /** The generated background id the managed wallpaper came from, or null for a photo. */
+    /** The living still id the managed wallpaper came from, or null for a photo. */
     @Nullable
     public String getManagedWallpaperAnimatedId() {
         String id = SharedPreferenceUtils.getString(mSharedPreferences,
@@ -3218,48 +3218,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setManagedWallpaperAnimatedId(@Nullable String id) {
         SharedPreferenceUtils.setString(mSharedPreferences,
             TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED, id == null ? "" : id, false);
-    }
-
-    /** {@code home} (default), {@code lock} or {@code both}: where the last generated still went. */
-    @androidx.annotation.NonNull
-    public String getManagedWallpaperAnimatedTarget() {
-        String target = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED_TARGET,
-            TERMUX_APP.DEFAULT_VALUE_MANAGED_WALLPAPER_ANIMATED_TARGET, true);
-        return "lock".equals(target) || "both".equals(target) ? target : "home";
-    }
-
-    public void setManagedWallpaperAnimatedTarget(@Nullable String target) {
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED_TARGET,
-            "lock".equals(target) || "both".equals(target) ? target : "home", false);
-    }
-
-    /** The four ARGB colours of the last rendered still, or null when unset or malformed. */
-    @Nullable
-    public int[] getManagedWallpaperAnimatedColors() {
-        String raw = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED_COLORS, null, true);
-        if (raw == null || raw.isEmpty()) return null;
-        String[] parts = raw.split(",");
-        if (parts.length != 4) return null;
-        int[] colors = new int[4];
-        try {
-            for (int i = 0; i < 4; i++) colors[i] = Integer.parseInt(parts[i].trim());
-        } catch (NumberFormatException e) {
-            return null;
-        }
-        return colors;
-    }
-
-    /** Stores four ARGB ints comma-separated; null (or a wrong length) clears them. */
-    public void setManagedWallpaperAnimatedColors(@Nullable int[] argb4) {
-        String raw = "";
-        if (argb4 != null && argb4.length == 4) {
-            raw = argb4[0] + "," + argb4[1] + "," + argb4[2] + "," + argb4[3];
-        }
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED_COLORS, raw, false);
     }
 
     /**

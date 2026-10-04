@@ -60,7 +60,7 @@ access; skip it if command-line tools do not need your shared files.
 
 ## Look
 
-- [Animated backgrounds](Animated_Backgrounds.md) — generated wallpapers behind the glass, and what kitty shaders have a counterpart
+- [Living stills](Animated_Backgrounds.md) — your photo brought to life behind the glass, and what kitty shaders have a counterpart
 
 ## Voice
 

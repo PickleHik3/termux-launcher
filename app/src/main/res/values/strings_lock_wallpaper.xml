@@ -2,5 +2,5 @@
 <!-- The lock-screen live wallpaper, as Android's live-wallpaper preview and chooser name it. -->
 <resources>
     <string name="lock_live_wallpaper_label">Termux Launcher lock screen</string>
-    <string name="lock_live_wallpaper_description">Plays the launcher\'s animated background on the lock screen, calmer and dimmed. Choose Lock screen when Android asks where to set it.</string>
+    <string name="lock_live_wallpaper_description">Plays the launcher\'s living still on the lock screen, calmer and dimmed. Choose Lock screen when Android asks where to set it.</string>
 </resources>

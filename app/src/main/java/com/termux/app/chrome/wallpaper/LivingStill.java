@@ -11,9 +11,9 @@ import java.util.Map;
 
 /**
  * A living still (project-docs/active/animated-wallpaper/living-stills.md, Part D): the user's own
- * photo with its depth map, three region masks and effect recipe, played as a generated
+ * photo with its depth map, three region masks and effect recipe, played as an animated
  * background. The id is {@code living:<hash>}; {@link AnimatedWallpapers#byId(android.content.Context,
- * String)} builds one from the manifest on disk and keeps it out of {@link AnimatedWallpapers#all()}.
+ * String)} builds one from the manifest on disk.
  *
  * <p>Two programs serve every still, split so the UI thread's draw stays cheap. The
  * <b>composite</b> ({@link #agsl()}, drawn at full resolution by the home backdrop, the lock engine

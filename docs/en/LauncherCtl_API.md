@@ -477,9 +477,7 @@ the first time the new store opens.
 | POST | `/v1/volume` | `{"stream": "music", "volume": 7}` | `{"ok": true, "stream": "music", "volume": 7, "max_volume": 15}` |
 | POST | `/v1/toast` | `{"text": "hi", "short": false}` | `{"ok": true, "length": 2}` |
 | POST | `/v1/wallpaper` | `{"path": "/sdcard/a.jpg", "target": "both"}` (`target`: `home`, `lock`, `both`; default `both`) | `{"ok": true, "target": "both", "width": 2400, "height": 1080, "launcher_refresh": "live"}` |
-| POST | `/v1/wallpaper` | `{"builtin": "aurora", "target": "both"}` (`palette` is ignored; `path` and `builtin` are mutually exclusive) | `{"ok": true, "target": "both", "builtin": "aurora", "palette": "own", "animated": true, "reason": null, "launcher_refresh": "live"}` |
-| GET | `/v1/wallpaper/builtins` | none | `{"ok": true, "builtins": [{"id": "aurora", "label": "Aurora", "palettes": ["own"]}, ...]}` |
-| GET | `/v1/wallpaper` | none | `{"ok": true, "home_id": 12, "lock_id": 13, "live": false, "managed": true, "animated": "aurora", "palette": "own", "playing": true, "reason": null, "tier": 0, "kills": 0, "lock_slot": "same_as_home", "lock_motion": true, "lock_live": true, "desired_width": 1080, "desired_height": 2400}` (`lock_slot`: `same_as_home`, a background id, or `photo`; `lock_live`: the launcher's live wallpaper holds the lock screen) |
+| GET | `/v1/wallpaper` | none | `{"ok": true, "home_id": 12, "lock_id": 13, "live": false, "managed": true, "animated": "living:0123456789abcdef", "palette": "own", "playing": true, "reason": null, "tier": 0, "kills": 0, "lock_slot": "same_as_home", "lock_motion": true, "lock_live": true, "desired_width": 1080, "desired_height": 2400}` (`lock_slot`: `same_as_home`, a living still id, or `photo`; `lock_live`: the launcher's live wallpaper holds the lock screen) |
 
 These are the answers `termux-vibrate`, `termux-torch`, `termux-battery-status`, `termux-volume`
 and `termux-toast` give, so a compatibility script can pass them through. They need no pane and
@@ -516,22 +514,13 @@ vibrate and torch, 60 for toast and volume writes, 120 for battery and volume re
   reload happens the next time it opens. `lock` alone changes nothing in the launcher. `GET`
   reports the current ids, whether a live wallpaper is on, and whether the home wallpaper is the
   one the launcher set (`managed`).
-- `wallpaper` with `builtin` sets one of the launcher's generated backgrounds (ids from
-  `GET /v1/wallpaper/builtins`) instead of a photo. The still is its rest pose, rendered with the
-  chosen palette at the size the photo cropper writes and applied through the same code as a
-  photo, so the exact copy and stored id follow. `palette` is ignored; the wallpaper always uses
-  its own colours and the system theme follows it. Rendering
-  needs Android 14 (API 34): below it the call is 409 `unsupported` with `"reason": "api"`. On API
-  34 or later the still is always set, and `animated` says whether the live frames will play: they
-  need Fancier Glass active, otherwise `"animated": false, "reason": "fancier_glass_off"` (or
-  `killed` when the hidden `animated_wallpaper_disabled` preference is on). Errors: 400
-  `bad_request` (both `path` and `builtin`, or a bad `palette` or `target`), 404 `not_found` for an
-  unknown id, 500 `wallpaper_failed`. Setting a `path` afterwards forgets the generated
-  background. `GET /v1/wallpaper` adds `animated` (the id or null), `palette` (mode or null),
-  `playing`, and `reason` (`api`, `fancier_glass_off`, `paused`, `killed`, `inactive`, or null while
-  playing); with no launcher screen registered it reports `playing: false`, `reason: "inactive"`.
-  Set from `launcherctl` with no launcher screen, Material colours come from the application
-  theme rather than the visible scheme.
+- `wallpaper` with `builtin` is gone with the pre-made backgrounds: 400 `bad_request`
+  ("'builtin' was removed; use 'path'"), and `GET /v1/wallpaper/builtins` no longer exists. Setting
+  a `path` afterwards forgets a living still. `GET /v1/wallpaper` adds `animated` (the living
+  still's id, `living:<hash>`, or null), `palette` (`own` or null), `playing`, and `reason` (`api`,
+  `fancier_glass_off`, `paused`, `killed`, `inactive`, or null while playing); with no launcher
+  screen registered it reports `playing: false`, `reason: "inactive"`. A stored id of a retired
+  background reads as a photo.
 
 ```sh
 launcherctl vibrate -d 200 --force
@@ -541,8 +530,6 @@ launcherctl volume                 # list every stream
 launcherctl volume music 7
 launcherctl toast --short 'build done'
 launcherctl wallpaper set ~/pics/a.jpg --lock   # --home | --lock | --both (default)
-launcherctl wallpaper set --builtin aurora --palette own --home
-launcherctl wallpaper list-builtins
 launcherctl wallpaper get
 ```
 

@@ -1,9 +1,7 @@
 package com.termux.app.chrome.wallpaper;
 
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -21,7 +19,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
 
-/** Choosing a generated background: palette modes, the offer rule, stored choice and the routes' early answers. */
+/** Choosing a living still: the offer rule and the stored choice. */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class GeneratedWallpaperChoosingTest {
@@ -34,15 +32,6 @@ public class GeneratedWallpaperChoosingTest {
         SharedPreferences sp = context.getSharedPreferences("generated-wallpaper-choosing-test", Context.MODE_PRIVATE);
         sp.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, sp, null);
-    }
-
-    @Test
-    public void ownModeGivesTheBackgroundsShippedPaletteWithoutAContext() {
-        for (AnimatedWallpaper w : AnimatedWallpapers.all()) {
-            int[] palette = WallpaperPaletteCapture.own(w);
-            assertArrayEquals(w.id(), w.ownPalette(), palette);
-            assertNotSame("a copy, so a caller cannot edit the shipped palette", w.ownPalette(), palette);
-        }
     }
 
     @Test
@@ -59,18 +48,12 @@ public class GeneratedWallpaperChoosingTest {
     @Test
     public void storedChoiceRoundTrips() {
         assertNull(preferences.getManagedWallpaperAnimatedId());
-        assertNull(preferences.getManagedWallpaperAnimatedColors());
         assertFalse(preferences.isAnimatedWallpaperDisabled());
 
-        int[] colors = {0xFF112233, 0xFF445566, 0xFF778899, 0xFFAABBCC};
-        preferences.setManagedWallpaperAnimatedId("aurora");
-        preferences.setManagedWallpaperAnimatedColors(colors);
-        assertEquals("aurora", preferences.getManagedWallpaperAnimatedId());
-        assertArrayEquals(colors, preferences.getManagedWallpaperAnimatedColors());
+        preferences.setManagedWallpaperAnimatedId("living:0123456789abcdef");
+        assertEquals("living:0123456789abcdef", preferences.getManagedWallpaperAnimatedId());
 
         preferences.setManagedWallpaperAnimatedId(null);
-        preferences.setManagedWallpaperAnimatedColors(null);
         assertNull(preferences.getManagedWallpaperAnimatedId());
-        assertNull(preferences.getManagedWallpaperAnimatedColors());
     }
 }

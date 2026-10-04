@@ -1,5 +1,10 @@
 # Generated animated backgrounds, with moments and Material colour
 
+> **Superseded on the built-in parts, 2026-10-04.** The ten pre-made AGSL backgrounds this issue describes
+> were removed in the Appearance round (`appearance-round-2026-10-04.md`, "Removal of the pre-made
+> backgrounds"); living stills (`living-stills.md`) are the only animated backgrounds now. The moments,
+> the rest pose, the Director and the Fancier Glass gate below still apply.
+
 Published as [#41](https://github.com/PickleHik3/termux-launcher/issues/41) on 2026-09-30 with the label
 `ready-for-agent`. The issue is authoritative; this copy is the in-repo record. It builds on
 `project-docs/active/animated-wallpaper/SPEC.md` (the pipeline: a live shared frame, the backdrop,

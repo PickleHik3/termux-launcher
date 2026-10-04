@@ -3,7 +3,7 @@ package com.termux.app.chrome.wallpaper;
 import androidx.annotation.Nullable;
 
 /**
- * What the activity knows about the live generated background, for {@code GET /v1/wallpaper}. The
+ * What the activity knows about the live living still, for {@code GET /v1/wallpaper}. The
  * activity registers one through {@link GeneratedWallpaperApplier#setStatusProvider}; with none
  * registered the route reports not playing, reason {@code inactive}.
  */

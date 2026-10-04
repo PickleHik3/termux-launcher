@@ -8,22 +8,15 @@ import androidx.annotation.Nullable;
 import com.termux.app.chrome.wallpaper.living.LivingStills;
 import com.termux.app.chrome.wallpaper.living.Manifest;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
 /**
- * The built-in generated backgrounds, in picker order, and the living stills the user built from
- * their photos (id {@code living:<hash>}), which are resolved from disk and kept out of
- * {@link #all()}.
+ * The living stills the user built from their photos (id {@code living:<hash>}), resolved from
+ * disk. They are the only animated backgrounds: the pre-made ones are gone, and a stored id that
+ * is not a living id (a retired background's) reads as unknown.
  */
 public final class AnimatedWallpapers {
-
-    private static final List<AnimatedWallpaper> ALL = Collections.unmodifiableList(Arrays.<AnimatedWallpaper>asList(
-        new Mesh(), new Aurora(), new Tide(), new Rain(),
-        new Contour(), new Drift(), new Lava(), new Silk(), new Caustics(), new Chrome()));
 
     private static final Pattern LIVING_ID = Pattern.compile("living:[0-9a-f]{16}");
 
@@ -32,26 +25,20 @@ public final class AnimatedWallpapers {
 
     private AnimatedWallpapers() {}
 
-    public static List<AnimatedWallpaper> all() {
-        return ALL;
-    }
-
     /**
-     * The built-in background with this id, or null when unknown (a restore from a newer build,
-     * say). A living still needs the disk: use {@link #byId(Context, String)}; this answers one only
-     * if that call resolved it before.
+     * The living still with this id, or null when unknown. A living still needs the disk: use
+     * {@link #byId(Context, String)}; this answers one only if that call resolved it before.
      */
-    public static AnimatedWallpaper byId(String id) {
-        if (id == null) return null;
-        for (AnimatedWallpaper w : ALL) if (w.id().equals(id)) return w;
+    @Nullable
+    public static AnimatedWallpaper byId(@Nullable String id) {
         return isLivingId(id) ? LIVING.get(id) : null;
     }
 
-    /** As {@link #byId(String)}, and a {@code living:<hash>} id is read from its manifest; null when that is gone. */
+    /** The living still with this id, read from its manifest; null when that is gone or the id is not a living id. */
     @Nullable
     public static AnimatedWallpaper byId(@NonNull Context context, @Nullable String id) {
         if (id == null) return null;
-        if (!isLivingId(id)) return byId(id);
+        if (!isLivingId(id)) return null;
         Manifest manifest = LivingStills.findByHash(context.getApplicationContext(),
             id.substring(LivingStill.ID_PREFIX.length()));
         if (manifest == null) {
@@ -71,8 +58,8 @@ public final class AnimatedWallpapers {
         return id != null && LIVING_ID.matcher(id).matches();
     }
 
-    /** Whether the id is a built-in or a well-formed living still id: what a stored slot may hold. */
+    /** Whether the id is a well-formed living still id: what a stored slot may hold. */
     public static boolean isKnownId(@Nullable String id) {
-        return id != null && (byId(id) != null || isLivingId(id));
+        return isLivingId(id);
     }
 }

@@ -32,7 +32,7 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
 
 /**
  * The lock-screen live wallpaper (project-docs/active/animated-wallpaper/lock-live-wallpaper.md):
- * draws the Lock slot's generated background, calmer and dimmed, on the keyguard. The home screen
+ * draws the Lock slot's living still, calmer and dimmed, on the keyguard. The home screen
  * keeps the launcher's self-drawn animation over a still, so the glass never samples a live
  * system wallpaper.
  *
@@ -236,6 +236,8 @@ public final class LockLiveWallpaperService extends WallpaperService {
 
         /** Reads the Lock slot and builds the shader for its background (null for a photo). */
         private void loadSlot() {
+            // A retired background in the slot would draw black; heal it before reading.
+            WallpaperSlots.dropRetiredBackgrounds(getApplicationContext());
             TermuxAppSharedPreferences prefs = mPrefs;
             String id = null;
             boolean motion = true;

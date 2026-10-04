@@ -1,17 +1,12 @@
 package com.termux.app.chrome.wallpaper;
 
 /**
- * The AGSL every built-in shares: the uniform contract, cheap float hashes and value noise, the
- * moment effects, and the {@code main} that ties a background's {@code scene} to them.
+ * The AGSL every living still shares: the uniform contract, cheap float hashes and value noise,
+ * and the moment effects. A living still's source is {@code HEAD + its own code}, and its own
+ * {@code main} calls {@link #HEAD}'s {@code momWarp} and {@code momLift}. AGSL has no
+ * preprocessor, no unsigned or bitwise operators, so the hashes are sin/fract floats.
  *
- * <p>A built-in's source is {@code HEAD + its own code + TAIL}. Its own code defines
- * {@code float3 scene(float2 p)}, the base picture in full-frame pixels (top-left origin), and
- * must either multiply everything {@code uTime}-dependent by {@code uEnergy} (swaying motion) or
- * drive one-way motion from {@code uPhase} alone, which the director integrates over energy and
- * zeroes once a lock settles. AGSL has no preprocessor, no
- * unsigned or bitwise operators, so the hashes are sin/fract floats.</p>
- *
- * <p>Moments never touch {@code scene}'s maths. A page change warps the sample position (a
+ * <p>Moments never touch the picture's maths. A page change warps the sample position (a
  * horizontal flow shift, eased out); every other kind adds a soft lift, together capped at +15 %,
  * on top of the finished colour. Slot layout: {@code uMomentState = (kind, progress)}; for
  * PANE_OPEN, PANE_CLOSE and BELL the rect is (l, t, r, b); for TOUCH the point is (rect.x,
@@ -98,26 +93,9 @@ final class MomentAgsl {
         "    return min(v, 1.0) * 0.15;\n" +
         "}\n";
 
-    static final String TAIL =
-        "half4 main(float2 p0) {\n" +
-        "    float2 p = momWarp(p0);\n" +
-        "    float3 c = scene(p);\n" +
-        "    float lift = momLift(p0);\n" +
-        "    float3 acc = float3(uPalette2.rgb);\n" +
-        "    c += lift * (c * 0.6 + acc * 0.6);\n" +
-        "    c = min(c, float3(0.6, 0.6, 0.6));\n" +
-        "    c += (hash21(p0) - 0.5) / 255.0;\n" +
-        "    c *= 1.0 - clamp(uDim, 0.0, 1.0);\n" +
-        "    return half4(half3(max(c, float3(0.0, 0.0, 0.0))), 1.0);\n" +
-        "}\n";
-
     /** Formats a Java float as an AGSL float literal. */
     static String lit(float v) {
         String s = Float.toString(v);
         return s.indexOf('.') >= 0 || s.indexOf('E') >= 0 ? s : s + ".0";
-    }
-
-    static String assemble(float period, String scene) {
-        return HEAD + "const float PERIOD = " + lit(period) + ";\n" + scene + TAIL;
     }
 }

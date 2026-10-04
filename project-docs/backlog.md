@@ -44,7 +44,7 @@ decision.
 
 | Item | Size | State |
 |---|---|---|
-| In-app animated wallpapers over a live shared frame | L | Moved to the next release on 2026-09-30. Now being built under [#41](https://github.com/PickleHik3/termux-launcher/issues/41) as generated backgrounds (Aurora, Mesh, Tide, Rain) with moments and a Material palette, gated behind Fancier Glass (API 34 is its own floor). The specs are `active/animated-wallpaper/SPEC.md` and `generated-backgrounds-issue.md`. Phase 0 (spec §10) comes first: a throwaway prototype whose numbers are measured on the real build on pong, and they decide whether the rest is kept. Spec questions 5, 6 and 8–11 are still open. |
+| In-app animated wallpapers over a live shared frame | L | Moved to the next release on 2026-09-30. Now being built under [#41](https://github.com/PickleHik3/termux-launcher/issues/41) as generated backgrounds with moments (the ten pre-made ones were removed 2026-10-04; living stills are the only animated backgrounds now) and a Material palette, gated behind Fancier Glass (API 34 is its own floor). The specs are `active/animated-wallpaper/SPEC.md` and `generated-backgrounds-issue.md`. Phase 0 (spec §10) comes first: a throwaway prototype whose numbers are measured on the real build on pong, and they decide whether the rest is kept. Spec questions 5, 6 and 8–11 are still open. |
 
 ## Deferred on purpose
 

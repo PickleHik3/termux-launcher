@@ -27,10 +27,10 @@ public class WallpaperSlotPlanTest {
     @Test public void lockValuesRoundTrip() {
         assertEquals("same_as_home", WallpaperSlotPlan.lockValue(Choice.sameAsHome()));
         assertEquals("photo", WallpaperSlotPlan.lockValue(Choice.photo()));
-        assertEquals("animated:aurora", WallpaperSlotPlan.lockValue(Choice.animated("aurora")));
+        assertEquals("animated:" + LIVING, WallpaperSlotPlan.lockValue(Choice.animated(LIVING)));
         assertTrue(WallpaperSlotPlan.lockChoice("same_as_home").sameAsHome);
         assertTrue(WallpaperSlotPlan.lockChoice("photo").photo);
-        assertEquals("tide", WallpaperSlotPlan.lockChoice("animated:tide").animatedId);
+        assertEquals(LIVING_B, WallpaperSlotPlan.lockChoice("animated:" + LIVING_B).animatedId);
     }
 
     @Test public void unknownLockValuesReadAsSameAsHome() {
@@ -41,57 +41,70 @@ public class WallpaperSlotPlanTest {
         assertTrue(WallpaperSlotPlan.lockChoice("both").sameAsHome);
     }
 
+    @Test public void retiredBackgroundsMigrateToAPhotoAndSameAsHome() {
+        for (String retired : new String[] {"mesh", "aurora", "tide", "rain", "contour", "drift", "lava", "silk",
+            "caustics", "chrome"}) {
+            assertTrue(retired, WallpaperSlotPlan.homeChoice(retired).photo);
+            assertTrue(retired, WallpaperSlotPlan.lockChoice("animated:" + retired).sameAsHome);
+            assertNull(retired, WallpaperSlotPlan.resolveLockId(Choice.animated(retired), null));
+            assertNull(retired, WallpaperSlotPlan.resolveLockId(Choice.sameAsHome(), retired));
+        }
+        assertTrue(WallpaperSlotPlan.homeChoice("aurora").photo);
+        assertTrue(WallpaperSlotPlan.lockChoice("animated:aurora").sameAsHome);
+        assertFalse(AnimatedWallpapers.isKnownId("mesh"));
+    }
+
     @Test public void homeChoiceIsAKnownIdElseAPhoto() {
-        assertEquals("mesh", WallpaperSlotPlan.homeChoice("mesh").animatedId);
+        assertEquals(LIVING, WallpaperSlotPlan.homeChoice(LIVING).animatedId);
         assertTrue(WallpaperSlotPlan.homeChoice(null).photo);
         assertTrue(WallpaperSlotPlan.homeChoice("gone").photo);
     }
 
     @Test public void sameAsHomeResolvesToTheHomeBackground() {
-        assertEquals("rain", WallpaperSlotPlan.resolveLockId(Choice.sameAsHome(), "rain"));
+        assertEquals(LIVING, WallpaperSlotPlan.resolveLockId(Choice.sameAsHome(), LIVING));
         assertNull("home photo", WallpaperSlotPlan.resolveLockId(Choice.sameAsHome(), null));
         assertNull(WallpaperSlotPlan.resolveLockId(Choice.sameAsHome(), "gone"));
-        assertEquals("silk", WallpaperSlotPlan.resolveLockId(Choice.animated("silk"), "rain"));
-        assertNull(WallpaperSlotPlan.resolveLockId(Choice.photo(), "rain"));
+        assertEquals(LIVING_B, WallpaperSlotPlan.resolveLockId(Choice.animated(LIVING_B), LIVING));
+        assertNull(WallpaperSlotPlan.resolveLockId(Choice.photo(), LIVING));
     }
 
     // --- Home ---
 
     @Test public void homeAnimatedSetsTheHomeStillOnlyWhenTheLockIsLiveAndFollows() {
-        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.HOME, Choice.animated("aurora"),
+        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.HOME, Choice.animated(LIVING),
             in(null, Choice.sameAsHome(), true, true));
         assertEquals(Kind.SET_STILL, p.kind);
         assertEquals(SYSTEM, p.flags);
-        assertEquals("aurora", p.stillId);
+        assertEquals(LIVING, p.stillId);
         assertTrue(p.recordHome);
         assertNull(p.recordLock);
     }
 
     @Test public void homeAnimatedAlsoUpdatesAStillSameAsHomeLock() {
-        WallpaperSlotPlan off = WallpaperSlotPlan.forApply(Slot.HOME, Choice.animated("aurora"),
+        WallpaperSlotPlan off = WallpaperSlotPlan.forApply(Slot.HOME, Choice.animated(LIVING),
             in(null, Choice.sameAsHome(), false, false));
         assertEquals(SYSTEM | LOCK, off.flags);
-        WallpaperSlotPlan notLive = WallpaperSlotPlan.forApply(Slot.HOME, Choice.animated("aurora"),
+        WallpaperSlotPlan notLive = WallpaperSlotPlan.forApply(Slot.HOME, Choice.animated(LIVING),
             in(null, Choice.sameAsHome(), true, false));
         assertEquals(SYSTEM | LOCK, notLive.flags);
         assertNull("the lock stays Same as Home", notLive.recordLock);
     }
 
     @Test public void homeAnimatedLeavesAnOwnLockChoiceAlone() {
-        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.HOME, Choice.animated("aurora"),
-            in(null, Choice.animated("tide"), false, false));
+        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.HOME, Choice.animated(LIVING),
+            in(null, Choice.animated(LIVING_B), false, false));
         assertEquals(SYSTEM, p.flags);
     }
 
     @Test public void homePhotoIsRecordOnly() {
-        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.HOME, Choice.photo(), in("mesh", Choice.sameAsHome(), true, true));
+        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.HOME, Choice.photo(), in(LIVING, Choice.sameAsHome(), true, true));
         assertEquals(Kind.RECORD_ONLY, p.kind);
         assertNull(p.recordLock);
         assertFalse(p.recordHome);
     }
 
     @Test public void homeAnimatedBelow34IsUnsupported() {
-        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.HOME, Choice.animated("aurora"),
+        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.HOME, Choice.animated(LIVING),
             new Inputs(33, null, Choice.sameAsHome(), true, false));
         assertEquals(Kind.UNSUPPORTED, p.kind);
     }
@@ -99,80 +112,80 @@ public class WallpaperSlotPlanTest {
     // --- Lock ---
 
     @Test public void lockAnimatedWithMotionOpensThePreviewTheFirstTime() {
-        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.animated("lava"),
-            in("mesh", Choice.sameAsHome(), true, false));
+        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.animated(LIVING),
+            in(LIVING, Choice.sameAsHome(), true, false));
         assertEquals(Kind.OPEN_PREVIEW, p.kind);
-        assertEquals("animated:lava", p.recordLock);
+        assertEquals("animated:" + LIVING, p.recordLock);
     }
 
     @Test public void lockAnimatedWithMotionOnceLiveOnlyRecords() {
-        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.animated("lava"),
-            in("mesh", Choice.sameAsHome(), true, true));
+        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.animated(LIVING),
+            in(LIVING, Choice.sameAsHome(), true, true));
         assertEquals(Kind.RECORD_ONLY, p.kind);
-        assertEquals("animated:lava", p.recordLock);
+        assertEquals("animated:" + LIVING, p.recordLock);
     }
 
     @Test public void lockSameAsHomeWithMotionFollowsTheHomeBackground() {
         WallpaperSlotPlan first = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.sameAsHome(),
-            in("mesh", Choice.photo(), true, false));
+            in(LIVING, Choice.photo(), true, false));
         assertEquals(Kind.OPEN_PREVIEW, first.kind);
-        assertEquals("mesh", first.stillId);
+        assertEquals(LIVING, first.stillId);
         assertEquals("same_as_home", first.recordLock);
     }
 
     @Test public void lockAnimatedWithMotionOffSetsTheLockStill() {
-        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.animated("drift"),
-            in("mesh", Choice.sameAsHome(), false, true));
+        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.animated(LIVING_B),
+            in(LIVING, Choice.sameAsHome(), false, true));
         assertEquals(Kind.SET_STILL, p.kind);
         assertEquals(LOCK, p.flags);
-        assertEquals("drift", p.stillId);
+        assertEquals(LIVING_B, p.stillId);
         assertFalse("the Home slot is untouched", p.recordHome);
-        assertEquals("animated:drift", p.recordLock);
+        assertEquals("animated:" + LIVING_B, p.recordLock);
     }
 
     @Test public void lockSameAsHomeWithAHomePhotoCopiesThePhoto() {
         WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.sameAsHome(),
-            in(null, Choice.animated("tide"), true, true));
+            in(null, Choice.animated(LIVING_B), true, true));
         assertEquals(Kind.COPY_HOME_PHOTO_TO_LOCK, p.kind);
         assertEquals("same_as_home", p.recordLock);
     }
 
     @Test public void lockPhotoIsRecordOnly() {
         WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.photo(),
-            in("mesh", Choice.sameAsHome(), true, true));
+            in(LIVING, Choice.sameAsHome(), true, true));
         assertEquals(Kind.RECORD_ONLY, p.kind);
         assertEquals("photo", p.recordLock);
     }
 
     @Test public void below34MotionIsIgnoredAndStillsNeed34() {
-        Inputs old = new Inputs(33, "mesh", Choice.sameAsHome(), true, false);
-        assertEquals(Kind.UNSUPPORTED, WallpaperSlotPlan.forApply(Slot.LOCK, Choice.animated("mesh"), old).kind);
+        Inputs old = new Inputs(33, LIVING, Choice.sameAsHome(), true, false);
+        assertEquals(Kind.UNSUPPORTED, WallpaperSlotPlan.forApply(Slot.LOCK, Choice.animated(LIVING), old).kind);
         assertFalse(old.motionPlays());
     }
 
     // --- Motion ---
 
     @Test public void motionOnOpensThePreviewWhenNotLive() {
-        WallpaperSlotPlan p = WallpaperSlotPlan.forMotion(true, in("mesh", Choice.sameAsHome(), false, false));
+        WallpaperSlotPlan p = WallpaperSlotPlan.forMotion(true, in(LIVING, Choice.sameAsHome(), false, false));
         assertEquals(Kind.OPEN_PREVIEW, p.kind);
         assertNull(p.recordLock);
     }
 
     @Test public void motionOnWhenLiveOnlyRecords() {
         assertEquals(Kind.RECORD_ONLY,
-            WallpaperSlotPlan.forMotion(true, in("mesh", Choice.sameAsHome(), false, true)).kind);
+            WallpaperSlotPlan.forMotion(true, in(LIVING, Choice.sameAsHome(), false, true)).kind);
     }
 
     @Test public void motionOffSetsTheLockStill() {
-        WallpaperSlotPlan p = WallpaperSlotPlan.forMotion(false, in("mesh", Choice.sameAsHome(), true, true));
+        WallpaperSlotPlan p = WallpaperSlotPlan.forMotion(false, in(LIVING, Choice.sameAsHome(), true, true));
         assertEquals(Kind.SET_STILL, p.kind);
         assertEquals(LOCK, p.flags);
-        assertEquals("mesh", p.stillId);
+        assertEquals(LIVING, p.stillId);
     }
 
     @Test public void motionWithALockPhotoChangesNothing() {
-        assertEquals(Kind.RECORD_ONLY, WallpaperSlotPlan.forMotion(false, in("mesh", Choice.photo(), true, false)).kind);
-        assertEquals(Kind.RECORD_ONLY, WallpaperSlotPlan.forMotion(true, in("mesh", Choice.photo(), false, false)).kind);
+        assertEquals(Kind.RECORD_ONLY, WallpaperSlotPlan.forMotion(false, in(LIVING, Choice.photo(), true, false)).kind);
+        assertEquals(Kind.RECORD_ONLY, WallpaperSlotPlan.forMotion(true, in(LIVING, Choice.photo(), false, false)).kind);
         assertEquals("a home photo on a still lock", Kind.RECORD_ONLY,
             WallpaperSlotPlan.forMotion(true, in(null, Choice.sameAsHome(), false, false)).kind);
     }
@@ -189,7 +202,7 @@ public class WallpaperSlotPlanTest {
         for (int sdk : new int[] {33, 34}) {
             // Apply: Home first, with Lock already Same as Home: one set for both screens…
             WallpaperSlotPlan home = WallpaperSlotPlan.forApply(Slot.HOME, Choice.photo(PICTURE),
-                at(sdk, "mesh", Choice.sameAsHome(), true, false));
+                at(sdk, LIVING, Choice.sameAsHome(), true, false));
             assertEquals(sdk + "", Kind.SET_PHOTO, home.kind);
             assertEquals(sdk + "", SYSTEM | LOCK, home.flags);
             assertEquals(PICTURE, home.photo);
@@ -203,10 +216,10 @@ public class WallpaperSlotPlanTest {
 
             // Lock had its own choice: Home's set is Home's only, and Lock follows by copying it.
             WallpaperSlotPlan homeOnly = WallpaperSlotPlan.forApply(Slot.HOME, Choice.photo(PICTURE),
-                at(sdk, "mesh", Choice.animated("rain"), false, false));
+                at(sdk, LIVING, Choice.animated(LIVING), false, false));
             assertEquals(SYSTEM, homeOnly.flags);
             WallpaperSlotPlan copy = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.sameAsHome(),
-                at(sdk, null, Choice.animated("rain"), false, false));
+                at(sdk, null, Choice.animated(LIVING), false, false));
             assertEquals(sdk + "", Kind.COPY_HOME_PHOTO_TO_LOCK, copy.kind);
             assertEquals(LOCK, copy.flags);
             assertEquals("same_as_home", copy.recordLock);
@@ -217,7 +230,7 @@ public class WallpaperSlotPlanTest {
         // At 34 with our live wallpaper on the lock screen and Motion on, Same as Home still
         // takes the photo: the engine cannot draw one.
         WallpaperSlotPlan home = WallpaperSlotPlan.forApply(Slot.HOME, Choice.photo(PICTURE),
-            at(34, "mesh", Choice.sameAsHome(), true, true));
+            at(34, LIVING, Choice.sameAsHome(), true, true));
         assertEquals(Kind.SET_PHOTO, home.kind);
         assertEquals(SYSTEM | LOCK, home.flags);
         WallpaperSlotPlan follows = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.sameAsHome(),
@@ -228,7 +241,7 @@ public class WallpaperSlotPlanTest {
     @Test public void photoOnHomeOnly() {
         for (int sdk : new int[] {33, 34}) {
             WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.HOME, Choice.photo(PICTURE),
-                at(sdk, "mesh", Choice.animated("tide"), true, true));
+                at(sdk, LIVING, Choice.animated(LIVING_B), true, true));
             assertEquals(sdk + "", Kind.SET_PHOTO, p.kind);
             assertEquals(sdk + "", SYSTEM, p.flags);
             assertTrue(p.recordHome);
@@ -239,7 +252,7 @@ public class WallpaperSlotPlanTest {
     @Test public void photoOnLockOnly() {
         for (int sdk : new int[] {33, 34}) {
             WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.photo(PICTURE),
-                at(sdk, "mesh", Choice.sameAsHome(), true, sdk >= 34));
+                at(sdk, LIVING, Choice.sameAsHome(), true, sdk >= 34));
             assertEquals(sdk + "", Kind.SET_PHOTO, p.kind);
             assertEquals(sdk + "", LOCK, p.flags);
             assertEquals(PICTURE, p.photo);
@@ -258,6 +271,7 @@ public class WallpaperSlotPlanTest {
     // --- living stills: a photo with motion, id living:<hash> (living-stills.md, Part D.3) ---
 
     private static final String LIVING = "living:0123456789abcdef";
+    private static final String LIVING_B = "living:fedcba9876543210";
 
     @Test public void livingIdsAreStoredAndReadBack() {
         assertEquals("animated:" + LIVING, WallpaperSlotPlan.lockValue(Choice.animated(LIVING)));

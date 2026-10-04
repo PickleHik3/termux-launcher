@@ -1558,19 +1558,12 @@ public final class TermuxPreferenceConstants {
 
         public static final int DEFAULT_VALUE_MANAGED_WALLPAPER_SYSTEM_ID = -1;
 
-        /** Id of the generated animated background the managed wallpaper was rendered from; unset for a photo. */
+        /** Id of the living still ({@code living:<hash>}) the managed wallpaper came from; unset for a photo. */
         public static final String KEY_MANAGED_WALLPAPER_ANIMATED = "managed_wallpaper_animated";
-
-        /** The four ARGB colours the last still was rendered with, comma-separated ints. */
-        public static final String KEY_MANAGED_WALLPAPER_ANIMATED_COLORS = "managed_wallpaper_animated_colors";
-
-        /** {@code home}, {@code lock} or {@code both}: where the last generated still was applied. */
-        public static final String KEY_MANAGED_WALLPAPER_ANIMATED_TARGET = "managed_wallpaper_animated_target";
-        public static final String DEFAULT_VALUE_MANAGED_WALLPAPER_ANIMATED_TARGET = "home";
 
         /**
          * The Lock wallpaper slot: {@code same_as_home} (default, follows the Home slot),
-         * {@code animated:<id>} (a generated background) or {@code photo}. The Home slot is
+         * {@code animated:<id>} (a living still) or {@code photo}. The Home slot is
          * {@link #KEY_MANAGED_WALLPAPER_ANIMATED} (an id, or unset for a photo).
          */
         public static final String KEY_WALLPAPER_LOCK_CHOICE = "wallpaper_lock_choice";

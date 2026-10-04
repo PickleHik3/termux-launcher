@@ -33,7 +33,7 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * The activity's side of a generated background (issue #41): owns the {@link WallpaperDirector} and
+ * The activity's side of a living still (issue #41): owns the {@link WallpaperDirector} and
  * the {@link AnimatedWallpaperClock}, reads the phone (power saver, thermal, battery, screen, unlock)
  * and the launcher (Fancier Glass, Lazy mode, reduced motion, which picture and backdrop) into the
  * Director's {@link WallpaperDirector.Conditions}, and points the glass readers at the live frames
@@ -243,6 +243,7 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
         registerDeviceListeners();
         recoverLock();
         retryIfKilled();
+        WallpaperSlots.dropRetiredBackgrounds(mActivity);
         refresh();
         leaveLockAfterScreenOff();
         AnimatedWallpaperClock clock = mClock;
@@ -252,6 +253,7 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
     /** Back in front (also after a picker shown over the activity). */
     public void onResume() {
         if (!mSupported) return;
+        WallpaperSlots.dropRetiredBackgrounds(mActivity);
         WallpaperSlots.keepHomeStill(mActivity);
         mVisible = true;
         refresh();
@@ -388,24 +390,8 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
         return mActivity;
     }
 
-    /** A new palette for the running background (the stored colours are re-read by {@link #refresh} too). */
-    public void setPalette(@Nullable int[] argb4) {
-        WallpaperDirector director = mDirector;
-        if (director == null || argb4 == null || argb4.length != 4) return;
-        mPalette = argb4.clone();
-        director.setPalette(argb4);
-        kick();
-    }
-
     /** The launcher's colour scheme was reloaded: nothing to do, the wallpaper keeps its own palette. */
     public void onStylingReloaded() {
-    }
-
-    /** A photo became the wallpaper: forget the generated background and go still. */
-    public void onPhotoApplied() {
-        if (!mSupported) return;
-        GeneratedWallpaperApplier.clear(mActivity);
-        refresh();
     }
 
     private void syncWallpaper() {
@@ -418,8 +404,7 @@ public final class GeneratedWallpaperHost implements AnimatedWallpaperStatus, An
         if (backdrop == null) wallpaper = null;
         int[] colors = null;
         if (wallpaper != null) {
-            colors = prefs.getManagedWallpaperAnimatedColors();
-            if (colors == null) colors = wallpaper.ownPalette();
+            colors = wallpaper.ownPalette();
         }
         boolean reapplied = mReapplied;
         mReapplied = false;

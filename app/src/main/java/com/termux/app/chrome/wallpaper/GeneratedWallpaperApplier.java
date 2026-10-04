@@ -1,45 +1,32 @@
 package com.termux.app.chrome.wallpaper;
 
-import android.app.WallpaperManager;
 import android.content.Context;
-import android.graphics.Bitmap;
-import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 
 import com.termux.app.chrome.FancierGlassPolicy;
-import com.termux.app.chrome.ManagedWallpaper;
-import com.termux.app.wall.WallParallax;
-import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
-import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The "choose and apply" half of a generated background: render its rest-pose still with the
- * chosen palette at the size the photo cropper writes (one and a half portrait screens wide), hand
- * it to {@link ManagedWallpaper#apply} through the same pending file the cropper uses (so the
- * launcher's exact copy, stored wallpaper id and the system's screen-sized centre all follow), and
- * remember which background and colours it was. Shared by the in-app picker and
- * {@code POST /v1/wallpaper}. No view is touched.
+ * The shared plumbing under the wallpaper slots: the single apply worker, the main-thread result
+ * post, the listeners the activity's live host registers, the Home slot's record of a living still
+ * ({@link #recordLiving}) and its {@link #clear}. A living still's photo is the system still, so
+ * nothing is rendered here. Shared by the in-app picker and {@code POST /v1/wallpaper}. No view
+ * is touched.
  */
 public final class GeneratedWallpaperApplier {
 
-    /** Result of {@link #apply}, always on the main thread. */
+    /** Result of an apply, always on the main thread. */
     public interface Callback {
         void onDone(boolean ok, @Nullable String error);
     }
 
-    private static final String LOG_TAG = "GeneratedWallpaperApplier";
     private static final ExecutorService WORKER = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "generated-wallpaper-apply");
         t.setDaemon(true);
@@ -57,7 +44,7 @@ public final class GeneratedWallpaperApplier {
 
     /**
      * Registered by the activity's live host: run on the main thread after the stored background or
-     * its colours changed ({@link #apply}, {@link #clear}), so it can pick the new ones up. Null
+     * its colours changed ({@link #recordLiving}, {@link #clear}), so it can pick the new ones up. Null
      * unregisters.
      */
     public static void setChangedListener(@Nullable Runnable listener) {
@@ -83,82 +70,18 @@ public final class GeneratedWallpaperApplier {
     }
 
     /**
-     * Whether generated backgrounds are offered (picker row, launcherctl): the still needs API 34
+     * Whether living stills are offered (picker row, launcherctl): the still needs API 34
      * and the live frames need Fancier Glass to be active.
      */
     public static boolean offered(int sdkInt, boolean fancierGlassActive) {
         return sdkInt >= 34 && fancierGlassActive;
     }
 
-    /** Why a background is not offered: {@code api}, {@code fancier_glass_off}, or null when it is. */
+    /** Why a living still is not offered: {@code api}, {@code fancier_glass_off}, or null when it is. */
     @Nullable
     public static String notOfferedReason(int sdkInt, boolean fancierGlassActive) {
         if (sdkInt < 34) return "api";
         return fancierGlassActive ? null : "fancier_glass_off";
-    }
-
-    /**
-     * Renders and applies {@code w} for {@code target} ({@code home}, {@code lock} or {@code both}).
-     * The background is always drawn with its own palette; the system theme follows the wallpaper.
-     * Call it on the main thread; the render and set run on a worker that holds only the
-     * application context. {@code cb} is called on the main thread.
-     *
-     * <p>Slots (lock-live-wallpaper.md): a target with the home screen records the Home slot;
-     * {@code lock} records the Lock slot as this background ({@code animated:<id>}) and
-     * {@code both} as Same as Home. A still set on the lock screen replaces the lock live
-     * wallpaper; the Motion toggle keeps its value.</p>
-     */
-    @RequiresApi(34)
-    public static void apply(@NonNull Context ctx, @NonNull AnimatedWallpaper w,
-                             @NonNull String target, @Nullable Callback cb) {
-        final int flags = ManagedWallpaper.flagsForTarget(target);
-        if (flags == 0) {
-            finish(cb, false, "target must be home, lock or both");
-            return;
-        }
-        boolean home = (flags & WallpaperManager.FLAG_SYSTEM) != 0;
-        String lockRecord = (flags & WallpaperManager.FLAG_LOCK) == 0 ? null
-            : home ? TERMUX_APP.VALUE_WALLPAPER_LOCK_SAME_AS_HOME
-            : TERMUX_APP.VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX + w.id();
-        applyStill(ctx, w, flags, home, lockRecord, cb);
-    }
-
-    /**
-     * The still for {@code flags}. {@code recordHome} stores the Home slot (id, colours, target);
-     * {@code lockRecord}, when not null, is the {@code wallpaper_lock_choice} value stored after
-     * Android took the still.
-     */
-    @RequiresApi(34)
-    static void applyStill(@NonNull Context ctx, @NonNull AnimatedWallpaper w, final int flags,
-                           final boolean recordHome, @Nullable final String lockRecord,
-                           @Nullable Callback cb) {
-        final Context app = ctx.getApplicationContext();
-        final int[] palette;
-        try {
-            palette = WallpaperPaletteCapture.own(w);
-        } catch (RuntimeException e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Palette resolve failed", e);
-            finish(cb, false, "palette_failed");
-            return;
-        }
-        WORKER.execute(() -> {
-            String error = renderAndSet(app, w, palette, flags);
-            if (error != null) {
-                finish(cb, false, error);
-                return;
-            }
-            TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, false);
-            if (prefs != null) {
-                if (recordHome) {
-                    prefs.setManagedWallpaperAnimatedId(w.id());
-                    prefs.setManagedWallpaperAnimatedColors(palette);
-                    prefs.setManagedWallpaperAnimatedTarget(ManagedWallpaper.targetName(flags));
-                }
-                if (lockRecord != null) prefs.setWallpaperLockChoice(lockRecord);
-            }
-            if (recordHome) notifyChanged();
-            finish(cb, true, null);
-        });
     }
 
     /** Runs {@code job} on the apply worker, behind any render already queued. */
@@ -172,56 +95,22 @@ public final class GeneratedWallpaperApplier {
     }
 
     /**
-     * Records the Home slot as the living still {@code livingId} whose photo was just set with
-     * {@code flags}: the id stays stored (the live host plays it over the photo) with no colours,
-     * so its own palette applies.
+     * Records the Home slot as the living still {@code livingId} whose photo was just set: the id
+     * stays stored and the live host plays it over the photo, with its own palette.
      */
-    static void recordLiving(@NonNull Context ctx, @NonNull String livingId, int flags) {
+    static void recordLiving(@NonNull Context ctx, @NonNull String livingId) {
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(ctx.getApplicationContext(), false);
         if (prefs == null) return;
         prefs.setManagedWallpaperAnimatedId(livingId);
-        prefs.setManagedWallpaperAnimatedColors(null);
-        prefs.setManagedWallpaperAnimatedTarget(ManagedWallpaper.targetName(flags));
         notifyChanged();
     }
 
-    /** Forgets the generated background; a photo (or a {@code path} set) is the wallpaper now. */
+    /** Forgets the living still; a photo (or a {@code path} set) is the wallpaper now. */
     public static void clear(@NonNull Context ctx) {
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(ctx.getApplicationContext(), false);
         if (prefs == null) return;
         prefs.setManagedWallpaperAnimatedId(null);
-        prefs.setManagedWallpaperAnimatedColors(null);
         notifyChanged();
-    }
-
-    /** Blocking. Returns null on success, else a short error code. */
-    @RequiresApi(34)
-    @Nullable
-    private static String renderAndSet(@NonNull Context app, @NonNull AnimatedWallpaper w,
-                                       @NonNull int[] palette, int flags) {
-        int[] portrait = ManagedWallpaper.portraitSize(app);
-        int width = WallParallax.pickerWidthPx(portrait[0]);
-        int height = portrait[1];
-        Bitmap still = null;
-        try {
-            still = AnimatedWallpaperStill.render(w, palette, width, height);
-            if (still == null) return "render_failed";
-            // The cropper's own pending file: apply() promotes it to the exact copy.
-            File pending = ManagedWallpaper.tempFile(app);
-            if (pending.exists()) pending.delete();
-            try (FileOutputStream out = new FileOutputStream(pending, false)) {
-                if (!still.compress(Bitmap.CompressFormat.PNG, 100, out)) return "encode_failed";
-                out.flush();
-            }
-            boolean ok = ManagedWallpaper.apply(app, WallpaperManager.getInstance(app), Uri.fromFile(pending),
-                flags, portrait[0], portrait[1], TermuxAppSharedPreferences.build(app, false));
-            return ok ? null : "wallpaper_failed";
-        } catch (Exception | OutOfMemoryError e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Applying a generated background failed", e);
-            return "wallpaper_failed";
-        } finally {
-            if (still != null) still.recycle();
-        }
     }
 
     private static void finish(@Nullable Callback cb, boolean ok, @Nullable String error) {
@@ -229,9 +118,9 @@ public final class GeneratedWallpaperApplier {
         MAIN.post(() -> cb.onDone(ok, error));
     }
 
-    /** Whether the switch-and-phone rule says generated backgrounds run, given the stored switch. */
+    /** Whether the switch-and-phone rule says living stills run, given the stored switch. */
     public static boolean offeredFor(int sdkInt, boolean fancierGlassSwitchOn) {
-        // A generated background is a managed wallpaper by construction, so the "managed on screen"
+        // A living still is a managed wallpaper by construction, so the "managed on screen"
         // leg of FancierGlassPolicy.active holds once it is applied.
         return offered(sdkInt, FancierGlassPolicy.active(sdkInt, fancierGlassSwitchOn, true));
     }

@@ -161,7 +161,7 @@ capsule, rounded
 ### Look and motion
 
 **Fancier Glass**:
-The extra glass: refraction at glass edges on every glass surface, animated backgrounds and the
+The extra glass: refraction at glass edges on every glass surface, living stills (animated backgrounds) and the
 tilting page motions. It has no switch any more (it left Settings › Look with the Looks): it is on
 wherever the device supports it — Android 13 and later, with a managed wallpaper — and each Look
 sets how deep the bend is. Lazy mode, battery saver and reduced motion override it. See ADR 0005

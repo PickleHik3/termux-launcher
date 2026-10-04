@@ -6,6 +6,12 @@ home screen keeps the launcher's self-drawn animation.
 
 ## The flow
 
+> **2026-10-04:** the pre-made backgrounds this page calls "built-in" or "preshipped" were removed;
+> only living stills (`living:<hash>`) remain, and `launcherctl` rejects `builtin` (400).
+> `WallpaperSlots.dropRetiredBackgrounds` heals a stored retired id: Home becomes a photo; a retired
+> lock choice becomes `same_as_home` (with the Home picture copied to the lock screen when our live
+> wallpaper holds it) or `photo`.
+
 When a preshipped (animated) background is applied:
 
 - **Lock screen:** our live wallpaper (`LockLiveWallpaperService`) animates it.
