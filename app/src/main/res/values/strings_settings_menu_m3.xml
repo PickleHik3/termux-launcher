@@ -92,4 +92,18 @@
 
     <!-- Permissions: an optional service is not a warning -->
     <string name="settings_accessibility_optional_summary">Used only for double-tap to lock the A–Z row. Shizuku does the same without it.</string>
+
+    <!-- Voice input page -->
+    <string name="settings_voice_group_speech">Speech</string>
+    <string name="settings_voice_group_cleanup">Dictation cleanup</string>
+    <string name="settings_voice_group_listening">Listening</string>
+    <string name="settings_voice_details_title">Cleanup details</string>
+    <string name="settings_voice_details_summary">What cleanup does, and shell commands</string>
+    <string name="settings_voice_details_header">Dictation cleanup</string>
+    <string name="settings_voice_details_cleanup_title">When it runs</string>
+    <string name="settings_voice_details_cleanup_summary">When you stop dictating, a local chat model cleans up the whole text in one pass. The panel marks what changed before you insert or copy it. Needs a cleanup model installed.</string>
+    <string name="settings_voice_details_off_title">When it is off</string>
+    <string name="settings_voice_details_off_summary">The text waits exactly as heard.</string>
+    <string name="settings_voice_details_shell_title">Shell commands</string>
+    <string name="settings_voice_details_shell_summary">Shell commands are formatted by fixed rules instead of the model (ls dash la becomes ls -la).</string>
 </resources>

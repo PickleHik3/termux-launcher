@@ -587,7 +587,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             CHILD_XML_RESOURCES.put("keyboard_input", new int[]{
                 R.xml.termux_keyboard_preferences, R.xml.termux_keyboard_layout_preferences,
                 R.xml.termux_keyboard_size_preferences, R.xml.termux_keyboard_typing_preferences,
-                R.xml.termux_keyboard_voice_preferences, R.xml.termux_keyboard_hardware_preferences,
+                R.xml.termux_keyboard_voice_preferences, R.xml.termux_keyboard_voice_details_preferences,
+                R.xml.termux_keyboard_hardware_preferences,
                 R.xml.speech_model_preferences});
             CHILD_XML_RESOURCES.put("display", new int[]{
                 R.xml.x11_display_preferences, R.xml.x11_display_input_preferences,
@@ -620,6 +621,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             CHILD_XML_PAGES.put(R.xml.termux_keyboard_size_preferences, TERMUX_PAGES + "KeyboardSizePreferencesFragment");
             CHILD_XML_PAGES.put(R.xml.termux_keyboard_typing_preferences, TERMUX_PAGES + "KeyboardTypingPreferencesFragment");
             CHILD_XML_PAGES.put(R.xml.termux_keyboard_voice_preferences, TERMUX_PAGES + "KeyboardVoicePreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.termux_keyboard_voice_details_preferences, TERMUX_PAGES + "KeyboardVoiceDetailsPreferencesFragment");
             CHILD_XML_PAGES.put(R.xml.termux_keyboard_hardware_preferences, TERMUX_PAGES + "KeyboardHardwarePreferencesFragment");
             CHILD_XML_PAGES.put(R.xml.speech_model_preferences, TERMUX_PAGES + "SpeechModelPreferencesFragment");
             CHILD_XML_PAGES.put(R.xml.launcher_dock_preferences, TERMUX_PAGES + "LauncherDockPreferencesFragment");
