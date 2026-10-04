@@ -23,7 +23,9 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.widget.PopupMenu;
 import androidx.constraintlayout.widget.Group;
+import androidx.appcompat.widget.TooltipCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.view.ViewCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
@@ -107,6 +109,8 @@ final class AppearanceEditorPanel {
     @NonNull private final View mRoot;
     /** The bottom padding the layout declares; the controller adds the navigation inset to it. */
     private final int mBasePaddingBottom;
+    private final int mBasePaddingStart;
+    private final int mBasePaddingEnd;
 
     private final MaterialButtonToggleGroup mMode;
     private final MaterialButton mUndo;
@@ -178,6 +182,8 @@ final class AppearanceEditorPanel {
         mContext = context;
         mRoot = root;
         mBasePaddingBottom = root.getPaddingBottom();
+        mBasePaddingStart = root.getPaddingStart();
+        mBasePaddingEnd = root.getPaddingEnd();
         mMode = root.findViewById(R.id.appearance_editor_mode);
         mUndo = root.findViewById(R.id.appearance_editor_undo);
         mDone = root.findViewById(R.id.appearance_editor_done);
@@ -205,6 +211,8 @@ final class AppearanceEditorPanel {
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
         mStyle = root.findViewById(R.id.appearance_editor_style);
         mHidden = root.findViewById(R.id.layout_editor_hidden);
+        TooltipCompat.setTooltipText(mHidden,
+            context.getString(R.string.appearance_editor_hidden_tooltip));
         mHiddenHighlight = root.findViewById(R.id.layout_editor_hidden_highlight);
         mHiddenTiles = root.findViewById(R.id.layout_editor_hidden_tiles);
         mHiddenTileGroup = root.findViewById(R.id.layout_editor_hidden_tile_group);
@@ -276,6 +284,20 @@ final class AppearanceEditorPanel {
         if (mRoot.getPaddingBottom() != bottom)
             mRoot.setPaddingRelative(mRoot.getPaddingStart(), mRoot.getPaddingTop(),
                 mRoot.getPaddingEnd(), bottom);
+    }
+
+    /**
+     * The side padding: the layout's own plus the display's side insets (a camera cutout or a
+     * navigation bar in landscape) under the sheet's content. {@code leftPx} and {@code rightPx}
+     * are physical, so they are mapped to start and end by the panel's layout direction. The
+     * sheet's background still runs edge to edge; only its content stands clear.
+     */
+    void setSideInsets(int leftPx, int rightPx) {
+        boolean rtl = mRoot.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+        int start = mBasePaddingStart + Math.max(0, rtl ? rightPx : leftPx);
+        int end = mBasePaddingEnd + Math.max(0, rtl ? leftPx : rightPx);
+        if (mRoot.getPaddingStart() != start || mRoot.getPaddingEnd() != end)
+            mRoot.setPaddingRelative(start, mRoot.getPaddingTop(), end, mRoot.getPaddingBottom());
     }
 
     /**
@@ -419,6 +441,10 @@ final class AppearanceEditorPanel {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.LEFT));
             mLookLabelViews[i] = label;
+            // The chosen stop is bold, so its width changes: centre it on what it now measures.
+            label.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+                if (r - l != or - ol) placeLookLabels();
+            });
         }
         mLook.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> placeLookLabels());
         mLookLabels.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> placeLookLabels());
@@ -442,12 +468,10 @@ final class AppearanceEditorPanel {
         boolean rtl = mLook.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
         for (int i = 0; i < mLookLabelViews.length; i++) {
             TextView label = mLookLabelViews[i];
-            int labelWidth = label.getWidth();
-            if (labelWidth <= 0) {
-                label.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
-                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
-                labelWidth = label.getMeasuredWidth();
-            }
+            // Measured with the paint it is drawn with now (bold when chosen), never a stale width.
+            label.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            int labelWidth = label.getMeasuredWidth();
             float along = span * i / last;
             float centre = offset + (rtl ? width - pad - along : pad + along);
             float x = Math.max(0, Math.min(mLookLabels.getWidth() - labelWidth,
@@ -493,6 +517,11 @@ final class AppearanceEditorPanel {
             // The chosen stop reads by weight as well as colour.
             label.setTypeface(Typeface.DEFAULT, i == stop ? Typeface.BOLD : Typeface.NORMAL);
             label.setSelected(i == stop);
+            // Selection is said as well as shown, whether or not the slider is moving.
+            label.setContentDescription(mContext.getString(LOOK_LABELS[i]));
+            ViewCompat.setStateDescription(label, i == stop
+                ? mContext.getString(R.string.appearance_editor_look_selected) : null);
+            label.requestLayout();
         }
     }
 

@@ -64,4 +64,8 @@
     <string name="settings_look_appearance_editor_summary">Looks, glass, opacity and text contrast, previewed on the home screen</string>
     <!-- The mode pill's first segment: the Looks slider and the tune row. Short on purpose: the pill shares its row with Undo and Done at 360dp. -->
     <string name="appearance_editor_mode_look">Look</string>
+    <!-- State said to TalkBack for the chosen Look stop; the stop's own name is its description. -->
+    <string name="appearance_editor_look_selected">Selected</string>
+    <!-- Tooltip of the eye-off control before any count is known. -->
+    <string name="appearance_editor_hidden_tooltip">Hidden elements</string>
 </resources>

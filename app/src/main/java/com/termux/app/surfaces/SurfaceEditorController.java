@@ -874,6 +874,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int statusInset = Math.max(0, Math.max(bars.top, mHost.statusBarInsetTop())
             - contentInWindow[1]);
         panel.setNavInset(mNavInsetPx);
+        // Side insets (landscape navigation bar, camera cutout) over the sheet's content, from
+        // the window's own insets and only where they overlap this content view.
+        Insets sides = insets == null ? Insets.NONE : insets.getInsets(
+            WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+        int decorWidth = content.getRootView().getWidth();
+        panel.setSideInsets(
+            Math.max(0, sides.left - contentInWindow[0]),
+            Math.max(0, sides.right - (decorWidth - (contentInWindow[0] + content.getWidth()))));
         // The sheet's height follows its content, but the frame stands above the tallest it gets
         // (Appearance with Row B up, or Layout), so it never moves when Row B comes and goes or
         // when the mode pill does, and no sheet ever covers it.

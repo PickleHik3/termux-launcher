@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Private styles of the Appearance / Layout editor panel (Material 3 menu rework, 2026-10-04).
+  Kept out of styles.xml, which the shared Settings work owns. A segment of the panel's toggle
+  groups is tonal rather than outlined: the chosen one on the secondary container, the rest on a
+  quiet container, no stroke. The 12dp content padding, the check icon and the single line come
+  from Widget.Termux.Button.Segment unchanged.
+-->
+<resources>
+    <style name="Widget.Termux.Editor.Segment" parent="Widget.Termux.Button.Segment">
+        <item name="strokeWidth">0dp</item>
+        <item name="backgroundTint">@color/termux_editor_segment_container</item>
+        <item name="android:textColor">@color/termux_editor_segment_content</item>
+        <item name="iconTint">@color/termux_editor_segment_content</item>
+        <item name="rippleColor">@color/termux_editor_segment_content</item>
+    </style>
+</resources>

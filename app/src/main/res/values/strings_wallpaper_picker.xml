@@ -15,7 +15,7 @@
     <string name="wallpaper_picker_apply_home_only">Home screen only</string>
     <string name="wallpaper_picker_apply_lock_only">Lock screen only</string>
     <string name="wallpaper_picker_motion">Motion</string>
-    <string name="wallpaper_picker_look">Look</string>
+    <string name="wallpaper_picker_look">Surface style</string>
     <string name="wallpaper_picker_icon_pack">Icon pack</string>
     <string name="wallpaper_picker_layout">Layout</string>
     <string name="wallpaper_picker_icon_pack_system">System icons</string>

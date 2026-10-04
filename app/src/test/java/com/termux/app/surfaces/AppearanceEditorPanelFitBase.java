@@ -245,6 +245,39 @@ public abstract class AppearanceEditorPanelFitBase {
         }
     }
 
+    @Test
+    public void sideInsetsKeepEveryControlInsideTheSheetAtThisWidth() {
+        mPanel.showAppearanceMode();
+        mPanel.setSideInsets(48, 24);
+        layOut(mPanel.measureFor(false, mWidthPx));
+        assertFits();
+        View root = mPanel.view();
+        assertTrue("content stands clear of the left inset", root.getPaddingLeft() >= 48);
+        assertTrue("content stands clear of the right inset", root.getPaddingRight() >= 24);
+    }
+
+    @Test
+    public void theChosenLookLabelIsSelectedAndNamedForAccessibility() {
+        mPanel.showAppearanceMode();
+        mPanel.setStop(2);
+        layOut(mPanel.measureFor(false, mWidthPx));
+        FrameLayout labels = mPanel.view().findViewById(R.id.appearance_editor_look_labels);
+        int selected = 0;
+        for (int i = 0; i < labels.getChildCount(); i++) {
+            View label = labels.getChildAt(i);
+            if (label.isSelected()) selected++;
+            assertNotNull(label.getContentDescription());
+        }
+        assertEquals(1, selected);
+        assertTrue(labels.getChildAt(2).isSelected());
+    }
+
+    @Test
+    public void theEyeOffControlHasATooltip() {
+        View hidden = mPanel.view().findViewById(R.id.layout_editor_hidden);
+        assertNotNull(hidden.getTooltipText());
+    }
+
     private void layOut(int heightPx) {
         View root = mPanel.view();
         root.measure(View.MeasureSpec.makeMeasureSpec(mWidthPx, View.MeasureSpec.EXACTLY),
