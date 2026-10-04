@@ -10,15 +10,45 @@ import androidx.core.content.pm.PackageInfoCompat;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
 
+/**
+ * What this device has learned about its models: which accelerators failed, what loads measured,
+ * which models reject a system role.
+ *
+ * <p>The history lives in its own file, {@code files/tai/runtime-history.json}, read from disk on
+ * every access and rewritten atomically under an exclusive file lock. It used to be one string in
+ * the shared {@code termux_ai} preferences, and two processes write to that file: the app process
+ * (settings, the API server, {@code clearRuntimeHistory}) and the {@code :tai_runtime} process
+ * (every load and every runtime outcome). SharedPreferences caches the whole file per process and
+ * writes the whole map back on every {@code apply()}, so a process holding a stale copy overwrote
+ * the other's change. On 2026-10-04 {@code tai runtime --clear-history} removed 61 entries in the
+ * app process, and the runtime process's next record wrote its stale 61 entries straight back,
+ * so a GPU failure we had cleared returned and kept demoting the GPU. The same clobber could also
+ * revert any TAI setting changed in the app process. With a file of its own, nothing is cached,
+ * the lock is held across each read-modify-write, and both processes see one truth.
+ *
+ * <p>The old preferences key is read once, to migrate an existing history into the file, and
+ * removed; after that this class never touches SharedPreferences.
+ */
 public final class TaiRuntimeHistory {
+    /** The legacy preferences key, kept only so an existing history can be migrated out of it. */
     private static final String KEY_HISTORY = "tai_runtime_history_json";
     /** Entries are never otherwise pruned; past this many, the oldest {@code updatedAtMs} go first. */
     static final int MAX_ENTRIES = 200;
+    private static final String FILE_NAME = "runtime-history.json";
+    private static final String LOCK_NAME = "runtime-history.lock";
 
     private TaiRuntimeHistory() {
     }
@@ -59,18 +89,20 @@ public final class TaiRuntimeHistory {
         @NonNull TaiDeviceCapabilities device,
         boolean success
     ) {
-        try {
-            JSONObject history = history(context);
-            JSONObject entry = new JSONObject();
-            entry.put("modelId", modelId);
-            entry.put("device", deviceKey(device));
-            entry.put("feature", "audio_input");
-            entry.put("success", success);
-            entry.put("updatedAtMs", System.currentTimeMillis());
-            history.put("audio_input|" + modelId + "|" + deviceKey(device), entry);
-            save(context, history);
-        } catch (JSONException ignored) {
-        }
+        withLock(context, history -> {
+            try {
+                JSONObject entry = new JSONObject();
+                entry.put("modelId", modelId);
+                entry.put("device", deviceKey(device));
+                entry.put("feature", "audio_input");
+                entry.put("success", success);
+                entry.put("updatedAtMs", System.currentTimeMillis());
+                history.put("audio_input|" + modelId + "|" + deviceKey(device), entry);
+                return true;
+            } catch (JSONException ignored) {
+                return false;
+            }
+        });
     }
 
     @Nullable
@@ -98,17 +130,19 @@ public final class TaiRuntimeHistory {
      * folded form rather than paying for the failed attempt every time.
      */
     public static void recordSystemRoleUnsupported(@NonNull Context context, @NonNull String modelId) {
-        try {
-            JSONObject history = history(context);
-            JSONObject entry = new JSONObject();
-            entry.put("modelId", modelId);
-            entry.put("feature", "system_role");
-            entry.put("success", false);
-            entry.put("updatedAtMs", System.currentTimeMillis());
-            history.put(systemRoleKey(modelId), entry);
-            save(context, history);
-        } catch (JSONException ignored) {
-        }
+        withLock(context, history -> {
+            try {
+                JSONObject entry = new JSONObject();
+                entry.put("modelId", modelId);
+                entry.put("feature", "system_role");
+                entry.put("success", false);
+                entry.put("updatedAtMs", System.currentTimeMillis());
+                history.put(systemRoleKey(modelId), entry);
+                return true;
+            } catch (JSONException ignored) {
+                return false;
+            }
+        });
     }
 
     /** Whether this model is already known to reject a system-role message; see {@link #recordSystemRoleUnsupported}. */
@@ -232,26 +266,28 @@ public final class TaiRuntimeHistory {
         long measuredBytes
     ) {
         if (measuredBytes <= 0L) return;
-        try {
-            JSONObject history = history(context);
-            String key = measuredKey(model, device, backend, accelerator, contextWindow);
-            JSONObject entry = history.optJSONObject(key);
-            long worst = entry == null ? 0L : entry.optLong("bytes", 0L);
-            int samples = entry == null ? 0 : entry.optInt("samples", 0);
-            if (entry == null) entry = new JSONObject();
-            entry.put("modelId", model.id);
-            entry.put("device", deviceKey(device));
-            entry.put("backend", backend);
-            entry.put("accelerator", normalizeAccelerator(accelerator));
-            entry.put("contextBucket", contextBucket(contextWindow));
-            entry.put("bytes", Math.max(worst, measuredBytes));
-            entry.put("lastBytes", measuredBytes);
-            entry.put("samples", samples + 1);
-            entry.put("updatedAtMs", System.currentTimeMillis());
-            history.put(key, entry);
-            save(context, history);
-        } catch (JSONException ignored) {
-        }
+        withLock(context, history -> {
+            try {
+                String key = measuredKey(model, device, backend, accelerator, contextWindow);
+                JSONObject entry = history.optJSONObject(key);
+                long worst = entry == null ? 0L : entry.optLong("bytes", 0L);
+                int samples = entry == null ? 0 : entry.optInt("samples", 0);
+                if (entry == null) entry = new JSONObject();
+                entry.put("modelId", model.id);
+                entry.put("device", deviceKey(device));
+                entry.put("backend", backend);
+                entry.put("accelerator", normalizeAccelerator(accelerator));
+                entry.put("contextBucket", contextBucket(contextWindow));
+                entry.put("bytes", Math.max(worst, measuredBytes));
+                entry.put("lastBytes", measuredBytes);
+                entry.put("samples", samples + 1);
+                entry.put("updatedAtMs", System.currentTimeMillis());
+                history.put(key, entry);
+                return true;
+            } catch (JSONException ignored) {
+                return false;
+            }
+        });
     }
 
     /** The worst measured drop for this key, or {@code 0} when no load of it has been measured. */
@@ -287,9 +323,16 @@ public final class TaiRuntimeHistory {
 
     /** Wipes every entry (the {@code tai runtime --clear-history} path); returns how many were dropped. */
     public static int clear(@NonNull Context context) {
-        int count = history(context).length();
-        prefs(context).edit().remove(KEY_HISTORY).apply();
-        return count;
+        final int[] count = {0};
+        withLock(context, history -> {
+            count[0] = history.length();
+            List<String> all = new ArrayList<>();
+            Iterator<String> keys = history.keys();
+            while (keys.hasNext()) all.add(keys.next());
+            for (String key : all) history.remove(key);
+            return true;
+        });
+        return count[0];
     }
 
     /**
@@ -297,10 +340,12 @@ public final class TaiRuntimeHistory {
      * system-role records, variants included), for when the model is deleted. Returns the number dropped.
      */
     public static int removeModel(@NonNull Context context, @NonNull String modelId) {
-        JSONObject history = history(context);
-        int removed = removeModel(history, modelId);
-        if (removed > 0) save(context, history);
-        return removed;
+        final int[] removed = {0};
+        withLock(context, history -> {
+            removed[0] = removeModel(history, modelId);
+            return removed[0] > 0;
+        });
+        return removed[0];
     }
 
     static int removeModel(@NonNull JSONObject history, @NonNull String modelId) {
@@ -335,11 +380,6 @@ public final class TaiRuntimeHistory {
         return entry == null ? 0L : entry.optLong("updatedAtMs", 0L);
     }
 
-    private static void save(@NonNull Context context, @NonNull JSONObject history) {
-        cap(history, MAX_ENTRIES);
-        prefs(context).edit().putString(KEY_HISTORY, history.toString()).apply();
-    }
-
     @NonNull
     public static JSONObject summary(@NonNull Context context) throws JSONException {
         JSONObject data = new JSONObject();
@@ -358,24 +398,24 @@ public final class TaiRuntimeHistory {
         boolean success,
         @NonNull String reason
     ) {
-        try {
-            JSONObject history = history(context);
-            JSONObject entry = new JSONObject();
-            entry.put("modelId", model.id);
-            entry.put("device", deviceKey(device));
-            entry.put("backend", backend);
-            entry.put("accelerator", normalizeAccelerator(accelerator));
-            entry.put("success", success);
-            entry.put("reason", reason);
-            entry.put("updatedAtMs", System.currentTimeMillis());
-            if (!success) {
-                long version = appVersionCode(context);
-                if (version > 0L) entry.put("appVersionCode", version);
+        final long version = success ? 0L : appVersionCode(context);
+        withLock(context, history -> {
+            try {
+                JSONObject entry = new JSONObject();
+                entry.put("modelId", model.id);
+                entry.put("device", deviceKey(device));
+                entry.put("backend", backend);
+                entry.put("accelerator", normalizeAccelerator(accelerator));
+                entry.put("success", success);
+                entry.put("reason", reason);
+                entry.put("updatedAtMs", System.currentTimeMillis());
+                if (!success && version > 0L) entry.put("appVersionCode", version);
+                history.put(key(model, device, accelerator), entry);
+                return true;
+            } catch (JSONException ignored) {
+                return false;
             }
-            history.put(key(model, device, accelerator), entry);
-            save(context, history);
-        } catch (JSONException ignored) {
-        }
+        });
     }
 
     @Nullable
@@ -388,15 +428,124 @@ public final class TaiRuntimeHistory {
         return history(context).optJSONObject(key(model, device, accelerator));
     }
 
+    /** A read-modify-write over the history; return {@code true} to have the changed history written back. */
+    private interface Mutation {
+        boolean apply(@NonNull JSONObject history);
+    }
+
+    /** Serialises threads of this process, since a {@link FileLock} is per JVM and overlapping requests throw. */
+    private static final Object PROCESS_LOCK = new Object();
+
+    @NonNull
+    private static File directory(@NonNull Context context) {
+        return new File(context.getApplicationContext().getFilesDir(), "tai");
+    }
+
+    /**
+     * Runs {@code mutation} on the freshly read history while holding the process lock and the
+     * exclusive file lock, and writes the result back (capped, to a temporary file renamed over the
+     * target) when it returns {@code true}. The lock spans the read and the write, so another
+     * process cannot slip a change in between and have it lost. Returns the history as it stands.
+     */
+    @NonNull
+    private static JSONObject withLock(@NonNull Context context, @NonNull Mutation mutation) {
+        File dir = directory(context);
+        synchronized (PROCESS_LOCK) {
+            if (!dir.isDirectory() && !dir.mkdirs() && !dir.isDirectory()) return new JSONObject();
+            try (RandomAccessFile lockFile = new RandomAccessFile(new File(dir, LOCK_NAME), "rw");
+                 FileChannel channel = lockFile.getChannel();
+                 FileLock ignored = channel.lock()) {
+                File file = new File(dir, FILE_NAME);
+                JSONObject history = readFile(context, file, true);
+                if (mutation.apply(history)) {
+                    cap(history, MAX_ENTRIES);
+                    write(file, history);
+                }
+                return history;
+            } catch (IOException | RuntimeException e) {
+                // The history is an optimisation; a failed write loses a record, never a load.
+                return new JSONObject();
+            }
+        }
+    }
+
+    private static void write(@NonNull File file, @NonNull JSONObject history) throws IOException {
+        File temp = new File(file.getParentFile(), FILE_NAME + ".tmp");
+        Files.write(temp.toPath(), history.toString().getBytes(StandardCharsets.UTF_8));
+        Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    /**
+     * Reads the history from disk every time, with no cache, because the other process may have
+     * changed the file since the last look. Writers replace the file by rename, so a read without
+     * the file lock always sees a whole file. The cases that must change something (a legacy value
+     * to migrate, an unparseable file to set aside) go through the lock.
+     */
     @NonNull
     private static JSONObject history(@NonNull Context context) {
-        String value = prefs(context).getString(KEY_HISTORY, "{}");
-        if (value == null || value.trim().isEmpty()) value = "{}";
-        try {
-            return new JSONObject(value);
-        } catch (JSONException e) {
+        File file = new File(directory(context), FILE_NAME);
+        if (file.isFile()) {
+            JSONObject parsed = readFile(context, file, false);
+            if (parsed != null) return parsed;
+        } else if (!hasLegacyHistory(context)) {
             return new JSONObject();
         }
+        return withLock(context, history -> false);
+    }
+
+    private static boolean hasLegacyHistory(@NonNull Context context) {
+        try {
+            return prefs(context).contains(KEY_HISTORY);
+        } catch (RuntimeException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Parses the file. With {@code locked} set (the caller holds the file lock) a missing file is
+     * filled from the legacy preferences value, which is then removed, and an unparseable file is
+     * renamed to {@code .bad} and read as empty. Without it, an unparseable file yields {@code null}
+     * so the caller can retry under the lock, and a missing file reads as empty.
+     */
+    @Nullable
+    private static JSONObject readFile(@NonNull Context context, @NonNull File file, boolean locked) {
+        if (!file.isFile()) return locked ? migrateLegacy(context, file) : new JSONObject();
+        try {
+            String text = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+            if (text.trim().isEmpty()) return new JSONObject();
+            return new JSONObject(text);
+        } catch (JSONException e) {
+            if (!locked) return null;
+            try {
+                Files.move(file.toPath(), new File(file.getParentFile(), FILE_NAME + ".bad").toPath(),
+                    StandardCopyOption.REPLACE_EXISTING);
+            } catch (IOException ignored) {
+            }
+            return new JSONObject();
+        } catch (IOException e) {
+            return new JSONObject();
+        }
+    }
+
+    @NonNull
+    private static JSONObject migrateLegacy(@NonNull Context context, @NonNull File file) {
+        JSONObject history = new JSONObject();
+        if (!hasLegacyHistory(context)) return history;
+        try {
+            SharedPreferences prefs = prefs(context);
+            String value = prefs.getString(KEY_HISTORY, "");
+            if (value != null && !value.trim().isEmpty()) {
+                try {
+                    history = new JSONObject(value);
+                } catch (JSONException ignored) {
+                    history = new JSONObject();
+                }
+            }
+            write(file, history);
+            prefs.edit().remove(KEY_HISTORY).apply();
+        } catch (IOException | RuntimeException ignored) {
+        }
+        return history;
     }
 
     @NonNull
