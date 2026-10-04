@@ -165,7 +165,9 @@ public final class LivingStillBuilder {
         // recipe
         recipe.version = LivingRecipe.VERSION;
         recipe.models.putAll(maps.models);
-        if (plan != null) {
+        // The director record is written whether or not the answer parsed: a null plan with a
+        // model and a time says "it was asked and failed", which is what a reader of the file needs.
+        if (chat != null && modelId != null) {
             recipe.gemmaModel = modelId;
             recipe.gemmaAccelerator = chat.lastAccelerator();
             recipe.gemmaFallbackReason = chat.lastFallbackReason();

@@ -27,7 +27,12 @@ public final class SceneReader {
     public static final String E2B_ID = "gemma-4-e2b-it-litert-lm";
     /** The suffix the TAI gives a model id for its vision-enabled load. */
     public static final String VISION_SUFFIX = "-vision";
-    public static final long TIMEOUT_MS = 60_000L;
+    /**
+     * The whole call, load included. On pong the GPU load alone took 15 s and the elements answer
+     * about 45 s more with speculative decoding, so 60 s cut the first on-device reading off and
+     * the recipe fell back to rules; the job runs behind a progress bar, so it may take its time.
+     */
+    public static final long TIMEOUT_MS = 180_000L;
     static final int CONTEXT_WINDOW = 2048;
     static final int MAX_TOKENS = 700;
 

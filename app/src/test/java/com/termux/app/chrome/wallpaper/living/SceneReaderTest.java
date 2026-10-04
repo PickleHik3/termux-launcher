@@ -166,7 +166,7 @@ public class SceneReaderTest {
         assertNull(SceneReader.read(crash, "x"));
         String good = fixture("e4b-round2-speculative.json");
         SceneReader.Chat ok = (body, timeout) -> {
-            assertEquals(60_000L, timeout);
+            assertEquals(SceneReader.TIMEOUT_MS, timeout);
             return good;
         };
         assertNotNull(SceneReader.read(ok, "x"));
