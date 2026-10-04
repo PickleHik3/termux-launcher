@@ -1439,7 +1439,6 @@
         <string name="tai_centre_voice_settings">Voice settings</string>
         <string name="tai_centre_delete_voice_title">Delete %1$s?</string>
         <string name="tai_centre_delete_voice_message">Read aloud stops working until you download it again.</string>
-        <string name="tai_centre_segment_vision">Vision</string>
         <string name="tai_centre_vision_header">Wallpaper vision</string>
         <string name="tai_centre_vision_sub">Depth, scene and subject maps for living wallpapers</string>
         <string name="tai_centre_kind_vision">vision</string>

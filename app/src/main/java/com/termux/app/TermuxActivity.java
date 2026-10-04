@@ -248,6 +248,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public static final String EXTRA_SURFACE_EDITOR_SECTION =
         "com.termux.app.extra.DOCK_TUNING_SECTION";
     /** Opens the wallpaper picker page over the live launcher: Settings' one "Appearance" door. */
+    /** With {@link #EXTRA_WALLPAPER_STYLE}: the launch came from Settings, so closing the surface returns there. */
+    public static final String EXTRA_APPEARANCE_FROM_SETTINGS = "com.termux.app.extra.APPEARANCE_FROM_SETTINGS";
     public static final String EXTRA_WALLPAPER_STYLE =
         "com.termux.app.extra.WALLPAPER_STYLE";
     /** Opens the Layout editor over the live place, from any door that sends an intent. */
@@ -10756,8 +10758,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void handleWallpaperStyleIntent(@Nullable Intent intent) {
         if (intent == null || !intent.getBooleanExtra(EXTRA_WALLPAPER_STYLE, false))
             return;
+        boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
         intent.removeExtra(EXTRA_WALLPAPER_STYLE);
+        intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
         openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
+        // Settings' Appearance row: closing the surface goes back to Settings, as its old Look page did.
+        mAppearanceFromSettings = fromSettings;
     }
 
     /**
@@ -16902,6 +16908,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     // Every door calls this: the Settings row, the terminal menu, the corner tabs, a deep link, and
     // the remote appearance.* actions.
     void openAppearanceSurface(@NonNull com.termux.app.surfaces.AppearanceSurfaceController.PageId page) {
+        mAppearanceFromSettings = false;
         openAppearanceSurface(page, null, null, null);
     }
 
@@ -17012,6 +17019,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void onClosed() {
             mOverviewRestore = null;
         }
+
+        @Override public void onClosedByUser() {
+            if (!mAppearanceFromSettings) return;
+            mAppearanceFromSettings = false;
+            // Opened from Settings' Appearance row: Back returns to Settings' first screen, not the
+            // launcher (the row's CLEAR_TOP launch closed Settings underneath the surface).
+            startActivity(new Intent(TermuxActivity.this, com.termux.app.activities.SettingsActivity.class));
+        }
     }
 
     /**
@@ -17030,6 +17045,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         options.inSampleSize = Math.max(1, Integer.highestOneBit(bounds.outWidth / 540));
         return android.graphics.BitmapFactory.decodeFile(file.getPath(), options);
     }
+
+    /** The open surface came from Settings' Appearance row; a close by the person goes back there. */
+    private boolean mAppearanceFromSettings;
 
     /** What the Overview asks of the activity. */
     @NonNull

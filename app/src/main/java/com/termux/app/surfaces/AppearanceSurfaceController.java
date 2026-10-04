@@ -184,6 +184,9 @@ public final class AppearanceSurfaceController {
 
         /** The surface closed, by any path. */
         void onClosed();
+
+        /** The person closed the surface themselves (Back or the Overview's back), after {@link #onClosed}. */
+        default void onClosedByUser() {}
     }
 
     /** Overview to editor; the editor's own frame settles in {@link AppearanceEditorFrame#ENTER_MS}. */
@@ -225,6 +228,8 @@ public final class AppearanceSurfaceController {
     };
 
     private boolean mOpen;
+    /** The close under way is the person's own, so the host may take them back where they came from. */
+    private boolean mClosingByUser;
     /** Opened straight into an editor: nothing behind it, so Done and Back close. */
     private boolean mDirect;
     private boolean mCovered;
@@ -689,6 +694,7 @@ public final class AppearanceSurfaceController {
     private void closeAnimated() {
         if (!mOpen || mTransitioning)
             return;
+        mClosingByUser = true;
         FrameLayout view = mView;
         if (view == null || mShown != PageId.OVERVIEW || ReducedMotion.isEnabled(mHost.context())) {
             closeNow();
@@ -736,7 +742,11 @@ public final class AppearanceSurfaceController {
         mDirect = false;
         mEditor.setOnDone(null);
         mEditor.endSession();
+        boolean byUser = mClosingByUser;
+        mClosingByUser = false;
         mHost.onClosed();
+        if (byUser)
+            mHost.onClosedByUser();
     }
 
     private void fadeHost(float alpha, @NonNull Runnable end) {

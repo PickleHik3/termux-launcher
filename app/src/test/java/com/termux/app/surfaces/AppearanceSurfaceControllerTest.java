@@ -165,6 +165,7 @@ public class AppearanceSurfaceControllerTest {
         FakeOverview overview;
         FakePage icons;
         int closed;
+        int closedByUser;
 
         FakeHost(Activity activity) {
             this.activity = activity;
@@ -189,6 +190,7 @@ public class AppearanceSurfaceControllerTest {
         }
 
         @Override public void onClosed() { closed++; }
+        @Override public void onClosedByUser() { closedByUser++; }
     }
 
     private Activity mActivity;
@@ -269,6 +271,21 @@ public class AppearanceSurfaceControllerTest {
         assertFalse("Look: taps go through to the launcher", host.isClickable());
         mNavigator.back();
         assertTrue("back on the Overview it takes them again", host.isClickable());
+    }
+
+    @Test
+    public void onlyThePersonsOwnCloseIsReportedAsTheirs() {
+        // Settings' Appearance row goes back to Settings on the person's close only: Home and the
+        // photo picker close the surface too, and must not.
+        mSurface.open(PageId.OVERVIEW);
+        mSurface.closeNow();
+        assertEquals(1, mHost.closed);
+        assertEquals("a forced close is not theirs", 0, mHost.closedByUser);
+        mSurface.open(PageId.OVERVIEW);
+        mNavigator.back();
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2));
+        assertEquals(2, mHost.closed);
+        assertEquals("Back on the Overview is", 1, mHost.closedByUser);
     }
 
     @Test

@@ -85,8 +85,7 @@ public class TaiModelCentreFragment extends Fragment
     public static final String SEGMENT_INSTALLED = "installed";
     public static final String SEGMENT_CHAT = "chat";
     public static final String SEGMENT_SPEECH = "speech";
-    public static final String SEGMENT_VISION = "vision";
-    private static final String[] SEGMENTS = {SEGMENT_INSTALLED, SEGMENT_CHAT, SEGMENT_SPEECH, SEGMENT_VISION};
+    private static final String[] SEGMENTS = {SEGMENT_INSTALLED, SEGMENT_CHAT, SEGMENT_SPEECH};
     /** How long a row brought into view by a deep link keeps its ring. */
     private static final long HIGHLIGHT_MS = 2400L;
     private static final String STATE_SEGMENT = "tai_centre_segment";
@@ -172,18 +171,18 @@ public class TaiModelCentreFragment extends Fragment
     }
 
     /**
-     * Opens the centre on the Vision segment, scrolled to {@code modelId}'s row, which is ringed for
+     * Opens the centre on the Chat segment, where the vision graphs close the list, scrolled to {@code modelId}'s row, which is ringed for
      * a moment: the wallpaper picker's "download the missing models" lands here.
      */
     public static void openForModel(@Nullable Activity activity, @NonNull String modelId) {
         if (activity == null) return;
         if (activity instanceof SettingsActivity) {
-            Bundle arguments = arguments(SEGMENT_VISION);
+            Bundle arguments = arguments(SEGMENT_CHAT);
             arguments.putString(SettingsActivity.EXTRA_SCROLL_TO_KEY, modelId);
             ((SettingsActivity) activity).openScreen(TaiModelCentreFragment.class, R.string.tai_model_centre_title, arguments);
         } else {
             activity.startActivity(SettingsActivity.createFragmentIntent(activity, TaiModelCentreFragment.class,
-                R.string.tai_model_centre_title, SEGMENT_VISION, modelId));
+                R.string.tai_model_centre_title, SEGMENT_CHAT, modelId));
         }
     }
 
@@ -388,7 +387,7 @@ public class TaiModelCentreFragment extends Fragment
         if (context == null) return;
         // A deep link's row is ringed from the rebuild that shows it; the ring clears itself after a moment.
         String scrollTarget = null;
-        if (pendingScrollKey != null && SEGMENTS[segment].equals(SEGMENT_VISION)) {
+        if (pendingScrollKey != null && SEGMENTS[segment].equals(SEGMENT_CHAT)) {
             scrollTarget = pendingScrollKey;
             highlightKey = pendingScrollKey;
             pendingScrollKey = null;
@@ -407,21 +406,19 @@ public class TaiModelCentreFragment extends Fragment
         CharSequence[] labels = {
             getString(R.string.tai_centre_segment_installed),
             getString(R.string.tai_centre_segment_chat),
-            getString(R.string.tai_centre_segment_speech),
-            getString(R.string.tai_centre_segment_vision)};
+            getString(R.string.tai_centre_segment_speech)};
         items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SEGMENTS, "segments", "segments|" + segment,
             new TaiModelCentreAdapter.Segments(segment, labels), false));
         switch (SEGMENTS[segment]) {
             case SEGMENT_CHAT:
                 addCatalogue(context, items, TaiModelCatalog.chatEntries().values(), false, busy);
                 addEmbeddings(context, items, busy);
+                // The wallpaper vision graphs close the list, as embeddings do: no tab of their own.
+                addVision(context, items, busy);
                 break;
             case SEGMENT_SPEECH:
                 addCatalogue(context, items, TaiModelCatalog.speechEntries().values(), true, busy);
                 addVoiceOutput(context, items, busy);
-                break;
-            case SEGMENT_VISION:
-                addVision(context, items, busy);
                 break;
             default: addInstalled(context, items); break;
         }

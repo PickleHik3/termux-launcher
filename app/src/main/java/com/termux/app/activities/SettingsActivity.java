@@ -587,6 +587,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 if (preference.getFragment() != null) return false;
                 Intent intent = new Intent(context, com.termux.app.TermuxActivity.class);
                 intent.putExtra(com.termux.app.TermuxActivity.EXTRA_WALLPAPER_STYLE, true);
+                intent.putExtra(com.termux.app.TermuxActivity.EXTRA_APPEARANCE_FROM_SETTINGS, true);
                 intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
                 startActivity(intent);
                 return true;
