@@ -12,6 +12,5 @@
         <item name="backgroundTint">@color/termux_editor_segment_container</item>
         <item name="android:textColor">@color/termux_editor_segment_content</item>
         <item name="iconTint">@color/termux_editor_segment_content</item>
-        <item name="rippleColor">@color/termux_editor_segment_content</item>
     </style>
 </resources>

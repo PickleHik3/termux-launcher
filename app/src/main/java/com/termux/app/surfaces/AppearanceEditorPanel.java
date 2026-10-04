@@ -25,7 +25,6 @@ import androidx.appcompat.widget.PopupMenu;
 import androidx.constraintlayout.widget.Group;
 import androidx.appcompat.widget.TooltipCompat;
 import androidx.core.content.ContextCompat;
-import androidx.core.view.ViewCompat;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
@@ -121,6 +120,8 @@ final class AppearanceEditorPanel {
     private final Slider mLook;
     private final FrameLayout mLookLabels;
     private final TextView[] mLookLabelViews = new TextView[AppearanceLooks.STOP_COUNT];
+    /** Each label's own typeface as its text appearance set it (family and weight kept). */
+    private final Typeface[] mLookLabelBase = new Typeface[AppearanceLooks.STOP_COUNT];
 
     private final View mRow2;
     private final TextView mRow2Name;
@@ -441,6 +442,7 @@ final class AppearanceEditorPanel {
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP | Gravity.LEFT));
             mLookLabelViews[i] = label;
+            mLookLabelBase[i] = label.getTypeface();
             // The chosen stop is bold, so its width changes: centre it on what it now measures.
             label.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
                 if (r - l != or - ol) placeLookLabels();
@@ -515,12 +517,9 @@ final class AppearanceEditorPanel {
             TextView label = mLookLabelViews[i];
             label.setTextColor(i == stop ? active : quiet);
             // The chosen stop reads by weight as well as colour.
-            label.setTypeface(Typeface.DEFAULT, i == stop ? Typeface.BOLD : Typeface.NORMAL);
+            Typeface base = mLookLabelBase[i] != null ? mLookLabelBase[i] : label.getTypeface();
+            label.setTypeface(i == stop ? Typeface.create(base, Typeface.BOLD) : base);
             label.setSelected(i == stop);
-            // Selection is said as well as shown, whether or not the slider is moving.
-            label.setContentDescription(mContext.getString(LOOK_LABELS[i]));
-            ViewCompat.setStateDescription(label, i == stop
-                ? mContext.getString(R.string.appearance_editor_look_selected) : null);
             label.requestLayout();
         }
     }
