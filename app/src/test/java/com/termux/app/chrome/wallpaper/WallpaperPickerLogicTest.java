@@ -251,4 +251,30 @@ public class WallpaperPickerLogicTest {
             WallpaperPickerLogic.applyBothEnabled(WallpaperSlots.Choice.animated(LIVING),
                 WallpaperSlots.Choice.photo(PHOTO_FILE), WallpaperSlots.Choice.sameAsHome(), false));
     }
+
+    @Test
+    public void aCardLosesTheLabelsHeightAndKeepsTheAspect() {
+        // A 360 dp wide pager 356 dp tall at 3x: 8 dp of padding each side and a 26 dp label.
+        int[] withLabel = WallpaperPickerLogic.cardSize(1080, 1068, 24, 78, 360f, 800f, 0.62f);
+        int[] without = WallpaperPickerLogic.cardSize(1080, 1068, 24, 0, 360f, 800f, 0.62f);
+        assertEquals(1068 - 48 - 78, withLabel[1]);
+        assertTrue("the label shrinks the card", withLabel[1] < without[1]);
+        assertEquals("at the overlay's aspect", Math.round(withLabel[1] * 360f / 800f), withLabel[0]);
+    }
+
+    @Test
+    public void aWideShortPagerNarrowsTheCardToItsShareOfTheWidth() {
+        int[] size = WallpaperPickerLogic.cardSize(400, 2000, 0, 0, 360f, 800f, 0.5f);
+        assertEquals(200, size[0]);
+        assertEquals(Math.round(200 * 800f / 360f), size[1]);
+        int[] none = WallpaperPickerLogic.cardSize(0, 0, 10, 10, 360f, 800f, 0.5f);
+        assertTrue("never smaller than a pixel", none[0] >= 1 && none[1] >= 1);
+    }
+
+    @Test
+    public void theStripIsSameAsHomeAndTheRecentsOnly() {
+        assertEquals(1, WallpaperPickerLogic.stripTileCount(0, 3));
+        assertEquals(3, WallpaperPickerLogic.stripTileCount(2, 3));
+        assertEquals("the recents are capped", 4, WallpaperPickerLogic.stripTileCount(9, 3));
+    }
 }

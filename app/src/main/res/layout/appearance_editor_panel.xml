@@ -232,8 +232,29 @@
             android:textAppearance="?attr/textAppearanceLabelMedium"
             android:textColor="?attr/colorOnSurfaceVariant"
             android:visibility="gone"
-            app:layout_constraintEnd_toStartOf="@id/appearance_editor_c2_label"
+            app:layout_constraintEnd_toStartOf="@id/appearance_editor_c3_label"
             app:layout_constraintStart_toEndOf="@id/appearance_editor_c1_label"
+            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_name"
+            app:layout_goneMarginEnd="16dp" />
+
+        <!-- The fourth column, the terminal's only: its Grain, between Text contrast and Blur.
+             Every other element has room for Grain in a column it already has (the status bar and
+             the dock in the first, the keyboard in the middle). The 16dp gap after it is c3's own;
+             cl's goneMarginEnd keeps one when c3 is gone. -->
+        <TextView
+            android:id="@+id/appearance_editor_c3_label"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:layout_marginEnd="16dp"
+            android:ellipsize="end"
+            android:maxLines="2"
+            android:minLines="1"
+            android:textAppearance="?attr/textAppearanceLabelMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone"
+            app:layout_constraintEnd_toStartOf="@id/appearance_editor_c2_label"
+            app:layout_constraintStart_toEndOf="@id/appearance_editor_cl_label"
             app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_name" />
 
         <TextView
@@ -247,7 +268,7 @@
             android:textAppearance="?attr/textAppearanceLabelMedium"
             android:textColor="?attr/colorOnSurfaceVariant"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/appearance_editor_cl_label"
+            app:layout_constraintStart_toEndOf="@id/appearance_editor_c3_label"
             app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_name" />
 
         <androidx.constraintlayout.widget.Barrier
@@ -255,7 +276,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:barrierDirection="bottom"
-            app:constraint_referenced_ids="appearance_editor_c1_label,appearance_editor_cl_label,appearance_editor_c2_label" />
+            app:constraint_referenced_ids="appearance_editor_c1_label,appearance_editor_cl_label,appearance_editor_c3_label,appearance_editor_c2_label" />
 
         <com.google.android.material.slider.Slider
             android:id="@+id/appearance_editor_c1_slider"
@@ -330,6 +351,21 @@
             app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier"
             app:tickVisibilityMode="hidden" />
 
+        <com.google.android.material.slider.Slider
+            android:id="@+id/appearance_editor_c3_slider"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:contentDescription="@string/appearance_editor_control_description"
+            android:stepSize="1"
+            android:valueFrom="0"
+            android:valueTo="100"
+            android:visibility="gone"
+            app:labelBehavior="gone"
+            app:layout_constraintEnd_toEndOf="@id/appearance_editor_c3_label"
+            app:layout_constraintStart_toStartOf="@id/appearance_editor_c3_label"
+            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier"
+            app:tickVisibilityMode="hidden" />
+
         <!-- The keyboard's door to its theme page (DECISIONS item 15), in the last column. -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_c2_button"
@@ -374,7 +410,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             app:barrierDirection="bottom"
-            app:constraint_referenced_ids="appearance_editor_c1_slider,appearance_editor_c1_soft,appearance_editor_legibility,appearance_editor_cl_slider,appearance_editor_c2_button,appearance_editor_c2_slider" />
+            app:constraint_referenced_ids="appearance_editor_c1_slider,appearance_editor_c1_soft,appearance_editor_legibility,appearance_editor_cl_slider,appearance_editor_c3_slider,appearance_editor_c2_button,appearance_editor_c2_slider" />
 
         <TextView
             android:id="@+id/appearance_editor_trail_label"

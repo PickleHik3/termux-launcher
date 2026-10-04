@@ -575,7 +575,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         }
 
         /**
-         * The "Wallpaper & style" row opens no page of its own: it brings the launcher forward with
+         * The "Appearance" row opens no page of its own: it brings the launcher forward with
          * the wallpaper picker over it, the same door the corner tab's button is. While a search hit
          * comes from a Look page row it carries that page's fragment instead (see
          * {@link #filterDestinationRow}), and the default handling opens the page.

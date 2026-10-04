@@ -94,6 +94,56 @@ final class AppearanceEditorFrame {
      * it to the device's corners. Called again on a rotation or a resize with the new numbers.
      */
     void show(float scale, float translationYPx, boolean animate) {
+        ensureClipped();
+        mRoot.setPivotX(mRoot.getWidth() / 2f);
+        mRoot.setPivotY(0f);
+        mRoot.animate().cancel();
+        if (!animate) {
+            mRoot.setScaleX(scale);
+            mRoot.setScaleY(scale);
+            mRoot.setTranslationY(translationYPx);
+            return;
+        }
+        mRoot.animate().scaleX(scale).scaleY(scale).translationY(translationYPx)
+            .setDuration(ENTER_MS).setInterpolator(Motion.settle()).start();
+    }
+
+    /**
+     * Puts the root at {@code scale} and {@code translationYPx} at once, clipped, without
+     * animating: where the hop from the Overview starts, at the Home card's rect, so the next
+     * {@link #show} travels from there.
+     */
+    void prime(float scale, float translationYPx) {
+        ensureClipped();
+        mRoot.setPivotX(mRoot.getWidth() / 2f);
+        mRoot.setPivotY(0f);
+        mRoot.animate().cancel();
+        mRoot.setScaleX(scale);
+        mRoot.setScaleY(scale);
+        mRoot.setTranslationY(translationYPx);
+    }
+
+    /**
+     * Travels to {@code scale} and {@code translationYPx} and stays there, clipped: the way back
+     * to the Overview's Home card, which covers the launcher by the time it arrives.
+     */
+    void moveTo(float scale, float translationYPx, @Nullable Runnable onEnd) {
+        ensureClipped();
+        mRoot.animate().cancel();
+        mRoot.setPivotX(mRoot.getWidth() / 2f);
+        mRoot.setPivotY(0f);
+        if (!isScaled() && scale == 1f && translationYPx == 0f) {
+            if (onEnd != null) onEnd.run();
+            return;
+        }
+        mRoot.animate().scaleX(scale).scaleY(scale).translationY(translationYPx)
+            .setDuration(EXIT_MS).setInterpolator(Motion.settle())
+            .withEndAction(() -> {
+                if (onEnd != null) onEnd.run();
+            }).start();
+    }
+
+    private void ensureClipped() {
         mCornerRadiusPx = deviceCornerRadiusPx(mRoot);
         if (!mClipped) {
             mSavedProvider = mRoot.getOutlineProvider();
@@ -110,17 +160,6 @@ final class AppearanceEditorFrame {
         } else {
             mRoot.invalidateOutline();
         }
-        mRoot.setPivotX(mRoot.getWidth() / 2f);
-        mRoot.setPivotY(0f);
-        mRoot.animate().cancel();
-        if (!animate) {
-            mRoot.setScaleX(scale);
-            mRoot.setScaleY(scale);
-            mRoot.setTranslationY(translationYPx);
-            return;
-        }
-        mRoot.animate().scaleX(scale).scaleY(scale).translationY(translationYPx)
-            .setDuration(ENTER_MS).setInterpolator(Motion.settle()).start();
     }
 
     /** Back to full size, and the clip taken off once it is there. */

@@ -35,8 +35,8 @@ public final class CornerTabGlyphs {
     public static final String POWER = "";
 
     /**
-     * nf-md-palette (U+F03D8, a surrogate pair like {@link #LAYOUT}): the Appearance editor. The
-     * same palette the editor itself wears on its floating pill and its shared-layer heading
+     * nf-md-palette (U+F03D8, a surrogate pair like {@link #LAYOUT}): the Appearance surface (Overview,
+     * Look, Layout and Icons), whatever place the tab is on. The same palette the editor itself wears on its floating pill and its shared-layer heading
      * ({@code ic_symbol_palette}), so the button and the thing it opens carry one mark. It used to
      * be nf-fa-sliders, which read as "settings" and told nobody a palette was behind it.
      */
@@ -55,18 +55,6 @@ public final class CornerTabGlyphs {
      * so this one is two chars where the Font Awesome glyphs above are one.
      */
     public static final String LAYOUT = "󰕮";
-
-    /**
-     * nf-md-wallpaper (U+F0E09, a surrogate pair like {@link #LAYOUT}): open the in-app wallpaper
-     * picker.
-     */
-    public static final String WALLPAPER = "󰸉";
-
-    /**
-     * The one "Wallpaper & style" button: it opens the wallpaper picker, which leads on to the Look
-     * and Layout editors. The wallpaper mark stands for the whole page.
-     */
-    public static final String WALLPAPER_STYLE = WALLPAPER;
 
     /** The question mark the help button wears, in the tab's text font rather than the symbols one. */
     @NonNull

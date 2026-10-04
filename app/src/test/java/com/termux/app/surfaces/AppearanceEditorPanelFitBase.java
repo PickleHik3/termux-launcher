@@ -42,14 +42,16 @@ public abstract class AppearanceEditorPanelFitBase {
     }
 
     @Test
-    public void appearanceModeWithTheTerminalsThreeControlsFits() {
+    public void appearanceModeWithTheTerminalsFourControlsFits() {
         mPanel.showAppearanceMode();
         mPanel.showRow2(R.string.appearance_editor_target_terminal);
         mPanel.setFirstSlider("Opacity · 40%", 40, 100);
         mPanel.setLegibility(mPanel.legibilityLabel(1), 1, true);
+        mPanel.setThirdSlider("Grain · 14%", 14, 100);
         mPanel.setSecondSlider("Blur · 12 dp", 12, 32);
         layOut(mPanel.measureFor(false, mWidthPx));
         assertFits();
+        mPanel.hideThird();
     }
 
     @Test

@@ -105,7 +105,7 @@ public class RootPreferencesSearchIndexTest {
         assertTrue(search.getOnQueryChangedListener() != null);
         search.getOnQueryChangedListener().onQueryChanged("lazy mode");
 
-        assertTrue("the Look page under Wallpaper & style contains lazy mode",
+        assertTrue("the Look page under Appearance contains lazy mode",
             isVisible(root, "wallpaper_style"));
         assertFalse("status bar page has no lazy mode row", isVisible(root, "status_bar"));
     }
@@ -126,7 +126,7 @@ public class RootPreferencesSearchIndexTest {
         SettingsSearchPreference search = root.findPreference("settings_search");
         search.getOnQueryChangedListener().onQueryChanged("typeface");
 
-        assertTrue("keyboard look moved onto the Look page, indexed under Wallpaper & style",
+        assertTrue("keyboard look moved onto the Look page, indexed under Appearance",
             isVisible(root, "wallpaper_style"));
     }
 

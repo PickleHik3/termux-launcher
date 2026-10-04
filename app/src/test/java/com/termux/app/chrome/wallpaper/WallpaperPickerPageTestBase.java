@@ -33,8 +33,6 @@ import com.termux.app.chrome.wallpaper.living.LivingRecipe;
 import com.termux.app.chrome.wallpaper.living.LivingStillBuilder;
 import com.termux.app.chrome.wallpaper.living.LivingStillJob;
 import com.termux.app.chrome.wallpaper.living.Manifest;
-import com.termux.app.launcher.data.IconPackChoices;
-import com.termux.app.launcher.model.IconPackInfo;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -50,15 +48,17 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The wallpaper picker page at the subclass's width: it lays out with nothing cut off, the title
- * follows the centred slot, Same as Home shows only for Lock, Apply is enabled only when the
- * pending choice differs, Apply puts the background on Home and points Lock at it while its menu
- * items apply one slot, Look and Layout hand back a state the page reopens at, the Icon pack menu
- * lists the packs on the page, the shortcut glyphs sit centred, and Motion is hidden below API 34.
- * Photos: a cropped photo comes back pending and Apply sets it, the current photo shows in its
- * card, the recent photos lead the strip, below API 34 the page holds photos only, and back
- * without Apply discards the pending file. A fake {@link WallpaperPickerPage.Slots} stands in for
- * {@link WallpaperSlots}. Native graphics, so text has real metrics.
+ * The Appearance Overview at the subclass's width: it lays out with nothing cut off, the heading is
+ * fixed ("Appearance") while each card carries its own label, Same as Home shows only for Lock,
+ * Apply is enabled only when the pending choice differs, Apply puts the background on Home and
+ * points Lock at it while its menu items apply one slot, the shortcuts ask the surface for Look,
+ * Icons and Layout, the shortcut glyphs sit centred, and Motion is hidden below API 34. The strip
+ * holds Same as Home and the recent photos, evenly spaced, and no pre-made backgrounds. Photos: a
+ * cropped photo comes back pending and Apply sets it, the current photo shows in its card, below
+ * API 34 the page holds photos only, and releasing without Apply discards the pending file. A
+ * living still's Read again is the AI-star icon button. A fake {@link WallpaperPickerPage.Slots}
+ * stands in for {@link WallpaperSlots}, and reads run inline. Native graphics, so text has real
+ * metrics.
  */
 public abstract class WallpaperPickerPageTestBase {
 
@@ -160,7 +160,6 @@ public abstract class WallpaperPickerPageTestBase {
     static final class RecordingListener implements WallpaperPickerPage.Listener {
         final List<String> calls = new ArrayList<>();
 
-        @Override public void onPageShown(boolean shown) { calls.add("shown " + shown); }
         @Override public void onPickPhoto(@NonNull WallpaperSlots.Slot slot, @NonNull WallpaperPickerPage.ReturnState back) {
             this.back = back;
             calls.add("photo " + slot);
@@ -169,20 +168,10 @@ public abstract class WallpaperPickerPageTestBase {
             calls.add("applied " + slot);
         }
         @Nullable WallpaperPickerPage.ReturnState back;
-        IconPackChoices.Listing packs = new IconPackChoices.Listing(IconPackChoices.entries("System icons",
-            Arrays.asList(new IconPackInfo("com.example.arcticons", "Arcticons", 1, false),
-                new IconPackInfo("com.example.lines", "Lines", 1, false)), false), 2);
 
-        @Override public void onOpenLook(@NonNull WallpaperPickerPage.ReturnState back) {
-            this.back = back;
-            calls.add("look");
-        }
-        @Override public void onOpenLayout(@NonNull WallpaperPickerPage.ReturnState back) {
-            this.back = back;
-            calls.add("layout");
-        }
-        @NonNull @Override public IconPackChoices.Listing iconPacks() { return packs; }
-        @Override public void onIconPackChosen(@NonNull String packageName) { calls.add("icon pack " + packageName); }
+        @Override public void onOpenLook() { calls.add("look"); }
+        @Override public void onOpenLayout() { calls.add("layout"); }
+        @Override public void onOpenIcons() { calls.add("icons"); }
     }
 
     private Activity mActivity;
@@ -260,7 +249,8 @@ public abstract class WallpaperPickerPageTestBase {
         assertTrue("the previews keep a real height", pager.getHeight() >= dp(160));
         assertTrue("a card is bound", pager.getChildCount() >= 1);
         View cell = pager.getChildAt(0);
-        View card = ((ViewGroup) cell).getChildAt(0);
+        // The cell is a column: the label over the card.
+        View card = ((ViewGroup) cell).getChildAt(1);
         assertTrue("the card is sized", card.getHeight() > dp(100) && card.getWidth() > dp(40));
         assertTrue("the card fits the pager", card.getHeight() <= pager.getHeight());
 
@@ -271,7 +261,7 @@ public abstract class WallpaperPickerPageTestBase {
             assertTrue(v.getResources().getResourceEntryName(id) + " is a 48dp target",
                 v.getHeight() >= dp(48) && v.getWidth() >= dp(48));
         }
-        assertEquals("ten backgrounds and Same as Home", AnimatedWallpapers.all().size() + 1, page.tileCount());
+        assertEquals("Same as Home alone: no backgrounds, no recents", 1, page.tileCount());
 
         page.centre(WallpaperSlots.Slot.HOME);
         settle();
@@ -279,16 +269,26 @@ public abstract class WallpaperPickerPageTestBase {
     }
 
     @Test
-    public void theTitleFollowsTheCentredSlot() {
+    public void theHeadingIsFixedAndEachCardCarriesItsOwnLabel() {
         WallpaperPickerPage page = open(34);
         assertEquals("the page opens on Home", WallpaperSlots.Slot.HOME, page.centredSlot());
-        page.centre(WallpaperSlots.Slot.LOCK);
         TextView title = page.root().findViewById(R.id.wallpaper_picker_title);
-        assertEquals(mThemed.getString(R.string.wallpaper_picker_slot_lock), title.getText().toString());
-        page.centre(WallpaperSlots.Slot.HOME);
-        assertEquals(mThemed.getString(R.string.wallpaper_picker_slot_home), title.getText().toString());
+        String heading = mThemed.getString(R.string.wallpaper_picker_title);
+        assertEquals("Appearance", heading);
+        assertEquals(heading, title.getText().toString());
         page.centre(WallpaperSlots.Slot.LOCK);
-        assertEquals(mThemed.getString(R.string.wallpaper_picker_slot_lock), title.getText().toString());
+        assertEquals("the heading does not follow the centred slot", heading, title.getText().toString());
+        page.centre(WallpaperSlots.Slot.HOME);
+        assertEquals(heading, title.getText().toString());
+        assertEquals(heading, page.title().toString());
+        settle();
+        TextView home = page.cardLabel(WallpaperSlots.Slot.HOME);
+        TextView lock = page.cardLabel(WallpaperSlots.Slot.LOCK);
+        assertTrue("both cards are bound", home != null && lock != null);
+        assertEquals(mThemed.getString(R.string.wallpaper_picker_slot_home), home.getText().toString());
+        assertEquals(mThemed.getString(R.string.wallpaper_picker_slot_lock), lock.getText().toString());
+        WallpaperPreviewView card = page.card(WallpaperSlots.Slot.HOME);
+        assertTrue("the label stands above its card", home.getBottom() <= card.getTop());
     }
 
     @Test
@@ -388,59 +388,27 @@ public abstract class WallpaperPickerPageTestBase {
     }
 
     @Test
-    public void lookHandsBackAStateThePageReopensAt() {
+    public void lookAndLayoutAreAskedOfTheSurfaceAndThePageStaysBuilt() {
         WallpaperPickerPage page = open(34);
         page.centre(WallpaperSlots.Slot.HOME);
         page.choose(WallpaperSlots.Choice.animated("tide"));
-        page.centre(WallpaperSlots.Slot.LOCK);
-        page.choose(WallpaperSlots.Choice.animated("rain"));
-        page.centre(WallpaperSlots.Slot.HOME);
         page.root().findViewById(R.id.wallpaper_picker_look).performClick();
-        assertEquals("shown false", mListener.calls.get(mListener.calls.size() - 2));
         assertEquals("look", mListener.calls.get(mListener.calls.size() - 1));
-        WallpaperPickerPage.ReturnState back = mListener.back;
-        assertTrue(back != null);
-
-        WallpaperPickerPage again = open(34, back);
-        assertEquals(WallpaperSlots.Slot.HOME, again.centredSlot());
-        assertEquals("tide", again.pending(WallpaperSlots.Slot.HOME).animatedId);
-        assertEquals("rain", again.pending(WallpaperSlots.Slot.LOCK).animatedId);
-        TextView title = again.root().findViewById(R.id.wallpaper_picker_title);
-        assertEquals(mThemed.getString(R.string.wallpaper_picker_slot_home), title.getText().toString());
-        assertTrue("still pending, not applied", mSlots.calls.isEmpty());
-        assertTrue(again.root().findViewById(R.id.wallpaper_picker_apply).isEnabled());
-    }
-
-    @Test
-    public void layoutHandsBackAStateToo() {
-        WallpaperPickerPage page = open(34);
-        page.centre(WallpaperSlots.Slot.LOCK);
-        page.choose(WallpaperSlots.Choice.animated("mesh"));
         page.root().findViewById(R.id.wallpaper_picker_layout).performClick();
         assertEquals("layout", mListener.calls.get(mListener.calls.size() - 1));
-        WallpaperPickerPage again = open(34, mListener.back);
-        assertEquals(WallpaperSlots.Slot.LOCK, again.centredSlot());
-        assertEquals("mesh", again.pending(WallpaperSlots.Slot.LOCK).animatedId);
-        assertEquals("aurora", again.pending(WallpaperSlots.Slot.HOME).animatedId);
+        // The page is hidden behind the editor, not rebuilt: its pending choices are where they were.
+        page.onHidden();
+        page.onShown();
+        assertEquals("tide", page.pending(WallpaperSlots.Slot.HOME).animatedId);
+        assertTrue("still pending, not applied", mSlots.calls.isEmpty());
+        assertTrue(page.root().findViewById(R.id.wallpaper_picker_apply).isEnabled());
     }
 
     @Test
-    public void theIconPackMenuOpensOnThePage() {
+    public void theIconPackButtonAsksTheSurfaceForTheIconsPage() {
         WallpaperPickerPage page = open(34);
         page.root().findViewById(R.id.wallpaper_picker_icon_pack).performClick();
-        assertFalse("the page stays open", mListener.calls.contains("shown false"));
-        PopupMenu popup = page.iconPackMenu();
-        assertTrue("a menu is up", popup != null);
-        Menu menu = popup.getMenu();
-        assertEquals(3, menu.size());
-        assertEquals("System icons", menu.getItem(0).getTitle().toString());
-        assertEquals("Arcticons", menu.getItem(1).getTitle().toString());
-        assertFalse(menu.getItem(0).isChecked());
-        assertTrue("the pack in force is checked", menu.getItem(2).isChecked());
-
-        assertTrue(menu.performIdentifierAction(menu.getItem(1).getItemId(), 0));
-        assertEquals("icon pack com.example.arcticons", mListener.calls.get(mListener.calls.size() - 1));
-        assertFalse("the page stays open", mListener.calls.contains("shown false"));
+        assertEquals("icons", mListener.calls.get(mListener.calls.size() - 1));
     }
 
     @Test
@@ -484,12 +452,15 @@ public abstract class WallpaperPickerPageTestBase {
     }
 
     @Test
-    public void photoClosesThePageFirst() {
+    public void photoHandsTheSurfaceItsStateToComeBackTo() {
         WallpaperPickerPage page = open(34);
         page.centre(WallpaperSlots.Slot.LOCK);
         page.root().findViewById(R.id.wallpaper_picker_photo).performClick();
-        assertEquals("shown false", mListener.calls.get(mListener.calls.size() - 2));
         assertEquals("photo LOCK", mListener.calls.get(mListener.calls.size() - 1));
+        assertEquals(WallpaperSlots.Slot.LOCK, mListener.back.centred);
+        // The surface closes the page after the hand-off: nothing pending is thrown away.
+        page.release();
+        assertTrue(mSlots.discarded.isEmpty());
     }
 
     // --- photos ---
@@ -571,7 +542,7 @@ public abstract class WallpaperPickerPageTestBase {
         File cropped = photoFile("discard.png");
         WallpaperPickerPage page = open(34, WallpaperPickerPage.ReturnState.withPhoto(null,
             WallpaperSlots.Slot.HOME, cropped, mSlots.state));
-        page.close();
+        page.release();
         assertTrue(mSlots.calls.isEmpty());
         assertEquals(Collections.singletonList(cropped), mSlots.discarded);
     }
@@ -594,15 +565,15 @@ public abstract class WallpaperPickerPageTestBase {
     }
 
     @Test
-    public void recentPhotosLeadTheStrip() {
+    public void theStripHoldsSameAsHomeAndTheRecentPhotosAndNothingElse() {
         File a = photoFile("recent-a.png");
         File b = photoFile("recent-b.png");
         mSlots.recents = Arrays.asList(a, b);
         WallpaperPickerPage page = openWithPhotos(34, null);
         assertEquals(2, page.recentTileCount());
-        assertEquals(AnimatedWallpapers.all().size(), page.animatedTileCount());
-        assertEquals(1 + 2 + AnimatedWallpapers.all().size(), page.tileCount());
-        assertTrue("the Recent label", page.recentBadge() != null);
+        assertEquals("Same as Home and the recents: no pre-made backgrounds",
+            WallpaperPickerLogic.stripTileCount(2, RecentWallpapers.MAX), page.tileCount());
+        assertEquals(3, page.tileCount());
         assertTrue("thumbnails decoded", mDecoded.containsAll(Arrays.asList(a, b)));
 
         page.choose(WallpaperSlots.Choice.photo(b));
@@ -613,13 +584,31 @@ public abstract class WallpaperPickerPageTestBase {
     }
 
     @Test
+    public void theStripsTilesAreEvenlySpacedAcrossTheRow() {
+        mSlots.recents = Arrays.asList(photoFile("e1.png"), photoFile("e2.png"), photoFile("e3.png"));
+        WallpaperPickerPage page = openWithPhotos(34, null);
+        page.centre(WallpaperSlots.Slot.LOCK);
+        settle();
+        ViewGroup strip = page.root().findViewById(R.id.wallpaper_picker_strip);
+        assertEquals("Same as Home and three photos", 4, strip.getChildCount());
+        int cell = strip.getChildAt(0).getWidth();
+        assertTrue("the cells share the row", cell > 0);
+        for (int i = 0; i < strip.getChildCount(); i++) {
+            View c = strip.getChildAt(i);
+            assertEquals("every cell is the same width", cell, c.getWidth(), 1f);
+            if (i > 0) assertEquals("with no gap between", strip.getChildAt(i - 1).getRight(), c.getLeft());
+        }
+        assertEquals("the row is used end to end", strip.getWidth() - strip.getPaddingLeft() - strip.getPaddingRight(),
+            cell * 4, 4f);
+    }
+
+    @Test
     public void below34ThePageHoldsPhotosOnly() {
         mSlots.state = new WallpaperSlots.State(WallpaperSlots.Choice.photo(photoFile("home.png")),
             WallpaperSlots.Choice.sameAsHome(), true, false);
         mSlots.recents = Arrays.asList(photoFile("r1.png"), photoFile("r2.png"), photoFile("r3.png"));
         WallpaperPickerPage page = openWithPhotos(33, null);
         View root = page.root();
-        assertEquals("no animated tiles", 0, page.animatedTileCount());
         assertEquals(3, page.recentTileCount());
         assertEquals("Same as Home and the recents", 1 + 3, page.tileCount());
         assertEquals("no Motion", View.GONE, root.findViewById(R.id.wallpaper_picker_motion_row).getVisibility());
@@ -917,12 +906,26 @@ public abstract class WallpaperPickerPageTestBase {
         assertEquals("re-attached to the run", View.VISIBLE, find(page, R.id.wallpaper_picker_living_working).getVisibility());
         assertEquals(View.GONE, find(page, R.id.wallpaper_picker_living_offer).getVisibility());
 
-        page.close();
+        page.release();
         assertTrue("the run goes on without the page", mSlots.job.isRunning());
         runWorker();
         assertEquals(photo, mScript.photoSeen);
         assertFalse(mSlots.job.isRunning());
         assertNull("the closed page took no result", ShadowToast.getTextOfLatestToast());
+    }
+
+    @Test
+    public void readAgainIsTheAiStarIconButton() {
+        withLiving();
+        mSlots.state = new WallpaperSlots.State(WallpaperSlots.Choice.animated(mManifest.wallpaperId()),
+            WallpaperSlots.Choice.sameAsHome(), true, false);
+        WallpaperPickerPage page = openWithPhotos(34, null);
+        MaterialButton again = find(page, R.id.wallpaper_picker_living_again);
+        assertEquals(View.VISIBLE, again.getVisibility());
+        assertTrue("an icon, not a text button", again.getIcon() != null);
+        assertEquals("no words on it", "", again.getText().toString());
+        assertEquals("Read again", again.getContentDescription().toString());
+        assertEquals(dp(48), again.getWidth());
     }
 
     @Test

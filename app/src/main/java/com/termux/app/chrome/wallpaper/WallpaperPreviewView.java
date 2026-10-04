@@ -31,6 +31,12 @@ import com.termux.shared.logger.Logger;
  * the generic lock-screen cutout ({@code lock_preview_overlay}, a 360×800 viewport) and the time
  * composed from the {@code lock_digit_*} glyphs in its clock area.
  *
+ * <p>A living still plays with its own effects map, as it does on Home and Lock: the card owns a
+ * {@link LivingEffectsRenderer} at a quarter of the card per side (its own small ring of buffers,
+ * drawn off the UI, the composite sampling the newest finished map as the lock engine does), so the
+ * water refraction and mist the still carries show in the preview too. It lives only while the card
+ * is live and attached.</p>
+ *
  * <p>The card's content never mirrors in RTL: it is a picture of a phone screen. Its corners are
  * the theme's Large shape.</p>
  */
@@ -80,6 +86,9 @@ public final class WallpaperPreviewView extends View {
     @Nullable private String mShaderFor;
     @Nullable private int[] mPalette;
     private boolean mShaderFailed;
+    /** A {@link LivingEffectsRenderer} on API 34+ for a living still, held as Object so this class loads on API 26. */
+    @Nullable private Object mEffects;
+    private boolean mEffectsFailed;
     private long mStartNanos;
     private long mLastFrameNanos;
     private boolean mTicking;
@@ -124,6 +133,8 @@ public final class WallpaperPreviewView extends View {
         mStill = still;
         mPhoto = photo && wallpaper == null;
         if (!samePlayer || !wallpaper.id().equals(mShaderFor)) {
+            releaseEffects();
+            mEffectsFailed = false;
             mShader = null;
             mShaderFor = null;
             mPalette = null;
@@ -178,6 +189,7 @@ public final class WallpaperPreviewView extends View {
         boolean want = live && Build.VERSION.SDK_INT >= 34;
         if (mLive == want) return;
         mLive = want;
+        if (!want) releaseEffects();
         if (want) mStartNanos = System.nanoTime();
         updateTicking();
         invalidate();
@@ -204,6 +216,7 @@ public final class WallpaperPreviewView extends View {
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         stopTicking();
+        releaseEffects();
     }
 
     private boolean shouldAnimate() {
@@ -268,6 +281,7 @@ public final class WallpaperPreviewView extends View {
             WallpaperDirector.Frame frame = new WallpaperDirector.Frame(MAX_FPS, t, t * energy,
                 energy, dim, mPalette, NO_MOMENTS, false);
             WallpaperUniforms.apply(shader, frame, w, h);
+            drawEffects(wallpaper, shader, frame, w, h);
             mPaint.setShader(shader);
             canvas.drawRect(0f, 0f, w, h, mPaint);
             mPaint.setShader(null);
@@ -276,9 +290,42 @@ public final class WallpaperPreviewView extends View {
             Logger.logStackTraceWithMessage(LOG_TAG, "Live preview failed, showing the still", e);
             mShaderFailed = true;
             mShader = null;
+            releaseEffects();
             stopTicking();
             return false;
         }
+    }
+
+    /**
+     * The living still's effects map for this frame: the ring is made on first use (the still's
+     * own effects program, a ring of small buffers), the next map is started off the UI, and the
+     * composite is bound to the newest one that has finished, a tick behind and never waiting on
+     * the GPU. A failure leaves the neutral map (no water, no mist) and is not retried.
+     */
+    @RequiresApi(34)
+    private void drawEffects(@NonNull AnimatedWallpaper wallpaper, @NonNull RuntimeShader composite,
+                             @NonNull WallpaperDirector.Frame frame, int w, int h) {
+        if (!(wallpaper instanceof LivingStill) || mEffectsFailed) return;
+        try {
+            LivingEffectsRenderer effects = (LivingEffectsRenderer) mEffects;
+            if (effects == null) {
+                effects = new LivingEffectsRenderer(WallpaperUniforms.newEffectsShader((LivingStill) wallpaper));
+                mEffects = effects;
+            }
+            effects.advance(frame, w, h);
+            effects.bindLatest(composite);
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Preview effects map failed, showing the still without it", e);
+            mEffectsFailed = true;
+            releaseEffects();
+            WallpaperUniforms.setEffects(composite, null, 1, 1);
+        }
+    }
+
+    private void releaseEffects() {
+        Object effects = mEffects;
+        mEffects = null;
+        if (effects != null && Build.VERSION.SDK_INT >= 34) ((LivingEffectsRenderer) effects).release();
     }
 
     private static final WallpaperDirector.Moment[] NO_MOMENTS =

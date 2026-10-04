@@ -283,4 +283,20 @@ public class AppearanceLooksTest {
                 AppearanceLooks.legibilityAt(AppearanceLooks.legibilityIndex(level)));
         assertEquals(1, AppearanceLooks.legibilityIndex(null));
     }
+
+    /** Every surface has a Grain slider, in a column of its own: the wallpaper has no glass. */
+    @Test
+    public void everySurfaceHasGrainInItsOwnColumn() {
+        for (AppearanceLooks.Target target : AppearanceLooks.Target.values()) {
+            boolean glass = target != AppearanceLooks.Target.WALLPAPER;
+            assertEquals(target.name(), glass, target.hasGrain());
+            assertEquals(target.name(), glass, target.grainColumn() != 0);
+        }
+        assertEquals("the status bar and the dock use their empty first column", 1,
+            AppearanceLooks.Target.STATUS.grainColumn());
+        assertEquals(1, AppearanceLooks.Target.DOCK.grainColumn());
+        assertEquals("the keyboard uses the middle", 2, AppearanceLooks.Target.KEYBOARD.grainColumn());
+        assertEquals("the terminal's middle is Text contrast: its Grain is a fourth column", 4,
+            AppearanceLooks.Target.TERMINAL.grainColumn());
+    }
 }

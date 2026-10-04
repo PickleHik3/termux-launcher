@@ -5,7 +5,7 @@
     <string name="pane_controls_add_page">Add page</string>
     <string name="pane_controls_keep_changes">Keep changes</string>
     <string name="pane_controls_discard_changes">Discard changes</string>
-    <string name="pane_controls_wallpaper_style">Wallpaper &amp; style</string>
+    <string name="pane_controls_wallpaper_style">Appearance</string>
     <string name="pane_controls_enter_minimal_mode">Enter minimal mode</string>
     <string name="pane_controls_leave_minimal_mode">Leave minimal mode</string>
     <string name="pane_controls_turn_on_auto_tiling">Turn on automatic tiling</string>

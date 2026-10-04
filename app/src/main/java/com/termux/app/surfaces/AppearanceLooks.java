@@ -144,6 +144,34 @@ public final class AppearanceLooks {
         }
 
         /**
+         * Whether row 2 carries a Grain slider: every surface does, the wallpaper (which has no
+         * glass of its own) does not.
+         */
+        public boolean hasGrain() {
+            return this != WALLPAPER;
+        }
+
+        /**
+         * Which column Grain stands in, counting the four row 2 can have: 1 the first (the status
+         * bar and the dock, whose first column is otherwise empty), 2 the middle (the keyboard,
+         * which has no Text contrast), 4 the terminal's fourth, between Text
+         * contrast and Blur; 0 for the wallpaper.
+         */
+        public int grainColumn() {
+            switch (this) {
+                case STATUS:
+                case DOCK:
+                    return 1;
+                case KEYBOARD:
+                    return 2;
+                case TERMINAL:
+                    return 4;
+                default:
+                    return 0;
+            }
+        }
+
+        /**
          * Whether the last control is the one shared Blur: every target but the wallpaper (Dim)
          * and the keyboard (its theme door; its Blur is the first control).
          */

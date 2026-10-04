@@ -85,6 +85,8 @@ final class AppearanceEditorPanel {
         void onRetroEffect(@NonNull String id);
         /** Row B's last slider (Blur, Dim or the global Grain). */
         void onSecondSlider(int value, boolean dragging);
+        /** The terminal's fourth column: its Grain. */
+        void onThirdSlider(int value, boolean dragging);
         /** A slider was released; deferred work settles here. */
         void onSliderReleased();
     }
@@ -125,6 +127,8 @@ final class AppearanceEditorPanel {
     private final TextView mSecondLabel;
     private final Slider mSecondSlider;
     private final Slider mMiddleSlider;
+    private final TextView mThirdLabel;
+    private final Slider mThirdSlider;
     private final MaterialButton mSecondButton;
 
     private final MaterialButtonToggleGroup mOrientation;
@@ -161,6 +165,7 @@ final class AppearanceEditorPanel {
     private boolean mFirstDragging;
     private boolean mSecondDragging;
     private boolean mMiddleDragging;
+    private boolean mThirdDragging;
     private boolean mCornersDragging;
     private boolean mMarginDragging;
 
@@ -189,6 +194,8 @@ final class AppearanceEditorPanel {
         mSecondLabel = root.findViewById(R.id.appearance_editor_c2_label);
         mSecondSlider = root.findViewById(R.id.appearance_editor_c2_slider);
         mMiddleSlider = root.findViewById(R.id.appearance_editor_cl_slider);
+        mThirdLabel = root.findViewById(R.id.appearance_editor_c3_label);
+        mThirdSlider = root.findViewById(R.id.appearance_editor_c3_slider);
         mSecondButton = root.findViewById(R.id.appearance_editor_c2_button);
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
         mStyle = root.findViewById(R.id.appearance_editor_style);
@@ -290,7 +297,7 @@ final class AppearanceEditorPanel {
         boolean shown = mLayoutMode;
         boolean rowShown = mRow2Shown;
         mRow2Shown = true;
-        TextView[] labels = {mFirstLabel, mLegibilityLabel, mSecondLabel};
+        TextView[] labels = {mFirstLabel, mLegibilityLabel, mThirdLabel, mSecondLabel};
         for (TextView label : labels)
             label.setMinLines(2);
         // The terminal's Trail row is the tallest Row B gets, so the frame stands above it.
@@ -299,7 +306,8 @@ final class AppearanceEditorPanel {
         applyGroups(false);
         // Row B at its fullest, whichever element (or none) is tapped now: the first and middle
         // slots shown, so the anchor does not depend on what Row B happens to hold.
-        View[] slots = {mFirstLabel, mFirstSlider, mLegibilityLabel, mLegibility};
+        View[] slots = {mFirstLabel, mFirstSlider, mLegibilityLabel, mLegibility, mThirdLabel,
+            mThirdSlider};
         int[] slotVisibility = new int[slots.length];
         for (int i = 0; i < slots.length; i++) {
             slotVisibility[i] = slots[i].getVisibility();
@@ -523,6 +531,21 @@ final class AppearanceEditorPanel {
 
             @Override public void onStopTrackingTouch(@NonNull Slider slider) {
                 mMiddleDragging = false;
+                if (mListener != null) mListener.onSliderReleased();
+            }
+        });
+        mThirdSlider.addOnChangeListener((slider, value, fromUser) -> {
+            if (mRestating || !fromUser || mListener == null)
+                return;
+            mListener.onThirdSlider(Math.round(value), mThirdDragging);
+        });
+        mThirdSlider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
+            @Override public void onStartTrackingTouch(@NonNull Slider slider) {
+                mThirdDragging = true;
+            }
+
+            @Override public void onStopTrackingTouch(@NonNull Slider slider) {
+                mThirdDragging = false;
                 if (mListener != null) mListener.onSliderReleased();
             }
         });
@@ -873,6 +896,7 @@ final class AppearanceEditorPanel {
             mSoft.getChildAt(i).setEnabled(shown);
         mLegibility.setEnabled(shown && mLegibilityEnabled);
         mMiddleSlider.setEnabled(shown);
+        mThirdSlider.setEnabled(shown);
         mSecondSlider.setEnabled(shown);
         mTrail.setEnabled(shown);
         mEffect.setEnabled(shown);
@@ -987,6 +1011,27 @@ final class AppearanceEditorPanel {
     /** Whether the middle column is the global Opacity slider, for a test to read. */
     boolean isMiddleSliderShown() {
         return mMiddleSlider.getVisibility() == View.VISIBLE;
+    }
+
+    /** The fourth column as a slider: the terminal's Grain. */
+    void setThirdSlider(@NonNull CharSequence label, int value, int max) {
+        mThirdLabel.setText(label);
+        mThirdSlider.setContentDescription(label);
+        restateSlider(mThirdSlider, value, max);
+        mThirdSlider.setEnabled(mRow2Shown);
+        mThirdLabel.setVisibility(View.VISIBLE);
+        mThirdSlider.setVisibility(View.VISIBLE);
+    }
+
+    void setThirdLabel(@NonNull CharSequence label) {
+        mThirdLabel.setText(label);
+        mThirdSlider.setContentDescription(label);
+    }
+
+    /** No fourth column: every element but the terminal. */
+    void hideThird() {
+        mThirdLabel.setVisibility(View.GONE);
+        mThirdSlider.setVisibility(View.GONE);
     }
 
     void setSecondLabel(@NonNull CharSequence label) {
