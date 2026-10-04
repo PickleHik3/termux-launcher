@@ -2,6 +2,11 @@ package com.termux.app.surfaces;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.Typeface;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -451,6 +456,30 @@ final class AppearanceEditorPanel {
         }
     }
 
+    /**
+     * A "Name · value" label with the name quiet and the value on the primary text role, so a
+     * read-out stays a number beside a name instead of one fused string. Text without the
+     * separator passes through untouched.
+     */
+    private CharSequence readout(@NonNull CharSequence label) {
+        String text = label.toString();
+        int cut = text.indexOf(" \u00b7 ");
+        if (cut <= 0) return label;
+        int quiet = MaterialColors.getColor(mRoot,
+            com.google.android.material.R.attr.colorOnSurfaceVariant,
+            ContextCompat.getColor(mContext, R.color.termux_on_surface));
+        int strong = MaterialColors.getColor(mRoot,
+            com.google.android.material.R.attr.colorOnSurface,
+            ContextCompat.getColor(mContext, R.color.termux_on_surface));
+        SpannableStringBuilder out = new SpannableStringBuilder(text);
+        out.setSpan(new ForegroundColorSpan(quiet), 0, cut, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        out.setSpan(new ForegroundColorSpan(strong), cut + 3, text.length(),
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        out.setSpan(new StyleSpan(Typeface.BOLD), cut + 3, text.length(),
+            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return out;
+    }
+
     private void styleLookLabels(int stop) {
         int active = MaterialColors.getColor(mRoot,
             androidx.appcompat.R.attr.colorPrimary,
@@ -458,8 +487,13 @@ final class AppearanceEditorPanel {
         int quiet = MaterialColors.getColor(mRoot,
             com.google.android.material.R.attr.colorOnSurfaceVariant,
             ContextCompat.getColor(mContext, R.color.termux_on_surface));
-        for (int i = 0; i < mLookLabelViews.length; i++)
-            mLookLabelViews[i].setTextColor(i == stop ? active : quiet);
+        for (int i = 0; i < mLookLabelViews.length; i++) {
+            TextView label = mLookLabelViews[i];
+            label.setTextColor(i == stop ? active : quiet);
+            // The chosen stop reads by weight as well as colour.
+            label.setTypeface(Typeface.DEFAULT, i == stop ? Typeface.BOLD : Typeface.NORMAL);
+            label.setSelected(i == stop);
+        }
     }
 
     // ---------------------------------------------------------------------------------- wiring
@@ -906,7 +940,7 @@ final class AppearanceEditorPanel {
 
     /** The first control as a slider: Opacity, the keyboard's Blur, or the global Blur. */
     void setFirstSlider(@NonNull CharSequence label, int value, int max) {
-        mFirstLabel.setText(label);
+        mFirstLabel.setText(readout(label));
         mFirstSlider.setContentDescription(label);
         mFirstSlider.setVisibility(View.VISIBLE);
         mSoft.setVisibility(View.GONE);
@@ -915,13 +949,13 @@ final class AppearanceEditorPanel {
     }
 
     void setFirstLabel(@NonNull CharSequence label) {
-        mFirstLabel.setText(label);
+        mFirstLabel.setText(readout(label));
         mFirstSlider.setContentDescription(label);
     }
 
     /** The first control as Soften wallpaper's Off / On. */
     void setSoft(@NonNull CharSequence label, boolean on) {
-        mFirstLabel.setText(label);
+        mFirstLabel.setText(readout(label));
         mFirstSlider.setVisibility(View.GONE);
         mSoft.setVisibility(View.VISIBLE);
         checkSegment(mSoft, on ? 1 : 0);
@@ -940,7 +974,7 @@ final class AppearanceEditorPanel {
      * palette is not the Material one it changes; the label then says so.
      */
     void setLegibility(@NonNull CharSequence label, int index, boolean enabled) {
-        mLegibilityLabel.setText(label);
+        mLegibilityLabel.setText(readout(label));
         restateSlider(mLegibility, index, 2);
         mLegibilityEnabled = enabled;
         mLegibility.setEnabled(enabled && mRow2Shown);
@@ -951,7 +985,7 @@ final class AppearanceEditorPanel {
 
     /** The middle column as a slider of its own: the global Opacity (DECISIONS item 13). */
     void setMiddleSlider(@NonNull CharSequence label, int value, int max) {
-        mLegibilityLabel.setText(label);
+        mLegibilityLabel.setText(readout(label));
         mMiddleSlider.setContentDescription(label);
         restateSlider(mMiddleSlider, value, max);
         mMiddleSlider.setEnabled(mRow2Shown);
@@ -961,7 +995,7 @@ final class AppearanceEditorPanel {
     }
 
     void setMiddleLabel(@NonNull CharSequence label) {
-        mLegibilityLabel.setText(label);
+        mLegibilityLabel.setText(readout(label));
         mMiddleSlider.setContentDescription(label);
     }
 
@@ -982,7 +1016,7 @@ final class AppearanceEditorPanel {
 
     /** The last control: Blur, Dim or the global Grain. */
     void setSecondSlider(@NonNull CharSequence label, int value, int max) {
-        mSecondLabel.setText(label);
+        mSecondLabel.setText(readout(label));
         mSecondSlider.setContentDescription(label);
         restateSlider(mSecondSlider, value, max);
         mSecondLabel.setVisibility(View.VISIBLE);
@@ -1015,7 +1049,7 @@ final class AppearanceEditorPanel {
 
     /** The fourth column as a slider: the terminal's Grain. */
     void setThirdSlider(@NonNull CharSequence label, int value, int max) {
-        mThirdLabel.setText(label);
+        mThirdLabel.setText(readout(label));
         mThirdSlider.setContentDescription(label);
         restateSlider(mThirdSlider, value, max);
         mThirdSlider.setEnabled(mRow2Shown);
@@ -1024,7 +1058,7 @@ final class AppearanceEditorPanel {
     }
 
     void setThirdLabel(@NonNull CharSequence label) {
-        mThirdLabel.setText(label);
+        mThirdLabel.setText(readout(label));
         mThirdSlider.setContentDescription(label);
     }
 
@@ -1035,7 +1069,7 @@ final class AppearanceEditorPanel {
     }
 
     void setSecondLabel(@NonNull CharSequence label) {
-        mSecondLabel.setText(label);
+        mSecondLabel.setText(readout(label));
         mSecondSlider.setContentDescription(label);
     }
 
@@ -1043,22 +1077,22 @@ final class AppearanceEditorPanel {
 
     /** Layout mode's Corners, at {@code value} dp of {@code max}. */
     void setCorners(@NonNull CharSequence label, int value, int max) {
-        mCornersLabel.setText(label);
+        mCornersLabel.setText(readout(label));
         restateSlider(mCorners, value, max);
     }
 
     void setCornersLabel(@NonNull CharSequence label) {
-        mCornersLabel.setText(label);
+        mCornersLabel.setText(readout(label));
     }
 
     /** Layout mode's Margin, at {@code value} dp of {@code max}. */
     void setMargin(@NonNull CharSequence label, int value, int max) {
-        mMarginLabel.setText(label);
+        mMarginLabel.setText(readout(label));
         restateSlider(mMargin, value, max);
     }
 
     void setMarginLabel(@NonNull CharSequence label) {
-        mMarginLabel.setText(label);
+        mMarginLabel.setText(readout(label));
     }
 
     private void checkSegment(@NonNull MaterialButtonToggleGroup group, int index) {
