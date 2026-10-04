@@ -87,6 +87,8 @@ public final class LockLiveWallpaperService extends WallpaperService {
         @Nullable private TermuxAppSharedPreferences mPrefs;
         @Nullable private AnimatedWallpaper mWallpaper;
         @Nullable private RuntimeShader mShader;
+        /** A living still's effects map, drawn off the main thread a tick ahead of the composite; else null. */
+        @Nullable private LivingEffectsRenderer mEffects;
         @Nullable private LockWallpaperDirector mDirector;
         private boolean mMotion = true;
         private boolean mKilled;
@@ -167,6 +169,7 @@ public final class LockLiveWallpaperService extends WallpaperService {
         @Override
         public void onDestroy() {
             stopFrames();
+            releaseEffects();
             if (mPrefs != null && mPrefs.getSharedPreferences() != null) {
                 mPrefs.getSharedPreferences().unregisterOnSharedPreferenceChangeListener(mPrefsListener);
             }
@@ -252,10 +255,16 @@ public final class LockLiveWallpaperService extends WallpaperService {
             }
             mWallpaper = w;
             mShader = null;
+            releaseEffects();
             if (w != null) {
                 try {
                     mShader = WallpaperUniforms.newShader(w);
+                    if (w instanceof LivingStill) {
+                        mEffects = new LivingEffectsRenderer(WallpaperUniforms.newEffectsShader((LivingStill) w));
+                    }
                 } catch (RuntimeException e) {
+                    mShader = null;
+                    releaseEffects();
                     Logger.logStackTraceWithMessage(LOG_TAG, "The " + w.id() + " shader did not compile", e);
                 }
                 int[] palette = WallpaperPaletteCapture.own(w);
@@ -351,7 +360,26 @@ public final class LockLiveWallpaperService extends WallpaperService {
         private void draw(@NonNull RuntimeShader shader, @NonNull WallpaperDirector.Frame frame) {
             int frameW = frameWidth();
             WallpaperUniforms.apply(shader, frame, frameW, mHeight);
+            LivingEffectsRenderer effects = mEffects;
+            if (effects != null) {
+                // The split render: the map is drawn at a quarter of the frame off this thread, and the
+                // composite below samples the newest finished one (a tick behind, which does not show).
+                try {
+                    effects.advance(frame, frameW, mHeight);
+                    effects.bindLatest(shader);
+                } catch (RuntimeException e) {
+                    Logger.logStackTraceWithMessage(LOG_TAG, "Lock effects map failed", e);
+                    releaseEffects();
+                    WallpaperUniforms.setEffects(shader, null, 1, 1);
+                }
+            }
             paint(frameW);
+        }
+
+        private void releaseEffects() {
+            LivingEffectsRenderer effects = mEffects;
+            mEffects = null;
+            if (effects != null) effects.release();
         }
 
         private void drawRest(@NonNull RuntimeShader shader) {

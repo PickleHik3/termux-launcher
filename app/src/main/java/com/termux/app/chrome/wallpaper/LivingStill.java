@@ -15,22 +15,38 @@ import java.util.Map;
  * background. The id is {@code living:<hash>}; {@link AnimatedWallpapers#byId(android.content.Context,
  * String)} builds one from the manifest on disk and keeps it out of {@link AnimatedWallpapers#all()}.
  *
- * <p>The program is the same for every still: {@link MomentAgsl#HEAD}, five child shaders (the
- * photo, depth and the three masks, bound by {@link WallpaperUniforms}) and recipe uniforms, whose
- * values {@link #recipeUniforms} derives from {@link LivingRecipe}, so one compiled program serves
- * every photo. Its {@code scene} is the browser prototype's shader ({@code wall-alive/page.html})
- * ported to AGSL: depth drift, bob, sway, three water modes, a looped sky flow, falling water, glow,
- * mist, particles and focus blur.</p>
+ * <p>Two programs serve every still, split so the UI thread's draw stays cheap. The
+ * <b>composite</b> ({@link #agsl()}, drawn at full resolution by the home backdrop, the lock engine
+ * and, scaled down, by the glass source nodes) is {@link MomentAgsl#HEAD}, six child shaders (the
+ * photo, depth, the three masks and the effects map, bound by {@link WallpaperUniforms}) and recipe
+ * uniforms, whose values {@link #recipeUniforms} derives from {@link LivingRecipe}. Its
+ * {@code scene} is the browser prototype's shader ({@code wall-alive/page.html}) ported to AGSL:
+ * depth drift, bob, sway, the lake waves, a looped sky flow, falling water, glow, particles and
+ * focus blur. The <b>effects program</b> ({@link #effectsAgsl()}, drawn off the UI at a quarter of
+ * the frame per side, {@link LivingEffectsRenderer}) holds the terms that need the noise loops:
+ * the water refraction of the noise and pool modes, the pool's crest brightness and the mist haze.
+ * Those fields are smooth, so a bilinear quarter-size map is enough.</p>
  *
- * <p>Rest pose: at {@code uEnergy == 0} (and so {@code uPhase == 0}) {@code scene} returns the
- * photo before any effect runs, so the still the system holds and the rest frame are the same
- * picture. Everything that moves is scaled by {@code uEnergy}; {@code uTime} is read once, below
- * that early return. The photo is laid over the frame like a centre-cropped cover.</p>
+ * <p>Effects map encoding (RGB only; alpha is 1, because a premultiplied alpha would wipe the
+ * colour): R, G = the water displacement in image-uv units as {@code 0.5 + d * 25.0}; B = the
+ * mist haze {@code f} in 0..1 or, in pool mode, the crest {@code waveH * 0.5 + 0.5}. Neutral is
+ * {@code (0.5, 0.5, 0)}, which is what the composite is bound to until a map lands.</p>
  *
- * <p>Cost: the five children are sampled by branches on the mask values, so a pixel pays the two
- * depth lookups, the masks it needs and one to three photo taps; about 7 on the common path, 11
- * with a sky or falling water under focus blur. The loop of 120 s is nominal: the noise and drift
- * terms are not periodic, which only matters if the clock wraps (after a day of playing).</p>
+ * <p>Rest pose: at {@code uEnergy == 0} (and so {@code uPhase == 0}) the composite's {@code scene}
+ * returns the photo before any effect runs and before it reads the effects map, so the still the
+ * system holds and the rest frame are the same picture. Everything that moves is scaled by
+ * {@code uEnergy}; {@code uTime} is read once, below that early return. The photo is laid over the
+ * frame like a centre-cropped cover.</p>
+ *
+ * <p>Cost of the composite: the children are sampled by branches on the mask values, so a pixel
+ * pays one depth lookup, the masks it needs, one photo tap (three under focus blur) and, where the
+ * recipe has noise or pool water or mist, one effects tap: about 6 on the common path. There is no
+ * noise loop in it. Focus blur is the 3-tap disc ({@code sampleLite}) at the main sample, not the
+ * old 7-tap disc. Two simplifications against the single program: the drift reads the depth once,
+ * and the effects are evaluated at the undrifted position (the drift is under 1 % of the frame),
+ * and the pool's caustic net, a 0.18 additive, is gone. The loop of 120 s is nominal: the noise
+ * and drift terms are not periodic, which only matters if the clock wraps (after a day of
+ * playing).</p>
  */
 public final class LivingStill implements AnimatedWallpaper {
 
@@ -50,9 +66,11 @@ public final class LivingStill implements AnimatedWallpaper {
         "uniform shader uMaskA;\n" +
         "uniform shader uMaskB;\n" +
         "uniform shader uMaskC;\n" +
+        "uniform shader uEffects;\n" +
         "uniform float2 uImageSize;\n" +
         "uniform float2 uDepthSize;\n" +
         "uniform float2 uMapSize;\n" +
+        "uniform float2 uEffectsSize;\n" +
         "uniform float2 uCover;\n" +
         "uniform float uFocus;\n" +
         "uniform float uIntensity;\n" +
@@ -79,30 +97,12 @@ public final class LivingStill implements AnimatedWallpaper {
         "float3 maskC(float2 uv) { return float3(uMaskC.eval(uv * uMapSize).rgb); }\n" +
         "float depthAt(float2 uv) { return float(uDepth.eval(uv * uDepthSize).r); }\n" +
         "float luma3(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }\n" +
-        "float fbm4(float2 p) {\n" +
-        "    float s = 0.0;\n" +
-        "    float a = 0.5;\n" +
-        "    for (int i = 0; i < 4; i++) {\n" +
-        "        s += a * vnoise(p);\n" +
-        "        p = p * 2.03 + 17.1;\n" +
-        "        a *= 0.5;\n" +
-        "    }\n" +
-        "    return s;\n" +
+        // The effects map (displacement in rg, haze or crest in b) at a frame pixel.
+        "float3 effectsAt(float2 p) {\n" +
+        "    return float3(uEffects.eval(p / uResolution * uEffectsSize).rgb);\n" +
         "}\n" +
-        // Focus blur: a 7 tap disc, radius rad in image widths (no textureLod in AGSL).
-        "float3 sampleImg(float2 uv, float rad) {\n" +
-        "    float3 c = imgAt(uv);\n" +
-        "    if (rad <= 0.0) return c;\n" +
-        "    float ry = rad * uCover.x / uCover.y;\n" +
-        "    c += imgAt(uv + float2(rad, 0.0));\n" +
-        "    c += imgAt(uv + float2(0.5 * rad, 0.866 * ry));\n" +
-        "    c += imgAt(uv + float2(-0.5 * rad, 0.866 * ry));\n" +
-        "    c += imgAt(uv + float2(-rad, 0.0));\n" +
-        "    c += imgAt(uv + float2(-0.5 * rad, -0.866 * ry));\n" +
-        "    c += imgAt(uv + float2(0.5 * rad, -0.866 * ry));\n" +
-        "    return c / 7.0;\n" +
-        "}\n" +
-        // The cheaper 3 tap version for the looped regions, which take two phases each.
+        // Focus blur: a 3 tap disc, radius rad in image widths (no textureLod in AGSL); the looped
+        // regions take two phases of it.
         "float3 sampleLite(float2 uv, float rad) {\n" +
         "    float3 c = imgAt(uv);\n" +
         "    if (rad <= 0.0) return c;\n" +
@@ -110,19 +110,6 @@ public final class LivingStill implements AnimatedWallpaper {
         "    c += imgAt(uv + float2(0.9 * rad, 0.5 * ry));\n" +
         "    c += imgAt(uv - float2(0.9 * rad, 0.5 * ry));\n" +
         "    return c / 3.0;\n" +
-        "}\n" +
-        "float caustic(float2 qv, float t) {\n" +
-        "    float2 iv = qv;\n" +
-        "    float c = 1.0;\n" +
-        "    float inten = 0.005;\n" +
-        "    for (int n = 0; n < 4; n++) {\n" +
-        "        float tt = t * (1.0 - 3.5 / float(n + 1));\n" +
-        "        iv = qv + float2(cos(tt - iv.x) + sin(tt + iv.y), sin(tt - iv.y) + cos(tt + iv.x));\n" +
-        "        c += 1.0 / length(float2(qv.x / (sin(iv.x + tt) / inten), qv.y / (cos(iv.y + tt) / inten)));\n" +
-        "    }\n" +
-        "    c /= 4.0;\n" +
-        "    c = 1.17 - pow(max(c, 0.0), 1.4);\n" +
-        "    return pow(abs(c), 8.0);\n" +
         "}\n" +
         // Sky: two phases of one flow, crossfaded, so clouds drift without stretching away.
         "float3 skyLoop(float2 s, float t, float I, float rad) {\n" +
@@ -133,10 +120,6 @@ public final class LivingStill implements AnimatedWallpaper {
         "    float3 b = sampleLite(s - fl * (f1 - 0.5), rad);\n" +
         "    return mix(a, b, abs(2.0 * f0 - 1.0));\n" +
         "}\n" +
-        "const float2 WAVE1 = float2(0.8, 0.6);\n" +
-        "const float2 WAVE2 = float2(-0.507, 0.862);\n" +
-        "const float2 WAVE3 = float2(0.954, -0.301);\n" +
-        "const float2 WAVE4 = float2(-0.2, -0.98);\n" +
         "float3 scene(float2 p) {\n" +
         "    float2 uv0 = coverUv(p);\n" +
         "    float e = clamp(uEnergy, 0.0, 1.0);\n" +
@@ -149,11 +132,10 @@ public final class LivingStill implements AnimatedWallpaper {
         "    float d0 = depthAt(uv);\n" +
         "    float focus = clamp(uFocus, 0.0, 1.0) * e;\n" +
         "    float rad = focus * mix(0.014, 0.006, smoothstep(0.35, 0.9, d0));\n" +
-        // Depth drift: a slow camera float; near pixels move against far ones (two-step lookup).
+        // Depth drift: a slow camera float; near pixels move against far ones (one depth lookup).
         "    float2 drift = float2(sin(t * 0.23), sin(t * 0.17 + 1.3) * 0.7) * 0.6 * I * 0.013 * uDrift;\n" +
         "    drift.y /= asp;\n" +
         "    float2 s = uv + drift * (d0 - 0.45);\n" +
-        "    s = uv + drift * (depthAt(s) - 0.45);\n" +
         "    float3 A = float3(0.0);\n" +
         "    float3 B = float3(0.0);\n" +
         "    float3 C = float3(0.0);\n" +
@@ -172,35 +154,31 @@ public final class LivingStill implements AnimatedWallpaper {
         "    }\n" +
         // Water. 0: refract through drifting noise (streams, reflections with anisotropic params).
         // 1: cartoon lake, wave bands that shrink toward the horizon. 2: clear pool, one wave surface.
+        // Modes 0 and 2 read their displacement (and the pool its crest) from the effects map, one tap
+        // that the mist shares.
         "    float2 q0 = s * float2(1.0, asp);\n" +
         "    float persp = 1.0;\n" +
-        "    float waveH = 0.0;\n" +
-        "    if (uWaterMode > 0.5 && uWaterMode < 1.5) {\n" +
+        "    bool lake = uWaterMode > 0.5 && uWaterMode < 1.5;\n" +
+        "    bool pool = uWaterMode > 1.5;\n" +
+        "    bool wet = (pool || (uWaterMode > -0.5 && uWaterMode < 0.5)) && A.r > 0.01;\n" +
+        "    bool hazy = uMist.a > 0.0 && C.g > 0.01;\n" +
+        "    float3 fx = float3(0.5, 0.5, 0.0);\n" +
+        "    if (wet || (hazy && !pool)) fx = effectsAt(p);\n" +
+        "    if (lake) {\n" +
         "        persp = mix(0.3, 1.0, smoothstep(0.58, 0.95, s.y));\n" +
         "        float k = 70.0 / persp;\n" +
         "        float phW = q0.y * k - t * 1.15 + sin(q0.x * 4.0 / persp + t * 0.35) * 1.4;\n" +
         "        float2 off = float2(sin(phW) * 0.8 + sin(phW * 0.53 + 2.0) * 0.2, sin(q0.x * 9.0 / persp - t * 0.7 + q0.y * 30.0) * 0.25);\n" +
         "        s += A.r * off * float2(uWater.z, uWater.w) * persp * I;\n" +
-        "    } else if (uWaterMode > 1.5) {\n" +
-        "        float2 qq = q0 + (float2(fbm4(q0 * 2.2 + t * 0.04), fbm4(q0 * 2.2 + 7.3 - t * 0.03)) - 0.5) * 0.35;\n" +
-        "        float p1 = dot(qq, WAVE1) * 17.0 - t * 0.85;\n" +
-        "        float p2 = dot(qq, WAVE2) * 26.0 - t * 1.15;\n" +
-        "        float p3 = dot(qq, WAVE3) * 39.0 - t * 1.5;\n" +
-        "        float p4 = dot(qq, WAVE4) * 11.0 - t * 0.55;\n" +
-        "        float2 waveG = WAVE1 * cos(p1) + WAVE2 * cos(p2) * 0.8 + WAVE3 * cos(p3) * 0.55 + WAVE4 * cos(p4) * 0.9;\n" +
-        "        waveH = (sin(p1) + sin(p2) * 0.8 + sin(p3) * 0.55 + sin(p4) * 0.9) / 3.25;\n" +
-        "        s += A.r * waveG * float2(uWater.z, uWater.w / asp) * I;\n" +
-        "    } else if (uWaterMode > -0.5) {\n" +
-        "        float2 wq = s * uWater.xy;\n" +
-        "        float2 wn = float2(fbm4(wq + float2(t * 0.12, t * 0.05)), fbm4(wq * 1.1 + float2(-t * 0.09, t * 0.11) + 5.2)) - 0.5;\n" +
-        "        s += A.r * wn * float2(uWater.z, uWater.w) * I * 2.0;\n" +
+        "    } else if (wet) {\n" +
+        "        s += A.r * (fx.rg - 0.5) / 25.0;\n" +
         "    }\n" +
         "    float3 col;\n" +
         "    bool sky = uSkyFlow > 0.0 && A.b > 0.01;\n" +
         "    if (sky && A.b > 0.98) {\n" +
         "        col = skyLoop(s, t, I, rad);\n" +
         "    } else {\n" +
-        "        col = sampleImg(s, rad);\n" +
+        "        col = sampleLite(s, rad);\n" +
         "        if (sky) col = mix(col, skyLoop(s, t, I, rad), A.b);\n" +
         "    }\n" +
         // Stars twinkle instead of clouds drifting.
@@ -238,17 +216,17 @@ public final class LivingStill implements AnimatedWallpaper {
         "        float shore = A.r * (1.0 - maskA(s - float2(0.0, lap * persp)).r);\n" +
         "        col = mix(col, float3(0.8, 0.95, 0.98), smoothstep(0.15, 0.7, shore) * 0.45 * wI);\n" +
         "    } else if (uWaterMode > 1.5 && A.r > 0.01) {\n" +
-        // Highlights follow the passing crests; a faint caustic net drifts on top; glints where crests line up.
+        // Highlights follow the passing crests (the map's blue); glints where crests line up.
+        "        float waveH = fx.b * 2.0 - 1.0;\n" +
         "        float hl = smoothstep(0.45, 0.85, luma3(col));\n" +
         "        col *= 1.0 + A.r * (waveH * 0.5 + 0.15) * (0.25 + hl) * 0.45 * wI;\n" +
-        "        float cc = caustic(q * 3.2 * TAU + 10.0, t * 0.22 + 23.0);\n" +
-        "        col += A.r * smoothstep(0.2, 1.2, cc) * 0.18 * float3(0.75, 1.0, 1.0) * wI;\n" +
-        "        float gl = smoothstep(0.93, 0.99, waveH * 0.5 + 0.5) * step(0.8, hash21(floor(q * 120.0)));\n" +
+        "        float gl = smoothstep(0.93, 0.99, fx.b) * step(0.8, hash21(floor(q * 120.0)));\n" +
         "        col += A.r * gl * 0.5 * wI;\n" +
         "    }\n" +
         // Mist: drifting haze, thicker where the mask says and further from the camera.
-        "    if (uMist.a > 0.0 && C.g > 0.01) {\n" +
-        "        float f = smoothstep(0.35, 0.85, fbm4(q * float2(2.2, 3.0) + float2(t * 0.03, -t * 0.008)));\n" +
+        "    if (hazy) {\n" +
+        // The pool's map carries the crest, so its haze is one cheap noise tap instead of the map's.
+        "        float f = pool ? smoothstep(0.3, 0.7, vnoise(q * float2(2.2, 3.0) + float2(t * 0.03, -t * 0.008))) : fx.b;\n" +
         "        float gate = smoothstep(0.0, 0.15, e);\n" +
         "        col = mix(col, uMist.rgb, C.g * f * uMist.a * min(I + 0.2, 1.2) * gate * (1.0 - 0.6 * d0));\n" +
         "    }\n" +
@@ -332,6 +310,74 @@ public final class LivingStill implements AnimatedWallpaper {
         "    return col;\n" +
         "}\n";
 
+    /** How far the effects map sits below the frame, per side. */
+    static final int EFFECTS_DIVISOR = 4;
+    /** The map's displacement scale: {@code 0.5 + d * EFFECTS_GAIN}, d in image-uv units. */
+    static final float EFFECTS_GAIN = 25f;
+
+    /**
+     * The effects program: the terms of the old single program that need the noise loops, in the
+     * encoding the class comment gives. It runs in full-frame pixels like the composite (the
+     * renderer scales the canvas to the map), so the mapping to the photo is the composite's own,
+     * minus the depth drift and the bob and sway, which are under 1 % of the frame. Rest pose: the
+     * neutral colour, and nothing here reads {@code uTime} before that return.
+     */
+    static final String EFFECTS =
+        "uniform float2 uCover;\n" +
+        "uniform float uIntensity;\n" +
+        "uniform float uWaterMode;\n" +
+        "uniform float4 uWater;\n" +
+        "uniform float4 uMist;\n" +
+        "float fbm4(float2 p) {\n" +
+        "    float s = 0.0;\n" +
+        "    float a = 0.5;\n" +
+        "    for (int i = 0; i < 4; i++) {\n" +
+        "        s += a * vnoise(p);\n" +
+        "        p = p * 2.03 + 17.1;\n" +
+        "        a *= 0.5;\n" +
+        "    }\n" +
+        "    return s;\n" +
+        "}\n" +
+        "const float2 WAVE1 = float2(0.8, 0.6);\n" +
+        "const float2 WAVE2 = float2(-0.507, 0.862);\n" +
+        "const float2 WAVE3 = float2(0.954, -0.301);\n" +
+        "const float2 WAVE4 = float2(-0.2, -0.98);\n" +
+        "half4 main(float2 p) {\n" +
+        "    float e = clamp(uEnergy, 0.0, 1.0);\n" +
+        "    if (e <= 0.0005) return half4(0.5, 0.5, 0.0, 1.0);\n" +
+        "    float t = uTime;\n" +
+        "    float I = e * uIntensity;\n" +
+        "    float asp = uCover.y / uCover.x;\n" +
+        "    float2 uv0 = (p - 0.5 * uResolution) / uCover + 0.5;\n" +
+        "    float2 uv = 0.5 + (uv0 - 0.5) * (1.0 - 0.03 * e);\n" +
+        "    float2 q0 = uv * float2(1.0, asp);\n" +
+        "    float2 d = float2(0.0);\n" +
+        "    float b = 0.0;\n" +
+        "    if (uWaterMode > 1.5) {\n" +
+        // Pool: one wave surface; its gradient refracts, its height is the crest.
+        "        float2 qq = q0 + (float2(fbm4(q0 * 2.2 + t * 0.04), fbm4(q0 * 2.2 + 7.3 - t * 0.03)) - 0.5) * 0.35;\n" +
+        "        float p1 = dot(qq, WAVE1) * 17.0 - t * 0.85;\n" +
+        "        float p2 = dot(qq, WAVE2) * 26.0 - t * 1.15;\n" +
+        "        float p3 = dot(qq, WAVE3) * 39.0 - t * 1.5;\n" +
+        "        float p4 = dot(qq, WAVE4) * 11.0 - t * 0.55;\n" +
+        "        float2 waveG = WAVE1 * cos(p1) + WAVE2 * cos(p2) * 0.8 + WAVE3 * cos(p3) * 0.55 + WAVE4 * cos(p4) * 0.9;\n" +
+        "        float waveH = (sin(p1) + sin(p2) * 0.8 + sin(p3) * 0.55 + sin(p4) * 0.9) / 3.25;\n" +
+        "        d = waveG * float2(uWater.z, uWater.w / asp) * I;\n" +
+        "        b = waveH * 0.5 + 0.5;\n" +
+        "    } else {\n" +
+        "        if (uWaterMode > -0.5 && uWaterMode < 0.5) {\n" +
+        "            float2 wq = uv * uWater.xy;\n" +
+        "            float2 wn = float2(fbm4(wq + float2(t * 0.12, t * 0.05)), fbm4(wq * 1.1 + float2(-t * 0.09, t * 0.11) + 5.2)) - 0.5;\n" +
+        "            d = wn * float2(uWater.z, uWater.w) * I * 2.0;\n" +
+        "        }\n" +
+        // Mist: the drifting haze; the composite thickens it by the mask and the depth.
+        "        if (uMist.a > 0.0) {\n" +
+        "            b = smoothstep(0.35, 0.85, fbm4(q0 * float2(2.2, 3.0) + float2(t * 0.03, -t * 0.008)));\n" +
+        "        }\n" +
+        "    }\n" +
+        "    return half4(half3(clamp(float3(0.5 + d * 25.0, b), float3(0.0), float3(1.0))), 1.0);\n" +
+        "}\n";
+
     /** The living still's own tail: no palette lift and no 0.6 cap, so the photo keeps its full range. */
     static final String TAIL =
         "half4 main(float2 p0) {\n" +
@@ -344,6 +390,7 @@ public final class LivingStill implements AnimatedWallpaper {
 
     private static final String AGSL = MomentAgsl.HEAD + "const float PERIOD = " + MomentAgsl.lit(PERIOD) + ";\n"
         + SCENE + TAIL;
+    private static final String EFFECTS_AGSL = MomentAgsl.HEAD + EFFECTS;
 
     private static final int[] OWN = {0xFF2A2A2A, 0xFFB0B0B0, 0xFF808080, 0xFF101010};
 
@@ -363,7 +410,10 @@ public final class LivingStill implements AnimatedWallpaper {
     @Override public String label() { return "Living still"; }
     @Override public float periodSeconds() { return PERIOD; }
     @Override public int[] ownPalette() { return OWN.clone(); }
+    /** The composite program (see the class comment); the effects program is {@link #effectsAgsl()}. */
     @Override public String agsl() { return AGSL; }
+    /** The effects program, drawn at {@link #EFFECTS_DIVISOR} below the frame by {@link LivingEffectsRenderer}. */
+    @NonNull public String effectsAgsl() { return EFFECTS_AGSL; }
 
     /** The hash an id like {@code living:0123456789abcdef} names, or null. */
     @Nullable

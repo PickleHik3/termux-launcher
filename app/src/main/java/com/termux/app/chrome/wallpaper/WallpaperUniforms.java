@@ -2,6 +2,7 @@ package com.termux.app.chrome.wallpaper;
 
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
+import android.graphics.Color;
 import android.graphics.RuntimeShader;
 import android.graphics.Shader;
 
@@ -23,10 +24,12 @@ import java.util.WeakHashMap;
  * TOUCH the point is (x, y) in rect.xy; for PAGE_CHANGE the direction x goes in rect.x. State is
  * (kind, progress). No allocation beyond the varargs the framework itself takes.</p>
  *
- * <p>A {@link LivingStill} also gets its five child shaders (the photo, depth and the three masks,
+ * <p>A {@link LivingStill} also gets its five picture children (the photo, depth and the three masks,
  * linear-filtered {@link BitmapShader}s over the process-wide decoded {@link LivingStillTextures})
- * and its recipe uniforms when the shader is built; each frame then adds the cover mapping (which
- * depends on the frame size) and the focus.</p>
+ * and its recipe uniforms when the composite shader is built; each frame then adds the cover mapping
+ * (which depends on the frame size) and the focus. The composite's sixth child, the effects map, is
+ * bound to a neutral 1x1 map until {@link #setEffects} hands it the landed one. The still's
+ * effects program has its own shader, {@link #newEffectsShader}, written by {@link #applyEffects}.</p>
  */
 @RequiresApi(33)
 public final class WallpaperUniforms {
@@ -63,6 +66,78 @@ public final class WallpaperUniforms {
         RuntimeShader shader = new RuntimeShader(w.agsl());
         if (w instanceof LivingStill) bindLiving(shader, (LivingStill) w);
         return shader;
+    }
+
+    /**
+     * Compiles a living still's effects program (see {@link LivingStill#effectsAgsl()}) with its
+     * recipe uniforms bound. Throws like {@link #newShader}.
+     */
+    @NonNull
+    public static RuntimeShader newEffectsShader(@NonNull LivingStill still) {
+        RuntimeShader shader = new RuntimeShader(still.effectsAgsl());
+        final LivingStillTextures t;
+        try {
+            t = LivingStillTextures.acquire(still.manifest());
+        } catch (IOException e) {
+            throw new IllegalStateException("Cannot read the living still " + still.id(), e);
+        }
+        Map<String, float[]> recipe = still.recipeUniforms();
+        for (String name : EFFECTS_RECIPE) shader.setFloatUniform(name, recipe.get(name));
+        shader.setFloatUniform("uCover", t.image.getWidth(), t.image.getHeight());
+        LIVING.put(shader, new Living(t));
+        return shader;
+    }
+
+    /** The recipe uniforms the effects program declares. */
+    private static final String[] EFFECTS_RECIPE = {"uIntensity", "uWaterMode", "uWater", "uMist"};
+
+    /**
+     * Writes one effects frame: the clock and the cover mapping, the only inputs the program has
+     * besides its recipe. {@code frameW}/{@code frameH} are the full shared-frame size in pixels,
+     * the same as the composite's, whatever size the map is drawn at.
+     */
+    public static void applyEffects(@NonNull RuntimeShader s, @NonNull WallpaperDirector.Frame f,
+                                    float frameW, float frameH) {
+        @Nullable Living living = LIVING.get(s);
+        if (living == null) return;
+        s.setFloatUniform("uResolution", frameW, frameH);
+        s.setFloatUniform("uTime", f.timeSeconds);
+        s.setFloatUniform("uEnergy", f.energy);
+        float[] cover = LivingStill.coverSize(frameW, frameH, living.imageW, living.imageH);
+        s.setFloatUniform("uCover", cover[0], cover[1]);
+    }
+
+    /**
+     * Binds the effects map a composite shader samples: {@code map}, a linear-filtered shader over
+     * the map's bitmap, {@code mapW} x {@code mapH} pixels; null puts the neutral 1x1 map back.
+     */
+    public static void setEffects(@NonNull RuntimeShader composite, @Nullable Shader map, int mapW, int mapH) {
+        if (map == null) {
+            map = neutralEffects();
+            mapW = 1;
+            mapH = 1;
+        }
+        composite.setInputShader("uEffects", map);
+        composite.setFloatUniform("uEffectsSize", mapW, mapH);
+    }
+
+    /** A linear-filtered shader over {@code bitmap}, for a child (also the effects map's). */
+    @NonNull
+    static BitmapShader linearShader(@NonNull Bitmap bitmap) {
+        return linear(bitmap);
+    }
+
+    @Nullable private static BitmapShader sNeutralEffects;
+
+    /** The map that changes nothing: no displacement, no haze ({@code (0.5, 0.5, 0)}). */
+    @NonNull
+    private static synchronized BitmapShader neutralEffects() {
+        if (sNeutralEffects == null) {
+            Bitmap b = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
+            b.setPixel(0, 0, Color.rgb(128, 128, 0));
+            sNeutralEffects = linear(b);
+        }
+        return sNeutralEffects;
     }
 
     /** Writes one live frame. {@code frameW}/{@code frameH} are the full shared-frame size in pixels. */
@@ -120,6 +195,7 @@ public final class WallpaperUniforms {
         }
         s.setFloatUniform("uFocus", 0f);
         s.setFloatUniform("uCover", t.image.getWidth(), t.image.getHeight());
+        setEffects(s, null, 1, 1);
         LIVING.put(s, new Living(t));
     }
 

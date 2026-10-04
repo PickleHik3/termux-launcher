@@ -32,6 +32,12 @@ import java.util.concurrent.atomic.AtomicInteger;
  * (animated-wallpaper SPEC §3.3, §3.6). API 34+: {@link HardwareBufferRenderer} draws a
  * {@link RenderNode} straight into a {@link HardwareBuffer} we own.
  *
+ * <p>A living still splits its program (see {@link LivingStill}): each render first draws the
+ * effects map at a quarter of the frame per side into its own buffer ({@link LivingEffectsRenderer}),
+ * waits for it, binds it to the composite shader and only then draws the sources, so the glass sees
+ * the same tick's map as the backdrop, which the clock binds it to as well. The self-check times
+ * both stages.</p>
+ *
  * <p>The graph: a <b>source node</b> per downsample (÷4 and ÷2 per side) whose canvas is scaled so
  * the wallpaper shader keeps drawing in the full frame rect's pixels and is re-recorded each
  * render (the uniforms changed); a <b>blur node</b> per live radius with a blur
@@ -103,6 +109,10 @@ public final class LiveWallpaperRenderer {
     @NonNull private final Handler mMain = new Handler(Looper.getMainLooper());
     private final float mDensity;
     @NonNull private final RuntimeShader mShader;
+    /** A living still's effects map ring, else null. */
+    @Nullable private final LivingEffectsRenderer mEffects;
+    /** The slot of the render that landed last; the effects map the backdrop is bound to. */
+    private int mLandedSlot = -1;
     @NonNull private final Paint mPaint = new Paint();
     /** Source nodes by divisor: index 0 is ÷2, index 1 is ÷4. Created on use. */
     private final RenderNode[] mSources = new RenderNode[2];
@@ -141,11 +151,14 @@ public final class LiveWallpaperRenderer {
      * @param density the screen density, which turns a live radius in dp into blur pixels
      * @param shader  this renderer's own wallpaper shader ({@code WallpaperUniforms.newShader});
      *                the backdrop draws its own, so no uniform is ever written under a draw
+     * @param effects a living still's own effects shader ({@code WallpaperUniforms.newEffectsShader}),
+     *                or null for every other background
      * @param frames  where the rings' bitmaps are published; cleared before any ring is freed
      * @param tier    the step-down tier this renderer runs at, for the log
      * @param lowRes  draw every ring at the ÷4 source resolution
      */
     public LiveWallpaperRenderer(float density, @NonNull RuntimeShader shader,
+                                 @Nullable RuntimeShader effects,
                                  @NonNull LiveWallpaperFrames frames, int tier, boolean lowRes) {
         mTier = tier;
         mLowRes = lowRes;
@@ -153,7 +166,17 @@ public final class LiveWallpaperRenderer {
         mFrames = frames;
         mDensity = density;
         mShader = shader;
+        mEffects = effects == null ? null : new LivingEffectsRenderer(effects);
         mPaint.setShader(shader);
+    }
+
+    /**
+     * Binds the effects map of the render that just landed to {@code target}, a composite shader
+     * (the backdrop's); a no-op for a background without one. Call it from the landing callback.
+     */
+    public void bindEffectsTo(@NonNull RuntimeShader target) {
+        LivingEffectsRenderer effects = mEffects;
+        if (effects != null && mLandedSlot >= 0) effects.bind(target, mLandedSlot);
     }
 
     /** The display's frame period from vsync, which sets the self-check's limit ({@link RenderBudget#setFramePeriodMs}). */
@@ -209,21 +232,19 @@ public final class LiveWallpaperRenderer {
             configure(radiiDp);
             if (mRingCount == 0) return false;
             WallpaperUniforms.apply(mShader, f, mFrameW, mFrameH);
-            for (int i = 0; i < mRingCount; i++) recordSource(mRings[i].divisor);
             int slot = LiveRadii.nextSlot(mSlot);
             mSlot = slot;
             mCallback = done;
             mFailed = false;
-            mPending.set(mRingCount);
             mInFlight = true;
             mStartNanos = System.nanoTime();
             final int token = ++mToken;
-            ExecutorService executor = executor();
-            ColorSpace srgb = ColorSpace.get(ColorSpace.Named.SRGB);
-            for (int i = 0; i < mRingCount; i++) {
-                mRings[i].renderers[slot].obtainRenderRequest()
-                    .setColorSpace(srgb)
-                    .draw(executor, result -> onDrawn(result, token, slot));
+            LivingEffectsRenderer effects = mEffects;
+            if (effects == null) {
+                startRings(token, slot);
+            } else {
+                effects.ensure(mFrameW, mFrameH);
+                effects.draw(f, slot, ok -> mMain.post(() -> afterEffects(token, slot, ok)));
             }
             return true;
         } catch (Throwable t) {
@@ -234,6 +255,44 @@ public final class LiveWallpaperRenderer {
         } finally {
             Trace.endSection();
         }
+    }
+
+    /** Records the sources and starts one draw per radius; the composite is already bound to its map. */
+    private void startRings(int token, int slot) {
+        for (int i = 0; i < mRingCount; i++) recordSource(mRings[i].divisor);
+        mPending.set(mRingCount);
+        ExecutorService executor = executor();
+        ColorSpace srgb = ColorSpace.get(ColorSpace.Named.SRGB);
+        for (int i = 0; i < mRingCount; i++) {
+            mRings[i].renderers[slot].obtainRenderRequest()
+                .setColorSpace(srgb)
+                .draw(executor, result -> onDrawn(result, token, slot));
+        }
+    }
+
+    /** Main thread: the effects map of this render is written; the glass sources can sample it now. */
+    private void afterEffects(int token, int slot, boolean ok) {
+        if (token != mToken) return;
+        if (mReleaseDeferred) {
+            mInFlight = false;
+            doRelease();
+            return;
+        }
+        if (mReleased) return;
+        LivingEffectsRenderer effects = mEffects;
+        if (ok && effects != null) {
+            try {
+                effects.bind(mShader, slot);
+                startRings(token, slot);
+                return;
+            } catch (Throwable t) {
+                Logger.logStackTraceWithMessage(TAG, "Live wallpaper render failed", t);
+            }
+        }
+        // The map or the rings failed: land it as a failed render, which the clock turns into a kill.
+        mFailed = true;
+        mEndNanos = System.nanoTime();
+        landed(token, slot);
     }
 
     /** Executor thread: wait for the buffer to be written, then count this radius in. */
@@ -266,6 +325,7 @@ public final class LiveWallpaperRenderer {
             return;
         }
         if (mReleased) return;
+        mLandedSlot = slot;
         boolean ok = !mFailed;
         if (!ok) {
             mHealthy = false;
@@ -314,6 +374,7 @@ public final class LiveWallpaperRenderer {
                 mSources[i] = null;
             }
         }
+        if (mEffects != null) mEffects.release();
         ExecutorService executor = mExecutor;
         mExecutor = null;
         if (executor != null) executor.shutdown();
