@@ -137,10 +137,10 @@ None of these are required for the basic launcher and terminal:
   launching, panes, workspaces, and the terminal do not need it.
 - **On-device AI:** optional local model host under **Settings → On-device AI**. See the
   [On-device AI user guide](On_Device_AI.md).
-- **`tlstore`:** the launcher's own tool store. `tlstore shell` installs fish with a wallpaper-matched
-  prompt, `eza` and `zoxide`; `tlstore install` opens a picker for everything else — a Neovim colour
-  scheme that follows your wallpaper, the showcase binaries (sigye, fastfetch, kitten), and Claude
-  Code. See the [tlstore guide](Tlstore.md).
+- **`tlstore`:** the launcher's own tool store. `tlstore install fish-shell` installs fish with a
+  wallpaper-matched prompt, `eza` and `zoxide`; `tlstore install` opens a picker for everything
+  else — a Neovim colour scheme that follows your wallpaper, the showcase binaries (sigye,
+  fastfetch, kitten), and Claude Code. See the [tlstore guide](Tlstore.md).
 
 ## 9. Your first recovery commands
 
