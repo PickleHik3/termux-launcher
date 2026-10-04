@@ -22,6 +22,7 @@ public final class StatusActionPreference extends Preference {
     private CharSequence status = "";
     private CharSequence action = "";
     private Tone tone = Tone.NEUTRAL;
+    private boolean optional;
 
     public StatusActionPreference(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -34,6 +35,28 @@ public final class StatusActionPreference extends Preference {
         this.action = action;
         this.tone = tone;
         notifyChanged();
+    }
+
+    /**
+     * Marks the service as optional: while it is off, an ERROR or WARNING tone is shown as a
+     * neutral "not enabled" state instead of an alarm. Required access (not optional) keeps its
+     * warning/error colour and icon. POSITIVE is unaffected.
+     */
+    public void setOptional(boolean optional) {
+        if (this.optional == optional) return;
+        this.optional = optional;
+        notifyChanged();
+    }
+
+    public boolean isOptional() {
+        return optional;
+    }
+
+    /** The tone actually shown: optional services never present as error or warning. */
+    @androidx.annotation.VisibleForTesting
+    @NonNull
+    Tone effectiveTone() {
+        return optional && (tone == Tone.ERROR || tone == Tone.WARNING) ? Tone.NEUTRAL : tone;
     }
 
     @Override public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
@@ -50,16 +73,19 @@ public final class StatusActionPreference extends Preference {
             actionView.setOnClickListener(view -> performClick());
         }
         if (icon != null) {
-            icon.setImageResource(tone == Tone.POSITIVE ? R.drawable.ic_symbol_check_circle
-                : tone == Tone.ERROR ? R.drawable.ic_symbol_error : R.drawable.ic_symbol_warning);
+            Tone shown = effectiveTone();
+            icon.setImageResource(shown == Tone.POSITIVE ? R.drawable.ic_symbol_check_circle
+                : shown == Tone.ERROR ? R.drawable.ic_symbol_error
+                : shown == Tone.WARNING ? R.drawable.ic_symbol_warning : R.drawable.ic_symbol_info);
             icon.setImageTintList(ColorStateList.valueOf(toneColor()));
         }
     }
 
     private int toneColor() {
-        int attr = tone == Tone.ERROR ? androidx.appcompat.R.attr.colorError
-            : tone == Tone.WARNING ? com.google.android.material.R.attr.colorTertiary
-            : tone == Tone.POSITIVE ? androidx.appcompat.R.attr.colorPrimary
+        Tone shown = effectiveTone();
+        int attr = shown == Tone.ERROR ? androidx.appcompat.R.attr.colorError
+            : shown == Tone.WARNING ? com.google.android.material.R.attr.colorTertiary
+            : shown == Tone.POSITIVE ? androidx.appcompat.R.attr.colorPrimary
             : com.google.android.material.R.attr.colorOnSurfaceVariant;
         return MaterialColors.getColor(getContext(), attr,
             ContextCompat.getColor(getContext(), R.color.termux_on_surface_variant));

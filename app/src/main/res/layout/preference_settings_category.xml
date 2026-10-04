@@ -1,24 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Section header: spacing separates sections; no divider line. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/title"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical">
-
-    <com.google.android.material.divider.MaterialDivider
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="8dp"
-        android:layout_marginEnd="16dp" />
-
-    <TextView
-        android:id="@android:id/title"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:paddingStart="16dp"
-        android:paddingTop="16dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="8dp"
-        android:textAppearance="?attr/textAppearanceTitleSmall"
-        android:textColor="?attr/colorPrimary" />
-</LinearLayout>
+    android:accessibilityHeading="true"
+    android:paddingStart="@dimen/settings_gutter"
+    android:paddingTop="@dimen/settings_category_top"
+    android:paddingEnd="@dimen/settings_gutter"
+    android:paddingBottom="@dimen/settings_category_bottom"
+    android:textAppearance="?attr/textAppearanceTitleSmall"
+    android:textColor="?attr/colorPrimary" />
