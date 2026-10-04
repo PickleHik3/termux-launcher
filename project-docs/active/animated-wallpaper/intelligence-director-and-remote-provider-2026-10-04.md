@@ -75,7 +75,7 @@ Measured numbers already on file (pong, Nothing Phone 2, Adreno 730):
 The `-gpu` bundle corruption on Adreno 730 does not apply: the catalogue ships only the standard
 file, and the standard file on the GPU backend measured "Use it".
 
-Verdict: **feasible and should be the default director.** It cuts the step from about a minute
+Verdict (desk, superseded by the measurement below): **feasible and should be the default director.** It cuts the step from about a minute
 to under ten seconds and opens the step to 8 GB phones. Two risks, both testable:
 
 1. Set-of-mark counting. E4B already miscounts (the parser drops marks past k). E2B may pick
@@ -93,6 +93,15 @@ Test plan (needs the developer's go, pong is in use): the 8 test wallpapers thro
 picks as IoU against the SegFormer groups where SegFormer is confident, and list style choices
 side by side for a visual judgement. Add a remote model as a third column once the provider exists.
 Watchdog on `MemAvailable` throughout.
+
+### Measured 2026-10-04 (see `director-comparison-2026-10-04.md`)
+
+E2B runs the step on the GPU in 12–16 s warm against E4B's 40–50 s on the CPU, but it reads scenes
+badly: eight of ten regions called water on the BMO picture, no styles, marks written as strings, and
+no improvement from stricter wording. E4B goes to the CPU because of the memory budget (~5.7 GB free
+needed for the GPU), not only because of the stale failure record. **Decision 1 is therefore
+reversed: E4B stays the director when installed; E2B is the fallback for phones without E4B, behind
+an over-listing guard; the remote director is the speed fix.**
 
 ## 4. Bring-your-own-key provider (OpenAI-compatible)
 
@@ -192,7 +201,8 @@ enough". Phase 1 pieces have disjoint files except `TaiSettings` (1a and 1b both
 
 ## 6. Decisions
 
-1. E2B as the default director, E4B only when E2B is absent. Open (recommended: yes).
+1. **Settled by measurement 2026-10-04:** E4B stays the director; E2B only as the fallback when E4B is
+   absent (with an over-listing guard). See §3 and `director-comparison-2026-10-04.md`.
 2. **Approved 2026-10-04:** cleartext as recommended in §7.2: manifest allows it, the client accepts
    `http://` only for localhost and private LAN / Tailscale hosts, with an "unencrypted" note.
 3. **Approved 2026-10-04:** default routing *Prefer remote*, with per-feature toggles (§7.2).
@@ -202,7 +212,7 @@ enough". Phase 1 pieces have disjoint files except `TaiSettings` (1a and 1b both
    `provider: tai` inherit the key, but it is not required.
 5. **Approved 2026-10-04:** consent copy = the settings line under the key plus a one-time dialog
    the first time Bring to life runs with the remote director on.
-6. Pong comparison run: **wait** for the developer's cue.
+6. **Done 2026-10-04** with the developer's go: `director-comparison-2026-10-04.md`.
 
 ## 7. Follow-ups from the 2026-10-04 review
 
