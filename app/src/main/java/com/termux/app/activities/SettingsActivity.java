@@ -11,6 +11,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.ColorUtils;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.preference.ListPreference;
@@ -457,6 +460,10 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         int surface = ThemeUtils.getSystemAttrColor(this, com.termux.shared.R.attr.termuxColorSurfaceBase, android.graphics.Color.BLACK);
         window.setStatusBarColor(surface);
         window.setNavigationBarColor(surface);
+        boolean lightSurface = ColorUtils.calculateLuminance(surface) > 0.5;
+        WindowInsetsControllerCompat bars = WindowCompat.getInsetsController(window, window.getDecorView());
+        bars.setAppearanceLightStatusBars(lightSurface);
+        bars.setAppearanceLightNavigationBars(lightSurface);
     }
 
     /**
