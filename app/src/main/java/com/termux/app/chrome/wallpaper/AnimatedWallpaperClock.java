@@ -78,6 +78,9 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
     /** The last vsync callback's time, and the shortest gap between two seen (the frame period). */
     private long mPrevVsyncNanos;
     private long mFramePeriodNanos;
+    private static final int GAPS = 32;
+    private final long[] mGaps = new long[GAPS];
+    private int mGapCount;
     @NonNull private final Handler mHandler = new Handler(Looper.getMainLooper());
     @NonNull private final Choreographer mChoreographer = Choreographer.getInstance();
     @NonNull private final Runnable mRelease = this::releaseAll;
@@ -237,18 +240,22 @@ public final class AnimatedWallpaperClock implements Choreographer.FrameCallback
     }
 
     /**
-     * The shortest gap between back-to-back vsync callbacks seen so far is the display's frame
-     * period (a skipped vsync only ever makes a gap longer). It sets the renderer's self-check limit.
+     * The display's frame period, as the median of the last {@link #GAPS} gaps between back-to-back
+     * vsync callbacks. Callback times jitter (on pong the shortest gap read 7.3 ms at 120 Hz), and a
+     * skipped vsync makes a gap longer, so the median and not the extreme. It sets the renderer's
+     * self-check limit.
      */
     private void noteVsync(long frameTimeNanos) {
         long gap = frameTimeNanos - mPrevVsyncNanos;
         mPrevVsyncNanos = frameTimeNanos;
         if (gap < 2_000_000L || gap > 50_000_000L) return;
-        if (mFramePeriodNanos == 0L || gap < mFramePeriodNanos) {
-            mFramePeriodNanos = gap;
-            LiveWallpaperRenderer renderer = mRenderer;
-            if (renderer != null) renderer.setFramePeriodMs(gap / 1_000_000f);
-        }
+        mGaps[mGapCount++ % GAPS] = gap;
+        if (mGapCount < GAPS || mGapCount % GAPS != 0) return;
+        long[] sorted = mGaps.clone();
+        java.util.Arrays.sort(sorted);
+        mFramePeriodNanos = sorted[GAPS / 2];
+        LiveWallpaperRenderer renderer = mRenderer;
+        if (renderer != null) renderer.setFramePeriodMs(mFramePeriodNanos / 1_000_000f);
     }
 
     @Nullable
