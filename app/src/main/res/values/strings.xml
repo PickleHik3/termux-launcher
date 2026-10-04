@@ -273,10 +273,10 @@
     <string name="settings_terminal_key_row_header">Terminal extra keys</string>
     <string name="settings_extra_keys_all_caps_title">Capitalize key labels</string>
     <string name="settings_extra_keys_all_caps_summary">Show ESC and TAB in capitals rather than as written.</string>
-    <string name="settings_use_as_title">Mode</string>
+    <string name="settings_use_as_title">Launcher mode</string>
     <string name="settings_use_as_dialog_title">How will you use it?</string>
     <string name="settings_use_as_terminal">Terminal</string>
-    <string name="settings_use_as_terminal_description">Just the terminal</string>
+    <string name="settings_use_as_terminal_description"></string>
     <string name="settings_use_as_home">Terminal + Home</string>
     <string name="settings_use_as_home_description">Apps and widgets</string>
     <string name="settings_use_as_display">Terminal + Home + Display</string>
@@ -807,7 +807,7 @@
     <string name="settings_notifications_home_header">On the home screen</string>
     <string name="settings_notifications_pinned_header">Pinned to the status bar</string>
     <string name="settings_notifications_shell_header">For the shell</string>
-    <string name="notif_history_title">Notification history for the shell</string>
+    <string name="notif_history_title">Notification history</string>
     <string name="notif_history_link_summary">Choose which apps are recorded for Termux</string>
     <plurals name="notif_history_apps_recorded">
         <item quantity="one">%1$d app recorded</item>
@@ -908,8 +908,8 @@
                 <string name="termux_top_pane_pinned_notifications_scroll_content_description">Pinned notifications, showing %1$d and %2$d of %3$d</string>
                 <string name="termux_top_pane_notification_access_title">Media and pinned notifications</string>
                 <string name="termux_top_pane_notification_access_summary">Grant notification access so the status bar can show the active media session and rule-matched notifications.</string>
-                <string name="settings_essential_notifications_title">Essential notification rules</string>
-                <string name="settings_essential_notifications_summary">Pin notifications to the top pane when they match an app package and/or keywords.</string>
+                <string name="settings_essential_notifications_title">Pinned notifications</string>
+                <string name="settings_essential_notifications_summary">Pin matching notifications to the top pane. Match an app package, keywords, or both.</string>
                 <string name="essential_rules_empty">No rules yet. A rule needs an app package, keywords, or both.</string>
                 <string name="essential_rules_package_hint">App package (e.g. com.whatsapp)</string>
                 <string name="essential_rules_keywords_hint">Keywords in title or text</string>
@@ -1929,7 +1929,7 @@
                 <string name="termux_app_launcher_bw_icons_summary">Render app icons in grayscale.</string>
                 <string name="termux_app_launcher_icon_pack_summary">Use icons from an installed launcher icon pack.</string>
                 <string name="termux_app_launcher_pinned_icon_pack_summary">Optional override for pinned apps. Otherwise they use the global icon pack.</string>
-                <string name="termux_app_launcher_notification_dots_summary">Show a Material color dot on apps with active notifications.</string>
+                <string name="termux_app_launcher_notification_dots_summary">Show a dot on apps with active notifications.</string>
                 <string name="termux_app_launcher_notification_dots_summary_needs_access">Enable notification access to show dots on apps with active notifications.</string>
                 <string name="termux_app_launcher_notification_access_title">Enable notification access?</string>
                 <string name="termux_app_launcher_notification_access_message">Notification dots use Android notification access to detect which apps currently have clearable notifications. Content is not used for launcher dots.</string>

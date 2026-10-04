@@ -98,6 +98,70 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
      * The deep-link arguments an Intent carries, or null when it carries none. Read by the
      * initial fragment; nothing else in the Intent reaches it.
      */
+    private static final String PAGES = "com.termux.app.fragments.settings.termux.";
+
+    /**
+     * A deep link that names an old page and a row that has since moved to a focused subpage
+     * (an external Intent, a saved Back stack, a search hit) is sent to the page that holds the row,
+     * with the same scroll key, so the row is still found. Any other class or key is returned as
+     * given, so a link without a key keeps opening the overview it always named.
+     */
+    @NonNull
+    static String redirectLegacyPage(@NonNull String className, @Nullable String scrollToKey) {
+        if (scrollToKey == null) return className;
+        String page = null;
+        if ((PAGES + "KeyboardPreferencesFragment").equals(className)) {
+            if (scrollToKey.startsWith("keyboard_voice") || scrollToKey.equals("keyboard_docs_voice"))
+                page = "KeyboardVoicePreferencesFragment";
+            else if (scrollToKey.equals("in_app_keyboard_hide_on_hardware")
+                || scrollToKey.equals("pass_ctrl_space_to_android"))
+                page = "KeyboardHardwarePreferencesFragment";
+            else if (scrollToKey.equals("keyboard_layout") || scrollToKey.equals("in_app_keyboard_extra_keys")
+                || scrollToKey.equals("in_app_keyboard_custom_layout") || scrollToKey.equals("in_app_keyboard_layouts")
+                || scrollToKey.startsWith("keyboard_docs_") || scrollToKey.startsWith("keyboard_credits"))
+                page = "KeyboardLayoutPreferencesFragment";
+            else if (scrollToKey.equals("keyboard_shapes") || scrollToKey.startsWith("in_app_keyboard_floating_")
+                || scrollToKey.equals("in_app_keyboard_split_gap"))
+                page = "KeyboardSizePreferencesFragment";
+            else if (scrollToKey.equals("keyboard_typing") || scrollToKey.equals("keyboard_feedback")
+                || scrollToKey.startsWith("in_app_keyboard_tap_correction")
+                || scrollToKey.equals("in_app_keyboard_key_sound_enabled")
+                || scrollToKey.equals("in_app_keyboard_key_popup"))
+                page = "KeyboardTypingPreferencesFragment";
+            else if (scrollToKey.equals("in_app_keyboard_haptics_enabled"))
+                page = "AppBehaviorPreferencesFragment";
+        } else if ((PAGES + "LauncherPreferencesFragment").equals(className)) {
+            if (scrollToKey.equals("app_launcher_input_char") || scrollToKey.equals("app_launcher_reset_usage_ranking"))
+                page = "LauncherSearchPreferencesFragment";
+            else if (scrollToKey.equals("app_launcher_az_lock_method")
+                || scrollToKey.equals("app_launcher_az_double_tap_lock"))
+                page = "LauncherLockPreferencesFragment";
+            else if (scrollToKey.equals("app_launcher_most_used_page"))
+                page = "LauncherDockPreferencesFragment";
+            else if (scrollToKey.equals("app_haptics_enabled") || scrollToKey.equals("app_launcher_row_haptics")
+                || scrollToKey.equals("show_in_recents_when_not_default"))
+                page = "AppBehaviorPreferencesFragment";
+        } else if ((PAGES + "X11DisplayPreferencesFragment").equals(className)) {
+            switch (scrollToKey) {
+                case "touchMode": case "x11_android_keyboard": case "x11_keyboard_follows_text":
+                case "clipboardEnable":
+                    page = "X11DisplayInputPreferencesFragment"; break;
+                case "displayResolutionMode": case "displayScale": case "displayResolutionExact":
+                case "displayResolutionCustom": case "displayFilteringMode": case "x11_display_dpi":
+                    page = "X11DisplayResolutionPreferencesFragment"; break;
+                case "x11_display_autostart": case "x11_display_command": case "x11_set_display_env":
+                    page = "X11DisplayStartupPreferencesFragment"; break;
+                case "x11_legacy_drawing": case "x11_force_bgra":
+                    page = "X11DisplayTroubleshootingPreferencesFragment"; break;
+                case "x11_drawer_apps": case "x11_gui_apps_setup": case "x11_hidden_apps":
+                case "x11_window_manager": case "x11_runtime_badge": case "x11_window_manager_hint":
+                    page = "X11DisplayLinuxAppsPreferencesFragment"; break;
+                default: break;
+            }
+        }
+        return page == null ? className : PAGES + page;
+    }
+
     @Nullable
     static Bundle deepLinkArguments(@NonNull Intent intent) {
         String place = intent.getStringExtra(EXTRA_INITIAL_PLACE);
@@ -322,13 +386,16 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
 
     private void pushScreen(@NonNull Class<? extends Fragment> fragmentClass, int titleResId,
                             @Nullable String titleText, @Nullable Bundle args) {
-        Fragment fragment = getSupportFragmentManager().getFragmentFactory()
-            .instantiate(getClassLoader(), fragmentClass.getName());
-        if (args != null) fragment.setArguments(args);
         String place = args == null ? null : args.getString(EXTRA_INITIAL_PLACE);
         String scrollToKey = args == null ? null : args.getString(EXTRA_SCROLL_TO_KEY);
+        // A saved or external entry for an old page, scrolled to a row that moved, opens the
+        // subpage that holds the row; the saved entry then records the page actually shown.
+        String className = redirectLegacyPage(fragmentClass.getName(), scrollToKey);
+        Fragment fragment = getSupportFragmentManager().getFragmentFactory()
+            .instantiate(getClassLoader(), className);
+        if (args != null) fragment.setArguments(args);
         mPushedScreens.add(new SettingsBackStackState.Entry(
-            fragmentClass.getName(), titleResId, titleText, place, scrollToKey));
+            className, titleResId, titleText, place, scrollToKey));
         // Named by its position so it always pops exactly one entry at a time, staying aligned
         // with mPushedScreens (see onBackStackChanged).
         getSupportFragmentManager().beginTransaction()
@@ -416,6 +483,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         if (fragmentClassName == null || fragmentClassName.isEmpty()) {
             return new RootPreferencesFragment();
         }
+        fragmentClassName = redirectLegacyPage(fragmentClassName,
+            getIntent().getStringExtra(EXTRA_SCROLL_TO_KEY));
         try {
             Class<?> fragmentClass = getClassLoader().loadClass(fragmentClassName);
             if (!isAllowedInitialFragment(fragmentClass)) {
@@ -672,8 +741,11 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             for (int i = 0; i < modes.size(); i++) {
                 String mode = modes.get(i);
                 values[i] = mode;
-                entries[i] = context.getString(LauncherUseCaseMode.titleRes(mode)) + "\n"
-                    + context.getString(LauncherUseCaseMode.descriptionRes(mode));
+                // A choice with nothing to add is the bare title: no empty second line.
+                String description = context.getString(LauncherUseCaseMode.descriptionRes(mode));
+                entries[i] = description.isEmpty()
+                    ? context.getString(LauncherUseCaseMode.titleRes(mode))
+                    : context.getString(LauncherUseCaseMode.titleRes(mode)) + "\n" + description;
             }
             row.setEntries(entries);
             row.setEntryValues(values);
