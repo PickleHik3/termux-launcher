@@ -450,7 +450,7 @@
     <string name="settings_status_not_installed">Not installed</string>
     <string name="settings_status_allowed">Allowed</string>
     <string name="settings_fix_action">Fix</string>
-    <string name="settings_permission_allowed_summary">Manage in Android settings.</string>
+    <string name="settings_permission_allowed_summary"></string>
     <string name="settings_permission_fix_summary">Action needed · Tap to fix.</string>
     <string name="settings_documentation_title">Documentation</string>
     <string name="settings_documentation_summary">Read launcher and terminal guides.</string>
@@ -521,7 +521,7 @@
     <string name="settings_app_drawer_category_sort_unavailable_model">Not available — model not downloaded</string>
     <string name="settings_app_drawer_category_sort_unavailable_memory">Not available — needs %1$s of RAM</string>
     <string name="settings_app_drawer_category_sort_load_failed">Couldn\'t start sorting. %1$s</string>
-    <string name="settings_app_drawer_category_refresh_title">Sort new apps</string>
+    <string name="settings_app_drawer_category_refresh_title">Re-sort apps</string>
     <string name="settings_app_drawer_category_refresh_never">Never run</string>
     <string name="settings_app_drawer_category_refresh_last_run">Last run · %1$s · %2$d apps</string>
     <plurals name="settings_app_drawer_category_refresh_pending">
