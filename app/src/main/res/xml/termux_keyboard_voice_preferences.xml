@@ -2,7 +2,7 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:key="keyboard_voice" app:title="@string/settings_keyboard_voice_header">
+    <PreferenceCategory app:title="@string/settings_voice_group_speech">
         <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="keyboard_voice_engine"
             app:title="@string/settings_keyboard_voice_engine_title"
@@ -16,6 +16,14 @@
             app:entryValues="@array/settings_keyboard_voice_language_values"
             app:defaultValue="auto"
             app:useSimpleSummaryProvider="true" />
+        <Preference
+            app:key="keyboard_voice_model"
+            app:persistent="false"
+            app:title="@string/settings_keyboard_voice_model_title"
+            app:summary="@string/settings_keyboard_voice_model_summary" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_voice_group_cleanup">
         <SwitchPreferenceCompat
             app:key="keyboard_voice_polish"
             app:title="@string/settings_keyboard_voice_polish_title"
@@ -34,6 +42,15 @@
             app:entryValues="@array/settings_keyboard_voice_polish_level_values"
             app:defaultValue="polished"
             app:useSimpleSummaryProvider="true" />
+        <Preference
+            app:key="keyboard_voice_details"
+            app:persistent="false"
+            app:title="@string/settings_voice_details_title"
+            app:summary="@string/settings_voice_details_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardVoiceDetailsPreferencesFragment" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_voice_group_listening">
         <ListPreference
             app:key="keyboard_voice_pause_ms"
             app:title="@string/settings_keyboard_voice_pause_title"
@@ -60,11 +77,6 @@
             app:title="@string/settings_keyboard_voice_sounds_title"
             app:summary="@string/settings_keyboard_voice_sounds_summary"
             android:defaultValue="true" />
-        <Preference
-            app:key="keyboard_voice_model"
-            app:persistent="false"
-            app:title="@string/settings_keyboard_voice_model_title"
-            app:summary="@string/settings_keyboard_voice_model_summary" />
     </PreferenceCategory>
 
 </PreferenceScreen>
