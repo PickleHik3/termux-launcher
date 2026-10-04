@@ -16,7 +16,7 @@
         style="?attr/textInputOutlinedStyle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:hint="@string/settings_search_hint"
+        app:hintEnabled="false"
         app:endIconMode="clear_text"
         app:hintTextColor="?attr/colorPrimary"
         app:shapeAppearance="?attr/shapeAppearanceCornerFull"
@@ -27,6 +27,7 @@
             android:id="@+id/settings_search_input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:hint="@string/settings_search_hint"
             android:imeOptions="actionDone"
             android:inputType="text"
             android:maxLines="1" />

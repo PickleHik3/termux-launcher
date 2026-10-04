@@ -59,17 +59,35 @@ public final class StatusActionPreference extends Preference {
         return optional && (tone == Tone.ERROR || tone == Tone.WARNING) ? Tone.NEUTRAL : tone;
     }
 
+    private boolean optionalOff() {
+        return optional && (tone == Tone.ERROR || tone == Tone.WARNING);
+    }
+
+    /** "Not enabled" for an optional service that is off, else the real status text. */
+    @androidx.annotation.VisibleForTesting
+    @NonNull
+    CharSequence displayedStatus() {
+        return optionalOff() ? getContext().getString(R.string.settings_optional_status_not_enabled) : status;
+    }
+
+    /** "Enable" for an optional service that is off, else the real action label. */
+    @androidx.annotation.VisibleForTesting
+    @NonNull
+    CharSequence displayedAction() {
+        return optionalOff() ? getContext().getString(R.string.settings_optional_action_enable) : action;
+    }
+
     @Override public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
         TextView statusView = (TextView) holder.findViewById(R.id.settings_status_text);
         MaterialButton actionView = (MaterialButton) holder.findViewById(R.id.settings_status_action);
         ImageView icon = (ImageView) holder.findViewById(R.id.settings_status_icon);
         if (statusView != null) {
-            statusView.setText(status);
+            statusView.setText(displayedStatus());
             statusView.setTextColor(toneColor());
         }
         if (actionView != null) {
-            actionView.setText(action);
+            actionView.setText(displayedAction());
             actionView.setOnClickListener(view -> performClick());
         }
         if (icon != null) {

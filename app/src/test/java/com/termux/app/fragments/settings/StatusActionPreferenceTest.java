@@ -42,4 +42,18 @@ public class StatusActionPreferenceTest {
         p.setState("On", "Manage", StatusActionPreference.Tone.POSITIVE);
         assertEquals(StatusActionPreference.Tone.POSITIVE, p.effectiveTone());
     }
+
+    @Test
+    public void optionalOffSaysNotEnabledAndEnable() {
+        StatusActionPreference p = make();
+        p.setState("Action needed", "Fix", StatusActionPreference.Tone.WARNING);
+        assertEquals("Action needed", p.displayedStatus().toString());
+        assertEquals("Fix", p.displayedAction().toString());
+        p.setOptional(true);
+        assertEquals("Not enabled", p.displayedStatus().toString());
+        assertEquals("Enable", p.displayedAction().toString());
+        p.setState("Allowed", "Manage", StatusActionPreference.Tone.POSITIVE);
+        assertEquals("Allowed", p.displayedStatus().toString());
+        assertEquals("Manage", p.displayedAction().toString());
+    }
 }
