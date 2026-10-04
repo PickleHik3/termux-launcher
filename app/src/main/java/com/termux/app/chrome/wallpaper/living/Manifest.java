@@ -45,6 +45,7 @@ public final class Manifest {
     @NonNull public File maskA() { return new File(mDir, MASK_A); }
     @NonNull public File maskB() { return new File(mDir, MASK_B); }
     @NonNull public File maskC() { return new File(mDir, MASK_C); }
+    @NonNull public File maskD() { return new File(mDir, "maskD.png"); }
     @NonNull public File recipeFile() { return new File(mDir, RECIPE); }
     @NonNull public LivingRecipe recipe() { return mRecipe; }
 

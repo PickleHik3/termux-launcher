@@ -83,7 +83,7 @@ public class LivingStillTest {
         String src = still(new LivingRecipe()).agsl();
         for (String u : UNIFORMS) assertTrue("lacks " + u, src.contains(u));
         assertTrue(src.contains("float3 scene(float2 p)"));
-        for (String child : new String[] {"uImage", "uDepth", "uMaskA", "uMaskB", "uMaskC", "uEffects"}) {
+        for (String child : new String[] {"uImage", "uDepth", "uMaskA", "uMaskB", "uMaskC", "uMaskD", "uEffects"}) {
             assertTrue(child, src.contains("uniform shader " + child + ";"));
         }
         assertTrue(src.contains("uniform float2 uEffectsSize;"));
@@ -210,6 +210,58 @@ public class LivingStillTest {
         assertArrayEquals(new float[] {0.2f, 0.4f, 0.6f, 0.5f}, u.get("uMist"), 0f);
         assertArrayEquals(new float[] {2f}, u.get("uParticles"), 0f);
         assertArrayEquals(new float[] {1f, 1f, 1f}, u.get("uNeed"), 0f);
+    }
+
+    @Test public void theV2FieldsBecomeUniforms() {
+        LivingRecipe r = new LivingRecipe();
+        r.cloudMode = "warp";
+        r.cloudWarpAmount = 0.6f;
+        r.cloudWarpPeriod = 90f;
+        r.windDirDeg = 180f;
+        r.windSpeed = 1.5f;
+        r.windAmp = 0.004f;
+        r.stillProtected = true;
+        Map<String, float[]> u = still(r).recipeUniforms();
+        assertArrayEquals(new float[] {2f}, u.get("uCloudMode"), 0f);
+        assertArrayEquals(new float[] {0.6f, 90f}, u.get("uCloudWarp"), 0f);
+        assertArrayEquals(new float[] {(float) Math.PI, 1.5f, 0.004f}, u.get("uWind"), 1e-6f);
+        assertArrayEquals(new float[] {1f}, u.get("uStillProtected"), 0f);
+        assertArrayEquals("warp reads the sky mask", new float[] {1f, 0f, 0f}, u.get("uNeed"), 0f);
+        assertArrayEquals(new float[] {1f}, u.get("uNeedD"), 0f);
+        r.cloudMode = "scroll";
+        assertArrayEquals(new float[] {1f}, still(r).recipeUniforms().get("uCloudMode"), 0f);
+        r.cloudMode = "none";
+        assertArrayEquals(new float[] {0f}, still(r).recipeUniforms().get("uCloudMode"), 0f);
+    }
+
+    @Test public void aV1RecipeWithASkyFlowStillScrolls() {
+        LivingRecipe r = new LivingRecipe();
+        r.cloudMode = null;
+        r.skyFlow = 0.035f;
+        Map<String, float[]> u = still(r).recipeUniforms();
+        assertArrayEquals(new float[] {1f}, u.get("uCloudMode"), 0f);
+        assertArrayEquals("no wind, no still: mask D is not read", new float[] {0f}, u.get("uNeedD"), 0f);
+        r.skyFlow = 0f;
+        assertArrayEquals(new float[] {0f}, still(r).recipeUniforms().get("uCloudMode"), 0f);
+    }
+
+    @Test public void theNewParticleKindsMapToSevenThroughTen() {
+        String[] kinds = {"petals", "leaves", "embers", "sparks"};
+        for (int i = 0; i < kinds.length; i++) {
+            LivingRecipe r = new LivingRecipe();
+            r.particles = kinds[i];
+            Map<String, float[]> u = still(r).recipeUniforms();
+            assertArrayEquals(kinds[i], new float[] {7f + i}, u.get("uParticles"), 0f);
+            assertArrayEquals(kinds[i] + " reads mask C", new float[] {0f, 0f, 1f}, u.get("uNeed"), 0f);
+        }
+    }
+
+    @Test public void theCompositeDeclaresMaskDAndTheV2Uniforms() {
+        String src = still(new LivingRecipe()).agsl();
+        assertTrue(src.contains("uniform shader uMaskD;"));
+        for (String u : new String[] {"uMapSizeD", "uCloudMode", "uCloudWarp", "uWind", "uStillProtected", "uNeedD"}) {
+            assertTrue(u, src.contains(" " + u + ";"));
+        }
     }
 
     @Test public void anEmptyRecipeReadsNoMask() {

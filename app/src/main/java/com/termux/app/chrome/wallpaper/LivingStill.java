@@ -56,6 +56,8 @@ public final class LivingStill implements AnimatedWallpaper {
     /** The shader's {@code uWaterMode} values. */
     static final float WATER_OFF = -1f, WATER_NOISE = 0f, WATER_LAKE = 1f, WATER_POOL = 2f;
     /** The shader's {@code uGlowMode} values. */
+    /** The shader's {@code uCloudMode} values. */
+    static final float CLOUD_NONE = 0f, CLOUD_SCROLL = 1f, CLOUD_WARP = 2f;
     static final float GLOW_OFF = 0f, GLOW_BREATHE = 1f, GLOW_FLICKER = 2f, GLOW_TRAILS = 3f;
     /** The prototype's trail direction, used when the recipe names none: right and slightly up. */
     static final float TRAIL_DIR_X = 0.45f, TRAIL_DIR_Y = -0.89f;
@@ -66,10 +68,12 @@ public final class LivingStill implements AnimatedWallpaper {
         "uniform shader uMaskA;\n" +
         "uniform shader uMaskB;\n" +
         "uniform shader uMaskC;\n" +
+        "uniform shader uMaskD;\n" +
         "uniform shader uEffects;\n" +
         "uniform float2 uImageSize;\n" +
         "uniform float2 uDepthSize;\n" +
         "uniform float2 uMapSize;\n" +
+        "uniform float2 uMapSizeD;\n" +
         "uniform float2 uEffectsSize;\n" +
         "uniform float2 uCover;\n" +
         "uniform float uFocus;\n" +
@@ -87,6 +91,11 @@ public final class LivingStill implements AnimatedWallpaper {
         "uniform float4 uMist;\n" +
         "uniform float uParticles;\n" +
         "uniform float3 uNeed;\n" +
+        "uniform float uNeedD;\n" +
+        "uniform float uCloudMode;\n" +
+        "uniform float2 uCloudWarp;\n" +
+        "uniform float3 uWind;\n" +
+        "uniform float uStillProtected;\n" +
         // Frame pixels to image uv: the photo covers the frame, centred.
         "float2 coverUv(float2 p) {\n" +
         "    return (p - 0.5 * uResolution) / uCover + 0.5;\n" +
@@ -95,6 +104,7 @@ public final class LivingStill implements AnimatedWallpaper {
         "float3 maskA(float2 uv) { return float3(uMaskA.eval(uv * uMapSize).rgb); }\n" +
         "float3 maskB(float2 uv) { return float3(uMaskB.eval(uv * uMapSize).rgb); }\n" +
         "float3 maskC(float2 uv) { return float3(uMaskC.eval(uv * uMapSize).rgb); }\n" +
+        "float3 maskD(float2 uv) { return float3(uMaskD.eval(uv * uMapSizeD).rgb); }\n" +
         "float depthAt(float2 uv) { return float(uDepth.eval(uv * uDepthSize).r); }\n" +
         "float luma3(float3 c) { return dot(c, float3(0.299, 0.587, 0.114)); }\n" +
         // The effects map (displacement in rg, haze or crest in b) at a frame pixel.
@@ -120,6 +130,16 @@ public final class LivingStill implements AnimatedWallpaper {
         "    float3 b = sampleLite(s - fl * (f1 - 0.5), rad);\n" +
         "    return mix(a, b, abs(2.0 * f0 - 1.0));\n" +
         "}\n" +
+        // Cloud warp: a divergence-free field (the curl of a noise potential, by forward differences)
+        // that slowly reshapes the clouds in place; one sample of the sky, never two.
+        "float2 curlWarp(float2 p, float tt) {\n" +
+        "    float2 o = float2(tt, -0.6 * tt) * 4.0;\n" +
+        "    float h = 0.15;\n" +
+        "    float n0 = vnoise(p + o);\n" +
+        "    float nx = vnoise(p + o + float2(h, 0.0));\n" +
+        "    float ny = vnoise(p + o + float2(0.0, h));\n" +
+        "    return float2(ny - n0, n0 - nx) / h;\n" +
+        "}\n" +
         "float3 scene(float2 p) {\n" +
         "    float2 uv0 = coverUv(p);\n" +
         "    float e = clamp(uEnergy, 0.0, 1.0);\n" +
@@ -142,6 +162,19 @@ public final class LivingStill implements AnimatedWallpaper {
         "    if (uNeed.x > 0.5) A = maskA(s);\n" +
         "    if (uNeed.y > 0.5) B = maskB(s);\n" +
         "    if (uNeed.z > 0.5) C = maskC(s);\n" +
+        // D: R wind, G still. Protected pixels never move: every mask that drives a displacement, glow
+        // or particles is zeroed there, and the sample position is the rest pose's below.
+        "    float3 D = float3(0.0);\n" +
+        "    float stl = 0.0;\n" +
+        "    if (uNeedD > 0.5) {\n" +
+        "        D = maskD(s);\n" +
+        "        if (uStillProtected > 0.5) stl = D.g;\n" +
+        "        float keep = 1.0 - stl;\n" +
+        "        A *= keep;\n" +
+        "        B *= keep;\n" +
+        "        C *= keep;\n" +
+        "        D.r *= keep;\n" +
+        "    }\n" +
         // Bob: floating things rock gently.
         "    if (C.r > 0.01) {\n" +
         "        s += C.r * float2(sin(t * 0.9) * 0.6, sin(t * 1.3 + 0.7)) * float2(0.0045, 0.0045 / asp) * I;\n" +
@@ -151,6 +184,13 @@ public final class LivingStill implements AnimatedWallpaper {
         "        float phS = t * uSway.x + s.y * 7.0 + vnoise(s * float2(5.0, 3.0)) * 6.0;\n" +
         "        s.x += A.g * (sin(phS) * 0.7 + sin(phS * 1.9 + 1.0) * 0.3) * uSway.y * I;\n" +
         "        s.y += A.g * sin(phS * 1.3) * uSway.y * 0.25 / asp * I;\n" +
+        "    }\n" +
+        // Wind: a travelling gust along the direction inside D.r; the mask carries the top weighting,
+        // as the sway mask does.
+        "    if (uWind.z > 0.0 && D.r > 0.01) {\n" +
+        "        float2 wd = float2(cos(uWind.x), sin(uWind.x));\n" +
+        "        float phW0 = dot(s, wd) * 18.0 - t * uWind.y * 1.7 + vnoise(s * 6.0) * 2.0;\n" +
+        "        s += wd * float2(1.0, 1.0 / asp) * (uWind.z * sin(phW0) * D.r * I);\n" +
         "    }\n" +
         // Water. 0: refract through drifting noise (streams, reflections with anisotropic params).
         // 1: cartoon lake, wave bands that shrink toward the horizon. 2: clear pool, one wave surface.
@@ -173,9 +213,14 @@ public final class LivingStill implements AnimatedWallpaper {
         "    } else if (wet) {\n" +
         "        s += A.r * (fx.rg - 0.5) / 25.0;\n" +
         "    }\n" +
+        // Protected pixels sample the rest pose's position, whatever moved them above.
+        "    if (stl > 0.0) s = mix(s, uv0, stl);\n" +
         "    float3 col;\n" +
-        "    bool sky = uSkyFlow > 0.0 && A.b > 0.01;\n" +
-        "    if (sky && A.b > 0.98) {\n" +
+        "    bool sky = uCloudMode > 0.5 && uCloudMode < 1.5 && uSkyFlow > 0.0 && A.b > 0.01;\n" +
+        "    if (uCloudMode > 1.5 && A.b > 0.01) {\n" +
+        "        float2 wv = curlWarp(s * 2.5, t / max(uCloudWarp.y, 1.0)) * (uCloudWarp.x * 0.01 * smoothstep(0.0, 0.15, A.b) * min(I, 1.5));\n" +
+        "        col = sampleLite(s + float2(wv.x, wv.y / asp), rad);\n" +
+        "    } else if (sky && A.b > 0.98) {\n" +
         "        col = skyLoop(s, t, I, rad);\n" +
         "    } else {\n" +
         "        col = sampleLite(s, rad);\n" +
@@ -251,7 +296,8 @@ public final class LivingStill implements AnimatedWallpaper {
         "        }\n" +
         "        col += B.b * bloom * uGlowGain * (0.55 + 0.45 * g) * 0.6 * gI;\n" +
         "    }\n" +
-        // Particles: 1 glints on water, 2 fireflies, 3 rain, 4 snow, 5 dust, 6 debris along the ground.
+        // Particles: 1 glints on water, 2 fireflies, 3 rain, 4 snow, 5 dust, 6 debris along the ground,
+        // 7 petals, 8 leaves, 9 embers, 10 sparks.
         "    if (uParticles > 0.5 && C.b > 0.01) {\n" +
         "        float pa = 0.0;\n" +
         "        float3 pc = float3(1.0);\n" +
@@ -294,7 +340,7 @@ public final class LivingStill implements AnimatedWallpaper {
         "            float2 c = float2(hash21(id + 2.0), hash21(id + 5.0)) * 0.7 + 0.15;\n" +
         "            pa = smoothstep(0.08, 0.0, length(fract(g) - c)) * step(0.6, hc) * (0.5 + 0.5 * sin(t * 0.8 + hc * 40.0)) * 0.6;\n" +
         "            pc = float3(1.0, 0.97, 0.9);\n" +
-        "        } else {\n" +
+        "        } else if (uParticles < 6.5) {\n" +
         "            float2 dir = normalize(float2(1.0, 0.3));\n" +
         "            float2 g = (q - dir * t * 0.09) * 26.0;\n" +
         "            float2 id = floor(g);\n" +
@@ -303,6 +349,28 @@ public final class LivingStill implements AnimatedWallpaper {
         "            float da = smoothstep(0.08, 0.0, length((fract(g) - c) * float2(1.0, 2.2))) * step(0.86, hc);\n" +
         "            float3 dc = luma3(col) < 0.35 ? float3(0.85, 0.85, 0.85) : float3(0.04, 0.04, 0.04);\n" +
         "            col = mix(col, dc, da * C.b * pI);\n" +
+        "        } else {\n" +
+        // 7 petals fall slowly, 8 leaves fall and blow sideways, 9 embers rise, 10 sparks are quick and short.
+        "            float2 wd = uWind.z > 0.0 ? float2(cos(uWind.x), sin(uWind.x)) * (0.02 + 0.03 * uWind.y) : float2(0.0);\n" +
+        "            bool pet = uParticles < 7.5;\n" +
+        "            bool lea = uParticles > 7.5 && uParticles < 8.5;\n" +
+        "            bool emb = uParticles > 8.5 && uParticles < 9.5;\n" +
+        "            float2 vel = pet ? float2(0.0, 0.04) + wd : (lea ? float2(0.0, 0.05) + wd * 2.2 : (emb ? float2(0.0, -0.06) + wd * 0.5 : float2(0.0, -0.10) + wd));\n" +
+        "            float cs = pet ? 15.0 : (lea ? 12.0 : (emb ? 22.0 : 28.0));\n" +
+        "            float2 g = (q - vel * t) * cs;\n" +
+        "            float2 id = floor(g);\n" +
+        "            float hc = hash21(id);\n" +
+        "            float sw = lea ? 0.28 : 0.16;\n" +
+        "            float2 c = float2(hash21(id + 2.0), hash21(id + 5.0)) * 0.5 + 0.25 + sw * float2(sin(t * 0.9 + hc * 40.0), cos(t * 0.7 + hc * 23.0));\n" +
+        "            float2 dv = (fract(g) - c) * float2(1.0, lea ? 1.9 : 1.0);\n" +
+        "            float rr = pet ? 0.11 : (lea ? 0.13 : (emb ? 0.07 : 0.045));\n" +
+        "            pa = smoothstep(rr, 0.0, length(dv)) * step(pet ? 0.7 : (lea ? 0.75 : (emb ? 0.65 : 0.82)), hc);\n" +
+        "            if (emb) pa *= 0.5 + 0.5 * sin(t * 3.0 + hc * 30.0);\n" +
+        "            if (uParticles > 9.5) {\n" +
+        "                float life = fract(t * 0.8 + hc * 7.0);\n" +
+        "                pa *= smoothstep(0.0, 0.08, life) * smoothstep(1.0, 0.35, life);\n" +
+        "            }\n" +
+        "            pc = pet ? float3(1.0, 0.74, 0.82) : (lea ? float3(0.86, 0.55, 0.2) : (emb ? float3(1.0, 0.5, 0.12) * 1.4 : float3(1.0, 0.94, 0.7) * 1.8));\n" +
         "        }\n" +
         "        col += pa * pc * C.b * pI;\n" +
         "    }\n" +
@@ -439,7 +507,9 @@ public final class LivingStill implements AnimatedWallpaper {
      * {@code uGlowDir} glowMode, glowGain and glowTrailAngleDeg (screen degrees, 0 = right, 90 =
      * down; 0 keeps the prototype's direction); {@code uMist} mistColour and mistAmount;
      * {@code uParticles} particles; {@code uIntensity} intensity; {@code uNeed} which of the three
-     * masks the recipe reads, so the shader skips the others.
+     * masks the recipe reads, so the shader skips the others; {@code uNeedD} whether mask D (wind, still)
+     * is read; {@code uCloudMode}, {@code uCloudWarp}, {@code uWind} (radians, speed, amp) and
+     * {@code uStillProtected} the version 2 sky, wind and protection fields.
      */
     @NonNull
     Map<String, float[]> recipeUniforms() {
@@ -451,6 +521,11 @@ public final class LivingStill implements AnimatedWallpaper {
         float water = waterMode(r.waterMode);
         u.put("uWaterMode", new float[] {water});
         u.put("uWater", new float[] {param(r, "freqX"), param(r, "freqY"), param(r, "ampX"), param(r, "ampY")});
+        float cloud = cloudMode(r);
+        u.put("uCloudMode", new float[] {cloud});
+        u.put("uCloudWarp", new float[] {r.cloudWarpAmount, r.cloudWarpPeriod});
+        u.put("uWind", new float[] {(float) Math.toRadians(r.windDirDeg), r.windSpeed, r.windAmp});
+        u.put("uStillProtected", new float[] {r.stillProtected ? 1f : 0f});
         u.put("uSkyFlow", new float[] {r.skyFlow});
         u.put("uSkyStars", new float[] {r.skyStars ? 1f : 0f});
         u.put("uPour", new float[] {r.pour});
@@ -469,12 +544,27 @@ public final class LivingStill implements AnimatedWallpaper {
         u.put("uGlowDir", new float[] {dx, dy});
         u.put("uMist", new float[] {r.mistColour[0], r.mistColour[1], r.mistColour[2], r.mistAmount});
         u.put("uParticles", new float[] {particleKind(r.particles)});
-        boolean needA = r.swayAmp > 0f || water > WATER_OFF || r.skyFlow > 0f || r.skyStars
-            || LivingRecipe.PARTICLES_GLINTS.equals(r.particles);
+        boolean needA = r.swayAmp > 0f || water > WATER_OFF || r.skyFlow > 0f || r.skyStars || cloud > CLOUD_SCROLL
+            || r.stillProtected || LivingRecipe.PARTICLES_GLINTS.equals(r.particles);
         boolean needB = r.pour > 0f || glowMode(r.glowMode) > GLOW_OFF;
         boolean needC = water > WATER_OFF || r.mistAmount > 0f || particleKind(r.particles) > 0f;
         u.put("uNeed", new float[] {needA ? 1f : 0f, needB ? 1f : 0f, needC ? 1f : 0f});
+        u.put("uNeedD", new float[] {r.windAmp > 0f || r.stillProtected ? 1f : 0f});
         return u;
+    }
+
+    /**
+     * {@code uCloudMode}: 0 none, 1 scroll, 2 warp. A recipe with no mode named (a version 1 one)
+     * scrolls when it has a sky flow.
+     */
+    static float cloudMode(LivingRecipe r) {
+        String m = r.cloudMode;
+        if (m == null) return r.skyFlow > 0f ? CLOUD_SCROLL : CLOUD_NONE;
+        switch (m) {
+            case "scroll": return CLOUD_SCROLL;
+            case "warp": return CLOUD_WARP;
+            default: return CLOUD_NONE;
+        }
     }
 
     private static float param(LivingRecipe r, String key) {
@@ -509,6 +599,10 @@ public final class LivingStill implements AnimatedWallpaper {
             case LivingRecipe.PARTICLES_SNOW: return 4f;
             case LivingRecipe.PARTICLES_DUST: return 5f;
             case LivingRecipe.PARTICLES_DEBRIS: return 6f;
+            case "petals": return 7f;
+            case "leaves": return 8f;
+            case "embers": return 9f;
+            case "sparks": return 10f;
             default: return 0f;
         }
     }
