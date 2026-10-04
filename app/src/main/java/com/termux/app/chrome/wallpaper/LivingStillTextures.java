@@ -36,13 +36,16 @@ final class LivingStillTextures {
     final Bitmap maskA;
     final Bitmap maskB;
     final Bitmap maskC;
+    /** Wind and still; a 1x1 black picture for a version 1 still, which has no such file. */
+    final Bitmap maskD;
 
-    private LivingStillTextures(Bitmap image, Bitmap depth, Bitmap maskA, Bitmap maskB, Bitmap maskC) {
+    private LivingStillTextures(Bitmap image, Bitmap depth, Bitmap maskA, Bitmap maskB, Bitmap maskC, Bitmap maskD) {
         this.image = image;
         this.depth = depth;
         this.maskA = maskA;
         this.maskB = maskB;
         this.maskC = maskC;
+        this.maskD = maskD;
     }
 
     private static final Map<String, WeakReference<LivingStillTextures>> CACHE = new HashMap<>();
@@ -56,7 +59,8 @@ final class LivingStillTextures {
         if (cached != null) return cached;
         LivingStillTextures fresh = new LivingStillTextures(
             decode(manifest.image(), MAX_IMAGE_SIDE), decode(manifest.depth(), 0),
-            decode(manifest.maskA(), 0), decode(manifest.maskB(), 0), decode(manifest.maskC(), 0));
+            decode(manifest.maskA(), 0), decode(manifest.maskB(), 0), decode(manifest.maskC(), 0),
+            decodeOrBlack(manifest.maskD()));
         CACHE.put(key, new WeakReference<>(fresh));
         return fresh;
     }
@@ -64,6 +68,20 @@ final class LivingStillTextures {
     /** Drops the cache's references (memory pressure); sets a shader still holds stay alive. */
     static synchronized void trim() {
         CACHE.clear();
+    }
+
+    @NonNull
+    private static Bitmap decodeOrBlack(@NonNull File file) {
+        if (file.isFile()) {
+            try {
+                return decode(file, 0);
+            } catch (IOException ignored) {
+                // fall through: an unreadable mask D is no mask D
+            }
+        }
+        Bitmap black = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888);
+        black.eraseColor(0xFF000000);
+        return black;
     }
 
     @NonNull

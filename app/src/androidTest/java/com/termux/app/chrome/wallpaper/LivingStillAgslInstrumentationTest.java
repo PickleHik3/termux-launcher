@@ -81,6 +81,77 @@ public class LivingStillAgslInstrumentationTest {
         }
     }
 
+    /**
+     * Version 2 terms on the device compiler: the program takes the new uniforms, a warp frame
+     * differs from the same frame without the warp only inside the sky mask, and a protected pixel
+     * under wind and drift equals the rest pixel.
+     */
+    @Test
+    public void cloudWarpStaysInTheSkyAndStillPixelsDoNotMove() throws IOException {
+        Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File dir = new File(context.getCacheDir(), "living-agsl-test-v2");
+        writeManifest(dir, LivingRecipe.WATER_NONE);
+        // Mask D: wind over the middle band, still over the left quarter of that band.
+        Bitmap d = Bitmap.createBitmap(W / 4, H / 4, Bitmap.Config.ARGB_8888);
+        for (int y = 0; y < H / 4; y++) {
+            for (int x = 0; x < W / 4; x++) {
+                float t = y / (float) (H / 4);
+                boolean band = t > 0.35f && t < 0.6f;
+                boolean still = band && x < W / 16;
+                d.setPixel(x, y, Color.rgb(band ? 255 : 0, still ? 255 : 0, 0));
+            }
+        }
+        save(d, new File(dir, "maskD.png"));
+        LivingRecipe recipe = new LivingRecipe();
+        recipe.cloudMode = "warp";
+        recipe.cloudWarpAmount = 6f;
+        recipe.cloudWarpPeriod = 30f;
+        recipe.windDirDeg = 0f;
+        recipe.windSpeed = 1.5f;
+        recipe.windAmp = 0.02f;
+        recipe.drift = 1f;
+        recipe.stillProtected = true;
+        Manifest.writeRecipe(dir, recipe);
+        Manifest manifest = Manifest.load(dir);
+        assertNotNull(manifest);
+        LivingStill still = new LivingStill(manifest);
+        RuntimeShader shader = WallpaperUniforms.newShader(still);
+        int[] palette = still.ownPalette();
+        WallpaperUniforms.applyRest(shader, palette, W, H);
+        Bitmap rest = draw(shader);
+        WallpaperDirector.Frame moving = new WallpaperDirector.Frame(30, 3.7f, 3.7f, 1f, 0f, palette,
+            null, false, 0.5f);
+        WallpaperUniforms.apply(shader, moving, W, H);
+        Bitmap live = draw(shader);
+
+        // Same frame without the warp: the two differ in the sky (the top 30 % of the frame) and nowhere else.
+        recipe.cloudMode = "none";
+        Manifest.writeRecipe(dir, recipe);
+        RuntimeShader noWarp = WallpaperUniforms.newShader(new LivingStill(Manifest.load(dir)));
+        WallpaperUniforms.apply(noWarp, moving, W, H);
+        Bitmap flat = draw(noWarp);
+        long skyDiff = 0;
+        int skyRows = Math.round(H * 0.3f) - 8;
+        for (int y = 0; y < skyRows; y++) {
+            for (int x = 0; x < W; x++) skyDiff += Math.abs(Color.red(live.getPixel(x, y)) - Color.red(flat.getPixel(x, y)));
+        }
+        assertTrue("the warp moves the sky, diff " + skyDiff, skyDiff > 0);
+        for (int y = Math.round(H * 0.3f) + 12; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                assertTrue("the warp changed a pixel below the sky at " + x + "," + y,
+                    live.getPixel(x, y) == flat.getPixel(x, y));
+            }
+        }
+        // A protected pixel equals the rest pixel under wind and drift.
+        int sy = Math.round(H * 0.48f);
+        for (int x = 2; x < W / 4 - 2; x++) {
+            int a = live.getPixel(x, sy), b = rest.getPixel(x, sy);
+            assertTrue("still pixel " + x + " moved: " + Integer.toHexString(a) + " vs " + Integer.toHexString(b),
+                Math.abs(Color.red(a) - Color.red(b)) + Math.abs(Color.green(a) - Color.green(b))
+                    + Math.abs(Color.blue(a) - Color.blue(b)) <= 6);
+        }
+    }
+
     /** Draws through a recorded picture, which renders on the GPU path (a software canvas refuses RuntimeShader). */
     private static Bitmap draw(RuntimeShader shader) {
         Picture picture = new Picture();
