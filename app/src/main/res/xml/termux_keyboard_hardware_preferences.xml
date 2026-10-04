@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:key="keyboard_hardware" app:title="@string/settings_keyboard_hardware_header">
+        <SwitchPreferenceCompat
+            app:key="in_app_keyboard_hide_on_hardware"
+            app:title="@string/settings_hide_keyboard_hardware_title"
+            app:summary="@string/settings_hide_keyboard_hardware_summary" />
+        <SwitchPreferenceCompat
+            app:key="pass_ctrl_space_to_android"
+            app:title="@string/settings_pass_ctrl_space_title"
+            app:summary="@string/settings_pass_ctrl_space_summary"
+            android:defaultValue="false" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

@@ -49,9 +49,13 @@ import java.util.concurrent.TimeUnit;
 public class KeyboardPreferencesFragmentTest {
 
     private KeyboardPreferencesFragment launch() {
+        return launch(KeyboardPreferencesFragment.class);
+    }
+
+    /** The overview, or one of its focused subpages (they share the controller). */
+    private KeyboardPreferencesFragment launch(Class<? extends KeyboardPreferencesFragment> page) {
         Intent intent = new Intent(RuntimeEnvironment.getApplication(), SettingsActivity.class)
-            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT,
-                KeyboardPreferencesFragment.class.getName());
+            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT, page.getName());
         ActivityController<SettingsActivity> controller =
             Robolectric.buildActivity(SettingsActivity.class, intent).create().start().resume();
         SettingsActivity activity = controller.get();
@@ -94,7 +98,7 @@ public class KeyboardPreferencesFragmentTest {
         assertEquals("polished", store.getString("keyboard_voice_polish_level", null));
         assertEquals("normal", store.getString("keyboard_voice_mic_sensitivity", null));
 
-        KeyboardPreferencesFragment fragment = launch();
+        KeyboardPreferencesFragment fragment = launch(KeyboardVoicePreferencesFragment.class);
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_engine"));
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_model"));
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model"));
@@ -104,7 +108,7 @@ public class KeyboardPreferencesFragmentTest {
 
     @Test
     public void theCleanupModelRowOpensTheCleanupModelScreenAndShowsAutomaticByDefault() {
-        KeyboardPreferencesFragment fragment = launch();
+        KeyboardPreferencesFragment fragment = launch(KeyboardVoicePreferencesFragment.class);
         Preference polishModel = fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model");
         assertNotNull(polishModel);
         assertEquals("Automatic", polishModel.getSummary().toString());

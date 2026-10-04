@@ -78,7 +78,7 @@ public class SettingsFragmentAliasesTest {
         assertNotNull(screen.findPreference("customize_keyboard_surface"));
         assertNull("bottom padding is the Layout editor's keyboard handle now",
             screen.findPreference("in_app_keyboard_bottom_padding"));
-        assertNotNull("Lazy mode moved in from the Terminal page", screen.findPreference("lazy_mode"));
+        assertNull("Lazy mode moved to App behavior", screen.findPreference("lazy_mode"));
         assertNull("Fancier Glass is owned by each Look now, with no switch",
             screen.findPreference("fancier_glass"));
     }
