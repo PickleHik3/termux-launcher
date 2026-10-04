@@ -176,4 +176,69 @@ public class KeyboardPreferencesFragmentTest {
         store.putString("keyboard_voice_mic_sensitivity", "max");
         assertEquals("normal", prefs.getInAppKeyboardVoiceMicSensitivity());
     }
+
+    private static void assertEnabled(KeyboardPreferencesFragment fragment, boolean expected, String... keys) {
+        for (String key : keys) {
+            Preference row = fragment.getPreferenceScreen().findPreference(key);
+            assertNotNull(key, row);
+            assertEquals(key, expected, row.isEnabled());
+        }
+    }
+
+    /**
+     * Android IME and Off dim only the built-in keyboard's own pages; voice, the hardware page,
+     * extra keys and the vibration shortcut stay usable.
+     */
+    @Test
+    public void switchingTheInputMethodDisablesOnlyTheBuiltInKeyboardLinks() {
+        KeyboardPreferencesDataStore.resetForTesting();
+        KeyboardPreferencesFragment fragment = launch();
+        SegmentedPillPreference method = fragment.getPreferenceScreen()
+            .findPreference("keyboard_input_method");
+        assertNotNull(method);
+        String[] builtInOnly = {"keyboard_sub_layout", "keyboard_sub_size", "keyboard_sub_typing"};
+        String[] always = {"keyboard_sub_voice", "keyboard_sub_hardware", "edit_extra_keys_row",
+            "extra_keys_text_all_caps", "keyboard_vibration_link"};
+        assertEnabled(fragment, true, builtInOnly);
+        assertEnabled(fragment, true, always);
+        for (String value : new String[] {"android", "none"}) {
+            method.getOnPreferenceChangeListener().onPreferenceChange(method, value);
+            assertEnabled(fragment, false, builtInOnly);
+            assertEnabled(fragment, true, always);
+        }
+        method.getOnPreferenceChangeListener().onPreferenceChange(method, "built_in");
+        assertEnabled(fragment, true, builtInOnly);
+        assertEnabled(fragment, true, always);
+    }
+
+    /** A subpage follows the stored input method; the voice page is never dimmed by it. */
+    @Test
+    public void voiceAndHardwareSubpagesStayUsableWithAndroidKeyboardOrOff() {
+        for (String value : new String[] {"android", "none"}) {
+            KeyboardPreferencesDataStore.resetForTesting();
+            store().putString("keyboard_input_method", value);
+            try {
+                assertEnabled(launch(KeyboardVoicePreferencesFragment.class), true,
+                    "keyboard_voice_engine", "keyboard_voice_polish", "keyboard_voice_sounds",
+                    "keyboard_voice_model", "keyboard_voice_pause_ms");
+                assertEnabled(launch(KeyboardHardwarePreferencesFragment.class), true,
+                    "in_app_keyboard_hide_on_hardware", "pass_ctrl_space_to_android");
+            } finally {
+                store().putString("keyboard_input_method", "built_in");
+            }
+        }
+    }
+
+    /** The built-in pages do dim on a subpage when the built-in keyboard is not in use. */
+    @Test
+    public void builtInSubpagesDimWhenAnotherInputMethodIsStored() {
+        KeyboardPreferencesDataStore.resetForTesting();
+        store().putString("keyboard_input_method", "android");
+        try {
+            KeyboardPreferencesFragment typing = launch(KeyboardTypingPreferencesFragment.class);
+            assertEnabled(typing, false, "keyboard_typing", "keyboard_feedback");
+        } finally {
+            store().putString("keyboard_input_method", "built_in");
+        }
+    }
 }

@@ -197,6 +197,43 @@ public class SettingsActivityRetainedIntentTest {
         }
     }
 
+    private static final String PAGES = "com.termux.app.fragments.settings.termux.";
+
+    @Test
+    public void legacyPageWithAMovedKeyOpensTheSubpageThatHoldsIt() {
+        assertEquals(PAGES + "KeyboardVoicePreferencesFragment", SettingsActivity.redirectLegacyPage(
+            PAGES + "KeyboardPreferencesFragment", "keyboard_voice_engine"));
+        assertEquals(PAGES + "X11DisplayStartupPreferencesFragment", SettingsActivity.redirectLegacyPage(
+            PAGES + "X11DisplayPreferencesFragment", "x11_display_autostart"));
+        assertEquals(PAGES + "LauncherLockPreferencesFragment", SettingsActivity.redirectLegacyPage(
+            PAGES + "LauncherPreferencesFragment", "app_launcher_az_lock_method"));
+    }
+
+    @Test
+    public void legacyPageWithoutAKeyOrWithAnOverviewKeyStaysTheOverview() {
+        for (String page : new String[] {"KeyboardPreferencesFragment", "LauncherPreferencesFragment",
+            "X11DisplayPreferencesFragment"}) {
+            assertEquals(PAGES + page, SettingsActivity.redirectLegacyPage(PAGES + page, null));
+            assertEquals(PAGES + page, SettingsActivity.redirectLegacyPage(PAGES + page, "keyboard_input_method"));
+        }
+        assertEquals("other classes are never redirected", PAGES + "TerminalPreferencesFragment",
+            SettingsActivity.redirectLegacyPage(PAGES + "TerminalPreferencesFragment", "keyboard_voice_engine"));
+    }
+
+    @Test
+    public void anIntentForTheOldKeyboardPageAndAVoiceKeyOpensTheVoicePage() {
+        Intent intent = new Intent(ApplicationProviderHolder.context(), SettingsActivity.class)
+            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT, PAGES + "KeyboardPreferencesFragment")
+            .putExtra(SettingsActivity.EXTRA_SCROLL_TO_KEY, "keyboard_voice_engine");
+        try (ActivityController<SettingsActivity> controller =
+                 Robolectric.buildActivity(SettingsActivity.class, intent).create()) {
+            SettingsActivity activity = controller.get();
+            activity.getSupportFragmentManager().executePendingTransactions();
+            Fragment fragment = activity.getSupportFragmentManager().findFragmentById(R.id.settings);
+            assertEquals(PAGES + "KeyboardVoicePreferencesFragment", fragment.getClass().getName());
+        }
+    }
+
     private static void assertRootFragment(SettingsActivity activity) {
         Fragment fragment = activity.getSupportFragmentManager().findFragmentById(R.id.settings);
         assertTrue(fragment instanceof SettingsActivity.RootPreferencesFragment);
