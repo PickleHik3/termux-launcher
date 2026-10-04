@@ -188,7 +188,7 @@ public class SurfacePresetsGlassTest {
         SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
         assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, preferences.getSurfaceGlassTint());
         assertEquals(TERMUX_APP.GLASS_MOTION_CLASSIC, preferences.getSurfaceGlassMotion());
-        assertEquals(SurfacePresets.FORMAT_VERSION, 2);
+        assertEquals(3, SurfacePresets.FORMAT_VERSION);
     }
 
     @Test
