@@ -9,6 +9,12 @@
             app:entries="@array/settings_keyboard_input_method_entries"
             app:entryValues="@array/settings_keyboard_input_method_values"
             app:defaultValue="built_in" />
+        <Preference
+            app:key="keyboard_sub_voice"
+            app:persistent="false"
+            app:title="@string/settings_keyboard_sub_voice_title"
+            app:summary="@string/settings_keyboard_sub_voice_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardVoicePreferencesFragment" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="keyboard_built_in" app:title="@string/settings_keyboard_built_in_header">
@@ -30,12 +36,6 @@
             app:title="@string/settings_keyboard_sub_typing_title"
             app:summary="@string/settings_keyboard_sub_typing_summary"
             app:fragment="com.termux.app.fragments.settings.termux.KeyboardTypingPreferencesFragment" />
-        <Preference
-            app:key="keyboard_sub_voice"
-            app:persistent="false"
-            app:title="@string/settings_keyboard_sub_voice_title"
-            app:summary="@string/settings_keyboard_sub_voice_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.KeyboardVoicePreferencesFragment" />
     </PreferenceCategory>
 
     <PreferenceCategory app:key="keyboard_terminal_hardware" app:title="@string/settings_terminal_key_row_header">
