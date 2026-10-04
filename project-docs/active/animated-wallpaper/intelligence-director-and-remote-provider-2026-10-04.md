@@ -259,6 +259,9 @@ Fixes, in the layer the developer asked for (all small, `com.termux.ai`). **Appr
   a plan whose accelerator is known slow for that model (CPU for a LiteRT file over 3 GB, or
   measured load above a limit) and the caller falls back to the smaller model or to rules, instead
   of grinding for a minute. Interactive chat keeps the slow-but-safe fallback.
+- **Momentary loads (built 2026-10-04, dev 14a964c00).** A request with `"load_class": "momentary"` keeps a
+  1 GiB reserve instead of the full one; the director sends it. On pong (4.6 GB free) that admits E4B on
+  the GPU for the 40-second step. Device check owed after the next install.
 - **Keep the ladder.** Forcing GPU unconditionally is the 2026-09-23 freeze again. The rule is
   "prefer the model that fits the GPU", not "force the GPU".
 
