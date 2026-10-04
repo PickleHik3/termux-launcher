@@ -395,7 +395,7 @@ android.sourceSets.all { sourceSet ->
 
 afterEvaluate {
     tasks.matching {
-        it.name ==~ /merge.*Assets/ || it.name.startsWith("lint") || it.name.contains("LintModel")
+        it.name ==~ /merge.*Assets/ || it.name.toLowerCase(java.util.Locale.ROOT).contains("lint")
     }.configureEach { it.dependsOn(tasks.named("fetchTlstore")) }
 }
 
@@ -578,8 +578,7 @@ if (findProject(":x11-server:loader") != null) {
             // same source sets, and Gradle fails the build outright when they meet a directory
             // nothing told them to wait for.
             def readsAssets = (name.startsWith("merge") && name.endsWith("Assets")) ||
-                name.startsWith("lint") || name.contains("LintModel") || name.contains("LintReportModel") ||
-                name.contains("LintVitalReportModel")
+                name.toLowerCase(java.util.Locale.ROOT).contains("lint")
             if (mentionsType && readsAssets) {
                 dependsOn task
             }
