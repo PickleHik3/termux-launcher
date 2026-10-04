@@ -26,4 +26,6 @@
     <!-- Pinned notification cards: TalkBack custom actions on each card. -->
     <item name="pinned_notification_action_dismiss" type="id" />
     <item name="pinned_notification_action_mute" type="id" />
+    <!-- The Appearance surface's host view in the activity's content. -->
+    <item name="appearance_surface_host" type="id" />
 </resources>
