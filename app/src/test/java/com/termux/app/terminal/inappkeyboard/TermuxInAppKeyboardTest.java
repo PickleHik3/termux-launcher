@@ -740,6 +740,57 @@ public class TermuxInAppKeyboardTest {
         return keyboard.rows.get(row).keys.get(column).keys[0];
     }
 
+    @Test
+    public void withTheHardwareSettingOnAndAKeyboardAttachedTheKeyboardStartsDown() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mPreferences.setSoftKeyboardEnabledOnlyIfNoHardware(true);
+        mController.setHardwareKeyboardDetector(() -> true);
+
+        mController.onCreate(null);
+
+        assertTrue(mController.isEnabled());
+        assertFalse(mController.isVisible());
+        mController.show(TermuxInAppKeyboard.ShowReason.TERMINAL_TAP);
+        assertFalse(mController.isVisible());
+        mController.show(TermuxInAppKeyboard.ShowReason.KEYBOARD_ACTION);
+        assertTrue(mController.isVisible());
+    }
+
+    @Test
+    public void detachingAndAttachingTheHardwareKeyboardShowsAndHidesTheKeyboard() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mPreferences.setSoftKeyboardEnabledOnlyIfNoHardware(true);
+        boolean[] attached = {true};
+        mController.setHardwareKeyboardDetector(() -> attached[0]);
+        mController.onCreate(null);
+        assertFalse(mController.isVisible());
+
+        attached[0] = false;
+        mController.onConfigurationChanged(new Configuration());
+        assertTrue(mController.isVisible());
+
+        attached[0] = true;
+        mController.onConfigurationChanged(new Configuration());
+        assertFalse(mController.isVisible());
+        assertEquals(TermuxInAppKeyboard.HideReason.HARDWARE_KEYBOARD,
+            mController.getLastHideReason());
+    }
+
+    @Test
+    public void withTheHardwareSettingOffAKeyboardAttachedChangesNothing() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.setHardwareKeyboardDetector(() -> true);
+
+        mController.onCreate(null);
+        assertTrue(mController.isVisible());
+
+        mController.onConfigurationChanged(new Configuration());
+        assertTrue(mController.isVisible());
+        mController.hide(TermuxInAppKeyboard.HideReason.USER_EVENT);
+        mController.show(TermuxInAppKeyboard.ShowReason.TERMINAL_TAP);
+        assertTrue(mController.isVisible());
+    }
+
     private TermuxInAppKeyboard newController() throws Exception {
         mLayoutFile = new File(temporaryFolder.newFolder(), "layout.xml");
         return new TermuxInAppKeyboard(mHost, mPreferences, new DirectExecutorService(),
