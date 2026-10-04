@@ -137,6 +137,30 @@ public final class TaiRuntimeHistory {
     }
 
     /**
+     * Whether a failed load result with this code says something about the accelerator, and so is
+     * worth recording as its failure. A cancelled load is the incident: one GPU load of gemma-4-e4b
+     * was cancelled, "Model load cancelled." was written down as a GPU failure, and from then on the
+     * automatic order put the CPU first, so the living-wallpaper director ran a minute per photo on
+     * the CPU. Cancellations, timeouts, memory refusals, file problems, a load already in progress
+     * and "known failed" echoes are about the moment, not the accelerator; native or GPU
+     * initialisation failures, unsupported operations, corrupt output and crashes are verdicts. An
+     * empty code is no verdict either, since nothing says what went wrong.
+     */
+    public static boolean isRuntimeVerdict(@Nullable String errorCode) {
+        if (!isAcceleratorVerdict(errorCode)) return false;
+        String code = errorCode.toLowerCase(Locale.ROOT);
+        return !code.contains("cancel")
+            && !code.contains("timeout")
+            && !code.contains("timed_out")
+            && !code.contains("insufficient_memory")
+            && !code.startsWith("known_failed")
+            && !"load_in_progress".equals(code)
+            && !"generation_active".equals(code)
+            && !"model_not_loaded".equals(code)
+            && !"backend_mismatch".equals(code);
+    }
+
+    /**
      * Records written before {@link #isAcceleratorVerdict} existed, by a load tried while the model
      * file was still missing. They say nothing about the accelerator, so they are not treated as
      * failures; this is what un-sticks a phone that already has one.
@@ -145,6 +169,13 @@ public final class TaiRuntimeHistory {
         String reason = entry.optString("reason", "");
         return reason.startsWith("Download or import this model");
     }
+
+    /**
+     * How long a failure record demotes its accelerator. A failure is a snapshot of one build on one
+     * day (a driver hiccup, a bug a later release fixed), so it must not decide the backend for
+     * ever: after this long the accelerator is tried again, and a new verdict writes a new record.
+     */
+    static final long FAILURE_TTL_MS = 7L * 24L * 60L * 60L * 1000L;
 
     @Nullable
     public static JSONObject failedEntry(
@@ -156,7 +187,32 @@ public final class TaiRuntimeHistory {
         JSONObject entry = entry(context, model, device, accelerator);
         if (entry == null || entry.optBoolean("success", false)) return null;
         if (isStaleFileMissingRecord(entry)) return null;
+        if (isExpired(entry, System.currentTimeMillis(), appVersionCode(context))) return null;
         return entry;
+    }
+
+    /**
+     * Whether a failure record no longer counts: older than {@link #FAILURE_TTL_MS}, or written by a
+     * different app version (a new build may well have fixed it). Records without an
+     * {@code appVersionCode} field, and an unknown running version ({@code 0}), follow the time rule
+     * only. The clock is a parameter for tests.
+     */
+    static boolean isExpired(@NonNull JSONObject entry, long nowMs, long currentVersionCode) {
+        long updated = entry.optLong("updatedAtMs", 0L);
+        if (updated > 0L && nowMs - updated > FAILURE_TTL_MS) return true;
+        long recorded = entry.optLong("appVersionCode", 0L);
+        return recorded > 0L && currentVersionCode > 0L && recorded != currentVersionCode;
+    }
+
+    /** The running app's version code, or {@code 0} when the package manager cannot say. */
+    static long appVersionCode(@Nullable Context context) {
+        if (context == null) return 0L;
+        try {
+            return context.getApplicationContext().getPackageManager()
+                .getPackageInfo(context.getPackageName(), 0).getLongVersionCode();
+        } catch (Exception e) {
+            return 0L;
+        }
     }
 
     /**
@@ -311,6 +367,10 @@ public final class TaiRuntimeHistory {
             entry.put("success", success);
             entry.put("reason", reason);
             entry.put("updatedAtMs", System.currentTimeMillis());
+            if (!success) {
+                long version = appVersionCode(context);
+                if (version > 0L) entry.put("appVersionCode", version);
+            }
             history.put(key(model, device, accelerator), entry);
             save(context, history);
         } catch (JSONException ignored) {

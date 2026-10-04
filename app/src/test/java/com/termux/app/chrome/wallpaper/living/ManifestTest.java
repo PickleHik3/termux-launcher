@@ -50,6 +50,21 @@ public class ManifestTest {
     }
 
     @Test
+    public void backendFieldsRoundTripWhenPresentAndAreOptional() throws Exception {
+        LivingRecipe a = sample();
+        a.gemmaAccelerator = "gpu";
+        a.gemmaFallbackReason = "history_failure: Model load cancelled.";
+        LivingRecipe b = LivingRecipe.fromJson(a.toJson().toString());
+        assertEquals("gpu", b.gemmaAccelerator);
+        assertEquals("history_failure: Model load cancelled.", b.gemmaFallbackReason);
+
+        LivingRecipe plain = LivingRecipe.fromJson(sample().toJson().toString());
+        assertNull(plain.gemmaAccelerator);
+        assertNull(plain.gemmaFallbackReason);
+        assertTrue(!sample().toJson().has("gemmaAccelerator"));
+    }
+
+    @Test
     public void recipeRoundTrips() throws Exception {
         LivingRecipe a = sample();
         LivingRecipe b = LivingRecipe.fromJson(a.toJson().toString());

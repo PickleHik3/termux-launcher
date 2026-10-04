@@ -739,7 +739,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             if (!loadCancellationRequested) {
                 engine = initializedEngine;
                 backendName = initializedBackendName;
-                backendFallbackReason = initializedFallbackReason;
+                // The runtime's own reason (an in-load GPU-to-CPU fallback) wins; otherwise the plan's
+                // (a demoted or budget-chosen accelerator), so the status always says why.
+                backendFallbackReason = !initializedFallbackReason.isEmpty() ? initializedFallbackReason
+                    : TaiAcceleratorFallback.get(modelSpec.id);
                 loadedModelId = modelSpec.id;
                 loadedModelPath = modelFile.getAbsolutePath();
                 loadedOptions = effectiveOptions;
