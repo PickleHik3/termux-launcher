@@ -144,6 +144,15 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="@id/appearance_editor_mode" />
 
+    <!-- The header's bottom edge: the mode pill's, or Undo and Done's when a narrow sheet wraps
+         them onto a second row (AppearanceEditorPanel.adaptHeader). Every row below hangs here. -->
+    <androidx.constraintlayout.widget.Barrier
+        android:id="@+id/appearance_editor_header_bottom"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:barrierDirection="bottom"
+        app:constraint_referenced_ids="appearance_editor_mode,appearance_editor_undo,appearance_editor_done" />
+
     <!-- ============================================================ Appearance mode -->
 
     <com.google.android.material.slider.Slider
@@ -159,7 +168,7 @@
         app:labelBehavior="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/appearance_editor_mode"
+        app:layout_constraintTop_toBottomOf="@id/appearance_editor_header_bottom"
         app:tickVisibilityMode="hidden" />
 
     <!-- One label per stop, centred under it in code. -->
@@ -494,7 +503,7 @@
         android:contentDescription="@string/termux_layout_editor_orientation"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/appearance_editor_mode"
+        app:layout_constraintTop_toBottomOf="@id/appearance_editor_header_bottom"
         app:selectionRequired="true"
         app:singleSelection="true">
 

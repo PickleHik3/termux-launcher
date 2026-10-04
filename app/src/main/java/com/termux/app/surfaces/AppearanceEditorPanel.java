@@ -22,6 +22,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.widget.PopupMenu;
+import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.constraintlayout.widget.Group;
 import androidx.appcompat.widget.TooltipCompat;
 import androidx.core.content.ContextCompat;
@@ -383,7 +384,46 @@ final class AppearanceEditorPanel {
         return height;
     }
 
+    /**
+     * The header is one row (mode pill, Undo, Done) while it fits the width the sheet's padding
+     * leaves, which includes the display's side insets. When it does not, Undo and Done drop to a
+     * second row at the end edge, 8dp under the pill, and the barrier the other rows hang from
+     * follows. Touch targets and text sizes are untouched.
+     */
+    private void adaptHeader(int widthPx) {
+        if (!(mUndo.getLayoutParams() instanceof ConstraintLayout.LayoutParams)
+            || !(mDone.getLayoutParams() instanceof ConstraintLayout.LayoutParams))
+            return;
+        int unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
+        mMode.measure(unspecified, unspecified);
+        mDone.measure(unspecified, unspecified);
+        int need = mMode.getMeasuredWidth() + mDone.getMeasuredWidth();
+        if (mUndo.getVisibility() != View.GONE) {
+            mUndo.measure(unspecified, unspecified);
+            need += mUndo.getMeasuredWidth();
+        }
+        int available = widthPx - mRoot.getPaddingStart() - mRoot.getPaddingEnd();
+        boolean wrap = need > available;
+        for (View view : new View[] {mUndo, mDone}) {
+            ConstraintLayout.LayoutParams lp = (ConstraintLayout.LayoutParams) view.getLayoutParams();
+            int unset = ConstraintLayout.LayoutParams.UNSET;
+            int topTop = wrap ? unset : R.id.appearance_editor_mode;
+            int topBottom = wrap ? R.id.appearance_editor_mode : unset;
+            int bottomBottom = wrap ? unset : R.id.appearance_editor_mode;
+            int margin = wrap ? Math.round(dp(8)) : 0;
+            if (lp.topToTop != topTop || lp.topToBottom != topBottom
+                || lp.bottomToBottom != bottomBottom || lp.topMargin != margin) {
+                lp.topToTop = topTop;
+                lp.topToBottom = topBottom;
+                lp.bottomToBottom = bottomBottom;
+                lp.topMargin = margin;
+                view.setLayoutParams(lp);
+            }
+        }
+    }
+
     private int measureNow(int widthPx) {
+        adaptHeader(widthPx);
         mRoot.measure(View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
         return mRoot.getMeasuredHeight();
