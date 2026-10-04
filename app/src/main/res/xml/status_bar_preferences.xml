@@ -2,12 +2,15 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
-    <PreferenceCategory app:title="@string/settings_clock_status_header">
+    <PreferenceCategory app:title="@string/settings_status_clock_header">
         <SwitchPreferenceCompat
             app:key="top_pane_clock_am_pm"
             app:title="@string/settings_use_12_hour_title"
             app:summary="@string/settings_use_12_hour_summary"
             app:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_status_indicators_header">
         <SwitchPreferenceCompat
             app:key="status_widget_cpu"
             app:title="@string/settings_cpu_usage_title"
@@ -18,6 +21,9 @@
             app:title="@string/settings_memory_usage_title"
             app:summary="@string/settings_memory_usage_summary"
             app:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_status_weather_header">
         <SwitchPreferenceCompat
             app:key="status_widget_weather"
             app:title="@string/settings_weather_title"
@@ -29,6 +35,9 @@
             app:summary="@string/settings_weather_fahrenheit_summary"
             app:defaultValue="false"
             app:dependency="status_widget_weather" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_status_more_header">
         <Preference
             app:key="status_bar_notifications_link"
             app:persistent="false"

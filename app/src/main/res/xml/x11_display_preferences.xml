@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The Linux display's options. The display rows write into the same store the display server
-     and `termux-x11-preference` read, so all three always agree; the starting rows are the
-     launcher's own and shape the command it runs when it starts a display itself. -->
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
@@ -11,143 +8,40 @@
         app:summary="@string/settings_x11_display_summary"
         android:defaultValue="false" />
 
-    <PreferenceCategory app:title="@string/settings_x11_category_display">
-        <com.termux.app.fragments.settings.SegmentedPillPreference
-            app:key="touchMode"
-            app:title="@string/settings_x11_touch_mode_title"
-            android:defaultValue="1"
-            app:entries="@array/x11_touch_mode_entries"
-            app:entryValues="@array/x11_touch_mode_values" />
-        <SwitchPreferenceCompat
-            app:key="x11_android_keyboard"
-            app:title="@string/settings_x11_android_keyboard_title"
-            app:summary="@string/settings_x11_android_keyboard_summary"
-            android:defaultValue="false" />
-        <SwitchPreferenceCompat
-            app:key="x11_keyboard_follows_text"
-            app:title="@string/settings_x11_keyboard_follows_text_title"
-            app:summary="@string/settings_x11_keyboard_follows_text_summary"
-            android:defaultValue="true" />
-        <ListPreference
-            app:key="displayResolutionMode"
-            app:title="@string/settings_x11_resolution_mode_title"
-            android:defaultValue="scaled"
-            app:entries="@array/x11_resolution_mode_entries"
-            app:entryValues="@array/x11_resolution_mode_values"
-            app:useSimpleSummaryProvider="true" />
-        <com.termux.app.fragments.settings.SliderPreference
-            app:key="displayScale"
-            app:title="@string/settings_x11_scale_title"
-            android:defaultValue="100"
-            app:min="30"
-            android:max="300"
-            app:seekBarIncrement="10"
-            app:showSeekBarValue="true" />
-        <com.termux.app.fragments.settings.SegmentedPillPreference
-            app:key="displayFilteringMode"
-            app:title="@string/settings_x11_filtering_title"
-            android:defaultValue="bilinear"
-            app:entries="@array/x11_filtering_entries"
-            app:entryValues="@array/x11_filtering_values" />
-        <ListPreference
-            app:key="displayResolutionExact"
-            app:title="@string/settings_x11_resolution_exact_title"
-            android:defaultValue="1280x1024"
-            app:entries="@array/displayResolution"
-            app:entryValues="@array/displayResolution"
-            app:useSimpleSummaryProvider="true" />
-        <EditTextPreference
-            app:key="displayResolutionCustom"
-            app:title="@string/settings_x11_resolution_custom_title"
-            android:defaultValue="1280x1024"
-            app:dialogMessage="@string/settings_x11_resolution_custom_summary"
-            app:useSimpleSummaryProvider="true" />
-        <com.termux.app.fragments.settings.SliderPreference
-            app:key="x11_display_dpi"
-            app:title="@string/settings_x11_dpi_title"
-            app:summary="@string/settings_x11_dpi_summary"
-            android:defaultValue="0"
-            app:min="0"
-            android:max="480"
-            app:seekBarIncrement="8"
-            app:showSeekBarValue="true" />
-        <SwitchPreferenceCompat
-            app:key="clipboardEnable"
-            app:title="@string/settings_x11_clipboard_title"
-            app:summary="@string/settings_x11_clipboard_summary"
-            android:defaultValue="true" />
-    </PreferenceCategory>
-
-    <PreferenceCategory app:title="@string/settings_x11_category_apps">
-        <SwitchPreferenceCompat
-            app:key="x11_drawer_apps"
-            app:title="@string/settings_x11_drawer_apps_title"
-            app:summary="@string/settings_x11_drawer_apps_summary"
-            android:defaultValue="true" />
+    <PreferenceCategory app:title="@string/settings_x11_group_configure">
         <Preference
-            app:key="x11_gui_apps_setup"
-            app:title="@string/settings_gui_apps_title"
-            app:summary="@string/settings_gui_apps_row_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.GuiAppsSetupPreferencesFragment" />
+            app:key="x11_sub_input"
+            app:persistent="false"
+            app:title="@string/settings_x11_sub_input_title"
+            app:summary="@string/settings_x11_sub_input_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.X11DisplayInputPreferencesFragment" />
         <Preference
-            app:key="x11_hidden_apps"
-            app:title="@string/settings_x11_hidden_apps_title"
-            app:summary="@string/settings_x11_hidden_apps_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.HiddenAppsPreferencesFragment" />
-        <!-- Kept as a row (user, 2026-09-22) after the hint alone turned out to be a dead end:
-             this is the only writer of x11_window_manager there has ever been, so removing it left
-             a manager set once and unchangeable. It matters more since D1, which has the manager
-             stand aside while a whole desktop runs. -->
-        <EditTextPreference
-            app:key="x11_window_manager"
-            app:title="@string/settings_x11_window_manager_title"
-            app:dialogMessage="@string/settings_x11_window_manager_summary"
-            android:defaultValue="openbox"
-            app:useSimpleSummaryProvider="true" />
-        <ListPreference
-            app:key="x11_runtime_badge"
-            app:title="@string/settings_x11_runtime_badge_title"
-            app:dialogMessage="@string/settings_x11_runtime_badge_summary"
-            android:defaultValue="termux"
-            app:entries="@array/x11_runtime_badge_entries"
-            app:entryValues="@array/x11_runtime_badge_values"
-            app:useSimpleSummaryProvider="true" />
+            app:key="x11_sub_resolution"
+            app:persistent="false"
+            app:title="@string/settings_x11_sub_resolution_title"
+            app:summary="@string/settings_x11_sub_resolution_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.X11DisplayResolutionPreferencesFragment" />
+        <Preference
+            app:key="x11_sub_linux_apps"
+            app:persistent="false"
+            app:title="@string/settings_x11_sub_linux_apps_title"
+            app:summary="@string/settings_x11_sub_linux_apps_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.X11DisplayLinuxAppsPreferencesFragment" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/settings_x11_category_starting">
-        <SwitchPreferenceCompat
-            app:key="x11_display_autostart"
-            app:title="@string/settings_x11_autostart_title"
-            app:summary="@string/settings_x11_autostart_summary"
-            android:defaultValue="false" />
-        <EditTextPreference
-            app:key="x11_display_command"
-            app:title="@string/settings_x11_command_title"
-            android:defaultValue="termux-x11 :0"
-            app:useSimpleSummaryProvider="true" />
-        <SwitchPreferenceCompat
-            app:key="x11_set_display_env"
-            app:title="@string/settings_x11_set_display_env_title"
-            app:summary="@string/settings_x11_set_display_env_summary"
-            android:defaultValue="false" />
-        <SwitchPreferenceCompat
-            app:key="x11_legacy_drawing"
-            app:title="@string/settings_x11_legacy_drawing_title"
-            app:summary="@string/settings_x11_legacy_drawing_summary"
-            android:defaultValue="false" />
-        <SwitchPreferenceCompat
-            app:key="x11_force_bgra"
-            app:title="@string/settings_x11_force_bgra_title"
-            app:summary="@string/settings_x11_force_bgra_summary"
-            android:defaultValue="false" />
+    <PreferenceCategory app:title="@string/settings_x11_group_support">
+        <Preference
+            app:key="x11_sub_startup"
+            app:persistent="false"
+            app:title="@string/settings_x11_sub_startup_title"
+            app:summary="@string/settings_x11_sub_startup_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.X11DisplayStartupPreferencesFragment" />
+        <Preference
+            app:key="x11_sub_troubleshooting"
+            app:persistent="false"
+            app:title="@string/settings_x11_sub_troubleshooting_title"
+            app:summary="@string/settings_x11_sub_troubleshooting_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.X11DisplayTroubleshootingPreferencesFragment" />
     </PreferenceCategory>
 
-    <!-- The plain-words version of the row above, at the foot of the page where someone who is not
-         looking for a setting will still read it: what arranges the windows, and that a whole
-         desktop arranges its own. -->
-    <Preference
-        app:key="x11_window_manager_hint"
-        app:summary="@string/settings_x11_window_manager_hint"
-        app:selectable="false"
-        app:persistent="false" />
 </PreferenceScreen>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/settings_x11_category_starting">
+        <SwitchPreferenceCompat
+            app:key="x11_display_autostart"
+            app:title="@string/settings_x11_autostart_title"
+            app:summary="@string/settings_x11_autostart_summary"
+            android:defaultValue="false" />
+        <EditTextPreference
+            app:key="x11_display_command"
+            app:title="@string/settings_x11_command_title"
+            android:defaultValue="termux-x11 :0"
+            app:useSimpleSummaryProvider="true" />
+        <SwitchPreferenceCompat
+            app:key="x11_set_display_env"
+            app:title="@string/settings_x11_set_display_env_title"
+            app:summary="@string/settings_x11_set_display_env_summary"
+            android:defaultValue="false" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

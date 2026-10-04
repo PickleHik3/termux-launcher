@@ -54,7 +54,8 @@ public class TerminalPreferencesFragmentTest {
 
         assertTrue(screen.findPreference("fullscreen") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("terminal_margin_adjustment") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("show_in_recents_when_not_default") instanceof SwitchPreferenceCompat);
+        org.junit.Assert.assertNull("Recents moved to App behavior",
+            screen.findPreference("show_in_recents_when_not_default"));
         assertTrue(screen.findPreference("split_pane_controls") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("show_key_hints") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("pane_dwindle_default") instanceof SwitchPreferenceCompat);

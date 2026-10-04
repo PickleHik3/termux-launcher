@@ -13,6 +13,7 @@ import androidx.preference.Preference;
 import androidx.preference.PreferenceDataStore;
 import androidx.preference.PreferenceManager;
 
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.ai.TaiSpeechModels;
@@ -75,6 +76,21 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         "https://github.com/Julow/Unexpected-Keyboard/blob/master/doc/Possible-key-values.md";
 
 
+    /**
+     * The XML this page inflates. The overview is this class itself; each focused subpage is a
+     * thin subclass that names its own XML and title, so every listener below keeps working on
+     * whichever of its rows the page holds (each lookup is null-tolerant).
+     */
+    @androidx.annotation.XmlRes
+    protected int preferencesXml() {
+        return R.xml.termux_keyboard_preferences;
+    }
+
+    @androidx.annotation.StringRes
+    protected int titleRes() {
+        return R.string.settings_destination_keyboard_input;
+    }
+
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         Context context = getContext();
@@ -84,10 +100,23 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         KeyboardPreferencesDataStore store = KeyboardPreferencesDataStore.getInstance(context);
         store.forgetTermuxProperties();
         preferenceManager.setPreferenceDataStore(store);
-        setPreferencesFromResource(R.xml.termux_keyboard_preferences, rootKey);
+        setPreferencesFromResource(preferencesXml(), rootKey);
+
+        // Keyboard sizes are percentage ratios, whichever page holds them.
+        for (String key : new String[] {"in_app_keyboard_floating_width",
+            "in_app_keyboard_floating_height", "in_app_keyboard_split_gap"}) {
+            Preference slider = findPreference(key);
+            if (slider instanceof com.termux.app.fragments.settings.SliderPreference)
+                ((com.termux.app.fragments.settings.SliderPreference) slider).setValueSuffix("%");
+        }
 
         SegmentedPillPreference inputMethodPreference = findPreference("keyboard_input_method");
-        if (inputMethodPreference != null) {
+        if (inputMethodPreference == null) {
+            // A focused subpage has no input-method row of its own: it follows the stored choice,
+            // so the built-in keyboard's rows dim there exactly as they do on the overview.
+            updateBuiltInKeyboardRows("built_in".equals(
+                store.getString("keyboard_input_method", "built_in")));
+        } else {
             updateBuiltInKeyboardRows("built_in".equals(inputMethodPreference.getValue()));
             inputMethodPreference.setOnPreferenceChangeListener((preference, newValue) -> {
                 updateBuiltInKeyboardRows("built_in".equals(newValue));
@@ -108,10 +137,19 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         if (tapReset != null) {
             refreshTapCorrectionSummary(tapReset);
             tapReset.setOnPreferenceClickListener(preference -> {
-                TapModelStore.delete(TapCorrectionController.modelFile(context));
-                refreshTapCorrectionSummary(preference);
-                // The running keyboard holds its own copy; it re-reads the file on the way back.
-                TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
+                new MaterialAlertDialogBuilder(context)
+                    .setTitle(R.string.settings_keyboard_tap_correction_reset_confirm_title)
+                    .setMessage(R.string.settings_keyboard_tap_correction_reset_confirm_message)
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(R.string.settings_keyboard_tap_correction_reset_confirm_action,
+                        (dialog, which) -> {
+                            TapModelStore.delete(TapCorrectionController.modelFile(context));
+                            refreshTapCorrectionSummary(preference);
+                            // The running keyboard holds its own copy; it re-reads the file on the
+                            // way back.
+                            TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
+                        })
+                    .show();
                 return true;
             });
         }
@@ -236,6 +274,8 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         Preference layout = findPreference("keyboard_layout");
         Preference shapes = findPreference("keyboard_shapes");
         Preference feedback = findPreference("keyboard_feedback");
+        Preference builtIn = findPreference("keyboard_built_in");
+        if (builtIn != null) builtIn.setEnabled(enabled);
         if (layout != null) layout.setEnabled(enabled);
         if (shapes != null) shapes.setEnabled(enabled);
         if (feedback != null) feedback.setEnabled(enabled);
@@ -245,7 +285,7 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     public void onResume() {
         super.onResume();
         if (getActivity() != null) {
-            getActivity().setTitle(R.string.settings_destination_keyboard_input);
+            getActivity().setTitle(titleRes());
         }
         // The file may have been hand-edited while the screen was away.
         if (getContext() != null) {

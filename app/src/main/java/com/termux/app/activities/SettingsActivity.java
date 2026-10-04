@@ -516,11 +516,20 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             CHILD_XML_RESOURCES.put("notifications", new int[]{
                 R.xml.notifications_preferences});
             CHILD_XML_RESOURCES.put("keyboard_input", new int[]{
-                R.xml.termux_keyboard_preferences, R.xml.speech_model_preferences});
+                R.xml.termux_keyboard_preferences, R.xml.termux_keyboard_layout_preferences,
+                R.xml.termux_keyboard_size_preferences, R.xml.termux_keyboard_typing_preferences,
+                R.xml.termux_keyboard_voice_preferences, R.xml.termux_keyboard_hardware_preferences,
+                R.xml.speech_model_preferences});
             CHILD_XML_RESOURCES.put("display", new int[]{
-                R.xml.x11_display_preferences});
+                R.xml.x11_display_preferences, R.xml.x11_display_input_preferences,
+                R.xml.x11_display_resolution_preferences, R.xml.x11_display_linux_apps_preferences,
+                R.xml.x11_display_startup_preferences, R.xml.x11_display_troubleshooting_preferences});
             CHILD_XML_RESOURCES.put("launcher_apps", new int[]{
-                R.xml.launcher_preferences});
+                R.xml.launcher_preferences, R.xml.launcher_dock_preferences,
+                R.xml.launcher_search_preferences, R.xml.launcher_lock_preferences,
+                R.xml.app_drawer_preferences});
+            CHILD_XML_RESOURCES.put("app_behavior", new int[]{
+                R.xml.app_behavior_preferences});
             CHILD_XML_RESOURCES.put("services_permissions", new int[]{
                 R.xml.services_permissions_preferences, R.xml.termux_ai_preferences,
                 R.xml.termux_privileged_access_preferences, R.xml.termux_api_preferences});
@@ -530,15 +539,46 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 R.xml.about_support_preferences});
         }
 
-        /** One indexed child preference: its display title and lowercase searchable text. */
+        /**
+         * The focused subpage that holds each XML resource's rows, so a search hit can open the
+         * page the setting is on rather than only the overview above it. A resource not listed
+         * here belongs to the destination row's own page.
+         */
+        private static final String TERMUX_PAGES = "com.termux.app.fragments.settings.termux.";
+        private static final Map<Integer, String> CHILD_XML_PAGES = new HashMap<>();
+        static {
+            CHILD_XML_PAGES.put(R.xml.termux_keyboard_layout_preferences, TERMUX_PAGES + "KeyboardLayoutPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.termux_keyboard_size_preferences, TERMUX_PAGES + "KeyboardSizePreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.termux_keyboard_typing_preferences, TERMUX_PAGES + "KeyboardTypingPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.termux_keyboard_voice_preferences, TERMUX_PAGES + "KeyboardVoicePreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.termux_keyboard_hardware_preferences, TERMUX_PAGES + "KeyboardHardwarePreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.speech_model_preferences, TERMUX_PAGES + "SpeechModelPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.launcher_dock_preferences, TERMUX_PAGES + "LauncherDockPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.launcher_search_preferences, TERMUX_PAGES + "LauncherSearchPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.launcher_lock_preferences, TERMUX_PAGES + "LauncherLockPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.app_drawer_preferences, TERMUX_PAGES + "AppDrawerPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.x11_display_input_preferences, TERMUX_PAGES + "X11DisplayInputPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.x11_display_resolution_preferences, TERMUX_PAGES + "X11DisplayResolutionPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.x11_display_linux_apps_preferences, TERMUX_PAGES + "X11DisplayLinuxAppsPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.x11_display_startup_preferences, TERMUX_PAGES + "X11DisplayStartupPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.x11_display_troubleshooting_preferences, TERMUX_PAGES + "X11DisplayTroubleshootingPreferencesFragment");
+        }
+
+        /** One indexed child preference: its display title, lowercase searchable text and page. */
         private static final class ChildSearchEntry {
             final String title;
             final String searchable;
-            ChildSearchEntry(String title, String searchable) {
+            /** The subpage that holds it, or null when it is on the destination row's own page. */
+            @Nullable final String fragment;
+            ChildSearchEntry(String title, String searchable, @Nullable String fragment) {
                 this.title = title;
                 this.searchable = searchable;
+                this.fragment = fragment;
             }
         }
+
+        // Each destination row's own fragment, captured before a search may point it at a subpage.
+        private final Map<String, String> mOriginalFragments = new HashMap<>();
 
         // Lazily built on first non-empty query; key -> indexed child preferences under it.
         private final Map<String, List<ChildSearchEntry>> mChildSearchIndex = new HashMap<>();
@@ -734,6 +774,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                         Preference row = category.getPreference(j);
                         if (row.getKey() != null) {
                             mOriginalSummaries.put(row.getKey(), row.getSummary());
+                            mOriginalFragments.put(row.getKey(), row.getFragment());
                         }
                     }
                 } else if (top.getKey() != null && !(top instanceof SettingsSearchPreference)) {
@@ -753,6 +794,9 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             CharSequence originalSummary = key == null ? row.getSummary() : mOriginalSummaries.get(key);
 
             if (KEY_WALLPAPER_STYLE.equals(key)) row.setFragment(null);
+            else if (key != null && mOriginalFragments.containsKey(key)) {
+                row.setFragment(mOriginalFragments.get(key));
+            }
 
             if (needle.isEmpty()) {
                 row.setSummary(originalSummary);
@@ -774,9 +818,12 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             if (childEntries != null) {
                 List<String> matchedTitles = new ArrayList<>();
                 boolean anyChildMatch = false;
+                // The subpage every hit lives on, when they all live on the same one.
+                java.util.Set<String> matchedPages = new java.util.HashSet<>();
                 for (ChildSearchEntry entry : childEntries) {
                     if (entry.searchable.contains(needle)) {
                         anyChildMatch = true;
+                        matchedPages.add(entry.fragment == null ? "" : entry.fragment);
                         if (!entry.title.isEmpty() && matchedTitles.size() < 3) {
                             matchedTitles.add(entry.title);
                         }
@@ -787,6 +834,10 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                     if (KEY_WALLPAPER_STYLE.equals(key)) {
                         row.setFragment(com.termux.app.fragments.settings.termux
                             .TermuxStylePreferencesFragment.class.getName());
+                    }
+                    if (matchedPages.size() == 1 && !KEY_WALLPAPER_STYLE.equals(key)) {
+                        String page = matchedPages.iterator().next();
+                        if (!page.isEmpty()) row.setFragment(page);
                     }
                     row.setSummary(row.getContext().getString(R.string.settings_search_contains,
                         TextUtils.join(", ", matchedTitles)));
@@ -821,7 +872,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                         PreferenceManager scratchManager = new PreferenceManager(context);
                         PreferenceScreen inflated = scratchManager.inflateFromResource(context, xmlRes, null);
                         if (inflated != null) {
-                            collectChildSearchEntries(inflated, entries);
+                            collectChildSearchEntries(inflated, entries, CHILD_XML_PAGES.get(xmlRes));
                         }
                     } catch (Exception e) {
                         // Skip this XML; search degrades gracefully instead of crashing the screen.
@@ -832,7 +883,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         }
 
         private static void collectChildSearchEntries(@NonNull PreferenceGroup group,
-                                                       @NonNull List<ChildSearchEntry> out) {
+                                                       @NonNull List<ChildSearchEntry> out,
+                                                       @Nullable String page) {
             for (int i = 0; i < group.getPreferenceCount(); i++) {
                 Preference child = group.getPreference(i);
                 CharSequence title = child.getTitle();
@@ -841,10 +893,10 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 String searchable = (titleText + " " + (summary == null ? "" : summary.toString()))
                     .trim().toLowerCase(Locale.ROOT);
                 if (!searchable.isEmpty()) {
-                    out.add(new ChildSearchEntry(titleText, searchable));
+                    out.add(new ChildSearchEntry(titleText, searchable, page));
                 }
                 if (child instanceof PreferenceGroup) {
-                    collectChildSearchEntries((PreferenceGroup) child, out);
+                    collectChildSearchEntries((PreferenceGroup) child, out, page);
                 }
             }
         }

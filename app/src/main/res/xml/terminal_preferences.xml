@@ -9,15 +9,6 @@
             app:summary="@string/termux_fullscreen_summary"
             android:defaultValue="false" />
         <SwitchPreferenceCompat
-            app:key="terminal_margin_adjustment"
-            app:title="@string/settings_adjust_keyboard_title"
-            app:summary="@string/settings_adjust_keyboard_summary" />
-        <SwitchPreferenceCompat
-            app:key="show_in_recents_when_not_default"
-            app:title="@string/settings_show_recents_title"
-            app:summary="@string/settings_show_recents_summary"
-            android:defaultValue="true" />
-        <SwitchPreferenceCompat
             app:key="terminal_padding_fill"
             app:title="@string/settings_terminal_padding_fill_title"
             app:summary="@string/settings_terminal_padding_fill_summary"
@@ -36,6 +27,13 @@
             app:entryValues="@array/settings_terminal_retro_effect_values"
             app:defaultValue="none"
             app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_terminal_compat_header">
+        <SwitchPreferenceCompat
+            app:key="terminal_margin_adjustment"
+            app:title="@string/settings_adjust_keyboard_title"
+            app:summary="@string/settings_adjust_keyboard_summary" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_clipboard_header">

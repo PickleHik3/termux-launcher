@@ -12,7 +12,7 @@
         app:title="@string/settings_use_as_title"
         app:dialogTitle="@string/settings_use_as_dialog_title" />
 
-    <PreferenceCategory app:title="@string/settings_root_launcher_header">
+    <PreferenceCategory app:key="root_personalization" app:title="@string/settings_root_personalization_header">
 
         <!-- One door to wallpaper, Look, Layout and the icon pack: opens the wallpaper picker
              over the live launcher, in code. The Look page rows stay searchable under it. -->
@@ -24,11 +24,11 @@
             app:summary="@string/settings_destination_wallpaper_style_summary" />
 
         <Preference
-            app:key="terminal"
-            app:icon="@drawable/ic_symbol_terminal"
-            app:title="@string/settings_destination_terminal"
-            app:summary="@string/settings_destination_terminal_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.TerminalPreferencesFragment" />
+            app:key="launcher_apps"
+            app:icon="@drawable/ic_symbol_apps"
+            app:title="@string/settings_destination_launcher_apps"
+            app:summary="@string/settings_destination_launcher_apps_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.LauncherPreferencesFragment" />
 
         <Preference
             app:key="status_bar"
@@ -44,19 +44,23 @@
             app:summary="@string/settings_destination_notifications_summary"
             app:fragment="com.termux.app.fragments.settings.termux.NotificationsPreferencesFragment" />
 
+    </PreferenceCategory>
+
+    <PreferenceCategory app:key="root_workspace" app:title="@string/settings_root_workspace_header">
+
+        <Preference
+            app:key="terminal"
+            app:icon="@drawable/ic_symbol_terminal"
+            app:title="@string/settings_destination_terminal"
+            app:summary="@string/settings_destination_terminal_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TerminalPreferencesFragment" />
+
         <Preference
             app:key="keyboard_input"
             app:icon="@drawable/ic_symbol_keyboard"
             app:title="@string/settings_destination_keyboard_input"
             app:summary="@string/settings_destination_keyboard_input_summary"
             app:fragment="com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment" />
-
-        <Preference
-            app:key="launcher_apps"
-            app:icon="@drawable/ic_symbol_apps"
-            app:title="@string/settings_destination_launcher_apps"
-            app:summary="@string/settings_destination_launcher_apps_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.LauncherPreferencesFragment" />
 
         <Preference
             app:key="display"
@@ -74,7 +78,14 @@
 
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/settings_root_system_info_header">
+    <PreferenceCategory app:key="root_app" app:title="@string/settings_root_app_header">
+
+        <Preference
+            app:key="app_behavior"
+            app:icon="@drawable/ic_symbol_battery_saver"
+            app:title="@string/settings_destination_app_behavior"
+            app:summary="@string/settings_destination_app_behavior_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.AppBehaviorPreferencesFragment" />
 
         <Preference
             app:key="services_permissions"
