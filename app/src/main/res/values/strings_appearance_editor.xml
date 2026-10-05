@@ -36,7 +36,7 @@
     <string name="appearance_editor_blur">Blur · %1$d dp</string>
     <string name="appearance_editor_legibility_low">Contrast · Softer</string>
     <string name="appearance_editor_legibility_unavailable">Contrast · off</string>
-    <string name="appearance_editor_key_corners">Key radius · %1$d dp</string>
+    <string name="appearance_editor_key_corners">Radius · %1$d dp</string>
     <string name="appearance_editor_legibility_normal">Contrast · Default</string>
     <string name="appearance_editor_legibility_high">Contrast · Harder</string>
     <!-- The terminal's Trail and Effect menu buttons: the name and the chosen option. -->
