@@ -144,7 +144,7 @@ public final class TaiWelcomeCardView extends FrameLayout {
         buttons.setOrientation(LinearLayout.HORIZONTAL);
         buttons.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         MaterialButton later = new MaterialButton(context, null,
-            com.google.android.material.R.attr.borderlessButtonStyle);
+            androidx.appcompat.R.attr.borderlessButtonStyle);
         later.setText(R.string.tai_welcome_later);
         later.setAllCaps(false);
         later.setMinHeight(dp(48));
