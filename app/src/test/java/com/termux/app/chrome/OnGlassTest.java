@@ -317,6 +317,17 @@ public class OnGlassTest {
     private static final int TERMINAL_DIM = 0xFF999699;
     private static final int TERMINAL_BG = 0xFF1C1B1F;
 
+    /** A thin 10% pane over a pale wallpaper never gets more veil than its ceiling. */
+    @Test
+    public void aFixedInkVeilNeverExceedsTheCeiling() {
+        int backdrop = OnGlass.backdrop(0xFFE8E4DA, Color.TRANSPARENT,
+            OnGlass.withAlpha(TERMINAL_BG, 26));
+        OnGlass.Resolution r = OnGlass.resolveFixedInk(backdrop, Color.TRANSPARENT, TERMINAL_FG,
+            OnGlass.TARGET_BODY_TEXT, TERMINAL_DIM, OnGlass.TARGET_LARGE_TEXT, TERMINAL_BG, 64);
+        assertTrue(r.toString(), Color.alpha(r.veil) <= 64);
+        assertTrue("the ceiling was reached before the target", r.veilCapped);
+    }
+
     /** The ink never moves: only a veil is bought, and past the chrome's cap when it must be. */
     @Test
     public void aFixedInkIsReachedByVeilAloneEvenPastTheChromesCap() {

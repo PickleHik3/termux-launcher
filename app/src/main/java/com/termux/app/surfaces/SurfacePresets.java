@@ -72,15 +72,13 @@ public final class SurfacePresets {
     }
 
     private static final List<Preset> PRESETS = Collections.unmodifiableList(Arrays.asList(
-        // Clear (id minimal): the most transparent, fanciest glass. Blur at 44 dp (the cap is 48),
-        // opacity 2 on every surface with the terminal canvas detached at 8 so text keeps something
-        // to sit on, grain 14. The edge is sharp real glass: a deep bend in a 32 dp band, one even
-        // bright hairline (no directional bevel, no gradient wash into the pane, no second line
-        // inside it: the developer saw each on pong as a milky, lopsided or double rim), and a
-        // moderate chromatic split. Scheme tint, hairline rim, classic motion.
+        // Clear (id minimal): the most transparent glass, wallpaper forward. Blur 4, opacity 10 on
+        // every surface (the terminal follows Base, no detached override), grain 4, a subtle
+        // depth (bend 4, edge 10, light 18), no specular and no dispersion. Scheme tint,
+        // hairline rim, classic motion.
         preset("minimal", R.string.termux_surface_preset_minimal,
-            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 44, 2, 14, 28, 32, 85, 0, 40,
-            look -> look.put(TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, 8)),
+            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 4, 10, 4, 4, 10, 18, 0, 0,
+            look -> { }),
         // Mist: Obsidian-Music's glass and motion (Apache-2.0; see
         // project-docs/reference/launcher/mist-preset-obsidian-values.md). Blur 25
         // and opacity 60 are Obsidian's own numbers. Grain 8 is not its 0.08 noise carried over:
@@ -94,10 +92,10 @@ public final class SurfacePresets {
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.GLASS_RIM_GRADIENT);
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_MOTION, TERMUX_APP.GLASS_MOTION_MIST);
             }),
-        // Tint (id stock): tinted, low blur, denser; for loud wallpapers and a dark terminal.
+        // Tint (id stock): glass in Material colours (surface tint toward primary container).
         preset("stock", R.string.termux_surface_preset_stock,
-            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 6, 46, 14, 4, 10, 18, 0, 0,
-            look -> look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_OBSIDIAN)),
+            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 10, 46, 10, 4, 10, 18, 0, 0,
+            look -> look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_MATERIAL)),
         // Solid: opaque, no blur cost.
         preset("solid", R.string.termux_surface_preset_solid,
             TERMUX_APP.SURFACE_MATERIAL_SOLID, 78, 0, 92, 0, 0, 1, 0, 0, 0,

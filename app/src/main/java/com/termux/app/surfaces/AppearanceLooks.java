@@ -229,7 +229,7 @@ public final class AppearanceLooks {
     /**
      * The global Opacity and Grain, in percent (DECISIONS item 13). Their ranges are the ones the
      * stored values already have (the material curves' clamp and the keyboard grain's ceiling),
-     * and cover every Look: Clear 16 / 4, Mist 60 / 8, Tint 46 / 14, Solid 92 / 0.
+     * and cover every Look: Clear 10 / 4, Mist 60 / 8, Tint 46 / 14, Solid 92 / 0.
      */
     public static final int OPACITY_MAX = 100;
     public static final int GRAIN_MAX = 100;

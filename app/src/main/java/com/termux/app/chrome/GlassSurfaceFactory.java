@@ -57,7 +57,17 @@ public final class GlassSurfaceFactory {
     /** The tint colour and rim every surface built here wears: the preset's, or the live one. */
     @NonNull
     public GlassLook look() {
-        return mLookOverride != null ? mLookOverride : GlassLook.of(mSurfaces.preferences());
+        GlassLook look = mLookOverride != null ? mLookOverride : GlassLook.of(mSurfaces.preferences());
+        if (!look.isMaterialRequested() || look.materialTint) return look;
+        android.content.Context context = mSurfaces.context();
+        int accent = mSurfaces.accentColor();
+        int container = com.google.android.material.color.MaterialColors.getColor(
+            context, com.google.android.material.R.attr.colorPrimaryContainer, accent);
+        int primary = com.google.android.material.color.MaterialColors.getColor(
+            context, androidx.appcompat.R.attr.colorPrimary, accent);
+        int surfaceTint = com.google.android.material.color.MaterialColors.getColor(
+            context, com.google.android.material.R.attr.colorSurfaceTint, primary);
+        return look.withMaterialColors(container, surfaceTint);
     }
 
     /**
