@@ -149,6 +149,10 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @Nullable private UsageModeHost mUsageModeHost;
     /** A run that was asked for while help was up, held until help goes away. */
     @Nullable private Runnable mStartWaitingForHelp;
+    /** Told when the real run ends, closing card or End tour: the welcome card follows it. */
+    @Nullable private Runnable mAfterRunListener;
+    /** Whether the run that is going is a help practice, which writes and ends nothing real. */
+    private boolean mPracticeRun;
     /** Whether the pinned-apps sheet is in front of the user, which only it can say. */
     private boolean mPinEditorUp;
     /** What the in-app keyboard has latched, for the chord cards' walking glow. */
@@ -209,6 +213,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             preferences.setFirstRunChainDone(true);
         }
         preferences.setFirstBootTourLegacyOnboardingMigrated(true);
+    }
+
+    /** Called once each time the real run ends; the launcher raises the welcome card from it. */
+    public void setAfterRunListener(@Nullable Runnable listener) {
+        mAfterRunListener = listener;
     }
 
     /** What else is covering the home screen, for the card visibility policy. */
@@ -287,7 +296,9 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         }
         if (waitForHelpToClose(() -> startPractice(lessonId))) return true;
         rebuildRunForThisPhone();
-        return mController.startPractice(lessonId);
+        boolean started = mController.startPractice(lessonId);
+        mPracticeRun = started;
+        return started;
     }
 
     /**
@@ -600,6 +611,12 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     public void onTourFinished(boolean skipped) {
         TourLog.d("run finished, skipped=" + skipped);
         removeOverlay();
+        boolean practice = mPracticeRun;
+        mPracticeRun = false;
+        // The step after the closing card (and after End tour): the device-tiers welcome card.
+        // Practice from help is not the run, so it never raises it.
+        Runnable after = mAfterRunListener;
+        if (!practice && after != null) after.run();
     }
 
     @Override

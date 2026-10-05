@@ -1721,6 +1721,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
         mLiveWallpaperHost.onCreate();
         ensureAppNoticeHost();
+        // The GPU path settles in the background so the welcome card knows it when it renders.
+        com.termux.app.firstrun.TaiWelcomeCardHost.probeEarly(this);
         if (savedInstanceState == null) {
             boolean forceOnboarding = getIntent().getBooleanExtra(EXTRA_SHOW_ONBOARDING, false);
             View contentView = findViewById(android.R.id.content);
@@ -2542,6 +2544,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The row card, for the update that has no first-run chain to hang it off and for the one
         // that was held while the run had the screen.
         maybeOfferExtraKeysDefaultRow();
+        // The on-device AI welcome card, for installs that skipped or finished the tour before it
+        // existed; the run itself raises it through the after-run listener below.
+        maybeOfferTaiWelcomeCard();
 
         // Check if a crash happened on last run of the app or if a plugin crashed and show a
         // notification with the crash details if it did
@@ -2671,6 +2676,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         AppNotice.show(this, R.string.extra_keys_default_offer_switched);
     }
 
+    /**
+     * The "What runs on this phone" card (tai-device-tiers spec section 5.1): once, after the tour's
+     * closing card, or on the next idle home screen for an install that skipped the tour or finished
+     * it before this version. Never while the tour is going or still to be offered, never over the
+     * chrome the tour's own cards wait behind (help included) or another setup card, and never
+     * again once raised: Later is an answer, and Settings keeps the way back in.
+     */
+    private void maybeOfferTaiWelcomeCard() {
+        if (isFinishing() || isDestroyed() || mPreferences == null) return;
+        // Cheapest check first: once shown, nothing else is read on any later resume.
+        if (com.termux.app.firstrun.TaiWelcomeCardHost.wasShown(this)) return;
+        FirstBootTour tour = firstBootTour();
+        TourChromeProbe chrome = new TourChromeProbe();
+        boolean chromeUp = chrome.isAppDrawerUp() || chrome.isCommandPaletteUp()
+            || chrome.isTerminalSheetUp() || chrome.isSurfaceEditorUp() || chrome.isHelpUp();
+        boolean otherCardUp = mFirstRunPermissionsCard != null || mExtraKeysDefaultOfferShowing
+            || com.termux.app.firstrun.TaiWelcomeCardHost.isShowing();
+        if (!com.termux.app.firstrun.TaiWelcomeCard.shouldShowOnHome(false,
+                tour != null && tour.isRunPending(), chromeUp, otherCardUp,
+                com.termux.app.firstrun.TaiWelcomeCardHost.hasRows(this))) {
+            return;
+        }
+        com.termux.app.firstrun.TaiWelcomeCardHost.show(this, true, null);
+    }
+
     /** The tour, built on the preferences the first time anything asks for it. */
     @Nullable
     private FirstBootTour firstBootTour() {
@@ -2678,6 +2708,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mFirstBootTour = new FirstBootTour(this, mPreferences,
                 this::getInAppKeyboardKeyRect);
             mFirstBootTour.setChromeProbe(new TourChromeProbe());
+            // The step after the closing card: the "What runs on this phone" card, once.
+            mFirstBootTour.setAfterRunListener(() -> {
+                View decor = getWindow().getDecorView();
+                decor.post(this::maybeOfferTaiWelcomeCard);
+            });
             // A run begins on the terminal, where its cards are taught; Replay and a resume after
             // a process death can both find the wall resting on another place.
             mFirstBootTour.setWallHost(() -> {
