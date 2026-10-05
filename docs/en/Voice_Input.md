@@ -109,27 +109,36 @@ On **Home** with no search or field open, nothing takes typing, so ✓ copies th
 
 ## Cleanup
 
-Cleanup is one pass a local chat model makes over the whole dictation once it stops, when you pause,
+Cleanup is one pass a chat model makes over the whole dictation once it stops, when you pause,
 tap the voice key or the Dictate key, press ✓ or Copy early, or the silence auto-stop fires. It
-fixes punctuation, capitals and fillers, and resolves self-corrections ("at five, no, six" becomes
-"at six"). The panel marks what changed: changed and added words in the accent colour, removed words
-struck through. The marks stay on screen for as long as the cleaned text does, so a long dictation's
-corrections can still be read; ✓ and Copy use the plain cleaned text. Undo takes the cleanup back and
-redo puts it, marks and all, on screen again.
+fixes punctuation, capitals, fillers and grammar, and resolves self-corrections ("at five, no, six"
+becomes "at six"). The panel marks what changed: changed and added words in the accent colour,
+removed words struck through. The marks stay on screen for as long as the cleaned text does, so a
+long dictation's corrections can still be read; ✓ and Copy use the plain cleaned text. Undo takes
+the cleanup back and redo puts it, marks and all, on screen again.
 
-Cleanup is **on by default** and needs a Gemma chat model installed. Turn it off with **Polish
-dictation with local model** in **Settings → Keyboard → Voice input**. While it is on, two more rows
-apply:
+Cleanup is **on by default** and needs a Gemma chat model installed, or a remote model for
+Polished. Turn it off with **Clean up dictation** in **Settings → Keyboard → Voice input**. While
+it is on, two more rows apply:
 
 | Setting | Choices | Default |
 | --- | --- | --- |
-| **Cleanup level** | **Light: punctuation, capitals and fillers** or **Polished: also grammar, in your words** | Polished |
+| **Cleanup level** | **Light**: punctuation, fillers and grammar, in your words, on one line, on this phone. **Polished**: also paragraphs, and a numbered or bulleted list when you count through or list items | Polished |
 | **Cleanup model** | **Automatic** or any installed chat model | Automatic |
 
-**Automatic** uses Gemma 4 E2B when it is installed, else Gemma 4 E4B. E2B is the recommended
-model: it keeps your words and is about three times faster than E4B. With no chat model installed,
-the text stays as heard. The cleanup model loads while you speak, so the pass at the end does not
+**Light** and the local half of **Polished** use the **Cleanup model**. **Automatic** uses Gemma 4
+E2B when it is installed, else Gemma 4 E4B. E2B is the recommended model: it keeps your words and is
+about three times faster than E4B. The model loads while you speak, so the pass at the end does not
 wait for it, and it stays loaded afterwards until On-device AI's normal idle unload.
+
+**Polished** uses the remote model from **Settings → On-device AI → Remote model** whenever one is
+set up, whatever the Cleanup model says. With no remote model it runs on the Cleanup model, so it
+works offline too. Choosing **Off** as the Cleanup model turns cleanup off for both levels. With no
+usable model the text stays as heard.
+
+A Polished result can have line breaks. They are inserted only into a program that accepts pasted
+text (bracketed paste), which receives it as one paste. In any other program, such as a plain shell
+prompt, the line breaks are joined with spaces, because each line would run on its own.
 
 The text is **Kept as heard** when:
 

@@ -89,10 +89,14 @@ public class VoicePolishRulesTest {
     public void theLevelsAskForDifferentEdits() {
         String light = VoicePolishRules.instructions(VoicePolishRules.LEVEL_LIGHT, "please fix the build");
         String polished = VoicePolishRules.instructions(VoicePolishRules.LEVEL_POLISHED, "please fix the build");
-        assertTrue(light.contains("smallest edits"));
-        assertFalse(light.contains("fix grammar"));
+        assertTrue(light.contains("fix grammar"));
+        assertTrue(light.contains("on one line"));
+        assertFalse(light.contains("numbered list"));
         assertTrue(polished.contains("fix grammar"));
-        assertFalse(polished.contains("smallest edits"));
+        assertTrue(polished.contains("numbered list"));
+        assertTrue(polished.contains("Never add headings"));
+        assertFalse(polished.contains("on one line"));
+        assertTrue(polished.contains("line breaks only between paragraphs and list items"));
         // Unknown or missing levels read as the default, Polished.
         assertEquals(polished, VoicePolishRules.instructions("careful", "please fix the build"));
         assertEquals(polished, VoicePolishRules.instructions(null, "please fix the build"));
@@ -144,6 +148,28 @@ public class VoicePolishRulesTest {
         assertNotNull(accepted);
         assertEquals("Please run the tests and report.", accepted);
         assertFalse(accepted.contains("\n"));
+    }
+
+    @Test
+    public void polishedKeepsSingleLineBreaksAndTidiesThem() {
+        String raw = "first fix the build second run the tests third ship it";
+        String list = "1. Fix the build.  \r\n2. Run the tests.\n\n\n\n3. Ship it.";
+        assertEquals("1. Fix the build.\n2. Run the tests.\n\n3. Ship it.",
+            VoicePolishRules.accept(raw, list, VoicePolishRules.LEVEL_POLISHED));
+        // Light flattens the same answer onto one line.
+        assertEquals("1. Fix the build. 2. Run the tests. 3. Ship it.",
+            VoicePolishRules.accept(raw, list, VoicePolishRules.LEVEL_LIGHT));
+        assertEquals("1. Fix the build. 2. Run the tests. 3. Ship it.", VoicePolishRules.accept(raw, list));
+    }
+
+    @Test
+    public void polishedMayRunToThreeTimesTheInputLength() {
+        String raw = "one two three";
+        String tripled = "one\ntwo\nthree\n- one\n- two\n- three";
+        assertNull(VoicePolishRules.accept(raw, tripled, VoicePolishRules.LEVEL_LIGHT));
+        assertEquals(tripled, VoicePolishRules.accept(raw, tripled, VoicePolishRules.LEVEL_POLISHED));
+        assertTrue(VoicePolishRules.maxTokens(words(100), VoicePolishRules.LEVEL_POLISHED)
+            > VoicePolishRules.maxTokens(words(100), VoicePolishRules.LEVEL_LIGHT));
     }
 
     @Test

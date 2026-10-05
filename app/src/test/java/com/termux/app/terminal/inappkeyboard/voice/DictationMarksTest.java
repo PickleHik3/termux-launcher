@@ -15,10 +15,17 @@ public class DictationMarksTest {
     /** A terminal session: whether it takes marks, and everything written to it. */
     private static final class FakeSession {
         boolean acceptsMarks;
+        boolean bracketedPaste;
         final StringBuilder written = new StringBuilder();
 
         FakeSession(boolean acceptsMarks) {
             this.acceptsMarks = acceptsMarks;
+            this.bracketedPaste = acceptsMarks;
+        }
+
+        FakeSession(boolean acceptsMarks, boolean bracketedPaste) {
+            this.acceptsMarks = acceptsMarks;
+            this.bracketedPaste = bracketedPaste;
         }
 
         String takeWritten() {
@@ -33,6 +40,11 @@ public class DictationMarksTest {
             @Override
             public boolean acceptsMarks(@NonNull FakeSession session) {
                 return session.acceptsMarks;
+            }
+
+            @Override
+            public boolean acceptsBracketedPaste(@NonNull FakeSession session) {
+                return session.bracketedPaste;
             }
 
             @Override
@@ -119,6 +131,32 @@ public class DictationMarksTest {
         marks.end(true);
         assertEquals(DictationMarks.endMark(true), listened.takeWritten());
         assertEquals("", other.takeWritten());
+    }
+
+    @Test
+    public void marksTakeAMarkedBracketedPasteWithItsLineBreaks() {
+        DictationMarks<FakeSession> marks = marks();
+        FakeSession session = new FakeSession(true);
+        marks.type(session, "1. one\n2. two");
+        assertEquals(DictationMarks.phraseMark(1) + "\033[200~1. one\n2. two\033[201~", session.takeWritten());
+    }
+
+    @Test
+    public void bracketedPasteAloneTakesAnUnmarkedPasteWithItsLineBreaks() {
+        DictationMarks<FakeSession> marks = marks();
+        FakeSession session = new FakeSession(false, true);
+        marks.type(session, "1. one\n2. two");
+        assertEquals("\033[200~1. one\n2. two\033[201~", session.takeWritten());
+    }
+
+    @Test
+    public void aBareShellGetsEveryLineBreakAsASpace() {
+        DictationMarks<FakeSession> marks = marks();
+        FakeSession session = new FakeSession(false, false);
+        marks.type(session, "First point.\r\n\r\n1. one\n2. two");
+        assertEquals("First point. 1. one 2. two", session.takeWritten());
+        marks.type(session, "no breaks here");
+        assertEquals("no breaks here", session.takeWritten());
     }
 
     @Test
