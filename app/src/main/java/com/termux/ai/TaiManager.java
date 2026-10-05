@@ -3904,7 +3904,11 @@ public final class TaiManager {
         return null;
     }
 
-    /** The measured load costs of this model on this device, as the budget asks for them. */
+    /**
+     * The measured load costs of this model on this device, as the budget asks for them; with none
+     * of its own yet, the shipped {@link TaiLoadPriors} for the bundled Gemma files, so the first
+     * load is planned on a measurement rather than the seed that refused it.
+     */
     @NonNull
     private TaiLoadBudget.History measuredHistory(@NonNull TaiModelSpec spec, @NonNull TaiDeviceCapabilities device) {
         long fileBytes = TaiResidency.fileBytes(spec);
@@ -3912,8 +3916,11 @@ public final class TaiManager {
         // no samples of its own borrows the text key's plus the encoders' share of the file.
         long slope = TaiLoadBudget.seedSlopeBytes(spec.backend, fileBytes, kvBytesPerToken(spec));
         long encoderDelta = fileBytes / 10L;
-        return (accelerator, contextTokens) -> TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device,
-            spec.backend, accelerator, contextTokens, slope, encoderDelta);
+        return (accelerator, contextTokens) -> {
+            long measured = TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device,
+                spec.backend, accelerator, contextTokens, slope, encoderDelta);
+            return measured > 0L ? measured : TaiLoadPriors.bytes(spec, accelerator, contextTokens, slope);
+        };
     }
 
     /** The architecture's KV bytes per token for an MNN model whose config says so; {@code 0} keeps the file-size slope. */
