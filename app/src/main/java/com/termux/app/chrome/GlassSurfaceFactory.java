@@ -65,9 +65,8 @@ public final class GlassSurfaceFactory {
             context, com.google.android.material.R.attr.colorPrimaryContainer, accent);
         int primary = com.google.android.material.color.MaterialColors.getColor(
             context, androidx.appcompat.R.attr.colorPrimary, accent);
-        int surfaceTint = com.google.android.material.color.MaterialColors.getColor(
-            context, com.google.android.material.R.attr.colorSurfaceTint, primary);
-        return look.withMaterialColors(container, surfaceTint);
+        // M3's surface tint is the primary role; MDC exposes no colorSurfaceTint attribute.
+        return look.withMaterialColors(container, primary);
     }
 
     /**
