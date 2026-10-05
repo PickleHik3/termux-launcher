@@ -188,7 +188,7 @@ public class TerminalClockWidgetTest {
         // 30 over a 48 column is .625, under the .65 floor: the band alone is fitted.
         float[] plan = TerminalClockWidget.fitScalePlan(30f, 400f, 48f, 34f, 150f, 130f, .65f);
         assertEquals(0f, plan[1], 0f);
-        assertEquals(.65f, plan[0], 1e-4f);
+        assertEquals(30f / 34f, plan[0], 1e-4f);
         assertEquals(130f * plan[0], plan[2], 1e-3f);
         // With no floor (the slot to itself) the date is never dropped.
         assertEquals(1f, TerminalClockWidget.fitScalePlan(30f, 400f, 48f, 34f, 150f, 130f, 0f)[1], 0f);
