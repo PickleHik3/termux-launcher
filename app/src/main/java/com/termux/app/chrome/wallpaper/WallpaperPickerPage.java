@@ -671,6 +671,9 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mRoot.findViewById(R.id.wallpaper_picker_back).setOnClickListener(v -> {
             if (!mReleased) mClose.run();
         });
+        mRoot.findViewById(R.id.wallpaper_picker_done).setOnClickListener(v -> {
+            if (!mReleased) mClose.run();
+        });
         mApply.setOnClickListener(v -> applyBoth());
         mApplyMore.setOnClickListener(v -> showApplyMenu());
         mPhoto.setOnClickListener(v -> {

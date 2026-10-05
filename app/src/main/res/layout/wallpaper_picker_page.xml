@@ -79,7 +79,7 @@
             android:paddingTop="0dp"
             android:paddingBottom="0dp"
             app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintEnd_toStartOf="@id/wallpaper_picker_done"
             app:layout_constraintTop_toTopOf="parent">
 
             <com.google.android.material.button.MaterialButton
@@ -98,6 +98,21 @@
                 android:tooltipText="@string/wallpaper_picker_apply_more"
                 app:icon="@drawable/m3_split_button_chevron_avd" />
         </com.google.android.material.button.MaterialSplitButton>
+
+        <!-- Done closes the Appearance surface, as the editor pages' Done does; Back is the same
+             door for people who reach for the arrow. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/wallpaper_picker_done"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:minWidth="0dp"
+            android:maxLines="1"
+            android:text="@string/appearance_editor_done"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
     </androidx.constraintlayout.widget.ConstraintLayout>
 
     <com.google.android.material.progressindicator.LinearProgressIndicator
