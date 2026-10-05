@@ -26,6 +26,13 @@ public class LauncherCategorySortPromptTest {
         return count;
     }
 
+    @Test public void theHealthDescriptionNamesSportAndWorkouts() {
+        // pong 2026-10-05: E2B went from 15/18 to 17/18 on an 18-app set with this wording (Strava, Calm).
+        String prompt = LauncherCategorySortPrompt.singleAppPrompt("Strava", "com.strava");
+        assertTrue(prompt.contains("- health: health, fitness, sport, workouts and medical\n"));
+        assertFalse(prompt.contains("health, fitness and medical"));
+    }
+
     @Test public void singleAppPromptListsEveryAssignableCategoryAndNoSyntheticOne() {
         String prompt = LauncherCategorySortPrompt.singleAppPrompt("Signal", "org.thoughtcrime");
         for (AppDrawerCategory category : AppDrawerCategory.values()) {

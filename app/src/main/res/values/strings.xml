@@ -2326,17 +2326,7 @@
     <string name="speech_output_sample_summary">Hear the chosen voice and speed</string>
     <string name="speech_output_sample_playing">Playing · tap to stop</string>
     <string name="speech_output_sample_text">Hi, I am %1$s. This is how I will sound when I read to you.</string>
-    <string name="cleanup_model_installed_header">Installed models</string>
     <string name="cleanup_model_automatic_title">Automatic</string>
-    <string name="cleanup_model_automatic_summary_model">Uses %1$s, the best model installed for this phone</string>
-    <string name="cleanup_model_automatic_summary_none">No Gemma model installed</string>
-    <string name="cleanup_model_empty_title">No cleanup model installed</string>
-    <string name="cleanup_model_empty_summary">Get a chat model in Model centre, then pick it here.</string>
-    <string name="cleanup_model_open_tai_settings">Open Model centre</string>
-    <string name="cleanup_model_in_use">In use</string>
-    <string name="cleanup_model_ram_warning">%1$s · may be slow or refuse to load on this phone</string>
-    <string name="cleanup_model_now_using">Cleanup dictation will use %1$s</string>
-    <string name="cleanup_model_now_using_automatic">Cleanup dictation will pick a model automatically</string>
     <string name="voice_input_listening">Listening…</string>
     <string name="voice_input_transcribing">Transcribing…</string>
     <string name="voice_input_warming_up">Warming up</string>

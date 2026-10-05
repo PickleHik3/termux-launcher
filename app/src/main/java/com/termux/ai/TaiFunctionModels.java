@@ -26,7 +26,7 @@ import java.util.Set;
  * walks the chain from the caller's side.
  *
  * <p>Storage and the installed-model lookup sit behind small interfaces so tests can fake them.
- * Callers keep their private rules until the callers' package moves them here.
+ * The callers (categories, reader, tidy dictation, speech, voice, depth, embeddings) resolve here.
  */
 public final class TaiFunctionModels {
     /** The stored value for "turn this function off" (or its without-model choice). */
@@ -148,16 +148,39 @@ public final class TaiFunctionModels {
         @NonNull public final List<TaiTierPolicy.Choice> chain;
         /** The model file is at least a quarter of the RAM class: show "May close apps running in the background". */
         public final boolean warnBackground;
+        /**
+         * {@code remote/<id>} when the pick is the remote provider's model and it is set up: the request
+         * then carries this as its {@code model} and no local model loads ({@link #modelId} is {@code null}).
+         */
+        @Nullable public final String remoteModel;
 
         Resolution(@Nullable String modelId, @Nullable String accelerator, @NonNull Source source,
                    @NonNull TaiTierPolicy.WithoutModel without, @NonNull List<TaiTierPolicy.Choice> chain,
                    boolean warnBackground) {
+            this(modelId, accelerator, source, without, chain, warnBackground, null);
+        }
+
+        public Resolution(@Nullable String modelId, @Nullable String accelerator, @NonNull Source source,
+                   @NonNull TaiTierPolicy.WithoutModel without, @NonNull List<TaiTierPolicy.Choice> chain,
+                   boolean warnBackground, @Nullable String remoteModel) {
+            this.remoteModel = remoteModel;
             this.modelId = modelId;
             this.accelerator = accelerator;
             this.source = source;
             this.without = without;
             this.chain = Collections.unmodifiableList(new ArrayList<>(chain));
             this.warnBackground = warnBackground;
+        }
+
+        /** True when the request goes to the remote provider. */
+        public boolean isRemote() {
+            return remoteModel != null;
+        }
+
+        /** The {@code model} a request for this resolution names: the remote name, else the local id, else {@code null}. */
+        @Nullable
+        public String requestModel() {
+            return remoteModel != null ? remoteModel : modelId;
         }
     }
 
@@ -341,7 +364,8 @@ public final class TaiFunctionModels {
 
     /** {@code remote/<id>}: no accelerator, and no background warning (nothing loads here). */
     private Resolution remoteResolution(Source source, List<TaiTierPolicy.Choice> chain) {
-        return new Resolution(REMOTE_PREFIX + remote.modelId(), null, source, TaiTierPolicy.WithoutModel.NONE, chain, false);
+        String name = REMOTE_PREFIX + remote.modelId();
+        return new Resolution(name, null, source, TaiTierPolicy.WithoutModel.NONE, chain, false, name);
     }
 
     private Resolution withModel(TaiFunction function, ModelInfo info, @Nullable String accelerator, Source source,

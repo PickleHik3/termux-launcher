@@ -69,7 +69,8 @@ public class TaiTierPolicyTest {
         Env env = env(12, GpuPath.YES);
         assertModel(E2B, "gpu", TaiTierPolicy.automatic(env, TaiFunction.ASSISTANT));
         assertModel(E2B, "gpu", TaiTierPolicy.automatic(env, TaiFunction.TIDY_DICTATION));
-        assertModel(E4B, "gpu", TaiTierPolicy.automatic(env, TaiFunction.APP_CATEGORIES));
+        // Categories moved to E2B on Tier 2 (pong benchmark 2026-10-05): same accuracy, half the time.
+        assertModel(E2B, "gpu", TaiTierPolicy.automatic(env, TaiFunction.APP_CATEGORIES));
         assertModel(E4B_V, "gpu", TaiTierPolicy.automatic(env, TaiFunction.WALLPAPER_READER));
         assertEquals("whisper-acft-small", TaiTierPolicy.automatic(env, TaiFunction.VOICE_TYPING).modelId);
         assertEquals(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID,
@@ -82,12 +83,22 @@ public class TaiTierPolicyTest {
         assertEquals(E2B_V, readerChain.get(0).modelId);
         assertEquals(WithoutModel.RULES_ONLY, readerChain.get(1).without);
         List<Choice> categoriesChain = TaiTierPolicy.fallbackChain(env, TaiFunction.APP_CATEGORIES);
-        assertEquals(E2B, categoriesChain.get(0).modelId);
+        assertEquals(1, categoriesChain.size());
+        assertEquals(WithoutModel.OFF, categoriesChain.get(0).without);
         assertEquals(Offer.PRESELECTED, TaiTierPolicy.offer(env, E2B));
         assertEquals(Offer.SUGGESTED, TaiTierPolicy.offer(env, E4B));
         assertEquals(Offer.PRESELECTED, TaiTierPolicy.offer(env, "whisper-acft-small"));
         assertEquals(Offer.SUGGESTED, TaiTierPolicy.offer(env, "whisper-acft-base"));
         assertEquals(Offer.SUGGESTED, TaiTierPolicy.offer(env, TaiModelCatalog.PARAKEET_TDT_V3_ID));
+    }
+
+    @Test
+    public void categoriesKeepE4bOnTierThreeWithE2bAsItsFallback() {
+        Env env = env(16, GpuPath.YES);
+        assertModel(E4B, "gpu", TaiTierPolicy.automatic(env, TaiFunction.APP_CATEGORIES));
+        List<Choice> chain = TaiTierPolicy.fallbackChain(env, TaiFunction.APP_CATEGORIES);
+        assertEquals(E2B, chain.get(0).modelId);
+        assertEquals(WithoutModel.OFF, chain.get(1).without);
     }
 
     @Test
@@ -165,7 +176,8 @@ public class TaiTierPolicyTest {
             Env env = env(gb, GpuPath.NO);
             assertModel(E2B, "cpu", TaiTierPolicy.automatic(env, TaiFunction.ASSISTANT));
             assertModel(E2B, "cpu", TaiTierPolicy.automatic(env, TaiFunction.TIDY_DICTATION));
-            assertModel(E4B, "cpu", TaiTierPolicy.automatic(env, TaiFunction.APP_CATEGORIES));
+            // Tier 3 keeps E4B for categories (its resident assistant); Tier 2 uses E2B.
+            assertModel(gb == 16 ? E4B : E2B, "cpu", TaiTierPolicy.automatic(env, TaiFunction.APP_CATEGORIES));
             assertModel(E4B_V, "cpu", TaiTierPolicy.automatic(env, TaiFunction.WALLPAPER_READER));
             assertFalse(TaiTierPolicy.gpuOffered(env));
         }
@@ -236,6 +248,8 @@ public class TaiTierPolicyTest {
         assertEquals(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, row(t12, "wallpaper_creator").modelIds.get(0));
         assertEquals(TaiModelCatalog.U2NET_ID, row(t12, "wallpaper_creator").modelIds.get(1));
         assertTrue(row(t12, "assistant").functions.contains(TaiFunction.ASSISTANT));
+        assertTrue(row(t12, "assistant").functions.contains(TaiFunction.APP_CATEGORIES));
+        assertFalse(smarter.functions.contains(TaiFunction.APP_CATEGORIES));
 
         List<WelcomeRow> t16 = TaiTierPolicy.welcomeRows(env(16, GpuPath.YES));
         WelcomeRow e4bRow = row(t16, "smarter_reading");

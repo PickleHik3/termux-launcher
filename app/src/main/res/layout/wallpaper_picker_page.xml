@@ -217,6 +217,19 @@
         </LinearLayout>
     </FrameLayout>
 
+    <!-- Under Bring to life / Read again when the reader's model is large for this phone's RAM. -->
+    <TextView
+        android:id="@+id/wallpaper_picker_living_warning"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="@string/tai_warn_background_apps"
+        android:textAppearance="?attr/textAppearanceLabelSmall"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:visibility="gone" />
+
     <LinearLayout
         android:id="@+id/wallpaper_picker_shortcuts"
         android:layout_width="match_parent"

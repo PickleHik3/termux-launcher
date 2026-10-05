@@ -78,9 +78,30 @@ public final class TaiSpeechModels {
         return chooseActive(settings.getSttModelId(), installed(store));
     }
 
+    /**
+     * The model voice input uses: the VOICE_TYPING function's resolution ({@link TaiFunctionModels}:
+     * the pick, else the tier's Automatic, else its chain), and when none of those is installed the
+     * first installed speech model, as {@link #chooseActive} has always done.
+     */
     @Nullable
     public static TaiModelSpec resolveActive(@NonNull Context context) {
-        return resolveActive(new TaiSettings(context), new TaiModelStore(context));
+        Context app = context.getApplicationContext();
+        TaiModelStore store = new TaiModelStore(app);
+        List<TaiModelSpec> installed = installed(store);
+        String resolved = TaiFunctionModels.forContext(app).resolve(TaiFunction.VOICE_TYPING).modelId;
+        if (resolved != null) {
+            for (TaiModelSpec spec : installed) {
+                if (resolved.equals(spec.id)) return spec;
+            }
+        }
+        return chooseActive(new TaiSettings(app).getSttModelId(), installed);
+    }
+
+    /** {@link #resolveActive(Context)}'s id, or empty when no speech model is installed. */
+    @NonNull
+    public static String activeModelId(@NonNull Context context) {
+        TaiModelSpec active = resolveActive(context);
+        return active == null ? "" : active.id;
     }
 
     /** {@link #resolveActive}'s id, or empty when no speech model is installed. */

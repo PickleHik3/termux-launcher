@@ -1,5 +1,7 @@
 package com.termux.ai;
 
+import androidx.annotation.NonNull;
+
 import com.termux.ai.TaiFunctionModels.ModelInfo;
 import com.termux.ai.TaiFunctionModels.Resolution;
 import com.termux.ai.TaiFunctionModels.Source;
@@ -223,7 +225,7 @@ public class TaiFunctionModelsTest {
         assertNull(resolution.accelerator);
         assertFalse(resolution.warnBackground);
         // The remote model uses no local file, so nothing local is "used by" it.
-        assertTrue(models.usedBy(E2B).isEmpty());
+        assertFalse(models.usedBy(E2B).contains(TaiFunction.ASSISTANT));
     }
 
     @Test
@@ -377,5 +379,120 @@ public class TaiFunctionModelsTest {
         java.util.ArrayList<String> out = new java.util.ArrayList<>();
         for (ModelInfo info : infos) out.add(info.id);
         return Collections.unmodifiableList(out);
+    }
+
+    // ------------------------------------------------------- callers: the resolutions they map from
+
+    private TaiFunctionModels withRemote(Env env, boolean configured, boolean images) {
+        TaiFunctionModels.Store store = new TaiFunctionModels.Store() {
+            @Override public String get(String key) {
+                String value = prefs.get(key);
+                return value == null ? "" : value;
+            }
+
+            @Override public void put(String key, String value) {
+                if (value.isEmpty()) prefs.remove(key);
+                else prefs.put(key, value);
+            }
+        };
+        return new TaiFunctionModels(env, store, () -> installed, new TaiFunctionModels.Remote() {
+            @Override public boolean configured() { return configured; }
+            @NonNull @Override public String modelId() { return "big-model"; }
+            @Override public boolean understandsImages() { return images; }
+            @Override public boolean prefersRemote() { return false; }
+        });
+    }
+
+    @Test
+    public void aRemotePickResolvesToTheRemoteModelWhenTheProviderIsSetUp() {
+        installGemma();
+        TaiFunctionModels models = withRemote(env(12, 34, GpuPath.YES), true, true);
+        models.set(TaiFunction.APP_CATEGORIES, "remote/big-model");
+        Resolution resolution = models.resolve(TaiFunction.APP_CATEGORIES);
+        assertTrue(resolution.isRemote());
+        assertEquals("remote/big-model", resolution.remoteModel);
+        assertEquals("remote/big-model", resolution.requestModel());
+        assertEquals("remote/big-model", resolution.modelId);
+        assertNull(resolution.accelerator);
+        assertFalse(resolution.warnBackground);
+    }
+
+    @Test
+    public void aRemoteReaderNeedsAModelThatTakesImages() {
+        installGemma();
+        TaiFunctionModels models = withRemote(env(12, 34, GpuPath.YES), true, false);
+        models.set(TaiFunction.WALLPAPER_READER, "remote/text-only");
+        Resolution resolution = models.resolve(TaiFunction.WALLPAPER_READER);
+        assertFalse(resolution.isRemote());
+        assertEquals(E4B + "-vision", resolution.modelId);
+        TaiFunctionModels seeing = withRemote(env(12, 34, GpuPath.YES), true, true);
+        seeing.set(TaiFunction.WALLPAPER_READER, "remote/vision-1");
+        assertTrue(seeing.resolve(TaiFunction.WALLPAPER_READER).isRemote());
+    }
+
+    @Test
+    public void aRemotePickWithNoProviderFallsToAutomatic() {
+        installGemma();
+        TaiFunctionModels models = withRemote(env(12, 34, GpuPath.YES), false, true);
+        models.set(TaiFunction.TIDY_DICTATION, "remote/gone");
+        Resolution resolution = models.resolve(TaiFunction.TIDY_DICTATION);
+        assertFalse(resolution.isRemote());
+        assertEquals(E2B, resolution.modelId);
+        assertEquals(Source.AUTOMATIC, resolution.source);
+    }
+
+    @Test
+    public void aRemotePickIsIgnoredByTheFunctionsThatRunNoChatModel() {
+        install("whisper-acft-small", 100L, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
+        TaiFunctionModels models = withRemote(env(12, 34, GpuPath.YES), true, true);
+        models.set(TaiFunction.VOICE_TYPING, "remote/x");
+        assertFalse(models.resolve(TaiFunction.VOICE_TYPING).isRemote());
+        assertEquals("whisper-acft-small", models.resolve(TaiFunction.VOICE_TYPING).modelId);
+    }
+
+    @Test
+    public void categoriesResolveToE2bOnTierTwoAndE4bOnTierThree() {
+        installGemma();
+        Resolution tier2 = models(env(12, 34, GpuPath.YES)).resolve(TaiFunction.APP_CATEGORIES);
+        assertEquals(E2B, tier2.modelId);
+        assertEquals("gpu", tier2.accelerator);
+        assertEquals(E4B, models(env(16, 34, GpuPath.YES)).resolve(TaiFunction.APP_CATEGORIES).modelId);
+    }
+
+    @Test
+    public void rulesOnlyAndRawTextAreTheWithoutModelChoices() {
+        Env tier1 = env(4, 34, GpuPath.YES);
+        Resolution reader = models(tier1).resolve(TaiFunction.WALLPAPER_READER);
+        assertNull(reader.modelId);
+        assertFalse(reader.isRemote());
+        assertEquals(WithoutModel.RULES_ONLY, reader.without);
+        assertEquals(WithoutModel.RAW_TEXT, models(tier1).resolve(TaiFunction.TIDY_DICTATION).without);
+    }
+
+    @Test
+    public void theEmbedderResolvesApartFromTheChatAssistant() {
+        installGemma();
+        install(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID, 200L, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+        TaiFunctionModels models = pong();
+        models.set(TaiFunction.ASSISTANT, E4B);
+        assertEquals(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID, models.resolve(TaiFunction.EMBEDDINGS).modelId);
+        assertEquals(E4B, models.resolve(TaiFunction.ASSISTANT).modelId);
+    }
+
+    @Test
+    public void speechVoiceAndDepthResolveFromTheirPicksThenAutomatic() {
+        install("whisper-acft-small", 100L, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
+        install("whisper-acft-base", 50L, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
+        install(TaiModelCatalog.KITTEN_TTS_NANO_ID, 30L, TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH);
+        install(TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID, 30L, TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION);
+        install(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, 30L, TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION);
+        TaiFunctionModels models = pong();
+        assertEquals("whisper-acft-small", models.resolve(TaiFunction.VOICE_TYPING).modelId);
+        models.set(TaiFunction.VOICE_TYPING, "whisper-acft-base");
+        assertEquals("whisper-acft-base", models.resolve(TaiFunction.VOICE_TYPING).modelId);
+        assertEquals(TaiModelCatalog.KITTEN_TTS_NANO_ID, models.resolve(TaiFunction.READ_ALOUD).modelId);
+        assertEquals(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, models.resolve(TaiFunction.WALLPAPER_DEPTH).modelId);
+        models.set(TaiFunction.WALLPAPER_DEPTH, TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID);
+        assertEquals(TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID, models.resolve(TaiFunction.WALLPAPER_DEPTH).modelId);
     }
 }

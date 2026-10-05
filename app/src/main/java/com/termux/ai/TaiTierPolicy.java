@@ -248,7 +248,9 @@ public final class TaiTierPolicy {
                 return Choice.model(TaiModelCatalog.KITTEN_TTS_NANO_ID, null);
             case APP_CATEGORIES:
                 if (t1) return Choice.without(WithoutModel.OFF);
-                return Choice.model(eight ? E2B : E4B, accel);
+                // The pong benchmark (2026-10-05): E4B sorted 11 of 12 apps, as E2B did, at twice the time
+                // and three times the memory. Only Tier 3, where E4B is the resident assistant, keeps it.
+                return Choice.model(tier == TaiDeviceTier.TIER_3 ? E4B : E2B, accel);
             case WALLPAPER_READER:
                 if (t1) return Choice.without(WithoutModel.RULES_ONLY);
                 return Choice.model(eight ? E2B_VISION : E4B_VISION, accel);
@@ -292,7 +294,7 @@ public final class TaiTierPolicy {
                 break;
             case APP_CATEGORIES:
                 if (!t1) {
-                    if (!eight) chain.add(Choice.model(E2B, accel));
+                    if (tier == TaiDeviceTier.TIER_3) chain.add(Choice.model(E2B, accel));
                     chain.add(Choice.without(WithoutModel.OFF));
                 }
                 break;
@@ -415,12 +417,12 @@ public final class TaiTierPolicy {
         if (!t1) {
             // Tier 3's E2B row is the tidy-dictation helper only: its assistant is E4B.
             List<TaiFunction> e2bFunctions = t3 ? fns(TaiFunction.TIDY_DICTATION)
-                : fns(TaiFunction.ASSISTANT, TaiFunction.TIDY_DICTATION);
+                : fns(TaiFunction.ASSISTANT, TaiFunction.TIDY_DICTATION, TaiFunction.APP_CATEGORIES);
             rows.add(new WelcomeRow("assistant", ids(E2B), e2bFunctions, true));
             if (!eight) {
                 List<TaiFunction> e4bFunctions = t3
                     ? fns(TaiFunction.ASSISTANT, TaiFunction.WALLPAPER_READER, TaiFunction.APP_CATEGORIES)
-                    : fns(TaiFunction.WALLPAPER_READER, TaiFunction.APP_CATEGORIES);
+                    : fns(TaiFunction.WALLPAPER_READER);
                 rows.add(new WelcomeRow("smarter_reading", ids(E4B), e4bFunctions, t3 && !env.noGpu()));
             }
         }

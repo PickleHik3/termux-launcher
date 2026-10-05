@@ -353,12 +353,12 @@ public final class TaiPlatformCaps {
 
     /**
      * The probe's verdict, or an "unknown" answer (GPU {@code UNKNOWN}) until a probe has run in this
-     * process or its cached result has been read with {@link #cached(Context)}. Never blocks.
+     * process or its cached result has been read with {@link #cached(Context)}. Never blocks. The
+     * GPU path carries the canary's verdict when one is stored ({@link TaiGpuVerdict}).
      */
     @NonNull
     public static TaiPlatformCaps cached() {
-        TaiPlatformCaps probed = sProbed;
-        return probed != null ? probed : fromDevice(Facts.unprobed(), false);
+        return withVerdict(rawCached(), null);
     }
 
     /**
@@ -367,6 +367,18 @@ public final class TaiPlatformCaps {
      */
     @NonNull
     public static TaiPlatformCaps cached(@NonNull Context context) {
+        return withVerdict(rawCached(context), context);
+    }
+
+    /** The probe's own answer, without the canary's verdict. */
+    @NonNull
+    static TaiPlatformCaps rawCached() {
+        TaiPlatformCaps probed = sProbed;
+        return probed != null ? probed : fromDevice(Facts.unprobed(), false);
+    }
+
+    @NonNull
+    static TaiPlatformCaps rawCached(@NonNull Context context) {
         TaiPlatformCaps probed = sProbed;
         if (probed != null) return probed;
         Facts stored = storedFacts(prefs(context));
@@ -374,6 +386,40 @@ public final class TaiPlatformCaps {
         TaiPlatformCaps caps = fromDevice(stored, true);
         sProbed = caps;
         return caps;
+    }
+
+    // The verdict file is written by either process: a read stays good for a few seconds, then the file is read again.
+    private static final long VERDICT_TTL_MS = 5_000L;
+    @Nullable private static volatile TaiGpuVerdict.State sVerdict;
+    @Nullable private static volatile String sVerdictKey;
+    private static volatile long sVerdictAt;
+
+    /** Forgets the remembered verdict, after the store changed. */
+    static void invalidateVerdict() {
+        sVerdict = null;
+    }
+
+    /**
+     * {@code caps} with the stored canary verdict applied to its GPU path. With no context the last
+     * verdict read is used, else none (the no-argument {@link #cached()} stays free of file reads).
+     */
+    @NonNull
+    private static TaiPlatformCaps withVerdict(@NonNull TaiPlatformCaps raw, @Nullable Context context) {
+        String key = TaiGpuVerdict.keyFor(raw);
+        TaiGpuVerdict.State state = sVerdict;
+        long now = System.currentTimeMillis();
+        if (context != null && (state == null || !key.equals(sVerdictKey) || now - sVerdictAt > VERDICT_TTL_MS)) {
+            state = TaiGpuVerdict.current(context, raw);
+            sVerdict = state;
+            sVerdictKey = key;
+            sVerdictAt = now;
+        }
+        if (state == null || !key.equals(sVerdictKey)) return raw;
+        GpuPath path = TaiGpuVerdict.apply(raw.gpuPath, state);
+        if (path == raw.gpuPath) return raw;
+        String reason = state == TaiGpuVerdict.State.FAILED ? TaiGpuVerdict.REASON_FAILED : "Checked on this phone.";
+        return new TaiPlatformCaps(raw.sdkInt, raw.liteRtAbiOk, raw.mnnAbiOk,
+            new GpuVerdict(raw.gpuFamily, path, reason), raw.gpuName, raw.gpuDriver, raw.cpuFeatures, raw.probed);
     }
 
     /**

@@ -22,5 +22,12 @@
     <string name="living_missing_item">• %1$s (%2$s)</string>
     <string name="living_missing_open">Open model centre</string>
     <string name="living_missing_not_now">Not now</string>
+    <!-- While a remote reader works. %1$s: the remote model's id. -->
+    <string name="living_stage_asking_remote">Asking %1$s…</string>
+    <string name="living_remote_consent_title">Send the photo to a remote model?</string>
+    <!-- %1$s: the remote server's host. -->
+    <string name="living_remote_consent_message">Your photo is sent to %1$s as two small JPEGs so the remote model can read the scene.</string>
+    <string name="living_remote_consent_continue">Continue</string>
+    <string name="living_remote_consent_on_device">Use on-device instead</string>
     <string name="living_failed">Could not bring the photo to life</string>
 </resources>

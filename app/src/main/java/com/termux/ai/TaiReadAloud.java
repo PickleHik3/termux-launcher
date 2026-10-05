@@ -64,7 +64,7 @@ public final class TaiReadAloud {
     public static boolean isAvailable(@NonNull Context context) {
         long now = SystemClock.elapsedRealtime();
         if (now - availabilityCheckedAt >= AVAILABILITY_CACHE_MS) {
-            available = TaiTtsModels.resolveActive(new TaiModelStore(context.getApplicationContext())) != null;
+            available = TaiTtsModels.resolveActive(context.getApplicationContext(), new TaiModelStore(context.getApplicationContext())) != null;
             availabilityCheckedAt = now;
         }
         return available;
