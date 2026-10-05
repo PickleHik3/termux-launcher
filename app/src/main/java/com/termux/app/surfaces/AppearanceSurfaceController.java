@@ -373,7 +373,10 @@ public final class AppearanceSurfaceController {
         mShown = PageId.OVERVIEW;
         mCovered = true;
         mHost.setCovered(true);
-        final boolean cover = mCoverNextOpen;
+        // Every Overview open covers at once (2026-10-05, pong): while the host faded in, the
+        // live backdrop was already stopped underneath, so the window's own wallpaper (the lock
+        // engine's picture) showed through for a few frames. The page fades in over the cover.
+        final boolean cover = true;
         mCoverNextOpen = false;
         if (cover) {
             view.setBackgroundColor(MaterialColors.getColor(mHost.context(),
