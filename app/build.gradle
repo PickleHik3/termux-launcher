@@ -110,7 +110,7 @@ android {
             manifestPlaceholders = [
                 TERMUX_APP_ALLOW_BACKUP: "false",
                 TERMUX_APP_FULL_BACKUP_CONTENT: "false",
-                TERMUX_APP_USES_CLEARTEXT_TRAFFIC: "false"
+                TERMUX_APP_USES_CLEARTEXT_TRAFFIC: "true" // http only to this phone/private LAN: TaiRemoteClient.checkUrl is the guard
             ]
         }
 

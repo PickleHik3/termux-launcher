@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- TAI settings → Remote model. Every row is non-persistent: TaiRemotePreferencesFragment reads
+     and writes TaiRemoteSettings, which keeps the API key out of plain prefs. -->
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory
+        app:key="tai_remote_server"
+        app:title="@string/tai_remote_server_header">
+        <Preference
+            app:key="tai_remote_base_url"
+            app:title="@string/tai_remote_base_url_title"
+            app:persistent="false"/>
+        <Preference
+            app:key="tai_remote_api_key"
+            app:title="@string/tai_remote_api_key_title"
+            app:persistent="false"/>
+        <Preference
+            app:key="tai_remote_consent"
+            app:summary="@string/tai_remote_consent"
+            app:persistent="false"
+            app:selectable="false"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:key="tai_remote_model_category"
+        app:title="@string/tai_remote_model_header">
+        <Preference
+            app:key="tai_remote_model"
+            app:title="@string/tai_remote_model_title"
+            app:persistent="false"/>
+        <androidx.preference.SwitchPreferenceCompat
+            app:key="tai_remote_images"
+            app:title="@string/tai_remote_images_title"
+            app:persistent="false"/>
+        <Preference
+            app:key="tai_remote_routing_row"
+            app:title="@string/tai_remote_routing_title"
+            app:persistent="false"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:key="tai_remote_actions"
+        app:title="@string/tai_remote_actions_header">
+        <Preference
+            app:key="tai_remote_test"
+            app:title="@string/tai_remote_test_title"
+            app:summary="@string/tai_remote_test_summary"
+            app:persistent="false"/>
+        <Preference
+            app:key="tai_remote_remove"
+            app:title="@string/tai_remote_remove_title"
+            app:summary="@string/tai_remote_remove_summary"
+            app:persistent="false"/>
+    </PreferenceCategory>
+</PreferenceScreen>
