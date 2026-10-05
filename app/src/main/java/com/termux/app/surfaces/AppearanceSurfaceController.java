@@ -276,6 +276,17 @@ public final class AppearanceSurfaceController {
     @Nullable private AppearanceEditorPage mEditorPage;
     /** colorSurface behind the scaled launcher, at index 0 of the content view, while open. */
     @Nullable private View mScrim;
+    /**
+     * The next Overview open covers the launcher at once (an opaque colorSurface host at full
+     * alpha) and fades the page in over that cover, instead of fading the whole host in over the
+     * home screen. For doors that arrive from another activity (Settings' Appearance row): the
+     * launcher's own frame would otherwise show for the time the Overview takes to build.
+     */
+    private boolean mCoverNextOpen;
+
+    public void coverNextOpen() {
+        mCoverNextOpen = true;
+    }
     /** Bumped on every open and close, so a late callback of an older surface does nothing. */
     private int mToken;
     @Nullable private PageId mQueued;
@@ -362,7 +373,16 @@ public final class AppearanceSurfaceController {
         mShown = PageId.OVERVIEW;
         mCovered = true;
         mHost.setCovered(true);
-        view.setAlpha(0f);
+        final boolean cover = mCoverNextOpen;
+        mCoverNextOpen = false;
+        if (cover) {
+            view.setBackgroundColor(MaterialColors.getColor(mHost.context(),
+                com.google.android.material.R.attr.colorSurface, Color.BLACK));
+            view.setAlpha(1f);
+            if (mScrim != null) mScrim.setAlpha(1f);
+        } else {
+            view.setAlpha(0f);
+        }
         mHost.createOverview(mNavigator, overview -> {
             if (!mOpen || token != mToken || mView != view) {
                 overview.release();
@@ -371,13 +391,20 @@ public final class AppearanceSurfaceController {
             mOverview = overview;
             addPage(overview.root());
             overview.onShown();
-            fadeHost(1f, () -> {
+            Runnable settled = () -> {
+                // The page carries its own colorSurface; the host goes clear again so the
+                // editor pages' frame can show through it later.
+                view.setBackground(null);
                 if (mQueued != null) {
                     PageId queued = mQueued;
                     mQueued = null;
                     go(queued);
                 }
-            });
+            };
+            if (cover)
+                fadePageIn(overview.root(), settled);
+            else
+                fadeHost(1f, settled);
         });
     }
 
@@ -952,6 +979,25 @@ public final class AppearanceSurfaceController {
         mHost.onClosed();
         if (byUser)
             mHost.onClosedByUser();
+    }
+
+    /** Fades one page in over an already opaque host (a covered open). */
+    private void fadePageIn(@NonNull View page, @NonNull Runnable end) {
+        if (ReducedMotion.isEnabled(mHost.context())) {
+            page.setAlpha(1f);
+            end.run();
+            return;
+        }
+        page.setAlpha(0f);
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(FADE_MS);
+        animator.setInterpolator(new LinearInterpolator());
+        animator.addUpdateListener(a -> page.setAlpha((Float) a.getAnimatedValue()));
+        track(animator, () -> {
+            page.setAlpha(1f);
+            end.run();
+        });
+        animator.start();
     }
 
     private void fadeHost(float alpha, @NonNull Runnable end) {
