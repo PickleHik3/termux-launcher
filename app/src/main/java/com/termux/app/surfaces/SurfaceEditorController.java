@@ -707,6 +707,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             canvas.setFrameCornerRadiusPx(mFrameCornerPx);
     }
 
+    /**
+     * The page bar's mode pill moved. One session for both modes: switching never asks and never
+     * resets anything.
+     */
+    @Override
+    public void setLayoutMode(boolean layout) {
+        if (layout != mLayoutMode)
+            setLayoutMode(layout, true);
+    }
+
     private void setLayoutMode(boolean layout, boolean animate) {
         setLayoutMode(layout, animate, 0L);
     }
@@ -1249,12 +1259,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The bottom area's events, turned into writes. */
     private final class PanelListener implements AppearanceEditorPanel.Listener {
-        @Override public void onModeChanged(boolean layout) {
-            // One session for both modes: switching never asks and never resets anything.
-            if (layout != mLayoutMode)
-                setLayoutMode(layout, true);
-        }
-
         @Override public void onLookStop(int stop) {
             moveToStop(stop);
         }

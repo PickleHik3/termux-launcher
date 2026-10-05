@@ -52,7 +52,7 @@ import java.util.Map;
  * means is {@link SurfaceEditorController}'s and
  * {@link com.termux.app.layouteditor.LayoutEditorController}'s.
  *
- * <p>The layout is one ConstraintLayout: the top row (the mode pill; Undo and Done are the page bar's) is both modes'; each
+ * <p>The layout is one ConstraintLayout: each
  * mode's rows are a {@link Group}, and a mode switch shows one and hides the other. Row B at
  * Appearance is the Custom row: a heading row with the selection's buttons over up to five
  * vertical {@link LegendSlider}s. It is GONE at a Look stop, so the sheet's height follows its
@@ -71,8 +71,6 @@ final class AppearanceEditorPanel {
 
     /** What the user did in the bottom area. */
     interface Listener {
-        /** The mode pill moved: true for Layout, false for Appearance. */
-        void onModeChanged(boolean layout);
         /** The Look slider settled on a stop (a drag reports each stop it crosses). */
         void onLookStop(int stop);
         /** Layout mode's Style toggle. */
@@ -123,7 +121,6 @@ final class AppearanceEditorPanel {
     private final int mBasePaddingStart;
     private final int mBasePaddingEnd;
 
-    private final MaterialButtonToggleGroup mMode;
     private final Group mAppearanceGroup;
     private final Group mLayoutGroup;
 
@@ -191,7 +188,6 @@ final class AppearanceEditorPanel {
         mBasePaddingBottom = root.getPaddingBottom();
         mBasePaddingStart = root.getPaddingStart();
         mBasePaddingEnd = root.getPaddingEnd();
-        mMode = root.findViewById(R.id.appearance_editor_mode);
         mAppearanceGroup = root.findViewById(R.id.appearance_editor_appearance_group);
         mLayoutGroup = root.findViewById(R.id.appearance_editor_layout_group);
         mLook = root.findViewById(R.id.appearance_editor_look);
@@ -556,12 +552,6 @@ final class AppearanceEditorPanel {
     // ---------------------------------------------------------------------------------- wiring
 
     private void bind() {
-        mMode.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            if (mRestating || !isChecked)
-                return;
-            if (mListener != null)
-                mListener.onModeChanged(checkedId == R.id.appearance_editor_mode_layout);
-        });
         mLook.addOnChangeListener((slider, value, fromUser) -> {
             int stop = AppearanceLooks.stopForSliderValue(value);
             styleLookLabels(stop);
@@ -719,17 +709,10 @@ final class AppearanceEditorPanel {
     }
 
     /**
-     * Shows one mode's rows and checks its segment, without reporting it. Row B keeps its state
+     * Shows one mode's rows (the pill is the page bar's, not the sheet's). Row B keeps its state
      * across a visit to Layout mode: it is Appearance's, so it goes and comes back with that group.
      */
     void setMode(boolean layout) {
-        int id = layout ? R.id.appearance_editor_mode_layout
-            : R.id.appearance_editor_mode_appearance;
-        if (mMode.getCheckedButtonId() != id) {
-            mRestating = true;
-            mMode.check(id);
-            mRestating = false;
-        }
         applyGroups(layout);
     }
 

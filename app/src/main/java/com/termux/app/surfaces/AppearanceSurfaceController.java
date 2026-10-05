@@ -158,6 +158,9 @@ public final class AppearanceSurfaceController {
 
         boolean isLayoutMode();
 
+        /** The page bar's Look | Layout pill: switches the editor's mode (no question, no reset). */
+        void setLayoutMode(boolean layout);
+
         /**
          * Leaving the editor page: asks the unsaved-changes question when there is something to
          * lose, and runs {@code proceed} when the answer lets it go; never when it keeps editing.
@@ -500,6 +503,11 @@ public final class AppearanceSurfaceController {
                 @Override public void onDone() {
                     if (!mTransitioning)
                         mEditor.done();
+                }
+
+                @Override public void onMode(boolean layout) {
+                    if (!mTransitioning)
+                        mEditor.setLayoutMode(layout);
                 }
             });
         mEditorPage = built;
