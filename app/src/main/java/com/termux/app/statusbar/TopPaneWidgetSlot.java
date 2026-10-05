@@ -32,6 +32,8 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     private static final float GAP_DP = 12f;
     /** The least run the media strip or the pinned cards keep beside a compact clock. */
     private static final float SIDE_MIN_DP = 120f;
+    /** Air the clock keeps off the slot's top and bottom edge when it fits itself to the slot. */
+    private static final float CLOCK_AIR_DP = 5f;
     private static final long MEDIA_TRANSITION_MS = 180L;
     private static final long PINNED_TRANSITION_MS = 200L;
 
@@ -48,6 +50,8 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     @Nullable private ViewPropertyAnimator mClockFade;
 
     private TopPaneSlotMode mMode = TopPaneSlotMode.CLOCK_ONLY;
+    /** Whether the clock currently fits itself as a sharer of the slot; flips mid-fade. */
+    private boolean mClockShared;
     @Nullable private Runnable mModeListener;
     @Nullable private HomeAnchorListener mHomeAnchorListener;
 
@@ -203,16 +207,22 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         mMode = mode;
         mPinnedCount = pinnedCount;
         if (cardsChanged && mModeListener != null) mModeListener.run();
-        applyClockForm(mode.clockForm(pinnedCount), animate);
+        applyClockForm(mode.clockForm(pinnedCount), mode != TopPaneSlotMode.CLOCK_ONLY, animate);
         applyChildVisibility(mNotifications, mode.showsNotifications(), animate,
             PINNED_TRANSITION_MS, 0f, 6f);
         applyChildVisibility(mMedia, mode.showsMedia(), animate, MEDIA_TRANSITION_MS, 8f, 0f);
         if (modeChanged) requestLayout();
     }
 
-    private void applyClockForm(@NonNull TopPaneClockForm form, boolean animate) {
+    /** Re-resolves the clock's colour roles; the bar calls it whenever it re-inks. */
+    public void onThemeChanged() {
+        if (mClock != null) mClock.onThemeChanged();
+        invalidate();
+    }
+
+    private void applyClockForm(@NonNull TopPaneClockForm form, boolean shared, boolean animate) {
         TerminalClockWidget clock = mClock;
-        if (clock == null || clock.getForm() == form) return;
+        if (clock == null || (clock.getForm() == form && mClockShared == shared)) return;
         if (mClockFade != null) {
             mClockFade.cancel();
             mClockFade = null;
@@ -220,6 +230,8 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         if (!animate) {
             clock.setAlpha(1f);
             clock.setForm(form);
+            mClockShared = shared;
+            requestLayout();
             return;
         }
         // The update listeners keep the slot's hairline extensions tracking the clock's alpha.
@@ -228,6 +240,8 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             .setUpdateListener(animation -> invalidate())
             .withEndAction(() -> {
                 clock.setForm(form);
+                mClockShared = shared;
+                requestLayout();
                 mClockFade = clock.animate().alpha(1f).setDuration(MEDIA_TRANSITION_MS / 2)
                     .setInterpolator(INTERPOLATOR)
                     .setUpdateListener(animation -> invalidate());
@@ -326,20 +340,24 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         int clockWidth;
         int clockHeight;
         int clockStart = contentStart;
+        float heightBudget = Math.max(1f, height - 2f * dp(CLOCK_AIR_DP));
         if (mMode == TopPaneSlotMode.CLOCK_ONLY) {
             int[] span = clockOnlySpan(width, contentStart, gutter, mClockAlignment);
             clockStart = span[0];
             clockWidth = Math.max(0, span[1] - span[0]);
             clockHeight = height;
+            mClock.setFitBudget(clockWidth, heightBudget, mClockShared);
         } else {
             clockHeight = height;
-            mClock.measure(MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED),
-                MeasureSpec.makeMeasureSpec(clockHeight, MeasureSpec.EXACTLY));
-            // The clock keeps the width its compact face paints, as long as the media strip or
-            // the cards beside it still get a usable run; only then is it cut to just over half.
+            // The clock scales as one entity to the room it is given: the full band minus the
+            // air, and the run the strip or cards beside it leave, which is just over half of
+            // the pane at the least.
             int sideMin = Math.round(dp(SIDE_MIN_DP)) + gap;
             int cap = Math.max(Math.round(available * .55f), available - sideMin);
-            clockWidth = Math.min(mClock.getMeasuredWidth(), Math.max(0, cap));
+            cap = Math.max(0, cap);
+            mClock.setFitBudget(cap, heightBudget, mClockShared);
+            clockWidth = Math.min(cap,
+                (int) Math.ceil(mClock.fitWidthPx(cap, heightBudget, mClockShared)));
         }
         mClock.measure(MeasureSpec.makeMeasureSpec(clockWidth, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(clockHeight, MeasureSpec.EXACTLY));
@@ -391,7 +409,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
                 float band = mClock.fullBandCenterYPx();
                 float bandHeight = mClock.fullBandHeightPx();
                 float centerY = band >= 0f ? mClock.getTop() + band : mClockBounds.exactCenterY();
-                float size = bandHeight > 0f ? bandHeight : dp(28f);
+                float size = bandHeight > 0f ? Math.min(bandHeight, dp(36f)) : dp(28f);
                 mHomeAnchorListener.onHomeAnchor(centerY, size);
             }
         }

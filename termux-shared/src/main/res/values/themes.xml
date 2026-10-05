@@ -75,6 +75,8 @@
         <item name="termuxColorOnAccentContainer">?attr/colorOnSecondaryContainer</item>
         <item name="termuxColorPrimaryContainer">?attr/colorPrimaryContainer</item>
         <item name="termuxColorOnPrimaryContainer">?attr/colorOnPrimaryContainer</item>
+        <item name="termuxColorTertiary">?attr/colorTertiary</item>
+        <item name="termuxColorOnTertiary">?attr/colorOnTertiary</item>
         <item name="termuxColorTertiaryContainer">?attr/colorTertiaryContainer</item>
         <item name="termuxColorOnTertiaryContainer">?attr/colorOnTertiaryContainer</item>
         <item name="termuxColorError">?attr/colorError</item>
