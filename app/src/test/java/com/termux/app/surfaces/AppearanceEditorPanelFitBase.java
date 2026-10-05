@@ -416,7 +416,14 @@ public abstract class AppearanceEditorPanelFitBase {
         assertTrue("the legend keeps a name", slider.shownLegend().length() > 0);
     }
 
-    private void layOut(int heightPx) {    private void assertFits() {
+    private void layOut(int heightPx) {
+        View root = mPanel.view();
+        root.measure(View.MeasureSpec.makeMeasureSpec(mWidthPx, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(heightPx, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, mWidthPx, heightPx);
+    }
+
+    private void assertFits() {
         View root = mPanel.view();
         assertEdges(root, 0, root.getWidth());
 
