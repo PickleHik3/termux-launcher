@@ -276,5 +276,42 @@ public class WallpaperPickerLogicTest {
         assertEquals(1, WallpaperPickerLogic.stripTileCount(0, 3));
         assertEquals(3, WallpaperPickerLogic.stripTileCount(2, 3));
         assertEquals("the recents are capped", 4, WallpaperPickerLogic.stripTileCount(9, 3));
+        assertEquals("five recents plus Same as Home", 6,
+            WallpaperPickerLogic.stripTileCount(9, RecentWallpapers.MAX));
+    }
+
+    @Test
+    public void stripThumbsShrinkToFitSixTiles() {
+        int[] dps = {320, 360, 411};
+        for (int dp : dps) {
+            // Density 1: a strip of (width - 32 card margins - 24 padding) px.
+            int avail = dp - 32 - 24;
+            int[] size = WallpaperPickerLogic.stripThumbSize(avail, 6, 1080, 2400, 112, 4);
+            assertTrue("fits at " + dp, size[0] + 4 <= avail / 6);
+            assertTrue(size[1] <= 112);
+            assertEquals("aspect kept at " + dp, 2400 / 1080f, size[1] / (float) size[0], 0.1f);
+        }
+        int[] roomy = WallpaperPickerLogic.stripThumbSize(2000, 6, 1080, 2400, 112, 4);
+        assertEquals("no growth past the natural width", WallpaperPickerLogic.thumbWidth(112, 1080, 2400), roomy[0]);
+        assertEquals(112, roomy[1]);
+    }
+
+    private static final long MB = 1024L * 1024L;
+
+    @Test
+    public void lowMemoryWarningNamesTheShortfallInMbRoundedUp() {
+        assertEquals(500L, WallpaperPickerLogic.lowMemoryWarning(3000 * MB, 2500 * MB, false));
+        assertEquals("a part of a MB counts as one", 1L,
+            WallpaperPickerLogic.lowMemoryWarning(3000 * MB + 1L, 3000 * MB, false));
+    }
+
+    @Test
+    public void lowMemoryWarningSaysNothingWhenItFitsOrCannotBeKnownOrIsRemote() {
+        assertEquals(0L, WallpaperPickerLogic.lowMemoryWarning(2000 * MB, 2000 * MB, false));
+        assertEquals(0L, WallpaperPickerLogic.lowMemoryWarning(2000 * MB, 4000 * MB, false));
+        assertEquals("a remote reader loads nothing here", 0L,
+            WallpaperPickerLogic.lowMemoryWarning(9000 * MB, 100 * MB, true));
+        assertEquals("no figure for the need", 0L, WallpaperPickerLogic.lowMemoryWarning(0L, 100 * MB, false));
+        assertEquals("no reading of free memory", 0L, WallpaperPickerLogic.lowMemoryWarning(2000 * MB, -1L, false));
     }
 }

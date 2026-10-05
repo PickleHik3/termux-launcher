@@ -309,7 +309,7 @@ public final class StatusBarWidgetView extends LinearLayout {
         int secondary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSecondary,
             ContextCompat.getColor(context, R.color.termux_secondary));
         int tertiary = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorTertiary, primary);
+            com.termux.shared.R.attr.termuxColorTertiary, primary);
         int roleColor = mColorRole == ColorRole.SECONDARY ? secondary
             : mColorRole == ColorRole.TERTIARY ? tertiary : primary;
         if (mMuted) {

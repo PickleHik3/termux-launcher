@@ -357,6 +357,20 @@ public final class LayoutEditorController {
         return mPlan != null && mPlan.isDirty();
     }
 
+    /** The dock's height scale in the orientation being edited, or -1 with no session. */
+    public float dockHeightScale() {
+        return mPlan == null ? -1f : mPlan.dockHeightScale();
+    }
+
+    /**
+     * The dock's height, as the Look editor's Dock size slider writes it: the same write the
+     * dock handle makes in Layout mode, so the session's Undo and dirty state cover it.
+     */
+    public void setDockHeightScale(float scale) {
+        if (mPlan != null)
+            afterCanvasWrite(mPlan.setDockHeightScale(scale));
+    }
+
     /** Undo: every bar back where the session found it, without leaving the editor. */
     public void revert() {
         if (mPlan == null)

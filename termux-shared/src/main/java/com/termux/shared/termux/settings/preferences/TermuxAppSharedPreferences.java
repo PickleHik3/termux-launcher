@@ -2972,7 +2972,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     @NonNull
     public String getSurfaceGlassTint() {
         return knownOrDefault(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT,
-            TERMUX_APP.GLASS_TINT_SCHEME, TERMUX_APP.GLASS_TINT_OBSIDIAN);
+            TERMUX_APP.GLASS_TINT_SCHEME, TERMUX_APP.GLASS_TINT_OBSIDIAN,
+            TERMUX_APP.GLASS_TINT_MATERIAL);
     }
 
     public void setSurfaceGlassTint(@Nullable String tint) {

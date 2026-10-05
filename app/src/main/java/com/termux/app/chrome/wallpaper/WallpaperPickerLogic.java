@@ -223,4 +223,44 @@ public final class WallpaperPickerLogic {
     public static int stripTileCount(int recentPhotos, int maxRecents) {
         return 1 + Math.max(0, Math.min(recentPhotos, maxRecents));
     }
+
+    /**
+     * The strip thumbnail size {width, height}: the photo's portrait aspect at {@code maxHeightPx},
+     * shrunk (aspect kept) until {@code tileCount} equal cells across {@code availablePx} each hold
+     * one with {@code minGapPx} to spare. Never clips; at least 1 px.
+     */
+    @NonNull
+    public static int[] stripThumbSize(int availablePx, int tileCount, int screenShort, int screenLong,
+                                       int maxHeightPx, int minGapPx) {
+        int shortSide = Math.max(1, Math.min(screenShort, screenLong));
+        int longSide = Math.max(1, Math.max(screenShort, screenLong));
+        int natural = thumbWidth(maxHeightPx, shortSide, longSide);
+        int w = natural;
+        if (availablePx > 0 && tileCount > 0) {
+            int cellW = availablePx / tileCount;
+            w = Math.min(w, cellW - Math.max(0, minGapPx));
+        }
+        w = Math.max(1, w);
+        // At the natural width the height is the budget itself: rounding the width and back
+        // would otherwise lose a pixel.
+        int h = w >= natural ? maxHeightPx
+            : Math.max(1, Math.min(maxHeightPx, Math.round(w * (longSide / (float) shortSide))));
+        return new int[] {w, h};
+    }
+
+    /**
+     * The low-memory notice before Bring to life: how many MB the on-device reader needs beyond
+     * what is free (so Android would close apps running in the background), or 0 when there is
+     * nothing to say. A remote reader loads nothing here; unknown figures (zero or less) say nothing.
+     *
+     * @param neededFreeBytes what a load needs free, margin and the floor kept for the phone included
+     * @param availableBytes  what is free now, with the idle models the load may close credited
+     */
+    public static long lowMemoryWarning(long neededFreeBytes, long availableBytes, boolean remote) {
+        if (remote || neededFreeBytes <= 0L || availableBytes < 0L) return 0L;
+        long shortfall = neededFreeBytes - availableBytes;
+        if (shortfall <= 0L) return 0L;
+        long mb = 1024L * 1024L;
+        return (shortfall + mb - 1L) / mb;
+    }
 }

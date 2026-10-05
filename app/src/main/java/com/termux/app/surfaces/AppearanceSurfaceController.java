@@ -4,6 +4,7 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.graphics.Color;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Interpolator;
@@ -17,6 +18,7 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
+import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.ReducedMotion;
 import com.termux.app.terminal.Motion;
@@ -43,8 +45,18 @@ import java.util.function.Consumer;
  * surface opened straight into an editor (a corner tab's Look or Layout, a deep link) has no
  * Overview behind it: Done and Back close it.</p>
  *
+ * <p><b>Shell.</b> Every page wears the same bar ({@link AppearanceEditorPage}): back arrow, the
+ * Wallpaper | Look | Layout pill (a title on the Icon pack page), Undo while the editor is dirty,
+ * and Done, over the page's content. The Overview is the Wallpaper segment, Look and Layout the
+ * other two. Look and Layout's content is the scaled launcher itself, so their bar is over a
+ * transparent region, with a colorSurface scrim behind the container in the content view; the sheet
+ * below the frame keeps only its controls. The bar never moves between pages: the Overview's and
+ * the editor's stand exactly over each other through a hop, and only the content slides to Icons.
+ * Back goes one page toward Wallpaper and then closes; Done closes the surface (saving first in an
+ * editor), after the editor's unsaved-changes question when leaving it.</p>
+ *
  * <p><b>One session.</b> The editor's session (the held wall, its wallpaper decoded when the
- * surface opens and kept under an opaque window, the launcher left as it was) begins when the
+ * surface opens in passthrough mode only, the launcher left as it was) begins when the
  * surface opens and ends when it closes; Look, Layout and the Overview move inside it. The backdrop
  * is told it is covered once when the surface opens and once when it closes.</p>
  *
@@ -79,6 +91,15 @@ public final class AppearanceSurfaceController {
 
         /** The surface closed: let go of everything. */
         void release();
+
+        /**
+         * The part of the page that travels when it slides to or from another page: the content
+         * under the shared bar, never the bar, which stays where it is. The root by default.
+         */
+        @NonNull
+        default View slidingPart() {
+            return root();
+        }
     }
 
     /** The Overview: a {@link Page} that also tells the surface what its hop moves. */
@@ -92,11 +113,17 @@ public final class AppearanceSurfaceController {
         /** The rows that slide down and fade as the editor takes over. */
         @NonNull List<View> leavingViews();
 
-        /** The views that only fade: the top bar and the pager's cards and labels. */
+        /** The views that only fade: the pager's cards and labels (the bar is the surface's and stays). */
         @NonNull List<View> fadingViews();
 
         /** The page's own background, 1 at rest and 0 while the launcher's frame shows through. */
         void setBackgroundAlpha(float alpha);
+
+        /**
+         * The page's bar hidden (false) while the editor's bar stands exactly over it, and shown
+         * again once the editor has left. Nothing by default.
+         */
+        default void setBarVisible(boolean visible) {}
     }
 
     /** What a page asks of the surface. */
@@ -112,6 +139,19 @@ public final class AppearanceSurfaceController {
 
         /** One page back: Icons to the Overview. Spent as a Back press is. */
         void back();
+    }
+
+    /** What the editor tells the page bar over its frame: the mode (the title) and the dirty state (Undo). */
+    public interface PageListener {
+        void onModeChanged(boolean layout);
+
+        void onDirtyChanged(boolean dirty);
+
+        /**
+         * The frame has no wallpaper to show: passthrough mode, and the system's picture could
+         * not be read. The scrim then stays clear so the window's own wallpaper shows through.
+         */
+        void onFrameWallpaperMissing();
     }
 
     /**
@@ -137,6 +177,9 @@ public final class AppearanceSurfaceController {
 
         boolean isLayoutMode();
 
+        /** The page bar's Look | Layout pill: switches the editor's mode (no question, no reset). */
+        void setLayoutMode(boolean layout);
+
         /**
          * Leaving the editor page: asks the unsaved-changes question when there is something to
          * lose, and runs {@code proceed} when the answer lets it go; never when it keeps editing.
@@ -158,6 +201,15 @@ public final class AppearanceSurfaceController {
 
         /** Done in the editor: the surface decides where it goes. */
         void setOnDone(@Nullable Runnable onDone);
+
+        /** The page bar's listener (title by mode, Undo while dirty); told the current state at once. */
+        void setPageListener(@Nullable PageListener listener);
+
+        /** The bar's Undo: the look and the arrangement back to the state at open. */
+        void undo();
+
+        /** The bar's Done: saves, then the done runnable set with {@link #setOnDone} runs. */
+        void done();
 
         /** The activity stopped with the surface up. */
         void onStopWhileOpen();
@@ -232,6 +284,8 @@ public final class AppearanceSurfaceController {
     private boolean mClosingByUser;
     /** Opened straight into an editor: nothing behind it, so Done and Back close. */
     private boolean mDirect;
+    /** Done on Look or Layout: the editor goes back to the Overview, which then closes the surface. */
+    private boolean mCloseAfterHop;
     private boolean mCovered;
     private boolean mTransitioning;
     /** Which page is showing: Overview, an editor (Look or Layout by the editor's mode) or Icons. */
@@ -239,9 +293,26 @@ public final class AppearanceSurfaceController {
     @Nullable private FrameLayout mView;
     @Nullable private OverviewPage mOverview;
     @Nullable private Page mIcons;
+    /** Look and Layout's page bar over the scaled frame; built on the first editor open. */
+    @Nullable private AppearanceEditorPage mEditorPage;
+    /** colorSurface behind the scaled launcher, at index 0 of the content view, while open. */
+    @Nullable private View mScrim;
+    /**
+     * The next Overview open covers the launcher at once (an opaque colorSurface host at full
+     * alpha) and fades the page in over that cover, instead of fading the whole host in over the
+     * home screen. For doors that arrive from another activity (Settings' Appearance row): the
+     * launcher's own frame would otherwise show for the time the Overview takes to build.
+     */
+    private boolean mCoverNextOpen;
+
+    public void coverNextOpen() {
+        mCoverNextOpen = true;
+    }
     /** Bumped on every open and close, so a late callback of an older surface does nothing. */
     private int mToken;
     @Nullable private PageId mQueued;
+    /** A page to go to once the Overview is reached (the Icon pack pill from the editor, or the reverse). */
+    @Nullable private PageId mThen;
     private final List<Animator> mRunning = new ArrayList<>();
 
     public AppearanceSurfaceController(@NonNull Host host, @NonNull Editor editor) {
@@ -305,9 +376,19 @@ public final class AppearanceSurfaceController {
         final int token = mToken;
         mEditor.setOnDone(this::onEditorDone);
         mEditor.beginSession();
+        FrameLayout view = hostView(content);
+        showScrim(content);
         if (page == PageId.LOOK || page == PageId.LAYOUT) {
+            // Straight into an editor: nothing behind it. The backdrop is not covered (it is the
+            // frame's picture and keeps playing, scaled), the host takes no touches, the bar eases
+            // in and the scrim fades up behind the frame as it scales.
             mDirect = true;
             mShown = page;
+            setTakesTouches(false);
+            AppearanceEditorPage bar = ensureEditorPage();
+            bar.root().setVisibility(View.VISIBLE);
+            animateEditorPageIn();
+            fadeScrim(1f);
             mEditor.present(page == PageId.LAYOUT, place, section, 0f, 0f, null);
             return;
         }
@@ -315,8 +396,19 @@ public final class AppearanceSurfaceController {
         mShown = PageId.OVERVIEW;
         mCovered = true;
         mHost.setCovered(true);
-        FrameLayout view = hostView(content);
-        view.setAlpha(0f);
+        // Every Overview open covers at once (2026-10-05, pong): while the host faded in, the
+        // live backdrop was already stopped underneath, so the window's own wallpaper (the lock
+        // engine's picture) showed through for a few frames. The page fades in over the cover.
+        final boolean cover = true;
+        mCoverNextOpen = false;
+        if (cover) {
+            view.setBackgroundColor(MaterialColors.getColor(mHost.context(),
+                com.google.android.material.R.attr.colorSurface, Color.BLACK));
+            view.setAlpha(1f);
+            if (mScrim != null) mScrim.setAlpha(1f);
+        } else {
+            view.setAlpha(0f);
+        }
         mHost.createOverview(mNavigator, overview -> {
             if (!mOpen || token != mToken || mView != view) {
                 overview.release();
@@ -325,13 +417,20 @@ public final class AppearanceSurfaceController {
             mOverview = overview;
             addPage(overview.root());
             overview.onShown();
-            fadeHost(1f, () -> {
+            Runnable settled = () -> {
+                // The page carries its own colorSurface; the host goes clear again so the
+                // editor pages' frame can show through it later.
+                view.setBackground(null);
                 if (mQueued != null) {
                     PageId queued = mQueued;
                     mQueued = null;
                     go(queued);
                 }
-            });
+            };
+            if (cover)
+                fadePageIn(overview.root(), settled);
+            else
+                fadeHost(1f, settled);
         });
     }
 
@@ -371,6 +470,164 @@ public final class AppearanceSurfaceController {
             return;
         view.setClickable(takes);
         view.setFocusable(takes);
+    }
+
+    // ------------------------------------------------------------------- scrim and editor page
+
+    /**
+     * An opaque colorSurface view under the launcher's container while the surface is open: what
+     * shows around the scaled frame, and what hides the system wallpaper in passthrough mode. It
+     * replaces swapping the window's background, a relayout of a window that shows the wallpaper.
+     * Starts clear and fades up with the host (or by itself for a direct editor open).
+     */
+    private void showScrim(@NonNull ViewGroup content) {
+        View scrim = mScrim;
+        if (scrim != null && scrim.getParent() == content)
+            return;
+        scrim = new View(mHost.context());
+        scrim.setBackgroundColor(MaterialColors.getColor(mHost.context(),
+            com.google.android.material.R.attr.colorSurface, Color.BLACK));
+        scrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        scrim.setClickable(false);
+        scrim.setFocusable(false);
+        scrim.setAlpha(0f);
+        content.addView(scrim, 0, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        mScrim = scrim;
+    }
+
+    @VisibleForTesting
+    @Nullable
+    View scrim() {
+        return mScrim;
+    }
+
+    private void fadeScrim(float alpha) {
+        final View scrim = mScrim;
+        if (scrim == null)
+            return;
+        if (ReducedMotion.isEnabled(mHost.context())) {
+            scrim.setAlpha(alpha);
+            return;
+        }
+        ValueAnimator animator = ValueAnimator.ofFloat(scrim.getAlpha(), alpha);
+        animator.setDuration(FADE_MS);
+        animator.setInterpolator(new LinearInterpolator());
+        animator.addUpdateListener(a -> scrim.setAlpha((Float) a.getAnimatedValue()));
+        track(animator, () -> scrim.setAlpha(alpha));
+        animator.start();
+    }
+
+    /**
+     * The scrim leaves with the surface. When the editor's frame is still scaled the session's end
+     * brings it back to full size first, so the scrim stays up for that long: the frame never
+     * grows over a bare window.
+     */
+    private void removeScrim(boolean editorWasUp) {
+        final View scrim = mScrim;
+        mScrim = null;
+        if (scrim == null || !(scrim.getParent() instanceof ViewGroup))
+            return;
+        final ViewGroup parent = (ViewGroup) scrim.getParent();
+        if (!editorWasUp || ReducedMotion.isEnabled(mHost.context())) {
+            parent.removeView(scrim);
+            return;
+        }
+        scrim.postDelayed(() -> parent.removeView(scrim),
+            AppearanceEditorFrame.EXIT_MS + 80L);
+    }
+
+    @NonNull
+    private AppearanceEditorPage ensureEditorPage() {
+        AppearanceEditorPage page = mEditorPage;
+        if (page != null)
+            return page;
+        final AppearanceEditorPage built = new AppearanceEditorPage(mHost.context(),
+            new AppearanceEditorPage.Callbacks() {
+                @Override public void onBack() {
+                    AppearanceSurfaceController.this.onBack();
+                }
+
+                @Override public void onUndo() {
+                    if (!mTransitioning)
+                        mEditor.undo();
+                }
+
+                @Override public void onDone() {
+                    if (!mTransitioning)
+                        mEditor.done();
+                }
+
+                @Override public void onSegment(@NonNull AppearanceEditorPage.Segment segment) {
+                    if (mTransitioning)
+                        return;
+                    if (segment == AppearanceEditorPage.Segment.ICON_PACK) {
+                        if (!mDirect) {
+                            mThen = PageId.ICONS;
+                            mEditor.requestLeave(AppearanceSurfaceController.this::hopToOverview);
+                        }
+                    } else if (segment == AppearanceEditorPage.Segment.WALLPAPER) {
+                        // Leaving for the Overview asks the unsaved-changes question; the pill is
+                        // on Wallpaper only once the answer lets it go.
+                        if (!mDirect)
+                            go(PageId.OVERVIEW);
+                    } else {
+                        mEditor.setLayoutMode(segment == AppearanceEditorPage.Segment.LAYOUT);
+                    }
+                }
+            });
+        built.setWallpaperAvailable(!mDirect);
+        mEditorPage = built;
+        built.root().setVisibility(View.INVISIBLE);
+        addPage(built.root());
+        mEditor.setPageListener(new PageListener() {
+            @Override public void onModeChanged(boolean layout) {
+                built.setLayoutMode(layout);
+            }
+
+            @Override public void onDirtyChanged(boolean dirty) {
+                built.setDirty(dirty);
+            }
+
+            @Override public void onFrameWallpaperMissing() {
+                fadeScrim(0f);
+            }
+        });
+        return built;
+    }
+
+    /**
+     * The editor page's bar at {@code in} (0 hidden, 1 at rest) on linear time for the fade, and
+     * {@code travel} for the quarter-width slide: the same slide and fade as Overview to Icons.
+     */
+    private void applyEditorPage(float in, float travel) {
+        AppearanceEditorPage page = mEditorPage;
+        FrameLayout host = mView;
+        if (page == null)
+            return;
+        float shift = (host == null ? 0 : host.getWidth()) * 0.25f;
+        View root = page.root();
+        root.setAlpha(clamp01((in - 0.2f) * 1.25f));
+        root.setTranslationX(shift * (1f - travel));
+    }
+
+    /** The bar of a direct editor open eases in; instant with animations off. */
+    private void animateEditorPageIn() {
+        if (ReducedMotion.isEnabled(mHost.context())) {
+            applyEditorPage(1f, 1f);
+            return;
+        }
+        final Interpolator settle = Motion.settle();
+        applyEditorPage(0f, 0f);
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(PAGE_MS);
+        animator.setInterpolator(new LinearInterpolator());
+        animator.addUpdateListener(a -> {
+            float f = (Float) a.getAnimatedValue();
+            applyEditorPage(f, settle.getInterpolation(f));
+        });
+        track(animator, () -> applyEditorPage(1f, 1f));
+        animator.start();
     }
 
     private void addPage(@NonNull View root) {
@@ -429,7 +686,10 @@ public final class AppearanceSurfaceController {
         } else if (from == PageId.OVERVIEW && target == PageId.ICONS) {
             slideToIcons();
         } else if (from == PageId.ICONS && target == PageId.OVERVIEW) {
-            slideToOverview();
+            slideToOverview(null);
+        } else if (from == PageId.ICONS && toEditor) {
+            // Icon pack to Look or Layout: back to the Overview, then the usual hop into the editor.
+            slideToOverview(target);
         }
     }
 
@@ -467,14 +727,16 @@ public final class AppearanceSurfaceController {
             mEditor.onStopWhileOpen();
     }
 
-    /** Done in the editor: the look is saved already; back to the Overview, or out for a direct open. */
+    /** Done in the editor: the look is saved already; the surface closes, over the Overview for an opened-through one. */
     private void onEditorDone() {
         if (!mOpen || mTransitioning)
             return;
-        if (mDirect)
+        if (mDirect) {
             closeAnimated();
-        else
+        } else {
+            mCloseAfterHop = true;
             hopToOverview();
+        }
     }
 
     // ---------------------------------------------------------------------------------- the hops
@@ -490,6 +752,10 @@ public final class AppearanceSurfaceController {
             if (!mOpen || token != mToken)
                 return;
             float[] pose = cardPose(overview);
+            // The bar does not move between pages: the editor's bar stands over the Overview's at
+            // once, with only the pill's selection and the end actions different.
+            ensureEditorPage().setLayoutMode(layout);
+            applyEditorPage(1f, 1f);
             final int[] pending = {2};
             Runnable done = () -> {
                 if (--pending[0] > 0 || !mOpen || token != mToken)
@@ -509,6 +775,10 @@ public final class AppearanceSurfaceController {
                 mTransitioning = false;
                 return;
             }
+            AppearanceEditorPage bar = mEditorPage;
+            if (bar != null)
+                bar.root().setVisibility(View.VISIBLE);
+            overview.setBarVisible(false);
             animateOverview(overview, true, HOP_ENTER_MS, done);
         });
     }
@@ -524,15 +794,37 @@ public final class AppearanceSurfaceController {
         final int token = mToken;
         float[] pose = cardPose(overview);
         final int[] pending = {2};
+        // The pill goes to Wallpaper as the editor leaves; the editor's bar stays until the
+        // Overview's own takes its place at the end.
+        if (mEditorPage != null) {
+            mEditorPage.showWallpaper();
+            applyEditorPage(1f, 1f);
+        }
+        overview.setBarVisible(false);
+        final boolean closeAfter = mCloseAfterHop;
+        mCloseAfterHop = false;
         Runnable done = () -> {
             if (--pending[0] > 0 || !mOpen || token != mToken)
                 return;
             mShown = PageId.OVERVIEW;
             mTransitioning = false;
+            AppearanceEditorPage bar = mEditorPage;
+            if (bar != null)
+                bar.root().setVisibility(View.INVISIBLE);
+            overview.setBarVisible(true);
             // The Overview covers the launcher again; only now is it put right, on the next frame
-            // so it never lands on the last frame of the hop.
+            // so it never lands on the last frame of the hop. A Done on Look or Layout closes the
+            // surface from here, over the Overview, as a Done on the Overview does.
             View view = mView;
-            Runnable restore = mEditor::restoreLauncher;
+            final PageId then = mThen;
+            mThen = null;
+            Runnable restore = () -> {
+                mEditor.restoreLauncher();
+                if (then != null && mOpen && token == mToken && !closeAfter)
+                    go(then);
+                if (closeAfter && mOpen && token == mToken)
+                    closeAnimated();
+            };
             if (view != null)
                 view.postOnAnimation(restore);
             else
@@ -542,6 +834,8 @@ public final class AppearanceSurfaceController {
         overview.root().setVisibility(View.VISIBLE);
         overview.onShown();
         applyAway(overview, 1f, 1f);
+        if (mEditorPage != null)
+            mEditorPage.root().setVisibility(View.VISIBLE);
         mEditor.dismiss(pose == null ? -1f : pose[0], pose == null ? 0f : pose[1], done);
         animateOverview(overview, false, HOP_EXIT_MS, done);
     }
@@ -636,12 +930,21 @@ public final class AppearanceSurfaceController {
         slide(overview, icons, true, () -> mShown = PageId.ICONS);
     }
 
-    private void slideToOverview() {
+    private void slideToOverview(@Nullable PageId then) {
         final OverviewPage overview = mOverview;
         final Page icons = mIcons;
         if (overview == null || icons == null)
             return;
-        slide(icons, overview, false, () -> mShown = PageId.OVERVIEW);
+        final int token = mToken;
+        slide(icons, overview, false, () -> {
+            mShown = PageId.OVERVIEW;
+            View view = mView;
+            if (then != null && view != null)
+                view.post(() -> {
+                    if (mOpen && token == mToken)
+                        go(then);
+                });
+        });
     }
 
     /** One page out and the other in, a quarter of the width apart, on the settle curve. */
@@ -651,6 +954,9 @@ public final class AppearanceSurfaceController {
         final int token = mToken;
         final View outRoot = out.root();
         final View inRoot = in.root();
+        // Only the content travels: the bar stays put, as the pages' bars crossfade in place.
+        final View outSlide = out.slidingPart();
+        final View inSlide = in.slidingPart();
         final float shift = (mView == null ? 0 : mView.getWidth()) * 0.25f * (forward ? 1f : -1f);
         inRoot.setVisibility(View.VISIBLE);
         in.onShown();
@@ -659,9 +965,9 @@ public final class AppearanceSurfaceController {
                 return;
             outRoot.setVisibility(View.INVISIBLE);
             outRoot.setAlpha(1f);
-            outRoot.setTranslationX(0f);
+            outSlide.setTranslationX(0f);
             inRoot.setAlpha(1f);
-            inRoot.setTranslationX(0f);
+            inSlide.setTranslationX(0f);
             out.onHidden();
             landed.run();
             mTransitioning = false;
@@ -678,12 +984,12 @@ public final class AppearanceSurfaceController {
             float f = (Float) a.getAnimatedValue();
             float e = settle.getInterpolation(f);
             outRoot.setAlpha(1f - clamp01(f * 1.6f));
-            outRoot.setTranslationX(-shift * e);
+            outSlide.setTranslationX(-shift * e);
             inRoot.setAlpha(clamp01((f - 0.2f) * 1.25f));
-            inRoot.setTranslationX(shift * (1f - e));
+            inSlide.setTranslationX(shift * (1f - e));
         });
         inRoot.setAlpha(0f);
-        inRoot.setTranslationX(shift);
+        inSlide.setTranslationX(shift);
         track(animator, finish);
         animator.start();
     }
@@ -696,7 +1002,7 @@ public final class AppearanceSurfaceController {
             return;
         mClosingByUser = true;
         FrameLayout view = mView;
-        if (view == null || mShown != PageId.OVERVIEW || ReducedMotion.isEnabled(mHost.context())) {
+        if (view == null || (mShown != PageId.OVERVIEW && mShown != PageId.ICONS) || ReducedMotion.isEnabled(mHost.context())) {
             closeNow();
             return;
         }
@@ -734,12 +1040,16 @@ public final class AppearanceSurfaceController {
         mView = null;
         if (view != null && view.getParent() instanceof ViewGroup)
             ((ViewGroup) view.getParent()).removeView(view);
+        mEditor.setPageListener(null);
+        mEditorPage = null;
+        removeScrim(mEditor.isPresented());
         if (mCovered) {
             mCovered = false;
             mHost.setCovered(false);
         }
         mShown = null;
         mDirect = false;
+        mCloseAfterHop = false;
         mEditor.setOnDone(null);
         mEditor.endSession();
         boolean byUser = mClosingByUser;
@@ -749,23 +1059,49 @@ public final class AppearanceSurfaceController {
             mHost.onClosedByUser();
     }
 
+    /** Fades one page in over an already opaque host (a covered open). */
+    private void fadePageIn(@NonNull View page, @NonNull Runnable end) {
+        if (ReducedMotion.isEnabled(mHost.context())) {
+            page.setAlpha(1f);
+            end.run();
+            return;
+        }
+        page.setAlpha(0f);
+        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(FADE_MS);
+        animator.setInterpolator(new LinearInterpolator());
+        animator.addUpdateListener(a -> page.setAlpha((Float) a.getAnimatedValue()));
+        track(animator, () -> {
+            page.setAlpha(1f);
+            end.run();
+        });
+        animator.start();
+    }
+
     private void fadeHost(float alpha, @NonNull Runnable end) {
         FrameLayout view = mView;
         if (view == null) {
             end.run();
             return;
         }
+        final View scrim = mScrim;
         if (ReducedMotion.isEnabled(mHost.context())) {
             view.setAlpha(alpha);
+            if (scrim != null) scrim.setAlpha(alpha);
             end.run();
             return;
         }
         ValueAnimator animator = ValueAnimator.ofFloat(view.getAlpha(), alpha);
         animator.setDuration(FADE_MS);
         animator.setInterpolator(new LinearInterpolator());
-        animator.addUpdateListener(a -> view.setAlpha((Float) a.getAnimatedValue()));
+        animator.addUpdateListener(a -> {
+            float f = (Float) a.getAnimatedValue();
+            view.setAlpha(f);
+            if (scrim != null) scrim.setAlpha(f);
+        });
         track(animator, () -> {
             view.setAlpha(alpha);
+            if (scrim != null) scrim.setAlpha(alpha);
             end.run();
         });
         animator.start();

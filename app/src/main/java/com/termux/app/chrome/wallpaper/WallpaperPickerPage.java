@@ -69,7 +69,7 @@ import java.util.function.Supplier;
  * The Appearance surface's Overview (appearance-round-2026-10-04.md; it began as the wallpaper
  * picker page of lock-live-wallpaper.md, "The picker page"): the fixed heading Appearance, two slot
  * previews (Lock, then Home, each under a small label) in a snap pager, the Lock slot's Motion
- * toggle, the Look / Icon pack / Layout shortcuts, the thumbnail strip and the Apply split button.
+ * toggle, and one row of the Apply split button and Motion over the thumbnail strip.
  *
  * <p>The page reads and writes the slots only through {@link Slots}, which in the app wraps
  * {@link WallpaperSlots}; it never names WallpaperManager or a slot preference. Tapping a
@@ -167,6 +167,15 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             return LivingReader.RULES_ONLY;
         }
 
+        /**
+         * How many MB the on-device {@code reader} needs beyond what is free, so that Android would
+         * close apps running in the background while it runs; 0 when it fits, when the reader is
+         * remote or rules only, or when this cannot be worked out. Not for the main thread.
+         */
+        default long livingShortfallMb(@NonNull LivingReader reader) {
+            return 0L;
+        }
+
         /** Whether the one-time "your photo is sent to a remote model" notice was shown. */
         default boolean remoteConsentShown() {
             return true;
@@ -188,6 +197,11 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         @NonNull
         default List<File> recents() {
             return Collections.emptyList();
+        }
+
+        /** Whether this recent photo was applied as a living still (its tile wears the living glyph). */
+        default boolean recentIsLiving(@NonNull File photo) {
+            return false;
         }
 
         /** A pending photo the page will not apply: its file goes (only a pending file ever does). */
@@ -293,6 +307,22 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
                 return LivingReader.resolve(activity);
             }
 
+            @Override public long livingShortfallMb(@NonNull LivingReader reader) {
+                try {
+                    if (reader.remote || reader.model == null) return 0L;
+                    com.termux.ai.TaiLoadBudget.Plan plan = com.termux.ai.TaiManager.getInstance(activity)
+                        .previewMomentaryLoad(reader.model, reader.accelerator,
+                            com.termux.app.chrome.wallpaper.living.SceneReader.CONTEXT_WINDOW);
+                    if (plan == null || !plan.measured) return 0L;
+                    // Idle models the plan would close are the runtime's own, not other apps.
+                    return WallpaperPickerLogic.lowMemoryWarning(plan.neededFreeBytes(),
+                        plan.availableBytes + plan.evictedBytes(), false);
+                } catch (RuntimeException | LinkageError e) {
+                    Logger.logStackTraceWithMessage(LOG_TAG, "Checking the reader's memory failed", e);
+                    return 0L;
+                }
+            }
+
             @Override public boolean remoteConsentShown() {
                 return new com.termux.ai.TaiRemoteSettings(activity).consentShown();
             }
@@ -316,6 +346,10 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
 
             @NonNull @Override public List<File> recents() {
                 return WallpaperSlots.recentPhotos(activity);
+            }
+
+            @Override public boolean recentIsLiving(@NonNull File photo) {
+                return WallpaperSlots.recentIsLiving(activity, photo);
             }
 
             @Override public void discardPhoto(@NonNull File photo) {
@@ -509,10 +543,9 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private final WallpaperThumbs mThumbs;
 
     private final View mRoot;
-    private final TextView mTitle;
     private final MaterialButton mApply;
+    private final View mApplyRow;
     private final MaterialButton mApplyMore;
-    private final View mIconPack;
     private final LinearProgressIndicator mProgress;
     private final RecyclerView mPager;
     private final LinearLayoutManager mPagerLayout;
@@ -524,7 +557,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private final View mLivingWorking;
     private final TextView mLivingStage;
     /** The "May close apps running in the background" line under Bring to life / Read again. */
-    private final TextView mLivingWarning;
     /** Who reads the photo; read once off the main thread, {@code null} until then. */
     @Nullable private LivingReader mReader;
     private boolean mReaderLoading;
@@ -532,9 +564,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     @Nullable private final LivingStillJob mLivingJob;
     private final LinearLayout mStrip;
     private final MaterialButton mPhoto;
-    private final View mTopBar;
     private final View mStripCard;
-    private final View mShortcuts;
     @Nullable private Drawable mBackground;
 
     @NonNull private WallpaperSlots.State mStored;
@@ -565,8 +595,11 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private final WallpaperPreviewView[] mCards = new WallpaperPreviewView[2];
     private int mCardW;
     private int mCardH;
-    private final int mThumbW;
-    private final int mThumbH;
+    /** Strip thumbnail size: shrunk to fit the row once its width is known ({@link #fitStripThumbs}). */
+    private int mThumbW;
+    private int mThumbH;
+    private List<File> mStripRecents = Collections.emptyList();
+    private int mStripFitWidth = -1;
 
     /** The strip's tiles, in order: Same as Home first, then the recently applied photos. */
     private final List<Tile> mTiles = new ArrayList<>();
@@ -645,13 +678,10 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         }
 
         mRoot = LayoutInflater.from(context).inflate(R.layout.wallpaper_picker_page, null, false);
-        mTitle = mRoot.findViewById(R.id.wallpaper_picker_title);
-        mTopBar = mRoot.findViewById(R.id.wallpaper_picker_top_bar);
         mStripCard = mRoot.findViewById(R.id.wallpaper_picker_strip_card);
-        mShortcuts = mRoot.findViewById(R.id.wallpaper_picker_shortcuts);
         mApply = mRoot.findViewById(R.id.wallpaper_picker_apply);
+        mApplyRow = mRoot.findViewById(R.id.wallpaper_picker_apply_row);
         mApplyMore = mRoot.findViewById(R.id.wallpaper_picker_apply_more);
-        mIconPack = mRoot.findViewById(R.id.wallpaper_picker_icon_pack);
         mProgress = mRoot.findViewById(R.id.wallpaper_picker_progress);
         mPager = mRoot.findViewById(R.id.wallpaper_picker_pager);
         mMotionRow = mRoot.findViewById(R.id.wallpaper_picker_motion_row);
@@ -660,17 +690,13 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mLivingOffer = mRoot.findViewById(R.id.wallpaper_picker_living_offer);
         mLivingWorking = mRoot.findViewById(R.id.wallpaper_picker_living_working);
         mLivingStage = mRoot.findViewById(R.id.wallpaper_picker_living_stage);
-        mLivingWarning = mRoot.findViewById(R.id.wallpaper_picker_living_warning);
         mLivingBar = mRoot.findViewById(R.id.wallpaper_picker_living_progress);
         mLivingJob = livingOffered() ? mSlots.livingJob() : null;
         mStrip = mRoot.findViewById(R.id.wallpaper_picker_strip);
         mPhoto = mRoot.findViewById(R.id.wallpaper_picker_photo);
 
-        // The heading is the surface's, not the centred slot's: the cards carry their own labels.
-        mTitle.setText(R.string.wallpaper_picker_title);
-        mRoot.findViewById(R.id.wallpaper_picker_back).setOnClickListener(v -> {
-            if (!mReleased) mClose.run();
-        });
+        // The bar (back, the Wallpaper | Look | Layout pill, Done) is the surface's shared frame:
+        // the page holds Apply under the cards and nothing above them.
         mApply.setOnClickListener(v -> applyBoth());
         mApplyMore.setOnClickListener(v -> showApplyMenu());
         mPhoto.setOnClickListener(v -> {
@@ -681,7 +707,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             mHandedOff = true;
             mListener.onPickPhoto(slot, back);
         });
-        mRoot.findViewById(R.id.wallpaper_picker_look).setOnClickListener(v -> openEditor(false));
         mRoot.findViewById(R.id.wallpaper_picker_more_settings).setOnClickListener(v -> {
             if (!mReleased) mSlots.openMoreSettings();
         });
@@ -690,10 +715,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mRoot.findViewById(R.id.wallpaper_picker_living_cancel).setOnClickListener(v -> {
             if (mLivingJob != null) mLivingJob.cancel();
         });
-        mIconPack.setOnClickListener(v -> {
-            if (!mBusy && !mReleased) mListener.onOpenIcons();
-        });
-        mRoot.findViewById(R.id.wallpaper_picker_layout).setOnClickListener(v -> openEditor(true));
 
         mMotion.setChecked(motionOf(mCentred));
         mMotion.setOnCheckedChangeListener((b, on) -> onMotionToggled(on));
@@ -703,6 +724,9 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mPagerLayout = new LinearLayoutManager(context, RecyclerView.HORIZONTAL, false);
         mPager.setLayoutManager(mPagerLayout);
         mPager.setAdapter(new CardAdapter());
+        // Start laid out at the centred card (Home): the first layout pass must not centre the
+        // Lock card at position 0, which is bound and played for a frame before sizeCards scrolls.
+        mPagerLayout.scrollToPositionWithOffset(initialPosition(mCentred), 0);
         mSnap.attachToRecyclerView(mPager);
         mPager.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
@@ -721,6 +745,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         });
 
         buildStrip(loaded.recents);
+        mStrip.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> fitStripThumbs(r - l));
         mRoot.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(@NonNull View v) {
                 mMain.removeCallbacks(mClockTick);
@@ -775,13 +800,13 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     @NonNull
     @Override
     public List<View> leavingViews() {
-        return Arrays.asList(mStripCard, mMotionRow, mShortcuts);
+        return Arrays.asList(mApplyRow, mStripCard);
     }
 
     @NonNull
     @Override
     public List<View> fadingViews() {
-        return Arrays.asList(mTopBar, mProgress, mPager);
+        return Arrays.asList(mProgress, mPager);
     }
 
     @Override
@@ -1078,13 +1103,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mSettingMotion = false;
     }
 
-    /** Look or Layout: the surface shows the editor; this page stays built, hidden, behind it. */
-    private void openEditor(boolean layout) {
-        if (mBusy || mReleased) return;
-        if (layout) mListener.onOpenLayout();
-        else mListener.onOpenLook();
-    }
-
     /**
      * The surface closed (back, the arrow, or Photo…): the page lets go of everything. Thumbnails
      * are recycled here and only here, so no view may still hold one.
@@ -1287,11 +1305,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mLivingWorking.setVisibility(row == WallpaperPickerLogic.MotionRow.WORKING ? View.VISIBLE : View.GONE);
         if (row == WallpaperPickerLogic.MotionRow.WORKING) showLivingProgress(job.lastProgress());
         loadReaderOnce();
-        // Under the action that would load the reader: a big model may make Android close cached apps.
-        LivingReader reader = mReader;
-        boolean action = row == WallpaperPickerLogic.MotionRow.OFFER
-            || (row == WallpaperPickerLogic.MotionRow.SWITCH && WallpaperPickerLogic.isLiving(shown));
-        mLivingWarning.setVisibility(action && reader != null && reader.warnBackground ? View.VISIBLE : View.GONE);
     }
 
     /** Resolves who reads the photo, once, off the main thread; the row redraws when it lands. */
@@ -1344,6 +1357,9 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         if (photo != null) startLiving(photo);
     }
 
+    /** The reader's memory check is out on the I/O thread: another tap waits for it. */
+    private boolean mMemoryChecking;
+
     private void startLiving(@NonNull File photo) {
         LivingStillJob job = mLivingJob;
         if (job == null) return;
@@ -1364,8 +1380,53 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             showRemoteConsent(photo, reader);
             return;
         }
+        checkMemoryThenStart(photo, reader);
+    }
+
+    /**
+     * Before the reader loads: when an on-device model needs room from other apps, one notice says
+     * so. The check runs on the I/O thread; a remote reader, a plan that fits and a check that
+     * fails all go straight ahead.
+     */
+    private void checkMemoryThenStart(@NonNull File photo, @NonNull LivingReader reader) {
+        if (mMemoryChecking) return;
+        if (reader.remote || reader.model == null) {
+            startNow(photo);
+            return;
+        }
+        mMemoryChecking = true;
+        mIo.run(() -> mSlots.livingShortfallMb(reader), mb -> {
+            mMemoryChecking = false;
+            if (mReleased) return;
+            if (mb != null && mb > 0L) showLowMemory(photo, mb);
+            else startNow(photo);
+        });
+    }
+
+    private void startNow(@NonNull File photo) {
+        LivingStillJob job = mLivingJob;
+        if (job == null) return;
         if (!job.start(photo)) showError(R.string.living_busy);
         refreshMotionRow();
+    }
+
+    /** "Low memory": the reader needs {@code mb} MB more than is free; Continue starts it anyway. */
+    private void showLowMemory(@NonNull File photo, long mb) {
+        final androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(mContext)
+            .setTitle(R.string.living_low_memory_title)
+            .setMessage(mContext.getString(R.string.living_low_memory_message, (int) Math.min(mb, Integer.MAX_VALUE)))
+            .setPositiveButton(R.string.living_low_memory_continue, (d, which) -> {
+                if (!mReleased) startNow(photo);
+            })
+            .setNegativeButton(R.string.living_missing_not_now, null)
+            .create();
+        androidx.appcompat.app.AlertDialog previous = mConsentDialog;
+        mConsentDialog = dialog;
+        dialog.setOnDismissListener(d -> {
+            if (mConsentDialog == dialog) mConsentDialog = null;
+        });
+        if (previous != null) previous.dismiss();
+        dialog.show();
     }
 
     /**
@@ -1475,6 +1536,11 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     }
 
     // --- pager ---
+
+    /** The pager position a page opens at: the centred slot's card (Home unless restored on Lock). */
+    static int initialPosition(@NonNull WallpaperSlots.Slot centred) {
+        return centred == WallpaperSlots.Slot.LOCK ? POS_LOCK : POS_HOME;
+    }
 
     private void sizeCards(int pagerW, int pagerH) {
         if (pagerW <= 0 || pagerH <= 0) return;
@@ -1670,6 +1736,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
      * whether it holds two tiles or four. No heading and no badge says what the photos are.
      */
     private void buildStrip(@NonNull List<File> recents) {
+        mStripRecents = recents;
         mStrip.removeAllViews();
         mTiles.clear();
         mSameAsHomeTile = addTile(WallpaperSlots.Choice.sameAsHome(),
@@ -1681,6 +1748,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             mRecentTiles++;
             Tile tile = addTile(WallpaperSlots.Choice.photo(photo),
                 mContext.getString(R.string.wallpaper_picker_recent_photo, mRecentTiles), false);
+            if (mSlots.recentIsLiving(photo)) addLivingBadge((FrameLayout) tile.view);
             final ShapeableImageView image = tile.image;
             final String key = photo.getAbsolutePath();
             image.setTag(key);
@@ -1688,6 +1756,47 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
                 if (key.equals(image.getTag())) image.setImageBitmap(bmp);
             });
         }
+    }
+
+    /**
+     * Sizes the thumbnails to the strip's real width ({@link WallpaperPickerLogic#stripThumbSize}):
+     * never clipped, aspect kept. Rebuilds the row only when the size actually changes.
+     */
+    private void fitStripThumbs(int stripWidth) {
+        if (stripWidth <= 0 || stripWidth == mStripFitWidth || mReleased) return;
+        mStripFitWidth = stripWidth;
+        int avail = stripWidth - mStrip.getPaddingStart() - mStrip.getPaddingEnd();
+        DisplayMetrics dm = mContext.getResources().getDisplayMetrics();
+        int[] size = WallpaperPickerLogic.stripThumbSize(avail,
+            WallpaperPickerLogic.stripTileCount(mStripRecents.size(), RecentWallpapers.MAX),
+            dm.widthPixels, dm.heightPixels, dp(THUMB_HEIGHT_DP), dp(4));
+        if (size[0] == mThumbW && size[1] == mThumbH) return;
+        mThumbW = size[0];
+        mThumbH = size[1];
+        // Rebuilding inside a layout pass is not allowed: post it.
+        mMain.post(() -> {
+            if (mReleased) return;
+            buildStrip(mStripRecents);
+            applyCentred();
+        });
+    }
+
+    /** The living glyph at the foot of a recent photo that was applied as a living still. */
+    private void addLivingBadge(@NonNull FrameLayout cell) {
+        ImageView badge = new ImageView(mContext);
+        badge.setImageResource(R.drawable.ic_symbol_bring_to_life);
+        badge.setImageTintList(ColorStateList.valueOf(MaterialColors.getColor(mContext,
+            com.google.android.material.R.attr.colorOnSecondaryContainer, 0)));
+        badge.setScaleType(ImageView.ScaleType.CENTER);
+        int size = Math.max(dp(16), Math.min(dp(24), mThumbW - dp(4)));
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size,
+            Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        lp.bottomMargin = dp(4);
+        cell.addView(badge, lp);
+        badge.setBackground(EditorM3.surface(badge,
+            com.google.android.material.R.attr.shapeAppearanceCornerExtraLarge,
+            com.google.android.material.R.attr.colorSecondaryContainer));
+        badge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
 
     @NonNull

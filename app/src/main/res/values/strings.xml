@@ -161,9 +161,9 @@
         <item quantity="other">%1$s and %2$d more</item>
     </plurals>
     <string-array name="terminal_contrast_entries">
-        <item>Softer</item>
-        <item>Default</item>
-        <item>Harder</item>
+        <item>Softer · pastel</item>
+        <item>Default · system</item>
+        <item>Harder · punchy</item>
     </string-array>
     <string-array name="terminal_contrast_values">
         <item>softer</item>
@@ -1844,7 +1844,6 @@
                 <!-- One shape for the two chips on the status row: the sessions indicator and the
                      window pills. Content inside the bar, not a surface, so it has its own knob. -->
                 <string name="termux_surface_tuning_indicator_radius">Chip radius</string>
-                <string name="termux_surface_tuning_clock_chevron">▾</string>
                 <string name="termux_surface_tuning_clock_open">Change the clock face or position</string>
                 <string name="termux_surface_tuning_clock_face_description">%1$s clock face</string>
                 <string name="termux_surface_tuning_clock_position_description">%1$s clock position</string>
@@ -2619,13 +2618,13 @@
     <string name="help_key_keyboard">Keyboard</string>
     <string name="help_key_secondary">↑ %1$s</string>
     <string name="help_topic_dock_purpose">The dock holds your pinned apps, the A–Z index and the extra keys.</string>
-    <string name="help_topic_dock_action">Pull the apps row away from its edge for the app drawer.</string>
+    <string name="help_topic_dock_action">Pull down to open the app drawer, or away from the edge if the apps row is anywhere but the bottom.</string>
     <string name="help_topic_dock_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
     <string name="help_topic_az_purpose">The A–Z index picks an app by its first letter.</string>
     <string name="help_topic_az_action">Slide along it, then drag up to the app you want.</string>
     <string name="help_topic_az_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
     <string name="help_topic_status_purpose">The status bar starts with your session number, then your windows, and shows which place you are on.</string>
-    <string name="help_topic_status_action">Swipe down from the page\'s top border, or drag the bar down, to open it.</string>
+    <string name="help_topic_status_action">Swipe down from the page\'s top border, or drag the bar down, to expand it.</string>
     <string name="help_topic_status_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
     <string name="help_topic_stats_purpose">The status widgets show how the phone is doing.</string>
     <string name="help_topic_stats_action">Tap one for details.</string>

@@ -17,6 +17,7 @@ import android.view.MenuItem;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -37,8 +38,11 @@ import com.google.android.material.shape.ShapeAppearanceModel;
 import com.google.android.material.slider.Slider;
 
 import com.termux.R;
+import com.termux.app.surfaces.AppearanceLooks.Control;
+import com.termux.app.surfaces.AppearanceLooks.Door;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -48,30 +52,25 @@ import java.util.Map;
  * means is {@link SurfaceEditorController}'s and
  * {@link com.termux.app.layouteditor.LayoutEditorController}'s.
  *
- * <p>The layout is one ConstraintLayout: the top row (mode pill, Undo, Done) is both modes'; each
- * mode's rows are a {@link Group}, and a mode switch shows one and hides the other. Row B
- * (the tapped element's controls) is GONE until an element is tapped, so the sheet's height
- * follows its content: {@link #measureFor} is the height for what shows now, and
- * {@link #measureTallest} the height with Row B up, which the frame stands above.</p>
+ * <p>The layout is one ConstraintLayout: each
+ * mode's rows are a {@link Group}, and a mode switch shows one and hides the other. Row B at
+ * Appearance is the Custom row: a heading row with the selection's buttons over up to five
+ * vertical {@link LegendSlider}s. It is GONE at a Look stop, so the sheet's height follows its
+ * content: {@link #measureFor} is the height for what shows now, and {@link #measureTallest} the
+ * height with Row B up, which the frame stands above. Row B is one height whatever is selected.</p>
  *
  * <p>Every restatement from code runs with {@link #mRestating} set, so a value the controller
  * pushes in is never read back as the user's.</p>
  *
- * <p>Layout editor v2 (DECISIONS items 2, 3, 10, 12, 13 and 15): Layout's Row A ends in eye-off,
- * the only hide drop target, whose tap opens the hidden tiles in Row B's place; Appearance's Row B
- * carries the global Blur, Opacity and Grain at the Custom stop with nothing tapped, and the
- * keyboard's Blur with its "Keyboard theme" door. Selected segments wear primaryContainer and
- * onPrimaryContainer. While the keyboard is selected its type chips and Key radius take Layout's
- * Row B in the same way.</p>
+ * <p>Layout mode's Row A ends in eye-off, the only hide drop target, whose tap opens the hidden
+ * tiles in Row B's place. While the keyboard is selected its type chips and Key radius take
+ * Layout's Row B in the same way. Selected segments wear primaryContainer and
+ * onPrimaryContainer.</p>
  */
 final class AppearanceEditorPanel {
 
     /** What the user did in the bottom area. */
     interface Listener {
-        /** The mode pill moved: true for Layout, false for Appearance. */
-        void onModeChanged(boolean layout);
-        void onUndo();
-        void onDone();
         /** The Look slider settled on a stop (a drag reports each stop it crosses). */
         void onLookStop(int stop);
         /** Layout mode's Style toggle. */
@@ -80,26 +79,32 @@ final class AppearanceEditorPanel {
         void onCorners(int value, boolean dragging);
         /** Layout mode's Margin slider, in dp. */
         void onMargin(int value, boolean dragging);
-        /** Row B's first slider (Opacity, the keyboard's Blur, or the global Blur). */
-        void onFirstSlider(int value, boolean dragging);
-        /** Row B's middle slider: the global Opacity. */
-        void onMiddleSlider(int value, boolean dragging);
-        /** Row B's last column as a button: the keyboard's "Keyboard theme". */
-        void onSecondButton();
-        /** Row B's first segmented control (Soften wallpaper), by segment index. */
-        void onFirstSegment(int index);
-        /** The terminal's Text contrast, by stop: 0 Low (Softer), 1 Normal (Default), 2 High (Harder). */
-        void onLegibility(int index);
+        /** One of the Custom row's sliders moved to {@code value}, in the control's own units. */
+        void onSlider(@NonNull Control control, int value, boolean dragging);
+        /** A slider was released; deferred work settles here. */
+        void onSliderReleased();
+        /** A button of the heading row: Keyboard theme, or Clock (with the button to anchor to). */
+        void onDoor(@NonNull Door door, @NonNull View anchor);
         /** The terminal's Trail menu: the cursor-trail style id the user chose. */
         void onTrailStyle(@NonNull String id);
         /** The terminal's Effect menu: the retro effect id the user chose. */
         void onRetroEffect(@NonNull String id);
-        /** Row B's last slider (Blur, Dim or the global Grain). */
-        void onSecondSlider(int value, boolean dragging);
-        /** The terminal's fourth column: its Grain. */
-        void onThirdSlider(int value, boolean dragging);
-        /** A slider was released; deferred work settles here. */
-        void onSliderReleased();
+    }
+
+    /** What one of the Custom row's sliders shows: its control, value and legend. */
+    static final class SliderState {
+        @NonNull final Control control;
+        final int value;
+        final boolean enabled;
+        @NonNull final com.google.android.material.slider.LabelFormatter legend;
+
+        SliderState(@NonNull Control control, int value, boolean enabled,
+                    @NonNull com.google.android.material.slider.LabelFormatter legend) {
+            this.control = control;
+            this.value = value;
+            this.enabled = enabled;
+            this.legend = legend;
+        }
     }
 
     private static final int[] LOOK_LABELS = {
@@ -116,9 +121,6 @@ final class AppearanceEditorPanel {
     private final int mBasePaddingStart;
     private final int mBasePaddingEnd;
 
-    private final MaterialButtonToggleGroup mMode;
-    private final MaterialButton mUndo;
-    private final MaterialButton mDone;
     private final Group mAppearanceGroup;
     private final Group mLayoutGroup;
 
@@ -130,21 +132,17 @@ final class AppearanceEditorPanel {
 
     private final View mRow2;
     private final TextView mRow2Name;
-    private final TextView mFirstLabel;
-    private final Slider mFirstSlider;
-    private final MaterialButtonToggleGroup mSoft;
-    private final TextView mLegibilityLabel;
-    private final Slider mLegibility;
+    private final LinearLayout mSliderRow;
+    private final LegendSlider[] mSliders = new LegendSlider[AppearanceLooks.MAX_CONTROLS];
+    /** The control each slider column stands for now; null for a hidden column. */
+    private final Control[] mSliderControls = new Control[AppearanceLooks.MAX_CONTROLS];
+    private final boolean[] mSliderDragging = new boolean[AppearanceLooks.MAX_CONTROLS];
+    /** Whether each column may be moved (Contrast is not while the palette is a scheme file). */
+    private final boolean[] mSliderEnabled = new boolean[AppearanceLooks.MAX_CONTROLS];
+    private final MaterialButton mKeyboardTheme;
+    private final MaterialButton mClock;
     private final MaterialButton mTrail;
     private final MaterialButton mEffect;
-    private final TextView mTrailLabel;
-    private final TextView mEffectLabel;
-    private final TextView mSecondLabel;
-    private final Slider mSecondSlider;
-    private final Slider mMiddleSlider;
-    private final TextView mThirdLabel;
-    private final Slider mThirdSlider;
-    private final MaterialButton mSecondButton;
 
     private final MaterialButtonToggleGroup mOrientation;
     private final MaterialButtonToggleGroup mStyle;
@@ -166,16 +164,12 @@ final class AppearanceEditorPanel {
      * under the finger: the sheet's height is measured once, not per tick.
      */
     private final Map<TextView, CharSequence[]> mReadoutRange = new HashMap<>();
-    /** Row B's label lines while measureTallest sizes the frame's anchor: 2, otherwise 1. */
-    private int mRow2MinLines = 1;
     private final Slider mKeyRadius;
 
     /** Whether Layout mode's rows are showing in place of Appearance's. */
     private boolean mLayoutMode;
     /** Whether Row B is up (an element is tapped at the Custom stop); kept across Layout mode. */
     private boolean mRow2Shown;
-    /** Whether Text contrast may be moved (the Material palette is on). */
-    private boolean mLegibilityEnabled = true;
     @NonNull private String mTrailId = "default";
     @NonNull private String mEffectId = "none";
     /** Whether the hidden tiles stand in Layout's Row B, in Corner radius and Margin's place. */
@@ -185,10 +179,6 @@ final class AppearanceEditorPanel {
 
     @Nullable private Listener mListener;
     private boolean mRestating;
-    private boolean mFirstDragging;
-    private boolean mSecondDragging;
-    private boolean mMiddleDragging;
-    private boolean mThirdDragging;
     private boolean mCornersDragging;
     private boolean mMarginDragging;
 
@@ -198,30 +188,22 @@ final class AppearanceEditorPanel {
         mBasePaddingBottom = root.getPaddingBottom();
         mBasePaddingStart = root.getPaddingStart();
         mBasePaddingEnd = root.getPaddingEnd();
-        mMode = root.findViewById(R.id.appearance_editor_mode);
-        mUndo = root.findViewById(R.id.appearance_editor_undo);
-        mDone = root.findViewById(R.id.appearance_editor_done);
         mAppearanceGroup = root.findViewById(R.id.appearance_editor_appearance_group);
         mLayoutGroup = root.findViewById(R.id.appearance_editor_layout_group);
         mLook = root.findViewById(R.id.appearance_editor_look);
         mLookLabels = root.findViewById(R.id.appearance_editor_look_labels);
         mRow2 = root.findViewById(R.id.appearance_editor_row2);
         mRow2Name = root.findViewById(R.id.appearance_editor_row2_name);
-        mFirstLabel = root.findViewById(R.id.appearance_editor_c1_label);
-        mFirstSlider = root.findViewById(R.id.appearance_editor_c1_slider);
-        mSoft = root.findViewById(R.id.appearance_editor_c1_soft);
-        mLegibilityLabel = root.findViewById(R.id.appearance_editor_cl_label);
-        mLegibility = root.findViewById(R.id.appearance_editor_legibility);
+        mSliderRow = root.findViewById(R.id.appearance_editor_sliders);
+        int[] sliderIds = {R.id.appearance_editor_slider_0, R.id.appearance_editor_slider_1,
+            R.id.appearance_editor_slider_2, R.id.appearance_editor_slider_3,
+            R.id.appearance_editor_slider_4};
+        for (int i = 0; i < mSliders.length; i++)
+            mSliders[i] = root.findViewById(sliderIds[i]);
+        mKeyboardTheme = root.findViewById(R.id.appearance_editor_door_keyboard_theme);
+        mClock = root.findViewById(R.id.appearance_editor_door_clock);
         mTrail = root.findViewById(R.id.appearance_editor_trail);
         mEffect = root.findViewById(R.id.appearance_editor_effect);
-        mTrailLabel = root.findViewById(R.id.appearance_editor_trail_label);
-        mEffectLabel = root.findViewById(R.id.appearance_editor_effect_label);
-        mSecondLabel = root.findViewById(R.id.appearance_editor_c2_label);
-        mSecondSlider = root.findViewById(R.id.appearance_editor_c2_slider);
-        mMiddleSlider = root.findViewById(R.id.appearance_editor_cl_slider);
-        mThirdLabel = root.findViewById(R.id.appearance_editor_c3_label);
-        mThirdSlider = root.findViewById(R.id.appearance_editor_c3_slider);
-        mSecondButton = root.findViewById(R.id.appearance_editor_c2_button);
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
         mStyle = root.findViewById(R.id.appearance_editor_style);
         mHidden = root.findViewById(R.id.layout_editor_hidden);
@@ -245,7 +227,7 @@ final class AppearanceEditorPanel {
         mLayoutGroup.setReferencedIds(new int[] {R.id.layout_editor_orientation,
             R.id.appearance_editor_style, R.id.layout_editor_hidden});
         applyGroups(false);
-        applyRow2(false, false);
+        applyRow2(false);
         paintSheet();
         paintSelectedSegments(mOrientation);
         paintSelectedSegments(mStyle);
@@ -328,9 +310,11 @@ final class AppearanceEditorPanel {
     }
 
     /**
-     * The tallest the sheet gets in {@code layout} mode: Appearance with Row B up and its labels
-     * on two lines, whether or not an element is tapped. The frame stands above this, so it never
-     * moves when Row B comes and goes. Layout mode's rows are the same at every moment.
+     * The tallest the sheet gets in {@code layout} mode: Appearance with Row B up, whether or not
+     * the Custom stop is showing. Row B is one height whatever is selected (a 48dp heading row
+     * over sliders of one fixed length), so this is the height at the Custom stop, and the frame
+     * stands above it: it never moves when Row B comes and goes. Layout mode's rows are the same
+     * at every moment.
      */
     int measureTallest(boolean layout, int widthPx) {
         if (layout)
@@ -338,34 +322,8 @@ final class AppearanceEditorPanel {
         boolean shown = mLayoutMode;
         boolean rowShown = mRow2Shown;
         mRow2Shown = true;
-        mRow2MinLines = 2;
-        // The terminal's Trail row is the tallest Row B gets, so the frame stands above it.
-        int trailVisibility = mTrail.getVisibility();
-        setTrailVisibility(View.VISIBLE);
         applyGroups(false);
-        // Row B at its fullest, whichever element (or none) is tapped now: the first and middle
-        // slots shown, so the anchor does not depend on what Row B happens to hold.
-        View[] slots = {mFirstLabel, mFirstSlider, mLegibilityLabel, mLegibility, mThirdLabel,
-            mThirdSlider};
-        int[] slotVisibility = new int[slots.length];
-        for (int i = 0; i < slots.length; i++) {
-            slotVisibility[i] = slots[i].getVisibility();
-            slots[i].setVisibility(View.VISIBLE);
-        }
         int height = measureNow(widthPx);
-        // The keyboard's "Keyboard theme" door may wrap to two lines in a narrow column, which
-        // can stand taller than a slider: the tallest Row B is measured with it too.
-        int sliderVisibility = mSecondSlider.getVisibility();
-        int buttonVisibility = mSecondButton.getVisibility();
-        mSecondSlider.setVisibility(View.GONE);
-        mSecondButton.setVisibility(View.VISIBLE);
-        height = Math.max(height, measureNow(widthPx));
-        mSecondSlider.setVisibility(sliderVisibility);
-        mSecondButton.setVisibility(buttonVisibility);
-        for (int i = 0; i < slots.length; i++)
-            slots[i].setVisibility(slotVisibility[i]);
-        setTrailVisibility(trailVisibility);
-        mRow2MinLines = 1;
         mRow2Shown = rowShown;
         applyGroups(shown);
         return height;
@@ -393,64 +351,24 @@ final class AppearanceEditorPanel {
         return height;
     }
 
-    /**
-     * The header is one row (mode pill, Undo, Done) while it fits the width the sheet's padding
-     * leaves, which includes the display's side insets. When it does not, Undo and Done drop to a
-     * second row at the end edge, 8dp under the pill, and the barrier the other rows hang from
-     * follows. Touch targets and text sizes are untouched.
-     */
-    private void adaptHeader(int widthPx) {
-        if (!(mUndo.getLayoutParams() instanceof ConstraintLayout.LayoutParams)
-            || !(mDone.getLayoutParams() instanceof ConstraintLayout.LayoutParams))
-            return;
-        int unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
-        mMode.measure(unspecified, unspecified);
-        mDone.measure(unspecified, unspecified);
-        int need = mMode.getMeasuredWidth() + mDone.getMeasuredWidth();
-        if (mUndo.getVisibility() != View.GONE) {
-            mUndo.measure(unspecified, unspecified);
-            need += mUndo.getMeasuredWidth();
-        }
-        int available = widthPx - mRoot.getPaddingStart() - mRoot.getPaddingEnd();
-        boolean wrap = need > available;
-        for (View view : new View[] {mUndo, mDone}) {
-            ConstraintLayout.LayoutParams lp = (ConstraintLayout.LayoutParams) view.getLayoutParams();
-            int unset = ConstraintLayout.LayoutParams.UNSET;
-            int topTop = wrap ? unset : R.id.appearance_editor_mode;
-            int topBottom = wrap ? R.id.appearance_editor_mode : unset;
-            int bottomBottom = wrap ? unset : R.id.appearance_editor_mode;
-            int margin = wrap ? Math.round(dp(8)) : 0;
-            if (lp.topToTop != topTop || lp.topToBottom != topBottom
-                || lp.bottomToBottom != bottomBottom || lp.topMargin != margin) {
-                lp.topToTop = topTop;
-                lp.topToBottom = topBottom;
-                lp.bottomToBottom = bottomBottom;
-                lp.topMargin = margin;
-                view.setLayoutParams(lp);
-            }
-        }
-    }
-
     private int measureNow(int widthPx) {
         int width = View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY);
         int height = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
         // Relative compound icons contribute width after inherited direction is resolved.
         mRoot.measure(width, height);
         reserveReadoutLines();
-        adaptHeader(widthPx);
         mRoot.measure(width, height);
         return mRoot.getMeasuredHeight();
     }
 
     /**
-     * Each readout label's lines, from the column width the first measure gave it: as many as
-     * the widest thing it may say needs (see mReadoutRange), at least mRow2MinLines in Row B.
+     * Each Layout label's lines, from the column width the first measure gave it: as many as the
+     * widest thing it may say needs (see mReadoutRange), so a drag never adds a line.
      */
     private void reserveReadoutLines() {
-        TextView[] labels = {mFirstLabel, mLegibilityLabel, mThirdLabel, mSecondLabel,
-            mCornersLabel, mMarginLabel};
+        TextView[] labels = {mCornersLabel, mMarginLabel};
         for (TextView label : labels) {
-            int lines = label == mCornersLabel || label == mMarginLabel ? 1 : mRow2MinLines;
+            int lines = 1;
             CharSequence[] range = mReadoutRange.get(label);
             int available = label.getMeasuredWidth() - label.getCompoundPaddingLeft()
                 - label.getCompoundPaddingRight();
@@ -634,18 +552,6 @@ final class AppearanceEditorPanel {
     // ---------------------------------------------------------------------------------- wiring
 
     private void bind() {
-        mMode.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            if (mRestating || !isChecked)
-                return;
-            if (mListener != null)
-                mListener.onModeChanged(checkedId == R.id.appearance_editor_mode_layout);
-        });
-        mUndo.setOnClickListener(view -> {
-            if (mListener != null) mListener.onUndo();
-        });
-        mDone.setOnClickListener(view -> {
-            if (mListener != null) mListener.onDone();
-        });
         mLook.addOnChangeListener((slider, value, fromUser) -> {
             int stop = AppearanceLooks.stopForSliderValue(value);
             styleLookLabels(stop);
@@ -658,68 +564,30 @@ final class AppearanceEditorPanel {
                 return;
             mListener.onStyle(checkedId == R.id.appearance_editor_style_floating);
         });
-        mFirstSlider.addOnChangeListener((slider, value, fromUser) -> {
-            if (mRestating || !fromUser || mListener == null)
-                return;
-            mListener.onFirstSlider(Math.round(value), mFirstDragging);
-        });
-        mFirstSlider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
-            @Override public void onStartTrackingTouch(@NonNull Slider slider) {
-                mFirstDragging = true;
-            }
+        for (int i = 0; i < mSliders.length; i++) {
+            final int column = i;
+            mSliders[i].addOnChangeListener((slider, value, fromUser) -> {
+                Control control = mSliderControls[column];
+                if (mRestating || !fromUser || mListener == null || control == null)
+                    return;
+                mListener.onSlider(control, Math.round(value), mSliderDragging[column]);
+            });
+            mSliders[i].addOnSliderTouchListener(new LegendSlider.OnSliderTouchListener() {
+                @Override public void onStartTrackingTouch(@NonNull LegendSlider slider) {
+                    mSliderDragging[column] = true;
+                }
 
-            @Override public void onStopTrackingTouch(@NonNull Slider slider) {
-                mFirstDragging = false;
-                if (mListener != null) mListener.onSliderReleased();
-            }
+                @Override public void onStopTrackingTouch(@NonNull LegendSlider slider) {
+                    mSliderDragging[column] = false;
+                    if (mListener != null) mListener.onSliderReleased();
+                }
+            });
+        }
+        mKeyboardTheme.setOnClickListener(view -> {
+            if (mListener != null) mListener.onDoor(Door.KEYBOARD_THEME, view);
         });
-        mSecondSlider.addOnChangeListener((slider, value, fromUser) -> {
-            if (mRestating || !fromUser || mListener == null)
-                return;
-            mListener.onSecondSlider(Math.round(value), mSecondDragging);
-        });
-        mSecondSlider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
-            @Override public void onStartTrackingTouch(@NonNull Slider slider) {
-                mSecondDragging = true;
-            }
-
-            @Override public void onStopTrackingTouch(@NonNull Slider slider) {
-                mSecondDragging = false;
-                if (mListener != null) mListener.onSliderReleased();
-            }
-        });
-        mMiddleSlider.addOnChangeListener((slider, value, fromUser) -> {
-            if (mRestating || !fromUser || mListener == null)
-                return;
-            mListener.onMiddleSlider(Math.round(value), mMiddleDragging);
-        });
-        mMiddleSlider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
-            @Override public void onStartTrackingTouch(@NonNull Slider slider) {
-                mMiddleDragging = true;
-            }
-
-            @Override public void onStopTrackingTouch(@NonNull Slider slider) {
-                mMiddleDragging = false;
-                if (mListener != null) mListener.onSliderReleased();
-            }
-        });
-        mThirdSlider.addOnChangeListener((slider, value, fromUser) -> {
-            if (mRestating || !fromUser || mListener == null)
-                return;
-            mListener.onThirdSlider(Math.round(value), mThirdDragging);
-        });
-        mThirdSlider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
-            @Override public void onStartTrackingTouch(@NonNull Slider slider) {
-                mThirdDragging = true;
-            }
-
-            @Override public void onStopTrackingTouch(@NonNull Slider slider) {
-                mThirdDragging = false;
-                if (mListener != null) mListener.onSliderReleased();
-            }
-        });
-        mSecondButton.setOnClickListener(view -> {
-            if (mListener != null) mListener.onSecondButton();
+        mClock.setOnClickListener(view -> {
+            if (mListener != null) mListener.onDoor(Door.CLOCK, view);
         });
         mCorners.addOnChangeListener((slider, value, fromUser) -> {
             if (mRestating || !fromUser || mListener == null)
@@ -751,11 +619,6 @@ final class AppearanceEditorPanel {
                 if (mListener != null) mListener.onSliderReleased();
             }
         });
-        mSoft.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            if (mRestating || !isChecked || mListener == null)
-                return;
-            mListener.onFirstSegment(group.indexOfChild(group.findViewById(checkedId)));
-        });
         mTrail.setOnClickListener(view -> showChoiceMenu(mTrail,
             R.array.settings_terminal_cursor_trail_style_entries,
             R.array.settings_terminal_cursor_trail_style_values, mTrailId, id -> {
@@ -770,13 +633,6 @@ final class AppearanceEditorPanel {
                 restateEffect();
                 if (mListener != null) mListener.onRetroEffect(id);
             }));
-        mLegibility.addOnChangeListener((slider, value, fromUser) -> {
-            if (mRestating || !fromUser || mListener == null)
-                return;
-            int index = Math.round(value);
-            mLegibilityLabel.setText(readout(legibilityLabel(index)));
-            mListener.onLegibility(index);
-        });
     }
 
     // ------------------------------------------------------------- Trail and Effect menus
@@ -816,41 +672,20 @@ final class AppearanceEditorPanel {
     }
 
     /**
-     * The terminal's Trail (and, where {@code effectAvailable}, Effect) at the stored ids. An id
-     * this build does not know reads as the first option, as the preference's own getter does.
+     * The terminal's Trail and Effect at the stored ids. An id this build does not know reads as
+     * the first option, as the preference's own getter does.
      */
-    void setTerminalLooks(@NonNull String trailId, @NonNull String effectId,
-                          boolean effectAvailable) {
+    void setTerminalLooks(@NonNull String trailId, @NonNull String effectId) {
         mTrailId = trailId;
         mEffectId = effectId;
         restateTrail();
         restateEffect();
-        setTrailVisibility(View.VISIBLE);
-        setEffectVisibility(effectAvailable ? View.VISIBLE : View.GONE);
-        mTrail.setEnabled(mRow2Shown);
-        mEffect.setEnabled(mRow2Shown);
-    }
-
-    void hideTerminalLooks() {
-        setTrailVisibility(View.GONE);
-        setEffectVisibility(View.GONE);
-    }
-
-    /** A label always follows its button. */
-    private void setTrailVisibility(int visibility) {
-        mTrail.setVisibility(visibility);
-        mTrailLabel.setVisibility(visibility);
-    }
-
-    private void setEffectVisibility(int visibility) {
-        mEffect.setVisibility(visibility);
-        mEffectLabel.setVisibility(visibility);
     }
 
     private void restateTrail() {
         String label = optionLabel(R.array.settings_terminal_cursor_trail_style_entries,
             R.array.settings_terminal_cursor_trail_style_values, mTrailId);
-        mTrail.setText(label);
+        mTrail.setText(mContext.getString(R.string.appearance_editor_trail_button, label));
         mTrail.setContentDescription(
             mContext.getString(R.string.appearance_editor_trail_description, label));
     }
@@ -858,7 +693,7 @@ final class AppearanceEditorPanel {
     private void restateEffect() {
         String label = optionLabel(R.array.settings_terminal_retro_effect_entries,
             R.array.settings_terminal_retro_effect_values, mEffectId);
-        mEffect.setText(label);
+        mEffect.setText(mContext.getString(R.string.appearance_editor_effect_button, label));
         mEffect.setContentDescription(
             mContext.getString(R.string.appearance_editor_effect_description, label));
     }
@@ -874,17 +709,10 @@ final class AppearanceEditorPanel {
     }
 
     /**
-     * Shows one mode's rows and checks its segment, without reporting it. Row B keeps its state
+     * Shows one mode's rows (the pill is the page bar's, not the sheet's). Row B keeps its state
      * across a visit to Layout mode: it is Appearance's, so it goes and comes back with that group.
      */
     void setMode(boolean layout) {
-        int id = layout ? R.id.appearance_editor_mode_layout
-            : R.id.appearance_editor_mode_appearance;
-        if (mMode.getCheckedButtonId() != id) {
-            mRestating = true;
-            mMode.check(id);
-            mRestating = false;
-        }
         applyGroups(layout);
     }
 
@@ -1000,13 +828,6 @@ final class AppearanceEditorPanel {
 
     // ------------------------------------------------------------------------- restatements
 
-    /** Undo shows only while there is something to undo; the pill → Undo gap absorbs it. */
-    void setDirty(boolean dirty) {
-        int visibility = dirty ? View.VISIBLE : View.GONE;
-        if (mUndo.getVisibility() != visibility)
-            mUndo.setVisibility(visibility);
-    }
-
     void setStop(int stop) {
         float value = AppearanceLooks.sliderValueForStop(stop);
         if (mLook.getValue() != value) {
@@ -1041,179 +862,137 @@ final class AppearanceEditorPanel {
         if (!mRow2Shown)
             return;
         mRow2Shown = false;
-        applyRow2(false, true);
+        applyRow2(false);
     }
 
-    /** Row B up, with the tapped element's name; the controls are set by the calls below. */
+    /** Row B up, with the selection's name; the sliders and buttons are set by the calls below. */
     void showRow2(@StringRes int name) {
         mRow2Name.setText(name);
         if (mRow2Shown)
             return;
         mRow2Shown = true;
-        applyRow2(true, true);
+        applyRow2(true);
     }
 
     /**
      * Row B's visibility, and whether its controls take touches and are read out. Row B is not
      * shown in Layout mode, whatever its state.
      */
-    private void applyRow2(boolean shown, boolean animate) {
+    private void applyRow2(boolean shown) {
         mRow2.setImportantForAccessibility(shown ? View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
             : View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
-        mFirstSlider.setEnabled(shown);
-        for (int i = 0; i < mSoft.getChildCount(); i++)
-            mSoft.getChildAt(i).setEnabled(shown);
-        mLegibility.setEnabled(shown && mLegibilityEnabled);
-        mMiddleSlider.setEnabled(shown);
-        mThirdSlider.setEnabled(shown);
-        mSecondSlider.setEnabled(shown);
-        mTrail.setEnabled(shown);
-        mEffect.setEnabled(shown);
-        mSecondButton.setEnabled(shown);
+        for (int i = 0; i < mSliders.length; i++)
+            mSliders[i].setEnabled(shown && mSliderEnabled[i]);
+        for (MaterialButton button : new MaterialButton[] {mKeyboardTheme, mClock, mTrail, mEffect})
+            button.setEnabled(shown);
         mRow2.setVisibility(shown && !mLayoutMode ? View.VISIBLE : View.GONE);
     }
 
-    /** The first control as a slider: Opacity, the keyboard's Blur, or the global Blur. */
-    void setFirstSlider(@NonNull CharSequence label, int value, int max) {
-        mFirstLabel.setText(readout(label));
-        mReadoutRange.put(mFirstLabel, readoutRange(label, max));
-        mFirstSlider.setContentDescription(label);
-        mFirstSlider.setVisibility(View.VISIBLE);
-        mSoft.setVisibility(View.GONE);
-        restateSlider(mFirstSlider, value, max);
-        mFirstLabel.setVisibility(View.VISIBLE);
+    /**
+     * The Custom row's sliders: one column per state, in order, the rest GONE. Each column gets
+     * its control's range, its value and its legend; the 12dp gaps are between the columns that
+     * show, so a hidden column leaves none.
+     */
+    void setSliders(@NonNull List<SliderState> states) {
+        int gap = Math.round(dp(12));
+        boolean first = true;
+        for (int i = 0; i < mSliders.length; i++) {
+            LegendSlider slider = mSliders[i];
+            if (i >= states.size()) {
+                mSliderControls[i] = null;
+                mSliderEnabled[i] = false;
+                slider.setLegend(null);
+                slider.setVisibility(View.GONE);
+                continue;
+            }
+            SliderState state = states.get(i);
+            mSliderControls[i] = state.control;
+            slider.setLegend(state.legend);
+            slider.setContentDescription(AppearanceLooks.legendName(
+                state.legend.getFormattedValue(state.value)));
+            restateSlider(slider, state.control, state.value);
+            // Remembered across applyRow2, which re-enables the shown row.
+            mSliderEnabled[i] = state.enabled;
+            slider.setEnabled(mRow2Shown && state.enabled);
+            ViewGroup.LayoutParams raw = slider.getLayoutParams();
+            if (raw instanceof ViewGroup.MarginLayoutParams) {
+                ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) raw;
+                int start = first ? 0 : gap;
+                if (params.getMarginStart() != start) {
+                    params.setMarginStart(start);
+                    slider.setLayoutParams(params);
+                }
+            }
+            slider.setVisibility(View.VISIBLE);
+            first = false;
+        }
     }
 
-    void setFirstLabel(@NonNull CharSequence label) {
-        mFirstLabel.setText(readout(label));
-        mFirstSlider.setContentDescription(label);
+    /** The control each visible column holds now, in order, for a test to read. */
+    @NonNull
+    List<Control> shownControls() {
+        java.util.ArrayList<Control> out = new java.util.ArrayList<>();
+        for (int i = 0; i < mSliders.length; i++) {
+            if (mSliders[i].getVisibility() == View.VISIBLE && mSliderControls[i] != null)
+                out.add(mSliderControls[i]);
+        }
+        return out;
     }
 
-    /** The first control as Soften wallpaper's Off / On. */
-    void setSoft(@NonNull CharSequence label, boolean on) {
-        mFirstLabel.setText(readout(label));
-        mReadoutRange.remove(mFirstLabel);
-        mFirstSlider.setVisibility(View.GONE);
-        mSoft.setVisibility(View.VISIBLE);
-        checkSegment(mSoft, on ? 1 : 0);
-        mFirstLabel.setVisibility(View.VISIBLE);
+    /** The slider column showing {@code control}, or null. */
+    @Nullable
+    LegendSlider sliderFor(@NonNull Control control) {
+        for (int i = 0; i < mSliders.length; i++) {
+            if (mSliderControls[i] == control && mSliders[i].getVisibility() == View.VISIBLE)
+                return mSliders[i];
+        }
+        return null;
     }
 
-    /** No first control: the status bar and the dock have Blur alone. */
-    void hideFirst() {
-        mFirstLabel.setVisibility(View.GONE);
-        mFirstSlider.setVisibility(View.GONE);
-        mSoft.setVisibility(View.GONE);
+    /** Restates one control's value after a write that moved it elsewhere (not by the user). */
+    void setSliderValue(@NonNull Control control, int value) {
+        LegendSlider slider = sliderFor(control);
+        if (slider != null)
+            restateSlider(slider, control, value);
+    }
+
+    /** Shows exactly these buttons in the heading row, in the layout's order. */
+    void setDoors(@NonNull List<Door> doors) {
+        mKeyboardTheme.setVisibility(doors.contains(Door.KEYBOARD_THEME) ? View.VISIBLE : View.GONE);
+        mClock.setVisibility(doors.contains(Door.CLOCK) ? View.VISIBLE : View.GONE);
+        mTrail.setVisibility(doors.contains(Door.TRAIL) ? View.VISIBLE : View.GONE);
+        View space = mRoot.findViewById(R.id.appearance_editor_row2_space);
+        if (space != null)
+            space.setVisibility(doors.contains(Door.TRAIL) || doors.contains(Door.EFFECT)
+                ? View.GONE : View.VISIBLE);
+        mEffect.setVisibility(doors.contains(Door.EFFECT) ? View.VISIBLE : View.GONE);
+    }
+
+    /** The Clock button, which the clock popup opens upward from. */
+    @NonNull MaterialButton clockButton() {
+        return mClock;
+    }
+
+    /** The heading row's buttons that show now, for a test to read. */
+    @NonNull
+    List<Door> shownDoors() {
+        java.util.ArrayList<Door> out = new java.util.ArrayList<>();
+        if (mKeyboardTheme.getVisibility() == View.VISIBLE) out.add(Door.KEYBOARD_THEME);
+        if (mClock.getVisibility() == View.VISIBLE) out.add(Door.CLOCK);
+        if (mTrail.getVisibility() == View.VISIBLE) out.add(Door.TRAIL);
+        if (mEffect.getVisibility() == View.VISIBLE) out.add(Door.EFFECT);
+        return out;
     }
 
     /**
-     * The terminal's Text contrast at {@code index}. Not {@code enabled} where the terminal
-     * palette is not the Material one it changes; the label then says so.
+     * The terminal's Contrast legend for a stop: Contrast · Low, Normal or High (see
+     * {@link #legibilityLabel}).
      */
-    void setLegibility(@NonNull CharSequence label, int index, boolean enabled) {
-        mLegibilityLabel.setText(readout(label));
-        mReadoutRange.put(mLegibilityLabel, new CharSequence[] {readout(label),
-            readout(legibilityLabel(0)), readout(legibilityLabel(1)), readout(legibilityLabel(2))});
-        restateSlider(mLegibility, index, 2);
-        mLegibilityEnabled = enabled;
-        mLegibility.setEnabled(enabled && mRow2Shown);
-        mLegibilityLabel.setVisibility(View.VISIBLE);
-        mLegibility.setVisibility(View.VISIBLE);
-        mMiddleSlider.setVisibility(View.GONE);
-    }
-
-    /** The middle column as a slider of its own: the global Opacity (DECISIONS item 13). */
-    void setMiddleSlider(@NonNull CharSequence label, int value, int max) {
-        mLegibilityLabel.setText(readout(label));
-        mReadoutRange.put(mLegibilityLabel, readoutRange(label, max));
-        mMiddleSlider.setContentDescription(label);
-        restateSlider(mMiddleSlider, value, max);
-        mMiddleSlider.setEnabled(mRow2Shown);
-        mLegibility.setVisibility(View.GONE);
-        mLegibilityLabel.setVisibility(View.VISIBLE);
-        mMiddleSlider.setVisibility(View.VISIBLE);
-    }
-
-    void setMiddleLabel(@NonNull CharSequence label) {
-        mLegibilityLabel.setText(readout(label));
-        mMiddleSlider.setContentDescription(label);
-    }
-
-    /** The label for a Text contrast stop: Low, Normal or High. */
     @NonNull
     String legibilityLabel(int index) {
         return mContext.getString(index <= 0 ? R.string.appearance_editor_legibility_low
             : index == 1 ? R.string.appearance_editor_legibility_normal
             : R.string.appearance_editor_legibility_high);
-    }
-
-    /** No middle column: neither Text contrast nor the global Opacity. */
-    void hideLegibility() {
-        mLegibilityLabel.setVisibility(View.GONE);
-        mLegibility.setVisibility(View.GONE);
-        mMiddleSlider.setVisibility(View.GONE);
-    }
-
-    /** The last control: Blur, Dim or the global Grain. */
-    void setSecondSlider(@NonNull CharSequence label, int value, int max) {
-        mSecondLabel.setText(readout(label));
-        mReadoutRange.put(mSecondLabel, readoutRange(label, max));
-        mSecondSlider.setContentDescription(label);
-        restateSlider(mSecondSlider, value, max);
-        mSecondLabel.setVisibility(View.VISIBLE);
-        mSecondSlider.setVisibility(View.VISIBLE);
-        mSecondButton.setVisibility(View.GONE);
-    }
-
-    /**
-     * The last column as a button: the keyboard's "Keyboard theme" door (DECISIONS item 15). Its
-     * label line stays, empty, so the button stands level with the slider beside it.
-     */
-    void setSecondButton(@NonNull CharSequence text) {
-        mSecondLabel.setText("");
-        mReadoutRange.remove(mSecondLabel);
-        mSecondButton.setText(text);
-        mSecondButton.setEnabled(mRow2Shown);
-        mSecondLabel.setVisibility(View.VISIBLE);
-        mSecondSlider.setVisibility(View.GONE);
-        mSecondButton.setVisibility(View.VISIBLE);
-    }
-
-    /** Whether the last column is the button, for a test to read. */
-    boolean isSecondButtonShown() {
-        return mSecondButton.getVisibility() == View.VISIBLE;
-    }
-
-    /** Whether the middle column is the global Opacity slider, for a test to read. */
-    boolean isMiddleSliderShown() {
-        return mMiddleSlider.getVisibility() == View.VISIBLE;
-    }
-
-    /** The fourth column as a slider: the terminal's Grain. */
-    void setThirdSlider(@NonNull CharSequence label, int value, int max) {
-        mThirdLabel.setText(readout(label));
-        mReadoutRange.put(mThirdLabel, readoutRange(label, max));
-        mThirdSlider.setContentDescription(label);
-        restateSlider(mThirdSlider, value, max);
-        mThirdSlider.setEnabled(mRow2Shown);
-        mThirdLabel.setVisibility(View.VISIBLE);
-        mThirdSlider.setVisibility(View.VISIBLE);
-    }
-
-    void setThirdLabel(@NonNull CharSequence label) {
-        mThirdLabel.setText(readout(label));
-        mThirdSlider.setContentDescription(label);
-    }
-
-    /** No fourth column: every element but the terminal. */
-    void hideThird() {
-        mThirdLabel.setVisibility(View.GONE);
-        mThirdSlider.setVisibility(View.GONE);
-    }
-
-    void setSecondLabel(@NonNull CharSequence label) {
-        mSecondLabel.setText(readout(label));
-        mSecondSlider.setContentDescription(label);
     }
 
     // ------------------------------------------------------------ Layout mode's own controls
@@ -1258,6 +1037,18 @@ final class AppearanceEditorPanel {
             slider.setValue(0f);
         slider.setValueTo(top);
         slider.setValue(clamped);
+        mRestating = false;
+    }
+
+    /** A Custom row slider at a control's range, step and value. */
+    private void restateSlider(@NonNull LegendSlider slider, @NonNull Control control, int value) {
+        mRestating = true;
+        // The range and step first, the value last: a Slider checks them together when it lays
+        // out, never between these calls.
+        slider.setValueFrom(control.min);
+        slider.setValueTo(control.max);
+        slider.setStepSize(control.step);
+        slider.setValue(control.clamp(value));
         mRestating = false;
     }
 

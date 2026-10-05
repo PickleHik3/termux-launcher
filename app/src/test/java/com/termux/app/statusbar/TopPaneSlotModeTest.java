@@ -18,10 +18,10 @@ public class TopPaneSlotModeTest {
     }
 
     @Test
-    public void mediaAlone_compactsTheClock() {
+    public void mediaAlone_keepsTheFullFaceAndScalesIt() {
         TopPaneSlotMode mode = TopPaneSlotMode.derive(0, true);
         assertEquals(TopPaneSlotMode.MEDIA, mode);
-        assertEquals(TopPaneClockForm.COMPACT, mode.clockForm(0));
+        assertEquals(TopPaneClockForm.FULL, mode.clockForm(0));
         assertTrue(mode.showsMedia());
     }
 
@@ -38,13 +38,13 @@ public class TopPaneSlotModeTest {
     @Test
     public void nothingDropsTheClockToItsMonoChip() {
         // The three-row stack went away with the scrolling cards: two cards and a compact clock
-        // is the busiest the slot ever gets, however many notifications matched.
+        // is the busiest the slot ever gets; the clock keeps its full face and scales to the room.
         TopPaneSlotMode mode = TopPaneSlotMode.derive(3, false);
         assertEquals(TopPaneSlotMode.NOTIFICATIONS, mode);
-        assertEquals(TopPaneClockForm.COMPACT, mode.clockForm(1));
-        assertEquals(TopPaneClockForm.COMPACT, mode.clockForm(2));
-        assertEquals(TopPaneClockForm.COMPACT, mode.clockForm(3));
-        assertEquals(TopPaneClockForm.COMPACT, mode.clockForm(9));
+        assertEquals(TopPaneClockForm.FULL, mode.clockForm(1));
+        assertEquals(TopPaneClockForm.FULL, mode.clockForm(2));
+        assertEquals(TopPaneClockForm.FULL, mode.clockForm(3));
+        assertEquals(TopPaneClockForm.FULL, mode.clockForm(9));
     }
 
     @Test
@@ -54,7 +54,7 @@ public class TopPaneSlotModeTest {
             TopPaneSlotMode.MAX_PINNED > TopPaneSlotMode.VISIBLE_PINNED);
         TopPaneSlotMode mode = TopPaneSlotMode.derive(9, false);
         assertEquals(TopPaneSlotMode.NOTIFICATIONS, mode);
-        assertEquals(TopPaneClockForm.COMPACT, mode.clockForm(9));
+        assertEquals(TopPaneClockForm.FULL, mode.clockForm(9));
     }
 
     @Test

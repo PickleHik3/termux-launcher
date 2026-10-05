@@ -76,20 +76,40 @@ public class RecentWallpapersTest {
     }
 
     @Test
-    public void trimsToThreeAndDeletesTheOldest() throws IOException {
+    public void trimsToFiveAndDeletesTheOldest() throws IOException {
         RecentWallpapers store = store();
         File oldest = store.add(picture("1.png", "one"), 1000);
         store.add(picture("2.png", "two"), 2000);
         store.add(picture("3.png", "three"), 3000);
         store.add(picture("4.png", "four"), 4000);
+        store.add(picture("5.png", "five"), 5000);
+        store.add(picture("6.png", "six"), 6000);
         List<File> list = store.list();
+        assertEquals(5, RecentWallpapers.MAX);
         assertEquals(RecentWallpapers.MAX, list.size());
-        assertEquals("four", read(list.get(0)));
-        assertEquals("three", read(list.get(1)));
-        assertEquals("two", read(list.get(2)));
+        assertEquals("six", read(list.get(0)));
+        assertEquals("two", read(list.get(4)));
         assertFalse("the oldest copy is deleted", oldest.exists());
         File[] files = store.directory().listFiles();
-        assertEquals("three pictures and the index", RecentWallpapers.MAX + 1, files == null ? 0 : files.length);
+        assertEquals("five pictures and the index", RecentWallpapers.MAX + 1, files == null ? 0 : files.length);
+    }
+
+    @Test
+    public void theLivingFlagIsRememberedAndOldLinesStillParse() throws IOException {
+        RecentWallpapers store = store();
+        File plain = store.add(picture("p.png", "plain"), 1000);
+        File alive = store.add(picture("l.png", "alive"), 2000, true);
+        assertTrue(store.isLiving(alive));
+        assertFalse(store.isLiving(plain));
+        // A plain re-apply keeps the flag.
+        store.add(picture("l2.png", "alive"), 3000, false);
+        assertTrue(store.isLiving(alive));
+        // An old two-token index line parses as not living.
+        Files.write(new File(store.directory(), "index").toPath(),
+            (plain.getName() + " abc\n").getBytes(StandardCharsets.UTF_8));
+        assertEquals(1, store.entries().size());
+        assertFalse(store.entries().get(0).living);
+        assertEquals("abc", store.entries().get(0).hash);
     }
 
     @Test

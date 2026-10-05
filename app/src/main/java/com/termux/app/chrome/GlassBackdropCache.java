@@ -290,19 +290,32 @@ public final class GlassBackdropCache {
                                         @ColorInt int backdrop, @ColorInt int preferredInk,
                                         @ColorInt int alternateInk, @ColorInt int veilColor,
                                         double target, @Nullable Boolean paleSide) {
+        return resolveOn(band, screenRect, backdrop, preferredInk, alternateInk, veilColor, target,
+            paleSide, OnGlass.MAX_VEIL_ALPHA_255);
+    }
+
+    /** {@link #resolveOn} with the veil held to {@code maxVeilAlpha255}; memoised with it. */
+    @NonNull
+    public OnGlass.Resolution resolveOn(@NonNull Band band, @NonNull Rect screenRect,
+                                        @ColorInt int backdrop, @ColorInt int preferredInk,
+                                        @ColorInt int alternateInk, @ColorInt int veilColor,
+                                        double target, @Nullable Boolean paleSide,
+                                        int maxVeilAlpha255) {
         Entry entry = entryFor(band, screenRect);
+        int ceilingKey = Math.max(0, Math.min(255, maxVeilAlpha255)) * 4;
         int sideKey = paleSide == null ? 0 : (paleSide ? 1 : -1);
         for (int i = 0; i < entry.memos.size(); i++) {
             Memo memo = entry.memos.get(i);
-            if (memo.matches(backdrop, BACKDROP_GIVEN + sideKey, preferredInk, alternateInk,
+            if (memo.matches(backdrop, BACKDROP_GIVEN + sideKey + ceilingKey, preferredInk, alternateInk,
                     veilColor, target)) {
                 return memo.resolution;
             }
         }
         OnGlass.Resolution resolution =
-            OnGlass.resolve(backdrop, preferredInk, alternateInk, veilColor, target, paleSide);
+            OnGlass.resolve(backdrop, preferredInk, alternateInk, veilColor, target, paleSide,
+                maxVeilAlpha255);
         if (entry.memos.size() >= MEMO_SLOTS) entry.memos.remove(entry.memos.size() - 1);
-        entry.memos.add(0, new Memo(resolution, backdrop, BACKDROP_GIVEN + sideKey, preferredInk,
+        entry.memos.add(0, new Memo(resolution, backdrop, BACKDROP_GIVEN + sideKey + ceilingKey, preferredInk,
             alternateInk, veilColor, target));
         return resolution;
     }

@@ -6,7 +6,7 @@
      which is AppearanceEditorPanel.measureFor(mode): one fixed height per mode, measured from the
      rows that mode shows. Nothing in it scrolls, and nothing in it is weighted.
 
-     One ConstraintLayout. The top row is both modes'; each mode's rows are a Group
+     One ConstraintLayout. Each mode's rows are a Group
      (appearance_editor_appearance_group / appearance_editor_layout_group), and a mode switch
      shows one Group and hides the other.
 
@@ -14,26 +14,23 @@
      nothing about where it sits changes), though the content root it is added to is pinned left
      to right.
 
-     Top row: the mode pill is the start anchor (wrap_content, never squeezed); Done is pinned to
-     the end and Undo to Done's start. Undo is GONE while there is nothing to undo; the gap between
-     the pill and Undo absorbs it, so neither the pill nor Done moves.
+     There is no top row: the Look | Layout mode pill is the page bar's title while this sheet is
+     up (appearance_page_frame, AppearanceEditorPage), and Undo and Done are the bar's end actions,
+     so the sheet starts at its first row and has no top padding.
 
      Appearance rows. Row A: the Look slider, a label centred under each of its five stops (placed
      in code: the stops sit inside the slider's track padding, so equal-width labels would drift
-     off them). Row B: the tapped element's name and up to three equal columns, each a label above
-     its control. Row B is GONE until an element is tapped: the sheet's height follows its content
-     (Row A alone, or Row A + Row B), the controller animates between the two, and the frame stands
-     above the taller of the two so it never moves. The labels may wrap to two lines ("Contrast ·
-     Normal" in a third of a phone's width); a Barrier under them keeps the sliders level.
-     Both ConstraintLayouts run with layout_optimizationLevel="none": the default optimizer places
-     a chain of 0dp-wide labels and the Barrier under them before a label that wraps has its
-     second line, so the sliders stood on the first line's bottom and the wrapped words ran over
-     them (AppearanceEditorPanelFitLargeText*Test).
-
-     Appearance Row B also carries, at the Custom stop with nothing tapped, the global row (layout
-     editor v2, DECISIONS item 13): Blur, Opacity and Grain in the three columns, the middle one a
-     slider of its own (appearance_editor_cl_slider). The keyboard's row is Blur and the
-     "Keyboard theme" button in the last column (item 15).
+     off them). Row B (the Custom stop only): a heading row, 48dp tall, then up to five vertical
+     Material 3 sliders (LegendSlider, 40dp track, the legend beside it) in equal columns.
+     The heading is the selection's name ("All surfaces" for nothing tapped) and leads the row;
+     the buttons the selection has follow it (Keyboard theme; Clock; Trail and Effect), each 48dp
+     tall and 8dp apart. The sliders are one fixed length, so the sheet is the same height for
+     every selection; Row B is GONE at a Look stop. Sets, top to bottom of each legend:
+       nothing  Blur, Grain, Opacity, Margin, Corner radius
+       keyboard Blur, Grain, Opacity, Key radius, Key spacing   (button: Keyboard theme)
+       dock     Blur, Grain, Opacity, Size, App icons
+       terminal Blur, Grain, Opacity, Contrast                  (buttons: Trail, Effect)
+       status   Blur, Grain, Opacity                            (button: Clock)
 
      Layout rows (layout editor v2, DECISIONS items 2, 3 and 10). Row A: Orientation (two 48dp
      icon segments), Style (two 48dp icon segments), and eye-off at the end: the only drop target
@@ -46,20 +43,12 @@
      its slider) in the rest of the row. The tiles win while both would. No hint text anywhere.
 
      Width arithmetic, dp. Sheet padding 16 + 16, so the content width is W - 32.
-       Top row (LabelLarge 14sp, Roboto Medium): "Look" ≈ 30, "Layout" ≈ 43. A segment is
-       12 pad + 18 check slot + 4 icon padding + text + 12 pad, minWidth 0: 76 + 89 = 165 for the
-       pill. Widget.Termux.Button.Segment pads all four sides 12dp: Material 3's OutlinedButton
-       sets paddingLeft/Right 24dp, which beat a paddingStart/End beside them and made every text
-       segment 32dp too wide.
-       Undo 48 (its own 4dp insets are the visual gaps on either side of it).
-       Done (Widget.Material3.Button, minWidth 0 over AppCompat's 88): 24 + "Done" ≈ 33 + 24 = 81.
-         360: 16 + 165 + 0 + 48 + 0 + 81 + 16 = 326 ≤ 360  (34 spare, in the pill → Undo gap)
-         411: 326 + 85 of gap;  533: 326 + 207 of gap.  Clean (Undo gone): 48 more gap.
+       (The mode pill is the page bar's title: 40dp segments, centred in the bar's title slot;
+       see appearance_page_frame. Widget.Termux.Button.Segment pads all four sides 12dp.)
        Appearance Row A: the slider spans W - 32 (328 / 379 / 501); five LabelMedium words, the
          widest "Custom" ≈ 44, under stops (W - 32 - 2 × track padding) / 4 apart: ≥ 70 at 360.
-       Appearance Row B: three columns, two 16dp gaps: (W - 64) / 3 = 98.7 / 115.7 / 156.3;
-         two columns: (W - 48) / 2 = 156 / 181.5 / 242.5; one column: W - 32.
-         The Soften toggle in a 156dp column: Off 12 + 18 + 4 + 20 + 12 = 66, On 66: 132 ≤ 156.
+       Appearance Row B: five columns, four 12dp gaps: (W - 32 - 48) / 5 = 56 / 66.2 / 88.6, each
+         wider than the 40dp track; fewer columns share the same width equally.
        Layout Row A: 96 + 8 + 96 + gap + 48 = 248 + gap; gap 80 / 131 / 253. The 64dp highlight
          is centred on eye-off: 8dp of it stand past the button's end, inside the sheet's 16dp
          padding.
@@ -72,10 +61,9 @@
          centred on the slider: the row's own 64.
 
      Heights, dp, without the navigation inset (the controller adds it to the bottom padding):
-       top row 48 (every button keeps its 48dp touch height).
-       Appearance: 12 + 48 + 8 + Row A (slider 48 + labels 16 = 64) + 8
-                   + Row B (name 20 + 4 + label 2 × 16 + control 48 = 104) + 16 = 260.
-       Layout:     12 + 48 + 8 + Row A 48 + 8 + Row B (label 16 + slider 48 = 64) + 16 = 204.
+       Appearance: Row A (slider 48 + labels 16 = 64) + 8
+                   + Row B (heading row 48 + 8 + sliders 168 = 224) + 16 = 312 (Row A alone: 80).
+       Layout:     Row A 48 + 8 + Row B (label 16 + slider 48 = 64) + 16 = 136.
      The controller uses the measured heights, not these numbers. -->
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -86,81 +74,10 @@
     android:clickable="true"
     android:focusable="false"
     android:paddingStart="16dp"
-    android:paddingTop="12dp"
+    android:paddingTop="0dp"
     android:paddingEnd="16dp"
     android:paddingBottom="16dp"
     app:layout_optimizationLevel="none">
-
-    <!-- ===================================================================== top row -->
-
-    <com.google.android.material.button.MaterialButtonToggleGroup
-        android:id="@+id/appearance_editor_mode"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:contentDescription="@string/appearance_editor_mode_description"
-        app:checkedButton="@+id/appearance_editor_mode_appearance"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        app:selectionRequired="true"
-        app:singleSelection="true">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/appearance_editor_mode_appearance"
-            app:icon="@drawable/segment_icon_look"
-            style="@style/Widget.Termux.Editor.Segment"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:ellipsize="none"
-            android:text="@string/appearance_editor_mode_look" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/appearance_editor_mode_layout"
-            app:icon="@drawable/segment_icon_layout"
-            style="@style/Widget.Termux.Editor.Segment"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="0dp"
-            android:ellipsize="none"
-            android:text="@string/action_layout_editor" />
-    </com.google.android.material.button.MaterialButtonToggleGroup>
-
-    <!-- 48dp tall, not wrap_content: an icon button keeps an empty line of text, which grows
-         with the font scale (53dp at Large) and, centred on the pill, would push the header down
-         whenever Undo appears. -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/appearance_editor_undo"
-        style="?attr/materialIconButtonStyle"
-        android:layout_width="wrap_content"
-        android:layout_height="48dp"
-        android:contentDescription="@string/appearance_editor_undo"
-        android:tooltipText="@string/appearance_editor_undo"
-        android:visibility="gone"
-        app:icon="@drawable/ic_symbol_undo"
-        app:layout_constraintBottom_toBottomOf="@id/appearance_editor_mode"
-        app:layout_constraintEnd_toStartOf="@id/appearance_editor_done"
-        app:layout_constraintTop_toTopOf="@id/appearance_editor_mode" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/appearance_editor_done"
-        style="@style/Widget.Material3.Button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:minWidth="0dp"
-        android:maxLines="1"
-        android:text="@string/appearance_editor_done"
-        app:layout_constraintBottom_toBottomOf="@id/appearance_editor_mode"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="@id/appearance_editor_mode" />
-
-    <!-- The header's bottom edge: the mode pill's, or Undo and Done's when a narrow sheet wraps
-         them onto a second row (AppearanceEditorPanel.adaptHeader). Every row below hangs here. -->
-    <androidx.constraintlayout.widget.Barrier
-        android:id="@+id/appearance_editor_header_bottom"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        app:barrierDirection="bottom"
-        app:constraint_referenced_ids="appearance_editor_mode,appearance_editor_undo,appearance_editor_done" />
 
     <!-- ============================================================ Appearance mode -->
 
@@ -168,7 +85,6 @@
         android:id="@+id/appearance_editor_look"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
         android:contentDescription="@string/appearance_editor_look_description"
         android:stepSize="1"
         android:value="4"
@@ -177,7 +93,7 @@
         app:labelBehavior="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/appearance_editor_header_bottom"
+        app:layout_constraintTop_toTopOf="parent"
         app:tickVisibilityMode="hidden" />
 
     <!-- One label per stop, centred under it in code. -->
@@ -190,312 +106,161 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/appearance_editor_look" />
 
-    <!-- Row B: its own ConstraintLayout, so the columns' per-element visibility is not the
-         Appearance group's to restate. GONE until an element is tapped (see the header). -->
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <!-- Row B: a heading row over the Custom row's vertical sliders. GONE until Look mode is at
+         the Custom stop (the global set shows with nothing tapped). Code fills it: the heading,
+         the buttons the selection has, and up to five LegendSliders (AppearanceLooks.controls). -->
+    <LinearLayout
         android:id="@+id/appearance_editor_row2"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
+        android:orientation="vertical"
         android:visibility="gone"
-        app:layout_optimizationLevel="none"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/appearance_editor_look_labels">
 
-        <TextView
-            android:id="@+id/appearance_editor_row2_name"
-            android:layout_width="0dp"
+        <!-- The heading row: always 48dp tall, so the sheet is one height whatever is selected.
+             The name leads (it gives way first); the buttons keep their size, 8dp apart. -->
+        <LinearLayout
+            android:id="@+id/appearance_editor_row2_head"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:textAppearance="?attr/textAppearanceTitleSmall"
-            android:textColor="?attr/colorPrimary"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            android:gravity="center_vertical"
+            android:minHeight="48dp"
+            android:orientation="horizontal">
 
-        <!-- Up to three equal columns: three labels in one chain, and under them a Barrier that
-             the three controls hang from, so the sliders line up whichever label wraps. The
-             16dp gaps sit on the end of c1 and cl, so whichever of c1 / cl is gone, the visible
-             columns keep one gap between them: c1's goneMarginEnd keeps it when cl is gone, and
-             c2 has no start margin. A column's views are shown and hidden together in code. -->
-        <TextView
-            android:id="@+id/appearance_editor_c1_label"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:layout_marginEnd="16dp"
-            android:ellipsize="end"
-            android:maxLines="2"
-            android:minLines="1"
-            android:textAppearance="?attr/textAppearanceLabelMedium"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            app:layout_constraintEnd_toStartOf="@id/appearance_editor_cl_label"
-            app:layout_constraintHorizontal_chainStyle="spread"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_name"
-            app:layout_goneMarginEnd="16dp" />
-
-        <!-- The terminal's Contrast: its palette's contrast (SPEC §2, §3.4). -->
-        <TextView
-            android:id="@+id/appearance_editor_cl_label"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:layout_marginEnd="16dp"
-            android:ellipsize="end"
-            android:maxLines="2"
-            android:minLines="1"
-            android:text="@string/appearance_editor_legibility_normal"
-            android:textAppearance="?attr/textAppearanceLabelMedium"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            android:visibility="gone"
-            app:layout_constraintEnd_toStartOf="@id/appearance_editor_c3_label"
-            app:layout_constraintStart_toEndOf="@id/appearance_editor_c1_label"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_name"
-            app:layout_goneMarginEnd="16dp" />
-
-        <!-- The fourth column, the terminal's only: its Grain, between Text contrast and Blur.
-             Every other element has room for Grain in a column it already has (the status bar and
-             the dock in the first, the keyboard in the middle). The 16dp gap after it is c3's own;
-             cl's goneMarginEnd keeps one when c3 is gone. -->
-        <TextView
-            android:id="@+id/appearance_editor_c3_label"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:layout_marginEnd="16dp"
-            android:ellipsize="end"
-            android:maxLines="2"
-            android:minLines="1"
-            android:textAppearance="?attr/textAppearanceLabelMedium"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            android:visibility="gone"
-            app:layout_constraintEnd_toStartOf="@id/appearance_editor_c2_label"
-            app:layout_constraintStart_toEndOf="@id/appearance_editor_cl_label"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_name" />
-
-        <TextView
-            android:id="@+id/appearance_editor_c2_label"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:ellipsize="end"
-            android:maxLines="2"
-            android:minLines="1"
-            android:textAppearance="?attr/textAppearanceLabelMedium"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/appearance_editor_c3_label"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_name" />
-
-        <androidx.constraintlayout.widget.Barrier
-            android:id="@+id/appearance_editor_row2_barrier"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            app:barrierDirection="bottom"
-            app:constraint_referenced_ids="appearance_editor_c1_label,appearance_editor_cl_label,appearance_editor_c3_label,appearance_editor_c2_label" />
-
-        <com.google.android.material.slider.Slider
-            android:id="@+id/appearance_editor_c1_slider"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:contentDescription="@string/appearance_editor_control_description"
-            android:stepSize="1"
-            android:valueFrom="0"
-            android:valueTo="100"
-            app:labelBehavior="gone"
-            app:layout_constraintEnd_toEndOf="@id/appearance_editor_c1_label"
-            app:layout_constraintStart_toStartOf="@id/appearance_editor_c1_label"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier"
-            app:tickVisibilityMode="hidden" />
-
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/appearance_editor_c1_soft"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:contentDescription="@string/appearance_editor_soft"
-            android:visibility="gone"
-            app:layout_constraintStart_toStartOf="@id/appearance_editor_c1_label"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier"
-            app:selectionRequired="true"
-            app:singleSelection="true">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/appearance_editor_soft_off"
-                style="@style/Widget.Termux.Editor.Segment"
+            <TextView
+                android:id="@+id/appearance_editor_row2_name"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:ellipsize="end"
+                android:maxWidth="132dp"
+                android:maxLines="1"
+                android:textAppearance="?attr/textAppearanceLabelLarge"
+                android:textColor="?attr/colorOnSurfaceVariant" />
+
+            <!-- Pushes a lone door (Keyboard theme, Clock) to the row's end; GONE while Trail
+                 and Effect share the row's width. -->
+            <Space
+                android:id="@+id/appearance_editor_row2_space"
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
+            <!-- The keyboard's door to its theme page (DECISIONS item 15). -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/appearance_editor_door_keyboard_theme"
+                style="@style/Widget.Material3.Button.TonalButton.Icon"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:minWidth="0dp"
-                android:text="@string/appearance_editor_soft_off" />
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="@string/appearance_editor_keyboard_theme"
+                android:visibility="gone"
+                app:icon="@drawable/ic_settings_chevron_right"
+                app:iconGravity="end"
+                app:iconPadding="4dp"
+                app:iconSize="18dp" />
+
+            <!-- The status bar's clock: opens the face and position popup upward from here. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/appearance_editor_door_clock"
+                style="@style/Widget.Material3.Button.TonalButton"
+                android:layout_width="wrap_content"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:contentDescription="@string/termux_surface_tuning_clock_open"
+                android:maxLines="1"
+                android:minWidth="0dp"
+                android:text="@string/appearance_editor_clock"
+                android:visibility="gone" />
+
+            <!-- The terminal's Trail and Effect: outlined buttons naming the chosen option and
+                 opening a menu of the choices. Effect is GONE below API 33. -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/appearance_editor_trail"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:ellipsize="end"
+                android:maxLines="1"
+                android:minWidth="0dp"
+                android:visibility="gone"
+                app:icon="@drawable/ic_arrow_drop_down_16"
+                app:iconGravity="end" />
 
             <com.google.android.material.button.MaterialButton
-                android:id="@+id/appearance_editor_soft_on"
-                style="@style/Widget.Termux.Editor.Segment"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:id="@+id/appearance_editor_effect"
+                style="?attr/materialButtonOutlinedStyle"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="48dp"
+                android:layout_marginStart="8dp"
+                android:ellipsize="end"
+                android:maxLines="1"
                 android:minWidth="0dp"
-                android:text="@string/appearance_editor_soft_on" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+                android:visibility="gone"
+                app:icon="@drawable/ic_arrow_drop_down_16"
+                app:iconGravity="end" />
+        </LinearLayout>
 
-        <com.google.android.material.slider.Slider
-            android:id="@+id/appearance_editor_legibility"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:contentDescription="@string/appearance_editor_legibility_description"
-            android:stepSize="1"
-            android:valueFrom="0"
-            android:valueTo="2"
-            android:visibility="gone"
-            app:labelBehavior="gone"
-            app:layout_constraintEnd_toEndOf="@id/appearance_editor_cl_label"
-            app:layout_constraintStart_toStartOf="@id/appearance_editor_cl_label"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier"
-            app:tickVisibilityMode="hidden" />
+        <!-- The sliders: equal columns 12dp apart (the gaps are set in code, so a hidden column
+             leaves none), all one fixed height. -->
+        <LinearLayout
+            android:id="@+id/appearance_editor_sliders"
+            android:layout_width="match_parent"
+            android:layout_height="@dimen/appearance_editor_slider_length"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
 
-        <!-- The global row's middle control: Opacity (DECISIONS item 13). -->
-        <com.google.android.material.slider.Slider
-            android:id="@+id/appearance_editor_cl_slider"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:contentDescription="@string/appearance_editor_control_description"
-            android:stepSize="1"
-            android:valueFrom="0"
-            android:valueTo="100"
-            android:visibility="gone"
-            app:labelBehavior="gone"
-            app:layout_constraintEnd_toEndOf="@id/appearance_editor_cl_label"
-            app:layout_constraintStart_toStartOf="@id/appearance_editor_cl_label"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier"
-            app:tickVisibilityMode="hidden" />
+            <com.termux.app.surfaces.LegendSlider
+                android:id="@+id/appearance_editor_slider_0"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:contentDescription="@string/appearance_editor_control_description"
+                android:visibility="gone" />
 
-        <com.google.android.material.slider.Slider
-            android:id="@+id/appearance_editor_c3_slider"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:contentDescription="@string/appearance_editor_control_description"
-            android:stepSize="1"
-            android:valueFrom="0"
-            android:valueTo="100"
-            android:visibility="gone"
-            app:labelBehavior="gone"
-            app:layout_constraintEnd_toEndOf="@id/appearance_editor_c3_label"
-            app:layout_constraintStart_toStartOf="@id/appearance_editor_c3_label"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier"
-            app:tickVisibilityMode="hidden" />
+            <com.termux.app.surfaces.LegendSlider
+                android:id="@+id/appearance_editor_slider_1"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:contentDescription="@string/appearance_editor_control_description"
+                android:visibility="gone" />
 
-        <!-- The keyboard's door to its theme page (DECISIONS item 15), in the last column. -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/appearance_editor_c2_button"
-            style="@style/Widget.Material3.Button.TonalButton.Icon"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:maxLines="2"
-            android:minWidth="0dp"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:text="@string/appearance_editor_keyboard_theme"
-            android:visibility="gone"
-            app:icon="@drawable/ic_settings_chevron_right"
-            app:iconGravity="end"
-            app:iconPadding="4dp"
-            app:iconSize="18dp"
-            app:layout_constraintEnd_toEndOf="@id/appearance_editor_c2_label"
-            app:layout_constraintStart_toStartOf="@id/appearance_editor_c2_label"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier" />
+            <com.termux.app.surfaces.LegendSlider
+                android:id="@+id/appearance_editor_slider_2"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:contentDescription="@string/appearance_editor_control_description"
+                android:visibility="gone" />
 
-        <com.google.android.material.slider.Slider
-            android:id="@+id/appearance_editor_c2_slider"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:contentDescription="@string/appearance_editor_control_description"
-            android:stepSize="1"
-            android:valueFrom="0"
-            android:valueTo="100"
-            app:labelBehavior="gone"
-            app:layout_constraintEnd_toEndOf="@id/appearance_editor_c2_label"
-            app:layout_constraintStart_toStartOf="@id/appearance_editor_c2_label"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier"
-            app:tickVisibilityMode="hidden" />
+            <com.termux.app.surfaces.LegendSlider
+                android:id="@+id/appearance_editor_slider_3"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:contentDescription="@string/appearance_editor_control_description"
+                android:visibility="gone" />
 
-        <!-- The terminal's Trail and Effect: a label over an outlined button that names the
-             chosen option and opens a menu of the choices (six trail styles do not fit as a
-             segmented row, and "Trail · Motion blur" does not fit a 360dp column). Equal columns
-             with one 16dp gap; Effect is GONE below API 33, and Trail then takes the full width.
-             Both are GONE for every element but the terminal; each label follows its button. -->
-        <androidx.constraintlayout.widget.Barrier
-            android:id="@+id/appearance_editor_row2_barrier_controls"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            app:barrierDirection="bottom"
-            app:constraint_referenced_ids="appearance_editor_c1_slider,appearance_editor_c1_soft,appearance_editor_legibility,appearance_editor_cl_slider,appearance_editor_c3_slider,appearance_editor_c2_button,appearance_editor_c2_slider" />
-
-        <TextView
-            android:id="@+id/appearance_editor_trail_label"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:layout_marginEnd="16dp"
-            android:ellipsize="end"
-            android:importantForAccessibility="no"
-            android:maxLines="1"
-            android:text="@string/appearance_editor_trail_label"
-            android:textAppearance="?attr/textAppearanceLabelMedium"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            android:visibility="gone"
-            app:layout_constraintEnd_toStartOf="@id/appearance_editor_effect_label"
-            app:layout_constraintHorizontal_chainStyle="spread"
-            app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier_controls"
-            app:layout_goneMarginEnd="0dp" />
-
-        <TextView
-            android:id="@+id/appearance_editor_effect_label"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:ellipsize="end"
-            android:importantForAccessibility="no"
-            android:maxLines="1"
-            android:text="@string/appearance_editor_effect_label"
-            android:textAppearance="?attr/textAppearanceLabelMedium"
-            android:textColor="?attr/colorOnSurfaceVariant"
-            android:visibility="gone"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toEndOf="@id/appearance_editor_trail_label"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_row2_barrier_controls" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/appearance_editor_trail"
-            style="?attr/materialButtonOutlinedStyle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:minWidth="0dp"
-            android:visibility="gone"
-            app:icon="@drawable/ic_arrow_drop_down_16"
-            app:iconGravity="end"
-            app:layout_constraintEnd_toEndOf="@id/appearance_editor_trail_label"
-            app:layout_constraintStart_toStartOf="@id/appearance_editor_trail_label"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_trail_label" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/appearance_editor_effect"
-            style="?attr/materialButtonOutlinedStyle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:ellipsize="end"
-            android:maxLines="1"
-            android:minWidth="0dp"
-            android:visibility="gone"
-            app:icon="@drawable/ic_arrow_drop_down_16"
-            app:iconGravity="end"
-            app:layout_constraintEnd_toEndOf="@id/appearance_editor_effect_label"
-            app:layout_constraintStart_toStartOf="@id/appearance_editor_effect_label"
-            app:layout_constraintTop_toBottomOf="@id/appearance_editor_effect_label" />
-    </androidx.constraintlayout.widget.ConstraintLayout>
+            <com.termux.app.surfaces.LegendSlider
+                android:id="@+id/appearance_editor_slider_4"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:contentDescription="@string/appearance_editor_control_description"
+                android:visibility="gone" />
+        </LinearLayout>
+    </LinearLayout>
 
     <androidx.constraintlayout.widget.Group
         android:id="@+id/appearance_editor_appearance_group"
@@ -513,7 +278,7 @@
         android:contentDescription="@string/termux_layout_editor_orientation"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/appearance_editor_header_bottom"
+        app:layout_constraintTop_toTopOf="parent"
         app:selectionRequired="true"
         app:singleSelection="true">
 

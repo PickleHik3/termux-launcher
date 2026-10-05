@@ -3105,6 +3105,54 @@ public final class TaiManager {
     }
 
     /**
+     * A dry run of the memory budget for a momentary load of {@code modelId} (a model the caller
+     * unloads within a minute, such as the living-still reader) as it would be decided now: the
+     * same request {@link #decideLoad} builds, but nothing is evicted, logged or loaded. Null when
+     * it cannot be worked out (unknown model, a blocked preflight, an error): the caller then goes
+     * ahead and lets the real load decide. Not for the main thread.
+     */
+    @Nullable
+    public TaiLoadBudget.Plan previewMomentaryLoad(@NonNull String modelId, @Nullable String accelerator,
+                                                   int contextWindow) {
+        try {
+            TaiModelSpec spec = resolveModel(modelId);
+            if (spec == null) return null;
+            JSONObject request = new JSONObject();
+            request.put("load_class", "momentary");
+            request.put("context_window", contextWindow);
+            if (accelerator != null) request.put("accelerator", accelerator);
+            TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
+            TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, true);
+            if (preflight.blocked) return null;
+            TaiDeviceCapabilities device = preflight.device;
+            List<String> accelerators;
+            if (!"auto".equals(preflight.requestedAccelerator) || TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
+                accelerators = Collections.singletonList(preflight.effectiveAccelerator);
+            } else {
+                accelerators = TaiLoadPreflight.autoAccelerators(appContext, spec, device, preflight.profile);
+                if (accelerators.isEmpty()) accelerators = Collections.singletonList(preflight.effectiveAccelerator);
+            }
+            int cap = TaiContextWindowPolicy.effectiveEndpointContextWindow(spec, device.memoryBytes, options.contextWindow);
+            boolean encoders = spec.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
+                || spec.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
+            List<TaiResidency.Entry> residents = residency().snapshot();
+            TaiMemInfo.Reading memory = TaiMemInfo.read(appContext);
+            long available = TaiResidency.creditedAvailable(availableMemory(memory, device), residents,
+                TaiResidency.Kind.CHAT, spec.backend);
+            return TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, TaiResidency.fileBytes(spec), encoders,
+                device.physicalMemoryBytes, available, accelerators, cap,
+                null, 0, options.contextWindow != null, device.memoryThresholdBytes,
+                measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend),
+                true)
+                .withConditions(TaiMemInfo.conditions(appContext, memory))
+                .withKvBytesPerToken(kvBytesPerToken(spec))
+                .withGpuless(!device.supportsAccelerator("gpu")));
+        } catch (Exception | LinkageError e) {
+            return null;
+        }
+    }
+
+    /**
      * Settles accelerator and context window for a load that passed preflight, from the memory free
      * right now (see {@link TaiLoadBudget}). Every load path goes through here: explicit loads,
      * keep-warm and the automatic load behind a chat request.

@@ -31,13 +31,23 @@ import com.termux.app.terminal.Motion;
  * <p>In wallpaper passthrough mode the wallpaper is not the launcher's to scale: the system draws
  * it behind the translucent window, and the scaled launcher would sit as a cut-out over an
  * unscaled picture. For the editor's lifetime the frame then paints the wallpaper itself, at the
- * decor's rect inside the container ({@link #showWallpaper}), so it scales with everything else,
- * and the host makes the window opaque around it.</p>
+ * decor's rect inside the container ({@link #showWallpaper}), so it scales with everything else.
+ * What shows around the scaled frame is the Appearance surface's colorSurface scrim in the content
+ * view, never a swap of the window's background.</p>
+ *
+ * <p><b>Wallpaper display contract.</b> The frame never replaces {@code wallpaper_backdrop}: in
+ * self-drawn mode the real backdrop view is part of the container and scales, clips and glasses
+ * with it, and no editor wallpaper is loaded. Live wallpapers render through
+ * {@code WallpaperBackdropView#setLiveShader} (driven by {@code GeneratedWallpaperHost}) and so
+ * scale with the frame with no editor change. {@link #showWallpaper} is for passthrough mode only,
+ * where the backdrop is hidden and the system draws the wallpaper.</p>
  */
 final class AppearanceEditorFrame {
 
     /** How far the launcher is scaled at most; smaller only when the bottom area needs the room. */
     static final float PREFERRED_SCALE = 0.76f;
+    /** The most the frame grows to where the sheet under it is short (a Look stop). */
+    static final float MAX_SCALE = 0.86f;
     /** Never smaller than this, however short the window: past it the frame is unreadable. */
     static final float MIN_SCALE = 0.5f;
     /** The radius used where the platform cannot say what the display's corners are. */
@@ -69,10 +79,27 @@ final class AppearanceEditorFrame {
      * @param frameBottomPx     how far down the frame may reach, in the same space
      */
     static float fitScale(int containerHeightPx, int frameTopPx, int frameBottomPx) {
+        return fitScale(containerHeightPx, frameTopPx, frameBottomPx, PREFERRED_SCALE);
+    }
+
+    /** {@link #fitScale(int, int, int)} with the cap given: {@link #MAX_SCALE} for a short sheet. */
+    static float fitScale(int containerHeightPx, int frameTopPx, int frameBottomPx, float cap) {
         if (containerHeightPx <= 0)
-            return PREFERRED_SCALE;
+            return Math.min(cap, PREFERRED_SCALE);
         float fit = (frameBottomPx - frameTopPx) / (float) containerHeightPx;
-        return Math.max(MIN_SCALE, Math.min(PREFERRED_SCALE, fit));
+        return Math.max(MIN_SCALE, Math.min(cap, fit));
+    }
+
+    /**
+     * Puts the root at {@code scale} and {@code translationYPx} now, on the frame's pivot, without
+     * touching its animations or clip: one tick of an animation the caller drives.
+     */
+    void setPose(float scale, float translationYPx) {
+        mRoot.setPivotX(mRoot.getWidth() / 2f);
+        mRoot.setPivotY(0f);
+        mRoot.setScaleX(scale);
+        mRoot.setScaleY(scale);
+        mRoot.setTranslationY(translationYPx);
     }
 
     /** The display's own corner radius, in px: the platform's on API 31+, 28dp below. */

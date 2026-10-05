@@ -3371,7 +3371,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Whether the appearance editor holds the window opaque behind its scaled frame; the window
      * background reset leaves the decor alone while it does.
      */
-    private boolean mEditorWindowOpaque;
     /** The glass drawable the gutter was last given, so a reset to a plain colour is told apart. */
     @Nullable private android.graphics.drawable.Drawable mFrameGutterDrawable;
 
@@ -3491,7 +3490,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override @Nullable public ColorFilter paneGlassFrostFilter() {
-                return com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getAppBarOpacity() : 100);
+                return com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getTerminalBackgroundOpacity() : 100);
             }
 
             @Override @Nullable public Bitmap wallBehindFrame() {
@@ -10796,6 +10795,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
         intent.removeExtra(EXTRA_WALLPAPER_STYLE);
         intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
+        // The door is another activity's: cover the launcher at once, so its home screen never
+        // shows between Settings closing and the Overview standing (the "flash").
+        mAppearance.coverNextOpen();
         openAppearanceSurface(com.termux.app.surfaces.AppearanceSurfaceController.PageId.OVERVIEW);
         // Settings' Appearance row: closing the surface goes back to Settings, as its old Look page did.
         mAppearanceFromSettings = fromSettings;
@@ -11005,12 +11007,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.isRoundedDockStyle();
         }
 
-        @Override public void setTopStatusBarCollapsed(boolean collapsed, boolean animate) {
-            TermuxActivity.this.setTopStatusBarCollapsed(collapsed, animate);
+        @Override public void setTopStatusBarExpandedForEditor(boolean expanded, boolean animate) {
+            TermuxActivity.this.setTopStatusBarExpandedForEditor(expanded, animate);
         }
 
-        @Override public boolean isTopStatusBarCollapsed() {
-            return isStatusBarCompact();
+        @Override public void applyDockButtonCount(int count) {
+            if (mSuggestionBarView == null) return;
+            mLastStyledDockButtonCount = count;
+            mSuggestionBarView.setMaxButtonCount(count);
+            mSuggestionBarView.reloadAllApps();
         }
 
         @Override public int statusBarInsetTop() {
@@ -11131,7 +11136,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     Drawable system = manager.getDrawable();
                     Logger.logDebug(LOG_TAG, "Editor wallpaper: system drawable="
                         + (system != null));
-                    if (system != null) return system;
+                    if (system != null) {
+                        // Own the pixels, then let the manager drop its cached copy: a stale
+                        // cache is what made the lock screen's picture flash on later reads.
+                        Drawable owned = copyEditorWallpaper(system);
+                        manager.forgetLoadedWallpaper();
+                        return owned;
+                    }
                 }
             } catch (Exception e) {
                 // No permission to read it, or no wallpaper service: try the launcher's own copy.
@@ -11140,6 +11151,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Drawable fallback = exact.isFile() ? decodeEditorWallpaper(exact) : null;
             Logger.logDebug(LOG_TAG, "Editor wallpaper: exact fallback=" + (fallback != null));
             return fallback;
+        }
+
+        @NonNull
+        private Drawable copyEditorWallpaper(@NonNull Drawable source) {
+            try {
+                Bitmap from = source instanceof android.graphics.drawable.BitmapDrawable
+                    ? ((android.graphics.drawable.BitmapDrawable) source).getBitmap() : null;
+                if (from != null) {
+                    Bitmap copy = from.copy(Bitmap.Config.ARGB_8888, false);
+                    if (copy != null)
+                        return new android.graphics.drawable.BitmapDrawable(getResources(), copy);
+                }
+            } catch (RuntimeException | OutOfMemoryError e) {
+                // Keep the drawable as read.
+            }
+            return source;
         }
 
         @Nullable
@@ -11168,22 +11195,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return wallGroundColor();
         }
 
-        @Nullable private Drawable mEditorSavedWindowBackground;
-
-        @Override public void setEditorWindowOpaque(boolean opaque) {
-            android.view.Window window = getWindow();
-            if (window == null || opaque == mEditorWindowOpaque) return;
-            if (opaque) {
-                mEditorSavedWindowBackground = window.getDecorView().getBackground();
-                window.setBackgroundDrawable(new ColorDrawable(getTermuxThemeColor(
-                    com.google.android.material.R.attr.colorSurface,
-                    R.color.termux_surface_base)));
-            } else {
-                window.setBackgroundDrawable(mEditorSavedWindowBackground != null
-                    ? mEditorSavedWindowBackground : new ColorDrawable(Color.TRANSPARENT));
-                mEditorSavedWindowBackground = null;
-            }
-            mEditorWindowOpaque = opaque;
+        // True where the system draws the wallpaper behind a translucent window (passthrough): the
+        // frame then paints a copy of it. Otherwise the container's own backdrop scales with it.
+        @Override public boolean editorPaintsWallpaper() {
+            return shouldUseWallpaperPassthroughMode();
         }
     }
 
@@ -11953,6 +11968,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean isStatusBarCompact() {
         if (!com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
             return true;
+        }
+        // The Look editor holds the bar open without touching the stored choice.
+        if (mStatusBarExpandedForEditor) {
+            return false;
         }
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && store.isStatusCompact(currentPlaceOrientation());
@@ -17007,9 +17026,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     navigator.close();
                     return;
                 }
-                ready.accept(new com.termux.app.chrome.wallpaper.WallpaperPickerPage(TermuxActivity.this,
-                    slots, overviewListener(), Build.VERSION.SDK_INT, animatedOffered, navigator::close,
-                    restore, new com.termux.app.chrome.wallpaper.WallpaperThumbs(), loaded, io));
+                final com.termux.app.chrome.wallpaper.WallpaperPickerPage picker =
+                    new com.termux.app.chrome.wallpaper.WallpaperPickerPage(TermuxActivity.this,
+                        slots, overviewListener(), Build.VERSION.SDK_INT, animatedOffered, navigator::close,
+                        restore, new com.termux.app.chrome.wallpaper.WallpaperThumbs(), loaded, io);
+                // The surface's one bar (back, the Wallpaper | Look | Layout pill, Done) around
+                // the page; the Wallpaper segment is this page.
+                final com.termux.app.surfaces.AppearanceEditorPage shell =
+                    com.termux.app.surfaces.AppearanceEditorPage.overview(TermuxActivity.this, navigator,
+                        picker.root());
+                ready.accept(new com.termux.app.surfaces.AppearanceSurfaceController.OverviewPage() {
+                    @NonNull @Override public View root() { return shell.root(); }
+                    @NonNull @Override public View slidingPart() { return shell.content(); }
+                    @NonNull @Override public CharSequence title() { return picker.title(); }
+                    @Override public void onShown() { picker.onShown(); }
+                    @Override public void onHidden() { picker.onHidden(); }
+                    @Override public void release() { picker.release(); }
+                    @Nullable @Override public View sharedCard() { return picker.sharedCard(); }
+                    @NonNull @Override public java.util.List<View> leavingViews() { return picker.leavingViews(); }
+                    @NonNull @Override public java.util.List<View> fadingViews() { return picker.fadingViews(); }
+                    @Override public void setBackgroundAlpha(float alpha) {
+                        shell.setBackgroundAlpha(alpha);
+                        picker.setBackgroundAlpha(alpha);
+                    }
+                    @Override public void setBarVisible(boolean visible) { shell.setBarVisible(visible); }
+                });
             });
         }
 
@@ -17035,15 +17076,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (page.root().isShown()) page.onShown();
                 });
             }, "appearance-icons-still").start();
-            // The page brings no bar of its own: the Overview's back-and-title bar over it.
-            final View frame = getLayoutInflater().inflate(R.layout.appearance_page_frame, null, false);
-            ((TextView) frame.findViewById(R.id.appearance_page_title)).setText(page.title());
-            frame.findViewById(R.id.appearance_page_back).setOnClickListener(v -> navigator.back());
-            ((ViewGroup) frame.findViewById(R.id.appearance_page_content)).addView(page.root(),
-                new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT));
+            // The page brings no bar of its own: the surface's shared bar (back, the title, Done).
+            final com.termux.app.surfaces.AppearanceEditorPage shell =
+                com.termux.app.surfaces.AppearanceEditorPage.icons(TermuxActivity.this, navigator,
+                    page.title(), page.root());
             return new com.termux.app.surfaces.AppearanceSurfaceController.Page() {
-                @NonNull @Override public View root() { return frame; }
+                @NonNull @Override public View root() { return shell.root(); }
+                @NonNull @Override public View slidingPart() { return shell.content(); }
                 @NonNull @Override public CharSequence title() { return page.title(); }
                 @Override public void onShown() { page.onShown(); }
                 @Override public void onHidden() { page.onHidden(); }
@@ -20469,6 +20508,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Whether the Appearance editor's Look page holds the top status bar open. A transient state
+     * ({@link #isStatusBarCompact} reads it as expanded) that is never stored: the stored
+     * compact/expanded choice, per orientation, is exactly what it was.
+     */
+    private boolean mStatusBarExpandedForEditor;
+
+    /**
+     * Opens the top status bar for the editor, or lets it fold back to its stored shape, with
+     * the same animated height change a fold makes. Nothing is written: with the flag set the
+     * bar already reads as expanded, so the fold's own preference write sees no change. A bar down
+     * a side cannot expand, so there this does nothing.
+     */
+    private void setTopStatusBarExpandedForEditor(boolean expanded, boolean animate) {
+        boolean held = expanded
+            && com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge);
+        if (mStatusBarExpandedForEditor == held) return;
+        mStatusBarExpandedForEditor = held;
+        setTopStatusBarCollapsed(isStatusBarCompact(), animate);
+    }
+
+    /**
      * Lands the bar in one of its two forms. The fold's arithmetic — the landing's time, when the
      * open bar's content shows — is {@link com.termux.app.statusbar.StatusBarFoldMotion}'s; the
      * curve is the shared settle curve. A fold the finger was driving ({@link #dragTopStatusBar})
@@ -21377,9 +21437,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!ink.bandRect(com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR, mStatusInkRect))
             return;
         int primary = statusInkSeed(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
+        // A real ink pair: the primary role toned dark (about 30) for pale glass and pale (about
+        // 85) for dark glass, so the band can flip with the chrome's polarity rather than buying
+        // a veil to keep one ink legible.
+        double primaryTone = com.termux.app.theme.SchemeTone.tone(primary);
+        int darkPrimary = com.termux.app.theme.SchemeTone.toneShift(primary, 30d - primaryTone);
+        int palePrimary = com.termux.app.theme.SchemeTone.toneShift(primary, 85d - primaryTone);
         com.termux.app.chrome.OnGlass.Resolution band = ink.onGlass(
             com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR, mStatusInkRect,
-            primary, primary, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+            darkPrimary, palePrimary, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
 
         // A muted widget is the AI glyph's few seconds of afterlife: the state is said by the
         // neutral role, and the fade is allowed only as far as the backdrop can carry it.
@@ -21409,7 +21475,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (lens != null) lens.setBandSurface(band.surface);
         com.termux.app.statusbar.SessionsIndicatorView sessions =
             findViewById(R.id.terminal_sessions_indicator);
-        if (sessions != null) sessions.setBandSurface(band.surface);
+        if (sessions != null) sessions.setBandInk(ink, band);
+        // What stands on the same band takes its ink from the same resolution.
+        com.termux.app.statusbar.PinnedNotificationsView pinned =
+            findViewById(R.id.terminal_pinned_notifications);
+        if (pinned != null) pinned.setBandSurface(band.surface);
+        com.termux.app.statusbar.MediaWidgetView media = findViewById(R.id.terminal_media_widget);
+        if (media != null) media.onThemeChanged();
+        com.termux.app.terminal.TerminalClockWidget clock = findViewById(R.id.terminal_clock_widget);
+        if (clock != null) clock.onThemeChanged();
     }
 
     /** The role colour a status tier is written in; its hue is the tier, and the toning keeps it. */
@@ -21423,7 +21497,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     androidx.core.content.ContextCompat.getColor(this, R.color.termux_secondary));
             case TERTIARY:
                 return MaterialColors.getColor(this,
-                    com.google.android.material.R.attr.colorTertiary, primary);
+                    com.termux.shared.R.attr.termuxColorTertiary, primary);
             default:
                 return primary;
         }
@@ -21470,7 +21544,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (weather != null) {
             weather.setVisibility(weatherOn ? View.VISIBLE : View.GONE);
-            weather.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
+            weather.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
             if (weather.getTag() == null) {
                 weather.setTag("wired");
                 weather.setIconAnimation(
@@ -21484,16 +21558,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
                 .cpuRamDotVisible(cpuOn, ramOn, weatherOn);
             cpuRamDot.setVisibility(show ? View.VISIBLE : View.GONE);
-            cpuRamDot.setColorRole(ramOn
-                ? com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY
-                : com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
+            // The dot takes the tier it leads into: RAM, or the weather when RAM is off. Both are
+            // secondary now, so AI alone carries the tertiary role.
+            cpuRamDot.setColorRole(
+                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
         }
         if (ramWeatherDot != null) {
             boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
                 .ramWeatherDotVisible(ramOn, weatherOn);
             ramWeatherDot.setVisibility(show ? View.VISIBLE : View.GONE);
             ramWeatherDot.setColorRole(
-                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
+                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
         }
 
         if (cpuOn || ramOn) {
@@ -23468,11 +23543,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // gets center-cropped to a shorter frame while the native wallpaper remains visible in
             // the inset. Two different crops of the same image produce the hard y=inset seam.
             //
-            // While the appearance editor has the window opaque (its scaled frame paints its own
-            // wallpaper and the fill around it is the editor's ground), the decor keeps that fill:
-            // clearing it here, which a Legibility change reaches through the palette refresh,
-            // showed the unscaled system wallpaper bright around the frame until the editor closed.
-            if (!mEditorWindowOpaque) decorView.setBackgroundColor(Color.TRANSPARENT);
+            // The appearance surface covers what shows around the editor's scaled frame with its
+            // own colorSurface scrim in the content view; the window itself is never swapped.
+            decorView.setBackgroundColor(Color.TRANSPARENT);
             if (backgroundHost != decorView) {
                 backgroundHost.setBackgroundColor(Color.TRANSPARENT);
             }
@@ -23495,7 +23568,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!hasFocus || mIsInvalidState || !mIsVisible) {
             return;
         }
-        mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
+        // The Appearance surface's own dialogs and sheets take and return focus: the backdrops are
+        // not re-rendered for them (a re-render under the scaled editor frame showed as a flash).
+        if (!mAppearance.isOpen())
+            mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
         // Returning from another app can restore focus before the terminal host re-measures to full
         // size, leaving panes stuck at a tiny stale grid. Re-measure once layout settles.
         if (mPaneController != null)

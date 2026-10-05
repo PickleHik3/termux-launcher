@@ -1460,6 +1460,8 @@ public final class TermuxPreferenceConstants {
         public static final String GLASS_TINT_SCHEME = "scheme";
         /** Obsidian-Music's ink-blue glass, a white wash over it; white in a light theme. */
         public static final String GLASS_TINT_OBSIDIAN = "obsidian";
+        /** Glass in Material colours: the scheme tint toward primary container, a surface-tint wash. */
+        public static final String GLASS_TINT_MATERIAL = "material";
         public static final String DEFAULT_SURFACE_GLASS_TINT = GLASS_TINT_SCHEME;
 
         public static final String KEY_SURFACE_GLASS_RIM = "surface_glass_rim";

@@ -458,6 +458,12 @@ public final class LayoutCanvasView extends View {
     private final RectF mExternalTray = new RectF();
     /** The outline's corner in px set by a frame-filling host; negative draws the artwork's. */
     private float mFrameRadiusOverridePx = -1f;
+    /**
+     * Whether the phone model drawn is not the view's own shape (the landscape model in a portrait
+     * host, or the other way round): it then stands centred inside the view at its own radius.
+     */
+    private boolean mModelResized;
+    @Nullable private Runnable mModelResizedListener;
     /** What {@link OnCanvasEditListener#onTrayOfferChanged} last said. */
     private boolean mToldTrayOffered;
     private boolean mToldTrayHovered;
@@ -1067,7 +1073,12 @@ public final class LayoutCanvasView extends View {
         mLegendRects.clear();
         boolean landscape = mOrientation == PlaceOrientation.LANDSCAPE;
         boolean viewLandscape = viewWidth > viewHeight;
-        if (landscape == viewLandscape) {
+        boolean resized = landscape != viewLandscape;
+        if (resized != mModelResized) {
+            mModelResized = resized;
+            if (mModelResizedListener != null) mModelResizedListener.run();
+        }
+        if (!resized) {
             mFrameRect.set(0f, 0f, viewWidth, viewHeight);
         } else {
             float aspect = landscape ? LANDSCAPE_ASPECT : PORTRAIT_ASPECT;
@@ -1103,7 +1114,16 @@ public final class LayoutCanvasView extends View {
         invalidate();
     }
 
-    /** Whether the phone outline is the view's own bounds. */
+    /** Whether the phone model is smaller than, and centred in, the view (the other orientation). */
+    public boolean isModelResized() {
+        return mFillsView && mModelResized;
+    }
+
+    /** Told when {@link #isModelResized} may have changed. */
+    public void setOnModelResizedListener(@Nullable Runnable listener) {
+        mModelResizedListener = listener;
+    }
+
     public void setOnTrashTapListener(@Nullable Runnable listener) {
         mTrashTapListener = listener;
     }
@@ -2274,6 +2294,13 @@ public final class LayoutCanvasView extends View {
         if (mFillsView && mFrameRadiusOverridePx >= 0f
             && mFrameRect.width() >= getWidth() && mFrameRect.height() >= getHeight())
             return mFrameRadiusOverridePx;
+        if (mFillsView && mModelResized && mFrameRadiusOverridePx >= 0f && getWidth() > 0) {
+            // The device's own corner at the model's scale: the host's radius is for the
+            // host's width, the model's short side is the host's width in the other orientation.
+            float short1 = Math.min(getWidth(), getHeight());
+            return mFrameRadiusOverridePx * Math.min(mFrameRect.width(), mFrameRect.height())
+                / Math.max(1f, short1);
+        }
         return u(FRAME_RADIUS_U);
     }
 

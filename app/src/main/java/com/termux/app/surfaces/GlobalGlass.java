@@ -10,8 +10,8 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
 /**
  * The Look editor's global glass (layout editor v2, DECISIONS items 13 and 14): Blur, Opacity and
  * Grain written as the shared base values. Writing one re-attaches every surface to the base,
- * terminal included, so the number is what every surface wears afterwards; the terminal's own
- * Opacity (Darkness) detaches it again for fine-tuning.
+ * terminal included, so the number is what every surface wears afterwards; an element's own
+ * Blur, Grain or Opacity on the Custom row detaches it again for fine-tuning.
  *
  * <p>No views and no {@code Context}: the rule is held by a test against real preferences.</p>
  */

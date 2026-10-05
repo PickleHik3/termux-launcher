@@ -164,6 +164,36 @@ public class TerminalClockWidgetTest {
             !widget.isInsideTapTarget(density, slot - density));
     }
 
+    @Test
+    public void fitScale_growsTheWholeColumnToTheBudgetButNeverPastTheCeiling() {
+        // 58 budget over a 48 column: the date stays and the face grows by one uniform scale.
+        float[] plan = TerminalClockWidget.fitScalePlan(58f, 400f, 48f, 34f, 150f, 130f, .65f);
+        assertEquals(58f / 48f, plan[0], 1e-4f);
+        assertEquals(1f, plan[1], 0f);
+        assertEquals(150f * plan[0], plan[2], 1e-3f);
+        // A tall budget stops at the ceiling.
+        float[] tall = TerminalClockWidget.fitScalePlan(200f, 4000f, 48f, 34f, 150f, 130f, .65f);
+        assertEquals(TerminalClockWidget.FIT_MAX_SCALE, tall[0], 0f);
+    }
+
+    @Test
+    public void fitScale_widthBudgetShrinksTheWholeFaceTogether() {
+        float[] plan = TerminalClockWidget.fitScalePlan(58f, 120f, 48f, 34f, 150f, 130f, .65f);
+        assertEquals(120f / 150f, plan[0], 1e-4f);
+        assertEquals(1f, plan[1], 0f);
+    }
+
+    @Test
+    public void fitScale_dropsTheDateWhenTheColumnFallsBelowTheFloor() {
+        // 30 over a 48 column is .625, under the .65 floor: the band alone is fitted.
+        float[] plan = TerminalClockWidget.fitScalePlan(30f, 400f, 48f, 34f, 150f, 130f, .65f);
+        assertEquals(0f, plan[1], 0f);
+        assertEquals(30f / 34f, plan[0], 1e-4f);
+        assertEquals(130f * plan[0], plan[2], 1e-3f);
+        // With no floor (the slot to itself) the date is never dropped.
+        assertEquals(1f, TerminalClockWidget.fitScalePlan(30f, 400f, 48f, 34f, 150f, 130f, 0f)[1], 0f);
+    }
+
     /** The source of {@code method}, from its signature to the first line that closes it. */
     private static String body(String source, String method) {
         int start = source.indexOf("private void " + method + "(");

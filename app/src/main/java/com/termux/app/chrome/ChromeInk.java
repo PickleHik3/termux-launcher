@@ -355,8 +355,11 @@ public final class ChromeInk {
         int flat = OnGlass.backdrop(wallpaper, mDimColor, tint);
         // The normal foreground is body text; the dim one is text a program asked to recede, and
         // is held to the large-text tier, scaled by the same level.
+        // The veil never takes the pane past its own opacity plus 15 points (20% to 55%): a pane
+        // the user made thin stays glass, and the ink is reported as capped instead.
+        int cap255 = veilCeiling255(tint);
         OnGlass.Resolution resolution = OnGlass.resolveFixedInk(flat, Color.TRANSPARENT, ink,
-            target, dimInk, mLevel.target(OnGlass.TARGET_LARGE_TEXT), veilColor);
+            target, dimInk, mLevel.target(OnGlass.TARGET_LARGE_TEXT), veilColor, cap255);
         if (answer == null) {
             answer = new PaneAnswer(resolution);
             if (mPanes.size() >= MAX_PANE_ANSWERS) {
@@ -442,6 +445,15 @@ public final class ChromeInk {
      * toned on the surface that is really under it and not on the veil it would have bought
      * alone.</p>
      */
+    /**
+     * The most veil a surface whose glass tint is {@code tint} may buy: its own opacity plus 15
+     * points, held to 20%..55%. A surface the user made thin stays glass; the ink moves instead.
+     */
+    static int veilCeiling255(@ColorInt int tint) {
+        float opacityFraction = Color.alpha(tint) / 255f;
+        return Math.round(255f * Math.max(0.20f, Math.min(0.55f, opacityFraction + 0.15f)));
+    }
+
     @NonNull
     private OnGlass.Resolution resolveBand(@NonNull GlassBackdropCache.Band band,
                                            @NonNull Contract contract) {
@@ -584,7 +596,8 @@ public final class ChromeInk {
         boolean pale = polarity() == Polarity.PALE_INK;
         if (OnGlass.ratio(ink, OnGlass.opaque(baseColor)) > OnGlass.ratio(ink, backdrop)) {
             OnGlass.Resolution own =
-                mCache.resolveOn(band, screenRect, backdrop, ink, ink, baseColor, target, pale);
+                mCache.resolveOn(band, screenRect, backdrop, ink, ink, baseColor, target, pale,
+                    veilCeiling255(OnGlass.withAlpha(baseColor, baseAlpha)));
             if (Color.alpha(own.veil) >= floorAlpha) return own;
             return OnGlass.resolveUnder(backdrop, OnGlass.withAlpha(baseColor, floorAlpha), ink,
                 target, pale);

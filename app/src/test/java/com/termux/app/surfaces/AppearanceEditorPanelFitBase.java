@@ -2,9 +2,12 @@ package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
+import android.graphics.Bitmap;
+import android.graphics.Canvas;
 import android.text.Layout;
 import android.view.ContextThemeWrapper;
 import android.view.View;
@@ -21,8 +24,10 @@ import org.junit.Test;
 import org.robolectric.Robolectric;
 import org.robolectric.RuntimeEnvironment;
 
+import java.util.List;
+
 /**
- * The bottom area fits a phone of the subclass's width in both modes with Undo up: no view runs past the sheet's
+ * The bottom area fits a phone of the subclass's width in both modes: no view runs past the sheet's
  * edge, the mode pill's words are whole, and nothing on the top row overlaps. Native graphics,
  * so text is measured with real font metrics rather than one pixel per character.
  */
@@ -45,78 +50,105 @@ public abstract class AppearanceEditorPanelFitBase {
         mPanel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
         mWidthPx = Math.round(themed.getResources().getConfiguration().screenWidthDp
             * themed.getResources().getDisplayMetrics().density);
-        mPanel.setDirty(true);
-    }
-
-    @Test
-    public void appearanceModeWithTheTerminalsFourControlsFits() {
-        mPanel.showAppearanceMode();
-        mPanel.showRow2(R.string.appearance_editor_target_terminal);
-        mPanel.setFirstSlider("Opacity · 40%", 40, 100);
-        mPanel.setLegibility(mPanel.legibilityLabel(1), 1, true);
-        mPanel.setThirdSlider("Grain · 14%", 14, 100);
-        mPanel.setSecondSlider("Blur · 12 dp", 12, 32);
-        layOut(mPanel.measureFor(false, mWidthPx));
-        assertFits();
-        mPanel.hideThird();
-    }
-
-    @Test
-    public void appearanceModeWithTheWallpapersToggleFits() {
-        mPanel.showAppearanceMode();
-        mPanel.showRow2(R.string.appearance_editor_target_wallpaper);
-        mPanel.setSoft("Soften wallpaper", true);
-        mPanel.hideLegibility();
-        mPanel.setSecondSlider("Dim · 30%", 30, 100);
-        layOut(mPanel.measureFor(false, mWidthPx));
-        assertFits();
-    }
-
-    /** The global row at Custom with nothing tapped: Blur, Opacity and Grain (item 13). */
-    @Test
-    public void appearanceModeWithTheGlobalRowFits() {
-        mPanel.showAppearanceMode();
-        mPanel.showRow2(R.string.appearance_editor_target_all);
-        mPanel.setFirstSlider("Blur · 30 dp", 30, 30);
-        mPanel.setMiddleSlider("Opacity · 100%", 100, 100);
-        mPanel.setSecondSlider("Grain · 100%", 100, 100);
-        layOut(mPanel.measureFor(false, mWidthPx));
-        assertFits();
-        // The controller rewrites only the label as a slider moves; the sheet keeps its height.
-        mPanel.setMiddleLabel("Opacity · 34%");
-        layOut(mPanel.measureFor(false, mWidthPx));
-        assertFits();
-        assertTrue(mPanel.measureFor(false, mWidthPx)
-            <= mPanel.measureTallest(false, mWidthPx));
-    }
-
-    /** The keyboard's row: Blur and the "Keyboard theme" door, whole and inside the sheet. */
-    @Test
-    public void appearanceModeWithTheKeyboardsThemeDoorFits() {
-        mPanel.showAppearanceMode();
-        mPanel.showRow2(R.string.appearance_editor_target_keyboard);
-        mPanel.setFirstSlider("Blur · 12 dp", 12, 30);
-        mPanel.hideLegibility();
-        mPanel.setSecondButton(mPanel.view().getContext()
-            .getString(R.string.appearance_editor_keyboard_theme));
-        layOut(mPanel.measureFor(false, mWidthPx));
-        assertFits();
-        TextView door = mPanel.view().findViewById(R.id.appearance_editor_c2_button);
-        assertEquals(View.VISIBLE, door.getVisibility());
-        Layout layout = door.getLayout();
-        assertNotNull(layout);
-        assertEquals("\"" + door.getText() + "\" is whole", 0,
-            layout.getEllipsisCount(layout.getLineCount() - 1));
-        assertTrue("a 48dp touch target", door.getHeight()
-            >= Math.round(48 * mPanel.view().getResources().getDisplayMetrics().density));
-        assertTrue(mPanel.measureFor(false, mWidthPx)
-            <= mPanel.measureTallest(false, mWidthPx));
     }
 
     /**
-     * A drag rewrites only the label, never the sheet's height: the label keeps the lines its
-     * widest value needs from the start, so the slider stays where the finger put it.
+     * Every selection's Custom row at its widest legends: its sliders are whole columns inside the
+     * sheet, 12dp apart, one height, each wider than the 40dp track; each legend fits its track
+     * (or is cut to it); the buttons are 48dp touch targets inside the sheet.
      */
+    @Test
+    public void everySelectionsCustomRowFits() {
+        for (AppearanceLooks.Target target : targets()) {
+            showControls(target);
+            layOut(mPanel.measureFor(false, mWidthPx));
+            assertFits();
+            List<AppearanceLooks.Control> expected = AppearanceLooks.controls(target);
+            assertEquals(String.valueOf(target), expected, mPanel.shownControls());
+            float density = mPanel.view().getResources().getDisplayMetrics().density;
+            int track = Math.round(40 * density);
+            int gap = Math.round(12 * density);
+            LegendSlider previous = null;
+            for (AppearanceLooks.Control control : expected) {
+                LegendSlider slider = mPanel.sliderFor(control);
+                assertNotNull(control.name(), slider);
+                assertTrue(control + " is wider than its track: " + slider.getWidth(),
+                    slider.getWidth() >= track);
+                assertEquals("one column height", slider.getResources().getDimensionPixelSize(
+                    R.dimen.appearance_editor_slider_length), slider.getHeight());
+                if (previous != null)
+                    assertEquals("12dp between columns", gap, Math.abs(
+                        slider.getLeft() - previous.getRight()), 1);
+                else
+                    assertEquals("the first column starts at the content edge", 0,
+                        slider.getLeft());
+                previous = slider;
+                assertLegendFits(slider, control);
+            }
+            for (AppearanceLooks.Door door : AppearanceLooks.doors(target)) {
+                MaterialButton button = doorView(door);
+                assertEquals(door.name(), View.VISIBLE, button.getVisibility());
+                assertTrue(door + " is a 48dp target: " + button.getHeight(),
+                    button.getHeight() >= Math.round(48 * density));
+                if (door == AppearanceLooks.Door.KEYBOARD_THEME
+                    || door == AppearanceLooks.Door.CLOCK) {
+                    Layout layout = button.getLayout();
+                    assertNotNull(layout);
+                    assertEquals("\"" + button.getText() + "\" is whole", 0,
+                        layout.getEllipsisCount(layout.getLineCount() - 1));
+                }
+            }
+        }
+    }
+
+    /** A control with the global set's five columns shows five legends reading upward. */
+    @Test
+    public void theGlobalSetHasFiveColumnsAndNoButtons() {
+        showControls(null);
+        layOut(mPanel.measureFor(false, mWidthPx));
+        assertEquals(5, mPanel.shownControls().size());
+        assertTrue(mPanel.shownDoors().isEmpty());
+        assertFits();
+    }
+
+    /** A hidden column leaves no gap: the remaining ones share the width. */
+    @Test
+    public void fewerColumnsShareTheWidthEqually() {
+        showControls(AppearanceLooks.Target.STATUS);
+        layOut(mPanel.measureFor(false, mWidthPx));
+        LegendSlider a = mPanel.sliderFor(AppearanceLooks.Control.BLUR);
+        LegendSlider b = mPanel.sliderFor(AppearanceLooks.Control.GRAIN);
+        LegendSlider c = mPanel.sliderFor(AppearanceLooks.Control.OPACITY);
+        assertNotNull(a);
+        assertNotNull(b);
+        assertNotNull(c);
+        assertEquals(a.getWidth(), b.getWidth(), 1);
+        assertEquals(b.getWidth(), c.getWidth(), 1);
+        View row = mPanel.view().findViewById(R.id.appearance_editor_sliders);
+        assertEquals("the last column ends at the content edge", row.getWidth(), c.getRight(), 1);
+    }
+
+    /**
+     * A drag rewrites only the legend, never the sheet's height or where a slider stands: the
+     * columns are fixed, and the legend is drawn inside them.
+     */
+    @Test
+    public void aLegendChangingMidDragMovesNothing() {
+        showControls(null);
+        int height = mPanel.measureFor(false, mWidthPx);
+        layOut(height);
+        LegendSlider blur = mPanel.sliderFor(AppearanceLooks.Control.BLUR);
+        int left = blur.getLeft();
+        int top = blur.getTop();
+        mPanel.setSliderValue(AppearanceLooks.Control.BLUR, 48);
+        layOut(height);
+        assertEquals(left, blur.getLeft());
+        assertEquals(top, blur.getTop());
+        assertEquals("the sheet keeps its height", height, mPanel.measureFor(false, mWidthPx));
+        assertEquals(48f, blur.getValue(), 0f);
+    }
+
+    /** Layout mode's labels keep the lines their widest value needs, so a drag moves nothing. */
     @Test
     public void aLabelGrowingMidDragKeepsItsSliderInPlace() {
         mPanel.showLayoutMode();
@@ -132,23 +164,6 @@ public abstract class AppearanceEditorPanelFitBase {
         assertFits();
         assertEquals("the slider stays put", top, corners.getTop());
         assertEquals("the sheet keeps its height", height, mPanel.measureFor(true, mWidthPx));
-
-        mPanel.showAppearanceMode();
-        mPanel.showRow2(R.string.appearance_editor_target_all);
-        mPanel.setFirstSlider("Blur · 0 dp", 0, 30);
-        mPanel.setMiddleSlider("Opacity · 5%", 5, 100);
-        mPanel.setSecondSlider("Grain · 0%", 0, 100);
-        height = mPanel.measureFor(false, mWidthPx);
-        layOut(height);
-        View opacity = mPanel.view().findViewById(R.id.appearance_editor_cl_slider);
-        top = opacity.getTop();
-        mPanel.setFirstLabel("Blur · 30 dp");
-        mPanel.setMiddleLabel("Opacity · 100%");
-        mPanel.setSecondLabel("Grain · 100%");
-        layOut(height);
-        assertFits();
-        assertEquals("the slider stays put", top, opacity.getTop());
-        assertEquals("the sheet keeps its height", height, mPanel.measureFor(false, mWidthPx));
     }
 
     /** Layout mode with the hidden tiles open: same height, nothing past the sheet's edge. */
@@ -226,72 +241,30 @@ public abstract class AppearanceEditorPanelFitBase {
     }
 
     /**
-     * The sheet's height follows its content: Row B is GONE until an element is tapped, so the
-     * untapped sheet is shorter, and every tapped element's is at most the tallest, which is
-     * what the frame stands above (so the frame never moves when Row B comes and goes). Undo
-     * does not move the sheet.
+     * The sheet's height follows its content: Row B is GONE until the Custom stop shows it, so the
+     * sheet without it is shorter; every selection's Row B is the same height (a 48dp heading row
+     * over sliders of one length), which is the tallest, so the frame never moves when the
+     * selection changes.
      */
     @Test
     public void appearanceHeightFollowsContentAndTheFrameAnchorIsFixed() {
         mPanel.showAppearanceMode();
-        int untapped = mPanel.measureFor(false, mWidthPx);
+        int lookStop = mPanel.measureFor(false, mWidthPx);
         int tallest = mPanel.measureTallest(false, mWidthPx);
-        assertTrue("untapped " + untapped + " < tallest " + tallest, untapped < tallest);
+        assertTrue("look stop " + lookStop + " < tallest " + tallest, lookStop < tallest);
         assertEquals("the anchor does not depend on Row B's state",
             tallest, mPanel.measureTallest(false, mWidthPx));
 
-        mPanel.showRow2(R.string.appearance_editor_target_dock);
-        mPanel.hideFirst();
-        mPanel.hideLegibility();
-        mPanel.setSecondSlider("Blur · 8 dp", 8, 32);
-        int dock = mPanel.measureFor(false, mWidthPx);
-        assertTrue("tapped " + dock + " > untapped " + untapped, dock > untapped);
-        assertTrue("tapped " + dock + " <= tallest " + tallest, dock <= tallest);
-        assertEquals("the anchor is the same with Row B up",
-            tallest, mPanel.measureTallest(false, mWidthPx));
-
-        mPanel.showRow2(R.string.appearance_editor_target_terminal);
-        mPanel.setFirstSlider("Opacity · 40%", 40, 100);
-        mPanel.setLegibility(mPanel.legibilityLabel(2), 2, true);
-        int terminal = mPanel.measureFor(false, mWidthPx);
-        assertTrue("terminal " + terminal + " <= tallest " + tallest, terminal <= tallest);
-        assertEquals(tallest, mPanel.measureTallest(false, mWidthPx));
-        mPanel.setDirty(true);
-        mPanel.setDirty(false);
-        assertEquals("Undo does not move the sheet", terminal, mPanel.measureFor(false, mWidthPx));
+        for (AppearanceLooks.Target target : targets()) {
+            showControls(target);
+            assertEquals("every selection is one height: " + target, tallest,
+                mPanel.measureFor(false, mWidthPx));
+            assertEquals(tallest, mPanel.measureTallest(false, mWidthPx));
+        }
 
         mPanel.hideRow2();
-        assertEquals("Row B down: back to Row A alone", untapped,
+        assertEquals("Row B down: back to Row A alone", lookStop,
             mPanel.measureFor(false, mWidthPx));
-    }
-
-    /** A text segment is its content plus the style's 12dp each side, not Material's 24dp. */
-    @Test
-    public void textSegmentsAreContentPlusTwelveDpEachSide() {
-        mPanel.showAppearanceMode();
-        layOut(mPanel.measureFor(false, mWidthPx));
-        float density = mPanel.view().getResources().getDisplayMetrics().density;
-        for (int id : new int[] {R.id.appearance_editor_mode_appearance,
-                R.id.appearance_editor_mode_layout}) {
-            MaterialButton segment = mPanel.view().findViewById(id);
-            String measured = segment.getText() + ": paddingLeft=" + segment.getPaddingLeft()
-                + " paddingRight=" + segment.getPaddingRight()
-                + " minWidth=" + segment.getMinWidth()
-                + " minimumWidth=" + segment.getMinimumWidth()
-                + " iconSize=" + segment.getIconSize()
-                + " inset=" + segment.getInsetLeft() + "/" + segment.getInsetRight()
-                + " iconPadding=" + segment.getIconPadding()
-                + " compoundPadding=" + segment.getCompoundDrawablePadding()
-                + " text=" + segment.getLayout().getLineWidth(0)
-                + " width=" + segment.getWidth();
-            assertEquals(measured, Math.round(12 * density), segment.getPaddingLeft());
-            assertEquals(measured, Math.round(12 * density), segment.getPaddingRight());
-            float content = segment.getLayout().getLineWidth(0)
-                + (segment.getIconSize() + segment.getIconPadding());
-            float expected = content + 24 * density;
-            assertTrue(measured + " expected about " + expected,
-                segment.getWidth() <= Math.ceil(expected) + 2 * density);
-        }
     }
 
     @Test
@@ -333,14 +306,82 @@ public abstract class AppearanceEditorPanelFitBase {
             MaterialButton button = root.findViewById(id);
             assertTrue("outlined segment keeps its boundary", button.getStrokeWidth() > 0);
         }
-        MaterialButton mode = root.findViewById(R.id.appearance_editor_mode_appearance);
-        assertEquals("mode segment is the stroke-free tonal one", 0, mode.getStrokeWidth());
     }
 
     @Test
     public void theEyeOffControlHasATooltip() {
         View hidden = mPanel.view().findViewById(R.id.layout_editor_hidden);
         assertNotNull(hidden.getTooltipText());
+    }
+
+    private static java.util.List<AppearanceLooks.Target> targets() {
+        java.util.List<AppearanceLooks.Target> out = new java.util.ArrayList<>();
+        out.add(null);
+        out.addAll(java.util.Arrays.asList(AppearanceLooks.Target.values()));
+        return out;
+    }
+
+    private static int nameOfTarget(AppearanceLooks.Target target) {
+        if (target == null)
+            return R.string.appearance_editor_target_all;
+        switch (target) {
+            case STATUS: return R.string.appearance_editor_target_status;
+            case TERMINAL: return R.string.appearance_editor_target_terminal;
+            case DOCK: return R.string.appearance_editor_target_dock;
+            default: return R.string.appearance_editor_target_keyboard;
+        }
+    }
+
+    /** The widest legend each control can show, so the row is fitted at its worst. */
+    private String widest(AppearanceLooks.Control control) {
+        android.content.Context context = mPanel.view().getContext();
+        switch (control) {
+            case BLUR: return context.getString(R.string.appearance_editor_blur, 48);
+            case GRAIN: return context.getString(R.string.appearance_editor_grain, 100);
+            case OPACITY: return context.getString(R.string.appearance_editor_opacity, 100);
+            case MARGIN: return context.getString(R.string.appearance_editor_margin, 48);
+            case CORNER_RADIUS: return context.getString(R.string.appearance_editor_corners, 40);
+            case KEY_RADIUS: return context.getString(R.string.appearance_editor_key_corners, 24);
+            case KEY_SPACING: return context.getString(R.string.appearance_editor_key_spacing, "8.0");
+            case DOCK_SIZE: return context.getString(R.string.appearance_editor_dock_size, 300);
+            case APP_ICONS: return context.getString(R.string.appearance_editor_app_icons, 10);
+            default: return context.getString(R.string.appearance_editor_legibility_unavailable);
+        }
+    }
+
+    /** The Custom row for a selection, as the controller states it, at the widest legends. */
+    private void showControls(AppearanceLooks.Target target) {
+        mPanel.showAppearanceMode();
+        mPanel.showRow2(nameOfTarget(target));
+        java.util.List<AppearanceEditorPanel.SliderState> states = new java.util.ArrayList<>();
+        for (AppearanceLooks.Control control : AppearanceLooks.controls(target)) {
+            final String legend = widest(control);
+            states.add(new AppearanceEditorPanel.SliderState(control, control.max,
+                control != AppearanceLooks.Control.CONTRAST, value -> legend));
+        }
+        mPanel.setSliders(states);
+        mPanel.setDoors(AppearanceLooks.doors(target));
+        mPanel.setTerminalLooks("default", "none");
+    }
+
+    private MaterialButton doorView(AppearanceLooks.Door door) {
+        View root = mPanel.view();
+        switch (door) {
+            case KEYBOARD_THEME: return root.findViewById(R.id.appearance_editor_door_keyboard_theme);
+            case CLOCK: return root.findViewById(R.id.appearance_editor_door_clock);
+            case TRAIL: return root.findViewById(R.id.appearance_editor_trail);
+            default: return root.findViewById(R.id.appearance_editor_effect);
+        }
+    }
+
+    /** Draws the slider and holds the legend it fitted against the track it has. */
+    private static void assertLegendFits(LegendSlider slider, AppearanceLooks.Control control) {
+        Bitmap bitmap = Bitmap.createBitmap(Math.max(1, slider.getWidth()),
+            Math.max(1, slider.getHeight()), Bitmap.Config.ARGB_8888);
+        slider.draw(new Canvas(bitmap));
+        assertTrue(control + " legend \"" + slider.shownLegend() + "\" fits its track",
+            slider.legendFits());
+        assertTrue("the legend keeps a name", slider.shownLegend().length() > 0);
     }
 
     private void layOut(int heightPx) {
@@ -354,31 +395,9 @@ public abstract class AppearanceEditorPanelFitBase {
         View root = mPanel.view();
         assertEdges(root, 0, root.getWidth());
 
-        View pill = root.findViewById(R.id.appearance_editor_mode);
-        View undo = root.findViewById(R.id.appearance_editor_undo);
-        View done = root.findViewById(R.id.appearance_editor_done);
-        assertEquals(View.VISIBLE, undo.getVisibility());
-        // One row when it fits; when side insets leave too little width, Undo and Done wrap to a
-        // row of their own under the pill. Either way the pill and Undo never overlap.
-        assertTrue("the pill ends before Undo, or Undo wraps under it: " + pill.getRight() + " > "
-                + undo.getLeft(),
-            pill.getRight() <= undo.getLeft() || pill.getBottom() <= undo.getTop());
+        assertNull("Undo lives in the page bar, not the sheet",
+            root.findViewById(R.id.appearance_page_undo));
         assertLabelsAboveTheirControls(root);
-
-        assertEquals("Undo and Done share a row", undo.getTop() < done.getBottom()
-            && done.getTop() < undo.getBottom(), true);
-        assertTrue("Undo ends before Done", undo.getRight() <= done.getLeft());
-        assertTrue("Done inside the sheet's padding",
-            done.getRight() <= root.getWidth() - root.getPaddingRight());
-
-        for (int id : new int[] {R.id.appearance_editor_mode_appearance,
-                R.id.appearance_editor_mode_layout, R.id.appearance_editor_done}) {
-            TextView button = root.findViewById(id);
-            Layout layout = button.getLayout();
-            assertNotNull(layout);
-            assertEquals("\"" + button.getText() + "\" is whole", 0, layout.getEllipsisCount(0));
-            assertEquals("\"" + button.getText() + "\" is on one line", 1, layout.getLineCount());
-        }
     }
 
     /**
@@ -387,13 +406,6 @@ public abstract class AppearanceEditorPanelFitBase {
      */
     private static void assertLabelsAboveTheirControls(View root) {
         int[][] columns = {
-            {R.id.appearance_editor_c1_label, R.id.appearance_editor_c1_slider,
-                R.id.appearance_editor_c1_soft},
-            {R.id.appearance_editor_cl_label, R.id.appearance_editor_legibility,
-                R.id.appearance_editor_cl_slider},
-            {R.id.appearance_editor_c3_label, R.id.appearance_editor_c3_slider},
-            {R.id.appearance_editor_c2_label, R.id.appearance_editor_c2_slider,
-                R.id.appearance_editor_c2_button},
             {R.id.appearance_editor_corners_label, R.id.appearance_editor_corners},
             {R.id.appearance_editor_margin_label, R.id.appearance_editor_margin},
         };
