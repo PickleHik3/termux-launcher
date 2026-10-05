@@ -187,6 +187,14 @@
                 android:textAppearance="?attr/textAppearanceLabelLarge"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
+            <!-- Pushes a lone door (Keyboard theme, Clock) to the row's end; GONE while Trail
+                 and Effect share the row's width. -->
+            <Space
+                android:id="@+id/appearance_editor_row2_space"
+                android:layout_width="0dp"
+                android:layout_height="1dp"
+                android:layout_weight="1" />
+
             <!-- The keyboard's door to its theme page (DECISIONS item 15). -->
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_editor_door_keyboard_theme"

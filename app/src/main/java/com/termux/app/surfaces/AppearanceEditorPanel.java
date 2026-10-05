@@ -978,6 +978,10 @@ final class AppearanceEditorPanel {
         mKeyboardTheme.setVisibility(doors.contains(Door.KEYBOARD_THEME) ? View.VISIBLE : View.GONE);
         mClock.setVisibility(doors.contains(Door.CLOCK) ? View.VISIBLE : View.GONE);
         mTrail.setVisibility(doors.contains(Door.TRAIL) ? View.VISIBLE : View.GONE);
+        View space = mRoot.findViewById(R.id.appearance_editor_row2_space);
+        if (space != null)
+            space.setVisibility(doors.contains(Door.TRAIL) || doors.contains(Door.EFFECT)
+                ? View.GONE : View.VISIBLE);
         mEffect.setVisibility(doors.contains(Door.EFFECT) ? View.VISIBLE : View.GONE);
     }
 
