@@ -11005,12 +11005,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.isRoundedDockStyle();
         }
 
-        @Override public void setTopStatusBarCollapsed(boolean collapsed, boolean animate) {
-            TermuxActivity.this.setTopStatusBarCollapsed(collapsed, animate);
+        @Override public void setTopStatusBarExpandedForEditor(boolean expanded, boolean animate) {
+            TermuxActivity.this.setTopStatusBarExpandedForEditor(expanded, animate);
         }
 
-        @Override public boolean isTopStatusBarCollapsed() {
-            return isStatusBarCompact();
+        @Override public void applyDockButtonCount(int count) {
+            if (mSuggestionBarView == null) return;
+            mLastStyledDockButtonCount = count;
+            mSuggestionBarView.setMaxButtonCount(count);
+            mSuggestionBarView.reloadAllApps();
         }
 
         @Override public int statusBarInsetTop() {
@@ -11953,6 +11956,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean isStatusBarCompact() {
         if (!com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge)) {
             return true;
+        }
+        // The Look editor holds the bar open without touching the stored choice.
+        if (mStatusBarExpandedForEditor) {
+            return false;
         }
         PlaceLayoutStore store = placeLayoutStore();
         return store != null && store.isStatusCompact(currentPlaceOrientation());
@@ -20466,6 +20473,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void setTopStatusBarCollapsed(boolean requestedCollapsed, boolean animate) {
         setTopStatusBarCollapsed(requestedCollapsed, animate, 0f);
+    }
+
+    /**
+     * Whether the Appearance editor's Look page holds the top status bar open. A transient state
+     * ({@link #isStatusBarCompact} reads it as expanded) that is never stored: the stored
+     * compact/expanded choice, per orientation, is exactly what it was.
+     */
+    private boolean mStatusBarExpandedForEditor;
+
+    /**
+     * Opens the top status bar for the editor, or lets it fold back to its stored shape, with
+     * the same animated height change a fold makes. Nothing is written: with the flag set the
+     * bar already reads as expanded, so the fold's own preference write sees no change. A bar down
+     * a side cannot expand, so there this does nothing.
+     */
+    private void setTopStatusBarExpandedForEditor(boolean expanded, boolean animate) {
+        boolean held = expanded
+            && com.termux.app.statusbar.StatusBarGesturePolicy.expansionAllowed(mStatusBarEdge);
+        if (mStatusBarExpandedForEditor == held) return;
+        mStatusBarExpandedForEditor = held;
+        setTopStatusBarCollapsed(isStatusBarCompact(), animate);
     }
 
     /**
