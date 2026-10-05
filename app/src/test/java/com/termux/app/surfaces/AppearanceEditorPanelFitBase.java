@@ -364,18 +364,19 @@ public abstract class AppearanceEditorPanelFitBase {
     }
 
     /** The widest legend each control can show, so the row is fitted at its worst. */
-    private static String widest(AppearanceLooks.Control control) {
+    private String widest(AppearanceLooks.Control control) {
+        android.content.Context context = mPanel.view().getContext();
         switch (control) {
-            case BLUR: return "Blur \u00b7 48 dp";
-            case GRAIN: return "Grain \u00b7 100%";
-            case OPACITY: return "Opacity \u00b7 100%";
-            case MARGIN: return "Margin \u00b7 48 dp";
-            case CORNER_RADIUS: return "Corner radius \u00b7 40 dp";
-            case KEY_RADIUS: return "Key radius \u00b7 24 dp";
-            case KEY_SPACING: return "Key spacing \u00b7 8.0";
-            case DOCK_SIZE: return "Size \u00b7 300%";
-            case APP_ICONS: return "App icons \u00b7 10";
-            default: return "Contrast \u00b7 needs wallpaper colors";
+            case BLUR: return context.getString(R.string.appearance_editor_blur, 48);
+            case GRAIN: return context.getString(R.string.appearance_editor_grain, 100);
+            case OPACITY: return context.getString(R.string.appearance_editor_opacity, 100);
+            case MARGIN: return context.getString(R.string.appearance_editor_margin, 48);
+            case CORNER_RADIUS: return context.getString(R.string.appearance_editor_corners, 40);
+            case KEY_RADIUS: return context.getString(R.string.appearance_editor_key_corners, 24);
+            case KEY_SPACING: return context.getString(R.string.appearance_editor_key_spacing, "8.0");
+            case DOCK_SIZE: return context.getString(R.string.appearance_editor_dock_size, 300);
+            case APP_ICONS: return context.getString(R.string.appearance_editor_app_icons, 10);
+            default: return context.getString(R.string.appearance_editor_legibility_unavailable);
         }
     }
 
