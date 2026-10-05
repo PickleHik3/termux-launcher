@@ -72,7 +72,7 @@ no device denylist and tells apps to build their own (soc §1). So:
 | GPU family | Detected how | GPU path | What the picker does |
 |---|---|---|---|
 | Adreno (Qualcomm) | Vulkan `vendorID` 0x5143 | **Yes** | GPU preselected |
-| Adreno 8xx with compiler `E031.47.12.*` | as above, plus `CL_DRIVER_VERSION` read by the OpenCL probe (no GL context needed) | **Unknown** | GPU preselected, with "This GPU driver is known to give wrong answers; update the phone's software". LiteRT-LM's own binary warns about this compiler (soc §1). Settled per device by the GPU check (§2.4). |
+| Adreno 8xx with compiler `E031.47.12.*` | as above, plus `CL_DRIVER_VERSION` read by the OpenCL probe (no GL context needed) | **Unknown** | GPU preselected, with "This GPU driver is known to give wrong answers; update the phone's software". LiteRT-LM's own binary warns about this compiler (soc §1). Settled per device by the GPU check (§2.3). |
 | Mali / Immortalis on Tensor G4 and newer | `vendorID` 0x13B5 + `SOC_MODEL` table | **Unknown** | GPU preselected, with the note (decision 3) |
 | Older Mali, Samsung Xclipse, PowerVR | `vendorID` 0x13B5 / 0x144D / 0x1010 | **CPU first** | CPU preselected; GPU selectable with "Often fails on this GPU" |
 | Pixel 10 | `Build.MODEL` contains "pixel 10" (Gallery's rule, kept as is) | **No** | GPU not offered |
@@ -89,7 +89,7 @@ no device denylist and tells apps to build their own (soc §1). So:
 CPU, with its speed in the fit line. The wallpaper reader and app categories run E4B on the CPU as
 background jobs (40–50 s on pong, measured 2026-10-04).
 
-### 2.4 GPU check: settling Unknown by running it
+### 2.3 GPU check: settling Unknown by running it
 
 A rule can only guess. Whether the GPU gives right answers on one phone and driver is settled by running it:
 
@@ -106,7 +106,7 @@ A rule can only guess. Whether the GPU gives right answers on one phone and driv
 
 This also covers the Adreno 730 `-gpu` corruption class that led to the ban on those files.
 
-### 2.3 CPU features
+### 2.4 CPU features
 
 `dotprod`, `i8mm` and `sme2` are read for bench labels and diagnostics only, and never gate anything. XNNPACK
 and MNN pick their kernels at run time (soc §2, §4).
