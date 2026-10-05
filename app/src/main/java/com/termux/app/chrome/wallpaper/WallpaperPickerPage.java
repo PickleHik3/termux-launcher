@@ -39,6 +39,7 @@ import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.termux.R;
 import com.termux.ai.TaiVisionModels;
 import com.termux.app.activities.SettingsActivity;
+import com.termux.app.chrome.wallpaper.living.LivingReader;
 import com.termux.app.chrome.wallpaper.living.LivingStillJob;
 import com.termux.app.chrome.wallpaper.living.LivingStills;
 import com.termux.app.chrome.wallpaper.living.Manifest;
@@ -157,6 +158,26 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             return Collections.emptyList();
         }
 
+        /**
+         * Who reads the photo for a living still: an on-device model, the remote provider's model, or
+         * nobody (rules only). Reads the model store, so never on the main thread.
+         */
+        @NonNull
+        default LivingReader livingReader() {
+            return LivingReader.RULES_ONLY;
+        }
+
+        /** Whether the one-time "your photo is sent to a remote model" notice was shown. */
+        default boolean remoteConsentShown() {
+            return true;
+        }
+
+        /** Records that the remote-reader notice was shown. */
+        default void setRemoteConsentShown() {}
+
+        /** Puts the reader back on Automatic ("Use on-device instead"). */
+        default void useOnDeviceReader() {}
+
         /** Opens the model centre on {@code modelId}'s row. */
         default void openModelCentre(@NonNull String modelId) {}
 
@@ -266,6 +287,22 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
 
             @NonNull @Override public List<TaiVisionModels.Missing> livingMissing() {
                 return TaiVisionModels.missing(activity);
+            }
+
+            @NonNull @Override public LivingReader livingReader() {
+                return LivingReader.resolve(activity);
+            }
+
+            @Override public boolean remoteConsentShown() {
+                return new com.termux.ai.TaiRemoteSettings(activity).consentShown();
+            }
+
+            @Override public void setRemoteConsentShown() {
+                new com.termux.ai.TaiRemoteSettings(activity).setConsentShown(true);
+            }
+
+            @Override public void useOnDeviceReader() {
+                com.termux.ai.TaiFunctionModels.forContext(activity).set(com.termux.ai.TaiFunction.WALLPAPER_READER, "");
             }
 
             @Override public void openModelCentre(@NonNull String modelId) {
@@ -486,6 +523,11 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private final MaterialButton mLivingOffer;
     private final View mLivingWorking;
     private final TextView mLivingStage;
+    /** The "May close apps running in the background" line under Bring to life / Read again. */
+    private final TextView mLivingWarning;
+    /** Who reads the photo; read once off the main thread, {@code null} until then. */
+    @Nullable private LivingReader mReader;
+    private boolean mReaderLoading;
     private final LinearProgressIndicator mLivingBar;
     @Nullable private final LivingStillJob mLivingJob;
     private final LinearLayout mStrip;
@@ -509,6 +551,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private boolean mHandedOff;
     private boolean mSettingMotion;
     @Nullable private androidx.appcompat.app.AlertDialog mMissingDialog;
+    @Nullable private androidx.appcompat.app.AlertDialog mConsentDialog;
     /** The photos whose living still was looked up: path to the manifest, or absent when it has none. */
     private final Map<String, Manifest> mLivingByPhoto = new HashMap<>();
     private final Set<String> mLivingAbsent = new HashSet<>();
@@ -617,6 +660,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mLivingOffer = mRoot.findViewById(R.id.wallpaper_picker_living_offer);
         mLivingWorking = mRoot.findViewById(R.id.wallpaper_picker_living_working);
         mLivingStage = mRoot.findViewById(R.id.wallpaper_picker_living_stage);
+        mLivingWarning = mRoot.findViewById(R.id.wallpaper_picker_living_warning);
         mLivingBar = mRoot.findViewById(R.id.wallpaper_picker_living_progress);
         mLivingJob = livingOffered() ? mSlots.livingJob() : null;
         mStrip = mRoot.findViewById(R.id.wallpaper_picker_strip);
@@ -1055,6 +1099,9 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         androidx.appcompat.app.AlertDialog missing = mMissingDialog;
         mMissingDialog = null;
         if (missing != null) missing.dismiss();
+        androidx.appcompat.app.AlertDialog consent = mConsentDialog;
+        mConsentDialog = null;
+        if (consent != null) consent.dismiss();
         for (WallpaperPreviewView card : mCards) {
             if (card == null) continue;
             card.setLive(false);
@@ -1239,11 +1286,34 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mLivingOffer.setTooltipText(running ? mContext.getString(R.string.living_busy) : null);
         mLivingWorking.setVisibility(row == WallpaperPickerLogic.MotionRow.WORKING ? View.VISIBLE : View.GONE);
         if (row == WallpaperPickerLogic.MotionRow.WORKING) showLivingProgress(job.lastProgress());
+        loadReaderOnce();
+        // Under the action that would load the reader: a big model may make Android close cached apps.
+        LivingReader reader = mReader;
+        boolean action = row == WallpaperPickerLogic.MotionRow.OFFER
+            || (row == WallpaperPickerLogic.MotionRow.SWITCH && WallpaperPickerLogic.isLiving(shown));
+        mLivingWarning.setVisibility(action && reader != null && reader.warnBackground ? View.VISIBLE : View.GONE);
+    }
+
+    /** Resolves who reads the photo, once, off the main thread; the row redraws when it lands. */
+    private void loadReaderOnce() {
+        if (mReader != null || mReaderLoading) return;
+        mReaderLoading = true;
+        mIo.run(() -> mSlots.livingReader(), reader -> {
+            mReaderLoading = false;
+            if (mReleased) return;
+            mReader = reader == null ? LivingReader.RULES_ONLY : reader;
+            refreshMotionRow();
+        });
     }
 
     private void showLivingProgress(@Nullable LivingStillJob.Progress p) {
         int percent = p == null ? 0 : p.overallPercent;
         String stage = mContext.getString(stageLabel(p));
+        // The remote reader is named while it works: "Asking <model>…".
+        LivingReader reader = mReader;
+        if (p != null && reader != null && reader.remote && "gemma".equals(WallpaperPickerLogic.stageKey(p.stage, p.asksGemma()))) {
+            stage = mContext.getString(R.string.living_stage_asking_remote, reader.remoteDisplayName());
+        }
         mLivingBar.setProgressCompat(percent, true);
         mLivingStage.setText(stage);
         mLivingBar.setContentDescription(mContext.getString(R.string.living_progress_description, stage, percent));
@@ -1288,8 +1358,48 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             showMissingModels(missing);
             return;
         }
+        // Resolved here when the row's own read has not landed yet: a remote reader must never skip the notice.
+        LivingReader reader = mReader != null ? mReader : mSlots.livingReader();
+        if (LivingReader.needsConsent(reader.remote, mSlots.remoteConsentShown())) {
+            showRemoteConsent(photo, reader);
+            return;
+        }
         if (!job.start(photo)) showError(R.string.living_busy);
         refreshMotionRow();
+    }
+
+    /**
+     * The first time a remote reader would see a photo: one notice saying where it goes. Continue
+     * remembers it and starts; "Use on-device instead" puts the reader back on Automatic and starts.
+     */
+    private void showRemoteConsent(@NonNull File photo, @NonNull LivingReader reader) {
+        String host = reader.remoteHost.isEmpty() ? reader.remoteDisplayName() : reader.remoteHost;
+        final androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(mContext)
+            .setTitle(R.string.living_remote_consent_title)
+            .setMessage(mContext.getString(R.string.living_remote_consent_message, host))
+            .setPositiveButton(R.string.living_remote_consent_continue, (d, which) -> {
+                if (mReleased) return;
+                mSlots.setRemoteConsentShown();
+                startLiving(photo);
+            })
+            .setNegativeButton(R.string.living_remote_consent_on_device, (d, which) -> {
+                if (mReleased) return;
+                mSlots.setRemoteConsentShown();
+                mSlots.useOnDeviceReader();
+                mReader = null;
+                loadReaderOnce();
+                LivingStillJob job = mLivingJob;
+                if (job != null && !job.start(photo)) showError(R.string.living_busy);
+                refreshMotionRow();
+            })
+            .create();
+        androidx.appcompat.app.AlertDialog previous = mConsentDialog;
+        mConsentDialog = dialog;
+        dialog.setOnDismissListener(d -> {
+            if (mConsentDialog == dialog) mConsentDialog = null;
+        });
+        if (previous != null) previous.dismiss();
+        dialog.show();
     }
 
     /** The models the analysis lacks, with their sizes, and a way to the model centre on the first. */

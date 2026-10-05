@@ -16,12 +16,12 @@ import java.io.IOException;
  * That namespace stays outside {@link TaiModelSpec}/{@link TaiModelStore} on purpose: a remote
  * model has no file, no backend and no catalogue entry.
  *
- * <p>TODO(remote routing, phase 1d): nothing calls this yet. The seam is
- * {@code TaiManager.openAiChatCompletions} and its stream variant, before
- * {@code shouldDelegateRuntime()}: a request whose model is {@code remote/<id>} (or a function
- * whose pick is remote) goes to {@link #chatCompletions}/{@link #stream} here, in the app
- * process, and the {@code :tai_runtime} process is never woken. The feature callers (categories,
- * wallpaper reader, dictation cleanup) follow through the per-function picker.
+ * <p>The seam is {@code TaiManager.openAiChatCompletions} and its stream variant, before
+ * {@code shouldDelegateRuntime()}: a request whose model is {@code remote/<id>}
+ * ({@link TaiCallerRequests#isRemoteRequest}) goes to {@link #chatCompletions}/{@link #stream} here,
+ * in the app process, and the {@code :tai_runtime} process is never woken. The feature callers
+ * (categories, wallpaper reader, dictation cleanup) reach it through their function's pick
+ * ({@link TaiFunctionModels.Resolution#remoteModel}).
  */
 public final class TaiRemoteProvider {
     public static final String MODEL_PREFIX = "remote/";

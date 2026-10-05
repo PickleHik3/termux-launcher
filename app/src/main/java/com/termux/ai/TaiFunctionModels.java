@@ -17,8 +17,8 @@ import java.util.Set;
 
 /**
  * Every function's model pick, and the one rule that turns a pick into a model (tai-device-tiers
- * spec §4.5). A stored value is {@code ""} (Automatic), a model id, {@code remote/<id>} (reserved
- * for the BYO-key provider, which is not built: it resolves as unavailable) or {@code off}.
+ * spec §4.5). A stored value is {@code ""} (Automatic), a model id, {@code remote/<id>} (the
+ * BYO-key provider's model: it resolves while the provider is set up, else as unavailable) or {@code off}.
  *
  * <p>{@link #resolve} goes: the pick, if it is installed and the platform allows it; else Automatic
  * ({@link TaiTierPolicy#automatic}); else the first installed link of the chain ({@link
@@ -26,7 +26,7 @@ import java.util.Set;
  * walks the chain from the caller's side.
  *
  * <p>Storage and the installed-model lookup sit behind small interfaces so tests can fake them.
- * Callers keep their private rules until the callers' package moves them here.
+ * The callers (categories, reader, tidy dictation, speech, voice, depth, embeddings) resolve here.
  */
 public final class TaiFunctionModels {
     /** The stored value for "turn this function off" (or its without-model choice). */
@@ -106,10 +106,22 @@ public final class TaiFunctionModels {
         @NonNull public final List<TaiTierPolicy.Choice> chain;
         /** The model file is at least a quarter of the RAM class: show "May close apps running in the background". */
         public final boolean warnBackground;
+        /**
+         * {@code remote/<id>} when the pick is the remote provider's model and it is set up: the request
+         * then carries this as its {@code model} and no local model loads ({@link #modelId} is {@code null}).
+         */
+        @Nullable public final String remoteModel;
 
         Resolution(@Nullable String modelId, @Nullable String accelerator, @NonNull Source source,
                    @NonNull TaiTierPolicy.WithoutModel without, @NonNull List<TaiTierPolicy.Choice> chain,
                    boolean warnBackground) {
+            this(modelId, accelerator, source, without, chain, warnBackground, null);
+        }
+
+        public Resolution(@Nullable String modelId, @Nullable String accelerator, @NonNull Source source,
+                   @NonNull TaiTierPolicy.WithoutModel without, @NonNull List<TaiTierPolicy.Choice> chain,
+                   boolean warnBackground, @Nullable String remoteModel) {
+            this.remoteModel = remoteModel;
             this.modelId = modelId;
             this.accelerator = accelerator;
             this.source = source;
@@ -117,16 +129,49 @@ public final class TaiFunctionModels {
             this.chain = Collections.unmodifiableList(new ArrayList<>(chain));
             this.warnBackground = warnBackground;
         }
+
+        /** True when the request goes to the remote provider. */
+        public boolean isRemote() {
+            return remoteModel != null;
+        }
+
+        /** The {@code model} a request for this resolution names: the remote name, else the local id, else {@code null}. */
+        @Nullable
+        public String requestModel() {
+            return remoteModel != null ? remoteModel : modelId;
+        }
     }
+
+    /** What the resolver needs to know of the remote provider (the BYO-key server), or nothing. */
+    public interface Remote {
+        /** A server and model are saved. */
+        boolean isConfigured();
+
+        /** The saved model accepts images (the reader's photo). */
+        boolean understandsImages();
+    }
+
+    /** No provider: {@code remote/<id>} picks fall through to Automatic. */
+    public static final Remote NO_REMOTE = new Remote() {
+        @Override public boolean isConfigured() { return false; }
+        @Override public boolean understandsImages() { return false; }
+    };
 
     private final TaiTierPolicy.Env env;
     private final Store store;
     private final Installed installed;
+    private final Remote remote;
 
     public TaiFunctionModels(@NonNull TaiTierPolicy.Env env, @NonNull Store store, @NonNull Installed installed) {
+        this(env, store, installed, NO_REMOTE);
+    }
+
+    public TaiFunctionModels(@NonNull TaiTierPolicy.Env env, @NonNull Store store, @NonNull Installed installed,
+                             @NonNull Remote remote) {
         this.env = env;
         this.store = store;
         this.installed = installed;
+        this.remote = remote;
     }
 
     /**
@@ -172,7 +217,12 @@ public final class TaiFunctionModels {
             for (TaiModelSpec spec : specs.values()) out.put(spec.id, ModelInfo.of(spec));
             return out;
         };
-        return new TaiFunctionModels(TaiTierPolicy.Env.forDevice(app), store, installed);
+        final TaiRemoteSettings remoteSettings = new TaiRemoteSettings(app);
+        Remote remote = new Remote() {
+            @Override public boolean isConfigured() { return remoteSettings.isConfigured(); }
+            @Override public boolean understandsImages() { return remoteSettings.understandsImages(); }
+        };
+        return new TaiFunctionModels(TaiTierPolicy.Env.forDevice(app), store, installed, remote);
     }
 
     @NonNull
@@ -229,7 +279,11 @@ public final class TaiFunctionModels {
                 ? function.withoutModel : TaiTierPolicy.WithoutModel.OFF;
             return new Resolution(null, null, Source.PICK, off, chain, false);
         }
-        // remote/<id> is reserved and unavailable until the provider exists: it falls through to Automatic.
+        // remote/<id> serves the chat functions while the provider is set up (the reader also needs a
+        // model that takes images); otherwise it falls through to Automatic.
+        if (isRemote(pick) && remoteServes(function)) {
+            return new Resolution(null, null, Source.PICK, TaiTierPolicy.WithoutModel.NONE, chain, false, pick);
+        }
         if (!pick.isEmpty() && !isRemote(pick)) {
             ModelInfo info = serving(function, models, pick);
             if (info != null) {
@@ -256,6 +310,11 @@ public final class TaiFunctionModels {
             }
         }
         return new Resolution(null, null, Source.NONE, function.withoutModel, chain, false);
+    }
+
+    private boolean remoteServes(TaiFunction function) {
+        if (!function.usesChatModel() || !remote.isConfigured()) return false;
+        return function != TaiFunction.WALLPAPER_READER || remote.understandsImages();
     }
 
     private Resolution withModel(TaiFunction function, ModelInfo info, @Nullable String accelerator, Source source,

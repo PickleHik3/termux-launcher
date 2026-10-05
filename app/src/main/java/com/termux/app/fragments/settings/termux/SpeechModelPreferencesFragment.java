@@ -47,6 +47,7 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
     private static final String KEY_INSTALLED_CATEGORY = "speech_model_installed";
     private static final String KEY_EMPTY = "speech_model_empty";
     static final String KEY_GET_MORE = "speech_model_get_more";
+    private static final String KEY_PICK = "speech_model_pick";
     private static final String KEY_IDLE_UNLOAD = "speech_model_idle_unload";
     private static final String KEY_OUTPUT_MISSING = "speech_output_missing";
     private static final String KEY_OUTPUT_VOICE = "speech_output_voice";
@@ -70,6 +71,12 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
         Preference getMore = findPreference(KEY_GET_MORE);
         if (getMore != null) getMore.setOnPreferenceClickListener(preference -> {
             TaiModelCentreFragment.open(getActivity(), TaiModelCentreFragment.SEGMENT_SPEECH);
+            return true;
+        });
+        // The model choice is the VOICE_TYPING function's picker sheet; the cards below still switch in place.
+        Preference pick = findPreference(KEY_PICK);
+        if (pick != null) pick.setOnPreferenceClickListener(preference -> {
+            TaiFunctionPickerSheet.show(this, com.termux.ai.TaiFunction.VOICE_TYPING);
             return true;
         });
         Preference idleUnload = findPreference(KEY_IDLE_UNLOAD);
@@ -127,7 +134,9 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
         TaiModelStore store = new TaiModelStore(context);
         TaiSettings settings = new TaiSettings(context);
         List<TaiModelSpec> installed = TaiSpeechModels.installed(store);
-        TaiModelSpec active = TaiSpeechModels.chooseActive(settings.getSttModelId(), installed);
+        TaiModelSpec active = TaiSpeechModels.resolveActive(context);
+        Preference pick = findPreference(KEY_PICK);
+        if (pick != null) pick.setSummary(active == null ? getString(R.string.cleanup_model_automatic_title) : TaiSpeechModels.plainName(active));
 
         Set<String> keep = new HashSet<>();
         int order = 1;
@@ -221,7 +230,7 @@ public class SpeechModelPreferencesFragment extends MaterialPreferenceFragment i
     }
 
     private void refreshVoiceOutput(@NonNull Context context, @NonNull TaiModelStore store, @NonNull TaiSettings settings) {
-        boolean installed = TaiTtsModels.resolveActive(store) != null;
+        boolean installed = TaiTtsModels.resolveActive(context, store) != null;
         Preference missing = findPreference(KEY_OUTPUT_MISSING);
         if (missing != null) missing.setVisible(!installed);
         Preference voice = findPreference(KEY_OUTPUT_VOICE);

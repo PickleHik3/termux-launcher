@@ -5,17 +5,14 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.TaiCallerRequests;
 import com.termux.ai.TaiManager;
-import com.termux.ai.TaiModelSpec;
-import com.termux.ai.TaiModelStore;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
-import java.util.HashSet;
-import java.util.Set;
 
 /**
  * The real {@link SceneReader.Chat}: one non-streaming call through
@@ -31,20 +28,6 @@ public final class TaiGemmaChat implements SceneReader.Chat {
         mManager = TaiManager.getInstance(context.getApplicationContext());
     }
 
-    /** The ids of the installed models (downloaded or imported), without any vision suffix. */
-    @NonNull
-    public static Set<String> installedIds(@NonNull Context context) {
-        TaiModelStore store = new TaiModelStore(context.getApplicationContext());
-        Set<String> ids = new HashSet<>(store.getDownloadedReadableModels().keySet());
-        for (TaiModelSpec spec : store.getInstalledUserModels().values()) ids.add(spec.id);
-        return ids;
-    }
-
-    /** True when the Gemma 4 E4B or E2B files are on the phone, so the director can run. */
-    public static boolean installed(@NonNull Context context) {
-        return SceneReader.modelId(installedIds(context)) != null;
-    }
-
     @NonNull
     @Override
     public String complete(@NonNull String requestBody, long timeoutMs) throws IOException {
@@ -52,6 +35,12 @@ public final class TaiGemmaChat implements SceneReader.Chat {
         String before = null;
         try {
             visionId = new JSONObject(requestBody).optString("model", null);
+            // A remote reader never touches the :tai_runtime process: no status read, no unload.
+            if (TaiCallerRequests.isRemoteModel(visionId)) {
+                mLastAccelerator = null;
+                mLastFallbackReason = null;
+                return ask(requestBody, timeoutMs);
+            }
             before = loadedModelId();
         } catch (JSONException ignored) {
             // the call below reports a malformed body

@@ -121,7 +121,7 @@ public class KeyboardPreferencesFragmentTest {
     }
 
     @Test
-    public void theCleanupModelRowOpensTheCleanupModelScreenAndShowsAutomaticByDefault() {
+    public void theCleanupModelRowShowsAutomaticByDefault() {
         KeyboardPreferencesFragment fragment = launch(KeyboardVoicePreferencesFragment.class);
         Preference polishModel = fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model");
         assertNotNull(polishModel);

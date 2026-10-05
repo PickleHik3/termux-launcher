@@ -55,8 +55,11 @@ public final class LivingStillBuilder {
     @NonNull
     public static Manifest build(@NonNull Context context, @NonNull File photo, @NonNull File analysisDir,
                                  @Nullable Progress progress) throws IOException {
-        SceneReader.Chat chat = TaiGemmaChat.installed(context) ? new TaiGemmaChat(context) : null;
-        return build(context, photo, analysisDir, progress, chat, chat == null ? null : SceneReader.modelId(TaiGemmaChat.installedIds(context)));
+        // Who reads the photo is the reader function's resolution: an on-device vision model, the
+        // remote provider's model, or nobody (rules only, the path with no director).
+        LivingReader reader = LivingReader.resolve(context);
+        SceneReader.Chat chat = reader.usesModel() ? new TaiGemmaChat(context) : null;
+        return build(context, photo, analysisDir, progress, chat, reader.model, reader.accelerator);
     }
 
     /** As above with the call given, asking the E4B vision model (or {@code null} chat for rules only). */
@@ -75,6 +78,14 @@ public final class LivingStillBuilder {
     public static Manifest build(@NonNull Context context, @NonNull File photo, @NonNull File analysisDir,
                                  @Nullable Progress progress, @Nullable SceneReader.Chat chat,
                                  @Nullable String modelId) throws IOException {
+        return build(context, photo, analysisDir, progress, chat, modelId, null);
+    }
+
+    /** As above, asking on {@code accelerator} ({@code gpu} or {@code cpu}; {@code null} for the runtime's choice). */
+    @NonNull
+    public static Manifest build(@NonNull Context context, @NonNull File photo, @NonNull File analysisDir,
+                                 @Nullable Progress progress, @Nullable SceneReader.Chat chat,
+                                 @Nullable String modelId, @Nullable String accelerator) throws IOException {
         long t0 = SystemClock.elapsedRealtime();
         Map<String, Long> timings = new LinkedHashMap<>();
         report(progress, 0);
@@ -110,7 +121,7 @@ public final class LivingStillBuilder {
                 Bitmap big = LivingBitmaps.decodeToWidth(photo, Math.max(1, gw));
                 String photoUrl = LivingBitmaps.jpegDataUrl(big, GEMMA_LONG_SIDE);
                 big.recycle();
-                plan = SceneReader.read(chat, modelId, photoUrl);
+                plan = SceneReader.read(chat, modelId, accelerator, photoUrl);
             } catch (IOException | RuntimeException e) {
                 plan = null;
             }

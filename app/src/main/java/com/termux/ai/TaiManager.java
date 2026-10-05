@@ -723,7 +723,7 @@ public final class TaiManager {
         }
         LoadDecision decision = decideLoad(spec, options, preflight);
         if (decision.refusal != null) return decision.refusal;
-        JSONObject result = localRuntime().load(spec, decision.options);
+        JSONObject result = loadWithCanary(spec, decision.options);
         result.put("preflight", preflight.toJson());
         decision.describe(result);
         recordRuntimeResult(spec, preflight, result);
@@ -1650,6 +1650,12 @@ public final class TaiManager {
      */
     @NonNull
     public JSONObject openAiChatCompletions(@NonNull String body, long timeoutMs) throws JSONException {
+        // A remote/<id> model goes to the remote provider here, in the app process: the :tai_runtime
+        // process is never woken for it (remote provider design, section 4.2).
+        if (!runtimeProcess && TaiCallerRequests.isRemoteRequest(body)) {
+            return new TaiRemoteProvider(appContext).chatCompletions(
+                TaiCallerRequests.remoteBody(parseBody(body)), timeoutMs);
+        }
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_CHAT, delegatedRuntimeBody(body), timeoutMs);
         JSONObject request = parseBody(body);
         JSONArray messages = request.optJSONArray("messages");
@@ -1786,6 +1792,11 @@ public final class TaiManager {
     }
 
     public void openAiChatCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
+        if (!runtimeProcess && TaiCallerRequests.isRemoteRequest(body)) {
+            new TaiRemoteProvider(appContext).stream(
+                TaiCallerRequests.remoteBody(parseBody(body)), DEFAULT_CHAT_TIMEOUT_MS, sink);
+            return;
+        }
         if (shouldDelegateRuntime()) {
             if (runtimeClient == null) {
                 emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "On-device AI runtime service client is unavailable."));
@@ -2312,8 +2323,29 @@ public final class TaiManager {
      *  number through {@code _endpoint_max_batch} on the embedder's {@code /v1/models} entry. */
     static final int EMBEDDINGS_MAX_BATCH = 64;
 
+    /**
+     * {@code body} with the embedder the EMBEDDINGS function resolves to as its {@code model} when it
+     * names none; unchanged when it names one, is not JSON, or nothing resolves.
+     */
+    @NonNull
+    private String withEmbeddingModel(@NonNull String body) {
+        if (runtimeProcess) return body;
+        try {
+            JSONObject request = new JSONObject(body);
+            if (!request.optString("model", "").trim().isEmpty()) return body;
+            String id = TaiFunctionModels.forContext(appContext).resolve(TaiFunction.EMBEDDINGS).modelId;
+            if (id == null || id.isEmpty()) return body;
+            return request.put("model", id).toString();
+        } catch (JSONException | RuntimeException e) {
+            return body;
+        }
+    }
+
     @NonNull
     public JSONObject embeddings(@NonNull String body) throws JSONException {
+        // No model in the request: the embedder the EMBEDDINGS function resolves to, not the chat
+        // assistant. Resolved before the runtime hand-off so both processes see the same model.
+        body = withEmbeddingModel(body);
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_EMBEDDINGS, delegatedRuntimeBody(body));
         JSONObject request = parseBody(body);
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
@@ -2776,9 +2808,9 @@ public final class TaiManager {
             TaiModelSpec supplied = resolveModel(request, modelId);
             return supplied != null && TaiTtsModels.isTtsModel(supplied) ? supplied : null;
         }
-        if (TaiSpeechRequest.isDefaultModelAlias(modelId)) return TaiTtsModels.resolveActive(modelStore);
+        if (TaiSpeechRequest.isDefaultModelAlias(modelId)) return TaiTtsModels.resolveActive(appContext, modelStore);
         TaiModelSpec spec = resolveModel(request, modelId);
-        if (spec == null && TaiModelCatalog.get(modelId) == null) return TaiTtsModels.resolveActive(modelStore);
+        if (spec == null && TaiModelCatalog.get(modelId) == null) return TaiTtsModels.resolveActive(appContext, modelStore);
         return spec != null && TaiTtsModels.isTtsModel(spec) ? spec : null;
     }
 
@@ -2882,7 +2914,7 @@ public final class TaiManager {
     @NonNull
     private String speechModelIdFor(@NonNull JSONObject request) {
         String requested = requestedModelId(request, "");
-        return requested.isEmpty() ? TaiSpeechModels.activeModelId(settings, modelStore) : requested;
+        return requested.isEmpty() ? TaiSpeechModels.activeModelId(appContext) : requested;
     }
 
     @NonNull
@@ -2989,12 +3021,51 @@ public final class TaiManager {
         }
         LoadDecision decision = decideLoad(spec, options, preflight);
         if (decision.refusal != null) return decision.refusal;
-        JSONObject load = localRuntime().load(spec, decision.options);
+        JSONObject load = loadWithCanary(spec, decision.options);
         load.put("preflight", preflight.toJson());
         decision.describe(load);
         recordRuntimeResult(spec, preflight, load);
         if (!load.optBoolean("ok", false)) return load;
         return null;
+    }
+
+    /** The canary runs at most once per process, whatever it finds. */
+    private static final java.util.concurrent.atomic.AtomicBoolean GPU_CANARY_RAN =
+        new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    /**
+     * A chat load, with the GPU check of spec section 2.3 after it. On the first GPU load of a Gemma 4
+     * file on a phone whose GPU path is unconfirmed, a fixed prompt is answered greedily before the
+     * caller's request; a wrong answer (or a crash, which {@link TaiGpuVerdict} reads on the next
+     * start) stores Failed, and this load is redone on the CPU with the reason stamped on it.
+     */
+    @NonNull
+    private JSONObject loadWithCanary(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) throws JSONException {
+        JSONObject result = localRuntime().load(spec, options);
+        if (!result.optBoolean("ok", false)) return result;
+        TaiPlatformCaps.GpuPath path = TaiPlatformCaps.cached(appContext).gpuPath;
+        if (!TaiGpuVerdict.shouldRunCanary(path, spec.id, options.accelerator, GPU_CANARY_RAN.get())) return result;
+        if (!GPU_CANARY_RAN.compareAndSet(false, true)) return result;
+        boolean passed;
+        TaiGpuVerdict.beginCanary(appContext);
+        try {
+            TaiRuntimeOptions canary = options.withGenerationOverrides(TaiGpuVerdict.CANARY_MAX_TOKENS, null, null, 0.0,
+                null, null, null, null, null, Boolean.FALSE, Boolean.FALSE);
+            JSONObject reply = localRuntime().chat(spec.id, "", TaiGpuVerdict.CANARY_PROMPT, canary);
+            passed = reply.optBoolean("ok", false) && TaiGpuVerdict.canaryPasses(reply.optString("response", ""));
+        } catch (JSONException | RuntimeException e) {
+            passed = false;
+        }
+        TaiGpuVerdict.finishCanary(appContext, passed);
+        if (passed) return result;
+        TaiEventLog.log(appContext, TaiEventLog.ACCEL_FALLBACK, spec.id, spec.backend, TaiTierPolicy.ACCEL_GPU,
+            0, 0L, 0L, TaiGpuVerdict.REASON_FAILED);
+        TaiAcceleratorFallback.set(spec.id, TaiGpuVerdict.REASON_FAILED);
+        JSONObject cpu = localRuntime().load(spec, options.withAccelerator(TaiTierPolicy.ACCEL_CPU));
+        if (cpu.optBoolean("ok", false) && cpu.isNull("backendFallbackReason")) {
+            cpu.put("backendFallbackReason", TaiGpuVerdict.REASON_FAILED);
+        }
+        return cpu;
     }
 
     /** The options a load goes ahead with, or the refusal the memory budget answered instead. */
@@ -4444,8 +4515,12 @@ public final class TaiManager {
             throw new JSONException("Chat request has no user, assistant, or tool messages");
         }
 
+        // _tai_no_system_prompt (the category sort): the user's own TAI system prompt is not injected.
+        // A system message the client sent still counts. The flag is read here and goes no further.
         String systemPrompt = clientSystemPrompt.length() > 0
-            ? clientSystemPrompt.toString() : settings.getSystemPrompt(spec.id);
+            ? clientSystemPrompt.toString()
+            : TaiCallerRequests.wantsNoSystemPrompt(request) ? "" : settings.getSystemPrompt(spec.id);
+        TaiCallerRequests.stripPrivateFlags(request);
         JSONArray toolsJson = request.optJSONArray("tools");
         List<ToolProvider> tools = toolProviders(toolsJson, request.opt("tool_choice"));
         systemPrompt = applyToolChoiceInstruction(systemPrompt, request.opt("tool_choice"), toolsJson);

@@ -149,11 +149,14 @@ public class SceneReaderTest {
     }
 
     @Test
-    public void modelChoice() {
-        assertEquals("gemma-4-e4b-it-litert-lm-vision", SceneReader.modelId(new HashSet<>(Arrays.asList(
-            "gemma-4-e2b-it-litert-lm", "gemma-4-e4b-it-litert-lm"))));
-        assertEquals("gemma-4-e2b-it-litert-lm-vision", SceneReader.modelId(new HashSet<>(Arrays.asList("gemma-4-e2b-it-litert-lm"))));
-        assertNull(SceneReader.modelId(new HashSet<>(Arrays.asList("other"))));
+    public void theRequestCarriesTheResolvedAcceleratorOnlyForALocalModel() throws Exception {
+        JSONObject local = new JSONObject(SceneReader.buildRequest("gemma-4-e2b-it-litert-lm-vision", "cpu", "data:image/jpeg;base64,AA"));
+        assertEquals("gemma-4-e2b-it-litert-lm-vision", local.getString("model"));
+        assertEquals("cpu", local.getString("accelerator"));
+        JSONObject remote = new JSONObject(SceneReader.buildRequest("remote/vision-1", "gpu", "data:image/jpeg;base64,AA"));
+        assertEquals("remote/vision-1", remote.getString("model"));
+        assertFalse(remote.has("accelerator"));
+        assertFalse(new JSONObject(SceneReader.buildRequest("data:image/jpeg;base64,AA")).has("accelerator"));
     }
 
     @Test

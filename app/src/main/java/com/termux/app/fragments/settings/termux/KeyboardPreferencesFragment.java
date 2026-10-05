@@ -181,7 +181,8 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 
         Preference polishModel = findPreference(KEY_VOICE_POLISH_MODEL);
         if (polishModel != null) polishModel.setOnPreferenceClickListener(preference -> {
-            openCleanupModelSettings(context);
+            // The Cleanup model choice is the TIDY_DICTATION function's picker sheet.
+            TaiFunctionPickerSheet.show(this, com.termux.ai.TaiFunction.TIDY_DICTATION);
             return true;
         });
         refreshPolishModelSummary(context);
@@ -203,22 +204,21 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         }
     }
 
-    /** The Cleanup model screen: which installed chat model "Polish dictation" uses, or Automatic. */
-    private void openCleanupModelSettings(@NonNull Context context) {
-        if (getActivity() instanceof com.termux.app.activities.SettingsActivity) {
-            ((com.termux.app.activities.SettingsActivity) getActivity()).openScreen(
-                CleanupModelPreferencesFragment.class,
-                R.string.settings_keyboard_voice_polish_model_title, null);
-        }
-    }
-
-    /** The chosen model's plain name, or "Automatic" when the stored id is empty. */
+    /** The chosen model's plain name, "Automatic" when the stored id is empty, the remote id for a remote pick, "Raw text" for off. */
     private void refreshPolishModelSummary(@NonNull Context context) {
         Preference polishModel = findPreference(KEY_VOICE_POLISH_MODEL);
         if (polishModel == null) return;
         String modelId = TermuxAppSharedPreferences.build(context, true).getInAppKeyboardVoicePolishModelId();
         if (modelId.isEmpty()) {
             polishModel.setSummary(R.string.cleanup_model_automatic_title);
+            return;
+        }
+        if (com.termux.ai.TaiFunctionModels.VALUE_OFF.equals(modelId)) {
+            polishModel.setSummary(R.string.tai_callers_cleanup_raw_text);
+            return;
+        }
+        if (com.termux.ai.TaiFunctionModels.isRemote(modelId)) {
+            polishModel.setSummary(modelId.substring(com.termux.ai.TaiFunctionModels.REMOTE_PREFIX.length()));
             return;
         }
         com.termux.ai.TaiModelSpec spec = com.termux.app.terminal.inappkeyboard.voice.LocalTaiVoiceTextPolisher

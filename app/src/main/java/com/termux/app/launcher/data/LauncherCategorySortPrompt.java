@@ -50,7 +50,9 @@ public final class LauncherCategorySortPrompt {
         descriptions.put("entertainment", "music, video and streaming");
         descriptions.put("shopping_food", "shopping, delivery, food and recipes");
         descriptions.put("finance", "banking, payments and investing");
-        descriptions.put("health", "health, fitness and medical");
+        // "sport, workouts" added 2026-10-05: on pong E2B went from 15/18 to 17/18 on an 18-app set (it fixed
+        // Strava and Calm) with no regressions.
+        descriptions.put("health", "health, fitness, sport, workouts and medical");
         descriptions.put("photo_video", "camera, gallery and photo or video editing");
         descriptions.put("travel", "maps, navigation, transport and travel booking");
         descriptions.put("information_reading", "news, search, reading, books and reference");

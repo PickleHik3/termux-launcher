@@ -78,27 +78,27 @@ public final class SceneReader {
         + "\n"
         + "{\"elements\": [{\"name\": \"\", \"kind\": \"\", \"box\": [0, 0, 0, 0], \"depth\": \"\", \"motion\": \"\"}], \"scene\": {\"time\": \"\", \"weather\": \"\", \"light_direction\": \"\", \"particles\": \"\", \"mood\": \"\", \"do_not_animate\": []}}";
 
-    /**
-     * The model to ask: E4B when installed, else E2B (each with the vision suffix), else {@code null}.
-     *
-     * @param installedIds ids of the installed models, without the vision suffix
-     */
-    @Nullable
-    public static String modelId(@NonNull Set<String> installedIds) {
-        if (installedIds.contains(E4B_ID)) return E4B_ID + VISION_SUFFIX;
-        if (installedIds.contains(E2B_ID)) return E2B_ID + VISION_SUFFIX;
-        return null;
-    }
+    // Which model reads the photo is the WALLPAPER_READER function's resolution: see LivingReader.
 
     /**
      * The chat-completions body: one user message with the prompt and the one photo ({@code photoDataUrl},
      * a data URL the caller makes). {@code context_window}, {@code load_class},
-     * {@code speculative_decoding} and {@code thinking} are TAI-local extensions: a future
-     * remote-provider body sanitiser must strip all four. Thinking stays off because it corrupted the
-     * JSON on both models; speculative decoding made E4B 2.4x faster.
+     * {@code speculative_decoding}, {@code thinking} and {@code accelerator} are TAI-local extensions:
+     * the remote seam in {@code TaiManager} strips them for a {@code remote/<id>} model. Thinking stays
+     * off because it corrupted the JSON on both models; speculative decoding made E4B 2.4x faster.
      */
     @NonNull
     public static String buildRequest(@NonNull String modelId, @NonNull String photoDataUrl) throws JSONException {
+        return buildRequest(modelId, null, photoDataUrl);
+    }
+
+    /**
+     * As above with the resolved {@code accelerator} ({@code gpu} or {@code cpu}) for an on-device
+     * model; {@code null}, or a {@code remote/<id>} model, sends none.
+     */
+    @NonNull
+    public static String buildRequest(@NonNull String modelId, @Nullable String accelerator,
+                                      @NonNull String photoDataUrl) throws JSONException {
         JSONArray content = new JSONArray();
         content.put(new JSONObject().put("type", "text").put("text", PROMPT));
         content.put(new JSONObject().put("type", "image_url").put("image_url", new JSONObject().put("url", photoDataUrl)));
@@ -113,6 +113,7 @@ public final class SceneReader {
         body.put("load_class", "momentary");
         body.put("speculative_decoding", true);
         body.put("thinking", false);
+        if (accelerator != null && !modelId.startsWith("remote/")) body.put("accelerator", accelerator);
         return body.toString();
     }
 
@@ -132,12 +133,19 @@ public final class SceneReader {
         return read(chat, E4B_ID + VISION_SUFFIX, photoUrl);
     }
 
-    /** As {@link #read(Chat, String)} with the model id from {@link #modelId}. */
+    /** As {@link #read(Chat, String)} with the model id from {@link LivingReader}. */
     @Nullable
     public static ScenePlan read(@NonNull Chat chat, @NonNull String modelId,
                                  @NonNull String photoUrl) {
+        return read(chat, modelId, null, photoUrl);
+    }
+
+    /** As above, asking on {@code accelerator} ({@code null} leaves it to the runtime). */
+    @Nullable
+    public static ScenePlan read(@NonNull Chat chat, @NonNull String modelId, @Nullable String accelerator,
+                                 @NonNull String photoUrl) {
         try {
-            return parse(chat.complete(buildRequest(modelId, photoUrl), TIMEOUT_MS));
+            return parse(chat.complete(buildRequest(modelId, accelerator, photoUrl), TIMEOUT_MS));
         } catch (IOException | JSONException | RuntimeException e) {
             return null;
         }
