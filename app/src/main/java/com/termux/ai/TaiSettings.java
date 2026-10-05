@@ -56,6 +56,11 @@ public final class TaiSettings {
     public static final String KEY_TTS_SPEED = "tai_tts_speed";
     /** How many model downloads run side by side (D3): 1 to 3, default 2. */
     public static final String KEY_DOWNLOAD_PARALLEL = "tai_download_parallel";
+    /**
+     * Developer override of the RAM tier ({@link TaiDeviceTier}): {@code ""} is automatic, else
+     * {@code 1}, {@code 2} or {@code 3}. Set by {@code tai runtime --tier}; users get no picker.
+     */
+    public static final String KEY_TIER_OVERRIDE = "tai_tier_override";
     public static final int DEFAULT_STT_WINDOW_SECONDS = 10;
     public static final int DEFAULT_STT_IDLE_UNLOAD_MINUTES = 2;
 
@@ -117,6 +122,38 @@ public final class TaiSettings {
         // Fall back without persisting: a model that is briefly unreadable (mid re-download, or
         // failing a stricter package check after an update) must not lose the user's choice.
         return TaiModelRegistry.MODEL_GEMMA_4_E2B_IT;
+    }
+
+    /** The stored tier override: {@code ""} (automatic), {@code "1"}, {@code "2"} or {@code "3"}. */
+    @NonNull
+    public String getTierOverrideValue() {
+        TaiDeviceTier tier = TaiDeviceTier.parseOverride(preferences.getString(KEY_TIER_OVERRIDE, ""));
+        return tier == null ? "" : Integer.toString(tier.number());
+    }
+
+    /** Stores the tier override; {@code "auto"}, empty or anything unrecognised clears it. */
+    public void setTierOverride(@Nullable String value) {
+        TaiDeviceTier tier = TaiDeviceTier.parseOverride(value);
+        SharedPreferences.Editor edit = preferences.edit();
+        if (tier == null) edit.remove(KEY_TIER_OVERRIDE);
+        else edit.putString(KEY_TIER_OVERRIDE, Integer.toString(tier.number()));
+        edit.apply();
+        TaiDeviceTier.rememberOverride(tier);
+    }
+
+    /** One function's stored pick or accelerator ({@link TaiFunctionModels}); {@code ""} when unset. */
+    @NonNull
+    public String getFunctionValue(@NonNull String key) {
+        String value = preferences.getString(key, "");
+        return value == null ? "" : value.trim();
+    }
+
+    /** Stores one function's pick or accelerator; {@code null} or empty goes back to Automatic. */
+    public void setFunctionValue(@NonNull String key, @Nullable String value) {
+        SharedPreferences.Editor edit = preferences.edit();
+        if (value == null || value.trim().isEmpty()) edit.remove(key);
+        else edit.putString(key, value.trim());
+        edit.apply();
     }
 
     @NonNull
