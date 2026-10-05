@@ -72,7 +72,7 @@ no device denylist and tells apps to build their own (soc §1). So:
 | GPU family | Detected how | GPU path | What the picker does |
 |---|---|---|---|
 | Adreno (Qualcomm) | Vulkan `vendorID` 0x5143 | **Yes** | GPU preselected |
-| Adreno 8xx with GL compiler `E031.47.12.*` | as above, plus the driver string | **Unknown** | GPU preselected, with "Not confirmed on this GPU yet". LiteRT-LM's own binary warns about this compiler (soc §1). |
+| Adreno 8xx with compiler `E031.47.12.*` | as above, plus `CL_DRIVER_VERSION` read by the OpenCL probe (no GL context needed) | **Unknown** | GPU preselected, with "This GPU driver is known to give wrong answers; update the phone's software". LiteRT-LM's own binary warns about this compiler (soc §1). Settled per device by the GPU check (§2.4). |
 | Mali / Immortalis on Tensor G4 and newer | `vendorID` 0x13B5 + `SOC_MODEL` table | **Unknown** | GPU preselected, with the note (decision 3) |
 | Older Mali, Samsung Xclipse, PowerVR | `vendorID` 0x13B5 / 0x144D / 0x1010 | **CPU first** | CPU preselected; GPU selectable with "Often fails on this GPU" |
 | Pixel 10 | `Build.MODEL` contains "pixel 10" (Gallery's rule, kept as is) | **No** | GPU not offered |
@@ -88,6 +88,23 @@ no device denylist and tells apps to build their own (soc §1). So:
 **No GPU path** on Tier 2 or 3: the assistant defaults to E2B on the CPU at 2048. E4B stays selectable on the
 CPU, with its speed in the fit line. The wallpaper reader and app categories run E4B on the CPU as
 background jobs (40–50 s on pong, measured 2026-10-04).
+
+### 2.4 GPU check: settling Unknown by running it
+
+A rule can only guess. Whether the GPU gives right answers on one phone and driver is settled by running it:
+
+- **Automatic check.** The first GPU load of a Gemma file on a device whose GPU path is Unknown runs a fixed
+  canary prompt before the real request: greedy decoding, about 16 output tokens, with an expected answer
+  checked by a pure matcher. Pass → the device's GPU path becomes **Verified** (stored with the driver string
+  and app version, so a driver update re-runs it). Garbage or a crash → **Failed**, the picker preselects the
+  CPU, and the user sees "The GPU gave wrong answers on this phone; using the CPU". It costs about one
+  second on top of the load.
+- **The benchmark.** A bench run on the GPU records the same verdict from its own outputs, so a user who runs
+  the bench settles it too.
+- **The user.** The picker keeps GPU and CPU selectable either way. A "Answers look wrong?" action under an
+  LLM function switches it to the CPU and records Failed. "Try the GPU again" clears the verdict.
+
+This also covers the Adreno 730 `-gpu` corruption class that led to the ban on those files.
 
 ### 2.3 CPU features
 
@@ -161,7 +178,7 @@ Phones set to English get the `.en` Whisper files; others get the multilingual o
 ### 3.7 Remote provider
 
 The BYO-key provider was approved on 2026-10-04 and **is not built**. This build leaves room for it: picks can
-hold `remote:<id>`, and the picker has a Remote section that stays hidden while no provider exists. Until it
+hold `remote/<id>`, and the picker has a Remote section that stays hidden while no provider exists. Until it
 lands, Tier 1's LLM functions offer "Rules only", "Raw text" or "Off", plus any model the user added.
 
 ## 4. Model Centre: a model picker per function
@@ -269,7 +286,7 @@ but not on 12 GB.
 - Existing keys stay as they are, so current picks survive: `tai_role_default_assistant`, `tai_stt_model_id`,
   `keyboard_voice_polish_model`, `wallpaper_depth_model`. New keys follow `tai_fn_<function>_model` for read
   aloud, app categories, wallpaper reader and embeddings. Accelerator picks use `tai_fn_<function>_accel`.
-- A value is `""` (Automatic), a model id, `remote:<id>` (reserved) or `off`.
+- A value is `""` (Automatic), a model id, `remote/<id>` (the remote provider's namespace) or `off`.
 - `resolve(function)` returns the model (or a without-a-model choice), the accelerator and the fallback chain,
   in this order:
   - the pick, if it is installed and the platform allows it;
