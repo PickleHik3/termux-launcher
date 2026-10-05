@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- A sub-page of the Appearance surface (Icon pack, Look, Layout): the Overview's top bar (back,
      the title straight after it, then the page's end actions) over the page's own content. Undo
-     and Done are gone unless the page asks for them (Look and Layout do). -->
+     and Done are gone unless the page asks for them (Look and Layout do). The Look and Layout
+     page replaces the title with the Look | Layout pill (appearance_page_mode_slot, GONE until
+     AppearanceEditorPage shows it): centred in the title's slot, 40dp segments in the 64dp bar. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -40,6 +42,49 @@
             android:maxLines="1"
             android:textAppearance="?attr/textAppearanceTitleLarge"
             android:textColor="?attr/colorOnSurface" />
+
+        <FrameLayout
+            android:id="@+id/appearance_page_mode_slot"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:visibility="gone">
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/appearance_page_mode"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:contentDescription="@string/appearance_editor_mode_description"
+                app:checkedButton="@+id/appearance_page_mode_look"
+                app:selectionRequired="true"
+                app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/appearance_page_mode_look"
+                style="@style/Widget.Termux.Editor.Segment"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:ellipsize="none"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                app:icon="@drawable/segment_icon_look"
+                android:text="@string/appearance_editor_mode_look" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/appearance_page_mode_layout"
+                style="@style/Widget.Termux.Editor.Segment"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:ellipsize="none"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                app:icon="@drawable/segment_icon_layout"
+                android:text="@string/action_layout_editor" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+        </FrameLayout>
 
         <!-- 48dp tall, as every icon button in the bar: it appears and goes with the dirty state. -->
         <com.google.android.material.button.MaterialButton

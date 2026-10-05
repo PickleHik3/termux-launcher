@@ -22,6 +22,7 @@ import org.robolectric.RobolectricTestRunner;
 public class AppearanceEditorPageTest {
 
     private final int[] mClicks = new int[3];
+    private final java.util.List<Boolean> mModes = new java.util.ArrayList<>();
     private AppearanceEditorPage mPage;
 
     @Before
@@ -33,6 +34,7 @@ public class AppearanceEditorPageTest {
             @Override public void onBack() { mClicks[0]++; }
             @Override public void onUndo() { mClicks[1]++; }
             @Override public void onDone() { mClicks[2]++; }
+            @Override public void onMode(boolean layout) { mModes.add(layout); }
         });
     }
 
@@ -44,6 +46,40 @@ public class AppearanceEditorPageTest {
         assertEquals("Layout", title.getText().toString());
         mPage.setLayoutMode(false);
         assertEquals("Look", mPage.title().toString());
+    }
+
+    @Test
+    public void thePillStandsInTheTitlesPlace() {
+        assertTrue(mPage.isModeShown());
+        assertFalse(mPage.isTitleShown());
+        View look = mPage.root().findViewById(R.id.appearance_page_mode_look);
+        View layout = mPage.root().findViewById(R.id.appearance_page_mode_layout);
+        look.performClick();
+        assertTrue(mModes.isEmpty());
+        layout.performClick();
+        assertEquals(java.util.Collections.singletonList(true), mModes);
+        mPage.setLayoutMode(false);
+        assertEquals(1, mModes.size());
+        assertTrue(look.isSelected() || ((com.google.android.material.button.MaterialButton) look).isChecked());
+    }
+
+    @Test
+    public void bothSegmentsFitOneLineAt360WithUndoAndDone() {
+        mPage.setDirty(true);
+        View root = mPage.root();
+        root.measure(View.MeasureSpec.makeMeasureSpec(
+                (int) (360 * root.getResources().getDisplayMetrics().density), View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.AT_MOST));
+        root.layout(0, 0, root.getMeasuredWidth(), root.getMeasuredHeight());
+        TextView look = mPage.root().findViewById(R.id.appearance_page_mode_look);
+        TextView layout = mPage.root().findViewById(R.id.appearance_page_mode_layout);
+        for (TextView t : new TextView[] {look, layout}) {
+            assertEquals(1, t.getLineCount());
+            assertTrue(t.getWidth() > 0);
+            assertEquals((int) (40 * root.getResources().getDisplayMetrics().density), t.getHeight());
+        }
+        assertTrue(mPage.isUndoShown());
+        assertTrue(mPage.isDoneShown());
     }
 
     @Test

@@ -118,8 +118,8 @@ public class LayoutModeViewsTest {
         assertEquals(48f, ((Slider) margin).getValueTo(), 0f);
         assertNotNull(panel.findViewById(R.id.appearance_editor_corners_label));
         assertNotNull(panel.findViewById(R.id.appearance_editor_margin_label));
-        // The mode pill alone stays on the top row for both modes; Undo and Done are the page bar's.
-        assertNotNull(panel.findViewById(R.id.appearance_editor_mode_layout));
+        // The mode pill, Undo and Done are the page bar's, not the sheet's.
+        assertNull(panel.findViewById(R.id.appearance_editor_mode_layout));
         assertNull(panel.findViewById(R.id.appearance_page_undo));
         assertNull(panel.findViewById(R.id.appearance_page_done));
     }

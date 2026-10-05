@@ -267,35 +267,6 @@ public abstract class AppearanceEditorPanelFitBase {
             mPanel.measureFor(false, mWidthPx));
     }
 
-    /** A text segment is its content plus the style's 12dp each side, not Material's 24dp. */
-    @Test
-    public void textSegmentsAreContentPlusTwelveDpEachSide() {
-        mPanel.showAppearanceMode();
-        layOut(mPanel.measureFor(false, mWidthPx));
-        float density = mPanel.view().getResources().getDisplayMetrics().density;
-        for (int id : new int[] {R.id.appearance_editor_mode_appearance,
-                R.id.appearance_editor_mode_layout}) {
-            MaterialButton segment = mPanel.view().findViewById(id);
-            String measured = segment.getText() + ": paddingLeft=" + segment.getPaddingLeft()
-                + " paddingRight=" + segment.getPaddingRight()
-                + " minWidth=" + segment.getMinWidth()
-                + " minimumWidth=" + segment.getMinimumWidth()
-                + " iconSize=" + segment.getIconSize()
-                + " inset=" + segment.getInsetLeft() + "/" + segment.getInsetRight()
-                + " iconPadding=" + segment.getIconPadding()
-                + " compoundPadding=" + segment.getCompoundDrawablePadding()
-                + " text=" + segment.getLayout().getLineWidth(0)
-                + " width=" + segment.getWidth();
-            assertEquals(measured, Math.round(12 * density), segment.getPaddingLeft());
-            assertEquals(measured, Math.round(12 * density), segment.getPaddingRight());
-            float content = segment.getLayout().getLineWidth(0)
-                + (segment.getIconSize() + segment.getIconPadding());
-            float expected = content + 24 * density;
-            assertTrue(measured + " expected about " + expected,
-                segment.getWidth() <= Math.ceil(expected) + 2 * density);
-        }
-    }
-
     @Test
     public void sideInsetsKeepEveryControlInsideTheSheetAtThisWidth() {
         mPanel.showAppearanceMode();
@@ -335,8 +306,6 @@ public abstract class AppearanceEditorPanelFitBase {
             MaterialButton button = root.findViewById(id);
             assertTrue("outlined segment keeps its boundary", button.getStrokeWidth() > 0);
         }
-        MaterialButton mode = root.findViewById(R.id.appearance_editor_mode_appearance);
-        assertEquals("mode segment is the stroke-free tonal one", 0, mode.getStrokeWidth());
     }
 
     @Test
@@ -426,22 +395,9 @@ public abstract class AppearanceEditorPanelFitBase {
         View root = mPanel.view();
         assertEdges(root, 0, root.getWidth());
 
-        View pill = root.findViewById(R.id.appearance_editor_mode);
         assertNull("Undo lives in the page bar, not the sheet",
             root.findViewById(R.id.appearance_page_undo));
-        assertNotNull(pill);
-        assertTrue("the pill inside the sheet's padding",
-            pill.getRight() <= root.getWidth() - root.getPaddingRight());
         assertLabelsAboveTheirControls(root);
-
-        for (int id : new int[] {R.id.appearance_editor_mode_appearance,
-                R.id.appearance_editor_mode_layout}) {
-            TextView button = root.findViewById(id);
-            Layout layout = button.getLayout();
-            assertNotNull(layout);
-            assertEquals("\"" + button.getText() + "\" is whole", 0, layout.getEllipsisCount(0));
-            assertEquals("\"" + button.getText() + "\" is on one line", 1, layout.getLineCount());
-        }
     }
 
     /**

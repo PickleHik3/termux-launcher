@@ -77,6 +77,8 @@ public class AppearanceSurfaceControllerTest {
 
         @Override public boolean isLayoutMode() { return presented && layoutMode; }
 
+        @Override public void setLayoutMode(boolean layout) { layoutMode = layout; }
+
         @Override public void requestLeave(@NonNull Runnable proceed) {
             calls.add("leave?");
             if (!dirty) {
