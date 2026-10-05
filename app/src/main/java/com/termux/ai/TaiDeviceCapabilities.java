@@ -26,7 +26,11 @@ import java.util.zip.ZipFile;
 
 public final class TaiDeviceCapabilities {
     private static final long BYTES_PER_GIB = 1024L * 1024L * 1024L;
-    public static final int MNN_SDK_MINIMUM = 24;
+    /**
+     * The bundled MNN bridge is built at API level 30 and imports a symbol that exists only from
+     * API 28, so it cannot load below 30 (the minimum was 24 before the bridge was checked).
+     */
+    public static final int MNN_SDK_MINIMUM = 30;
     public static final int MNN_MEMORY_ESTIMATE_MB = 2048;
 
     public final String model;
@@ -284,6 +288,13 @@ public final class TaiDeviceCapabilities {
         json.put("lowMemory", lowMemory);
         json.put("memorySource", memorySource);
         json.put("pixel10", pixel10);
+        json.put("tier", TaiDeviceTier.effectiveCached(memoryBytes).number());
+        TaiPlatformCaps gpu = TaiPlatformCaps.cached();
+        json.put("gpuPath", gpu.gpuPath.name());
+        json.put("gpuFamily", gpu.gpuFamily.name());
+        json.put("gpuReason", gpu.gpuReason);
+        json.put("gpuName", gpu.gpuName);
+        json.put("gpuDriver", gpu.gpuDriver);
         json.put("liteRtLmAbiSupported", liteRtLmAbiSupported);
         json.put("liteRtLmNativeLibrariesAvailable", liteRtLmNativeLibrariesAvailable);
         json.put("mnnSupported", mnnSupported);

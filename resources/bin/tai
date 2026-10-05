@@ -7,7 +7,7 @@ TAI / Termux AI - local multi-backend model host
 Usage:
   tai --json <command>
   tai status
-  tai runtime
+  tai runtime [--tier 1|2|3|auto]
   tai models
   tai import <path> [model-id]
   tai download <model-id> <https-url> --accept-terms
@@ -167,7 +167,15 @@ case "$cmd" in
     get_json /v1/ai/status
     ;;
   runtime)
-    get_json /v1/ai/runtime
+    if [ "${1:-}" = "--tier" ]; then
+      # Developer override of the RAM tier, for testing on pong and Waydroid; users get no picker.
+      case "${2:-}" in
+        1|2|3|auto) post_json /v1/ai/tier "{\"tier\":\"$2\"}" ;;
+        *) echo "usage: tai runtime --tier 1|2|3|auto" >&2; exit 2 ;;
+      esac
+    else
+      get_json /v1/ai/runtime
+    fi
     ;;
   models)
     get_json /v1/ai/models
