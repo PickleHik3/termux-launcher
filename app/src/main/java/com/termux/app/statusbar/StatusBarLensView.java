@@ -287,10 +287,12 @@ public final class StatusBarLensView extends View {
         switch (page) {
             case WIDGETS:
                 return MaterialColors.getColor(context,
-                    com.google.android.material.R.attr.colorTertiary,
+                    com.termux.shared.R.attr.termuxColorTertiary,
                     ContextCompat.getColor(context, R.color.termux_secondary));
             case DISPLAY:
-                return ContextCompat.getColor(context, R.color.termux_place_display);
+                return MaterialColors.getColor(context,
+                    com.termux.shared.R.attr.termuxColorSecondary,
+                    ContextCompat.getColor(context, R.color.termux_secondary));
             default:
                 return MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
                     ContextCompat.getColor(context, R.color.termux_primary));

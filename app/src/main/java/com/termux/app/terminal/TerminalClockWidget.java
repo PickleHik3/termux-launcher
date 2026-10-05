@@ -169,6 +169,8 @@ public final class TerminalClockWidget extends View {
     private int mFlipClipOutline;
     private int mFlipClipShadow;
     private boolean mDarkFlipStock;
+    private boolean mColorsResolved;
+    private int mColorSignature;
 
     /** Largest scale the fit mode grows the FULL face to. */
     static final float FIT_MAX_SCALE = 1.35f;
@@ -345,6 +347,13 @@ public final class TerminalClockWidget extends View {
         mOnSurfaceVariant = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
             ContextCompat.getColor(context, R.color.termux_on_surface_variant));
+        // The bar asks on every ink pass; an unchanged palette keeps its cached gradients.
+        int signature = java.util.Arrays.hashCode(new int[] {mOnSurface, mSecondary, mPrimary,
+            mSurfaceBase, mSurfacePanel, mSurfacePanelHigh, mSurfacePanelHighest, mOutlineVariant,
+            mOnSurfaceVariant});
+        if (mColorsResolved && signature == mColorSignature) return;
+        mColorsResolved = true;
+        mColorSignature = signature;
         mPrimaryLine = alpha(mPrimary, .45f);
         mSecondaryQuiet = alpha(mSecondary, .5f);
         mDateInk = alpha(mOnSurface, .62f);

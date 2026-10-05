@@ -218,6 +218,8 @@ public final class PinnedNotificationsView extends View {
     private int mOnSurface;
     private int mOnSurfaceVariant;
     private int mTertiary;
+    /** The STATUS_BAR band's measured surface; null until the bar has been measured. */
+    @Nullable private Integer mBandSurface;
     private int mSurface;
 
     public PinnedNotificationsView(Context context) {
@@ -250,11 +252,34 @@ public final class PinnedNotificationsView extends View {
             ContextCompat.getColor(context, R.color.termux_on_surface));
         mOnSurfaceVariant = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorOnSurfaceVariant, mOnSurface);
-        mTertiary = MaterialColors.getColor(context, com.google.android.material.R.attr.colorTertiary,
+        mTertiary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorTertiary,
             MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
                 ContextCompat.getColor(context, R.color.termux_primary)));
-        mSurface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel,
-            ContextCompat.getColor(context, R.color.termux_surface_panel));
+        // What the cards' inks are measured against: the band the chrome resolved once it has,
+        // the nominal panel colour only until then.
+        mSurface = mBandSurface != null ? mBandSurface
+            : MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel,
+                ContextCompat.getColor(context, R.color.termux_surface_panel));
+    }
+
+    /**
+     * The STATUS_BAR band's resolved surface (the activity's status-ink pass reads it once), so
+     * the card inks are measured on what the cards really stand on.
+     */
+    public void setBandSurface(@androidx.annotation.ColorInt int bandSurface) {
+        if (mBandSurface != null && mBandSurface == bandSurface) return;
+        mBandSurface = bandSurface;
+        resolveColors();
+        mInks.clear();
+        invalidate();
+    }
+
+    /** The scheme changed: resolve the roles again. */
+    public void onThemeChanged() {
+        mTints.clear();
+        resolveColors();
+        mInks.clear();
+        invalidate();
     }
 
     public void setListener(@Nullable DismissListener listener) {

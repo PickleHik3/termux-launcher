@@ -244,6 +244,25 @@ public final class StatusBarInk {
             OnGlass.ratio(label, surface), OnGlass.ratio(stroke, surface));
     }
 
+    /**
+     * The session chip through the chrome's own ink: the same container as {@link #chip}, but the
+     * label and the rim are asked of {@link com.termux.app.chrome.ChromeInk#inkOn} on the chip's
+     * real ground (the container over the measured band), so they follow the bar's polarity and
+     * level like every other ink on the glass.
+     */
+    @NonNull
+    public static Chip chipOn(@NonNull com.termux.app.chrome.ChromeInk ink,
+                              @NonNull OnGlass.Resolution band, @ColorInt int containerSeed,
+                              int containerAlpha, @ColorInt int labelSeed,
+                              @ColorInt int strokeSeed) {
+        int container = OnGlass.withAlpha(containerSeed, containerAlpha);
+        int surface = OnGlass.opaque(OnGlass.composite(container, OnGlass.opaque(band.surface)));
+        int label = ink.inkOn(band, surface, labelSeed, labelSeed, OnGlass.TARGET_BODY_TEXT);
+        int stroke = ink.inkOn(band, surface, strokeSeed, strokeSeed, OnGlass.TARGET_LARGE_TEXT);
+        return new Chip(container, surface, label, stroke,
+            OnGlass.ratio(label, surface), OnGlass.ratio(stroke, surface));
+    }
+
     // ---------------------------------------------------------------- luminance
 
     /** WCAG relative luminance; the same arithmetic {@code SchemeTone} measures contrast with. */

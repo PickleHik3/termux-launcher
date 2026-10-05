@@ -21409,7 +21409,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (lens != null) lens.setBandSurface(band.surface);
         com.termux.app.statusbar.SessionsIndicatorView sessions =
             findViewById(R.id.terminal_sessions_indicator);
-        if (sessions != null) sessions.setBandSurface(band.surface);
+        if (sessions != null) sessions.setBandInk(ink, band);
+        // What stands on the same band takes its ink from the same resolution.
+        com.termux.app.statusbar.PinnedNotificationsView pinned =
+            findViewById(R.id.terminal_pinned_notifications);
+        if (pinned != null) pinned.setBandSurface(band.surface);
+        com.termux.app.statusbar.MediaWidgetView media = findViewById(R.id.terminal_media_widget);
+        if (media != null) media.onThemeChanged();
+        com.termux.app.terminal.TerminalClockWidget clock = findViewById(R.id.terminal_clock_widget);
+        if (clock != null) clock.onThemeChanged();
     }
 
     /** The role colour a status tier is written in; its hue is the tier, and the toning keeps it. */
@@ -21423,7 +21431,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     androidx.core.content.ContextCompat.getColor(this, R.color.termux_secondary));
             case TERTIARY:
                 return MaterialColors.getColor(this,
-                    com.google.android.material.R.attr.colorTertiary, primary);
+                    com.termux.shared.R.attr.termuxColorTertiary, primary);
             default:
                 return primary;
         }
@@ -21470,7 +21478,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (weather != null) {
             weather.setVisibility(weatherOn ? View.VISIBLE : View.GONE);
-            weather.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
+            weather.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
             if (weather.getTag() == null) {
                 weather.setTag("wired");
                 weather.setIconAnimation(
@@ -21484,16 +21492,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
                 .cpuRamDotVisible(cpuOn, ramOn, weatherOn);
             cpuRamDot.setVisibility(show ? View.VISIBLE : View.GONE);
-            cpuRamDot.setColorRole(ramOn
-                ? com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY
-                : com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
+            // The dot takes the tier it leads into: RAM, or the weather when RAM is off. Both are
+            // secondary now, so AI alone carries the tertiary role.
+            cpuRamDot.setColorRole(
+                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
         }
         if (ramWeatherDot != null) {
             boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
                 .ramWeatherDotVisible(ramOn, weatherOn);
             ramWeatherDot.setVisibility(show ? View.VISIBLE : View.GONE);
             ramWeatherDot.setColorRole(
-                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.TERTIARY);
+                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
         }
 
         if (cpuOn || ramOn) {
