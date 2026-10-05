@@ -102,3 +102,28 @@ pairs `secondaryContainer` with `onSecondaryContainer`; clock re-resolves roles 
 The editor frame shows the real `wallpaper_backdrop` scaled with the root container; the separate
 `EditorWallpaperView` and the opaque-window swap are gone. Live content plugs in through the existing
 `WallpaperBackdropView.setLiveShader` / `GeneratedWallpaperHost` path and needs no editor change.
+
+## 8. Built 2026-10-05 (branch head), Waydroid-checked at 411dp
+
+Everything in §2–§7 is on the branch. Deviations from the plan, decided while building:
+
+- The sheet is taller than 2/10 of the window: a mode row, the Look slider, a heading row and
+  120dp vertical sliders need about 320dp in portrait. The frame still stands above it and never
+  moves. At a Look stop the sheet shrinks to the mode row and the Look slider.
+- Legends are LabelMedium and short ("Corners", "Radius", "Spacing", "Icons"); one that still
+  overruns the track shrinks to 0.8x before it is ellipsised. The legend reads upward along the
+  track and inverts across the fill; only the 4dp handle bar interrupts it.
+- Material tint washes with `colorPrimary` (MDC exposes no `colorSurfaceTint` attribute).
+- The keyboard page writes `in_app_keyboard_theme = custom` only when an imported palette exists;
+  pinned edits apply through overrides and leave it at `system`.
+- Dock size is not in `AppearanceSnapshot`: the layout session already restores it.
+- Passthrough mode without wallpaper read permission (Waydroid): the content scrim yields and the
+  window's own wallpaper shows around the frame; on a device with an in-app wallpaper the backdrop
+  paints inside the frame.
+- Clock face popup opens upward from the Clock door (confirmed via dumpsys; the window animates in,
+  so a capture needs a moment).
+
+Owed on pong: Clear/Mist/Tint on a real wallpaper; the pane veil cap on a light wallpaper; the
+expanded clock with media and with notifications; the lock wallpaper flash on open; the Keyboard
+theme page's chip rows at 360dp (the row titles sit beside wrapping chips, which could become a
+title line above each row); the terminal Contrast slider's three palettes in a shell.
