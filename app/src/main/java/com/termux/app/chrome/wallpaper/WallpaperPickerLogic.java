@@ -223,4 +223,24 @@ public final class WallpaperPickerLogic {
     public static int stripTileCount(int recentPhotos, int maxRecents) {
         return 1 + Math.max(0, Math.min(recentPhotos, maxRecents));
     }
+
+    /**
+     * The strip thumbnail size {width, height}: the photo's portrait aspect at {@code maxHeightPx},
+     * shrunk (aspect kept) until {@code tileCount} equal cells across {@code availablePx} each hold
+     * one with {@code minGapPx} to spare. Never clips; at least 1 px.
+     */
+    @NonNull
+    public static int[] stripThumbSize(int availablePx, int tileCount, int screenShort, int screenLong,
+                                       int maxHeightPx, int minGapPx) {
+        int shortSide = Math.max(1, Math.min(screenShort, screenLong));
+        int longSide = Math.max(1, Math.max(screenShort, screenLong));
+        int w = thumbWidth(maxHeightPx, shortSide, longSide);
+        if (availablePx > 0 && tileCount > 0) {
+            int cellW = availablePx / tileCount;
+            w = Math.min(w, cellW - Math.max(0, minGapPx));
+        }
+        w = Math.max(1, w);
+        int h = Math.max(1, Math.min(maxHeightPx, Math.round(w * (longSide / (float) shortSide))));
+        return new int[] {w, h};
+    }
 }

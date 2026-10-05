@@ -16,9 +16,11 @@
          Motion switch for that slot with an AI-star icon button, Read again;
        the shortcut row: three 64dp tonal round buttons with a label under each, the 24dp glyph
          centred both ways (no padding, textStart gravity: an icon-only button centres its icon);
-       the thumbnail strip card: Same as Home (Lock only) then the photos last applied, in equal
-         cells across the row (no heading, no pre-made backgrounds), then Photo… beside More
-         settings (the old Look page).
+       the thumbnail strip card: Same as Home (Lock only) then up to five photos last applied
+         (six tiles), in equal cells across the row (no heading, no pre-made backgrounds); each
+         thumbnail is at most 112 tall and shrinks, aspect kept, so six fit the row's width
+         (WallpaperPickerLogic.stripThumbSize), never clipped; then Photo… beside More settings
+         (the old Look page).
 
      Fixed heights, dp: 64 + 4 + 48 + (8 + 64 + 4 + 20 + 8) + (8 + 12 + 112 + 4 + 48 + 4 + 16) = 424,
      so the pager gets 356 at 780 tall and about 290 under real system bars, 24 + 2 of it the label.
@@ -392,7 +394,8 @@
             android:paddingTop="12dp"
             android:paddingBottom="4dp">
 
-            <!-- Equal cells across the row, each tile centred in its share: evenly spaced. -->
+            <!-- Equal cells across the row, each tile centred in its share: evenly spaced. Thumbnails
+                 shrink to fit six cells in this width (12dp side padding), so the 112dp is a maximum. -->
             <LinearLayout
                 android:id="@+id/wallpaper_picker_strip"
                 android:layout_width="match_parent"

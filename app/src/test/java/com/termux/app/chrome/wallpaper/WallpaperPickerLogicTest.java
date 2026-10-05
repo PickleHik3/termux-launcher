@@ -276,5 +276,23 @@ public class WallpaperPickerLogicTest {
         assertEquals(1, WallpaperPickerLogic.stripTileCount(0, 3));
         assertEquals(3, WallpaperPickerLogic.stripTileCount(2, 3));
         assertEquals("the recents are capped", 4, WallpaperPickerLogic.stripTileCount(9, 3));
+        assertEquals("five recents plus Same as Home", 6,
+            WallpaperPickerLogic.stripTileCount(9, RecentWallpapers.MAX));
+    }
+
+    @Test
+    public void stripThumbsShrinkToFitSixTiles() {
+        int[] dps = {320, 360, 411};
+        for (int dp : dps) {
+            // Density 1: a strip of (width - 32 card margins - 24 padding) px.
+            int avail = dp - 32 - 24;
+            int[] size = WallpaperPickerLogic.stripThumbSize(avail, 6, 1080, 2400, 112, 4);
+            assertTrue("fits at " + dp, size[0] + 4 <= avail / 6);
+            assertTrue(size[1] <= 112);
+            assertEquals("aspect kept at " + dp, 2400 / 1080f, size[1] / (float) size[0], 0.1f);
+        }
+        int[] roomy = WallpaperPickerLogic.stripThumbSize(2000, 6, 1080, 2400, 112, 4);
+        assertEquals("no growth past the natural width", WallpaperPickerLogic.thumbWidth(112, 1080, 2400), roomy[0]);
+        assertEquals(112, roomy[1]);
     }
 }

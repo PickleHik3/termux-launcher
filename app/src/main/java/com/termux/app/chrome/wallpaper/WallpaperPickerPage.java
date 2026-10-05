@@ -190,6 +190,11 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             return Collections.emptyList();
         }
 
+        /** Whether this recent photo was applied as a living still (its tile wears the living glyph). */
+        default boolean recentIsLiving(@NonNull File photo) {
+            return false;
+        }
+
         /** A pending photo the page will not apply: its file goes (only a pending file ever does). */
         default void discardPhoto(@NonNull File photo) {}
     }
@@ -316,6 +321,10 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
 
             @NonNull @Override public List<File> recents() {
                 return WallpaperSlots.recentPhotos(activity);
+            }
+
+            @Override public boolean recentIsLiving(@NonNull File photo) {
+                return WallpaperSlots.recentIsLiving(activity, photo);
             }
 
             @Override public void discardPhoto(@NonNull File photo) {
@@ -565,8 +574,11 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private final WallpaperPreviewView[] mCards = new WallpaperPreviewView[2];
     private int mCardW;
     private int mCardH;
-    private final int mThumbW;
-    private final int mThumbH;
+    /** Strip thumbnail size: shrunk to fit the row once its width is known ({@link #fitStripThumbs}). */
+    private int mThumbW;
+    private int mThumbH;
+    private List<File> mStripRecents = Collections.emptyList();
+    private int mStripFitWidth = -1;
 
     /** The strip's tiles, in order: Same as Home first, then the recently applied photos. */
     private final List<Tile> mTiles = new ArrayList<>();
@@ -727,6 +739,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         });
 
         buildStrip(loaded.recents);
+        mStrip.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> fitStripThumbs(r - l));
         mRoot.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override public void onViewAttachedToWindow(@NonNull View v) {
                 mMain.removeCallbacks(mClockTick);
@@ -1681,6 +1694,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
      * whether it holds two tiles or four. No heading and no badge says what the photos are.
      */
     private void buildStrip(@NonNull List<File> recents) {
+        mStripRecents = recents;
         mStrip.removeAllViews();
         mTiles.clear();
         mSameAsHomeTile = addTile(WallpaperSlots.Choice.sameAsHome(),
@@ -1692,6 +1706,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             mRecentTiles++;
             Tile tile = addTile(WallpaperSlots.Choice.photo(photo),
                 mContext.getString(R.string.wallpaper_picker_recent_photo, mRecentTiles), false);
+            if (mSlots.recentIsLiving(photo)) addLivingBadge((FrameLayout) tile.view);
             final ShapeableImageView image = tile.image;
             final String key = photo.getAbsolutePath();
             image.setTag(key);
@@ -1699,6 +1714,47 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
                 if (key.equals(image.getTag())) image.setImageBitmap(bmp);
             });
         }
+    }
+
+    /**
+     * Sizes the thumbnails to the strip's real width ({@link WallpaperPickerLogic#stripThumbSize}):
+     * never clipped, aspect kept. Rebuilds the row only when the size actually changes.
+     */
+    private void fitStripThumbs(int stripWidth) {
+        if (stripWidth <= 0 || stripWidth == mStripFitWidth || mReleased) return;
+        mStripFitWidth = stripWidth;
+        int avail = stripWidth - mStrip.getPaddingStart() - mStrip.getPaddingEnd();
+        DisplayMetrics dm = mContext.getResources().getDisplayMetrics();
+        int[] size = WallpaperPickerLogic.stripThumbSize(avail,
+            WallpaperPickerLogic.stripTileCount(mStripRecents.size(), RecentWallpapers.MAX),
+            dm.widthPixels, dm.heightPixels, dp(THUMB_HEIGHT_DP), dp(4));
+        if (size[0] == mThumbW && size[1] == mThumbH) return;
+        mThumbW = size[0];
+        mThumbH = size[1];
+        // Rebuilding inside a layout pass is not allowed: post it.
+        mMain.post(() -> {
+            if (mReleased) return;
+            buildStrip(mStripRecents);
+            applyCentred();
+        });
+    }
+
+    /** The living glyph at the foot of a recent photo that was applied as a living still. */
+    private void addLivingBadge(@NonNull FrameLayout cell) {
+        ImageView badge = new ImageView(mContext);
+        badge.setImageResource(R.drawable.ic_symbol_bring_to_life);
+        badge.setImageTintList(ColorStateList.valueOf(MaterialColors.getColor(mContext,
+            com.google.android.material.R.attr.colorOnSecondaryContainer, 0)));
+        badge.setScaleType(ImageView.ScaleType.CENTER);
+        int size = Math.max(dp(16), Math.min(dp(24), mThumbW - dp(4)));
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size,
+            Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        lp.bottomMargin = dp(4);
+        cell.addView(badge, lp);
+        badge.setBackground(EditorM3.surface(badge,
+            com.google.android.material.R.attr.shapeAppearanceCornerExtraLarge,
+            com.google.android.material.R.attr.colorSecondaryContainer));
+        badge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
 
     @NonNull
