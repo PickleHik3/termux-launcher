@@ -7,20 +7,11 @@ import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
- * How hard every band in the launcher works to be read: the one legibility control, and the one
- * place it is read from.
- *
- * <p>It is the "Terminal contrast" preference ({@code terminal_contrast_level}, Softer / Default /
- * Harder) and nothing new: no second key, no second slider. That preference always drove the
- * terminal palette's own contrast ({@link TerminalContrastLevel}); it now also sets the body-text
- * target every band's veil is bought against (appearance-layout-editor SPEC §2) — 3.0, 4.5 or
- * 7.0 — and every other tier moves by the same factor. The palette and {@link ChromeInk} both ask
- * here, so the two meanings of the one control cannot drift apart.</p>
- *
- * <p>Scaling is proportional, with one floor: {@link OnGlass#TARGET_DECORATION} never drops below
- * itself. Softer would otherwise put the separator dots at 1.33:1, which is where the reporting
- * device measured them invisible (1.01) before the decoration tier existed. Large text at Softer
- * lands on 2.0 exactly, at the same floor; nothing reaches under it.</p>
+ * The band legibility level. It used to follow the "Terminal contrast" preference; that preference
+ * now changes only the terminal's own palette ({@link TerminalContrastLevel}), so
+ * {@link #of(TermuxAppSharedPreferences)} always answers {@link #DEFAULT} and every band is held
+ * to the original {@link OnGlass} targets. The class and {@link #target(double)} stay so callers
+ * keep compiling.
  *
  * <p>Pure and context free, so it unit tests on the JVM.</p>
  */
@@ -54,20 +45,21 @@ public enum LegibilityLevel {
         return DEFAULT;
     }
 
-    /** The level the preferences hold; null preferences (a test, a detached host) read as default. */
+    /** Always {@link #DEFAULT}: the contrast preference no longer moves the chrome bands. */
     @NonNull
     public static LegibilityLevel of(@Nullable TermuxAppSharedPreferences preferences) {
-        return preferences == null ? DEFAULT : of(preferences.getTerminalContrastLevel());
+        return DEFAULT;
     }
 
     /**
-     * The terminal palette contrast the preferences ask for. The palette's side of the same
-     * accessor: whoever builds a palette asks here, as {@link ChromeInk} does for its targets.
+     * The terminal palette level the preferences ask for; read straight from the preference, not
+     * through {@link #of(TermuxAppSharedPreferences)}.
      */
     @NonNull
     public static TerminalContrastLevel terminalContrast(
             @Nullable TermuxAppSharedPreferences preferences) {
-        return of(preferences).terminalContrast;
+        return preferences == null ? TerminalContrastLevel.DEFAULT
+            : preferences.getTerminalContrastLevel();
     }
 
     /** How far this level moves every tier: 1 at {@link #DEFAULT}. */

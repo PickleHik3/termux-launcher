@@ -161,9 +161,9 @@
         <item quantity="other">%1$s and %2$d more</item>
     </plurals>
     <string-array name="terminal_contrast_entries">
-        <item>Softer</item>
-        <item>Default</item>
-        <item>Harder</item>
+        <item>Softer &#8212; pastel palette</item>
+        <item>Default &#8212; system palette</item>
+        <item>Harder &#8212; punchy palette</item>
     </string-array>
     <string-array name="terminal_contrast_values">
         <item>softer</item>

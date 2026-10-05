@@ -80,6 +80,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private final android.graphics.Rect mPaneVisibleRect = new android.graphics.Rect();
     private boolean mForegroundRefreshPending;
     private int mLastMaterialTerminalPaletteSignature;
+    /** Cheap stamp (mtime, length) of colors.properties at the last non-dynamic apply. */
+    private long mLastColorsFileStamp = Long.MIN_VALUE;
     @NonNull private String mLastFontErrorSummary = "";
     private final Runnable mForegroundTerminalRefreshRunnable;
 
@@ -852,6 +854,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 props = MaterialTerminalColorScheme.create(mContext, level);
                 mLastMaterialTerminalPaletteSignature =
                     MaterialTerminalColorScheme.signature(mContext, level);
+                mLastColorsFileStamp = Long.MIN_VALUE;
                 // Built here, on the main thread, and handed over as finished values: the writer thread
                 // must not touch the theme or resources, and this way the files describe the same
                 // palette the terminal just took. The dark and light halves are derived beside it,
@@ -863,10 +866,15 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 props = new Properties();
                 mLastMaterialTerminalPaletteSignature = 0;
                 File colorsFile = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
+                mLastColorsFileStamp = colorsFileStamp();
                 if (colorsFile.isFile()) {
                     try (InputStream in = new FileInputStream(colorsFile)) {
                         props.load(in);
                     }
+                    exportSchemeColorFiles(props);
+                } else {
+                    // No custom theme: rewrite the material-colors files from the scheme so shells
+                    // do not keep the old wallpaper palette.
                     exportSchemeColorFiles(props);
                 }
             }
@@ -1029,6 +1037,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             R.plurals.terminal_font_config_errors, errors.size(), errors.size()), true);
     }
 
+    private static long colorsFileStamp() {
+        File f = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
+        if (!f.isFile()) return -1L;
+        return f.lastModified() * 31L + f.length();
+    }
+
     /**
      * Rebuild the palette only if the Material roles or the contrast level actually moved. This is the
      * path for resume, configuration changes and wallpaper-colour callbacks: they fire whether or not
@@ -1036,8 +1050,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      * every session, and two file writes that open shells watch.
      */
     public void refreshMaterialTerminalColorsIfNeeded() {
-        if (mHost.preferences() == null
-            || !mHost.preferences().isTerminalDynamicColorsEnabled()) {
+        if (mHost.preferences() == null) return;
+        if (!mHost.preferences().isTerminalDynamicColorsEnabled()) {
+            // A custom colors.properties is followed: re-read it only when it changed.
+            if (colorsFileStamp() != mLastColorsFileStamp) applyTerminalColors();
             return;
         }
         int signature = MaterialTerminalColorScheme.signature(mContext,

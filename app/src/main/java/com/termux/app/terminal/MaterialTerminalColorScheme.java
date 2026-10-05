@@ -56,8 +56,6 @@ public final class MaterialTerminalColorScheme {
      * six indistinguishable slots; the ceiling keeps a vivid one from producing the 2014-accent neon
      * this replaced. Between them the slots are exactly as saturated as the theme is.
      */
-    private static final double ANSI_CHROMA_MIN = 28d;
-    private static final double ANSI_CHROMA_MAX = 52d;
 
     /**
      * How much chroma the neutral slots and the foreground carry.
@@ -131,7 +129,7 @@ public final class MaterialTerminalColorScheme {
 
         props.putAll(ansiSlots(primaryHct.getHue(), primaryHct.getChroma(),
             themeError != 0 ? Hct.fromInt(themeError).getHue() : ANSI_HUE_ANCHORS[0],
-            surfaceHct.getHue(), surfaceHct.getChroma(), dark));
+            surfaceHct.getHue(), surfaceHct.getChroma(), dark, level));
 
         applyAnsiContrastFloor(props, background, level);
 
@@ -186,10 +184,20 @@ public final class MaterialTerminalColorScheme {
     @VisibleForTesting
     static Properties ansiSlots(double sourceHue, double sourceChroma, double redHue,
                                 double neutralHue, double neutralChroma, boolean dark) {
+        return ansiSlots(sourceHue, sourceChroma, redHue, neutralHue, neutralChroma, dark,
+            TerminalContrastLevel.DEFAULT);
+    }
+
+    /** As above, with the accent chroma band and tones the level's recipe asks for. */
+    @NonNull
+    @VisibleForTesting
+    static Properties ansiSlots(double sourceHue, double sourceChroma, double redHue,
+                                double neutralHue, double neutralChroma, boolean dark,
+                                @NonNull TerminalContrastLevel level) {
         Properties slots = new Properties();
-        double chroma = Math.max(ANSI_CHROMA_MIN, Math.min(ANSI_CHROMA_MAX, sourceChroma));
-        double normalTone = dark ? 80d : 40d;
-        double brightTone = dark ? 90d : 30d;
+        double chroma = Math.max(level.chromaMin, Math.min(level.chromaMax, sourceChroma));
+        double normalTone = dark ? level.normalToneDark : level.normalToneLight;
+        double brightTone = dark ? level.brightToneDark : level.brightToneLight;
         for (int slot = 1; slot <= 6; slot++) {
             double hue = harmonizeHue(slot == 1 ? redHue : ANSI_HUE_ANCHORS[slot - 1], sourceHue);
             slots.setProperty("color" + slot, hex(Hct.from(hue, chroma, normalTone).toInt()));
@@ -649,12 +657,7 @@ public final class MaterialTerminalColorScheme {
     static int surfaceTone(@ColorInt int color, @NonNull TerminalContrastLevel level) {
         boolean dark = perceivedBrightness(color) < 128;
         Hct source = Hct.fromInt(color);
-        double tone;
-        switch (level) {
-            case SOFTER: tone = dark ? 14d : 94d; break;
-            case HARDER: tone = dark ? 4d : 99d; break;
-            default: tone = dark ? 8d : 97d; break;
-        }
+        double tone = dark ? level.bgToneDark : level.bgToneLight;
         return Hct.from(source.getHue(), source.getChroma(), tone).toInt();
     }
 
