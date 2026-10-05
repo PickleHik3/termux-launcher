@@ -435,7 +435,7 @@ public class AppearanceSurfaceControllerTest {
     }
 
     @Test
-    public void doneInAnEditorReturnsToTheOverview() {
+    public void doneInAnEditorGoesDownToTheOverviewAndThenClosesTheSurface() {
         toLook();
         assertNotNull(mEditor.onDone);
         mEditor.onDone.run();
@@ -443,7 +443,47 @@ public class AppearanceSurfaceControllerTest {
         assertEquals(1, mEditor.count("dismiss"));
         mEditor.finishHide();
         assertEquals(PageId.OVERVIEW, mSurface.shownPage());
-        assertTrue(mSurface.isOpen());
+        assertTrue("the surface closes from the Overview, on the next frame", mSurface.isOpen());
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2));
+        assertFalse(mSurface.isOpen());
+        assertEquals("the launcher was put right first", 1, mEditor.count("restore"));
+        assertEquals("a Done is the person's own close", 1, mHost.closedByUser);
+    }
+
+    @Test
+    public void theEditorsPillGoesBackToWallpaperThroughTheUnsavedQuestion() {
+        toLook();
+        ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
+        View bar = host.getChildAt(host.getChildCount() - 1);
+        com.google.android.material.button.MaterialButton wallpaper =
+            bar.findViewById(R.id.appearance_page_mode_wallpaper);
+        com.google.android.material.button.MaterialButton look =
+            bar.findViewById(R.id.appearance_page_mode_look);
+        assertEquals("the pill offers Wallpaper behind an Overview", View.VISIBLE, wallpaper.getVisibility());
+        mEditor.dirty = true;
+        wallpaper.performClick();
+        idle();
+        assertEquals("asked first", 1, mEditor.count("leave?"));
+        assertEquals("kept editing: nothing moved", 0, mEditor.count("dismiss"));
+        assertTrue("and the pill snapped back to Look", look.isChecked());
+        mEditor.pendingLeave.run();
+        assertEquals("answered: the editor goes down", 1, mEditor.count("dismiss"));
+        idle();
+        assertTrue("the pill reads Wallpaper while it goes", wallpaper.isChecked());
+    }
+
+    @Test
+    public void theEditorsPillSwitchesBetweenLookAndLayoutAndAnOverviewlessOpenHasNoWallpaperSegment() {
+        toLook();
+        ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
+        View bar = host.getChildAt(host.getChildCount() - 1);
+        bar.findViewById(R.id.appearance_page_mode_layout).performClick();
+        assertTrue("the editor's mode is the pill's", mEditor.layoutMode);
+        mSurface.closeNow();
+        mSurface.open(PageId.LOOK);
+        ViewGroup direct = mActivity.findViewById(R.id.appearance_surface_host);
+        View directBar = direct.getChildAt(direct.getChildCount() - 1);
+        assertEquals(View.GONE, directBar.findViewById(R.id.appearance_page_mode_wallpaper).getVisibility());
     }
 
     @Test

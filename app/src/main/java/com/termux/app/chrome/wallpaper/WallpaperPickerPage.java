@@ -167,6 +167,15 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             return LivingReader.RULES_ONLY;
         }
 
+        /**
+         * How many MB the on-device {@code reader} needs beyond what is free, so that Android would
+         * close apps running in the background while it runs; 0 when it fits, when the reader is
+         * remote or rules only, or when this cannot be worked out. Not for the main thread.
+         */
+        default long livingShortfallMb(@NonNull LivingReader reader) {
+            return 0L;
+        }
+
         /** Whether the one-time "your photo is sent to a remote model" notice was shown. */
         default boolean remoteConsentShown() {
             return true;
@@ -296,6 +305,22 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
 
             @NonNull @Override public LivingReader livingReader() {
                 return LivingReader.resolve(activity);
+            }
+
+            @Override public long livingShortfallMb(@NonNull LivingReader reader) {
+                try {
+                    if (reader.remote || reader.model == null) return 0L;
+                    com.termux.ai.TaiLoadBudget.Plan plan = com.termux.ai.TaiManager.getInstance(activity)
+                        .previewMomentaryLoad(reader.model, reader.accelerator,
+                            com.termux.app.chrome.wallpaper.living.SceneReader.CONTEXT_WINDOW);
+                    if (plan == null || !plan.measured) return 0L;
+                    // Idle models the plan would close are the runtime's own, not other apps.
+                    return WallpaperPickerLogic.lowMemoryWarning(plan.neededFreeBytes(),
+                        plan.availableBytes + plan.evictedBytes(), false);
+                } catch (RuntimeException | LinkageError e) {
+                    Logger.logStackTraceWithMessage(LOG_TAG, "Checking the reader's memory failed", e);
+                    return 0L;
+                }
             }
 
             @Override public boolean remoteConsentShown() {
@@ -518,8 +543,8 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private final WallpaperThumbs mThumbs;
 
     private final View mRoot;
-    private final TextView mTitle;
     private final MaterialButton mApply;
+    private final View mApplyRow;
     private final MaterialButton mApplyMore;
     private final View mIconPack;
     private final LinearProgressIndicator mProgress;
@@ -533,7 +558,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private final View mLivingWorking;
     private final TextView mLivingStage;
     /** The "May close apps running in the background" line under Bring to life / Read again. */
-    private final TextView mLivingWarning;
     /** Who reads the photo; read once off the main thread, {@code null} until then. */
     @Nullable private LivingReader mReader;
     private boolean mReaderLoading;
@@ -541,7 +565,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     @Nullable private final LivingStillJob mLivingJob;
     private final LinearLayout mStrip;
     private final MaterialButton mPhoto;
-    private final View mTopBar;
     private final View mStripCard;
     private final View mShortcuts;
     @Nullable private Drawable mBackground;
@@ -657,11 +680,10 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         }
 
         mRoot = LayoutInflater.from(context).inflate(R.layout.wallpaper_picker_page, null, false);
-        mTitle = mRoot.findViewById(R.id.wallpaper_picker_title);
-        mTopBar = mRoot.findViewById(R.id.wallpaper_picker_top_bar);
         mStripCard = mRoot.findViewById(R.id.wallpaper_picker_strip_card);
         mShortcuts = mRoot.findViewById(R.id.wallpaper_picker_shortcuts);
         mApply = mRoot.findViewById(R.id.wallpaper_picker_apply);
+        mApplyRow = mRoot.findViewById(R.id.wallpaper_picker_apply_row);
         mApplyMore = mRoot.findViewById(R.id.wallpaper_picker_apply_more);
         mIconPack = mRoot.findViewById(R.id.wallpaper_picker_icon_pack);
         mProgress = mRoot.findViewById(R.id.wallpaper_picker_progress);
@@ -672,20 +694,13 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mLivingOffer = mRoot.findViewById(R.id.wallpaper_picker_living_offer);
         mLivingWorking = mRoot.findViewById(R.id.wallpaper_picker_living_working);
         mLivingStage = mRoot.findViewById(R.id.wallpaper_picker_living_stage);
-        mLivingWarning = mRoot.findViewById(R.id.wallpaper_picker_living_warning);
         mLivingBar = mRoot.findViewById(R.id.wallpaper_picker_living_progress);
         mLivingJob = livingOffered() ? mSlots.livingJob() : null;
         mStrip = mRoot.findViewById(R.id.wallpaper_picker_strip);
         mPhoto = mRoot.findViewById(R.id.wallpaper_picker_photo);
 
-        // The heading is the surface's, not the centred slot's: the cards carry their own labels.
-        mTitle.setText(R.string.wallpaper_picker_title);
-        mRoot.findViewById(R.id.wallpaper_picker_back).setOnClickListener(v -> {
-            if (!mReleased) mClose.run();
-        });
-        mRoot.findViewById(R.id.wallpaper_picker_done).setOnClickListener(v -> {
-            if (!mReleased) mClose.run();
-        });
+        // The bar (back, the Wallpaper | Look | Layout pill, Done) is the surface's shared frame:
+        // the page holds Apply under the cards and nothing above them.
         mApply.setOnClickListener(v -> applyBoth());
         mApplyMore.setOnClickListener(v -> showApplyMenu());
         mPhoto.setOnClickListener(v -> {
@@ -794,13 +809,13 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     @NonNull
     @Override
     public List<View> leavingViews() {
-        return Arrays.asList(mStripCard, mMotionRow, mShortcuts);
+        return Arrays.asList(mApplyRow, mStripCard, mMotionRow, mShortcuts);
     }
 
     @NonNull
     @Override
     public List<View> fadingViews() {
-        return Arrays.asList(mTopBar, mProgress, mPager);
+        return Arrays.asList(mProgress, mPager);
     }
 
     @Override
@@ -1306,11 +1321,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mLivingWorking.setVisibility(row == WallpaperPickerLogic.MotionRow.WORKING ? View.VISIBLE : View.GONE);
         if (row == WallpaperPickerLogic.MotionRow.WORKING) showLivingProgress(job.lastProgress());
         loadReaderOnce();
-        // Under the action that would load the reader: a big model may make Android close cached apps.
-        LivingReader reader = mReader;
-        boolean action = row == WallpaperPickerLogic.MotionRow.OFFER
-            || (row == WallpaperPickerLogic.MotionRow.SWITCH && WallpaperPickerLogic.isLiving(shown));
-        mLivingWarning.setVisibility(action && reader != null && reader.warnBackground ? View.VISIBLE : View.GONE);
     }
 
     /** Resolves who reads the photo, once, off the main thread; the row redraws when it lands. */
@@ -1363,6 +1373,9 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         if (photo != null) startLiving(photo);
     }
 
+    /** The reader's memory check is out on the I/O thread: another tap waits for it. */
+    private boolean mMemoryChecking;
+
     private void startLiving(@NonNull File photo) {
         LivingStillJob job = mLivingJob;
         if (job == null) return;
@@ -1383,8 +1396,53 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             showRemoteConsent(photo, reader);
             return;
         }
+        checkMemoryThenStart(photo, reader);
+    }
+
+    /**
+     * Before the reader loads: when an on-device model needs room from other apps, one notice says
+     * so. The check runs on the I/O thread; a remote reader, a plan that fits and a check that
+     * fails all go straight ahead.
+     */
+    private void checkMemoryThenStart(@NonNull File photo, @NonNull LivingReader reader) {
+        if (mMemoryChecking) return;
+        if (reader.remote || reader.model == null) {
+            startNow(photo);
+            return;
+        }
+        mMemoryChecking = true;
+        mIo.run(() -> mSlots.livingShortfallMb(reader), mb -> {
+            mMemoryChecking = false;
+            if (mReleased) return;
+            if (mb != null && mb > 0L) showLowMemory(photo, mb);
+            else startNow(photo);
+        });
+    }
+
+    private void startNow(@NonNull File photo) {
+        LivingStillJob job = mLivingJob;
+        if (job == null) return;
         if (!job.start(photo)) showError(R.string.living_busy);
         refreshMotionRow();
+    }
+
+    /** "Low memory": the reader needs {@code mb} MB more than is free; Continue starts it anyway. */
+    private void showLowMemory(@NonNull File photo, long mb) {
+        final androidx.appcompat.app.AlertDialog dialog = new MaterialAlertDialogBuilder(mContext)
+            .setTitle(R.string.living_low_memory_title)
+            .setMessage(mContext.getString(R.string.living_low_memory_message, (int) Math.min(mb, Integer.MAX_VALUE)))
+            .setPositiveButton(R.string.living_low_memory_continue, (d, which) -> {
+                if (!mReleased) startNow(photo);
+            })
+            .setNegativeButton(R.string.living_missing_not_now, null)
+            .create();
+        androidx.appcompat.app.AlertDialog previous = mConsentDialog;
+        mConsentDialog = dialog;
+        dialog.setOnDismissListener(d -> {
+            if (mConsentDialog == dialog) mConsentDialog = null;
+        });
+        if (previous != null) previous.dismiss();
+        dialog.show();
     }
 
     /**

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A sub-page of the Appearance surface (Icon pack, Look, Layout): the Overview's top bar (back,
-     the title straight after it, then the page's end actions) over the page's own content. Undo
-     and Done are gone unless the page asks for them (Look and Layout do). The Look and Layout
-     page replaces the title with the Look | Layout pill (appearance_page_mode_slot, GONE until
-     AppearanceEditorPage shows it): centred in the title's slot, 40dp segments in the 64dp bar. -->
+<!-- The one bar of the Appearance surface, over each page's own content: back, then either the
+     title (the Icon pack page) or the Wallpaper | Look | Layout pill (appearance_page_mode_slot,
+     GONE until AppearanceEditorPage shows it; centred in the title's slot, 40dp segments in the
+     64dp bar), then Undo (Look and Layout, while there is something to undo) and Done. The
+     bar is the same on every page: only the pill's selection and the end actions change. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -13,6 +13,7 @@
     android:orientation="vertical">
 
     <LinearLayout
+        android:id="@+id/appearance_page_bar"
         android:layout_width="match_parent"
         android:layout_height="64dp"
         android:gravity="center_vertical"
@@ -59,6 +60,18 @@
                 app:checkedButton="@+id/appearance_page_mode_look"
                 app:selectionRequired="true"
                 app:singleSelection="true">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/appearance_page_mode_wallpaper"
+                style="@style/Widget.Termux.Editor.Segment"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:ellipsize="none"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                app:icon="@drawable/segment_icon_wallpaper"
+                android:text="@string/appearance_page_wallpaper" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_page_mode_look"
