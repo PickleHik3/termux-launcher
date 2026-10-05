@@ -344,11 +344,64 @@ public final class WallpaperSlots {
         }
         if (recordLock != null) Logger.logInfo(LOG_TAG, "Lock slot: " + recordLock);
         try {
-            recents(app).add(picture, System.currentTimeMillis());
+            recents(app).add(picture, System.currentTimeMillis(), livingId != null);
         } catch (IOException | RuntimeException e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Keeping the recent photo failed", e);
         }
+        // Adding a recent is the only moment one can fall out: sweep the folders nothing names now.
+        pruneLivingFolders(app);
         return null;
+    }
+
+    /**
+     * Deletes living-still folders nothing refers to: not a recent photo, the Home or Lock still,
+     * a pending crop, the Lock photo or the Home exact copy. Conservative: if anything that could
+     * name a folder cannot be read or hashed, nothing is deleted. Hashes photos, so worker threads
+     * only.
+     */
+    @WorkerThread
+    static void pruneLivingFolders(@NonNull Context app) {
+        try {
+            TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, false);
+            if (prefs == null) return;
+            java.util.Set<String> keep = new java.util.HashSet<>();
+            for (RecentWallpapers.Entry e : recents(app).entries()) {
+                if (e.hash.length() < 16) return;
+                keep.add(e.hash.substring(0, 16));
+            }
+            addLivingHash(keep, prefs.getManagedWallpaperAnimatedId());
+            String lock = prefs.getWallpaperLockChoice();
+            String prefix = TERMUX_APP.VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX;
+            if (lock != null && lock.startsWith(prefix)) addLivingHash(keep, lock.substring(prefix.length()));
+            File[] pending = pendingDir(app).listFiles();
+            if (pending != null) {
+                for (File f : pending) {
+                    if (f.isFile()) keep.add(LivingStills.hash16(f));
+                }
+            }
+            File lockPhoto = new File(new File(photoRoot(app), "slots"), "lock.png");
+            if (lockPhoto.isFile()) keep.add(LivingStills.hash16(lockPhoto));
+            File exact = new File(new File(app.getFilesDir(), "managed-wallpaper"), "system-wallpaper-exact.png");
+            if (exact.isFile()) keep.add(LivingStills.hash16(exact));
+            int n = com.termux.app.chrome.wallpaper.living.LivingStillPruner.prune(LivingStills.root(app), keep);
+            if (n > 0) Logger.logInfo(LOG_TAG, "Pruned " + n + " orphaned living still folder(s)");
+        } catch (IOException | RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Pruning living stills failed; nothing deleted", e);
+        }
+    }
+
+    /** Adds the hash of a {@code living:<hash>} id (anything else is ignored). */
+    private static void addLivingHash(@NonNull java.util.Set<String> keep, @Nullable String id) {
+        if (id != null && AnimatedWallpapers.isLivingId(id)) keep.add(id.substring("living:".length()));
+    }
+
+    /** Whether the recent photo was last applied as a living still (reads a small index). */
+    public static boolean recentIsLiving(@NonNull Context ctx, @NonNull File photo) {
+        try {
+            return recents(ctx.getApplicationContext()).isLiving(photo);
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /** The recent photos, newest first (reads a small index). */
@@ -517,6 +570,8 @@ public final class WallpaperSlots {
         String lockValue = prefs.getWallpaperLockChoice();
         boolean homeRetired = isRetiredHomeId(homeId);
         boolean lockRetired = healedLockValue(lockValue, false) != null;
+        // Startup heal: also sweep orphaned living folders, off the caller's thread.
+        GeneratedWallpaperApplier.onWorker(() -> pruneLivingFolders(app));
         if (!homeRetired && !lockRetired) return;
         boolean live = lockLiveActive(app);
         boolean copy = false;
