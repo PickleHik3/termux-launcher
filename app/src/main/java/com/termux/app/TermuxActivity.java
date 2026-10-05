@@ -3491,7 +3491,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override @Nullable public ColorFilter paneGlassFrostFilter() {
-                return com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getAppBarOpacity() : 100);
+                return com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getTerminalBackgroundOpacity() : 100);
             }
 
             @Override @Nullable public Bitmap wallBehindFrame() {
