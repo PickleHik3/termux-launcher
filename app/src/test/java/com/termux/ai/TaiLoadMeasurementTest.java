@@ -11,6 +11,9 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -55,29 +58,89 @@ public class TaiLoadMeasurementTest {
         TaiRuntimeHistory.recordMeasuredLoad(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096, 4_200_000_000L);
         assertEquals(4_200_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096));
 
-        // Another accelerator, backend or window bucket is another key; a non-positive drop is not a record.
+        // Another accelerator or backend is another key; a non-positive drop is not a record.
         assertEquals(0L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 4096));
         assertEquals(0L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_MNN_LLM, "gpu", 4096));
-        assertEquals(0L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 8192));
         TaiRuntimeHistory.recordMeasuredLoad(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 4096, 0L);
         assertEquals(0L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 4096));
     }
 
-    /** Windows share a record by power-of-two bucket, and the -vision variant shares the base model's. */
+    /**
+     * The window is in the sample, not the key: a window above every sample is carried up by the
+     * seed slope (the budget's history hook passes it), a smaller one reads the larger sample.
+     */
     @Test
-    public void historyBucketsWindowsAndKeysByTheBaseModel() {
-        assertEquals(0, TaiRuntimeHistory.contextBucket(0));
-        assertEquals(4096, TaiRuntimeHistory.contextBucket(4000));
-        assertEquals(4096, TaiRuntimeHistory.contextBucket(4096));
-        assertEquals(8192, TaiRuntimeHistory.contextBucket(6000));
+    public void historyAnswersOtherWindowsFromTheSamplesItHas() {
+        TaiModelSpec spec = chatSpec("gemma-4-e4b");
+        TaiRuntimeHistory.recordMeasuredLoad(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096, 4_200_000_000L);
+        assertEquals(4_200_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 2048));
+        assertEquals(4_200_000_000L + 192_606L * 4096L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device,
+            TaiModelSpec.BACKEND_LITERT_LM, "gpu", 8192, 192_606L, 0L));
+    }
 
+    /** The -vision variant has a key of its own, and until it has a sample it reads the base model's plus the encoder delta. */
+    @Test
+    public void historyKeysTheVisionVariantSeparatelyAndFallsBackToTheTextKey() {
         TaiModelSpec base = chatSpec("gemma-4-e4b");
+        TaiModelSpec vision = chatSpec("gemma-4-e4b-vision");
         TaiRuntimeHistory.recordMeasuredLoad(context, base, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4000, 3_100_000_000L);
-        assertEquals(3_100_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, base, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096));
-        assertEquals(3_100_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, chatSpec("gemma-4-e4b-vision"), device,
-            TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096));
+        assertEquals(3_100_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, base, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 3000));
+        // Text samples with the encoders' share on top for a vision plan; none for a text one.
+        assertEquals(3_100_000_000L + 365_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, vision, device,
+            TaiModelSpec.BACKEND_LITERT_LM, "gpu", 3000, 0L, 365_000_000L));
         // opencl is MNN's spelling of the GPU.
-        assertEquals(3_100_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, base, device, TaiModelSpec.BACKEND_LITERT_LM, "opencl", 4096));
+        assertEquals(3_100_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, base, device, TaiModelSpec.BACKEND_LITERT_LM, "opencl", 3000));
+
+        // A vision sample, once there is one, is used on its own.
+        TaiRuntimeHistory.recordMeasuredLoad(context, vision, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096, 3_400_000_000L);
+        assertEquals(3_400_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, vision, device,
+            TaiModelSpec.BACKEND_LITERT_LM, "gpu", 2048, 0L, 365_000_000L));
+        assertEquals(3_100_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, base, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 3000));
+    }
+
+    /** Plan on the first prefill when the key has one: the first request is where a CPU load's buffers arrive. */
+    @Test
+    public void historyPlansOnTheFirstPrefillWhenItHasOne() {
+        TaiModelSpec spec = chatSpec("gemma-4-e2b");
+        TaiRuntimeHistory.recordMeasuredLoad(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 4096, 400_000_000L);
+        assertEquals(400_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 4096));
+        TaiRuntimeHistory.recordMeasuredLoad(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 4096, 2_500_000_000L,
+            TaiRuntimeHistory.PHASE_FIRST_PREFILL, 800);
+        assertEquals(2_500_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 4096));
+    }
+
+    /** The key tells apart a re-exported file of the same id, a new app version, an accelerator and a modality. */
+    @Test
+    public void theKeyCarriesTheFileSizeVersionAcceleratorAndModality() {
+        String key = TaiRuntimeHistory.loadKey("gemma-4-e4b", "text", E4B, device, 7L, TaiModelSpec.BACKEND_LITERT_LM, "gpu");
+        assertEquals(key, TaiRuntimeHistory.loadKey("gemma-4-e4b", "text", E4B, device, 7L, TaiModelSpec.BACKEND_LITERT_LM, "opencl"));
+        assertFalse(key.equals(TaiRuntimeHistory.loadKey("gemma-4-e4b", "text", E4B + 1L, device, 7L, TaiModelSpec.BACKEND_LITERT_LM, "gpu")));
+        assertFalse(key.equals(TaiRuntimeHistory.loadKey("gemma-4-e4b", "text", E4B, device, 8L, TaiModelSpec.BACKEND_LITERT_LM, "gpu")));
+        assertFalse(key.equals(TaiRuntimeHistory.loadKey("gemma-4-e4b", "vision", E4B, device, 7L, TaiModelSpec.BACKEND_LITERT_LM, "gpu")));
+        assertFalse(key.equals(TaiRuntimeHistory.loadKey("gemma-4-e4b", "text", E4B, device, 7L, TaiModelSpec.BACKEND_LITERT_LM, "cpu")));
+        assertFalse(key.equals(TaiRuntimeHistory.loadKey("gemma-4-e4b", "text", E4B, device, 7L, TaiModelSpec.BACKEND_MNN_LLM, "gpu")));
+        assertTrue(key.contains(Long.toString(E4B)));
+    }
+
+    /** A history file in the old format reads as empty, does not crash, and is dropped on the next write. */
+    @Test
+    public void anOldFormatHistoryFileIsIgnoredSafelyAndDroppedOnTheNextWrite() throws Exception {
+        File dir = new File(context.getFilesDir(), "tai");
+        assertTrue(dir.isDirectory() || dir.mkdirs());
+        File file = new File(dir, "runtime-history.json");
+        String legacy = "{\"load|gemma-4-e4b|dev|litert-lm|gpu|4096\":{\"modelId\":\"gemma-4-e4b\",\"bytes\":4200000000,"
+            + "\"lastBytes\":3000000000,\"samples\":11,\"contextBucket\":4096,\"updatedAtMs\":1790000000000},"
+            + "\"gemma-4-e4b|dev|gpu\":{\"modelId\":\"gemma-4-e4b\",\"success\":true,\"updatedAtMs\":1790000000000}}";
+        Files.write(file.toPath(), legacy.getBytes(StandardCharsets.UTF_8));
+
+        TaiModelSpec spec = chatSpec("gemma-4-e4b");
+        assertEquals(0L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096));
+
+        TaiRuntimeHistory.recordMeasuredLoad(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096, 3_000_000_000L);
+        String after = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+        assertFalse(after.contains("load|gemma-4-e4b"));
+        assertTrue(after.contains("gemma-4-e4b|dev|gpu"));
+        assertEquals(3_000_000_000L, TaiRuntimeHistory.measuredLoadBytes(context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "gpu", 4096));
     }
 
     /** The budget's history hook reads what the runtimes recorded, so the next plan is measured. */

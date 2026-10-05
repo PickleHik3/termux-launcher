@@ -61,7 +61,7 @@ public class TaiImageAdmissionTest {
     }
 
     private static long reserve() {
-        return TaiLoadBudget.floorBytes(THRESHOLD, PONG_TOTAL);
+        return TaiLoadBudget.holdFloorBytes(TaiLoadBudget.ramClassBytes(PONG_TOTAL));
     }
 
     @Test

@@ -7,6 +7,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.pm.PackageInfoCompat;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -22,6 +23,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * What this device has learned about its models: which accelerators failed, what loads measured,
@@ -250,11 +253,56 @@ public final class TaiRuntimeHistory {
         }
     }
 
+    // ---- Measured loads ---------------------------------------------------------------------------
+    //
+    // One record per (model file, device, app version, backend, accelerator, modality), holding a
+    // ring of the last RING_SIZE samples. The window is part of each sample, not of the key, so a
+    // 2048-token request can use what a 4096-token load measured (a larger window is an upper
+    // bound) and a 6k request can be carried up from what 4k cost. The worst-case-forever ratchet
+    // is gone: samples expire after SAMPLE_TTL_MS and with the app version, as failures do.
+
+    /** Samples kept per key; the oldest leave first. */
+    static final int RING_SIZE = 8;
+    /** How long a measured sample counts. A sample is a snapshot of one build on one day. */
+    static final long SAMPLE_TTL_MS = 30L * 24L * 60L * 60L * 1000L;
+    /** The drop from just before native init to its end. */
+    public static final String PHASE_LOAD = "load";
+    /** The drop from just before native init to the first token of the first request after the load. */
+    public static final String PHASE_FIRST_PREFILL = "first_prefill";
+    static final String MODALITY_TEXT = "text";
+    static final String MODALITY_VISION = "vision";
+    static final String MODALITY_AUDIO = "audio";
+    private static final String MEASURED_PREFIX = "load2|";
+    /** Written before the window moved into the samples; ignored on read and dropped on the next write. */
+    private static final String LEGACY_MEASURED_PREFIX = "load|";
+
+    /** One measured drop: what the phone lost, at which window, for how long a prompt, and when. */
+    static final class Sample {
+        final int window;
+        final long dropBytes;
+        final int promptTokens;
+        @NonNull final String phase;
+        final long timestampMs;
+
+        Sample(int window, long dropBytes, int promptTokens, @NonNull String phase, long timestampMs) {
+            this.window = window;
+            this.dropBytes = dropBytes;
+            this.promptTokens = promptTokens;
+            this.phase = phase;
+            this.timestampMs = timestampMs;
+        }
+
+        @NonNull
+        JSONObject toJson() throws JSONException {
+            return new JSONObject().put("w", window).put("d", dropBytes).put("p", promptTokens)
+                .put("ph", phase).put("t", timestampMs);
+        }
+    }
+
     /**
-     * Keeps the largest MemAvailable drop any load of this model has measured on this device,
-     * backend and accelerator at this window bucket — the worst case is what the budget plans
-     * against, since identical GPU loads spread over ±0.9 GB on pong. Non-positive drops are not
-     * recorded; callers skip cancelled and failed loads.
+     * Keeps one measured MemAvailable drop of this model on this device, backend and accelerator in
+     * its ring, with the window it was taken at. Non-positive drops are not recorded; callers skip
+     * cancelled and failed loads. Recorded as the {@link #PHASE_LOAD} phase.
      */
     public static void recordMeasuredLoad(
         @NonNull Context context,
@@ -265,23 +313,40 @@ public final class TaiRuntimeHistory {
         int contextWindow,
         long measuredBytes
     ) {
+        recordMeasuredLoad(context, model, device, backend, accelerator, contextWindow, measuredBytes, PHASE_LOAD, 0);
+    }
+
+    /**
+     * {@link #recordMeasuredLoad(Context, TaiModelSpec, TaiDeviceCapabilities, String, String, int, long)}
+     * with the phase ({@link #PHASE_LOAD} or {@link #PHASE_FIRST_PREFILL}) and the prompt token
+     * count of the request a first-prefill drop was taken over, image tokens included.
+     */
+    public static void recordMeasuredLoad(
+        @NonNull Context context,
+        @NonNull TaiModelSpec model,
+        @NonNull TaiDeviceCapabilities device,
+        @NonNull String backend,
+        @NonNull String accelerator,
+        int contextWindow,
+        long measuredBytes,
+        @NonNull String phase,
+        int promptTokens
+    ) {
         if (measuredBytes <= 0L) return;
+        final long version = appVersionCode(context);
+        final String key = loadKey(model, TaiResidency.fileBytes(model), device, version, backend, accelerator);
         withLock(context, history -> {
             try {
-                String key = measuredKey(model, device, backend, accelerator, contextWindow);
+                long now = System.currentTimeMillis();
+                pruneMeasured(history, now, version);
                 JSONObject entry = history.optJSONObject(key);
-                long worst = entry == null ? 0L : entry.optLong("bytes", 0L);
-                int samples = entry == null ? 0 : entry.optInt("samples", 0);
                 if (entry == null) entry = new JSONObject();
                 entry.put("modelId", model.id);
                 entry.put("device", deviceKey(device));
                 entry.put("backend", backend);
                 entry.put("accelerator", normalizeAccelerator(accelerator));
-                entry.put("contextBucket", contextBucket(contextWindow));
-                entry.put("bytes", Math.max(worst, measuredBytes));
-                entry.put("lastBytes", measuredBytes);
-                entry.put("samples", samples + 1);
-                entry.put("updatedAtMs", System.currentTimeMillis());
+                entry.put("modality", modalityOf(model.id));
+                appendSample(entry, new Sample(contextWindow, measuredBytes, Math.max(0, promptTokens), phase, now), now, version);
                 history.put(key, entry);
                 return true;
             } catch (JSONException ignored) {
@@ -290,7 +355,11 @@ public final class TaiRuntimeHistory {
         });
     }
 
-    /** The worst measured drop for this key, or {@code 0} when no load of it has been measured. */
+    /**
+     * The measured drop to plan a load of {@code contextWindow} tokens on, or {@code 0} when nothing
+     * usable was measured; see {@link #lookup}. No seed slope is known here, so a window above every
+     * sample is planned at the largest sample; the budget's history hook passes its own.
+     */
     public static long measuredLoadBytes(
         @NonNull Context context,
         @NonNull TaiModelSpec model,
@@ -299,26 +368,204 @@ public final class TaiRuntimeHistory {
         @NonNull String accelerator,
         int contextWindow
     ) {
-        JSONObject entry = history(context).optJSONObject(measuredKey(model, device, backend, accelerator, contextWindow));
-        return entry == null ? 0L : Math.max(0L, entry.optLong("bytes", 0L));
+        return measuredLoadBytes(context, model, device, backend, accelerator, contextWindow, 0L, 0L);
     }
 
     /**
-     * Windows are bucketed to the power of two at or above them, so 4000 and 4096 share a record
-     * and a 6k window plans against what 8k cost. {@code 0} (no window) stays {@code 0}.
+     * The measured drop for a load of {@code contextWindow} tokens: this key's samples through
+     * {@link #lookup} with {@code seedSlopeBytes} for what lies above them; when a vision or audio
+     * key has none, the text key's plus {@code encoderDeltaBytes}, never the reverse.
      */
-    static int contextBucket(int contextWindow) {
-        if (contextWindow <= 0) return 0;
-        int bucket = 1;
-        while (bucket < contextWindow && bucket < (1 << 30)) bucket <<= 1;
-        return bucket;
+    public static long measuredLoadBytes(
+        @NonNull Context context,
+        @NonNull TaiModelSpec model,
+        @NonNull TaiDeviceCapabilities device,
+        @NonNull String backend,
+        @NonNull String accelerator,
+        int contextWindow,
+        long seedSlopeBytes,
+        long encoderDeltaBytes
+    ) {
+        long version = appVersionCode(context);
+        long fileBytes = TaiResidency.fileBytes(model);
+        JSONObject history = history(context);
+        long now = System.currentTimeMillis();
+        String key = loadKey(model, fileBytes, device, version, backend, accelerator);
+        return lookupWithVariantFallback(entrySamples(history.optJSONObject(key)),
+            modalityOf(model.id), () -> entrySamples(history.optJSONObject(
+                loadKey(TaiModelVariants.baseModelId(model.id), MODALITY_TEXT, fileBytes, device, version, backend, accelerator))),
+            contextWindow, seedSlopeBytes, encoderDeltaBytes, now);
+    }
+
+    /** Supplies the samples of the text key when a vision or audio key has none. */
+    interface TextSamples {
+        @NonNull List<Sample> get();
+    }
+
+    /**
+     * {@link #lookup} on the variant's own samples; with none and a non-text modality, the text
+     * samples plus {@code encoderDeltaBytes}. The delta is added to the text figure, never the other
+     * way round: a text drop read back for a vision load would be missing the encoder.
+     */
+    static long lookupWithVariantFallback(
+        @NonNull List<Sample> own,
+        @NonNull String modality,
+        @NonNull TextSamples text,
+        int window,
+        long seedSlopeBytes,
+        long encoderDeltaBytes,
+        long nowMs
+    ) {
+        long measured = lookup(own, window, seedSlopeBytes, nowMs);
+        if (measured > 0L || MODALITY_TEXT.equals(modality)) return measured;
+        long base = lookup(text.get(), window, seedSlopeBytes, nowMs);
+        return base > 0L ? base + Math.max(0L, encoderDeltaBytes) : 0L;
+    }
+
+    /**
+     * The drop to plan on for a load of {@code window} tokens, from the live samples (younger than
+     * {@link #SAMPLE_TTL_MS}); {@code 0} means none, and the caller uses its seed. Only
+     * {@link #PHASE_FIRST_PREFILL} samples count when the key has any, since the first request is
+     * where a load's real cost lands; otherwise the {@link #PHASE_LOAD} ones. In order:
+     * <ol>
+     *   <li>the largest sample at the smallest measured window at or above {@code window}: a larger
+     *       window is an upper bound for a smaller one;</li>
+     *   <li>with two or more windows, all below, a line fitted through each window's largest sample,
+     *       evaluated at {@code window} (never below the largest sample);</li>
+     *   <li>with one window, below: that sample plus {@code seedSlopeBytes} for each extra token;</li>
+     * </ol>
+     */
+    static long lookup(@NonNull List<Sample> samples, int window, long seedSlopeBytes, long nowMs) {
+        boolean prefill = false;
+        for (Sample sample : samples) {
+            if (nowMs - sample.timestampMs <= SAMPLE_TTL_MS && PHASE_FIRST_PREFILL.equals(sample.phase)) prefill = true;
+        }
+        String wanted = prefill ? PHASE_FIRST_PREFILL : PHASE_LOAD;
+        TreeMap<Integer, Long> maxima = new TreeMap<>();
+        for (Sample sample : samples) {
+            if (nowMs - sample.timestampMs > SAMPLE_TTL_MS || !wanted.equals(sample.phase) || sample.dropBytes <= 0L) continue;
+            Long best = maxima.get(sample.window);
+            if (best == null || sample.dropBytes > best) maxima.put(sample.window, sample.dropBytes);
+        }
+        if (maxima.isEmpty()) return 0L;
+        int w = Math.max(0, window);
+        Integer above = maxima.ceilingKey(w);
+        if (above != null) return maxima.get(above);
+        Map.Entry<Integer, Long> top = maxima.lastEntry();
+        long beyond = (long) (w - top.getKey());
+        if (maxima.size() >= 2) {
+            double n = maxima.size();
+            double sx = 0, sy = 0, sxx = 0, sxy = 0;
+            for (Map.Entry<Integer, Long> e : maxima.entrySet()) {
+                double x = e.getKey();
+                double y = e.getValue();
+                sx += x;
+                sy += y;
+                sxx += x * x;
+                sxy += x * y;
+            }
+            double slope = (n * sxy - sx * sy) / (n * sxx - sx * sx);
+            double fixed = (sy - slope * sx) / n;
+            if (slope > 0.0) return Math.max(top.getValue(), Math.round(fixed + slope * w));
+        }
+        return top.getValue() + Math.max(0L, seedSlopeBytes) * beyond;
+    }
+
+    /** The samples a record holds, oldest first; unreadable or missing ones are skipped, never thrown. */
+    @NonNull
+    static List<Sample> entrySamples(@Nullable JSONObject entry) {
+        List<Sample> samples = new ArrayList<>();
+        JSONArray array = entry == null ? null : entry.optJSONArray("samples");
+        if (array == null) return samples;
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject json = array.optJSONObject(i);
+            if (json == null) continue;
+            long drop = json.optLong("d", 0L);
+            long at = json.optLong("t", 0L);
+            if (drop <= 0L || at <= 0L) continue;
+            samples.add(new Sample(json.optInt("w", 0), drop, json.optInt("p", 0), json.optString("ph", PHASE_LOAD), at));
+        }
+        return samples;
+    }
+
+    /**
+     * Adds a sample to a record's ring: samples older than {@link #SAMPLE_TTL_MS}, and every sample
+     * when the record was written by another app version, leave first; then only the last
+     * {@link #RING_SIZE} stay.
+     */
+    static void appendSample(@NonNull JSONObject entry, @NonNull Sample sample, long nowMs, long versionCode)
+        throws JSONException {
+        List<Sample> kept = new ArrayList<>();
+        long recorded = entry.optLong("appVersionCode", 0L);
+        boolean otherVersion = recorded > 0L && versionCode > 0L && recorded != versionCode;
+        if (!otherVersion) {
+            for (Sample old : entrySamples(entry)) {
+                if (nowMs - old.timestampMs <= SAMPLE_TTL_MS) kept.add(old);
+            }
+        }
+        kept.add(sample);
+        while (kept.size() > RING_SIZE) kept.remove(0);
+        JSONArray array = new JSONArray();
+        for (Sample s : kept) array.put(s.toJson());
+        entry.put("samples", array);
+        entry.put("appVersionCode", versionCode);
+        entry.put("updatedAtMs", nowMs);
+    }
+
+    /**
+     * Drops what can no longer be read: records in the old format (one bucketed worst case, no
+     * window per sample), records of another app version, and records whose samples have all
+     * expired. Returns how many were removed.
+     */
+    static int pruneMeasured(@NonNull JSONObject history, long nowMs, long versionCode) {
+        List<String> doomed = new ArrayList<>();
+        Iterator<String> keys = history.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            if (key.startsWith(LEGACY_MEASURED_PREFIX)) {
+                doomed.add(key);
+            } else if (key.startsWith(MEASURED_PREFIX)) {
+                JSONObject entry = history.optJSONObject(key);
+                long recorded = entry == null ? 0L : entry.optLong("appVersionCode", 0L);
+                boolean otherVersion = recorded > 0L && versionCode > 0L && recorded != versionCode;
+                boolean live = false;
+                for (Sample sample : entrySamples(entry)) {
+                    if (nowMs - sample.timestampMs <= SAMPLE_TTL_MS) live = true;
+                }
+                if (otherVersion || !live) doomed.add(key);
+            }
+        }
+        for (String key : doomed) history.remove(key);
+        return doomed.size();
+    }
+
+    /** {@code text}, {@code vision} or {@code audio}, from the variant suffix of the model id. */
+    @NonNull
+    static String modalityOf(@NonNull String modelId) {
+        if (modelId.endsWith(TaiModelVariants.SUFFIX_VISION)) return MODALITY_VISION;
+        if (modelId.endsWith(TaiModelVariants.SUFFIX_AUDIO)) return MODALITY_AUDIO;
+        return MODALITY_TEXT;
     }
 
     @NonNull
-    private static String measuredKey(@NonNull TaiModelSpec model, @NonNull TaiDeviceCapabilities device,
-                                      @NonNull String backend, @NonNull String accelerator, int contextWindow) {
-        return "load|" + TaiModelVariants.baseModelId(model.id) + "|" + deviceKey(device) + "|" + backend + "|"
-            + normalizeAccelerator(accelerator) + "|" + contextBucket(contextWindow);
+    private static String loadKey(@NonNull TaiModelSpec model, long fileBytes, @NonNull TaiDeviceCapabilities device,
+                                  long versionCode, @NonNull String backend, @NonNull String accelerator) {
+        return loadKey(TaiModelVariants.baseModelId(model.id), modalityOf(model.id), fileBytes, device, versionCode,
+            backend, accelerator);
+    }
+
+    /**
+     * {@code model base id + file size | device (its Android version included) | app version |
+     * backend | accelerator | modality}. The file size tells a re-exported model of the same id
+     * from the one measured; the app version is the runtime's, so a new LiteRT-LM or MNN starts
+     * clean.
+     */
+    @NonNull
+    static String loadKey(@NonNull String baseModelId, @NonNull String modality, long fileBytes,
+                          @NonNull TaiDeviceCapabilities device, long versionCode, @NonNull String backend,
+                          @NonNull String accelerator) {
+        return MEASURED_PREFIX + baseModelId + "|" + fileBytes + "|" + deviceKey(device) + "|" + versionCode + "|"
+            + backend + "|" + normalizeAccelerator(accelerator) + "|" + modality;
     }
 
     /** Wipes every entry (the {@code tai runtime --clear-history} path); returns how many were dropped. */

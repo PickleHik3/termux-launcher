@@ -1,7 +1,5 @@
 package com.termux.ai;
 
-import android.content.ComponentCallbacks2;
-
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -17,15 +15,21 @@ import java.util.concurrent.TimeUnit;
  * nothing left to hold. {@link TaiRuntimeService} reads {@code MemoryInfo} and carries the
  * decisions out; nothing here evicts anything.
  *
- * <p>Tiers, from Android's own numbers ({@code MemoryInfo.threshold} is the level at which the
- * system starts killing cached apps; the floor is {@link TaiLoadBudget#floorBytes}, twice that):
+ * <p>Tiers, against the budget's floors ({@link TaiLoadBudget#floorBytes}: the hold floor for what
+ * stays resident, the lower peak floor for a momentary load; each carries the swap penalty, and
+ * the hold floor the launcher-not-in-front one). Free memory is {@link TaiMemInfo}'s: MemAvailable.
  *
  * <pre>
  *   lowMemory                         → RELEASE_ALL: cancel in-flight work, unload everything
- *   availMem &lt; threshold × 1.25       → CHAT: also give up idle chat
- *   availMem &lt; floor                  → AUXILIARY: give up idle embeddings, idle speech output, then idle STT
+ *   avail &lt; peak floor                → CHAT: also give up idle chat
+ *   avail &lt; hold floor                → AUXILIARY: give up idle embeddings, idle speech output, then idle STT
  *   otherwise                         → NONE
  * </pre>
+ *
+ * There is no line above the floors, and no {@code onTrimMemory} mapping: the running trim levels
+ * are "not notified of this level since API level 34", so on current Android the poll is the only
+ * watch, every {@link #POLL_BUSY_MS} while a load or first prefill runs and every
+ * {@link #POLL_IDLE_MS} otherwise.
  *
  * The two eviction tiers give up one resident per evaluation, cheapest first, and the watch looks
  * again on its next tick: MemAvailable is noisy and memory comes back late (§3c of the plan), so
@@ -36,9 +40,6 @@ final class TaiPressureWatch {
 
     /** In the order the actions escalate; {@link Enum#compareTo} is meaningful. */
     enum Tier { NONE, AUXILIARY, CHAT, RELEASE_ALL }
-
-    /** Idle chat is given up below this many hundredths of {@code MemoryInfo.threshold}. */
-    static final long CHAT_THRESHOLD_PERCENT = 125L;
 
     /** An embedding interpreter nobody has used for this long is closed. */
     static final long EMBEDDING_IDLE_MS = TimeUnit.MINUTES.toMillis(5);
@@ -61,40 +62,33 @@ final class TaiPressureWatch {
      */
     static final long IDLE_EXIT_MS = TimeUnit.MINUTES.toMillis(10);
 
+    /** How often the watch looks while a load or a first prefill is running: the allocation it guards is fast. */
+    static final long POLL_BUSY_MS = 250L;
+    /** How often it looks otherwise; slow enough to be invisible in battery stats. */
+    static final long POLL_IDLE_MS = 2_000L;
+
     private TaiPressureWatch() {
     }
 
-    /**
-     * The tier for one reading of {@code MemoryInfo}. Unknown free memory ({@code <= 0}) selects
-     * nothing on its own; an unknown threshold ({@code <= 0}) leaves the chat line undefined, so
-     * only the floor (then the old reserve, see {@link TaiLoadBudget#floorBytes}) and
-     * {@code lowMemory} apply.
-     */
-    @NonNull
-    static Tier tier(long availBytes, long floorBytes, long thresholdBytes, boolean lowMemory) {
-        if (lowMemory) return Tier.RELEASE_ALL;
-        if (availBytes <= 0L) return Tier.NONE;
-        if (thresholdBytes > 0L && availBytes < thresholdBytes * CHAT_THRESHOLD_PERCENT / 100L) return Tier.CHAT;
-        if (floorBytes > 0L && availBytes < floorBytes) return Tier.AUXILIARY;
-        return Tier.NONE;
+    /** The poll interval: {@link #POLL_BUSY_MS} while a load or first prefill runs ({@link TaiLoadMeter#anyActive}), else {@link #POLL_IDLE_MS}. */
+    static long pollIntervalMs(boolean loadOrFirstPrefillRunning) {
+        return loadOrFirstPrefillRunning ? POLL_BUSY_MS : POLL_IDLE_MS;
     }
 
     /**
-     * The tier an {@code onTrimMemory} level maps to. Only the running levels count — the system
-     * telling a process it is low while it runs — and they stop being delivered from Android 14,
-     * which is why the poll exists. {@code UI_HIDDEN} and the background levels are lifecycle,
-     * not pressure: backgrounding the launcher must not drop a warm model.
+     * The tier for one reading of free memory, against the budget's floors
+     * ({@link TaiLoadBudget#floorBytes}, with the swap and foreground penalties already in):
+     * below the hold floor the watch gives up idle auxiliaries; below the lower peak floor it gives
+     * up idle chat too; {@code lowMemory} releases everything. Unknown free memory ({@code <= 0})
+     * selects nothing on its own, and a floor of {@code 0} means that line is unknown.
      */
     @NonNull
-    static Tier tierForTrimLevel(int level) {
-        switch (level) {
-            case ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW:
-                return Tier.AUXILIARY;
-            case ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL:
-                return Tier.CHAT;
-            default:
-                return Tier.NONE;
-        }
+    static Tier tier(long availBytes, long holdFloorBytes, long peakFloorBytes, boolean lowMemory) {
+        if (lowMemory) return Tier.RELEASE_ALL;
+        if (availBytes <= 0L) return Tier.NONE;
+        if (peakFloorBytes > 0L && availBytes < peakFloorBytes) return Tier.CHAT;
+        if (holdFloorBytes > 0L && availBytes < holdFloorBytes) return Tier.AUXILIARY;
+        return Tier.NONE;
     }
 
     /**
