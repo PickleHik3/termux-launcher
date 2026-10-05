@@ -119,7 +119,9 @@ public class LayoutModeViewsTest {
         assertNotNull(panel.findViewById(R.id.appearance_editor_corners_label));
         assertNotNull(panel.findViewById(R.id.appearance_editor_margin_label));
         // The mode pill, Undo and Done are the page bar's, not the sheet's.
-        assertNull(panel.findViewById(R.id.appearance_editor_mode_layout));
+        assertEquals("the pill left the sheet for the page bar", 0,
+            panel.getResources().getIdentifier("appearance_editor_mode_layout", "id",
+                panel.getContext().getPackageName()));
         assertNull(panel.findViewById(R.id.appearance_page_undo));
         assertNull(panel.findViewById(R.id.appearance_page_done));
     }
