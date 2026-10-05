@@ -190,3 +190,11 @@ colour under Clear/Mist/Tint against the dock; slider ends and legend legibility
   dry-run load plan for the wallpaper reader's model off the main thread (`TaiManager.previewMomentaryLoad`);
   a remote reader or a model that fits starts at once; only a local model that would need room from
   other apps gets a Low memory dialog with the shortfall in MB and Not now / Continue.
+
+## 12. Pong round 4 (2026-10-05, evening)
+
+Wallpaper page: the shortcut row (Surface style · Icon pack · Layout) is gone; Icon pack is the
+pill's fourth segment, so the bar reads `Wallpaper | Look | Layout | Icon pack` on every page (the
+selected segment carries its label, the others their glyph). The Lock/Home cards fill the freed
+height; Apply · more · Motion · sparkle share one row directly above the recents strip. Installed on
+pong e731dd10d+ and walked: Wallpaper, Icon pack, back to Wallpaper, Done.
