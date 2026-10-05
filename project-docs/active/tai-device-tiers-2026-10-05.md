@@ -19,7 +19,7 @@ model can be added from the Model Centre on any tier.
 | Tier | RAM class (`totalMem`, rounded up) | One line |
 |---|---|---|
 | **Tier 1, "Core"** | 6 GB and under | **Nothing by default.** Voice typing and read aloud are offered but not preselected. LLMs are never suggested; users may add one in the Model Centre and pick it per function (app categories, for example) or serve it on the endpoint. |
-| **Tier 2, "Plus"** | 8, 10 and 12 GB (pong) | LLMs on. E2B is the default assistant and tidies dictation. E4B reads wallpapers and sorts apps on 10–12 GB; 8 GB uses E2B for those. |
+| **Tier 2, "Plus"** | 8, 10 and 12 GB (pong) | LLMs on. E2B is the default assistant, tidies dictation and sorts apps. E4B reads wallpapers on 10–12 GB; 8 GB uses E2B for that. |
 | **Tier 3, "Max"** | 16 GB and more | Everything local. E4B is the default assistant. Voice and search stay loaded beside it. |
 
 The Android version and the GPU then switch individual features off or move them to the CPU (§2). The Model
