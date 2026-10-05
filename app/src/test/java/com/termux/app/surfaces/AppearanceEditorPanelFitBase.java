@@ -74,7 +74,8 @@ public abstract class AppearanceEditorPanelFitBase {
                 assertNotNull(control.name(), slider);
                 assertTrue(control + " is wider than its track: " + slider.getWidth(),
                     slider.getWidth() >= track);
-                assertEquals("one column height", Math.round(168 * density), slider.getHeight());
+                assertEquals("one column height", slider.getResources().getDimensionPixelSize(
+                    R.dimen.appearance_editor_slider_length), slider.getHeight());
                 if (previous != null)
                     assertEquals("12dp between columns", gap, Math.abs(
                         slider.getLeft() - previous.getRight()), 1);
