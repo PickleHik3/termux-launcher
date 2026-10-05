@@ -52,7 +52,7 @@ import java.util.Map;
  * means is {@link SurfaceEditorController}'s and
  * {@link com.termux.app.layouteditor.LayoutEditorController}'s.
  *
- * <p>The layout is one ConstraintLayout: the top row (mode pill, Undo, Done) is both modes'; each
+ * <p>The layout is one ConstraintLayout: the top row (the mode pill; Undo and Done are the page bar's) is both modes'; each
  * mode's rows are a {@link Group}, and a mode switch shows one and hides the other. Row B at
  * Appearance is the Custom row: a heading row with the selection's buttons over up to five
  * vertical {@link LegendSlider}s. It is GONE at a Look stop, so the sheet's height follows its
@@ -73,8 +73,6 @@ final class AppearanceEditorPanel {
     interface Listener {
         /** The mode pill moved: true for Layout, false for Appearance. */
         void onModeChanged(boolean layout);
-        void onUndo();
-        void onDone();
         /** The Look slider settled on a stop (a drag reports each stop it crosses). */
         void onLookStop(int stop);
         /** Layout mode's Style toggle. */
@@ -126,8 +124,6 @@ final class AppearanceEditorPanel {
     private final int mBasePaddingEnd;
 
     private final MaterialButtonToggleGroup mMode;
-    private final MaterialButton mUndo;
-    private final MaterialButton mDone;
     private final Group mAppearanceGroup;
     private final Group mLayoutGroup;
 
@@ -196,8 +192,6 @@ final class AppearanceEditorPanel {
         mBasePaddingStart = root.getPaddingStart();
         mBasePaddingEnd = root.getPaddingEnd();
         mMode = root.findViewById(R.id.appearance_editor_mode);
-        mUndo = root.findViewById(R.id.appearance_editor_undo);
-        mDone = root.findViewById(R.id.appearance_editor_done);
         mAppearanceGroup = root.findViewById(R.id.appearance_editor_appearance_group);
         mLayoutGroup = root.findViewById(R.id.appearance_editor_layout_group);
         mLook = root.findViewById(R.id.appearance_editor_look);
@@ -361,51 +355,12 @@ final class AppearanceEditorPanel {
         return height;
     }
 
-    /**
-     * The header is one row (mode pill, Undo, Done) while it fits the width the sheet's padding
-     * leaves, which includes the display's side insets. When it does not, Undo and Done drop to a
-     * second row at the end edge, 8dp under the pill, and the barrier the other rows hang from
-     * follows. Touch targets and text sizes are untouched.
-     */
-    private void adaptHeader(int widthPx) {
-        if (!(mUndo.getLayoutParams() instanceof ConstraintLayout.LayoutParams)
-            || !(mDone.getLayoutParams() instanceof ConstraintLayout.LayoutParams))
-            return;
-        int unspecified = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
-        mMode.measure(unspecified, unspecified);
-        mDone.measure(unspecified, unspecified);
-        int need = mMode.getMeasuredWidth() + mDone.getMeasuredWidth();
-        if (mUndo.getVisibility() != View.GONE) {
-            mUndo.measure(unspecified, unspecified);
-            need += mUndo.getMeasuredWidth();
-        }
-        int available = widthPx - mRoot.getPaddingStart() - mRoot.getPaddingEnd();
-        boolean wrap = need > available;
-        for (View view : new View[] {mUndo, mDone}) {
-            ConstraintLayout.LayoutParams lp = (ConstraintLayout.LayoutParams) view.getLayoutParams();
-            int unset = ConstraintLayout.LayoutParams.UNSET;
-            int topTop = wrap ? unset : R.id.appearance_editor_mode;
-            int topBottom = wrap ? R.id.appearance_editor_mode : unset;
-            int bottomBottom = wrap ? unset : R.id.appearance_editor_mode;
-            int margin = wrap ? Math.round(dp(8)) : 0;
-            if (lp.topToTop != topTop || lp.topToBottom != topBottom
-                || lp.bottomToBottom != bottomBottom || lp.topMargin != margin) {
-                lp.topToTop = topTop;
-                lp.topToBottom = topBottom;
-                lp.bottomToBottom = bottomBottom;
-                lp.topMargin = margin;
-                view.setLayoutParams(lp);
-            }
-        }
-    }
-
     private int measureNow(int widthPx) {
         int width = View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY);
         int height = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
         // Relative compound icons contribute width after inherited direction is resolved.
         mRoot.measure(width, height);
         reserveReadoutLines();
-        adaptHeader(widthPx);
         mRoot.measure(width, height);
         return mRoot.getMeasuredHeight();
     }
@@ -606,12 +561,6 @@ final class AppearanceEditorPanel {
                 return;
             if (mListener != null)
                 mListener.onModeChanged(checkedId == R.id.appearance_editor_mode_layout);
-        });
-        mUndo.setOnClickListener(view -> {
-            if (mListener != null) mListener.onUndo();
-        });
-        mDone.setOnClickListener(view -> {
-            if (mListener != null) mListener.onDone();
         });
         mLook.addOnChangeListener((slider, value, fromUser) -> {
             int stop = AppearanceLooks.stopForSliderValue(value);
@@ -895,13 +844,6 @@ final class AppearanceEditorPanel {
     }
 
     // ------------------------------------------------------------------------- restatements
-
-    /** Undo shows only while there is something to undo; the pill → Undo gap absorbs it. */
-    void setDirty(boolean dirty) {
-        int visibility = dirty ? View.VISIBLE : View.GONE;
-        if (mUndo.getVisibility() != visibility)
-            mUndo.setVisibility(visibility);
-    }
 
     void setStop(int stop) {
         float value = AppearanceLooks.sliderValueForStop(stop);

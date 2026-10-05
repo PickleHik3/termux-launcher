@@ -171,10 +171,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         /** The dim the window's root paints over the system wallpaper. */
         int editorWallpaperDimColor();
         /**
-         * Gives the window an opaque background for the editor's lifetime, so nothing of the
-         * system wallpaper shows around the scaled frame; false hands passthrough back.
+         * Whether the frame has to paint the wallpaper itself: only in passthrough mode, where the
+         * system draws it behind a translucent window. Otherwise {@code wallpaper_backdrop} is the
+         * wallpaper and scales with the container, and nothing is read or painted for the editor.
          */
-        void setEditorWindowOpaque(boolean opaque);
+        boolean editorPaintsWallpaper();
     }
 
     @NonNull private final Host mHost;
@@ -356,7 +357,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mFrame == null || mFrame.root() != rootContainer)
             mFrame = new AppearanceEditorFrame(rootContainer);
         mWallpaperSettled = false;
-        loadEditorWallpaper(rootContainer);
+        if (mHost.editorPaintsWallpaper()) {
+            loadEditorWallpaper(rootContainer);
+        } else {
+            // Self-drawn: the real wallpaper_backdrop scales inside the container; nothing to load.
+            mWallpaperSettled = true;
+        }
     }
 
     /**
@@ -460,6 +466,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mPanel.showAppearanceMode();
         mPanel.hideRow2();
         syncPanel();
+        // The bar's title is the mode the page opens in, so it never reads Look for a frame.
+        if (mPageListener != null)
+            mPageListener.onModeChanged(layoutMode);
+        notifyDirty();
         panelView.setVisibility(View.INVISIBLE);
 
         // The layout session opens with the presentation, whichever mode it opens in, so the one
@@ -711,6 +721,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         mLayoutMode = layout;
         panel.setMode(layout);
+        if (mPageListener != null)
+            mPageListener.onModeChanged(layout);
         // Corners and Margin are the Custom row's too: each page reads what the other wrote.
         syncLayoutControls();
         if (!layout)
@@ -778,8 +790,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /**
      * In passthrough mode the system draws the wallpaper behind the window, outside the frame's
      * scale. The picture is read off the main thread and painted inside the container for the
-     * editor's lifetime, and only then is the window made opaque, so there is never a frame of
-     * bare surface behind the translucent launcher.
+     * editor's lifetime; the surface's colorSurface scrim (never a window swap) covers what shows
+     * around the scaled frame. Not called in self-drawn mode.
      */
     private void loadEditorWallpaper(@NonNull View rootContainer) {
         final int token = ++mWallpaperToken;
@@ -819,7 +831,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int rootTop = parentInDecor[1] + root.getTop();
         frame.showWallpaper(picture, mHost.editorWallpaperDimColor(), -rootLeft, -rootTop,
             decor.getWidth(), decor.getHeight());
-        mHost.setEditorWindowOpaque(true);
     }
 
     private void selectSection(@Nullable String section) {
@@ -911,7 +922,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         int containerTop = parentOffset[1] + root.getTop();
         int containerLeft = parentOffset[0] + root.getLeft();
-        int frameTop = Math.max(containerTop, statusInset) + dp(FRAME_GAP_DP);
+        // The page bar (back, title, Undo, Done) stands between the status inset and the frame.
+        int frameTop = Math.max(containerTop, statusInset + dp(AppearanceEditorPage.BAR_DP))
+            + dp(FRAME_GAP_DP);
         // Nothing stands between the frame and the sheet any more (DECISIONS item 2): the hide
         // zone's 56dp are the frame's.
         int frameBottom = windowHeight - mRestHeightPx - dp(FRAME_GAP_DP);
@@ -1171,7 +1184,42 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mDirtyDeferred = true;
             return;
         }
-        mPanel.setDirty(isDirty());
+        notifyDirty();
+    }
+
+    // ------------------------------------------------------------------- the page bar's wiring
+
+    /** What the surface's page bar over the frame needs to know of the editor. */
+    @Nullable private AppearanceSurfaceController.PageListener mPageListener;
+
+    @Override
+    public void setPageListener(@Nullable AppearanceSurfaceController.PageListener listener) {
+        mPageListener = listener;
+        if (listener != null) {
+            listener.onModeChanged(mLayoutMode);
+            listener.onDirtyChanged(mOpen && isDirty());
+        }
+    }
+
+    private void notifyDirty() {
+        AppearanceSurfaceController.PageListener listener = mPageListener;
+        boolean dirty = mOpen && isDirty();
+        if (listener != null)
+            listener.onDirtyChanged(dirty);
+    }
+
+    /** The bar's Undo: everything back to the state at open. */
+    @Override
+    public void undo() {
+        if (mOpen)
+            revertToEntry();
+    }
+
+    /** The bar's Done: saves the look and hands the page change to the surface. */
+    @Override
+    public void done() {
+        if (mOpen)
+            commitAndExit();
     }
 
     @StringRes
@@ -1203,14 +1251,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             // One session for both modes: switching never asks and never resets anything.
             if (layout != mLayoutMode)
                 setLayoutMode(layout, true);
-        }
-
-        @Override public void onUndo() {
-            revertToEntry();
-        }
-
-        @Override public void onDone() {
-            commitAndExit();
         }
 
         @Override public void onLookStop(int stop) {
@@ -2458,7 +2498,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (frame != null) {
             frame.hide(false, null);
             frame.hideWallpaper();
-            mHost.setEditorWindowOpaque(false);
             mHost.redressChrome();
             frame.repaintAll();
         } else {

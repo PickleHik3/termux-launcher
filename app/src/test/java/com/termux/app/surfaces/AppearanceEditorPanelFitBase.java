@@ -2,6 +2,7 @@ package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -26,7 +27,7 @@ import org.robolectric.RuntimeEnvironment;
 import java.util.List;
 
 /**
- * The bottom area fits a phone of the subclass's width in both modes with Undo up: no view runs past the sheet's
+ * The bottom area fits a phone of the subclass's width in both modes: no view runs past the sheet's
  * edge, the mode pill's words are whole, and nothing on the top row overlaps. Native graphics,
  * so text is measured with real font metrics rather than one pixel per character.
  */
@@ -49,7 +50,6 @@ public abstract class AppearanceEditorPanelFitBase {
         mPanel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
         mWidthPx = Math.round(themed.getResources().getConfiguration().screenWidthDp
             * themed.getResources().getDisplayMetrics().density);
-        mPanel.setDirty(true);
     }
 
     /**
@@ -243,7 +243,7 @@ public abstract class AppearanceEditorPanelFitBase {
      * The sheet's height follows its content: Row B is GONE until the Custom stop shows it, so the
      * sheet without it is shorter; every selection's Row B is the same height (a 48dp heading row
      * over sliders of one length), which is the tallest, so the frame never moves when the
-     * selection changes. Undo does not move the sheet.
+     * selection changes.
      */
     @Test
     public void appearanceHeightFollowsContentAndTheFrameAnchorIsFixed() {
@@ -260,9 +260,6 @@ public abstract class AppearanceEditorPanelFitBase {
                 mPanel.measureFor(false, mWidthPx));
             assertEquals(tallest, mPanel.measureTallest(false, mWidthPx));
         }
-        mPanel.setDirty(true);
-        mPanel.setDirty(false);
-        assertEquals("Undo does not move the sheet", tallest, mPanel.measureFor(false, mWidthPx));
 
         mPanel.hideRow2();
         assertEquals("Row B down: back to Row A alone", lookStop,
@@ -428,24 +425,15 @@ public abstract class AppearanceEditorPanelFitBase {
         assertEdges(root, 0, root.getWidth());
 
         View pill = root.findViewById(R.id.appearance_editor_mode);
-        View undo = root.findViewById(R.id.appearance_editor_undo);
-        View done = root.findViewById(R.id.appearance_editor_done);
-        assertEquals(View.VISIBLE, undo.getVisibility());
-        // One row when it fits; when side insets leave too little width, Undo and Done wrap to a
-        // row of their own under the pill. Either way the pill and Undo never overlap.
-        assertTrue("the pill ends before Undo, or Undo wraps under it: " + pill.getRight() + " > "
-                + undo.getLeft(),
-            pill.getRight() <= undo.getLeft() || pill.getBottom() <= undo.getTop());
+        assertNull("Undo lives in the page bar, not the sheet",
+            root.findViewById(R.id.appearance_page_undo));
+        assertNotNull(pill);
+        assertTrue("the pill inside the sheet's padding",
+            pill.getRight() <= root.getWidth() - root.getPaddingRight());
         assertLabelsAboveTheirControls(root);
 
-        assertEquals("Undo and Done share a row", undo.getTop() < done.getBottom()
-            && done.getTop() < undo.getBottom(), true);
-        assertTrue("Undo ends before Done", undo.getRight() <= done.getLeft());
-        assertTrue("Done inside the sheet's padding",
-            done.getRight() <= root.getWidth() - root.getPaddingRight());
-
         for (int id : new int[] {R.id.appearance_editor_mode_appearance,
-                R.id.appearance_editor_mode_layout, R.id.appearance_editor_done}) {
+                R.id.appearance_editor_mode_layout}) {
             TextView button = root.findViewById(id);
             Layout layout = button.getLayout();
             assertNotNull(layout);

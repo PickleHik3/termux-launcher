@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A sub-page of the Appearance surface (Icon pack): the Overview's top bar (back, then the title
-     straight after it) over the page's own content. -->
+<!-- A sub-page of the Appearance surface (Icon pack, Look, Layout): the Overview's top bar (back,
+     the title straight after it, then the page's end actions) over the page's own content. Undo
+     and Done are gone unless the page asks for them (Look and Layout do). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -39,6 +40,29 @@
             android:maxLines="1"
             android:textAppearance="?attr/textAppearanceTitleLarge"
             android:textColor="?attr/colorOnSurface" />
+
+        <!-- 48dp tall, as every icon button in the bar: it appears and goes with the dirty state. -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_page_undo"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/appearance_editor_undo"
+            android:tooltipText="@string/appearance_editor_undo"
+            android:visibility="gone"
+            app:icon="@drawable/ic_symbol_undo"
+            app:iconSize="24dp"
+            app:iconTint="?attr/colorOnSurface" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/appearance_page_done"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:minWidth="0dp"
+            android:maxLines="1"
+            android:text="@string/appearance_editor_done"
+            android:visibility="gone" />
     </LinearLayout>
 
     <FrameLayout

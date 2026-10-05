@@ -118,10 +118,10 @@ public class LayoutModeViewsTest {
         assertEquals(48f, ((Slider) margin).getValueTo(), 0f);
         assertNotNull(panel.findViewById(R.id.appearance_editor_corners_label));
         assertNotNull(panel.findViewById(R.id.appearance_editor_margin_label));
-        // The mode pill, Undo and Done stay on the top row for both modes.
+        // The mode pill alone stays on the top row for both modes; Undo and Done are the page bar's.
         assertNotNull(panel.findViewById(R.id.appearance_editor_mode_layout));
-        assertNotNull(panel.findViewById(R.id.appearance_editor_undo));
-        assertNotNull(panel.findViewById(R.id.appearance_editor_done));
+        assertNull(panel.findViewById(R.id.appearance_page_undo));
+        assertNull(panel.findViewById(R.id.appearance_page_done));
     }
 
     /** Row B holds five vertical LegendSliders in one row, apart from the heading row. */
