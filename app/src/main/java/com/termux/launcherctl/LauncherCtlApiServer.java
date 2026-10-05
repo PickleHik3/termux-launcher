@@ -2083,15 +2083,10 @@ public class LauncherCtlApiServer {
         return "0.0.0.0";
     }
 
-    private void installTaiCliScripts() {
-        File loginBinary = new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/login");
-        if (!loginBinary.exists()) {
-            Logger.logInfo(LOG_TAG, "Skipping TAI CLI install until bootstrap is initialized.");
-            return;
-        }
-
-        String taiScript =
-            "#!" + TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/sh\n" +
+    /** The {@code tai} CLI script; resources/bin/tai is its twin and TaiCliScriptTest keeps them in step. */
+    static String taiCliScript(String binPrefixDir) {
+        return
+            "#!" + binPrefixDir + "/sh\n" +
             "set -eu\n" +
             "print_help() {\n" +
             "  cat <<'EOF'\n" +
@@ -2121,6 +2116,7 @@ public class LauncherCtlApiServer {
             "  tai benchmark --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]\n" +
             "  tai transcribe <file.wav> [--model id] [--language xx] [--prompt \"words\"]\n" +
             "  tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [text]\n" +
+            "  agent | tai speak [--whole|--stream]\n" +
             "  tai speak --stop\n" +
             "  tai image \"prompt\" [--model ID | --model-dir DIR] [--type sd15|taiyi|sana] [--out FILE.png] [--steps N]\n" +
             "             [--seed N] [--size WxH] [--cfg X] [--image IN.png] [--cpu] [--memory-mode 0|1|2]\n" +
@@ -2167,6 +2163,8 @@ public class LauncherCtlApiServer {
             "output): the text from the command line or stdin, the voice and speed from the options or\n" +
             "On-device AI settings. Speech starts after the first sentence; Ctrl-C or tai speak --stop stops it.\n" +
             "--out file.wav saves the audio instead of playing it.\n" +
+            "agent | tai speak speaks piped text sentence by sentence as the lines arrive (colour codes and\n" +
+            "markdown marks are dropped); --whole collects everything first, --stream forces streaming.\n" +
             "tai image makes a picture from a text prompt with an MNN diffusion model (Stable Diffusion 1.5, Taiyi,\n" +
             "Sana), on the GPU through OpenCL unless --cpu. --model names an installed image model; --model-dir points at\n" +
             "a model folder directly (it needs tokenizer.mtok for Stable Diffusion/Taiyi; Taiyi must be said with --type).\n" +
@@ -2535,13 +2533,17 @@ public class LauncherCtlApiServer {
             "    speed=\"\"\n" +
             "    model=\"\"\n" +
             "    out=\"\"\n" +
-            "    usage_speak() { echo \"usage: tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [text...]  (reads stdin when no text is given; tai speak --stop stops)\" >&2; exit 2; }\n" +
+            "    stream=0\n" +
+            "    whole=0\n" +
+            "    usage_speak() { echo \"usage: tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [--whole|--stream] [text...]  (reads stdin when no text is given and speaks piped lines as they arrive; tai speak --stop stops)\" >&2; exit 2; }\n" +
             "    while [ \"$#\" -gt 0 ]; do\n" +
             "      case \"$1\" in\n" +
             "        --voice) shift; [ \"$#\" -gt 0 ] || usage_speak; voice=\"$1\" ;;\n" +
             "        --speed) shift; [ \"$#\" -gt 0 ] || usage_speak; speed=\"$1\" ;;\n" +
             "        --model) shift; [ \"$#\" -gt 0 ] || usage_speak; model=\"$1\" ;;\n" +
             "        --out|-o) shift; [ \"$#\" -gt 0 ] || usage_speak; out=\"$1\" ;;\n" +
+            "        --stream) stream=1 ;;\n" +
+            "        --whole) whole=1 ;;\n" +
             "        --stop) post_json /v1/ai/speak/stop '{}'; exit $? ;;\n" +
             "        --) shift; break ;;\n" +
             "        -*) usage_speak ;;\n" +
@@ -2559,10 +2561,55 @@ public class LauncherCtlApiServer {
             "    [ -z \"$speed\" ] || add_query \"speed=$speed\"\n" +
             "    [ -z \"$model\" ] || add_query \"model=$model\"\n" +
             "    [ -z \"$out\" ] || add_query \"format=wav\"\n" +
+            "    CURL_SPEAK=\"--fail-with-body -sS --connect-timeout 2 --max-time 3600\"\n" +
+            "    # Piped input is spoken as it arrives; --whole collects it first, --out needs the whole text.\n" +
+            "    if [ \"$stream\" = \"1\" ]; then\n" +
+            "      { [ \"$whole\" = \"0\" ] && [ -z \"$out\" ] && [ \"$#\" -eq 0 ]; } || usage_speak\n" +
+            "    elif [ \"$whole\" = \"0\" ] && [ -z \"$out\" ] && [ \"$#\" -eq 0 ] && [ ! -t 0 ]; then\n" +
+            "      stream=1\n" +
+            "    fi\n" +
+            "    if [ \"$stream\" = \"1\" ]; then\n" +
+            "      # One line in, sentences out: drop colour codes and carriage returns, drop markdown marks that\n" +
+            "      # would be read aloud, collapse spaces, then break after . ! ? (and closing quotes or brackets).\n" +
+            "      speak_sed='s/\\r//g\n" +
+            "s/\\x1b\\][^\\x07]*(\\x07|\\x1b\\\\)//g\n" +
+            "s/\\x1b\\[[0-9;:?<>=! ]*[A-Za-z@]//g\n" +
+            "s/\\x1b.//g\n" +
+            "s/\\*\\*//g\n" +
+            "s/__//g\n" +
+            "s/`//g\n" +
+            "s/[[:space:]]+/ /g\n" +
+            "s/^ //\n" +
+            "s/ $//\n" +
+            "s/^#+ +//\n" +
+            "s/^[-*+>] +//\n" +
+            "s/^([0-9]+)[.)] +/\\1, /\n" +
+            "s/([.!?][]\\x22\\x27)]*) /\\1\\n/g'\n" +
+            "      trap 'post_json /v1/ai/speak/stop \"{}\" >/dev/null 2>&1; exit 130' INT TERM\n" +
+            "      if [ \"$OUTPUT_MODE\" = \"text\" ]; then set -- -H \"X-TAI-Output: text\"; else set --; fi\n" +
+            "      while IFS= read -r line || [ -n \"$line\" ]; do\n" +
+            "        parts=$(printf '%s\\n' \"$line\" | sed -E -e \"$speak_sed\") || parts=\"\"\n" +
+            "        while IFS= read -r sentence || [ -n \"$sentence\" ]; do\n" +
+            "          case \"$sentence\" in *[[:alnum:]]*) ;; *) continue ;; esac\n" +
+            "          # Each request returns once its sentence has been heard, which keeps the order.\n" +
+            "          if body=$(printf '%s' \"$sentence\" | curl $CURL_SPEAK -X POST -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: text/plain; charset=utf-8\" \"$@\" --data-binary @- \"$BASE/v1/ai/speak$query\"); then\n" +
+            "            :\n" +
+            "          else\n" +
+            "            rc=$?\n" +
+            "            printf '%s\\n' \"$body\" >&2\n" +
+            "            trap - INT TERM\n" +
+            "            exit \"$rc\"\n" +
+            "          fi\n" +
+            "        done <<SPEAK_EOF\n" +
+            "$parts\n" +
+            "SPEAK_EOF\n" +
+            "      done\n" +
+            "      trap - INT TERM\n" +
+            "      exit 0\n" +
+            "    fi\n" +
             "    tmp=$(mktemp \"${TMPDIR:-$HOME}/tai-speak.XXXXXX\") || exit 1\n" +
             "    if [ \"$#\" -gt 0 ]; then printf '%s' \"$*\" > \"$tmp\"; else cat > \"$tmp\"; fi\n" +
             "    [ -s \"$tmp\" ] || { rm -f \"$tmp\"; usage_speak; }\n" +
-            "    CURL_SPEAK=\"--fail-with-body -sS --connect-timeout 2 --max-time 3600\"\n" +
             "    if [ -n \"$out\" ]; then\n" +
             "      if curl $CURL_SPEAK -X POST -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: text/plain; charset=utf-8\" --data-binary \"@$tmp\" -o \"$out.part\" \"$BASE/v1/ai/speak$query\"; then\n" +
             "        mv -f \"$out.part\" \"$out\"\n" +
@@ -2674,6 +2721,16 @@ public class LauncherCtlApiServer {
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";
+    }
+
+    private void installTaiCliScripts() {
+        File loginBinary = new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/login");
+        if (!loginBinary.exists()) {
+            Logger.logInfo(LOG_TAG, "Skipping TAI CLI install until bootstrap is initialized.");
+            return;
+        }
+
+        String taiScript = taiCliScript(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH);
 
         // launcherctl is the shell companion: `launcherctl launch` for tmux configs and shell binds,
         // and `launcherctl pane …` so a process in a shell — an agent, a build, a script — can open
