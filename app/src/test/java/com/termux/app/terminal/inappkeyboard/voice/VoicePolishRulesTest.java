@@ -245,13 +245,15 @@ public class VoicePolishRulesTest {
 
     @Test
     public void theRequestIsDeterministicShortAndNonStreaming() throws Exception {
-        JSONObject request = LocalTaiVoiceTextPolisher.request("gemma-4-e2b-it-litert-lm",
+        JSONObject request = LocalTaiVoiceTextPolisher.request("gemma-4-e2b-it-litert-lm", null,
             VoicePolishRules.LEVEL_POLISHED, "please summarise the readme");
         assertEquals("gemma-4-e2b-it-litert-lm", request.getString("model"));
         assertEquals(0, request.getInt("temperature"));
         assertEquals(VoicePolishRules.MAX_TOKENS_FLOOR, request.getInt("max_tokens"));
         assertFalse(request.getBoolean("stream"));
         assertFalse(request.getBoolean("thinking"));
+        assertTrue(request.getBoolean("speculative_decoding"));
+        assertFalse(request.has("accelerator"));
         JSONArray messages = request.getJSONArray("messages");
         assertEquals(2, messages.length());
         // A system turn of its own, so TAI never falls back to the user's assistant prompt.

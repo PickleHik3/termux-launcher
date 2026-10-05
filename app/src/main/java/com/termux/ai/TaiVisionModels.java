@@ -86,7 +86,12 @@ public final class TaiVisionModels {
      */
     @NonNull
     public static String depthModel(@NonNull Context context) {
-        return chooseDepth(installedIds(new TaiModelStore(context)), chosenDepth(context));
+        Collection<String> installed = installedIds(new TaiModelStore(context));
+        // WALLPAPER_DEPTH's resolution: the pick, else the tier's Automatic (DA3 on 10 GB and up, DA2
+        // below), else the chain. chooseDepth stays as the last resort over what is installed.
+        String resolved = TaiFunctionModels.forContext(context).resolve(TaiFunction.WALLPAPER_DEPTH).modelId;
+        if (resolved != null && installed.contains(resolved)) return resolved;
+        return chooseDepth(installed, chosenDepth(context));
     }
 
     @NonNull

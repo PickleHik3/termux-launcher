@@ -44,6 +44,11 @@ public interface TerminalViewClient {
 
     boolean shouldUseCtrlSpaceWorkaround();
 
+    /** Whether hardware Ctrl+Space is left to Android instead of being sent to the terminal. */
+    default boolean shouldPassCtrlSpaceToAndroid() {
+        return false;
+    }
+
     boolean isTerminalViewSelected();
 
     void copyModeChanged(boolean copyMode);

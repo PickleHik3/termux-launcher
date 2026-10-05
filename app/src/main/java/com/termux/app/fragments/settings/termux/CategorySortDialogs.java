@@ -28,13 +28,15 @@ import com.termux.app.material.M3;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.ai.TaiDeviceCapabilities;
-import com.termux.ai.TaiModelRegistry;
+import com.termux.ai.TaiFunction;
+import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherCategoryCatalogue;
 import com.termux.app.launcher.data.LauncherCategoryPasteImporter;
 import com.termux.app.launcher.data.LauncherCategoryPasteNotification;
+import com.termux.app.launcher.data.LauncherCategorySortPlan;
 import com.termux.app.launcher.data.LauncherCategorySortPrompt;
 import com.termux.shared.interact.ShareUtils;
 
@@ -53,10 +55,6 @@ import java.util.concurrent.Executors;
  */
 final class CategorySortDialogs {
 
-    /** Measured on-device throughput, used only for the "takes about N minutes" estimate. */
-    private static final int SECONDS_PER_APP_E4B = 3;
-    private static final int SECONDS_PER_APP_E2B = 1;
-
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
     /**
      * The config read/merge/write is disk I/O and must not run on the click. One shared daemon
@@ -73,18 +71,23 @@ final class CategorySortDialogs {
     }
 
     /**
-     * @return the downloaded model this feature would use — E4B when the phone meets its RAM
-     *     recommendation (or E2B is not there to fall back on), else E2B — or null when neither is
-     *     installed. Availability is a separate question, see {@link #unavailableReason}.
+     * @return what a sort would ask: the APP_CATEGORIES function's resolution ({@link
+     *     TaiFunctionModels}: the user's pick, else the tier's Automatic, else its chain), a local
+     *     model on an accelerator or the remote provider's model. Reads the model store and
+     *     settings. Availability is a separate question, see {@link #unavailableReason}.
      */
+    @NonNull
+    static LauncherCategorySortPlan resolvePlan(@NonNull Context context) {
+        return LauncherCategorySortPlan.of(TaiFunctionModels.forContext(context).resolve(TaiFunction.APP_CATEGORIES));
+    }
+
+    /** The installed spec for a local plan's model, or null (and always null for a remote plan). */
     @Nullable
-    static TaiModelSpec resolveModel(@NonNull Context context) {
-        Map<String, TaiModelSpec> installed = new TaiModelStore(context).getDownloadedReadableModels();
-        TaiModelSpec e4b = installed.get(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT);
-        TaiModelSpec e2b = installed.get(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
-        if (e4b != null && (e2b == null
-                || TaiDeviceCapabilities.detect(context).checkModelCapability(e4b).warning == null)) return e4b;
-        return e2b != null ? e2b : e4b;
+    private static TaiModelSpec specFor(@NonNull Context context, @NonNull LauncherCategorySortPlan plan) {
+        if (plan.model == null || plan.remote) return null;
+        TaiModelStore store = new TaiModelStore(context);
+        TaiModelSpec spec = store.getDownloadedReadableModels().get(plan.model);
+        return spec != null ? spec : store.getInstalledUserModels().get(plan.model);
     }
 
     /**
@@ -93,7 +96,9 @@ final class CategorySortDialogs {
      *     what to install or why their device cannot do it.
      */
     @Nullable
-    static String unavailableReason(@NonNull Context context, @Nullable TaiModelSpec model) {
+    static String unavailableReason(@NonNull Context context, @NonNull LauncherCategorySortPlan plan) {
+        if (plan.remote) return null; // the remote provider runs it: nothing to download or fit
+        TaiModelSpec model = specFor(context, plan);
         if (model == null)
             return context.getString(R.string.settings_app_drawer_category_sort_unavailable_model);
         TaiDeviceCapabilities.ModelCapabilityCheck check =
@@ -132,15 +137,19 @@ final class CategorySortDialogs {
      *
      * @param onDeviceChosen run when the on-device row is picked; the caller owns starting the
      *     service, because only it can keep polling for progress afterwards.
+     * @param onChangeModel run when the Model row is picked: the caller opens the function picker
+     *     sheet for APP_CATEGORIES. Null hides the row.
      * @param onPasteApplied run after a pasted reply has been written, so the caller can refresh.
      */
     static void showChooser(@NonNull Context context,
                             @NonNull List<LauncherCategorySortPrompt.AppEntry> apps,
                             @NonNull Runnable onDeviceChosen,
+                            @Nullable Runnable onChangeModel,
                             @Nullable Runnable onPasteApplied) {
-        TaiModelSpec model = resolveModel(context);
-        String unavailable = unavailableReason(context, model);
-        boolean onDeviceEnabled = unavailable == null && model != null;
+        LauncherCategorySortPlan plan = resolvePlan(context);
+        TaiModelSpec model = specFor(context, plan);
+        String unavailable = unavailableReason(context, plan);
+        boolean onDeviceEnabled = unavailable == null && plan.hasModel();
 
         float density = context.getResources().getDisplayMetrics().density;
         LinearLayout container = new LinearLayout(context);
@@ -156,14 +165,20 @@ final class CategorySortDialogs {
             .setNegativeButton(android.R.string.cancel, null)
             .create();
 
-        String onDeviceSummary = onDeviceEnabled && model != null
-            ? context.getString(R.string.settings_app_drawer_category_sort_on_device_summary,
-                model.displayName)
+        String modelName = plan.remote ? plan.displayId() : model != null ? model.displayName : "";
+        String onDeviceSummary = onDeviceEnabled
+            ? context.getString(plan.remote
+                ? R.string.tai_callers_category_remote_summary
+                : R.string.settings_app_drawer_category_sort_on_device_summary, modelName)
             : unavailable;
-        String onDeviceNote = onDeviceEnabled && model != null
+        String onDeviceNote = onDeviceEnabled
             ? context.getString(R.string.settings_app_drawer_category_sort_on_device_warning,
-                estimatedMinutes(model, apps.size()))
+                plan.estimatedMinutes(apps.size()))
             : null;
+        // A large model may make Android close cached background apps (tai-device-tiers spec section 4.4).
+        if (onDeviceNote != null && plan.warnBackground) {
+            onDeviceNote += "\n" + context.getString(R.string.tai_warn_background_apps);
+        }
         container.addView(buildRow(context,
             R.drawable.ic_symbol_smart_toy,
             context.getString(R.string.settings_app_drawer_category_sort_on_device),
@@ -174,6 +189,19 @@ final class CategorySortDialogs {
                 dialog.dismiss();
                 onDeviceChosen.run();
             }));
+
+        if (onChangeModel != null) {
+            container.addView(buildRow(context,
+                R.drawable.ic_symbol_smart_toy,
+                context.getString(R.string.tai_callers_category_model_row),
+                plan.hasModel() ? modelName : context.getString(R.string.cleanup_model_automatic_title),
+                null,
+                true,
+                () -> {
+                    dialog.dismiss();
+                    onChangeModel.run();
+                }));
+        }
 
         container.addView(buildRow(context,
             R.drawable.ic_symbol_content_copy,
@@ -396,10 +424,4 @@ final class CategorySortDialogs {
             R.string.settings_app_drawer_category_sort_ignored_lines, ignored);
     }
 
-    /** Rounded up and never zero: "about 0 minutes" would read as instant. */
-    private static int estimatedMinutes(@NonNull TaiModelSpec model, int appCount) {
-        int secondsPerApp = TaiModelRegistry.MODEL_GEMMA_4_E2B_IT.equals(model.id)
-            ? SECONDS_PER_APP_E2B : SECONDS_PER_APP_E4B;
-        return Math.max(1, (int) Math.ceil(appCount * secondsPerApp / 60.0));
-    }
 }

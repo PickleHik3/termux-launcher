@@ -22,6 +22,7 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
+import androidx.core.view.ViewCompat;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.fragment.app.Fragment;
 
@@ -213,7 +214,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         header.setTextColor(MaterialColors.getColor(context,
             androidx.appcompat.R.attr.colorPrimary, Color.GRAY));
         header.setText(title);
-        header.setAccessibilityHeading(true);
+        ViewCompat.setAccessibilityHeading(header, true);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         params.topMargin = dp(24);

@@ -11,6 +11,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.graphics.ColorUtils;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
 import androidx.preference.ListPreference;
@@ -98,6 +101,70 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
      * The deep-link arguments an Intent carries, or null when it carries none. Read by the
      * initial fragment; nothing else in the Intent reaches it.
      */
+    private static final String PAGES = "com.termux.app.fragments.settings.termux.";
+
+    /**
+     * A deep link that names an old page and a row that has since moved to a focused subpage
+     * (an external Intent, a saved Back stack, a search hit) is sent to the page that holds the row,
+     * with the same scroll key, so the row is still found. Any other class or key is returned as
+     * given, so a link without a key keeps opening the overview it always named.
+     */
+    @NonNull
+    static String redirectLegacyPage(@NonNull String className, @Nullable String scrollToKey) {
+        if (scrollToKey == null) return className;
+        String page = null;
+        if ((PAGES + "KeyboardPreferencesFragment").equals(className)) {
+            if (scrollToKey.startsWith("keyboard_voice") || scrollToKey.equals("keyboard_docs_voice"))
+                page = "KeyboardVoicePreferencesFragment";
+            else if (scrollToKey.equals("in_app_keyboard_hide_on_hardware")
+                || scrollToKey.equals("pass_ctrl_space_to_android"))
+                page = "KeyboardHardwarePreferencesFragment";
+            else if (scrollToKey.equals("keyboard_layout") || scrollToKey.equals("in_app_keyboard_extra_keys")
+                || scrollToKey.equals("in_app_keyboard_custom_layout") || scrollToKey.equals("in_app_keyboard_layouts")
+                || scrollToKey.startsWith("keyboard_docs_") || scrollToKey.startsWith("keyboard_credits"))
+                page = "KeyboardLayoutPreferencesFragment";
+            else if (scrollToKey.equals("keyboard_shapes") || scrollToKey.startsWith("in_app_keyboard_floating_")
+                || scrollToKey.equals("in_app_keyboard_split_gap"))
+                page = "KeyboardSizePreferencesFragment";
+            else if (scrollToKey.equals("keyboard_typing") || scrollToKey.equals("keyboard_feedback")
+                || scrollToKey.startsWith("in_app_keyboard_tap_correction")
+                || scrollToKey.equals("in_app_keyboard_key_sound_enabled")
+                || scrollToKey.equals("in_app_keyboard_key_popup"))
+                page = "KeyboardTypingPreferencesFragment";
+            else if (scrollToKey.equals("in_app_keyboard_haptics_enabled"))
+                page = "AppBehaviorPreferencesFragment";
+        } else if ((PAGES + "LauncherPreferencesFragment").equals(className)) {
+            if (scrollToKey.equals("app_launcher_input_char") || scrollToKey.equals("app_launcher_reset_usage_ranking"))
+                page = "LauncherSearchPreferencesFragment";
+            else if (scrollToKey.equals("app_launcher_az_lock_method")
+                || scrollToKey.equals("app_launcher_az_double_tap_lock"))
+                page = "LauncherLockPreferencesFragment";
+            else if (scrollToKey.equals("app_launcher_most_used_page"))
+                page = "LauncherDockPreferencesFragment";
+            else if (scrollToKey.equals("app_haptics_enabled") || scrollToKey.equals("app_launcher_row_haptics")
+                || scrollToKey.equals("show_in_recents_when_not_default"))
+                page = "AppBehaviorPreferencesFragment";
+        } else if ((PAGES + "X11DisplayPreferencesFragment").equals(className)) {
+            switch (scrollToKey) {
+                case "touchMode": case "x11_android_keyboard": case "x11_keyboard_follows_text":
+                case "clipboardEnable":
+                    page = "X11DisplayInputPreferencesFragment"; break;
+                case "displayResolutionMode": case "displayScale": case "displayResolutionExact":
+                case "displayResolutionCustom": case "displayFilteringMode": case "x11_display_dpi":
+                    page = "X11DisplayResolutionPreferencesFragment"; break;
+                case "x11_display_autostart": case "x11_display_command": case "x11_set_display_env":
+                    page = "X11DisplayStartupPreferencesFragment"; break;
+                case "x11_legacy_drawing": case "x11_force_bgra":
+                    page = "X11DisplayTroubleshootingPreferencesFragment"; break;
+                case "x11_drawer_apps": case "x11_gui_apps_setup": case "x11_hidden_apps":
+                case "x11_window_manager": case "x11_runtime_badge": case "x11_window_manager_hint":
+                    page = "X11DisplayLinuxAppsPreferencesFragment"; break;
+                default: break;
+            }
+        }
+        return page == null ? className : PAGES + page;
+    }
+
     @Nullable
     static Bundle deepLinkArguments(@NonNull Intent intent) {
         String place = intent.getStringExtra(EXTRA_INITIAL_PLACE);
@@ -322,13 +389,16 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
 
     private void pushScreen(@NonNull Class<? extends Fragment> fragmentClass, int titleResId,
                             @Nullable String titleText, @Nullable Bundle args) {
-        Fragment fragment = getSupportFragmentManager().getFragmentFactory()
-            .instantiate(getClassLoader(), fragmentClass.getName());
-        if (args != null) fragment.setArguments(args);
         String place = args == null ? null : args.getString(EXTRA_INITIAL_PLACE);
         String scrollToKey = args == null ? null : args.getString(EXTRA_SCROLL_TO_KEY);
+        // A saved or external entry for an old page, scrolled to a row that moved, opens the
+        // subpage that holds the row; the saved entry then records the page actually shown.
+        String className = redirectLegacyPage(fragmentClass.getName(), scrollToKey);
+        Fragment fragment = getSupportFragmentManager().getFragmentFactory()
+            .instantiate(getClassLoader(), className);
+        if (args != null) fragment.setArguments(args);
         mPushedScreens.add(new SettingsBackStackState.Entry(
-            fragmentClass.getName(), titleResId, titleText, place, scrollToKey));
+            className, titleResId, titleText, place, scrollToKey));
         // Named by its position so it always pops exactly one entry at a time, staying aligned
         // with mPushedScreens (see onBackStackChanged).
         getSupportFragmentManager().beginTransaction()
@@ -390,6 +460,10 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         int surface = ThemeUtils.getSystemAttrColor(this, com.termux.shared.R.attr.termuxColorSurfaceBase, android.graphics.Color.BLACK);
         window.setStatusBarColor(surface);
         window.setNavigationBarColor(surface);
+        boolean lightSurface = ColorUtils.calculateLuminance(surface) > 0.5;
+        WindowInsetsControllerCompat bars = WindowCompat.getInsetsController(window, window.getDecorView());
+        bars.setAppearanceLightStatusBars(lightSurface);
+        bars.setAppearanceLightNavigationBars(lightSurface);
     }
 
     /**
@@ -416,6 +490,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         if (fragmentClassName == null || fragmentClassName.isEmpty()) {
             return new RootPreferencesFragment();
         }
+        fragmentClassName = redirectLegacyPage(fragmentClassName,
+            getIntent().getStringExtra(EXTRA_SCROLL_TO_KEY));
         try {
             Class<?> fragmentClass = getClassLoader().loadClass(fragmentClassName);
             if (!isAllowedInitialFragment(fragmentClass)) {
@@ -516,11 +592,21 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             CHILD_XML_RESOURCES.put("notifications", new int[]{
                 R.xml.notifications_preferences});
             CHILD_XML_RESOURCES.put("keyboard_input", new int[]{
-                R.xml.termux_keyboard_preferences, R.xml.speech_model_preferences});
+                R.xml.termux_keyboard_preferences, R.xml.termux_keyboard_layout_preferences,
+                R.xml.termux_keyboard_size_preferences, R.xml.termux_keyboard_typing_preferences,
+                R.xml.termux_keyboard_voice_preferences, R.xml.termux_keyboard_voice_details_preferences,
+                R.xml.termux_keyboard_hardware_preferences,
+                R.xml.speech_model_preferences});
             CHILD_XML_RESOURCES.put("display", new int[]{
-                R.xml.x11_display_preferences});
+                R.xml.x11_display_preferences, R.xml.x11_display_input_preferences,
+                R.xml.x11_display_resolution_preferences, R.xml.x11_display_linux_apps_preferences,
+                R.xml.x11_display_startup_preferences, R.xml.x11_display_troubleshooting_preferences});
             CHILD_XML_RESOURCES.put("launcher_apps", new int[]{
-                R.xml.launcher_preferences});
+                R.xml.launcher_preferences, R.xml.launcher_dock_preferences,
+                R.xml.launcher_search_preferences, R.xml.launcher_lock_preferences,
+                R.xml.app_drawer_preferences});
+            CHILD_XML_RESOURCES.put("app_behavior", new int[]{
+                R.xml.app_behavior_preferences});
             CHILD_XML_RESOURCES.put("services_permissions", new int[]{
                 R.xml.services_permissions_preferences, R.xml.termux_ai_preferences,
                 R.xml.termux_privileged_access_preferences, R.xml.termux_api_preferences});
@@ -530,15 +616,47 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 R.xml.about_support_preferences});
         }
 
-        /** One indexed child preference: its display title and lowercase searchable text. */
+        /**
+         * The focused subpage that holds each XML resource's rows, so a search hit can open the
+         * page the setting is on rather than only the overview above it. A resource not listed
+         * here belongs to the destination row's own page.
+         */
+        private static final String TERMUX_PAGES = "com.termux.app.fragments.settings.termux.";
+        private static final Map<Integer, String> CHILD_XML_PAGES = new HashMap<>();
+        static {
+            CHILD_XML_PAGES.put(R.xml.termux_keyboard_layout_preferences, TERMUX_PAGES + "KeyboardLayoutPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.termux_keyboard_size_preferences, TERMUX_PAGES + "KeyboardSizePreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.termux_keyboard_typing_preferences, TERMUX_PAGES + "KeyboardTypingPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.termux_keyboard_voice_preferences, TERMUX_PAGES + "KeyboardVoicePreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.termux_keyboard_voice_details_preferences, TERMUX_PAGES + "KeyboardVoiceDetailsPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.termux_keyboard_hardware_preferences, TERMUX_PAGES + "KeyboardHardwarePreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.speech_model_preferences, TERMUX_PAGES + "SpeechModelPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.launcher_dock_preferences, TERMUX_PAGES + "LauncherDockPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.launcher_search_preferences, TERMUX_PAGES + "LauncherSearchPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.launcher_lock_preferences, TERMUX_PAGES + "LauncherLockPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.app_drawer_preferences, TERMUX_PAGES + "AppDrawerPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.x11_display_input_preferences, TERMUX_PAGES + "X11DisplayInputPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.x11_display_resolution_preferences, TERMUX_PAGES + "X11DisplayResolutionPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.x11_display_linux_apps_preferences, TERMUX_PAGES + "X11DisplayLinuxAppsPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.x11_display_startup_preferences, TERMUX_PAGES + "X11DisplayStartupPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.x11_display_troubleshooting_preferences, TERMUX_PAGES + "X11DisplayTroubleshootingPreferencesFragment");
+        }
+
+        /** One indexed child preference: its display title, lowercase searchable text and page. */
         private static final class ChildSearchEntry {
             final String title;
             final String searchable;
-            ChildSearchEntry(String title, String searchable) {
+            /** The subpage that holds it, or null when it is on the destination row's own page. */
+            @Nullable final String fragment;
+            ChildSearchEntry(String title, String searchable, @Nullable String fragment) {
                 this.title = title;
                 this.searchable = searchable;
+                this.fragment = fragment;
             }
         }
+
+        // Each destination row's own fragment, captured before a search may point it at a subpage.
+        private final Map<String, String> mOriginalFragments = new HashMap<>();
 
         // Lazily built on first non-empty query; key -> indexed child preferences under it.
         private final Map<String, List<ChildSearchEntry>> mChildSearchIndex = new HashMap<>();
@@ -632,8 +750,11 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             for (int i = 0; i < modes.size(); i++) {
                 String mode = modes.get(i);
                 values[i] = mode;
-                entries[i] = context.getString(LauncherUseCaseMode.titleRes(mode)) + "\n"
-                    + context.getString(LauncherUseCaseMode.descriptionRes(mode));
+                // A choice with nothing to add is the bare title: no empty second line.
+                String description = context.getString(LauncherUseCaseMode.descriptionRes(mode));
+                entries[i] = description.isEmpty()
+                    ? context.getString(LauncherUseCaseMode.titleRes(mode))
+                    : context.getString(LauncherUseCaseMode.titleRes(mode)) + "\n" + description;
             }
             row.setEntries(entries);
             row.setEntryValues(values);
@@ -734,6 +855,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                         Preference row = category.getPreference(j);
                         if (row.getKey() != null) {
                             mOriginalSummaries.put(row.getKey(), row.getSummary());
+                            mOriginalFragments.put(row.getKey(), row.getFragment());
                         }
                     }
                 } else if (top.getKey() != null && !(top instanceof SettingsSearchPreference)) {
@@ -753,6 +875,9 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             CharSequence originalSummary = key == null ? row.getSummary() : mOriginalSummaries.get(key);
 
             if (KEY_WALLPAPER_STYLE.equals(key)) row.setFragment(null);
+            else if (key != null && mOriginalFragments.containsKey(key)) {
+                row.setFragment(mOriginalFragments.get(key));
+            }
 
             if (needle.isEmpty()) {
                 row.setSummary(originalSummary);
@@ -774,9 +899,12 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             if (childEntries != null) {
                 List<String> matchedTitles = new ArrayList<>();
                 boolean anyChildMatch = false;
+                // The subpage every hit lives on, when they all live on the same one.
+                java.util.Set<String> matchedPages = new java.util.HashSet<>();
                 for (ChildSearchEntry entry : childEntries) {
                     if (entry.searchable.contains(needle)) {
                         anyChildMatch = true;
+                        matchedPages.add(entry.fragment == null ? "" : entry.fragment);
                         if (!entry.title.isEmpty() && matchedTitles.size() < 3) {
                             matchedTitles.add(entry.title);
                         }
@@ -787,6 +915,10 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                     if (KEY_WALLPAPER_STYLE.equals(key)) {
                         row.setFragment(com.termux.app.fragments.settings.termux
                             .TermuxStylePreferencesFragment.class.getName());
+                    }
+                    if (matchedPages.size() == 1 && !KEY_WALLPAPER_STYLE.equals(key)) {
+                        String page = matchedPages.iterator().next();
+                        if (!page.isEmpty()) row.setFragment(page);
                     }
                     row.setSummary(row.getContext().getString(R.string.settings_search_contains,
                         TextUtils.join(", ", matchedTitles)));
@@ -821,7 +953,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                         PreferenceManager scratchManager = new PreferenceManager(context);
                         PreferenceScreen inflated = scratchManager.inflateFromResource(context, xmlRes, null);
                         if (inflated != null) {
-                            collectChildSearchEntries(inflated, entries);
+                            collectChildSearchEntries(inflated, entries, CHILD_XML_PAGES.get(xmlRes));
                         }
                     } catch (Exception e) {
                         // Skip this XML; search degrades gracefully instead of crashing the screen.
@@ -832,7 +964,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         }
 
         private static void collectChildSearchEntries(@NonNull PreferenceGroup group,
-                                                       @NonNull List<ChildSearchEntry> out) {
+                                                       @NonNull List<ChildSearchEntry> out,
+                                                       @Nullable String page) {
             for (int i = 0; i < group.getPreferenceCount(); i++) {
                 Preference child = group.getPreference(i);
                 CharSequence title = child.getTitle();
@@ -841,10 +974,10 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                 String searchable = (titleText + " " + (summary == null ? "" : summary.toString()))
                     .trim().toLowerCase(Locale.ROOT);
                 if (!searchable.isEmpty()) {
-                    out.add(new ChildSearchEntry(titleText, searchable));
+                    out.add(new ChildSearchEntry(titleText, searchable, page));
                 }
                 if (child instanceof PreferenceGroup) {
-                    collectChildSearchEntries((PreferenceGroup) child, out);
+                    collectChildSearchEntries((PreferenceGroup) child, out, page);
                 }
             }
         }

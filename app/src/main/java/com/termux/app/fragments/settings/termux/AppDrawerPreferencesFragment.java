@@ -19,9 +19,10 @@ import androidx.preference.PreferenceManager;
 
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
-import com.termux.ai.TaiModelSpec;
+import com.termux.ai.TaiFunction;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.launcher.data.LauncherCategoryPasteNotification;
+import com.termux.app.launcher.data.LauncherCategorySortPlan;
 import com.termux.app.launcher.data.LauncherCategorySortProgress;
 import com.termux.app.launcher.data.LauncherCategorySortPrompt;
 import com.termux.app.launcher.data.LauncherCategorySortService;
@@ -170,7 +171,9 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
                 Context current = getContext();
                 if (current == null) return;
                 CategorySortDialogs.showChooser(current, apps,
-                    () -> startSort(current, CategorySortDialogs.resolveModel(current)),
+                    () -> startSort(current, CategorySortDialogs.resolvePlan(current)),
+                    // The old model choice is an entry to the function's picker sheet.
+                    () -> TaiFunctionPickerSheet.show(this, TaiFunction.APP_CATEGORIES),
                     () -> updateRefreshSummary(current));
             });
         });
@@ -181,22 +184,23 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
      * in which case the chooser is the screen that explains why and offers the paste route.
      */
     private void startRefresh(@NonNull Context context) {
-        TaiModelSpec model = CategorySortDialogs.resolveModel(context);
-        if (model == null || CategorySortDialogs.unavailableReason(context, model) != null) {
+        LauncherCategorySortPlan plan = CategorySortDialogs.resolvePlan(context);
+        if (!plan.hasModel() || CategorySortDialogs.unavailableReason(context, plan) != null) {
             openChooser(context);
             return;
         }
-        startSort(context, model);
+        startSort(context, plan);
     }
 
-    private void startSort(@NonNull Context context, @Nullable TaiModelSpec model) {
-        if (model == null) {
+    private void startSort(@NonNull Context context, @NonNull LauncherCategorySortPlan plan) {
+        if (!plan.hasModel()) {
             openChooser(context);
             return;
         }
         Intent intent = new Intent(context, LauncherCategorySortService.class);
         intent.setAction(LauncherCategorySortService.ACTION_SORT);
-        intent.putExtra(LauncherCategorySortService.EXTRA_MODEL_ID, model.id);
+        intent.putExtra(LauncherCategorySortService.EXTRA_MODEL_ID, plan.model);
+        if (plan.accelerator != null) intent.putExtra(LauncherCategorySortService.EXTRA_ACCELERATOR, plan.accelerator);
         ContextCompat.startForegroundService(context, intent);
         updateRefreshSummary(context);
         handler.removeCallbacks(refreshRunnable);

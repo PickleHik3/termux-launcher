@@ -187,9 +187,11 @@ public final class WallpaperUniforms {
         s.setInputShader("uMaskA", linear(t.maskA));
         s.setInputShader("uMaskB", linear(t.maskB));
         s.setInputShader("uMaskC", linear(t.maskC));
+        s.setInputShader("uMaskD", linear(t.maskD));
         s.setFloatUniform("uImageSize", t.image.getWidth(), t.image.getHeight());
         s.setFloatUniform("uDepthSize", t.depth.getWidth(), t.depth.getHeight());
         s.setFloatUniform("uMapSize", t.maskA.getWidth(), t.maskA.getHeight());
+        s.setFloatUniform("uMapSizeD", t.maskD.getWidth(), t.maskD.getHeight());
         for (Map.Entry<String, float[]> e : still.recipeUniforms().entrySet()) {
             s.setFloatUniform(e.getKey(), e.getValue());
         }

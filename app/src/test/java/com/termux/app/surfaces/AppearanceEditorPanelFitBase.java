@@ -19,6 +19,7 @@ import com.termux.R;
 import org.junit.Before;
 import org.junit.Test;
 import org.robolectric.Robolectric;
+import org.robolectric.RuntimeEnvironment;
 
 /**
  * The bottom area fits a phone of the subclass's width in both modes with Undo up: no view runs past the sheet's
@@ -30,8 +31,14 @@ public abstract class AppearanceEditorPanelFitBase {
     private AppearanceEditorPanel mPanel;
     private int mWidthPx;
 
+    /** The text size the subclass runs at; 1.3 is Android's Large. */
+    protected float fontScale() {
+        return 1f;
+    }
+
     @Before
     public void setUp() {
+        RuntimeEnvironment.setFontScale(fontScale());
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ContextThemeWrapper themed = new ContextThemeWrapper(activity,
             R.style.Theme_TermuxActivity_DayNight_NoActionBar);
@@ -75,6 +82,10 @@ public abstract class AppearanceEditorPanelFitBase {
         mPanel.setSecondSlider("Grain · 100%", 100, 100);
         layOut(mPanel.measureFor(false, mWidthPx));
         assertFits();
+        // The controller rewrites only the label as a slider moves; the sheet keeps its height.
+        mPanel.setMiddleLabel("Opacity · 34%");
+        layOut(mPanel.measureFor(false, mWidthPx));
+        assertFits();
         assertTrue(mPanel.measureFor(false, mWidthPx)
             <= mPanel.measureTallest(false, mWidthPx));
     }
@@ -100,6 +111,44 @@ public abstract class AppearanceEditorPanelFitBase {
             >= Math.round(48 * mPanel.view().getResources().getDisplayMetrics().density));
         assertTrue(mPanel.measureFor(false, mWidthPx)
             <= mPanel.measureTallest(false, mWidthPx));
+    }
+
+    /**
+     * A drag rewrites only the label, never the sheet's height: the label keeps the lines its
+     * widest value needs from the start, so the slider stays where the finger put it.
+     */
+    @Test
+    public void aLabelGrowingMidDragKeepsItsSliderInPlace() {
+        mPanel.showLayoutMode();
+        mPanel.setCorners("Corner radius · 4 dp", 4, 40);
+        mPanel.setMargin("Margin · 0 dp", 0, 48);
+        int height = mPanel.measureFor(true, mWidthPx);
+        layOut(height);
+        View corners = mPanel.view().findViewById(R.id.appearance_editor_corners);
+        int top = corners.getTop();
+        mPanel.setCornersLabel("Corner radius · 40 dp");
+        mPanel.setMarginLabel("Margin · 48 dp");
+        layOut(height);
+        assertFits();
+        assertEquals("the slider stays put", top, corners.getTop());
+        assertEquals("the sheet keeps its height", height, mPanel.measureFor(true, mWidthPx));
+
+        mPanel.showAppearanceMode();
+        mPanel.showRow2(R.string.appearance_editor_target_all);
+        mPanel.setFirstSlider("Blur · 0 dp", 0, 30);
+        mPanel.setMiddleSlider("Opacity · 5%", 5, 100);
+        mPanel.setSecondSlider("Grain · 0%", 0, 100);
+        height = mPanel.measureFor(false, mWidthPx);
+        layOut(height);
+        View opacity = mPanel.view().findViewById(R.id.appearance_editor_cl_slider);
+        top = opacity.getTop();
+        mPanel.setFirstLabel("Blur · 30 dp");
+        mPanel.setMiddleLabel("Opacity · 100%");
+        mPanel.setSecondLabel("Grain · 100%");
+        layOut(height);
+        assertFits();
+        assertEquals("the slider stays put", top, opacity.getTop());
+        assertEquals("the sheet keeps its height", height, mPanel.measureFor(false, mWidthPx));
     }
 
     /** Layout mode with the hidden tiles open: same height, nothing past the sheet's edge. */
@@ -245,6 +294,55 @@ public abstract class AppearanceEditorPanelFitBase {
         }
     }
 
+    @Test
+    public void sideInsetsKeepEveryControlInsideTheSheetAtThisWidth() {
+        mPanel.showAppearanceMode();
+        mPanel.setSideInsets(48, 24);
+        layOut(mPanel.measureFor(false, mWidthPx));
+        assertFits();
+        View root = mPanel.view();
+        assertTrue("content stands clear of the left inset", root.getPaddingLeft() >= 48);
+        assertTrue("content stands clear of the right inset", root.getPaddingRight() >= 24);
+    }
+
+    @Test
+    public void theChosenLookLabelIsSelectedAndKeepsItsFamily() {
+        mPanel.showAppearanceMode();
+        mPanel.setStop(2);
+        layOut(mPanel.measureFor(false, mWidthPx));
+        FrameLayout labels = mPanel.view().findViewById(R.id.appearance_editor_look_labels);
+        int selected = 0;
+        for (int i = 0; i < labels.getChildCount(); i++) {
+            TextView label = (TextView) labels.getChildAt(i);
+            if (label.isSelected()) selected++;
+            assertNotNull("typeface kept", label.getTypeface());
+            assertEquals("labels stay out of accessibility; the slider is the route",
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO, label.getImportantForAccessibility());
+        }
+        assertEquals(1, selected);
+        assertTrue(labels.getChildAt(2).isSelected());
+        assertTrue(((TextView) labels.getChildAt(2)).getTypeface().isBold());
+    }
+
+    @Test
+    public void orientationAndStyleKeepTheOriginalBoundedSegmentStyle() {
+        View root = mPanel.view();
+        for (int id : new int[] {R.id.layout_editor_orientation_portrait,
+                R.id.layout_editor_orientation_landscape, R.id.appearance_editor_style_docked,
+                R.id.appearance_editor_style_floating}) {
+            MaterialButton button = root.findViewById(id);
+            assertTrue("outlined segment keeps its boundary", button.getStrokeWidth() > 0);
+        }
+        MaterialButton mode = root.findViewById(R.id.appearance_editor_mode_appearance);
+        assertEquals("mode segment is the stroke-free tonal one", 0, mode.getStrokeWidth());
+    }
+
+    @Test
+    public void theEyeOffControlHasATooltip() {
+        View hidden = mPanel.view().findViewById(R.id.layout_editor_hidden);
+        assertNotNull(hidden.getTooltipText());
+    }
+
     private void layOut(int heightPx) {
         View root = mPanel.view();
         root.measure(View.MeasureSpec.makeMeasureSpec(mWidthPx, View.MeasureSpec.EXACTLY),
@@ -260,8 +358,15 @@ public abstract class AppearanceEditorPanelFitBase {
         View undo = root.findViewById(R.id.appearance_editor_undo);
         View done = root.findViewById(R.id.appearance_editor_done);
         assertEquals(View.VISIBLE, undo.getVisibility());
-        assertTrue("the pill ends before Undo: " + pill.getRight() + " > " + undo.getLeft(),
-            pill.getRight() <= undo.getLeft());
+        // One row when it fits; when side insets leave too little width, Undo and Done wrap to a
+        // row of their own under the pill. Either way the pill and Undo never overlap.
+        assertTrue("the pill ends before Undo, or Undo wraps under it: " + pill.getRight() + " > "
+                + undo.getLeft(),
+            pill.getRight() <= undo.getLeft() || pill.getBottom() <= undo.getTop());
+        assertLabelsAboveTheirControls(root);
+
+        assertEquals("Undo and Done share a row", undo.getTop() < done.getBottom()
+            && done.getTop() < undo.getBottom(), true);
         assertTrue("Undo ends before Done", undo.getRight() <= done.getLeft());
         assertTrue("Done inside the sheet's padding",
             done.getRight() <= root.getWidth() - root.getPaddingRight());
@@ -274,6 +379,66 @@ public abstract class AppearanceEditorPanelFitBase {
             assertEquals("\"" + button.getText() + "\" is whole", 0, layout.getEllipsisCount(0));
             assertEquals("\"" + button.getText() + "\" is on one line", 1, layout.getLineCount());
         }
+    }
+
+    /**
+     * Each shown column label is whole (wrapping, never ellipsized) and ends above the control it
+     * names, whichever label in the row wraps.
+     */
+    private static void assertLabelsAboveTheirControls(View root) {
+        int[][] columns = {
+            {R.id.appearance_editor_c1_label, R.id.appearance_editor_c1_slider,
+                R.id.appearance_editor_c1_soft},
+            {R.id.appearance_editor_cl_label, R.id.appearance_editor_legibility,
+                R.id.appearance_editor_cl_slider},
+            {R.id.appearance_editor_c3_label, R.id.appearance_editor_c3_slider},
+            {R.id.appearance_editor_c2_label, R.id.appearance_editor_c2_slider,
+                R.id.appearance_editor_c2_button},
+            {R.id.appearance_editor_corners_label, R.id.appearance_editor_corners},
+            {R.id.appearance_editor_margin_label, R.id.appearance_editor_margin},
+        };
+        for (int[] column : columns) {
+            TextView label = root.findViewById(column[0]);
+            if (!isShown(label, root))
+                continue;
+            Layout layout = label.getLayout();
+            assertNotNull(name(label), layout);
+            assertEquals("\"" + label.getText() + "\" is whole", 0,
+                layout.getEllipsisCount(layout.getLineCount() - 1));
+            String text = label.getText().toString();
+            int value = text.indexOf(" \u00b7 ") + 3;
+            if (value > 2 && value < text.length()) {
+                assertEquals("\"" + text + "\" keeps its value on one line",
+                    layout.getLineForOffset(value), layout.getLineForOffset(text.length() - 1));
+            }
+            assertTrue("\"" + label.getText() + "\" fits its own height: " + layout.getHeight()
+                    + " > " + label.getHeight(),
+                layout.getHeight() + label.getTotalPaddingTop() + label.getTotalPaddingBottom()
+                    <= label.getHeight());
+            for (int i = 1; i < column.length; i++) {
+                View control = root.findViewById(column[i]);
+                if (!isShown(control, root))
+                    continue;
+                assertTrue("\"" + label.getText() + "\" ends at " + label.getBottom()
+                        + ", under the top of " + name(control) + " at " + control.getTop(),
+                    label.getBottom() <= control.getTop());
+                int bottom = control.getBottom();
+                for (View v = (View) control.getParent(); v != root; v = (View) v.getParent())
+                    bottom += v.getTop();
+                assertTrue(name(control) + " ends at " + bottom + ", in the sheet's bottom padding",
+                    bottom <= root.getHeight() - root.getPaddingBottom());
+            }
+        }
+    }
+
+    private static boolean isShown(View view, View root) {
+        for (View v = view; v != null; v = (View) v.getParent()) {
+            if (v.getVisibility() != View.VISIBLE)
+                return false;
+            if (v == root)
+                return true;
+        }
+        return false;
     }
 
     /** No shown view's right edge runs past the panel's width. */

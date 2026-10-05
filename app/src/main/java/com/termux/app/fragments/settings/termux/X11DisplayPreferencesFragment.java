@@ -31,7 +31,7 @@ import com.termux.x11.Prefs;
  * command on the clipboard like the rest of that screen; the window manager row went with it,
  * leaving the one line at the foot of this page that names what arranges the windows.
  */
-public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
+public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
 
     private static final String KEY_TOUCH_MODE = "touchMode";
     private static final String KEY_KEYBOARD_FOLLOWS_TEXT = "x11_keyboard_follows_text";
@@ -40,11 +40,22 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
     private static final String KEY_RESOLUTION_EXACT = "displayResolutionExact";
     private static final String KEY_RESOLUTION_CUSTOM = "displayResolutionCustom";
 
+    /** The overview is this class; each focused subpage names its own XML and title. */
+    @androidx.annotation.XmlRes
+    protected int preferencesXml() {
+        return R.xml.x11_display_preferences;
+    }
+
+    @androidx.annotation.StringRes
+    protected int titleRes() {
+        return R.string.settings_destination_display;
+    }
+
     @Override
     public void onResume() {
         super.onResume();
         // Child screens (GUI apps) retitle the activity; take it back when they pop.
-        if (getActivity() != null) getActivity().setTitle(R.string.settings_destination_display);
+        if (getActivity() != null) getActivity().setTitle(titleRes());
     }
 
     @Override
@@ -53,8 +64,14 @@ public final class X11DisplayPreferencesFragment extends MaterialPreferenceFragm
         if (context == null) return;
         PreferenceManager manager = getPreferenceManager();
         manager.setPreferenceDataStore(new X11DisplayPreferencesDataStore(context));
-        setPreferencesFromResource(R.xml.x11_display_preferences, rootKey);
+        setPreferencesFromResource(preferencesXml(), rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
+        Preference scaleRow = findPreference(KEY_SCALE);
+        if (scaleRow instanceof com.termux.app.fragments.settings.SliderPreference)
+            ((com.termux.app.fragments.settings.SliderPreference) scaleRow).setValueSuffix("%");
+        Preference dpiRow = findPreference("x11_display_dpi");
+        if (dpiRow instanceof com.termux.app.fragments.settings.SliderPreference)
+            ((com.termux.app.fragments.settings.SliderPreference) dpiRow).setValueSuffix(" dpi");
         com.termux.app.fragments.settings.SegmentedPillPreference touch = findPreference(KEY_TOUCH_MODE);
         if (touch != null) {
             applyKeyboardFollowsTextRow(touch.getValue());

@@ -25,6 +25,10 @@
      (Row A alone, or Row A + Row B), the controller animates between the two, and the frame stands
      above the taller of the two so it never moves. The labels may wrap to two lines ("Contrast ·
      Normal" in a third of a phone's width); a Barrier under them keeps the sliders level.
+     Both ConstraintLayouts run with layout_optimizationLevel="none": the default optimizer places
+     a chain of 0dp-wide labels and the Barrier under them before a label that wraps has its
+     second line, so the sliders stood on the first line's bottom and the wrapped words ran over
+     them (AppearanceEditorPanelFitLargeText*Test).
 
      Appearance Row B also carries, at the Custom stop with nothing tapped, the global row (layout
      editor v2, DECISIONS item 13): Blur, Opacity and Grain in the three columns, the middle one a
@@ -60,7 +64,8 @@
          is centred on eye-off: 8dp of it stand past the button's end, inside the sheet's 16dp
          padding.
        Layout Row B: two columns, one 16dp gap: 156 / 181.5 / 242.5; "Corner radius · 40 dp"
-         (LabelMedium) ≈ 120 ≤ 156.
+         (LabelMedium) ≈ 120 ≤ 156 at the default text size; at Large it wraps to two lines,
+         and a Barrier under both labels keeps the sliders level.
        Keyboard tools in Row B: three 48dp-tall chips (24dp glyph + 4 + 4 + chip padding ≈ 50
          each, 4dp apart) ≈ 158, 16 gap, Key radius in the rest: 154 / 205 / 327;
          "Key radius · 24 dp" ≈ 105 ≤ 154. Height: label 16 + slider 48 = 64, the chips' 48
@@ -83,7 +88,8 @@
     android:paddingStart="16dp"
     android:paddingTop="12dp"
     android:paddingEnd="16dp"
-    android:paddingBottom="16dp">
+    android:paddingBottom="16dp"
+    app:layout_optimizationLevel="none">
 
     <!-- ===================================================================== top row -->
 
@@ -101,7 +107,7 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_mode_appearance"
             app:icon="@drawable/segment_icon_look"
-            style="@style/Widget.Termux.Button.Segment"
+            style="@style/Widget.Termux.Editor.Segment"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
@@ -111,7 +117,7 @@
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_editor_mode_layout"
             app:icon="@drawable/segment_icon_layout"
-            style="@style/Widget.Termux.Button.Segment"
+            style="@style/Widget.Termux.Editor.Segment"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
@@ -119,11 +125,14 @@
             android:text="@string/action_layout_editor" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
+    <!-- 48dp tall, not wrap_content: an icon button keeps an empty line of text, which grows
+         with the font scale (53dp at Large) and, centred on the pill, would push the header down
+         whenever Undo appears. -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/appearance_editor_undo"
         style="?attr/materialIconButtonStyle"
         android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_height="48dp"
         android:contentDescription="@string/appearance_editor_undo"
         android:tooltipText="@string/appearance_editor_undo"
         android:visibility="gone"
@@ -144,6 +153,15 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="@id/appearance_editor_mode" />
 
+    <!-- The header's bottom edge: the mode pill's, or Undo and Done's when a narrow sheet wraps
+         them onto a second row (AppearanceEditorPanel.adaptHeader). Every row below hangs here. -->
+    <androidx.constraintlayout.widget.Barrier
+        android:id="@+id/appearance_editor_header_bottom"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:barrierDirection="bottom"
+        app:constraint_referenced_ids="appearance_editor_mode,appearance_editor_undo,appearance_editor_done" />
+
     <!-- ============================================================ Appearance mode -->
 
     <com.google.android.material.slider.Slider
@@ -159,7 +177,7 @@
         app:labelBehavior="gone"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/appearance_editor_mode"
+        app:layout_constraintTop_toBottomOf="@id/appearance_editor_header_bottom"
         app:tickVisibilityMode="hidden" />
 
     <!-- One label per stop, centred under it in code. -->
@@ -180,6 +198,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:visibility="gone"
+        app:layout_optimizationLevel="none"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/appearance_editor_look_labels">
@@ -305,7 +324,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_editor_soft_off"
-                style="@style/Widget.Termux.Button.Segment"
+                style="@style/Widget.Termux.Editor.Segment"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minWidth="0dp"
@@ -313,7 +332,7 @@
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_editor_soft_on"
-                style="@style/Widget.Termux.Button.Segment"
+                style="@style/Widget.Termux.Editor.Segment"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:minWidth="0dp"
@@ -494,7 +513,7 @@
         android:contentDescription="@string/termux_layout_editor_orientation"
         android:visibility="gone"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/appearance_editor_mode"
+        app:layout_constraintTop_toBottomOf="@id/appearance_editor_header_bottom"
         app:selectionRequired="true"
         app:singleSelection="true">
 
@@ -596,7 +615,7 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:ellipsize="end"
-        android:maxLines="1"
+        android:maxLines="2"
         android:textAppearance="?attr/textAppearanceLabelMedium"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:visibility="gone"
@@ -611,7 +630,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:ellipsize="end"
-        android:maxLines="1"
+        android:maxLines="2"
         android:textAppearance="?attr/textAppearanceLabelMedium"
         android:textColor="?attr/colorOnSurfaceVariant"
         android:visibility="gone"

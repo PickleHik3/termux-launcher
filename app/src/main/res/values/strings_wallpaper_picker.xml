@@ -15,15 +15,15 @@
     <string name="wallpaper_picker_apply_home_only">Home screen only</string>
     <string name="wallpaper_picker_apply_lock_only">Lock screen only</string>
     <string name="wallpaper_picker_motion">Motion</string>
-    <string name="wallpaper_picker_look">Look</string>
+    <string name="wallpaper_picker_look">Surface style</string>
     <string name="wallpaper_picker_icon_pack">Icon pack</string>
     <string name="wallpaper_picker_layout">Layout</string>
     <string name="wallpaper_picker_icon_pack_system">System icons</string>
     <string name="wallpaper_picker_icon_pack_global">Same as app icons</string>
     <string name="wallpaper_picker_same_as_home">Same as Home</string>
     <string name="wallpaper_picker_photo">Photo…</string>
-    <!-- Opens the old Look page, for everything the wallpaper page does not carry. -->
-    <string name="wallpaper_picker_more_settings">More settings</string>
+    <!-- Opens the global theme and font Settings, for everything the wallpaper page does not carry. -->
+    <string name="wallpaper_picker_more_settings">Theme &amp; fonts</string>
     <string name="wallpaper_picker_photo_preview">Your photo</string>
     <!-- A recent photo tile, for TalkBack: "Recent photo 1" is the newest. -->
     <string name="wallpaper_picker_recent_photo">Recent photo %1$d</string>

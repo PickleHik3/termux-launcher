@@ -388,6 +388,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     @Override
+    public boolean shouldPassCtrlSpaceToAndroid() {
+        return mHost.preferences().isPassCtrlSpaceToAndroidEnabled();
+    }
+
+    @Override
     public boolean isTerminalViewSelected() {
         return !mHost.hasTerminalToolbar() || mHost.isTerminalViewSelected() || mHost.focusedView().hasFocus();
     }

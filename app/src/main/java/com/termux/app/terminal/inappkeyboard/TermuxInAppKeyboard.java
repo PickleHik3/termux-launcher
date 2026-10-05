@@ -34,6 +34,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.BooleanSupplier;
 
 import juloo.keyboard2.Config;
 import juloo.keyboard2.KeyValue;
@@ -73,7 +74,9 @@ public final class TermuxInAppKeyboard {
         /** A person asked, through {@code keyboard.hide}. */
         TOOL,
         /** Text focus went away, so what a focus signal opened is closed again. */
-        FOCUS
+        FOCUS,
+        /** A hardware keyboard was attached and the setting asks the on-screen one to step aside. */
+        HARDWARE_KEYBOARD
     }
 
     public enum ToggleReason {
@@ -119,6 +122,10 @@ public final class TermuxInAppKeyboard {
     private View.OnFocusChangeListener mSystemImeFocusListener;
     private TerminalKeyEventHandler.KeyValueInterceptor mKeyValueInterceptor;
 
+    /** Whether a hardware keyboard is attached; read fresh each time, injectable for tests. */
+    private BooleanSupplier mHardwareKeyboardConnected;
+    /** The keyboard is down only because the hardware keyboard setting kept an automatic show out. */
+    private boolean mHiddenForHardwareKeyboard;
     private boolean mEnabled;
     private boolean mVisible;
     private boolean mDestroyed;
@@ -187,6 +194,7 @@ public final class TermuxInAppKeyboard {
         mLayoutExecutor = Objects.requireNonNull(layoutExecutor, "layoutExecutor");
 
         Context context = requireContainer().getContext();
+        mHardwareKeyboardConnected = () -> KeyboardUtils.isHardKeyboardConnected(context);
         mTapCorrection = new TapCorrectionController(
             TapCorrectionController.modelFile(context), mLayoutExecutor,
             new Handler(Looper.getMainLooper()));
@@ -210,6 +218,40 @@ public final class TermuxInAppKeyboard {
 
     public boolean isEnabled() {
         return mEnabled;
+    }
+
+    /** Replaces how a connected hardware keyboard is detected; for tests. */
+    void setHardwareKeyboardDetector(@NonNull BooleanSupplier detector) {
+        mHardwareKeyboardConnected = Objects.requireNonNull(detector, "detector");
+    }
+
+    /** Whether the setting asks this keyboard to stay away while a hardware keyboard is attached. */
+    private boolean shouldHideForHardwareKeyboard() {
+        return mPreferences.isSoftKeyboardEnabledOnlyIfNoHardware()
+            && mHardwareKeyboardConnected.getAsBoolean();
+    }
+
+    /** Taps, focus and first enable are the app's doing; the rest are a person asking. */
+    private static boolean isAutomaticShow(@Nullable ShowReason reason) {
+        return reason == ShowReason.FIRST_ENABLE || reason == ShowReason.TERMINAL_TAP
+            || reason == ShowReason.FOCUS;
+    }
+
+    /** Puts down a keyboard that an automatic show raised once the setting and hardware say so. */
+    private void hideForHardwareKeyboardIfNeeded() {
+        if (!mVisible || !shouldHideForHardwareKeyboard() || !isAutomaticShow(mLastShowReason))
+            return;
+        hide(HideReason.HARDWARE_KEYBOARD);
+        if (!mVisible)
+            mHiddenForHardwareKeyboard = true;
+    }
+
+    /** Brings back what the hardware keyboard put down, once it or the setting is gone. */
+    private void restoreAfterHardwareKeyboardIfNeeded() {
+        if (!mHiddenForHardwareKeyboard || shouldHideForHardwareKeyboard())
+            return;
+        mHiddenForHardwareKeyboard = false;
+        show(ShowReason.FIRST_ENABLE);
     }
 
     public boolean isVisible() {
@@ -242,6 +284,10 @@ public final class TermuxInAppKeyboard {
             mVisible = true;
             mLastShowReason = ShowReason.FIRST_ENABLE;
         }
+        if (mEnabled && mVisible && shouldHideForHardwareKeyboard()) {
+            mVisible = false;
+            mHiddenForHardwareKeyboard = true;
+        }
 
         // Switched off, the keyboard starts down whatever the last instance left it as.
         if (mPreferences.isKeyboardTurnedOff())
@@ -265,6 +311,8 @@ public final class TermuxInAppKeyboard {
         if (!mExternalTextInputActive)
             suppressSystemIme();
         recheckLayout();
+        hideForHardwareKeyboardIfNeeded();
+        restoreAfterHardwareKeyboardIfNeeded();
         if (mVisible && !mExternalTextInputActive)
             showInternal();
     }
@@ -326,6 +374,7 @@ public final class TermuxInAppKeyboard {
         if (!mHeightAdjusting)
             mHeightScale = mPreferences.getInAppKeyboardHeightScale();
         mFloatingHeightScale = mPreferences.getInAppKeyboardFloatingHeightScale();
+        hideForHardwareKeyboardIfNeeded();
         resetInputPipeline();
         if (mKeyboardView != null) {
             mHost.detachKeyboardView();
@@ -334,6 +383,7 @@ public final class TermuxInAppKeyboard {
         }
         if (mVisible)
             showInternal();
+        restoreAfterHardwareKeyboardIfNeeded();
         // The overlay controls sample colors from the keyboard view, which was just recreated.
         if (mHeightAdjusting)
             mHost.setKeyboardHeightAdjustmentVisible(true);
@@ -366,6 +416,11 @@ public final class TermuxInAppKeyboard {
             mEnabled = true;
             mVisible = !mPreferences.isKeyboardTurnedOff();
             mLastShowReason = ShowReason.FIRST_ENABLE;
+            mHiddenForHardwareKeyboard = false;
+            if (mVisible && shouldHideForHardwareKeyboard()) {
+                mVisible = false;
+                mHiddenForHardwareKeyboard = true;
+            }
             // The ring may have been edited while the keyboard was off; render the layout it
             // ends on rather than the one this instance was created with.
             reloadLayoutRing(false);
@@ -376,6 +431,8 @@ public final class TermuxInAppKeyboard {
             else
                 setContainerVisible(false);
         } else if (enabled) {
+            hideForHardwareKeyboardIfNeeded();
+            restoreAfterHardwareKeyboardIfNeeded();
             // Settings may have toggled the feature or forgotten the learned taps.
             mTapCorrection.reload();
             mTapCorrection.setEnabled(mPreferences.isInAppKeyboardTapCorrectionEnabled());
@@ -410,6 +467,8 @@ public final class TermuxInAppKeyboard {
         // one exception: it has to show the rows it is resizing.
         if (mPreferences.isKeyboardTurnedOff() && reason != ShowReason.HEIGHT_ADJUSTMENT)
             return;
+        if (!gateForHardwareKeyboard(reason))
+            return;
         Trace.beginSection("Keyboard.show");
         try {
             boolean wasVisible = mVisible;
@@ -440,6 +499,8 @@ public final class TermuxInAppKeyboard {
             return;
         if (mPreferences.isKeyboardTurnedOff())
             return;
+        if (!gateForHardwareKeyboard(reason))
+            return;
         Trace.beginSection("Keyboard.showForTravel");
         try {
             boolean wasVisible = mVisible;
@@ -450,6 +511,24 @@ public final class TermuxInAppKeyboard {
         } finally {
             Trace.endSection();
         }
+    }
+
+    /**
+     * Whether a show may go ahead. With the hardware keyboard setting on and one attached, the
+     * automatic reasons are kept out and remembered; a person asking clears that and goes through.
+     */
+    private boolean gateForHardwareKeyboard(ShowReason reason) {
+        Objects.requireNonNull(reason, "reason");
+        if (!isAutomaticShow(reason)) {
+            mHiddenForHardwareKeyboard = false;
+            return true;
+        }
+        if (shouldHideForHardwareKeyboard()) {
+            if (!mVisible)
+                mHiddenForHardwareKeyboard = true;
+            return false;
+        }
+        return true;
     }
 
     public void hide(HideReason reason) {

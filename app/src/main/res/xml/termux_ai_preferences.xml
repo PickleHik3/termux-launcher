@@ -26,6 +26,11 @@
             app:title="@string/tai_model_centre_title"
             app:persistent="false"/>
         <Preference
+            app:key="tai_welcome_card"
+            app:title="@string/tai_welcome_pref_title"
+            app:summary="@string/tai_welcome_pref_summary"
+            app:persistent="false"/>
+        <Preference
             app:key="tai_benchmark"
             app:title="@string/tai_bench_title"
             app:summary="@string/tai_bench_pref_summary"
@@ -34,6 +39,18 @@
             app:key="tai_huggingface_token"
             app:title="@string/termux_ai_huggingface_token_title"
             app:summary="@string/termux_ai_huggingface_token_summary"
+            app:persistent="false"/>
+    </PreferenceCategory>
+
+    <PreferenceCategory
+        app:key="tai_remote_category"
+        app:title="@string/tai_remote_zone_title">
+        <!-- A bring-your-own-key OpenAI-compatible server; its rows live on their own screen
+             (TaiRemotePreferencesFragment). -->
+        <Preference
+            app:key="tai_remote_provider"
+            app:title="@string/tai_remote_row_title"
+            app:summary="@string/tai_remote_row_summary_off"
             app:persistent="false"/>
     </PreferenceCategory>
 

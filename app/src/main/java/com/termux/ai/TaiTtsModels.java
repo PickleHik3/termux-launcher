@@ -48,4 +48,20 @@ public final class TaiTtsModels {
     public static TaiModelSpec resolveActive(@NonNull TaiModelStore store) {
         return chooseActive(installed(store));
     }
+
+    /**
+     * The model that speaks: the READ_ALOUD function's resolution ({@link TaiFunctionModels}), and
+     * when it is not installed the {@link #chooseActive} rule over what is.
+     */
+    @Nullable
+    public static TaiModelSpec resolveActive(@NonNull android.content.Context context, @NonNull TaiModelStore store) {
+        List<TaiModelSpec> installed = installed(store);
+        String resolved = TaiFunctionModels.forContext(context).resolve(TaiFunction.READ_ALOUD).modelId;
+        if (resolved != null) {
+            for (TaiModelSpec spec : installed) {
+                if (resolved.equals(spec.id)) return spec;
+            }
+        }
+        return chooseActive(installed);
+    }
 }

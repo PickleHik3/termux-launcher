@@ -46,6 +46,6 @@ final class TaiLivingEngine implements LivingStillJob.Engine {
 
     @Override
     public boolean usesGemma() {
-        return TaiGemmaChat.installed(mContext);
+        return LivingReader.resolve(mContext).usesModel();
     }
 }

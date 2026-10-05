@@ -19,7 +19,7 @@ public class RecipeRulesTest {
 
     @Test
     public void emptySceneOnlyDrifts() {
-        LivingRecipe r = RecipeRules.make(stats(), null);
+        LivingRecipe r = RecipeRules.make(stats());
         assertEquals(LivingRecipe.WATER_NONE, r.waterMode);
         assertEquals(0f, r.swayAmp, 0f);
         assertEquals(0f, r.pour, 0f);
@@ -33,38 +33,38 @@ public class RecipeRulesTest {
     public void waterModesFollowTheRules() {
         RegionMasks.Stats s = stats();
         s.water = 0.2f;
-        assertEquals(LivingRecipe.WATER_LAKE, RecipeRules.make(s, null).waterMode);
+        assertEquals(LivingRecipe.WATER_LAKE, RecipeRules.make(s).waterMode);
         s.water = 0.6f;
         s.waterDepthStd = 0.05f;
-        assertEquals(LivingRecipe.WATER_POOL, RecipeRules.make(s, null).waterMode);
+        assertEquals(LivingRecipe.WATER_POOL, RecipeRules.make(s).waterMode);
         s.water = 0.2f;
         s.sceneLum = 0.2f;
         s.horizon = 0.3f;
-        assertEquals(LivingRecipe.WATER_REFLECTION, RecipeRules.make(s, null).waterMode);
+        assertEquals(LivingRecipe.WATER_REFLECTION, RecipeRules.make(s).waterMode);
         s.water = 0.02f;
-        assertEquals(LivingRecipe.WATER_NONE, RecipeRules.make(s, null).waterMode);
+        assertEquals(LivingRecipe.WATER_NONE, RecipeRules.make(s).waterMode);
     }
 
     @Test
     public void skyIsCloudsByDayAndStarsAtNight() {
         RegionMasks.Stats s = stats();
         s.sky = 0.3f;
-        LivingRecipe day = RecipeRules.make(s, null);
+        LivingRecipe day = RecipeRules.make(s);
         assertFalse(day.skyStars);
         assertTrue(day.skyFlow > 0f);
         s.skyLum = 0.1f;
-        assertTrue(RecipeRules.make(s, null).skyStars);
+        assertTrue(RecipeRules.make(s).skyStars);
         s.sky = 0.04f;
-        assertEquals(0f, RecipeRules.make(s, null).skyFlow, 0f);
+        assertEquals(0f, RecipeRules.make(s).skyFlow, 0f);
     }
 
     @Test
     public void glowFlickersInSignsAndBreathesOtherwise() {
         RegionMasks.Stats s = stats();
         s.glow = 0.02f;
-        assertEquals(LivingRecipe.GLOW_BREATHE, RecipeRules.make(s, null).glowMode);
+        assertEquals(LivingRecipe.GLOW_BREATHE, RecipeRules.make(s).glowMode);
         s.lightsInSigns = 0.8f;
-        assertEquals(LivingRecipe.GLOW_FLICKER, RecipeRules.make(s, null).glowMode);
+        assertEquals(LivingRecipe.GLOW_FLICKER, RecipeRules.make(s).glowMode);
     }
 
     @Test
@@ -73,28 +73,10 @@ public class RecipeRulesTest {
         s.foliage = 0.2f;
         s.fall = 0.01f;
         s.depthSpread = 0.7f;
-        LivingRecipe r = RecipeRules.make(s, null);
+        LivingRecipe r = RecipeRules.make(s);
         assertTrue(r.swayAmp > 0f);
         assertEquals(1f, r.pour, 0f);
         assertTrue(r.mistAmount > 0.1f);
         assertTrue("a haze, not a fog that washes the picture out", r.mistAmount <= 0.25f);
-    }
-
-    @Test
-    public void gemmaStylesWinOverRules() {
-        RegionMasks.Stats s = stats();
-        s.water = 0.6f;
-        s.waterDepthStd = 0.05f;
-        s.glow = 0.05f;
-        GemmaSceneReader.Plan plan = GemmaSceneReader.parse(
-            "{\"style\":\"photo\",\"regions\":{},\"water_style\":\"reflection\",\"light_style\":\"trails\","
-                + "\"trail_angle_deg\":135,\"particles\":\"snow\",\"intensity\":1.4}", 10);
-        LivingRecipe r = RecipeRules.make(s, plan);
-        assertEquals(LivingRecipe.WATER_REFLECTION, r.waterMode);
-        assertEquals(LivingRecipe.GLOW_TRAILS, r.glowMode);
-        assertEquals(135f, r.glowTrailAngleDeg, 0f);
-        assertEquals(LivingRecipe.PARTICLES_SNOW, r.particles);
-        assertEquals(1.4f, r.intensity, 1e-6f);
-        assertTrue(r.gemma);
     }
 }

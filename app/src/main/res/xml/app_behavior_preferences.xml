@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One home for the switches that cut across the launcher: power saving, vibration and Recents.
+     Every key is the one it always was; only the page that edits it moved. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/settings_behavior_battery_header">
+        <SwitchPreferenceCompat
+            app:key="lazy_mode"
+            app:title="@string/settings_behavior_idle_title"
+            app:summary="@string/settings_behavior_idle_summary"
+            app:defaultValue="false" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_behavior_vibration_header">
+        <SwitchPreferenceCompat
+            app:key="app_haptics_enabled"
+            app:title="@string/settings_behavior_vibration_title"
+            app:summary="@string/settings_behavior_vibration_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="app_launcher_row_haptics"
+            app:title="@string/settings_behavior_launcher_vibration_title"
+            app:summary="@string/settings_behavior_launcher_vibration_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="in_app_keyboard_haptics_enabled"
+            app:title="@string/settings_behavior_keyboard_vibration_title"
+            app:summary="@string/settings_behavior_keyboard_vibration_summary" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_behavior_home_header">
+        <SwitchPreferenceCompat
+            app:key="show_in_recents_when_not_default"
+            app:title="@string/settings_show_recents_title"
+            app:summary="@string/settings_show_recents_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+
+</PreferenceScreen>

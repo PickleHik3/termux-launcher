@@ -217,6 +217,19 @@
         </LinearLayout>
     </FrameLayout>
 
+    <!-- Under Bring to life / Read again when the reader's model is large for this phone's RAM. -->
+    <TextView
+        android:id="@+id/wallpaper_picker_living_warning"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:text="@string/tai_warn_background_apps"
+        android:textAppearance="?attr/textAppearanceLabelSmall"
+        android:textColor="?attr/colorOnSurfaceVariant"
+        android:visibility="gone" />
+
     <LinearLayout
         android:id="@+id/wallpaper_picker_shortcuts"
         android:layout_width="match_parent"
@@ -255,8 +268,10 @@
             <TextView
                 android:id="@+id/wallpaper_picker_look_label"
                 android:layout_width="wrap_content"
-                android:layout_height="20dp"
+                android:layout_height="wrap_content"
+                android:minHeight="20dp"
                 android:layout_marginTop="4dp"
+                android:ellipsize="end"
                 android:importantForAccessibility="no"
                 android:maxLines="1"
                 android:text="@string/wallpaper_picker_look"
@@ -291,8 +306,10 @@
             <TextView
                 android:id="@+id/wallpaper_picker_icon_pack_label"
                 android:layout_width="wrap_content"
-                android:layout_height="20dp"
+                android:layout_height="wrap_content"
+                android:minHeight="20dp"
                 android:layout_marginTop="4dp"
+                android:ellipsize="end"
                 android:importantForAccessibility="no"
                 android:maxLines="1"
                 android:text="@string/wallpaper_picker_icon_pack"
@@ -327,8 +344,10 @@
             <TextView
                 android:id="@+id/wallpaper_picker_layout_label"
                 android:layout_width="wrap_content"
-                android:layout_height="20dp"
+                android:layout_height="wrap_content"
+                android:minHeight="20dp"
                 android:layout_marginTop="4dp"
+                android:ellipsize="end"
                 android:importantForAccessibility="no"
                 android:maxLines="1"
                 android:text="@string/wallpaper_picker_layout"

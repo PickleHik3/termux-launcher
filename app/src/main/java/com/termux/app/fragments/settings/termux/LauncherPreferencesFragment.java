@@ -38,6 +38,21 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_NOTIFICATION_SETTINGS = "app_launcher_notification_settings";
     private static final String KEY_APP_PERMISSIONS = "app_launcher_app_permissions";
 
+    /**
+     * The XML this page inflates. The overview is this class itself; each focused subpage (dock,
+     * search, lock) is a thin subclass naming its own XML and title, so the click listeners below
+     * keep working on whichever of their rows a page holds (every lookup is null-tolerant).
+     */
+    @androidx.annotation.XmlRes
+    protected int preferencesXml() {
+        return R.xml.launcher_preferences;
+    }
+
+    @androidx.annotation.StringRes
+    protected int titleRes() {
+        return R.string.settings_destination_launcher_apps;
+    }
+
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         Context context = getContext();
@@ -45,7 +60,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             return;
         PreferenceManager preferenceManager = getPreferenceManager();
         preferenceManager.setPreferenceDataStore(TermuxStylePreferencesDataStore.getInstance(context));
-        setPreferencesFromResource(R.xml.launcher_preferences, rootKey);
+        setPreferencesFromResource(preferencesXml(), rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         configurePermissionActions(context);
         configureHelp(context);
@@ -118,7 +133,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         Context context = getContext();
         if (context == null) return;
         if (getActivity() != null) {
-            getActivity().setTitle(R.string.settings_destination_launcher_apps);
+            getActivity().setTitle(titleRes());
         }
         updatePermissionSummaries(context);
         updateDrawerLayoutSummary();

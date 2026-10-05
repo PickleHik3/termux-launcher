@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
-    <PreferenceCategory app:title="@string/settings_diagnostics_header">
+    <PreferenceCategory app:title="@string/settings_diagnostics_logging_header">
         <ListPreference app:key="log_level" app:title="@string/termux_log_level_title" />
         <SwitchPreferenceCompat app:key="terminal_view_key_logging_enabled"
             app:title="@string/settings_log_terminal_keys_title" app:summary="@string/settings_log_terminal_keys_summary" />
+    </PreferenceCategory>
+    <PreferenceCategory app:title="@string/settings_diagnostics_alerts_header">
         <SwitchPreferenceCompat app:key="plugin_error_notifications_enabled"
             app:title="@string/settings_plugin_error_alerts_title" app:summary="@string/settings_plugin_error_alerts_summary" />
         <SwitchPreferenceCompat app:key="crash_report_notifications_enabled"
             app:title="@string/settings_crash_alerts_title" app:summary="@string/settings_crash_alerts_summary" />
+    </PreferenceCategory>
+    <PreferenceCategory app:title="@string/settings_diagnostics_checks_header">
         <Preference app:key="privileged_backend_smoke_test"
             app:title="@string/settings_test_backend_title" app:summary="@string/settings_test_backend_summary" />
     </PreferenceCategory>

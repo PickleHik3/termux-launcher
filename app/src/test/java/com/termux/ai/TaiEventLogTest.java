@@ -31,6 +31,14 @@ public class TaiEventLogTest {
     }
 
     @Test
+    public void acceleratorFallbackLineSaysWhy() {
+        String line = TaiEventLog.formatLine(0L, TaiEventLog.ACCEL_FALLBACK, "gemma-4-e4b-it-litert-lm", "litert_lm", "cpu",
+            4096, 0L, 0L, "history_failure: Model load cancelled.");
+        assertEquals("1970-01-01T00:00:00.000Z accel_fallback model=gemma-4-e4b-it-litert-lm backend=litert_lm accel=cpu "
+            + "ctx=4096 reason=\"history_failure: Model load cancelled.\"", line);
+    }
+
+    @Test
     public void unknownFiguresAreLeftOut() {
         String line = TaiEventLog.formatLine(0L, TaiEventLog.IDLE_EXIT, null, null, null, 0, 0L, 0L, "baseline only");
         assertEquals("1970-01-01T00:00:00.000Z idle_exit reason=\"baseline only\"", line);

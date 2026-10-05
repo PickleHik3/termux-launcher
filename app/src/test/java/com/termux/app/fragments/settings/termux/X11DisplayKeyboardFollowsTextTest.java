@@ -39,7 +39,7 @@ public class X11DisplayKeyboardFollowsTextTest {
         Application app = RuntimeEnvironment.getApplication();
         Intent intent = new Intent(app, SettingsActivity.class)
             .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT,
-                X11DisplayPreferencesFragment.class.getName());
+                X11DisplayInputPreferencesFragment.class.getName());
         ActivityController<SettingsActivity> controller =
             Robolectric.buildActivity(SettingsActivity.class, intent).create().start().resume();
         SettingsActivity activity = controller.get();

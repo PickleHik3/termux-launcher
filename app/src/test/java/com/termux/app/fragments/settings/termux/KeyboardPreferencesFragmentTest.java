@@ -1,11 +1,13 @@
 package com.termux.app.fragments.settings.termux;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Build;
@@ -22,8 +24,10 @@ import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -47,10 +51,25 @@ import java.util.concurrent.TimeUnit;
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class KeyboardPreferencesFragmentTest {
 
+    @Before
+    public void seedPreferencesFileBeforeMultiProcessReaders() throws Exception {
+        Context context = RuntimeEnvironment.getApplication().createPackageContext(
+            TermuxConstants.TERMUX_PACKAGE_NAME, Context.CONTEXT_RESTRICTED);
+        SharedPreferences prefs = context.getSharedPreferences(
+            TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+            Context.MODE_PRIVATE);
+        assertTrue(prefs.edit().putBoolean("keyboard_test_seed", true).commit());
+        assertTrue(prefs.edit().remove("keyboard_test_seed").commit());
+    }
+
     private KeyboardPreferencesFragment launch() {
+        return launch(KeyboardPreferencesFragment.class);
+    }
+
+    /** The overview, or one of its focused subpages (they share the controller). */
+    private KeyboardPreferencesFragment launch(Class<? extends KeyboardPreferencesFragment> page) {
         Intent intent = new Intent(RuntimeEnvironment.getApplication(), SettingsActivity.class)
-            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT,
-                KeyboardPreferencesFragment.class.getName());
+            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT, page.getName());
         ActivityController<SettingsActivity> controller =
             Robolectric.buildActivity(SettingsActivity.class, intent).create().start().resume();
         SettingsActivity activity = controller.get();
@@ -93,7 +112,7 @@ public class KeyboardPreferencesFragmentTest {
         assertEquals("polished", store.getString("keyboard_voice_polish_level", null));
         assertEquals("normal", store.getString("keyboard_voice_mic_sensitivity", null));
 
-        KeyboardPreferencesFragment fragment = launch();
+        KeyboardPreferencesFragment fragment = launch(KeyboardVoicePreferencesFragment.class);
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_engine"));
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_model"));
         assertNotNull(fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model"));
@@ -102,11 +121,26 @@ public class KeyboardPreferencesFragmentTest {
     }
 
     @Test
-    public void theCleanupModelRowOpensTheCleanupModelScreenAndShowsAutomaticByDefault() {
-        KeyboardPreferencesFragment fragment = launch();
+    public void theCleanupModelRowShowsAutomaticByDefault() {
+        KeyboardPreferencesFragment fragment = launch(KeyboardVoicePreferencesFragment.class);
         Preference polishModel = fragment.getPreferenceScreen().findPreference("keyboard_voice_polish_model");
         assertNotNull(polishModel);
         assertEquals("Automatic", polishModel.getSummary().toString());
+    }
+
+    @Test
+    public void thePassCtrlSpaceRowRoundTripsThroughTheStore() {
+        KeyboardPreferencesDataStore.resetForTesting();
+        KeyboardPreferencesDataStore store = store();
+        TermuxAppSharedPreferences prefs =
+            TermuxAppSharedPreferences.build(RuntimeEnvironment.getApplication(), true);
+
+        assertFalse(store.getBoolean("pass_ctrl_space_to_android", false));
+        store.putBoolean("pass_ctrl_space_to_android", true);
+        assertTrue(prefs.isPassCtrlSpaceToAndroidEnabled());
+        assertTrue(store.getBoolean("pass_ctrl_space_to_android", false));
+        store.putBoolean("pass_ctrl_space_to_android", false);
+        assertFalse(prefs.isPassCtrlSpaceToAndroidEnabled());
     }
 
     @Test
@@ -155,5 +189,70 @@ public class KeyboardPreferencesFragmentTest {
         assertEquals("high", store.getString("keyboard_voice_mic_sensitivity", null));
         store.putString("keyboard_voice_mic_sensitivity", "max");
         assertEquals("normal", prefs.getInAppKeyboardVoiceMicSensitivity());
+    }
+
+    private static void assertEnabled(KeyboardPreferencesFragment fragment, boolean expected, String... keys) {
+        for (String key : keys) {
+            Preference row = fragment.getPreferenceScreen().findPreference(key);
+            assertNotNull(key, row);
+            assertEquals(key, expected, row.isEnabled());
+        }
+    }
+
+    /**
+     * Android IME and Off dim only the built-in keyboard's own pages; voice, the hardware page,
+     * extra keys and the vibration shortcut stay usable.
+     */
+    @Test
+    public void switchingTheInputMethodDisablesOnlyTheBuiltInKeyboardLinks() {
+        KeyboardPreferencesDataStore.resetForTesting();
+        KeyboardPreferencesFragment fragment = launch();
+        SegmentedPillPreference method = fragment.getPreferenceScreen()
+            .findPreference("keyboard_input_method");
+        assertNotNull(method);
+        String[] builtInOnly = {"keyboard_sub_layout", "keyboard_sub_size", "keyboard_sub_typing"};
+        String[] always = {"keyboard_sub_voice", "keyboard_sub_hardware", "edit_extra_keys_row",
+            "extra_keys_text_all_caps", "keyboard_vibration_link"};
+        assertEnabled(fragment, true, builtInOnly);
+        assertEnabled(fragment, true, always);
+        for (String value : new String[] {"android", "none"}) {
+            method.getOnPreferenceChangeListener().onPreferenceChange(method, value);
+            assertEnabled(fragment, false, builtInOnly);
+            assertEnabled(fragment, true, always);
+        }
+        method.getOnPreferenceChangeListener().onPreferenceChange(method, "built_in");
+        assertEnabled(fragment, true, builtInOnly);
+        assertEnabled(fragment, true, always);
+    }
+
+    /** A subpage follows the stored input method; the voice page is never dimmed by it. */
+    @Test
+    public void voiceAndHardwareSubpagesStayUsableWithAndroidKeyboardOrOff() {
+        for (String value : new String[] {"android", "none"}) {
+            KeyboardPreferencesDataStore.resetForTesting();
+            store().putString("keyboard_input_method", value);
+            try {
+                assertEnabled(launch(KeyboardVoicePreferencesFragment.class), true,
+                    "keyboard_voice_engine", "keyboard_voice_polish", "keyboard_voice_sounds",
+                    "keyboard_voice_model", "keyboard_voice_pause_ms");
+                assertEnabled(launch(KeyboardHardwarePreferencesFragment.class), true,
+                    "in_app_keyboard_hide_on_hardware", "pass_ctrl_space_to_android");
+            } finally {
+                store().putString("keyboard_input_method", "built_in");
+            }
+        }
+    }
+
+    /** The built-in pages do dim on a subpage when the built-in keyboard is not in use. */
+    @Test
+    public void builtInSubpagesDimWhenAnotherInputMethodIsStored() {
+        KeyboardPreferencesDataStore.resetForTesting();
+        store().putString("keyboard_input_method", "android");
+        try {
+            KeyboardPreferencesFragment typing = launch(KeyboardTypingPreferencesFragment.class);
+            assertEnabled(typing, false, "keyboard_typing", "keyboard_feedback");
+        } finally {
+            store().putString("keyboard_input_method", "built_in");
+        }
     }
 }

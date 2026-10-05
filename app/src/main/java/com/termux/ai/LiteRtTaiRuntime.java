@@ -109,6 +109,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private String loadingModelId;
     /** MemAvailable drop of the last native init that returned; see {@link #createAndInitializeEngineWithCrashMarker}. */
     private long lastLoadDropBytes = -1L;
+    /** The meter of that init, still sampling for the first request's first token; loading thread only. */
+    @Nullable private TaiLoadMeter lastLoadMeter;
+    /** The loaded model's meter waiting for its first request; taken by the next generation. Guarded by {@code this}. */
+    @Nullable private TaiLoadMeter.Pending pendingPrefill;
 
     public LiteRtTaiRuntime(@NonNull Context context) {
         this(context, new TaiResidency());
@@ -340,6 +344,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         Message sendMessage;
         String generationId;
         long startedAt;
+        TaiLoadMeter.Pending prefill;
         synchronized (this) {
             JSONObject availabilityError = ensureLoadedForGenerationLocked(modelId);
             if (availabilityError != null) return availabilityError;
@@ -351,6 +356,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             pendingSendMessage = null;
             generationId = beginGenerationLocked();
             startedAt = activeGenerationStartedAtMs;
+            prefill = pendingPrefill;
+            pendingPrefill = null;
         }
 
         CountDownLatch done = new CountDownLatch(1);
@@ -379,6 +386,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             activeConversation.sendMessageAsync(sendMessage, new MessageCallback() {
                     @Override
                     public void onMessage(@NonNull Message message) {
+                        // The first token ends the first-prefill measurement of a fresh load.
+                        if (prefill != null) prefill.firstToken();
                         String text = textFromMessage(message);
                         String thinking = message.getChannels().get("thought");
                         synchronized (responseBuilder) {
@@ -492,6 +501,11 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 }
                 pendingTranscript = null;
             }
+        }
+
+        if (prefill != null) {
+            int promptTokens = lastPrefillTokens.get() > 0 ? lastPrefillTokens.get() : approximatePromptTokens(request);
+            prefill.finish(appContext, promptTokens, errorRef.get() == null);
         }
 
         Throwable throwable = errorRef.get();
@@ -739,7 +753,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             if (!loadCancellationRequested) {
                 engine = initializedEngine;
                 backendName = initializedBackendName;
-                backendFallbackReason = initializedFallbackReason;
+                // The runtime's own reason (an in-load GPU-to-CPU fallback) wins; otherwise the plan's
+                // (a demoted or budget-chosen accelerator), so the status always says why.
+                backendFallbackReason = !initializedFallbackReason.isEmpty() ? initializedFallbackReason
+                    : TaiAcceleratorFallback.get(modelSpec.id);
                 loadedModelId = modelSpec.id;
                 loadedModelPath = modelFile.getAbsolutePath();
                 loadedOptions = effectiveOptions;
@@ -756,13 +773,17 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 // reaches this block.
                 String loadedAccelerator = acceleratorFromBackendName(backendName, requestedAccelerator);
                 int loadedContext = effectiveOptions.contextWindow != null ? effectiveOptions.contextWindow : TaiLoadBudget.FLOOR_CONTEXT;
-                // A LiteRT CPU load's drop is taken before its buffers exist (see
-                // TaiLoadBudget#trustsLoadDrop), so it is treated as unmeasured.
-                long measured = TaiLoadBudget.trustsLoadDrop(TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator) ? lastLoadDropBytes : -1L;
+                // The load phase is booked now; the first request's first-prefill drop is booked by
+                // generate() through the pending meter, which is where a CPU load's buffers arrive.
+                long measured = lastLoadDropBytes;
                 if (measured >= 0L) {
                     TaiRuntimeHistory.recordMeasuredLoad(appContext, modelSpec, deviceCapabilities,
                         TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator, loadedContext, measured);
                 }
+                if (pendingPrefill != null) pendingPrefill.abandon();
+                pendingPrefill = lastLoadMeter == null ? null : new TaiLoadMeter.Pending(lastLoadMeter, modelSpec,
+                    deviceCapabilities, TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator, loadedContext);
+                lastLoadMeter = null;
                 residency.register(TaiResidency.Entry.chat(modelSpec, TaiModelSpec.BACKEND_LITERT_LM, loadedAccelerator, loadedContext)
                     .withMeasured(measured >= 0L ? measured : null));
                 TaiRuntimeHistory.recordSuccess(appContext, modelSpec, deviceCapabilities,
@@ -1000,13 +1021,23 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     ) {
         TaiRuntimeCrashMarker.markLoad(appContext, modelSpec, options.withAccelerator(accelerator), TaiModelSpec.BACKEND_LITERT_LM);
         lastLoadDropBytes = -1L;
+        if (lastLoadMeter != null) lastLoadMeter.stop();
+        lastLoadMeter = null;
         TaiLoadMeter meter = TaiLoadMeter.start(appContext);
+        boolean initialized = false;
         try {
-            return createAndInitializeEngine(modelSpec, modelPath, options, profile, deviceCapabilities, backend);
+            Engine created = createAndInitializeEngine(modelSpec, modelPath, options, profile, deviceCapabilities, backend);
+            // The load phase ends here; the meter goes on until the first request's first token
+            // (see TaiLoadMeter), where a CPU load's KV cache and a vision load's encoder arrive.
+            lastLoadDropBytes = meter.endLoad();
+            lastLoadMeter = meter;
+            initialized = true;
+            return created;
         } finally {
-            // Stopped on every exit so the sampler thread never outlives the init; a failed or
-            // cancelled init's figure is never read (the success block is not reached).
-            lastLoadDropBytes = meter.stop();
+            // A failed or cancelled init stops its sampler here and its figure is never read (the
+            // success block is not reached); a successful one is stopped by its first request,
+            // by an unload, or by the cap.
+            if (!initialized) meter.stop();
         }
     }
 
@@ -1038,13 +1069,17 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         int window = cpuOptions.contextWindow != null ? cpuOptions.contextWindow : TaiLoadBudget.FLOOR_CONTEXT;
         List<TaiResidency.Entry> residents = residency.snapshot();
         // The previous chat model was closed before this load began; the credit is what is left.
-        long available = TaiResidency.creditedAvailable(now.availableMemoryBytes, residents,
-            TaiResidency.Kind.CHAT, TaiModelSpec.BACKEND_LITERT_LM);
+        TaiMemInfo.Reading memory = TaiMemInfo.read(appContext);
+        long available = TaiResidency.creditedAvailable(memory.availBytes > 0L ? memory.availBytes : now.availableMemoryBytes,
+            residents, TaiResidency.Kind.CHAT, TaiModelSpec.BACKEND_LITERT_LM);
+        long fileBytes = TaiResidency.fileBytes(modelSpec);
+        long slope = TaiLoadBudget.seedSlopeBytes(TaiModelSpec.BACKEND_LITERT_LM, fileBytes, 0L);
         TaiLoadBudget.History history = (accelerator, contextTokens) -> TaiRuntimeHistory.measuredLoadBytes(
-            appContext, modelSpec, now, TaiModelSpec.BACKEND_LITERT_LM, accelerator, contextTokens);
-        return TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, TaiResidency.fileBytes(modelSpec),
+            appContext, modelSpec, now, TaiModelSpec.BACKEND_LITERT_LM, accelerator, contextTokens, slope, fileBytes / 10L);
+        return TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, fileBytes,
             encoders, now.physicalMemoryBytes, available, Collections.singletonList("cpu"), window, null, 0,
-            true, now.memoryThresholdBytes, history, Collections.<TaiResidency.Entry>emptyList()));
+            true, now.memoryThresholdBytes, history, Collections.<TaiResidency.Entry>emptyList())
+            .withConditions(TaiMemInfo.conditions(appContext, memory)));
     }
 
     @NonNull
@@ -1319,6 +1354,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         // Every close funnels through here — unload, idle timer, keep-warm expiry, the close
         // before a replacing load, and the pending unload after a cancelled generation.
         if (loadedModelId != null) residency.deregister(TaiResidency.Kind.CHAT, loadedModelId);
+        if (pendingPrefill != null) {
+            pendingPrefill.abandon();
+            pendingPrefill = null;
+        }
         loadedModelId = null;
         loadedModelPath = null;
         loadedOptions = null;

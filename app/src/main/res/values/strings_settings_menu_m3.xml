@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copy for the task-based Settings menus: root groups, the focused Keyboard, Apps and Display
+     pages, and App behavior. Short titles; a sentence only where the consequence is not obvious. -->
+<resources>
+    <!-- Root groups and the new destination -->
+    <string name="settings_root_personalization_header">Personalization</string>
+    <string name="settings_root_workspace_header">Workspace</string>
+    <string name="settings_root_app_header">App</string>
+    <string name="settings_destination_app_behavior">App behavior</string>
+    <string name="settings_destination_app_behavior_summary">Battery use and vibration</string>
+
+    <!-- App behavior -->
+    <string name="settings_behavior_battery_header">Battery and motion</string>
+    <string name="settings_behavior_idle_title">Reduce idle activity</string>
+    <string name="settings_behavior_idle_summary">Lazy mode. Pause idle animations and update status less often.</string>
+    <string name="settings_behavior_vibration_header">Vibration</string>
+    <string name="settings_behavior_vibration_title">Allow vibration</string>
+    <string name="settings_behavior_vibration_summary">Master control. Turn off to silence launcher and keyboard vibration.</string>
+    <string name="settings_behavior_launcher_vibration_title">Launcher vibration</string>
+    <string name="settings_behavior_launcher_vibration_summary">Dock and app-index feedback.</string>
+    <string name="settings_behavior_keyboard_vibration_title">Keyboard vibration</string>
+    <string name="settings_behavior_keyboard_vibration_summary">Key press feedback.</string>
+    <string name="settings_behavior_home_header">Home behavior</string>
+
+    <!-- Keyboard overview and subpages -->
+    <string name="settings_keyboard_built_in_header">Built-in keyboard</string>
+    <string name="settings_keyboard_hardware_header">Hardware keyboard</string>
+    <string name="settings_keyboard_layout_keys_header">Layouts and keys</string>
+    <string name="settings_keyboard_docs_credits_header">Documentation and credits</string>
+    <string name="settings_keyboard_sub_layout_title">Layouts</string>
+    <string name="settings_keyboard_sub_layout_summary">Languages, extra keys and custom layout</string>
+    <string name="settings_keyboard_sub_size_title">Size and position</string>
+    <string name="settings_keyboard_sub_size_summary">Floating and split keyboard, in percent</string>
+    <string name="settings_keyboard_sub_typing_title">Typing and feedback</string>
+    <string name="settings_keyboard_sub_typing_summary">Touch accuracy, sound and key preview</string>
+    <string name="settings_keyboard_sub_voice_title">Voice input</string>
+    <string name="settings_keyboard_sub_voice_summary">Speech and dictation cleanup</string>
+    <string name="settings_keyboard_sub_hardware_title">Hardware keyboard</string>
+    <string name="settings_keyboard_sub_hardware_summary">Visibility and language shortcut</string>
+    <string name="settings_keyboard_vibration_link_title">Vibration</string>
+    <string name="settings_keyboard_vibration_link_summary">App-wide and keyboard vibration</string>
+    <string name="settings_keyboard_tap_correction_reset_confirm_title">Reset learned taps?</string>
+    <string name="settings_keyboard_tap_correction_reset_confirm_message">Deletes learned touch accuracy only. Layouts and other keyboard settings stay.</string>
+    <string name="settings_keyboard_tap_correction_reset_confirm_action">Reset</string>
+
+    <!-- Apps overview and subpages -->
+    <string name="settings_apps_home_header">Home app</string>
+    <string name="settings_apps_customize_header">Customize</string>
+    <string name="settings_apps_sub_dock_title">Dock</string>
+    <string name="settings_apps_sub_dock_summary">Pinned apps and usage-ranked page</string>
+    <string name="settings_apps_sub_search_title">App search</string>
+    <string name="settings_apps_sub_search_summary">Terminal search prefix and ranking</string>
+    <string name="settings_apps_sub_lock_title">Double-tap to lock</string>
+    <string name="settings_apps_sub_lock_summary">Shizuku, or optional accessibility access</string>
+    <string name="settings_apps_behavior_link_summary">Recents, power saving and vibration</string>
+    <string name="settings_lock_method_header">Lock method</string>
+    <string name="settings_lock_method_summary">Double-tap the A–Z row. Shizuku keeps the normal screen-off animation. Accessibility is optional and may flicker.</string>
+
+    <!-- Display overview and subpages -->
+    <string name="settings_x11_group_configure">Configure</string>
+    <string name="settings_x11_group_support">Startup and support</string>
+    <string name="settings_x11_group_touch">Touch</string>
+    <string name="settings_x11_group_keyboard">Keyboard</string>
+    <string name="settings_x11_group_clipboard">Clipboard</string>
+    <string name="settings_x11_group_resolution">Resolution</string>
+    <string name="settings_x11_group_rendering">Rendering</string>
+    <string name="settings_x11_group_rendering_fixes">Rendering fixes</string>
+    <string name="settings_x11_group_desktop">Desktop</string>
+    <string name="settings_x11_sub_input_title">Input</string>
+    <string name="settings_x11_sub_input_summary">Touch mode, keyboard and clipboard</string>
+    <string name="settings_x11_sub_resolution_title">Resolution and scaling</string>
+    <string name="settings_x11_sub_resolution_summary">Size in percent, filtering and density in dpi</string>
+    <string name="settings_x11_sub_linux_apps_title">Linux apps</string>
+    <string name="settings_x11_sub_linux_apps_summary">Setup and drawer integration</string>
+    <string name="settings_x11_sub_startup_title">Startup</string>
+    <string name="settings_x11_sub_startup_summary">Auto-start and shell connection</string>
+    <string name="settings_x11_sub_troubleshooting_title">Troubleshooting</string>
+    <string name="settings_x11_sub_troubleshooting_summary">Black screen or wrong colors</string>
+
+    <!-- Other destinations: group headings -->
+    <string name="settings_terminal_compat_header">Compatibility</string>
+    <string name="settings_status_clock_header">Clock</string>
+    <string name="settings_status_indicators_header">Indicators</string>
+    <string name="settings_status_weather_header">Weather</string>
+    <string name="settings_status_more_header">More</string>
+    <string name="settings_diagnostics_logging_header">Logging</string>
+    <string name="settings_diagnostics_alerts_header">Alerts</string>
+    <string name="settings_diagnostics_checks_header">Checks</string>
+    <string name="settings_about_help_header">Help</string>
+    <string name="settings_about_app_header">App</string>
+    <string name="settings_about_project_header">Project</string>
+
+    <!-- Permissions: an optional service is not a warning -->
+    <string name="settings_accessibility_optional_summary">Used only for double-tap to lock the A–Z row. Shizuku does the same without it.</string>
+
+    <!-- Voice input page -->
+    <string name="settings_voice_group_speech">Speech</string>
+    <string name="settings_voice_group_cleanup">Dictation cleanup</string>
+    <string name="settings_voice_group_listening">Listening</string>
+    <string name="settings_voice_details_title">Cleanup details</string>
+    <string name="settings_voice_details_summary">What cleanup does, and shell commands</string>
+    <string name="settings_voice_details_header">Dictation cleanup</string>
+    <string name="settings_voice_details_cleanup_title">When it runs</string>
+    <string name="settings_voice_details_cleanup_summary">When you stop dictating, a local chat model cleans up the whole text in one pass. The panel marks what changed before you insert or copy it. Needs a cleanup model installed.</string>
+    <string name="settings_voice_details_off_title">When it is off</string>
+    <string name="settings_voice_details_off_summary">The text waits exactly as heard.</string>
+    <string name="settings_voice_details_shell_title">Shell commands</string>
+    <string name="settings_voice_details_shell_summary">Shell commands are formatted by fixed rules instead of the model (ls dash la becomes ls -la).</string>
+</resources>

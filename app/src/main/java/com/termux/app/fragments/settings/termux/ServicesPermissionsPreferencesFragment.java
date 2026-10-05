@@ -63,7 +63,7 @@ public final class ServicesPermissionsPreferencesFragment extends MaterialPrefer
         setPermission(STORAGE, PermissionUtils.checkAndRequestLegacyOrManageExternalStoragePermission(context, -1, true, false));
         refreshWallpaperRead(context);
         setPermission(NOTIFICATION_ACCESS, LauncherNotificationAccess.isEnabled(context));
-        setPermission(ACCESSIBILITY, LauncherLockAccessibilityAccess.isEnabled(context));
+        setOptionalPermission(ACCESSIBILITY, LauncherLockAccessibilityAccess.isEnabled(context));
         setPermission(NOTIFICATIONS, NotificationManagerCompat.from(context).areNotificationsEnabled());
     }
 
@@ -163,6 +163,19 @@ public final class ServicesPermissionsPreferencesFragment extends MaterialPrefer
                 ? R.string.settings_manage_action : R.string.settings_fix_action),
             allowed ? StatusActionPreference.Tone.POSITIVE : StatusActionPreference.Tone.WARNING);
         row.setSummary(allowed ? R.string.settings_permission_allowed_summary : R.string.settings_permission_fix_summary);
+    }
+
+    /**
+     * A permission nothing depends on: only the A-Z double-tap lock can use it, and Shizuku does
+     * the same job without it. The row is marked optional so "off" reads as neutral, and its
+     * summary names that purpose instead of the generic "tap to fix".
+     */
+    private void setOptionalPermission(String key, boolean allowed) {
+        setPermission(key, allowed);
+        Preference row = findPreference(key);
+        if (!(row instanceof StatusActionPreference)) return;
+        ((StatusActionPreference) row).setOptional(true);
+        row.setSummary(R.string.settings_accessibility_optional_summary);
     }
 
     private boolean start(Intent intent) {

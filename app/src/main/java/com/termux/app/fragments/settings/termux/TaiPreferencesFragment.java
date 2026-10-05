@@ -41,6 +41,8 @@ import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
+import com.termux.ai.TaiRemoteClient;
+import com.termux.ai.TaiRemoteSettings;
 import com.termux.ai.TaiSettings;
 import com.termux.launcherctl.LauncherCtlApiServer;
 
@@ -137,8 +139,10 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         configureOverrides(context);
         configureEndpointPreferences(context);
         configureModelCentreRow();
+        configureWelcomeCardRow();
         configureBenchmarkRow();
         configureHuggingFaceToken();
+        configureRemoteRow();
         configureAdvancedSection(context);
         configureLanToggle(context);
         configureAuthToggle(context);
@@ -206,6 +210,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
             refreshTaiPage(context);
             handler.postDelayed(refreshRuntimeRunnable, 2000L);
             refreshBenchmarkRow(context);
+            refreshRemoteRow(context);
         }
     }
 
@@ -804,6 +809,18 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         });
     }
 
+    /** Reopens the "What runs on this phone" card any time; it does not count as the automatic raise. */
+    private void configureWelcomeCardRow() {
+        Preference row = findPreference("tai_welcome_card");
+        if (row == null) return;
+        row.setOnPreferenceClickListener(preference -> {
+            if (getActivity() != null) {
+                com.termux.app.firstrun.TaiWelcomeCardHost.show(getActivity(), false, null);
+            }
+            return true;
+        });
+    }
+
     private void configureBenchmarkRow() {
         Preference row = findPreference("tai_benchmark");
         if (row == null) return;
@@ -923,6 +940,27 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         }
     }
 
+    /** The Remote model row opens its own screen, pushed in place so Back returns here. */
+    private void configureRemoteRow() {
+        Preference row = findPreference("tai_remote_provider");
+        if (row == null) return;
+        row.setOnPreferenceClickListener(preference -> {
+            if (getActivity() instanceof com.termux.app.activities.SettingsActivity) {
+                ((com.termux.app.activities.SettingsActivity) getActivity()).openScreen(
+                    TaiRemotePreferencesFragment.class, R.string.tai_remote_screen_title, null);
+            }
+            return true;
+        });
+    }
+
+    /** "model on host" once a remote model is set up; the plain invitation otherwise. */
+    private void refreshRemoteRow(@NonNull Context context) {
+        Preference row = findPreference("tai_remote_provider");
+        if (row == null) return;
+        String summary = TaiRemotePreferencesFragment.rowSummary(context);
+        row.setSummary(summary != null ? summary : getString(R.string.tai_remote_row_summary_off));
+    }
+
     private void configureHuggingFaceToken() {
         Preference token = findPreference(TaiSettings.KEY_HUGGINGFACE_TOKEN);
         if (token == null) return;
@@ -1010,6 +1048,11 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         }
         String hfToken = new TaiSettings(context).getHuggingFaceToken();
         if (!hfToken.trim().isEmpty()) redacted = redacted.replace(hfToken, TaiSettings.redactToken(hfToken));
+        try {
+            redacted = TaiRemoteClient.redact(redacted, new TaiRemoteSettings(context).apiKey());
+        } catch (RuntimeException ignored) {
+            // The keystore is unavailable; the key cannot be in the text either way.
+        }
         return redacted;
     }
 

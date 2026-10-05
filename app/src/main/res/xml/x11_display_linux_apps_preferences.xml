@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <PreferenceCategory app:title="@string/settings_x11_category_apps">
+        <SwitchPreferenceCompat
+            app:key="x11_drawer_apps"
+            app:title="@string/settings_x11_drawer_apps_title"
+            app:summary="@string/settings_x11_drawer_apps_summary"
+            android:defaultValue="true" />
+        <Preference
+            app:key="x11_gui_apps_setup"
+            app:title="@string/settings_gui_apps_title"
+            app:summary="@string/settings_gui_apps_row_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.GuiAppsSetupPreferencesFragment" />
+        <Preference
+            app:key="x11_hidden_apps"
+            app:title="@string/settings_x11_hidden_apps_title"
+            app:summary="@string/settings_x11_hidden_apps_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.HiddenAppsPreferencesFragment" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_x11_group_desktop">
+        <EditTextPreference
+            app:key="x11_window_manager"
+            app:title="@string/settings_x11_window_manager_title"
+            app:dialogMessage="@string/settings_x11_window_manager_summary"
+            android:defaultValue="openbox"
+            app:useSimpleSummaryProvider="true" />
+        <ListPreference
+            app:key="x11_runtime_badge"
+            app:title="@string/settings_x11_runtime_badge_title"
+            app:dialogMessage="@string/settings_x11_runtime_badge_summary"
+            android:defaultValue="termux"
+            app:entries="@array/x11_runtime_badge_entries"
+            app:entryValues="@array/x11_runtime_badge_values"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <Preference
+        app:key="x11_window_manager_hint"
+        app:summary="@string/settings_x11_window_manager_hint"
+        app:selectable="false"
+        app:persistent="false" />
+
+</PreferenceScreen>

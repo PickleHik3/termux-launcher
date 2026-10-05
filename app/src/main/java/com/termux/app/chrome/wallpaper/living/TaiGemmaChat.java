@@ -5,39 +5,27 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.TaiCallerRequests;
 import com.termux.ai.TaiManager;
-import com.termux.ai.TaiModelSpec;
-import com.termux.ai.TaiModelStore;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.IOException;
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 /**
- * The real {@link GemmaSceneReader.Chat}: one non-streaming call through
+ * The real {@link SceneReader.Chat}: one non-streaming call through
  * {@link TaiManager#openAiChatCompletions(String, long)}. The only place the living-still code
  * touches the TAI. Blocking; call it off the main thread.
  */
-public final class TaiGemmaChat implements GemmaSceneReader.Chat {
+public final class TaiGemmaChat implements SceneReader.Chat {
     @NonNull private final TaiManager mManager;
+    @Nullable private volatile String mLastAccelerator;
+    @Nullable private volatile String mLastFallbackReason;
 
     public TaiGemmaChat(@NonNull Context context) {
         mManager = TaiManager.getInstance(context.getApplicationContext());
-    }
-
-    /** True when the Gemma 4 E4B files are on the phone (downloaded or imported). */
-    public static boolean installed(@NonNull Context context) {
-        TaiModelStore store = new TaiModelStore(context.getApplicationContext());
-        Map<String, TaiModelSpec> models = new LinkedHashMap<>(store.getDownloadedReadableModels());
-        models.putAll(store.getInstalledUserModels());
-        for (TaiModelSpec spec : models.values()) {
-            if (GemmaSceneReader.MODEL_ID.equals(spec.id)) return true;
-        }
-        return false;
     }
 
     @NonNull
@@ -47,16 +35,52 @@ public final class TaiGemmaChat implements GemmaSceneReader.Chat {
         String before = null;
         try {
             visionId = new JSONObject(requestBody).optString("model", null);
+            // A remote reader never touches the :tai_runtime process: no status read, no unload.
+            if (TaiCallerRequests.isRemoteModel(visionId)) {
+                mLastAccelerator = null;
+                mLastFallbackReason = null;
+                return ask(requestBody, timeoutMs);
+            }
             before = loadedModelId();
         } catch (JSONException ignored) {
             // the call below reports a malformed body
         }
         try {
-            return ask(requestBody, timeoutMs);
+            String text = ask(requestBody, timeoutMs);
+            // Read before the unload below: the status describes the load this call used.
+            noteBackend();
+            return text;
         } finally {
             // Gemma 4 E4B with its vision encoder held about 3.9 GB on pong (CPU, 4096 window).
             // When this step loaded it, free it now instead of at the idle unload ten minutes on.
             if (visionId != null && !visionId.equals(before)) unloadIfLoaded(visionId);
+        }
+    }
+
+    @Nullable
+    @Override
+    public String lastAccelerator() {
+        return mLastAccelerator;
+    }
+
+    @Nullable
+    @Override
+    public String lastFallbackReason() {
+        return mLastFallbackReason;
+    }
+
+    private void noteBackend() {
+        mLastAccelerator = null;
+        mLastFallbackReason = null;
+        try {
+            JSONObject runtime = mManager.runtimeStatus().optJSONObject("runtime");
+            if (runtime == null) return;
+            String backend = runtime.optString("backend", "");
+            if (!backend.isEmpty() && !"null".equals(backend)) mLastAccelerator = backend;
+            String reason = runtime.isNull("backendFallbackReason") ? "" : runtime.optString("backendFallbackReason", "");
+            if (!reason.isEmpty()) mLastFallbackReason = reason;
+        } catch (JSONException | RuntimeException ignored) {
+            // the recipe simply omits the backend
         }
     }
 

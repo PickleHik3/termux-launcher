@@ -50,6 +50,21 @@ public class ManifestTest {
     }
 
     @Test
+    public void backendFieldsRoundTripWhenPresentAndAreOptional() throws Exception {
+        LivingRecipe a = sample();
+        a.gemmaAccelerator = "gpu";
+        a.gemmaFallbackReason = "history_failure: Model load cancelled.";
+        LivingRecipe b = LivingRecipe.fromJson(a.toJson().toString());
+        assertEquals("gpu", b.gemmaAccelerator);
+        assertEquals("history_failure: Model load cancelled.", b.gemmaFallbackReason);
+
+        LivingRecipe plain = LivingRecipe.fromJson(sample().toJson().toString());
+        assertNull(plain.gemmaAccelerator);
+        assertNull(plain.gemmaFallbackReason);
+        assertTrue(!sample().toJson().has("gemmaAccelerator"));
+    }
+
+    @Test
     public void recipeRoundTrips() throws Exception {
         LivingRecipe a = sample();
         LivingRecipe b = LivingRecipe.fromJson(a.toJson().toString());
@@ -75,7 +90,7 @@ public class ManifestTest {
 
     private File fakeFolder(boolean withRecipe) throws Exception {
         File dir = tmp.newFolder("abc" + (withRecipe ? "1" : "0"));
-        for (String n : new String[] {Manifest.IMAGE, Manifest.DEPTH, Manifest.MASK_A, Manifest.MASK_B, Manifest.MASK_C}) {
+        for (String n : new String[] {Manifest.IMAGE, Manifest.DEPTH, Manifest.MASK_A, Manifest.MASK_B, Manifest.MASK_C, Manifest.MASK_D}) {
             try (FileOutputStream out = new FileOutputStream(new File(dir, n))) {
                 out.write(1);
             }
@@ -101,6 +116,81 @@ public class ManifestTest {
         File dir = fakeFolder(true);
         assertTrue(new File(dir, Manifest.MASK_C).delete());
         assertNull(Manifest.load(dir));
+    }
+
+    @Test
+    public void v1RecipeLoadsWithV2Defaults() throws Exception {
+        JSONObject o = sample().toJson();
+        o.put("version", 1);
+        o.remove("plan");
+        o.remove("wind");
+        o.remove("cloudMode");
+        o.remove("cloudWarp");
+        o.remove("stillProtected");
+        o.remove("director");
+        o.put("gemmaAccelerator", "gpu");
+        o.put("sky", new JSONObject().put("flow", 0.03).put("stars", false));
+        LivingRecipe r = LivingRecipe.fromJson(o.toString());
+        assertEquals(1, r.version);
+        assertNull(r.plan);
+        assertEquals(0f, r.windAmp, 0f);
+        assertEquals(LivingRecipe.CLOUDS_SCROLL, r.cloudMode);
+        assertTrue(!r.stillProtected);
+        assertEquals("gpu", r.director.accelerator);
+        assertEquals("gemma-4-e4b-it-litert-lm-vision", r.director.model);
+        o.put("sky", new JSONObject().put("flow", 0).put("stars", false));
+        assertEquals(LivingRecipe.CLOUDS_NONE, LivingRecipe.fromJson(o.toString()).cloudMode);
+    }
+
+    @Test
+    public void v2RoundTripsWithAPlan() throws Exception {
+        LivingRecipe a = sample();
+        a.plan = new JSONObject("{\"elements\":[{\"name\":\"sky\",\"kind\":\"sky\"}],\"scene\":{\"time\":\"day\"}}");
+        a.windDirDeg = 180f;
+        a.windSpeed = 1f;
+        a.windAmp = 0.006f;
+        a.cloudMode = LivingRecipe.CLOUDS_WARP;
+        a.cloudWarpAmount = 0.6f;
+        a.cloudWarpPeriod = 90f;
+        a.stillProtected = true;
+        a.particles = LivingRecipe.PARTICLES_PETALS;
+        a.director.model = "m";
+        a.director.accelerator = "gpu";
+        a.director.fallbackReason = "why";
+        a.director.ms = 4200L;
+        LivingRecipe b = LivingRecipe.fromJson(a.toJson().toString());
+        assertEquals(2, b.version);
+        assertEquals(a.toJson().toString(), b.toJson().toString());
+        assertEquals("day", b.plan.getJSONObject("scene").getString("time"));
+        assertEquals(180f, b.windDirDeg, 0f);
+        assertEquals(LivingRecipe.CLOUDS_WARP, b.cloudMode);
+        assertEquals(90f, b.cloudWarpPeriod, 0f);
+        assertTrue(b.stillProtected);
+        assertEquals(LivingRecipe.PARTICLES_PETALS, b.particles);
+        assertEquals("why", b.director.fallbackReason);
+        assertEquals(4200L, b.director.ms);
+    }
+
+    @Test
+    public void maskDIsRequiredOnlyForVersionTwo() throws Exception {
+        File v2 = fakeFolder(true);
+        assertTrue(new File(v2, Manifest.MASK_D).delete());
+        assertNull(Manifest.load(v2));
+
+        File v1 = tmp.newFolder("v1");
+        for (String n : new String[] {Manifest.IMAGE, Manifest.DEPTH, Manifest.MASK_A, Manifest.MASK_B, Manifest.MASK_C}) {
+            try (FileOutputStream out = new FileOutputStream(new File(v1, n))) {
+                out.write(1);
+            }
+        }
+        JSONObject o = sample().toJson();
+        o.put("version", 1);
+        try (FileOutputStream out = new FileOutputStream(new File(v1, Manifest.RECIPE))) {
+            out.write(o.toString().getBytes(StandardCharsets.UTF_8));
+        }
+        Manifest m = Manifest.load(v1);
+        assertNotNull(m);
+        assertEquals(new File(v1, "maskD.png"), m.maskD());
     }
 
     @Test

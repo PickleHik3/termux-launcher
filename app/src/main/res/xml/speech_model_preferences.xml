@@ -6,6 +6,11 @@
         app:key="speech_model_installed"
         app:title="@string/speech_model_installed_header">
         <Preference
+            app:key="speech_model_pick"
+            app:title="@string/tai_callers_speech_pick_title"
+            app:order="0"
+            app:persistent="false"/>
+        <Preference
             app:key="speech_model_empty"
             app:title="@string/speech_model_empty_title"
             app:summary="@string/speech_model_empty_summary"

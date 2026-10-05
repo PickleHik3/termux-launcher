@@ -60,8 +60,10 @@
     <string name="appearance_editor_margin_description">Margin</string>
 
     <!-- The doors. -->
-    <string name="settings_look_appearance_editor_title">Appearance editor</string>
+    <string name="settings_look_appearance_editor_title">Surface style</string>
     <string name="settings_look_appearance_editor_summary">Looks, glass, opacity and text contrast, previewed on the home screen</string>
     <!-- The mode pill's first segment: the Looks slider and the tune row. Short on purpose: the pill shares its row with Undo and Done at 360dp. -->
     <string name="appearance_editor_mode_look">Look</string>
+    <!-- Tooltip of the eye-off control before any count is known. -->
+    <string name="appearance_editor_hidden_tooltip">Hidden elements</string>
 </resources>

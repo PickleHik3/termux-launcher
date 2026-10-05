@@ -600,6 +600,9 @@ public class LauncherCtlApiServer {
                 return maybeTextResponse(request, "status", TaiManager.getInstance(context).status());
             } else if ("GET".equals(request.method) && "/v1/ai/runtime".equals(request.path)) {
                 return maybeTextResponse(request, "runtime", TaiManager.getInstance(context).runtimeStatus());
+            } else if ("POST".equals(request.method) && "/v1/ai/tier".equals(request.path)) {
+                // tai runtime --tier 1|2|3|auto: the developer override of the RAM tier.
+                return jsonResponse(setTierOverride(context, request.body));
             } else if ("GET".equals(request.method) && "/v1/ai/models".equals(request.path)) {
                 return maybeTextResponse(request, "models", TaiManager.getInstance(context).models());
             } else if ("POST".equals(request.method) && "/v1/ai/models/import".equals(request.path)) {
@@ -1893,6 +1896,7 @@ public class LauncherCtlApiServer {
         rateLimiters.put("GET:/v1/wallpaper", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/ai/status", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/runtime", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("POST:/v1/ai/tier", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/ai/models", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/ai/models/import", new SimpleRateLimiter(20, 60_000));
         rateLimiters.put("POST:/v1/ai/models/download", new SimpleRateLimiter(20, 60_000));
@@ -3233,6 +3237,22 @@ public class LauncherCtlApiServer {
             file.setExecutable(true, false);
             file.setReadable(true, false);
         }
+    }
+
+    /** Stores the tier override ({@code auto}, 1, 2 or 3) and answers with the tier it gives now. */
+    private JSONObject setTierOverride(Context context, @Nullable String body) throws JSONException {
+        JSONObject request = body == null || body.trim().isEmpty() ? new JSONObject() : new JSONObject(body);
+        String value = request.optString("tier", "").trim().toLowerCase(Locale.ROOT);
+        if (!"auto".equals(value) && !"1".equals(value) && !"2".equals(value) && !"3".equals(value)) {
+            return statusError(400, "bad_request", "tier must be 1, 2, 3 or auto.");
+        }
+        TaiSettings settings = new TaiSettings(context);
+        settings.setTierOverride(value);
+        JSONObject response = new JSONObject();
+        response.put("ok", true);
+        response.put("tierOverride", settings.getTierOverrideValue());
+        response.put("tier", com.termux.ai.TaiDeviceTier.forDevice(context).number());
+        return response;
     }
 
     private HttpResponse jsonResponse(JSONObject response) {

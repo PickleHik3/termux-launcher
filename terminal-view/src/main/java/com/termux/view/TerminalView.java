@@ -2240,10 +2240,22 @@ public final class TerminalView extends View {
         return super.showContextMenu(x, y);
     }
 
+    /** Whether a hardware Ctrl+Space is yielded to Android (for keyboard language switching). */
+    private boolean isCtrlSpacePassThrough(int keyCode, KeyEvent event) {
+        return isCtrlSpacePassThrough(mClient.shouldPassCtrlSpaceToAndroid(), keyCode, event.isCtrlPressed());
+    }
+
+    static boolean isCtrlSpacePassThrough(boolean enabled, int keyCode, boolean ctrlPressed) {
+        return enabled && keyCode == KeyEvent.KEYCODE_SPACE && ctrlPressed;
+    }
+
     @Override
     public boolean onKeyPreIme(int keyCode, KeyEvent event) {
         if (TERMINAL_VIEW_KEY_LOGGING_ENABLED)
             mClient.logInfo(LOG_TAG, "onKeyPreIme(keyCode=" + keyCode + ", event=" + event + ")");
+        if (isCtrlSpacePassThrough(keyCode, event)) {
+            return super.onKeyPreIme(keyCode, event);
+        }
         if (keyCode == KeyEvent.KEYCODE_BACK) {
             cancelRequestAutoFill();
             if (isSelectingText()) {
@@ -2368,6 +2380,9 @@ public final class TerminalView extends View {
             mClient.logInfo(LOG_TAG, "onKeyDown(keyCode=" + keyCode + ", isSystem()=" + event.isSystem() + ", event=" + event + ")");
         if (mEmulator == null)
             return true;
+        if (isCtrlSpacePassThrough(keyCode, event)) {
+            return super.onKeyDown(keyCode, event);
+        }
         if (isSelectingText()) {
             stopTextSelectionMode();
         }
@@ -2570,6 +2585,9 @@ public final class TerminalView extends View {
         // to exit the activity.
         if (mEmulator == null && keyCode != KeyEvent.KEYCODE_BACK)
             return true;
+        if (isCtrlSpacePassThrough(keyCode, event)) {
+            return super.onKeyUp(keyCode, event);
+        }
         if (mClient.onKeyUp(keyCode, event)) {
             invalidate();
             return true;
