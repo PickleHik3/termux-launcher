@@ -395,7 +395,8 @@ public abstract class WallpaperPickerPageTestBase {
         WallpaperPickerPage page = open(34);
         page.centre(WallpaperSlots.Slot.HOME);
         page.choose(WallpaperSlots.Choice.animated("tide"));
-        assertNull(page.root().findViewById(R.id.wallpaper_picker_shortcuts));
+        assertEquals("the shortcut row is gone", 0, page.root().getResources().getIdentifier(
+            "wallpaper_picker_shortcuts", "id", page.root().getContext().getPackageName()));
         // The page is hidden behind the editor, not rebuilt: its pending choices are where they were.
         page.onHidden();
         page.onShown();
