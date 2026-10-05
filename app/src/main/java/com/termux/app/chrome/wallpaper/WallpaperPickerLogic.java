@@ -247,4 +247,20 @@ public final class WallpaperPickerLogic {
             : Math.max(1, Math.min(maxHeightPx, Math.round(w * (longSide / (float) shortSide))));
         return new int[] {w, h};
     }
+
+    /**
+     * The low-memory notice before Bring to life: how many MB the on-device reader needs beyond
+     * what is free (so Android would close apps running in the background), or 0 when there is
+     * nothing to say. A remote reader loads nothing here; unknown figures (zero or less) say nothing.
+     *
+     * @param neededFreeBytes what a load needs free, margin and the floor kept for the phone included
+     * @param availableBytes  what is free now, with the idle models the load may close credited
+     */
+    public static long lowMemoryWarning(long neededFreeBytes, long availableBytes, boolean remote) {
+        if (remote || neededFreeBytes <= 0L || availableBytes < 0L) return 0L;
+        long shortfall = neededFreeBytes - availableBytes;
+        if (shortfall <= 0L) return 0L;
+        long mb = 1024L * 1024L;
+        return (shortfall + mb - 1L) / mb;
+    }
 }

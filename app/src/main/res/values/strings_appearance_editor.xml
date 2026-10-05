@@ -9,6 +9,7 @@
     <string name="appearance_editor_undo">Undo</string>
     <string name="appearance_editor_done">Done</string>
     <!-- The page bar's title over the scaled frame, by mode. -->
+    <string name="appearance_page_wallpaper">Wallpaper</string>
     <string name="appearance_page_look">Look</string>
     <string name="appearance_page_layout">Layout</string>
 

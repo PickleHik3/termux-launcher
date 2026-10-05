@@ -29,4 +29,8 @@
     <string name="wallpaper_picker_recent_photo">Recent photo %1$d</string>
     <string name="wallpaper_picker_apply_failed">Could not apply the background</string>
     <string name="wallpaper_picker_motion_failed">Could not change Motion</string>
+    <!-- Before Bring to life when the on-device reader needs room from other apps; %1$d is the shortfall in MB. -->
+    <string name="living_low_memory_title">Low memory</string>
+    <string name="living_low_memory_message">Reading this wallpaper needs about %1$d MB more than is free. Android may close apps running in the background while it runs.</string>
+    <string name="living_low_memory_continue">Continue</string>
 </resources>

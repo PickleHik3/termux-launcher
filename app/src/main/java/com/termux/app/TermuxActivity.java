@@ -17026,9 +17026,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     navigator.close();
                     return;
                 }
-                ready.accept(new com.termux.app.chrome.wallpaper.WallpaperPickerPage(TermuxActivity.this,
-                    slots, overviewListener(), Build.VERSION.SDK_INT, animatedOffered, navigator::close,
-                    restore, new com.termux.app.chrome.wallpaper.WallpaperThumbs(), loaded, io));
+                final com.termux.app.chrome.wallpaper.WallpaperPickerPage picker =
+                    new com.termux.app.chrome.wallpaper.WallpaperPickerPage(TermuxActivity.this,
+                        slots, overviewListener(), Build.VERSION.SDK_INT, animatedOffered, navigator::close,
+                        restore, new com.termux.app.chrome.wallpaper.WallpaperThumbs(), loaded, io);
+                // The surface's one bar (back, the Wallpaper | Look | Layout pill, Done) around
+                // the page; the Wallpaper segment is this page.
+                final com.termux.app.surfaces.AppearanceEditorPage shell =
+                    com.termux.app.surfaces.AppearanceEditorPage.overview(TermuxActivity.this, navigator,
+                        picker.root());
+                ready.accept(new com.termux.app.surfaces.AppearanceSurfaceController.OverviewPage() {
+                    @NonNull @Override public View root() { return shell.root(); }
+                    @NonNull @Override public View slidingPart() { return shell.content(); }
+                    @NonNull @Override public CharSequence title() { return picker.title(); }
+                    @Override public void onShown() { picker.onShown(); }
+                    @Override public void onHidden() { picker.onHidden(); }
+                    @Override public void release() { picker.release(); }
+                    @Nullable @Override public View sharedCard() { return picker.sharedCard(); }
+                    @NonNull @Override public java.util.List<View> leavingViews() { return picker.leavingViews(); }
+                    @NonNull @Override public java.util.List<View> fadingViews() { return picker.fadingViews(); }
+                    @Override public void setBackgroundAlpha(float alpha) {
+                        shell.setBackgroundAlpha(alpha);
+                        picker.setBackgroundAlpha(alpha);
+                    }
+                    @Override public void setBarVisible(boolean visible) { shell.setBarVisible(visible); }
+                });
             });
         }
 
@@ -17054,15 +17076,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (page.root().isShown()) page.onShown();
                 });
             }, "appearance-icons-still").start();
-            // The page brings no bar of its own: the Overview's back-and-title bar over it.
-            final View frame = getLayoutInflater().inflate(R.layout.appearance_page_frame, null, false);
-            ((TextView) frame.findViewById(R.id.appearance_page_title)).setText(page.title());
-            frame.findViewById(R.id.appearance_page_back).setOnClickListener(v -> navigator.back());
-            ((ViewGroup) frame.findViewById(R.id.appearance_page_content)).addView(page.root(),
-                new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT));
+            // The page brings no bar of its own: the surface's shared bar (back, the title, Done).
+            final com.termux.app.surfaces.AppearanceEditorPage shell =
+                com.termux.app.surfaces.AppearanceEditorPage.icons(TermuxActivity.this, navigator,
+                    page.title(), page.root());
             return new com.termux.app.surfaces.AppearanceSurfaceController.Page() {
-                @NonNull @Override public View root() { return frame; }
+                @NonNull @Override public View root() { return shell.root(); }
+                @NonNull @Override public View slidingPart() { return shell.content(); }
                 @NonNull @Override public CharSequence title() { return page.title(); }
                 @Override public void onShown() { page.onShown(); }
                 @Override public void onHidden() { page.onHidden(); }

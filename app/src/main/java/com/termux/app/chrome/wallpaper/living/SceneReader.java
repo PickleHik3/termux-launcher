@@ -33,7 +33,7 @@ public final class SceneReader {
      * the recipe fell back to rules; the job runs behind a progress bar, so it may take its time.
      */
     public static final long TIMEOUT_MS = 180_000L;
-    static final int CONTEXT_WINDOW = 2048;
+    public static final int CONTEXT_WINDOW = 2048;
     static final int MAX_TOKENS = 700;
 
     /** The single call out to the model: a chat-completions body in, the reply text out. */

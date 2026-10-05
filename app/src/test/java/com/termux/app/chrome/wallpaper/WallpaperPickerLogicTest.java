@@ -295,4 +295,23 @@ public class WallpaperPickerLogicTest {
         assertEquals("no growth past the natural width", WallpaperPickerLogic.thumbWidth(112, 1080, 2400), roomy[0]);
         assertEquals(112, roomy[1]);
     }
+
+    private static final long MB = 1024L * 1024L;
+
+    @Test
+    public void lowMemoryWarningNamesTheShortfallInMbRoundedUp() {
+        assertEquals(500L, WallpaperPickerLogic.lowMemoryWarning(3000 * MB, 2500 * MB, false));
+        assertEquals("a part of a MB counts as one", 1L,
+            WallpaperPickerLogic.lowMemoryWarning(3000 * MB + 1L, 3000 * MB, false));
+    }
+
+    @Test
+    public void lowMemoryWarningSaysNothingWhenItFitsOrCannotBeKnownOrIsRemote() {
+        assertEquals(0L, WallpaperPickerLogic.lowMemoryWarning(2000 * MB, 2000 * MB, false));
+        assertEquals(0L, WallpaperPickerLogic.lowMemoryWarning(2000 * MB, 4000 * MB, false));
+        assertEquals("a remote reader loads nothing here", 0L,
+            WallpaperPickerLogic.lowMemoryWarning(9000 * MB, 100 * MB, true));
+        assertEquals("no figure for the need", 0L, WallpaperPickerLogic.lowMemoryWarning(0L, 100 * MB, false));
+        assertEquals("no reading of free memory", 0L, WallpaperPickerLogic.lowMemoryWarning(2000 * MB, -1L, false));
+    }
 }

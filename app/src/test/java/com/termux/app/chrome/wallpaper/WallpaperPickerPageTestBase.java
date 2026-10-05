@@ -4,6 +4,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -254,7 +255,7 @@ public abstract class WallpaperPickerPageTestBase {
         assertTrue("the card is sized", card.getHeight() > dp(100) && card.getWidth() > dp(40));
         assertTrue("the card fits the pager", card.getHeight() <= pager.getHeight());
 
-        for (int id : new int[] {R.id.wallpaper_picker_back, R.id.wallpaper_picker_apply,
+        for (int id : new int[] {R.id.wallpaper_picker_apply,
             R.id.wallpaper_picker_apply_more, R.id.wallpaper_picker_look, R.id.wallpaper_picker_icon_pack, R.id.wallpaper_picker_layout,
             R.id.wallpaper_picker_photo, R.id.wallpaper_picker_motion}) {
             View v = root.findViewById(id);
@@ -269,18 +270,17 @@ public abstract class WallpaperPickerPageTestBase {
     }
 
     @Test
-    public void theHeadingIsFixedAndEachCardCarriesItsOwnLabel() {
+    public void thePageHasNoBarOfItsOwnAndEachCardCarriesItsOwnLabel() {
         WallpaperPickerPage page = open(34);
         assertEquals("the page opens on Home", WallpaperSlots.Slot.HOME, page.centredSlot());
-        TextView title = page.root().findViewById(R.id.wallpaper_picker_title);
-        String heading = mThemed.getString(R.string.wallpaper_picker_title);
-        assertEquals("Appearance", heading);
-        assertEquals(heading, title.getText().toString());
+        // The bar (back, the Wallpaper | Look | Layout pill, Done) is the surface's shared frame.
+        assertNull(page.root().findViewById(R.id.appearance_page_back));
+        assertNull(page.root().findViewById(R.id.appearance_page_done));
+        assertEquals("Appearance", mThemed.getString(R.string.wallpaper_picker_title));
+        assertEquals("Appearance", page.title().toString());
         page.centre(WallpaperSlots.Slot.LOCK);
-        assertEquals("the heading does not follow the centred slot", heading, title.getText().toString());
+        assertEquals("the heading does not follow the centred slot", "Appearance", page.title().toString());
         page.centre(WallpaperSlots.Slot.HOME);
-        assertEquals(heading, title.getText().toString());
-        assertEquals(heading, page.title().toString());
         settle();
         TextView home = page.cardLabel(WallpaperSlots.Slot.HOME);
         TextView lock = page.cardLabel(WallpaperSlots.Slot.LOCK);
@@ -972,5 +972,23 @@ public abstract class WallpaperPickerPageTestBase {
             ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) assertInside(root, g.getChildAt(i));
         }
+    }
+
+    @Test
+    public void applyAndItsMoreButtonSitInOneRowUnderTheCardsAboveMotion() {
+        WallpaperPickerPage page = open(34);
+        settle();
+        View root = page.root();
+        View pager = root.findViewById(R.id.wallpaper_picker_pager);
+        View row = root.findViewById(R.id.wallpaper_picker_apply_row);
+        View apply = root.findViewById(R.id.wallpaper_picker_apply);
+        View more = root.findViewById(R.id.wallpaper_picker_apply_more);
+        View motion = root.findViewById(R.id.wallpaper_picker_motion_row);
+        assertSame("both are in the row", row, apply.getParent());
+        assertSame(row, more.getParent());
+        assertTrue("under the cards", row.getTop() >= pager.getBottom());
+        assertTrue("above the Motion row", row.getBottom() <= motion.getTop());
+        assertTrue("one row, side by side", more.getLeft() > apply.getLeft());
+        assertTrue(page.leavingViews().contains(row));
     }
 }
