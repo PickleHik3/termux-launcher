@@ -416,9 +416,9 @@ public abstract class WallpaperPickerPageTestBase {
         assertTrue("the row ends above the strip card", row.getBottom() <= strip.getTop());
         View apply = root.findViewById(R.id.wallpaper_picker_apply);
         View motion = root.findViewById(R.id.wallpaper_picker_motion_row);
-        assertTrue("Apply and Motion share the row", apply.getTop() >= row.getTop()
-            && apply.getBottom() <= row.getBottom() && motion.getTop() >= row.getTop()
-            && motion.getBottom() <= row.getBottom());
+        // Children's coordinates are the row's own: both stand inside it, Motion after Apply.
+        assertSame("Apply is in the row", row, apply.getParent());
+        assertSame("Motion is in the row", row, motion.getParent());
         assertTrue("Motion is at the row's end", motion.getLeft() >= apply.getRight());
     }
 
@@ -666,7 +666,8 @@ public abstract class WallpaperPickerPageTestBase {
             assertEquals(slot, page.centredSlot());
             View offer = find(page, R.id.wallpaper_picker_living_offer);
             assertEquals(slot + "", View.VISIBLE, offer.getVisibility());
-            assertTrue("a 48dp target", offer.getHeight() >= dp(48) && offer.getWidth() >= dp(48));
+            // A 40dp Material button in the Apply row, as Apply itself is.
+            assertTrue("a 40dp button", offer.getHeight() >= dp(40) && offer.getWidth() >= dp(40));
             assertTrue("the button reads Bring to life",
                 ((MaterialButton) offer).getText().toString().equals(mThemed.getString(R.string.living_bring_to_life)));
             assertNotNull("with the new glyph", ((MaterialButton) offer).getIcon());
@@ -976,7 +977,7 @@ public abstract class WallpaperPickerPageTestBase {
         assertSame("both are in the row", row, apply.getParent());
         assertSame(row, more.getParent());
         assertTrue("under the cards", row.getTop() >= pager.getBottom());
-        assertTrue("above the Motion row", row.getBottom() <= motion.getTop());
+        assertSame("Motion shares the row", row, motion.getParent());
         assertTrue("one row, side by side", more.getLeft() > apply.getLeft());
         assertTrue(page.leavingViews().contains(row));
     }
