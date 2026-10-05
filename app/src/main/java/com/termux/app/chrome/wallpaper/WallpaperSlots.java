@@ -359,6 +359,9 @@ public final class WallpaperSlots {
      * name a folder cannot be read or hashed, nothing is deleted. Hashes photos, so worker threads
      * only.
      */
+    private static final java.util.concurrent.atomic.AtomicBoolean sPrunedThisProcess =
+        new java.util.concurrent.atomic.AtomicBoolean(false);
+
     @WorkerThread
     static void pruneLivingFolders(@NonNull Context app) {
         try {
@@ -570,8 +573,10 @@ public final class WallpaperSlots {
         String lockValue = prefs.getWallpaperLockChoice();
         boolean homeRetired = isRetiredHomeId(homeId);
         boolean lockRetired = healedLockValue(lockValue, false) != null;
-        // Startup heal: also sweep orphaned living folders, off the caller's thread.
-        GeneratedWallpaperApplier.onWorker(() -> pruneLivingFolders(app));
+        // Startup heal: also sweep orphaned living folders, off the caller's thread. Once per
+        // process: this runs on every resume, and the sweep hashes every kept photo.
+        if (sPrunedThisProcess.compareAndSet(false, true))
+            GeneratedWallpaperApplier.onWorker(() -> pruneLivingFolders(app));
         if (!homeRetired && !lockRetired) return;
         boolean live = lockLiveActive(app);
         boolean copy = false;
