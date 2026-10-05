@@ -100,3 +100,37 @@ still wrong.
 - The CPU path.
 - Memory per window on E2B beyond noise.
 - The wallpaper reader. Its settings (2048 window, MTP on) are from the 2026-10-04 Gallery round.
+
+## Wallpaper reader (E4B / E2B vision), measured later the same day
+
+The same set-up, with the reader's own request from `SceneReader.buildRequest`: one 768×432 JPEG, temperature
+0, `max_tokens` 700, `load_class: momentary`, thinking off. The photo is a flat-art wallpaper from pong's
+Pictures folder: a crescent moon, three hill bands and a few birds, with no water.
+
+The first attempt was discarded because the developer was using the phone and the timings were inconsistent;
+it is kept in `reader_results_polluted.jsonl`. The rerun waited for more than 4.5 GB free before each
+configuration. One configuration (4096, MTP off) was unloaded mid-answer and was rerun on its own
+(`reader_redo.jsonl`).
+
+| Model | Window | MTP | Cold (load + answer) | Warm (answer only) | Memory drop | Answer |
+|---|---|---|---|---|---|---|
+| E4B vision | 2048 | on | **33.4 s** | **18.2 s** | 3.33 GB | 4 elements: moon, mountain, hills, birds |
+| E4B vision | 2048 | off | 52.3 s | 40.4 s | 3.36 GB | 5 elements: moon, three hill bands, birds |
+| E4B vision | 4096 | on | 40.9 s | 24.0 s | 3.12 GB | 5 elements, as above |
+| E4B vision | 4096 | off | 64.7 s | 50.8 s | 3.84 GB | 5 elements, as above |
+| E2B vision | 2048 | on | 51.2 s | 21.5 s | 1.99 GB | 7 elements: moon as sky, birds as other, hill boxes out of order |
+
+### Findings
+
+1. **The app's reader settings are the fastest measured.** A 2048 window with speculative decoding was 2.2×
+   faster than without it (18 s against 40 s warm), and 2048 was about 25 % faster than 4096. Keep them.
+2. **E4B reads better, and with speculative decoding it is also faster than E2B when warm** (18 s against
+   21.5 s), because E2B writes more. Its only edge is memory (2.0 GB against 3.3 GB).
+3. **Speculative decoding changed the answer**: the three hill bands were merged into one mountain plus one
+   ground element. Both answers have no invented water and keep the moon and birds.
+4. **Two prompt issues seen in every answer, worth a follow-up:**
+   - The models put **every element** in `do_not_animate`, so check how the builder uses it.
+   - The JSON comes back fenced and pretty-printed, with one number per line, which roughly doubles the
+     output tokens. LiteRT-LM 0.17.1's JSON-schema `responseFormat` or a "one line, no fences" rule should
+     cut the answer time (review, 2026-10-04).
+   - No E4B answer listed the sky itself.
