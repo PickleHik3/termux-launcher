@@ -37,7 +37,7 @@
         android:layout_width="match_parent"
         android:layout_height="64dp"
         android:paddingStart="4dp"
-        android:paddingEnd="16dp">
+        android:paddingEnd="4dp">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/wallpaper_picker_back"
@@ -87,6 +87,8 @@
                 style="?attr/materialSplitButtonLeadingFilledStyle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
+                android:paddingStart="16dp"
+                android:paddingEnd="16dp"
                 android:text="@string/wallpaper_picker_apply" />
 
             <com.google.android.material.button.MaterialButton
@@ -100,16 +102,18 @@
         </com.google.android.material.button.MaterialSplitButton>
 
         <!-- Done closes the Appearance surface, as the editor pages' Done does; Back is the same
-             door for people who reach for the arrow. -->
+             door for people who reach for the arrow. An icon button: a text Done does not fit the
+             360dp bar beside the title and the Apply split. -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/wallpaper_picker_done"
-            style="@style/Widget.Material3.Button.TextButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="4dp"
-            android:minWidth="0dp"
-            android:maxLines="1"
-            android:text="@string/appearance_editor_done"
+            style="?attr/materialIconButtonStyle"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="@string/appearance_editor_done"
+            android:tooltipText="@string/appearance_editor_done"
+            app:icon="@drawable/ic_symbol_check"
+            app:iconSize="24dp"
+            app:iconTint="?attr/colorOnSurface"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
