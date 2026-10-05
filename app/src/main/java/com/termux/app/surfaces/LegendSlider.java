@@ -46,6 +46,10 @@ public final class LegendSlider extends Slider {
     private float mFitRoomPx;
     /** The width the stock slider measured itself at: the track's own width. */
     private int mNaturalWidth;
+    /** The legend's text size at rest, from the text appearance. */
+    private float mBaseTextSizePx;
+    /** How far the legend may shrink to stay whole before it is ellipsised. */
+    private static final float MIN_TEXT_SCALE = 0.8f;
 
     public LegendSlider(@NonNull Context context) {
         this(context, null);
@@ -113,6 +117,7 @@ public final class LegendSlider extends Slider {
             appearance = value.resourceId;
         probe.setTextAppearance(appearance);
         mPaint.set(probe.getPaint());
+        mBaseTextSizePx = mPaint.getTextSize();
     }
 
     private void resolveInk() {
@@ -172,7 +177,15 @@ public final class LegendSlider extends Slider {
         float cy = height / 2f;
 
         mFitRoomPx = length;
-        mShown = fit(mLegend.getFormattedValue(getValue()), mFitRoomPx);
+        CharSequence legend = mLegend.getFormattedValue(getValue());
+        // A legend that overruns the track at the user's text size first gives up a little size
+        // (to the floor), and only then its name's tail: large text keeps a whole legend longer.
+        mPaint.setTextSize(mBaseTextSizePx);
+        float natural = mPaint.measureText(legend, 0, legend.length());
+        if (natural > length)
+            mPaint.setTextSize(Math.max(mBaseTextSizePx * MIN_TEXT_SCALE,
+                mBaseTextSizePx * length / natural));
+        mShown = fit(legend, mFitRoomPx);
         float textWidth = mPaint.measureText(mShown, 0, mShown.length());
         Paint.FontMetrics metrics = mPaint.getFontMetrics();
         float baseline = cy - (metrics.ascent + metrics.descent) / 2f;
