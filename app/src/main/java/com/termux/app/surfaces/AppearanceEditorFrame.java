@@ -31,8 +31,16 @@ import com.termux.app.terminal.Motion;
  * <p>In wallpaper passthrough mode the wallpaper is not the launcher's to scale: the system draws
  * it behind the translucent window, and the scaled launcher would sit as a cut-out over an
  * unscaled picture. For the editor's lifetime the frame then paints the wallpaper itself, at the
- * decor's rect inside the container ({@link #showWallpaper}), so it scales with everything else,
- * and the host makes the window opaque around it.</p>
+ * decor's rect inside the container ({@link #showWallpaper}), so it scales with everything else.
+ * What shows around the scaled frame is the Appearance surface's colorSurface scrim in the content
+ * view, never a swap of the window's background.</p>
+ *
+ * <p><b>Wallpaper display contract.</b> The frame never replaces {@code wallpaper_backdrop}: in
+ * self-drawn mode the real backdrop view is part of the container and scales, clips and glasses
+ * with it, and no editor wallpaper is loaded. Live wallpapers render through
+ * {@code WallpaperBackdropView#setLiveShader} (driven by {@code GeneratedWallpaperHost}) and so
+ * scale with the frame with no editor change. {@link #showWallpaper} is for passthrough mode only,
+ * where the backdrop is hidden and the system draws the wallpaper.</p>
  */
 final class AppearanceEditorFrame {
 

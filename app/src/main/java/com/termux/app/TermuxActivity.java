@@ -3371,7 +3371,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Whether the appearance editor holds the window opaque behind its scaled frame; the window
      * background reset leaves the decor alone while it does.
      */
-    private boolean mEditorWindowOpaque;
     /** The glass drawable the gutter was last given, so a reset to a plain colour is told apart. */
     @Nullable private android.graphics.drawable.Drawable mFrameGutterDrawable;
 
@@ -11134,7 +11133,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     Drawable system = manager.getDrawable();
                     Logger.logDebug(LOG_TAG, "Editor wallpaper: system drawable="
                         + (system != null));
-                    if (system != null) return system;
+                    if (system != null) {
+                        // Own the pixels, then let the manager drop its cached copy: a stale
+                        // cache is what made the lock screen's picture flash on later reads.
+                        Drawable owned = copyEditorWallpaper(system);
+                        manager.forgetLoadedWallpaper();
+                        return owned;
+                    }
                 }
             } catch (Exception e) {
                 // No permission to read it, or no wallpaper service: try the launcher's own copy.
@@ -11143,6 +11148,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Drawable fallback = exact.isFile() ? decodeEditorWallpaper(exact) : null;
             Logger.logDebug(LOG_TAG, "Editor wallpaper: exact fallback=" + (fallback != null));
             return fallback;
+        }
+
+        @NonNull
+        private Drawable copyEditorWallpaper(@NonNull Drawable source) {
+            try {
+                Bitmap from = source instanceof android.graphics.drawable.BitmapDrawable
+                    ? ((android.graphics.drawable.BitmapDrawable) source).getBitmap() : null;
+                if (from != null) {
+                    Bitmap copy = from.copy(Bitmap.Config.ARGB_8888, false);
+                    if (copy != null)
+                        return new android.graphics.drawable.BitmapDrawable(getResources(), copy);
+                }
+            } catch (RuntimeException | OutOfMemoryError e) {
+                // Keep the drawable as read.
+            }
+            return source;
         }
 
         @Nullable
@@ -11171,22 +11192,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return wallGroundColor();
         }
 
-        @Nullable private Drawable mEditorSavedWindowBackground;
-
-        @Override public void setEditorWindowOpaque(boolean opaque) {
-            android.view.Window window = getWindow();
-            if (window == null || opaque == mEditorWindowOpaque) return;
-            if (opaque) {
-                mEditorSavedWindowBackground = window.getDecorView().getBackground();
-                window.setBackgroundDrawable(new ColorDrawable(getTermuxThemeColor(
-                    com.google.android.material.R.attr.colorSurface,
-                    R.color.termux_surface_base)));
-            } else {
-                window.setBackgroundDrawable(mEditorSavedWindowBackground != null
-                    ? mEditorSavedWindowBackground : new ColorDrawable(Color.TRANSPARENT));
-                mEditorSavedWindowBackground = null;
-            }
-            mEditorWindowOpaque = opaque;
+        // True where the system draws the wallpaper behind a translucent window (passthrough): the
+        // frame then paints a copy of it. Otherwise the container's own backdrop scales with it.
+        @Override public boolean editorPaintsWallpaper() {
+            return shouldUseWallpaperPassthroughMode();
         }
     }
 
@@ -23505,11 +23514,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // gets center-cropped to a shorter frame while the native wallpaper remains visible in
             // the inset. Two different crops of the same image produce the hard y=inset seam.
             //
-            // While the appearance editor has the window opaque (its scaled frame paints its own
-            // wallpaper and the fill around it is the editor's ground), the decor keeps that fill:
-            // clearing it here, which a Legibility change reaches through the palette refresh,
-            // showed the unscaled system wallpaper bright around the frame until the editor closed.
-            if (!mEditorWindowOpaque) decorView.setBackgroundColor(Color.TRANSPARENT);
+            // The appearance surface covers what shows around the editor's scaled frame with its
+            // own colorSurface scrim in the content view; the window itself is never swapped.
+            decorView.setBackgroundColor(Color.TRANSPARENT);
             if (backgroundHost != decorView) {
                 backgroundHost.setBackgroundColor(Color.TRANSPARENT);
             }
@@ -23532,7 +23539,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!hasFocus || mIsInvalidState || !mIsVisible) {
             return;
         }
-        mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
+        // The Appearance surface's own dialogs and sheets take and return focus: the backdrops are
+        // not re-rendered for them (a re-render under the scaled editor frame showed as a flash).
+        if (!mAppearance.isOpen())
+            mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
         // Returning from another app can restore focus before the terminal host re-measures to full
         // size, leaving panes stuck at a tiny stale grid. Re-measure once layout settles.
         if (mPaneController != null)

@@ -14,9 +14,8 @@
      nothing about where it sits changes), though the content root it is added to is pinned left
      to right.
 
-     Top row: the mode pill is the start anchor (wrap_content, never squeezed); Done is pinned to
-     the end and Undo to Done's start. Undo is GONE while there is nothing to undo; the gap between
-     the pill and Undo absorbs it, so neither the pill nor Done moves.
+     Top row: the mode pill alone, the start anchor (wrap_content, never squeezed). Undo and Done
+     are the page bar's end actions over the frame, not the sheet's.
 
      Appearance rows. Row A: the Look slider, a label centred under each of its five stops (placed
      in code: the stops sit inside the slider's track padding, so equal-width labels would drift
@@ -48,10 +47,6 @@
        pill. Widget.Termux.Button.Segment pads all four sides 12dp: Material 3's OutlinedButton
        sets paddingLeft/Right 24dp, which beat a paddingStart/End beside them and made every text
        segment 32dp too wide.
-       Undo 48 (its own 4dp insets are the visual gaps on either side of it).
-       Done (Widget.Material3.Button, minWidth 0 over AppCompat's 88): 24 + "Done" ≈ 33 + 24 = 81.
-         360: 16 + 165 + 0 + 48 + 0 + 81 + 16 = 326 ≤ 360  (34 spare, in the pill → Undo gap)
-         411: 326 + 85 of gap;  533: 326 + 207 of gap.  Clean (Undo gone): 48 more gap.
        Appearance Row A: the slider spans W - 32 (328 / 379 / 501); five LabelMedium words, the
          widest "Custom" ≈ 44, under stops (W - 32 - 2 × track padding) / 4 apart: ≥ 70 at 360.
        Appearance Row B: five columns, four 12dp gaps: (W - 32 - 48) / 5 = 56 / 66.2 / 88.6, each
@@ -121,42 +116,14 @@
             android:text="@string/action_layout_editor" />
     </com.google.android.material.button.MaterialButtonToggleGroup>
 
-    <!-- 48dp tall, not wrap_content: an icon button keeps an empty line of text, which grows
-         with the font scale (53dp at Large) and, centred on the pill, would push the header down
-         whenever Undo appears. -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/appearance_editor_undo"
-        style="?attr/materialIconButtonStyle"
-        android:layout_width="wrap_content"
-        android:layout_height="48dp"
-        android:contentDescription="@string/appearance_editor_undo"
-        android:tooltipText="@string/appearance_editor_undo"
-        android:visibility="gone"
-        app:icon="@drawable/ic_symbol_undo"
-        app:layout_constraintBottom_toBottomOf="@id/appearance_editor_mode"
-        app:layout_constraintEnd_toStartOf="@id/appearance_editor_done"
-        app:layout_constraintTop_toTopOf="@id/appearance_editor_mode" />
-
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/appearance_editor_done"
-        style="@style/Widget.Material3.Button"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:minWidth="0dp"
-        android:maxLines="1"
-        android:text="@string/appearance_editor_done"
-        app:layout_constraintBottom_toBottomOf="@id/appearance_editor_mode"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="@id/appearance_editor_mode" />
-
-    <!-- The header's bottom edge: the mode pill's, or Undo and Done's when a narrow sheet wraps
-         them onto a second row (AppearanceEditorPanel.adaptHeader). Every row below hangs here. -->
+    <!-- The header's bottom edge: the mode pill's. Every row below hangs here. Undo and Done live
+         in the page bar over the frame (appearance_page_frame), not in the sheet. -->
     <androidx.constraintlayout.widget.Barrier
         android:id="@+id/appearance_editor_header_bottom"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         app:barrierDirection="bottom"
-        app:constraint_referenced_ids="appearance_editor_mode,appearance_editor_undo,appearance_editor_done" />
+        app:constraint_referenced_ids="appearance_editor_mode" />
 
     <!-- ============================================================ Appearance mode -->
 

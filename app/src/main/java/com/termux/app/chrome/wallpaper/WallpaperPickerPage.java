@@ -703,6 +703,9 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mPagerLayout = new LinearLayoutManager(context, RecyclerView.HORIZONTAL, false);
         mPager.setLayoutManager(mPagerLayout);
         mPager.setAdapter(new CardAdapter());
+        // Start laid out at the centred card (Home): the first layout pass must not centre the
+        // Lock card at position 0, which is bound and played for a frame before sizeCards scrolls.
+        mPagerLayout.scrollToPositionWithOffset(initialPosition(mCentred), 0);
         mSnap.attachToRecyclerView(mPager);
         mPager.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override public void onScrolled(@NonNull RecyclerView rv, int dx, int dy) {
@@ -1475,6 +1478,11 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     }
 
     // --- pager ---
+
+    /** The pager position a page opens at: the centred slot's card (Home unless restored on Lock). */
+    static int initialPosition(@NonNull WallpaperSlots.Slot centred) {
+        return centred == WallpaperSlots.Slot.LOCK ? POS_LOCK : POS_HOME;
+    }
 
     private void sizeCards(int pagerW, int pagerH) {
         if (pagerW <= 0 || pagerH <= 0) return;

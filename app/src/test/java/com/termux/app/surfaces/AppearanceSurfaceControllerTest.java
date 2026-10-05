@@ -15,6 +15,7 @@ import android.provider.Settings;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -101,6 +102,16 @@ public class AppearanceSurfaceControllerTest {
         @Override public void setOnDone(@Nullable Runnable onDone) { this.onDone = onDone; }
 
         @Override public void onStopWhileOpen() { calls.add("stop"); }
+
+        @Nullable AppearanceSurfaceController.PageListener pageListener;
+
+        @Override public void setPageListener(@Nullable AppearanceSurfaceController.PageListener listener) {
+            pageListener = listener;
+        }
+
+        @Override public void undo() { calls.add("undo"); }
+
+        @Override public void done() { calls.add("done"); }
 
         /** The frame has settled in the editor. */
         void settle() {
@@ -203,6 +214,8 @@ public class AppearanceSurfaceControllerTest {
     @Before
     public void setUp() {
         mActivity = Robolectric.buildActivity(Activity.class).setup().get();
+        // The editor page inflates the Material page bar.
+        mActivity.setTheme(R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         // Animations off: every hop the surface plays itself lands at once.
         Settings.Global.putFloat(mActivity.getContentResolver(),
             Settings.Global.ANIMATOR_DURATION_SCALE, 0f);
@@ -271,6 +284,49 @@ public class AppearanceSurfaceControllerTest {
         assertFalse("Look: taps go through to the launcher", host.isClickable());
         mNavigator.back();
         assertTrue("back on the Overview it takes them again", host.isClickable());
+    }
+
+    @Test
+    public void anEditorPageHasTheIconsPagesBarAndAScrimStandsUnderTheLauncher() {
+        mSurface.open(PageId.OVERVIEW);
+        ViewGroup content = mActivity.findViewById(android.R.id.content);
+        assertSame("colorSurface scrim at index 0 of the content view", mSurface.scrim(),
+            content.getChildAt(0));
+        mNavigator.openLook();
+        mEditor.settle();
+        ViewGroup host = content.findViewById(R.id.appearance_surface_host);
+        View bar = host.getChildAt(host.getChildCount() - 1);
+        TextView title = bar.findViewById(R.id.appearance_page_title);
+        assertEquals("Look", title.getText().toString());
+        assertEquals(View.VISIBLE, bar.getVisibility());
+        assertNotNull(mEditor.pageListener);
+        mEditor.pageListener.onModeChanged(true);
+        assertEquals("Layout", title.getText().toString());
+        assertEquals(View.GONE, bar.findViewById(R.id.appearance_page_undo).getVisibility());
+        mEditor.pageListener.onDirtyChanged(true);
+        assertEquals(View.VISIBLE, bar.findViewById(R.id.appearance_page_undo).getVisibility());
+        bar.findViewById(R.id.appearance_page_undo).performClick();
+        bar.findViewById(R.id.appearance_page_done).performClick();
+        assertEquals(1, mEditor.count("undo"));
+        assertEquals(1, mEditor.count("done"));
+        bar.findViewById(R.id.appearance_page_back).performClick();
+        assertEquals("the bar's back is Back: it asks the editor to leave", 1, mEditor.count("leave?"));
+        mSurface.closeNow();
+        assertNull("the scrim goes with the surface", mSurface.scrim());
+        assertNull(content.findViewById(R.id.appearance_surface_host));
+    }
+
+    @Test
+    public void aDirectEditorOpenHasABarAndNoCover() {
+        mSurface.open(PageId.LOOK);
+        assertEquals(PageId.LOOK, mSurface.shownPage());
+        ViewGroup content = mActivity.findViewById(android.R.id.content);
+        ViewGroup host = content.findViewById(R.id.appearance_surface_host);
+        assertNotNull(host);
+        assertNotNull(host.findViewById(R.id.appearance_page_back));
+        assertFalse("the host lets taps through to the frame", host.isClickable());
+        assertEquals("the backdrop is not covered for a direct open", 0, mHost.covered.size());
+        assertSame(mSurface.scrim(), content.getChildAt(0));
     }
 
     @Test
