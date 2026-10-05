@@ -27,7 +27,11 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipDrawable;
+import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.shape.MaterialShapeDrawable;
+import com.google.android.material.shape.ShapeAppearanceModel;
 import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.color.MaterialColors;
 import com.termux.app.notice.AppNotice;
@@ -62,12 +66,12 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private InAppKeyboardColorScheme mScheme;
     private Keyboard2View mKeyboard;
     private LinearLayout mSwatchGrid;
-    private TextView mStatus;
     private final List<View> mSwatchViews = new ArrayList<>();
     private final List<View> mSwatchBadges = new ArrayList<>();
     private final List<View> mSwatchItems = new ArrayList<>();
-    /** The six role glyphs, in order; the one at {@link #mSelectedRoleIndex} is lit. */
-    private final List<View> mRoleCells = new ArrayList<>();
+    /** The six role chips by {@link #ROLE_ORDER} index; the one at {@link #mSelectedRoleIndex} is on. */
+    private Chip[] mRoleChips = new Chip[0];
+    private static final int KEY_FILL_INDEX = 0;
     private int mSelectedRoleIndex;
     private TextView mEditingTitle;
     private int mSelectedSwatch;
@@ -92,16 +96,11 @@ public class KeyboardColorSchemeFragment extends Fragment {
         "error + onSurface 20%", "tertiary + onSurface 20%", "primary + onSurface 20%",
         "secondary + onSurface 20%", "tertiary + primary 50%", "primary + secondary 50%"
     };
-    private static final String[] THEME_VALUES = {"system", "light", "dark"};
     private static final String FONT_DIR_NAME = "inapp-keyboard";
     private static final String FONT_FILE_NAME = "label-font.ttf";
 
     private ActivityResultLauncher<String[]> mFontPickerLauncher;
     private FrameLayout mPreviewHolder;
-    private MaterialButtonToggleGroup mThemeGroup;
-    private MaterialButton[] mThemeButtons;
-    private String[] mThemeSegmentValues = THEME_VALUES;
-    private boolean mUpdatingThemeGroup;
     private TextView mFontSummary;
 
     @Override
@@ -126,63 +125,38 @@ public class KeyboardColorSchemeFragment extends Fragment {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(12), dp(16), dp(12));
 
+        syncThemePreference();
+
         // 1. The live preview, which every control below repaints.
         mPreviewHolder = new FrameLayout(context);
         root.addView(mPreviewHolder, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         rebuildPreview();
 
-        // 2. Theme.
-        root.addView(sectionHeader(context, R.string.termux_in_app_keyboard_theme_title));
-        mThemeGroup = (MaterialButtonToggleGroup) inflater.inflate(
-            R.layout.keyboard_theme_segments, root, false);
-        mThemeButtons = new MaterialButton[] {
-            mThemeGroup.findViewById(R.id.keyboard_theme_system),
-            mThemeGroup.findViewById(R.id.keyboard_theme_light),
-            mThemeGroup.findViewById(R.id.keyboard_theme_dark),
-            mThemeGroup.findViewById(R.id.keyboard_theme_custom)
-        };
-        mThemeGroup.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
-            if (!isChecked || mUpdatingThemeGroup) return;
-            for (int i = 0; i < mThemeButtons.length; i++) {
-                if (mThemeButtons[i].getId() == checkedId && i < mThemeSegmentValues.length) {
-                    onThemeChosen(mThemeSegmentValues[i]);
-                    return;
-                }
-            }
-        });
-        root.addView(mThemeGroup);
-        refreshThemeGroup();
-
-        // 3. Colors. The status line sits first and is dimmed while an imported palette is not the
-        // chosen theme, so it is plain which choice the colors belong to.
-        root.addView(sectionHeader(context, R.string.keyboard_theme_section_colors));
-        mStatus = new TextView(context);
-        mStatus.setTextAppearance(
-            com.google.android.material.R.style.TextAppearance_Material3_TitleSmall);
-        mStatus.setText(statusText(context, mScheme));
-        root.addView(mStatus, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        updateStatusEmphasis();
-
+        // 2. One supporting line; the pencil and reset glyphs sit in the sentences, the same marks
+        // as the card's buttons.
         TextView instructions = new TextView(context);
         instructions.setTextAppearance(
             com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
         int instructionColor = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY);
         instructions.setTextColor(instructionColor);
-        // The pencil and reset glyphs sit in the sentences, the same marks as the buttons.
         instructions.setText(android.text.TextUtils.expandTemplate(
             getText(R.string.termux_keyboard_color_scheme_instructions),
             inlineGlyph(context, R.drawable.ic_symbol_edit, instructionColor, instructions),
             inlineGlyph(context, R.drawable.ic_symbol_restart, instructionColor, instructions)));
         LinearLayout.LayoutParams instructionParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        instructionParams.topMargin = dp(6);
+        instructionParams.topMargin = dp(8);
         root.addView(instructions, instructionParams);
 
-        // All 24 swatches sit right under the preview's controls so a chosen color lands next to
-        // the keys it paints; the card below keeps the actions and role filters.
+        // 3. The role rows; each chip picks the part the swatches below paint.
+        mRoleChips = new Chip[ROLE_ORDER.length];
+        addRoleRow(context, root, R.string.keyboard_theme_row_hints, 3, 4);
+        addRoleRow(context, root, R.string.keyboard_theme_row_keyboard, 5, 0, 1);
+        addRoleRow(context, root, R.string.keyboard_theme_row_labels, 2);
+
+        // 4. The 24 swatches: the colour choices for the selected role.
         mSwatchGrid = new LinearLayout(context);
         mSwatchGrid.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(
@@ -190,13 +164,11 @@ public class KeyboardColorSchemeFragment extends Fragment {
         gridParams.topMargin = dp(12);
         root.addView(mSwatchGrid, gridParams);
 
+        // 5. The card: the editing capsule, then the Font chooser.
         root.addView(buildPaletteCard(context), new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        selectRole(KEY_FILL_INDEX);
         createSwatches();
-
-        // 4. Typeface.
-        root.addView(sectionHeader(context, R.string.settings_typeface_title));
-        root.addView(buildTypefaceRow(context));
 
         android.widget.ScrollView scroll = new android.widget.ScrollView(context);
         scroll.setFillViewport(true);
@@ -205,21 +177,15 @@ public class KeyboardColorSchemeFragment extends Fragment {
         return scroll;
     }
 
-    /** Section header: TitleSmall in the primary colour, set apart from the block above it. */
+    /** Row title: LabelLarge, at the start of its chip row. */
     @NonNull
-    private TextView sectionHeader(@NonNull android.content.Context context, int title) {
+    private TextView rowTitle(@NonNull android.content.Context context, int title) {
         TextView header = new TextView(context);
         header.setTextAppearance(
-            com.google.android.material.R.style.TextAppearance_Material3_TitleSmall);
+            com.google.android.material.R.style.TextAppearance_Material3_LabelLarge);
         header.setTextColor(MaterialColors.getColor(context,
-            androidx.appcompat.R.attr.colorPrimary, Color.GRAY));
+            com.google.android.material.R.attr.colorOnSurface, Color.GRAY));
         header.setText(title);
-        ViewCompat.setAccessibilityHeading(header, true);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.topMargin = dp(24);
-        params.bottomMargin = dp(8);
-        header.setLayoutParams(params);
         return header;
     }
 
@@ -282,52 +248,14 @@ public class KeyboardColorSchemeFragment extends Fragment {
         return com.termux.shared.termux.font.NerdFontSpans.typeface(context);
     }
 
-    /** Segments for the stored theme: a fourth "Imported: X" one only while a palette is imported. */
-    private void refreshThemeGroup() {
-        String importedId = mScheme.getImportedThemeId();
-        boolean imported = !importedId.isEmpty();
-        if (!imported && "custom".equals(mPreferences.getInAppKeyboardTheme()))
-            mPreferences.setInAppKeyboardTheme("system");
-        mThemeSegmentValues = imported
-            ? new String[]{"system", "light", "dark", "custom"} : THEME_VALUES;
-        CharSequence[] labels = {
-            getString(R.string.termux_in_app_keyboard_theme_system),
-            getString(R.string.termux_in_app_keyboard_theme_light),
-            getString(R.string.termux_in_app_keyboard_theme_dark),
-            imported ? getString(R.string.termux_in_app_keyboard_theme_imported_short, importedId)
-                : ""
-        };
-        String current = mPreferences.getInAppKeyboardTheme();
-        mUpdatingThemeGroup = true;
-        try {
-            for (int i = 0; i < mThemeButtons.length; i++) {
-                boolean present = i < mThemeSegmentValues.length;
-                mThemeButtons[i].setVisibility(present ? View.VISIBLE : View.GONE);
-                mThemeButtons[i].setText(labels[i]);
-            }
-            int checked = 0;
-            for (int i = 0; i < mThemeSegmentValues.length; i++) {
-                if (mThemeSegmentValues[i].equals(current)) checked = i;
-            }
-            mThemeGroup.check(mThemeButtons[checked].getId());
-        } finally {
-            mUpdatingThemeGroup = false;
-        }
-    }
-
-    /** Same write as the Style page's old theme pill; the preview follows it. */
-    private void onThemeChosen(@NonNull String value) {
-        mPreferences.setInAppKeyboardTheme(value);
-        mKeyboard.setPalette(buildPreviewPalette(requireContext()));
-        updateStatusEmphasis();
-    }
-
-    /** The imported-palette status reads at full strength only while the Imported theme is on. */
-    private void updateStatusEmphasis() {
-        if (mStatus == null) return;
-        boolean inactive = mScheme.hasImportedPalette()
-            && !mScheme.shouldApplyImportedPalette(mPreferences.getInAppKeyboardTheme());
-        mStatus.setAlpha(inactive ? 0.6f : 1f);
+    /**
+     * The keyboard theme is no longer chosen by hand: "custom" while an imported palette exists,
+     * otherwise "system" (which follows day/night).
+     */
+    private void syncThemePreference() {
+        String wanted = mScheme.hasImportedPalette() ? "custom" : "system";
+        if (!wanted.equals(mPreferences.getInAppKeyboardTheme()))
+            mPreferences.setInAppKeyboardTheme(wanted);
     }
 
     /** A two-line row, title over summary, that opens the pick/reset flow. */
@@ -342,6 +270,8 @@ public class KeyboardColorSchemeFragment extends Fragment {
         row.setClickable(true);
         row.setFocusable(true);
         row.setMinimumHeight(dp(48));
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPaddingRelative(dp(8), dp(8), dp(8), dp(8));
         TextView title = new TextView(context);
         title.setTextAppearance(
             com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
@@ -472,7 +402,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
             base.functionKeyBackground, base.functionLabelColor);
     }
 
-    /** Bottom sheet-style card holding the swatches, edit/reset actions, and role filters. */
+    /** Card holding the editing capsule (reset, edit) and the Font chooser. */
     @NonNull
     private View buildPaletteCard(@NonNull android.content.Context context) {
         MaterialCardView card = new MaterialCardView(context);
@@ -493,10 +423,18 @@ public class KeyboardColorSchemeFragment extends Fragment {
 
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPaddingRelative(dp(16), dp(2), dp(8), dp(6));
+        content.setPadding(dp(8), dp(8), dp(8), dp(8));
 
         LinearLayout heading = new LinearLayout(context);
         heading.setGravity(Gravity.CENTER_VERTICAL);
+        // The capsule: full shape, highest surface container.
+        MaterialShapeDrawable capsule = new MaterialShapeDrawable(ShapeAppearanceModel.builder()
+            .setAllCornerSizes(ShapeAppearanceModel.PILL).build());
+        capsule.setFillColor(android.content.res.ColorStateList.valueOf(MaterialColors.getColor(
+            context, com.google.android.material.R.attr.colorSurfaceContainerHighest,
+            Color.DKGRAY)));
+        heading.setBackground(capsule);
+        heading.setPaddingRelative(dp(16), 0, dp(4), 0);
         // Names the role being painted, so the glyphs below need no text of their own.
         mEditingTitle = new TextView(context);
         mEditingTitle.setTextAppearance(
@@ -527,28 +465,8 @@ public class KeyboardColorSchemeFragment extends Fragment {
         heading.addView(edit);
         content.addView(heading);
 
-        LinearLayout roles = new LinearLayout(context);
-        roles.setOrientation(LinearLayout.HORIZONTAL);
-        mRoleCells.clear();
-        addRole(context, roles, R.string.termux_keyboard_color_scheme_key_bg,
-            R.drawable.ic_keyboard_color_role_key_bg);
-        addRole(context, roles, R.string.termux_keyboard_color_scheme_key_border,
-            R.drawable.ic_keyboard_color_role_key_border);
-        addRole(context, roles, R.string.termux_keyboard_color_scheme_primary,
-            R.drawable.ic_keyboard_color_role_primary);
-        addRole(context, roles, R.string.termux_keyboard_color_scheme_secondary,
-            R.drawable.ic_keyboard_color_role_secondary);
-        addRole(context, roles, R.string.termux_keyboard_color_scheme_secondary_bottom,
-            R.drawable.ic_keyboard_color_role_secondary_bottom);
-        // Not a per-key role: while selected, a swatch tap immediately becomes the whole
-        // keyboard's background, and re-tapping the assigned swatch clears it again.
-        addRole(context, roles, R.string.termux_keyboard_color_scheme_background,
-            R.drawable.ic_keyboard_color_role_background);
-        selectRole(0);
-        LinearLayout.LayoutParams roleParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        roleParams.setMarginEnd(dp(8));
-        content.addView(roles, roleParams);
+        content.addView(buildTypefaceRow(context), new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         card.addView(content);
         return card;
@@ -587,11 +505,6 @@ public class KeyboardColorSchemeFragment extends Fragment {
         } else {
             resetSchemeToTheme(mScheme);
         }
-        // An imported palette is applied only while the theme preference names a custom theme, so
-        // a deliberate light/dark choice is left alone.
-        if ("custom".equals(mPreferences.getInAppKeyboardTheme()))
-            mPreferences.setInAppKeyboardTheme("system");
-        refreshThemeGroup();
         mSelectedSwatch = 0;
         persistAndRender();
         createSwatches();
@@ -697,72 +610,80 @@ public class KeyboardColorSchemeFragment extends Fragment {
         return glyph;
     }
 
-    /** What each glyph cell paints, in {@link #mRoleCells} order; null is the Background. */
+    /** What each chip paints, by index; null is the Background. */
     private static final InAppKeyboardColorScheme.Role[] ROLE_ORDER = {
         InAppKeyboardColorScheme.Role.KEY_BACKGROUND, InAppKeyboardColorScheme.Role.KEY_BORDER,
         InAppKeyboardColorScheme.Role.PRIMARY, InAppKeyboardColorScheme.Role.SECONDARY,
         InAppKeyboardColorScheme.Role.SECONDARY_BOTTOM, null
     };
+    private static final int[] ROLE_LABELS = {
+        R.string.termux_keyboard_color_scheme_key_bg,
+        R.string.termux_keyboard_color_scheme_key_border,
+        R.string.termux_keyboard_color_scheme_primary,
+        R.string.termux_keyboard_color_scheme_secondary,
+        R.string.termux_keyboard_color_scheme_secondary_bottom,
+        R.string.termux_keyboard_color_scheme_background
+    };
+    private static final int[] ROLE_ICONS = {
+        R.drawable.ic_keyboard_color_role_key_bg, R.drawable.ic_keyboard_color_role_key_border,
+        R.drawable.ic_keyboard_color_role_primary, R.drawable.ic_keyboard_color_role_secondary,
+        R.drawable.ic_keyboard_color_role_secondary_bottom,
+        R.drawable.ic_keyboard_color_role_background
+    };
 
-    /**
-     * One role filter: a bare keycap glyph with the part it paints lit, sharing the row equally
-     * with the other five. Its name is in the heading while it is selected, and otherwise in its
-     * content description and long-press tooltip.
-     */
-    private void addRole(@NonNull android.content.Context context, @NonNull LinearLayout row,
-                         int label, int icon) {
-        int index = mRoleCells.size();
-        LinearLayout cell = new LinearLayout(context);
-        cell.setOrientation(LinearLayout.VERTICAL);
-        cell.setGravity(Gravity.CENTER_HORIZONTAL);
-        cell.setPadding(0, dp(4), 0, dp(4));
-        cell.setTag(getString(label));
-        cell.setContentDescription(getString(label));
-        cell.setClickable(true);
-        cell.setFocusable(true);
-        android.util.TypedValue ripple = new android.util.TypedValue();
-        context.getTheme().resolveAttribute(
-            android.R.attr.selectableItemBackgroundBorderless, ripple, true);
-        cell.setBackgroundResource(ripple.resourceId);
-        androidx.appcompat.widget.TooltipCompat.setTooltipText(cell, getString(label));
-        cell.setOnClickListener(view -> selectRole(index));
-
-        android.widget.ImageView glyph = new android.widget.ImageView(context);
-        glyph.setImageResource(icon);
-        glyph.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
-        cell.addView(glyph, new LinearLayout.LayoutParams(dp(36), dp(36)));
-
-        View indicator = new View(context);
-        GradientDrawable bar = new GradientDrawable();
-        bar.setCornerRadius(dpFloat(2));
-        bar.setColor(MaterialColors.getColor(context,
-            androidx.appcompat.R.attr.colorPrimary, Color.WHITE));
-        indicator.setBackground(bar);
-        LinearLayout.LayoutParams indicatorParams = new LinearLayout.LayoutParams(dp(16), dp(3));
-        indicatorParams.topMargin = dp(3);
-        cell.addView(indicator, indicatorParams);
-
-        mRoleCells.add(cell);
-        row.addView(cell, new LinearLayout.LayoutParams(0,
+    /** A LabelLarge title at the start, then that row's role chips (wrapping when narrow). */
+    private void addRoleRow(@NonNull android.content.Context context, @NonNull LinearLayout root,
+                            int title, int... roleIndices) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        TextView label = rowTitle(context, title);
+        ViewCompat.setAccessibilityHeading(label, true);
+        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        labelParams.setMarginEnd(dp(12));
+        row.addView(label, labelParams);
+        ChipGroup chips = new ChipGroup(context);
+        for (int index : roleIndices)
+            chips.addView(createRoleChip(context, index));
+        row.addView(chips, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        rowParams.topMargin = dp(8);
+        root.addView(row, rowParams);
     }
 
-    /** Light one glyph, dim the rest, and name the choice in the heading. */
+    /** One role chip: the role glyph and name; checked = secondaryContainer (stock filter chip). */
+    @NonNull
+    private Chip createRoleChip(@NonNull android.content.Context context, int index) {
+        Chip chip = new Chip(context);
+        chip.setChipDrawable(ChipDrawable.createFromAttributes(context, null, 0,
+            com.google.android.material.R.style.Widget_Material3_Chip_Filter));
+        chip.setText(ROLE_LABELS[index]);
+        chip.setChipIconResource(ROLE_ICONS[index]);
+        chip.setChipIconTint(null);
+        chip.setChipIconVisible(true);
+        chip.setCheckedIconVisible(false);
+        chip.setCheckable(true);
+        chip.setContentDescription(getString(ROLE_LABELS[index]));
+        chip.setOnClickListener(view -> selectRole(index));
+        mRoleChips[index] = chip;
+        return chip;
+    }
+
+    /** Check one chip, uncheck the rest, and name the choice in the capsule. */
     private void selectRole(int index) {
         mSelectedRoleIndex = index;
         InAppKeyboardColorScheme.Role role = ROLE_ORDER[index];
         mPaintingBackground = role == null;
         if (role != null) mSelectedRole = role;
-        for (int i = 0; i < mRoleCells.size(); i++) {
-            ViewGroup cell = (ViewGroup) mRoleCells.get(i);
-            boolean selected = i == index;
-            cell.setSelected(selected);
-            cell.getChildAt(0).setAlpha(selected ? 1f : 0.45f);
-            cell.getChildAt(1).setVisibility(selected ? View.VISIBLE : View.INVISIBLE);
+        for (int i = 0; i < mRoleChips.length; i++) {
+            if (mRoleChips[i] != null) mRoleChips[i].setChecked(i == index);
         }
         if (mEditingTitle != null) {
             mEditingTitle.setText(getString(R.string.termux_keyboard_color_scheme_editing,
-                (CharSequence) mRoleCells.get(index).getTag()));
+                getString(ROLE_LABELS[index])));
         }
     }
 
@@ -866,8 +787,6 @@ public class KeyboardColorSchemeFragment extends Fragment {
             mSwatchBadges.get(i).setVisibility(pinned ? View.VISIBLE : View.INVISIBLE);
             mSwatchItems.get(i).setContentDescription(slotDescription(context, mScheme, i));
         }
-        if (mStatus != null)
-            mStatus.setText(statusText(context, mScheme));
     }
 
     private void showHexEditor(int index) {
@@ -930,7 +849,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mPreferences.setInAppKeyboardColorScheme(mScheme.toJson());
         mKeyboard.setPalette(buildPreviewPalette(requireContext()));
         mKeyboard.setKeyColorOverrides(mScheme.resolvedOverrides());
-        updateStatusEmphasis();
+        syncThemePreference();
     }
 
     private int dp(float value) { return Math.round(dpFloat(value)); }

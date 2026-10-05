@@ -8,12 +8,10 @@ import static org.junit.Assert.assertTrue;
 import android.app.Application;
 import android.content.Intent;
 import android.os.Build;
-import android.view.View;
 
 import androidx.fragment.app.Fragment;
 import androidx.preference.Preference;
 
-import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -50,18 +48,12 @@ public class KeyboardThemePageTest {
     }
 
     @Test
-    public void themeChoiceWritesTheKeyboardThemePreference() {
-        Fragment page = launch(KeyboardColorSchemeFragment.class);
-        MaterialButtonToggleGroup group = page.requireView().findViewById(R.id.keyboard_theme_track);
-        assertNotNull(group);
-        // No palette is imported, so the fourth segment stays away.
-        assertEquals(View.GONE, group.findViewById(R.id.keyboard_theme_custom).getVisibility());
-
-        group.check(R.id.keyboard_theme_dark);
+    public void pageWritesSystemThemeWhenNothingIsImported() {
+        launch(KeyboardColorSchemeFragment.class);
 
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(
             RuntimeEnvironment.getApplication(), true);
-        assertEquals("dark", preferences.getInAppKeyboardTheme());
+        assertEquals("system", preferences.getInAppKeyboardTheme());
     }
 
     @Test
