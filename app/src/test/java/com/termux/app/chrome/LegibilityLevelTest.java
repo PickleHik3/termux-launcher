@@ -7,16 +7,20 @@ import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 
 import org.junit.Test;
 
-/** The one legibility control: the "Terminal contrast" choice as a multiplier on every tier. */
+/** Band legibility no longer follows the "Terminal contrast" choice. */
 public class LegibilityLevelTest {
 
     private static final double EPS = 1e-9;
 
+    /** The preference no longer moves the bands: whatever it holds, the targets are the default. */
     @Test
-    public void bodyTextIsThreeFourAndAHalfOrSeven() {
-        assertEquals(3.0d, LegibilityLevel.SOFTER.target(OnGlass.TARGET_BODY_TEXT), EPS);
-        assertEquals(4.5d, LegibilityLevel.DEFAULT.target(OnGlass.TARGET_BODY_TEXT), EPS);
-        assertEquals(7.0d, LegibilityLevel.HARDER.target(OnGlass.TARGET_BODY_TEXT), EPS);
+    public void bandTargetsAreDefaultRegardlessOfPreference() {
+        LegibilityLevel level = LegibilityLevel.of(
+            (com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences) null);
+        assertSame(LegibilityLevel.DEFAULT, level);
+        assertEquals(4.5d, level.target(OnGlass.TARGET_BODY_TEXT), EPS);
+        assertEquals(3.0d, level.target(OnGlass.TARGET_LARGE_TEXT), EPS);
+        assertEquals(2.0d, level.target(OnGlass.TARGET_DECORATION), EPS);
     }
 
     /** Default changes nothing, so every band that predates the control keeps its answer. */
