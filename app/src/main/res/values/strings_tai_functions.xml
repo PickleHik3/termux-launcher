@@ -71,6 +71,8 @@
     <string name="tai_fn_section_extras">Settings</string>
     <string name="tai_fn_nothing_on_phone">No installed model serves this yet.</string>
     <string name="tai_fn_runs_on">Runs on</string>
+    <string name="tai_fn_gpu_wrong">Answers look wrong? Use the CPU</string>
+    <string name="tai_fn_gpu_retry">Try the GPU again</string>
     <string name="tai_fn_get_action">Get</string>
     <string name="tai_fn_get_starting">Starting…</string>
     <string name="tai_fn_get_started">Downloading</string>

@@ -16,13 +16,16 @@ import androidx.fragment.app.FragmentActivity;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
+import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
+import com.termux.ai.TaiGpuVerdict;
 import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
+import com.termux.ai.TaiPlatformCaps;
 import com.termux.ai.TaiSettings;
 import com.termux.ai.TaiSpeechModels;
 import com.termux.ai.TaiTierPolicy;
@@ -308,6 +311,7 @@ public final class TaiFunctionPickerSheet {
                 note.setPadding(0, dp(6), 0, 0);
                 box.addView(note);
             }
+            addGpuVerdictAction(box, accelerator.gpuSelected);
         } else {
             // No GPU path at all: the CPU is the only choice, so say so rather than offer a control.
             TextView only = text(com.google.android.material.R.attr.textAppearanceBodyMedium,
@@ -316,6 +320,30 @@ public final class TaiFunctionPickerSheet {
             box.addView(only);
         }
         into.addView(box);
+    }
+
+    /**
+     * The user's half of the GPU check (tiers spec §2.3): "Answers look wrong?" records a failed GPU
+     * verdict and moves this function to the CPU; once failed, "Try the GPU again" clears the verdict.
+     */
+    private void addGpuVerdictAction(@NonNull LinearLayout box, boolean gpuSelected) {
+        final Context app = activity.getApplicationContext();
+        boolean failed = TaiGpuVerdict.current(app, TaiPlatformCaps.cached(app)) == TaiGpuVerdict.State.FAILED;
+        if (!failed && !gpuSelected) return;
+        MaterialButton action = new MaterialButton(activity, null, androidx.appcompat.R.attr.borderlessButtonStyle);
+        action.setAllCaps(false);
+        action.setText(failed ? R.string.tai_fn_gpu_retry : R.string.tai_fn_gpu_wrong);
+        action.setOnClickListener(view -> WORKER.execute(() -> {
+            if (failed) {
+                TaiGpuVerdict.clear(app);
+            } else {
+                TaiGpuVerdict.markFailed(app);
+                TaiFunctionModels.forContext(app).setAcceleratorPick(function, TaiTierPolicy.ACCEL_CPU);
+            }
+            changed();
+        }));
+        box.addView(action, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
     private void addOption(@NonNull LinearLayout into, @NonNull TaiFunctionPickerModel.Entry entry,

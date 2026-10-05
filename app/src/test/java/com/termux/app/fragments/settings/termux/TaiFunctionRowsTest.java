@@ -212,9 +212,10 @@ public class TaiFunctionRowsTest {
     @Test
     public void theBackgroundWarningFollowsTheResolvedModelsSize() {
         installGemma();
-        // E4B is 30 % of 12 GB: warns. E2B is 21 %: does not.
+        // E4B (the reader on 12 GB) is 30 % of 12 GB: warns. E2B (assistant, categories) is 21 %: does not.
         List<TaiFunctionRows.FunctionRow> rows = TaiFunctionRows.functionRows(models(env(12, 34, GpuPath.YES)), LABELS, "polished");
-        assertTrue(row(rows, TaiFunction.APP_CATEGORIES).warnBackground);
+        assertTrue(row(rows, TaiFunction.WALLPAPER_READER).warnBackground);
+        assertFalse(row(rows, TaiFunction.APP_CATEGORIES).warnBackground);
         assertFalse(row(rows, TaiFunction.ASSISTANT).warnBackground);
     }
 
@@ -251,10 +252,10 @@ public class TaiFunctionRowsTest {
         TaiFunctionModels models = models(env(12, 34, GpuPath.YES));
         models.set(TaiFunction.ASSISTANT, E4B);
         String warning = TaiFunctionRows.deleteWarning(models, E4B, LABELS);
-        // E4B is the pick for the assistant and Automatic for categories and the reader.
+        // E4B is the pick for the assistant and Automatic for the reader (categories use E2B on Tier 2).
         assertTrue(warning, warning.startsWith("DELETE_IN_USE["));
         assertTrue(warning, warning.contains("DELETE_LINE[ASSISTANT, AUTOMATIC[" + E2B + "] · GPU]"));
-        assertTrue(warning, warning.contains("DELETE_LINE[APP_CATEGORIES, AUTOMATIC[" + E2B + "] · GPU]"));
+        assertFalse(warning, warning.contains("DELETE_LINE[APP_CATEGORIES"));
         assertTrue(warning, warning.contains("DELETE_LINE[CHOOSER_READER, AUTOMATIC[" + E2B + "] · GPU]"));
     }
 

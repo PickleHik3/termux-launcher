@@ -335,9 +335,10 @@ public class TaiFunctionModelsTest {
         installGemma();
         TaiFunctionModels models = pong();
         List<TaiFunction> e4b = models.usedBy(E4B);
-        assertEquals(Arrays.asList(TaiFunction.APP_CATEGORIES, TaiFunction.WALLPAPER_READER), e4b);
+        assertEquals(Collections.singletonList(TaiFunction.WALLPAPER_READER), e4b);
         assertEquals(e4b, models.usedBy(E4B + "-vision"));
-        assertEquals(Arrays.asList(TaiFunction.ASSISTANT, TaiFunction.TIDY_DICTATION), models.usedBy(E2B));
+        assertEquals(Arrays.asList(TaiFunction.ASSISTANT, TaiFunction.TIDY_DICTATION, TaiFunction.APP_CATEGORIES),
+            models.usedBy(E2B));
         models.set(TaiFunction.ASSISTANT, E4B);
         assertTrue(models.usedBy(E4B).contains(TaiFunction.ASSISTANT));
         assertFalse(models.usedBy(E2B).contains(TaiFunction.ASSISTANT));
