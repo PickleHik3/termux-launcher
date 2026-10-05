@@ -34,11 +34,11 @@
 
     <!-- Row 2's controls; the number is the control's own read-out. -->
     <string name="appearance_editor_blur">Blur · %1$d dp</string>
-    <string name="appearance_editor_legibility_low">Contrast · Low</string>
-    <string name="appearance_editor_legibility_unavailable">Contrast · needs wallpaper colors</string>
+    <string name="appearance_editor_legibility_low">Contrast · Softer</string>
+    <string name="appearance_editor_legibility_unavailable">Contrast · off</string>
     <string name="appearance_editor_key_corners">Key radius · %1$d dp</string>
-    <string name="appearance_editor_legibility_normal">Contrast · Normal</string>
-    <string name="appearance_editor_legibility_high">Contrast · High</string>
+    <string name="appearance_editor_legibility_normal">Contrast · Default</string>
+    <string name="appearance_editor_legibility_high">Contrast · Harder</string>
     <!-- The terminal's Trail and Effect menu buttons: the name and the chosen option. -->
     <string name="appearance_editor_trail_button">Trail · %1$s</string>
     <string name="appearance_editor_effect_button">Effect · %1$s</string>
@@ -46,8 +46,8 @@
     <string name="appearance_editor_clock">Clock</string>
     <!-- The Custom row's own legends; the number is the slider's read-out. -->
     <string name="appearance_editor_dock_size">Size · %1$d%%</string>
-    <string name="appearance_editor_app_icons">App icons · %1$d</string>
-    <string name="appearance_editor_key_spacing">Key spacing · %1$s</string>
+    <string name="appearance_editor_app_icons">Icons · %1$d</string>
+    <string name="appearance_editor_key_spacing">Spacing · %1$s</string>
     <string name="appearance_editor_trail_description">Cursor trail, %1$s</string>
     <string name="appearance_editor_effect_description">Terminal effect, %1$s</string>
     <!-- The global row (layout editor v2): the base values every surface follows. -->
@@ -57,7 +57,7 @@
     <string name="appearance_editor_keyboard_theme">Keyboard theme</string>
 
     <!-- Layout mode's global shape: no Look sets these. -->
-    <string name="appearance_editor_corners">Corner radius · %1$d dp</string>
+    <string name="appearance_editor_corners">Corners · %1$d dp</string>
     <string name="appearance_editor_corners_description">Corner radius</string>
     <string name="appearance_editor_margin">Margin · %1$d dp</string>
     <string name="appearance_editor_margin_description">Margin</string>

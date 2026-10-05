@@ -29,7 +29,7 @@
     <dimen name="appearance_editor_slider_gap">6dp</dimen>
     <dimen name="appearance_editor_slider_stop">4dp</dimen>
     <!-- The sliders' length: the sheet's one fixed Appearance height is the rows above plus this. -->
-    <dimen name="appearance_editor_slider_length">168dp</dimen>
+    <dimen name="appearance_editor_slider_length">136dp</dimen>
 
     <style name="Widget.Termux.LegendSlider" parent="Widget.Material3.Slider">
         <item name="android:orientation">vertical</item>

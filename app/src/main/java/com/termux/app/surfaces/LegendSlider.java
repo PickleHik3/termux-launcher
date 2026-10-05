@@ -56,7 +56,7 @@ public final class LegendSlider extends Slider {
     public LegendSlider(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         setLabelBehavior(LabelFormatter.LABEL_GONE);
-        mEndInsetPx = 8f * context.getResources().getDisplayMetrics().density;
+        mEndInsetPx = 4f * context.getResources().getDisplayMetrics().density;
         resolvePaint();
         resolveInk();
     }
@@ -78,7 +78,7 @@ public final class LegendSlider extends Slider {
         return mLegend == null ? "" : mLegend.getFormattedValue(getValue());
     }
 
-    /** The legend's text size, from {@code textAppearanceLabelLarge}, for a test to read. */
+    /** The legend's text size, from {@code textAppearanceLabelMedium}, for a test to read. */
     float legendTextSizePx() {
         return mPaint.getTextSize();
     }
@@ -104,9 +104,9 @@ public final class LegendSlider extends Slider {
     private void resolvePaint() {
         TextView probe = new TextView(getContext());
         TypedValue value = new TypedValue();
-        int appearance = com.google.android.material.R.style.TextAppearance_Material3_LabelLarge;
+        int appearance = com.google.android.material.R.style.TextAppearance_Material3_LabelMedium;
         if (getContext().getTheme().resolveAttribute(
-                com.google.android.material.R.attr.textAppearanceLabelLarge, value, true)
+                com.google.android.material.R.attr.textAppearanceLabelMedium, value, true)
             && value.resourceId != 0)
             appearance = value.resourceId;
         probe.setTextAppearance(appearance);
