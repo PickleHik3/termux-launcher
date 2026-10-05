@@ -30,18 +30,4 @@
     <dimen name="appearance_editor_slider_stop">4dp</dimen>
     <!-- The sliders' length: the sheet's one fixed Appearance height is the rows above plus this. -->
     <dimen name="appearance_editor_slider_length">120dp</dimen>
-
-    <style name="Widget.Termux.LegendSlider" parent="Widget.Material3.Slider">
-        <item name="android:orientation">vertical</item>
-        <item name="trackHeight">@dimen/appearance_editor_slider_track</item>
-        <item name="trackCornerSize">@dimen/appearance_editor_slider_track_corner</item>
-        <item name="trackInsideCornerSize">@dimen/appearance_editor_slider_inside_corner</item>
-        <item name="thumbWidth">@dimen/appearance_editor_slider_thumb_width</item>
-        <item name="thumbHeight">@dimen/appearance_editor_slider_thumb_height</item>
-        <item name="thumbTrackGapSize">@dimen/appearance_editor_slider_gap</item>
-        <item name="trackStopIndicatorSize">@dimen/appearance_editor_slider_stop</item>
-        <item name="trackColorActive">?attr/colorPrimary</item>
-        <item name="trackColorInactive">?attr/colorSecondaryContainer</item>
-        <item name="labelBehavior">gone</item>
-    </style>
 </resources>

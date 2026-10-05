@@ -582,12 +582,12 @@ final class AppearanceEditorPanel {
                     return;
                 mListener.onSlider(control, Math.round(value), mSliderDragging[column]);
             });
-            mSliders[i].addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
-                @Override public void onStartTrackingTouch(@NonNull Slider slider) {
+            mSliders[i].addOnSliderTouchListener(new LegendSlider.OnSliderTouchListener() {
+                @Override public void onStartTrackingTouch(@NonNull LegendSlider slider) {
                     mSliderDragging[column] = true;
                 }
 
-                @Override public void onStopTrackingTouch(@NonNull Slider slider) {
+                @Override public void onStopTrackingTouch(@NonNull LegendSlider slider) {
                     mSliderDragging[column] = false;
                     if (mListener != null) mListener.onSliderReleased();
                 }
@@ -1054,7 +1054,7 @@ final class AppearanceEditorPanel {
     }
 
     /** A Custom row slider at a control's range, step and value. */
-    private void restateSlider(@NonNull Slider slider, @NonNull Control control, int value) {
+    private void restateSlider(@NonNull LegendSlider slider, @NonNull Control control, int value) {
         mRestating = true;
         // The range and step first, the value last: a Slider checks them together when it lays
         // out, never between these calls.

@@ -20,7 +20,7 @@
      Appearance rows. Row A: the Look slider, a label centred under each of its five stops (placed
      in code: the stops sit inside the slider's track padding, so equal-width labels would drift
      off them). Row B (the Custom stop only): a heading row, 48dp tall, then up to five vertical
-     Material 3 sliders (LegendSlider, 40dp track, the legend drawn inside it) in equal columns.
+     Material 3 sliders (LegendSlider, 40dp track, the legend beside it) in equal columns.
      The heading is the selection's name ("All surfaces" for nothing tapped) and leads the row;
      the buttons the selection has follow it (Keyboard theme; Clock; Trail and Effect), each 48dp
      tall and 8dp apart. The sliders are one fixed length, so the sheet is the same height for
@@ -261,68 +261,43 @@
 
             <com.termux.app.surfaces.LegendSlider
                 android:id="@+id/appearance_editor_slider_0"
-                style="@style/Widget.Termux.LegendSlider"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:contentDescription="@string/appearance_editor_control_description"
-                android:stepSize="1"
-                android:valueFrom="0"
-                android:valueTo="100"
-                android:visibility="gone"
-                app:tickVisibilityMode="hidden" />
+                android:visibility="gone" />
 
             <com.termux.app.surfaces.LegendSlider
                 android:id="@+id/appearance_editor_slider_1"
-                style="@style/Widget.Termux.LegendSlider"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:contentDescription="@string/appearance_editor_control_description"
-                android:stepSize="1"
-                android:valueFrom="0"
-                android:valueTo="100"
-                android:visibility="gone"
-                app:tickVisibilityMode="hidden" />
+                android:visibility="gone" />
 
             <com.termux.app.surfaces.LegendSlider
                 android:id="@+id/appearance_editor_slider_2"
-                style="@style/Widget.Termux.LegendSlider"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:contentDescription="@string/appearance_editor_control_description"
-                android:stepSize="1"
-                android:valueFrom="0"
-                android:valueTo="100"
-                android:visibility="gone"
-                app:tickVisibilityMode="hidden" />
+                android:visibility="gone" />
 
             <com.termux.app.surfaces.LegendSlider
                 android:id="@+id/appearance_editor_slider_3"
-                style="@style/Widget.Termux.LegendSlider"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:contentDescription="@string/appearance_editor_control_description"
-                android:stepSize="1"
-                android:valueFrom="0"
-                android:valueTo="100"
-                android:visibility="gone"
-                app:tickVisibilityMode="hidden" />
+                android:visibility="gone" />
 
             <com.termux.app.surfaces.LegendSlider
                 android:id="@+id/appearance_editor_slider_4"
-                style="@style/Widget.Termux.LegendSlider"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:contentDescription="@string/appearance_editor_control_description"
-                android:stepSize="1"
-                android:valueFrom="0"
-                android:valueTo="100"
-                android:visibility="gone"
-                app:tickVisibilityMode="hidden" />
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 
