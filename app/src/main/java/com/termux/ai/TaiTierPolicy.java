@@ -378,9 +378,12 @@ public final class TaiTierPolicy {
 
     /** One row of the welcome card "What runs on this phone" (spec §5.2, §5.3). */
     public static final class WelcomeRow {
-        /** A stable key: {@code voice_typing}, {@code read_aloud}, {@code assistant}, {@code smarter_reading}, {@code search}, {@code wallpaper_creator}. */
+        /** A stable key: {@code voice_typing}, {@code read_aloud}, {@code e4b_assistant}, {@code assistant}, {@code dawn_notes}, {@code wallpaper_creator}. */
         @NonNull public final String id;
-        /** The downloads the row stands for, in order; the wallpaper creator has depth then the cut-out. */
+        /**
+         * The downloads the row stands for, in order; the wallpaper creator has depth then the
+         * cut-out, then E4B (its reader) on a 12 GB Tier 2 phone.
+         */
         @NonNull public final List<String> modelIds;
         /** The functions the row's ticked download serves. */
         @NonNull public final List<TaiFunction> functions;
@@ -399,7 +402,8 @@ public final class TaiTierPolicy {
      * The card's rows for this phone, in display order, with the fixed preselection of spec §5.3.
      * Depends only on the device: nothing on how full the phone is today (storage can disable
      * Download, never change a tick). A row the platform removes is absent; Tier 1 has no assistant
-     * rows (the card adds its own Model Centre line); on a phone with no GPU path the E4B row is unticked.
+     * rows (the card adds its own Model Centre line); Tier 3's E4B assistant row is unticked on a
+     * phone with no GPU path. E4B has no row of its own on Tier 2: it is part of the wallpaper creator.
      */
     @NonNull
     public static List<WelcomeRow> welcomeRows(@NonNull Env env) {
@@ -414,24 +418,26 @@ public final class TaiTierPolicy {
             fns(TaiFunction.VOICE_TYPING), !t1));
         rows.add(new WelcomeRow("read_aloud", ids(TaiModelCatalog.KITTEN_TTS_NANO_ID),
             fns(TaiFunction.READ_ALOUD), !t1));
-        if (!t1) {
-            // Tier 3's E2B row is the tidy-dictation helper only: its assistant is E4B.
-            List<TaiFunction> e2bFunctions = t3 ? fns(TaiFunction.TIDY_DICTATION)
-                : fns(TaiFunction.ASSISTANT, TaiFunction.TIDY_DICTATION, TaiFunction.APP_CATEGORIES);
-            rows.add(new WelcomeRow("assistant", ids(E2B), e2bFunctions, true));
-            if (!eight) {
-                List<TaiFunction> e4bFunctions = t3
-                    ? fns(TaiFunction.ASSISTANT, TaiFunction.WALLPAPER_READER, TaiFunction.APP_CATEGORIES)
-                    : fns(TaiFunction.WALLPAPER_READER);
-                rows.add(new WelcomeRow("smarter_reading", ids(E4B), e4bFunctions, t3 && !env.noGpu()));
-            }
+        if (t3) {
+            // Tier 3's assistant is E4B, which also reads wallpapers; E2B is the tidy-dictation helper only.
+            rows.add(new WelcomeRow("e4b_assistant", ids(E4B),
+                fns(TaiFunction.ASSISTANT, TaiFunction.WALLPAPER_READER, TaiFunction.APP_CATEGORIES), !env.noGpu()));
+            rows.add(new WelcomeRow("assistant", ids(E2B), fns(TaiFunction.TIDY_DICTATION), true));
+        } else if (!t1) {
+            rows.add(new WelcomeRow("assistant", ids(E2B),
+                fns(TaiFunction.ASSISTANT, TaiFunction.TIDY_DICTATION, TaiFunction.APP_CATEGORIES), true));
         }
-        rows.add(new WelcomeRow("search", ids(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID),
+        rows.add(new WelcomeRow("dawn_notes", ids(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID),
             fns(TaiFunction.EMBEDDINGS), !t1));
         if (env.wallpaperSupported()) {
             String depth = t1 || eight ? TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID : TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID;
-            rows.add(new WelcomeRow("wallpaper_creator", ids(depth, TaiModelCatalog.U2NET_ID),
-                fns(TaiFunction.WALLPAPER_DEPTH), !t1));
+            // A 12 GB Tier 2 phone reads its wallpapers with E4B: the reader rides in this row, one tick.
+            boolean reader = tier == TaiDeviceTier.TIER_2 && !eight;
+            rows.add(reader
+                ? new WelcomeRow("wallpaper_creator", ids(depth, TaiModelCatalog.U2NET_ID, E4B),
+                    fns(TaiFunction.WALLPAPER_DEPTH, TaiFunction.WALLPAPER_READER), true)
+                : new WelcomeRow("wallpaper_creator", ids(depth, TaiModelCatalog.U2NET_ID),
+                    fns(TaiFunction.WALLPAPER_DEPTH), !t1));
         }
         return rows;
     }

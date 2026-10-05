@@ -1425,7 +1425,7 @@
         <string name="tai_centre_empty_chat">Every chat model in the catalogue is installed or on its way. Paste a link above to add any other.</string>
         <string name="tai_centre_empty_speech">Every speech model in the catalogue is installed or on its way.</string>
         <string name="tai_centre_embeddings_header">Embeddings</string>
-        <string name="tai_centre_embeddings_sub">Search and memory for apps on the phone</string>
+        <string name="tai_centre_embeddings_sub">Lets Dawn notes find notes by meaning</string>
         <string name="tai_centre_kind_embeddings">embeddings</string>
         <string name="tai_centre_empty_embeddings">The embedding model is installed or on its way.</string>
         <string name="tai_centre_gated_note">Needs a Hugging Face token. Accept the model terms on its page first.</string>

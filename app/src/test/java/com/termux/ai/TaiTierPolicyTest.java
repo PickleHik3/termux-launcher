@@ -114,8 +114,8 @@ public class TaiTierPolicyTest {
         assertEquals(1, readerChain.size());
         assertEquals(WithoutModel.RULES_ONLY, readerChain.get(0).without);
         assertEquals(Offer.LISTED, TaiTierPolicy.offer(env, E4B));
-        // The 8 GB welcome card has no E4B row at all.
-        for (WelcomeRow row : TaiTierPolicy.welcomeRows(env)) assertFalse(row.id.equals("smarter_reading"));
+        // The 8 GB welcome card offers E4B nowhere, not even inside the wallpaper row.
+        for (WelcomeRow row : TaiTierPolicy.welcomeRows(env)) assertFalse(row.modelIds.contains(E4B));
         assertFalse(env(10, GpuPath.YES).isEightGb());
     }
 
@@ -184,7 +184,7 @@ public class TaiTierPolicyTest {
         assertTrue(TaiTierPolicy.fallbackChain(env(16, GpuPath.NO), TaiFunction.ASSISTANT).isEmpty());
         // The E4B row is unticked on a phone with no GPU path.
         for (WelcomeRow row : TaiTierPolicy.welcomeRows(env(16, GpuPath.NO))) {
-            if (row.id.equals("smarter_reading")) assertFalse(row.preselected);
+            if (row.id.equals("e4b_assistant")) assertFalse(row.preselected);
         }
     }
 
@@ -231,28 +231,31 @@ public class TaiTierPolicyTest {
     @Test
     public void welcomeRowsFollowThePreselectionTable() {
         List<WelcomeRow> t1 = TaiTierPolicy.welcomeRows(env(4, GpuPath.YES));
-        assertEquals(java.util.Arrays.asList("voice_typing", "read_aloud", "search", "wallpaper_creator"), rowIds(t1, false));
+        assertEquals(java.util.Arrays.asList("voice_typing", "read_aloud", "dawn_notes", "wallpaper_creator"), rowIds(t1, false));
         assertTrue(rowIds(t1, true).isEmpty());
         assertEquals("whisper-acft-base", row(t1, "voice_typing").modelIds.get(0));
 
         List<WelcomeRow> t8 = TaiTierPolicy.welcomeRows(env(8, GpuPath.YES));
-        assertEquals(java.util.Arrays.asList("voice_typing", "read_aloud", "assistant", "search", "wallpaper_creator"),
+        assertEquals(java.util.Arrays.asList("voice_typing", "read_aloud", "assistant", "dawn_notes", "wallpaper_creator"),
             rowIds(t8, true));
         assertEquals(TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID, row(t8, "wallpaper_creator").modelIds.get(0));
         assertEquals("whisper-acft-small", row(t8, "voice_typing").modelIds.get(0));
 
         List<WelcomeRow> t12 = TaiTierPolicy.welcomeRows(env(12, GpuPath.YES));
-        WelcomeRow smarter = row(t12, "smarter_reading");
-        assertEquals(E4B, smarter.modelIds.get(0));
-        assertFalse(smarter.preselected);
-        assertEquals(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, row(t12, "wallpaper_creator").modelIds.get(0));
-        assertEquals(TaiModelCatalog.U2NET_ID, row(t12, "wallpaper_creator").modelIds.get(1));
+        assertNull(row(t12, "e4b_assistant"));
+        WelcomeRow wallpaper = row(t12, "wallpaper_creator");
+        assertEquals(java.util.Arrays.asList(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, TaiModelCatalog.U2NET_ID, E4B),
+            wallpaper.modelIds);
+        assertTrue(wallpaper.preselected);
+        assertTrue(wallpaper.functions.contains(TaiFunction.WALLPAPER_READER));
         assertTrue(row(t12, "assistant").functions.contains(TaiFunction.ASSISTANT));
         assertTrue(row(t12, "assistant").functions.contains(TaiFunction.APP_CATEGORIES));
-        assertFalse(smarter.functions.contains(TaiFunction.APP_CATEGORIES));
+        assertFalse(wallpaper.functions.contains(TaiFunction.APP_CATEGORIES));
 
         List<WelcomeRow> t16 = TaiTierPolicy.welcomeRows(env(16, GpuPath.YES));
-        WelcomeRow e4bRow = row(t16, "smarter_reading");
+        WelcomeRow e4bRow = row(t16, "e4b_assistant");
+        assertEquals(java.util.Arrays.asList(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, TaiModelCatalog.U2NET_ID),
+            row(t16, "wallpaper_creator").modelIds);
         assertTrue(e4bRow.preselected);
         assertTrue(e4bRow.functions.contains(TaiFunction.ASSISTANT));
         assertTrue(e4bRow.functions.contains(TaiFunction.APP_CATEGORIES));

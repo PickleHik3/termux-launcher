@@ -30,7 +30,7 @@ public enum TaiFunction {
     WALLPAPER_READER(null, Store.TAI, TaiTierPolicy.WithoutModel.RULES_ONLY),
     /** The wallpaper creator's depth model. API 34+. */
     WALLPAPER_DEPTH(TaiVisionModels.PREF_DEPTH_MODEL, Store.TAI, TaiTierPolicy.WithoutModel.NONE),
-    /** Search and memory: the embedder. */
+    /** Dawn notes integration: the embedder (Dawn notes is the only app that uses it). */
     EMBEDDINGS(null, Store.TAI, TaiTierPolicy.WithoutModel.NONE);
 
     /** Which preference file holds the pick. */
