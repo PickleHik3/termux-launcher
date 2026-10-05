@@ -355,8 +355,12 @@ public final class ChromeInk {
         int flat = OnGlass.backdrop(wallpaper, mDimColor, tint);
         // The normal foreground is body text; the dim one is text a program asked to recede, and
         // is held to the large-text tier, scaled by the same level.
+        // The veil never takes the pane past its own opacity plus 15 points (20% to 55%): a pane
+        // the user made thin stays glass, and the ink is reported as capped instead.
+        float opacityFraction = Color.alpha(tint) / 255f;
+        int cap255 = Math.round(255f * Math.max(0.20f, Math.min(0.55f, opacityFraction + 0.15f)));
         OnGlass.Resolution resolution = OnGlass.resolveFixedInk(flat, Color.TRANSPARENT, ink,
-            target, dimInk, mLevel.target(OnGlass.TARGET_LARGE_TEXT), veilColor);
+            target, dimInk, mLevel.target(OnGlass.TARGET_LARGE_TEXT), veilColor, cap255);
         if (answer == null) {
             answer = new PaneAnswer(resolution);
             if (mPanes.size() >= MAX_PANE_ANSWERS) {

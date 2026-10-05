@@ -29,6 +29,29 @@ public class GlassLookTest {
     }
 
     @Test
+    public void materialTintLiesBetweenSurfaceAndPrimaryContainerWithTheWash() {
+        int surface = 0x80202020;
+        int container = 0xFF4060C0;
+        int surfaceTint = 0xFF6080FF;
+        GlassLook look = GlassLook.material(false, container, surfaceTint);
+        int out = look.tintBase(surface);
+        assertEquals("alpha is kept", 0x80, out >>> 24);
+        for (int shift = 16; shift >= 0; shift -= 8) {
+            int s = (surface >> shift) & 0xFF;
+            int c = (container >> shift) & 0xFF;
+            int o = (out >> shift) & 0xFF;
+            assertTrue("channel moved toward the container, not past the surface tint",
+                o >= Math.min(s, c) && o <= Math.max(Math.max(s, c), (surfaceTint >> shift) & 0xFF));
+        }
+        // Blue: 0x20 -> 0x20 + 0.35 * (0xC0 - 0x20) = 88, then 14% toward 0xFF = 111.
+        assertEquals(111, out & 0xFF, 1);
+        assertEquals(out, look.flatTint(surface));
+        assertEquals(0, look.flatTint(0x00123456) >>> 24);
+        // Unresolved material degrades to the scheme behaviour.
+        assertEquals(surface, GlassLook.ofRequested("material", "hairline").tintBase(surface));
+    }
+
+    @Test
     public void aFlatTintIsTheWashOverTheInk() {
         GlassLook look = GlassLook.of("obsidian", "hairline");
         int flat = look.flatTint(0x99202020);
