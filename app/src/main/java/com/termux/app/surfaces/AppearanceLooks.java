@@ -7,24 +7,21 @@ import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
  * The Appearance editor's arithmetic (appearance-layout-editor SPEC §3.3–3.4), as pure functions.
  *
  * <p>The Look slider has five stops: the four Looks in {@link SurfacePresets#presets()} order —
- * Clear, Mist, Tint, Solid — and Custom last. Custom's row 2 folds each tapped element to a few
- * controls, and each control writes one or two stored keys along a fixed rule: Darkness moves the
- * terminal's own opacity and the tint together, Key corners is the key caps' radius alone, and
- * Soft wallpaper is a fixed dim plus a fixed blur that Dim then adds to.</p>
+ * Clear, Mist, Tint, Solid — and Custom last. At Custom the sheet shows a row of vertical sliders
+ * whose set follows the selection ({@link #controls}): the global set with nothing tapped, or the
+ * tapped element's own, with the buttons above them ({@link #doors}). Blur, Grain and Opacity are
+ * the shared glass on the global set and the element's own values on an element.</p>
  *
  * <p>Layout mode's Corners and Margin (SPEC §3.5) are here too: the global shape, which no Look
- * sets (2026-10-01).</p>
- *
- * <p>Layout editor v2 (DECISIONS items 13 to 15): at the Custom stop with nothing tapped row 2 is
- * the global row, Blur, Opacity and Grain written as the base values ({@link #rowFor}); the
- * keyboard's row is its Blur and the "Keyboard theme" door, and Key radius has moved to Layout
- * mode.</p>
+ * sets (2026-10-01); the Custom row's Margin and Corner radius write the same keys.</p>
  *
  * <p>No views and no {@code Context}, so the rules are held by JVM tests.</p>
  */
@@ -91,92 +88,18 @@ public final class AppearanceLooks {
 
     // ------------------------------------------------------------------------ what can be tapped
 
-    /** The elements a tap in the frame can select. Wallpaper is any bare area. */
+    /** The elements a tap in the frame can select. The bare wallpaper selects none. */
     public enum Target {
         STATUS(SurfaceSlot.STATUS),
         TERMINAL(SurfaceSlot.CANVAS),
         DOCK(SurfaceSlot.DOCK),
-        KEYBOARD(SurfaceSlot.KEYBOARD),
-        WALLPAPER(null);
+        KEYBOARD(SurfaceSlot.KEYBOARD);
 
-        /** The surface this target is, or null for the wallpaper, which is none. */
-        @Nullable public final SurfaceSlot slot;
+        /** The surface this target is. */
+        @NonNull public final SurfaceSlot slot;
 
-        Target(@Nullable SurfaceSlot slot) {
+        Target(@NonNull SurfaceSlot slot) {
             this.slot = slot;
-        }
-
-        /**
-         * Whether row 2 has a first control: Darkness, the keyboard's Blur or Soft wallpaper. The
-         * status bar and the dock have Blur alone, in the last column.
-         */
-        public boolean hasFirstControl() {
-            return this != STATUS && this != DOCK;
-        }
-
-        /**
-         * Whether the first control is the shared Blur: the keyboard's, whose last column is the
-         * "Keyboard theme" door (DECISIONS item 15).
-         */
-        public boolean firstControlIsBlur() {
-            return this == KEYBOARD;
-        }
-
-        /** Whether the last column is the "Keyboard theme" button rather than a slider. */
-        public boolean secondControlIsKeyboardTheme() {
-            return this == KEYBOARD;
-        }
-
-        /**
-         * Whether row 2 has Key radius. It has none any more: Key radius is Layout mode's, beside
-         * the keyboard's type chips (DECISIONS item 6).
-         */
-        public boolean hasKeyRadius() {
-            return false;
-        }
-
-        /**
-         * Whether row 2 carries Legibility: the terminal only, since what it changes is the
-         * terminal palette's contrast (2026-10-01).
-         */
-        public boolean hasLegibility() {
-            return this == TERMINAL;
-        }
-
-        /**
-         * Whether row 2 carries a Grain slider: every surface does, the wallpaper (which has no
-         * glass of its own) does not.
-         */
-        public boolean hasGrain() {
-            return this != WALLPAPER;
-        }
-
-        /**
-         * Which column Grain stands in, counting the four row 2 can have: 1 the first (the status
-         * bar and the dock, whose first column is otherwise empty), 2 the middle (the keyboard,
-         * which has no Text contrast), 4 the terminal's fourth, between Text
-         * contrast and Blur; 0 for the wallpaper.
-         */
-        public int grainColumn() {
-            switch (this) {
-                case STATUS:
-                case DOCK:
-                    return 1;
-                case KEYBOARD:
-                    return 2;
-                case TERMINAL:
-                    return 4;
-                default:
-                    return 0;
-            }
-        }
-
-        /**
-         * Whether the last control is the one shared Blur: every target but the wallpaper (Dim)
-         * and the keyboard (its theme door; its Blur is the first control).
-         */
-        public boolean secondControlIsBlur() {
-            return this != WALLPAPER && this != KEYBOARD;
         }
 
         @Nullable
@@ -189,6 +112,145 @@ public final class AppearanceLooks {
             }
             return null;
         }
+    }
+
+    // ------------------------------------------------------------------ the control sets
+
+    /**
+     * A vertical slider of the Custom row, with the integer range its stored value maps onto.
+     * Dock size is the dock's height scale in percent of its unscaled height; Key spacing is the
+     * key margin scale in tenths; the others are their own units (dp, percent, a count, a stop).
+     */
+    public enum Control {
+        BLUR(0, BLUR_MAX_DP, 1),
+        GRAIN(0, GRAIN_MAX, 1),
+        OPACITY(0, OPACITY_MAX, 1),
+        MARGIN(0, MARGIN_MAX_DP, 1),
+        CORNER_RADIUS(0, CORNERS_MAX_DP, 1),
+        KEY_RADIUS(0, KEY_CORNERS_MAX_DP, 1),
+        KEY_SPACING(0, KEY_SPACING_MAX_TENTHS, 1),
+        DOCK_SIZE(DOCK_SIZE_MIN_PERCENT, DOCK_SIZE_MAX_PERCENT, DOCK_SIZE_STEP_PERCENT),
+        APP_ICONS(APP_ICONS_MIN, APP_ICONS_MAX, 1),
+        CONTRAST(0, 2, 1);
+
+        public final int min;
+        public final int max;
+        public final int step;
+
+        Control(int min, int max, int step) {
+            this.min = min;
+            this.max = max;
+            this.step = step;
+        }
+
+        /** The value held inside the control's range. */
+        public int clamp(int value) {
+            return AppearanceLooks.clamp(value, min, max);
+        }
+    }
+
+    /**
+     * A button above the sliders: a door to another page, a menu, or the clock's popup. Keyboard
+     * theme and Clock are tonal buttons; Trail and Effect are the outlined menu buttons.
+     */
+    public enum Door {
+        KEYBOARD_THEME,
+        CLOCK,
+        TRAIL,
+        EFFECT
+    }
+
+    /** Key spacing is the key margin scale, 0.0 to 8.0, in tenths. */
+    public static final int KEY_SPACING_MAX_TENTHS = 80;
+
+    /** Dock size is the dock height scale (0.4 to 3.0) in percent, five at a time. */
+    public static final int DOCK_SIZE_MIN_PERCENT = 40;
+    public static final int DOCK_SIZE_MAX_PERCENT = 300;
+    public static final int DOCK_SIZE_STEP_PERCENT = 5;
+
+    /** The dock's visible app buttons. */
+    public static final int APP_ICONS_MIN = 3;
+    public static final int APP_ICONS_MAX = 10;
+
+    /**
+     * The sliders of the Custom row for a selection, in legend order (left to right): the global
+     * set for nothing tapped (null), or the element's own. Blur, Grain and Opacity come first for
+     * everything, so the same three columns stay under the user's thumb as the selection changes.
+     */
+    @NonNull
+    public static List<Control> controls(@Nullable Target target) {
+        if (target == null)
+            return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.MARGIN,
+                Control.CORNER_RADIUS);
+        switch (target) {
+            case KEYBOARD:
+                return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
+                    Control.KEY_RADIUS, Control.KEY_SPACING);
+            case DOCK:
+                return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
+                    Control.DOCK_SIZE, Control.APP_ICONS);
+            case TERMINAL:
+                return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
+                    Control.CONTRAST);
+            case STATUS:
+            default:
+                return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY);
+        }
+    }
+
+    /** The buttons above the sliders for a selection, in order; none for the global set. */
+    @NonNull
+    public static List<Door> doors(@Nullable Target target) {
+        if (target == null)
+            return Collections.emptyList();
+        switch (target) {
+            case KEYBOARD:
+                return Collections.singletonList(Door.KEYBOARD_THEME);
+            case TERMINAL:
+                return Arrays.asList(Door.TRAIL, Door.EFFECT);
+            case STATUS:
+                return Collections.singletonList(Door.CLOCK);
+            case DOCK:
+            default:
+                return Collections.emptyList();
+        }
+    }
+
+    /** The most sliders any selection has: the columns the sheet is built for. */
+    public static final int MAX_CONTROLS = 5;
+
+    /** The name in a legend such as "Blur · 12 dp": the part before the separator. */
+    @NonNull
+    public static String legendName(@NonNull CharSequence legend) {
+        String text = legend.toString();
+        int cut = text.indexOf(" \u00b7 ");
+        return cut > 0 ? text.substring(0, cut) : text;
+    }
+
+    /** The dock height scale a Dock size value (percent) writes. */
+    public static float dockScaleFor(int percent) {
+        return Control.DOCK_SIZE.clamp(percent) / 100f;
+    }
+
+    /** Where the Dock size slider stands for a stored dock height scale. */
+    public static int dockSizeValueFor(float scale) {
+        return Control.DOCK_SIZE.clamp(Math.round(scale * 100f / DOCK_SIZE_STEP_PERCENT)
+            * DOCK_SIZE_STEP_PERCENT);
+    }
+
+    /** The key margin scale a Key spacing value (tenths) writes. */
+    public static float keySpacingScaleFor(int tenths) {
+        return Control.KEY_SPACING.clamp(tenths) / 10f;
+    }
+
+    /** Where the Key spacing slider stands for a stored key margin scale. */
+    public static int keySpacingValueFor(float scale) {
+        return Control.KEY_SPACING.clamp(Math.round(scale * 10f));
+    }
+
+    /** Where the App icons slider stands for a stored button count. */
+    public static int appIconsValueFor(int count) {
+        return Control.APP_ICONS.clamp(count);
     }
 
     /** What row 2 holds (DECISIONS item 13). */
@@ -213,15 +275,12 @@ public final class AppearanceLooks {
     }
 
     /**
-     * What a tap on the bare wallpaper selects at the Custom stop, given what is selected now:
-     * with an element tapped it is the empty canvas, which brings the global row back (null); with
-     * the global row up, or anywhere at a Look stop, it opens the wallpaper's own row.
+     * Whether a tap on the bare wallpaper deselects and brings the global set back: at the Custom
+     * stop it does; at a Look stop there is nothing selected and nothing to open, so it does
+     * nothing. The wallpaper has no controls of its own any more (Soften and Dim left the editor).
      */
-    @Nullable
-    public static Target afterWallpaperTap(int stop, @Nullable Target selected) {
-        if (!isCustomStop(stop))
-            return Target.WALLPAPER;
-        return selected == null ? Target.WALLPAPER : null;
+    public static boolean wallpaperTapDeselects(int stop) {
+        return isCustomStop(stop);
     }
 
     // ------------------------------------------------------------------------------ the controls
@@ -247,21 +306,6 @@ public final class AppearanceLooks {
 
     public static int blurDp(int value) {
         return clamp(value, 0, BLUR_MAX_DP);
-    }
-
-    /** At or above this Darkness the tint is Obsidian; below it the scheme's own. */
-    public static final int DARKNESS_OBSIDIAN_FROM = 50;
-
-    /** The terminal's own opacity a Darkness value writes. */
-    public static int darknessOpacity(int darkness) {
-        return clamp(darkness, 0, 100);
-    }
-
-    /** The glass tint a Darkness value writes. */
-    @NonNull
-    public static String darknessTint(int darkness) {
-        return clamp(darkness, 0, 100) >= DARKNESS_OBSIDIAN_FROM
-            ? TERMUX_APP.GLASS_TINT_OBSIDIAN : TERMUX_APP.GLASS_TINT_SCHEME;
     }
 
     /**
@@ -351,7 +395,7 @@ public final class AppearanceLooks {
         return LEGIBILITY[clamp(index, 0, LEGIBILITY.length - 1)];
     }
 
-    private static int clamp(int value, int min, int max) {
+    static int clamp(int value, int min, int max) {
         return Math.max(min, Math.min(max, value));
     }
 }

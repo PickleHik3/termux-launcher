@@ -133,4 +133,35 @@ public class AppearanceSnapshotTest {
         assertEquals(0, preferences.getFancierGlassDispersionPercent());
         assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
     }
+
+    /** Key spacing and App icons (the Custom row's) are seen by the signature and come back. */
+    @Test
+    public void keySpacingAndTheDockButtonCountAreSnapshottedAndRestored() {
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        String before = AppearanceSnapshot.signatureOf(preferences);
+        int count = preferences.getAppLauncherButtonCount();
+
+        preferences.setInAppKeyboardKeyMarginScale(3.5f);
+        assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
+        entry.restore(preferences);
+        assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
+
+        preferences.setAppLauncherButtonCount(count == 5 ? 6 : 5);
+        assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
+        entry.restore(preferences);
+        assertEquals(count, preferences.getAppLauncherButtonCount());
+        assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
+    }
+
+    /** A key spacing the Style owned (no key at all) comes back as no key, not a written default. */
+    @Test
+    public void anAbsentKeySpacingComesBackAbsent() {
+        assertFalse(store.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE));
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+
+        preferences.setInAppKeyboardKeyMarginScale(2f);
+        entry.restore(preferences);
+
+        assertFalse(store.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE));
+    }
 }

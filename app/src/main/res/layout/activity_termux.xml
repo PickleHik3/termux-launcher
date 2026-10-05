@@ -1064,24 +1064,6 @@
                 android:clickable="true"
                 android:focusable="false"
                 android:visibility="gone">
-
-                <!-- The clock's own control: laid over the live clock in code while the status bar
-                     is the element being tuned, with the ▾ drawn at its trailing edge. Clickable in
-                     its own right: a child takes the touch before the group's handler sees it. -->
-                <TextView
-                    android:id="@+id/surface_tuning_status_clock_handle"
-                    android:layout_width="28dp"
-                    android:layout_height="28dp"
-                    android:layout_gravity="top|start"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:clickable="true"
-                    android:focusable="true"
-                    android:gravity="center_vertical|end"
-                    android:paddingEnd="8dp"
-                    android:text="@string/termux_surface_tuning_clock_chevron"
-                    android:textColor="?attr/termuxColorPrimary"
-                    android:textSize="13sp"
-                    android:visibility="gone" />
             </FrameLayout>
 
             <FrameLayout
