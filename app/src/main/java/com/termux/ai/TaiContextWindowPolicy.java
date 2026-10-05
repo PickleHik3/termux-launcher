@@ -19,13 +19,30 @@ public final class TaiContextWindowPolicy {
     private TaiContextWindowPolicy() {
     }
 
-    /** Largest context window this policy hands to a device with {@code memoryBytes} of RAM. */
+    /**
+     * The window an automatic setting raises a model to on a device with {@code memoryBytes} of RAM,
+     * by RAM class (see {@link TaiLoadBudget#ramClassBytes}): 2048 up to 6 GB, 4096 from 8 GB up.
+     * The window is KV cache the phone must hold for as long as the model is resident, and the
+     * budget's ladder halves it down to 4096 anyway, so a larger automatic window was only ever a
+     * 32k freeze waiting for a day with enough free memory. Applies to MNN as much as LiteRT.
+     * {@code 0} when the RAM is unknown.
+     */
     public static int tierCap(long memoryBytes) {
-        if (memoryBytes <= 0L) return 0;
-        if (memoryBytes < 5_632L * GIB / 1024L) return 4096;   // < 5.5 GiB
-        if (memoryBytes < 7_680L * GIB / 1024L) return 8192;   // < 7.5 GiB
-        if (memoryBytes < 11_776L * GIB / 1024L) return 16_384; // < 11.5 GiB
-        return 32_768;
+        long ramClass = TaiLoadBudget.ramClassBytes(memoryBytes);
+        if (ramClass <= 0L) return 0;
+        return ramClass <= 6L * GIB ? 2048 : 4096;
+    }
+
+    /**
+     * The largest window a user setting may select ("most"): 4096 up to 8 GB, 8192 at 10-12 GB,
+     * 16384 from 16 GB up. {@code 0} when the RAM is unknown, which leaves a setting as chosen.
+     */
+    public static int mostCap(long memoryBytes) {
+        long ramClass = TaiLoadBudget.ramClassBytes(memoryBytes);
+        if (ramClass <= 0L) return 0;
+        if (ramClass <= 8L * GIB) return 4096;
+        if (ramClass <= 12L * GIB) return 8192;
+        return 16_384;
     }
 
     /**
@@ -44,7 +61,12 @@ public final class TaiContextWindowPolicy {
         int artifactLimit = artifactContextLimit(spec.localPath);
         if (TaiModelSpec.BACKEND_LITERT_LM.equals(spec.backend) && artifactLimit > 0)
             limit = Math.min(limit, artifactLimit);
-        if (userOverride != null && userOverride > 0) return Math.min(limit, Math.max(1024, userOverride));
+        if (userOverride != null && userOverride > 0) {
+            int chosen = Math.max(1024, userOverride);
+            int most = mostCap(memoryBytes);
+            // A setting never goes past what the RAM class allows; an unknown class leaves it as chosen.
+            return Math.min(limit, most > 0 ? Math.min(chosen, Math.max(most, 1024)) : chosen);
+        }
         int cap = tierCap(memoryBytes);
         int requested = cap <= 0 ? spec.endpointContextWindow : Math.max(spec.endpointContextWindow, cap);
         return Math.min(limit, requested);

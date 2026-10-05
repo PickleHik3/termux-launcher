@@ -62,15 +62,34 @@ public final class TaiRuntimeServiceClient {
         try {
             if (!request.done.await(timeoutMs, TimeUnit.MILLISECONDS)) {
                 pending.remove(request.requestId);
+                releaseAbandonedMomentaryLoad(operation, body);
                 return runtimeUnavailable("tai_runtime_timeout", "On-device AI runtime service timed out.");
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             pending.remove(request.requestId);
+            releaseAbandonedMomentaryLoad(operation, body);
             return runtimeUnavailable("tai_runtime_interrupted", "On-device AI runtime request interrupted.");
         }
         if (request.result == null) return runtimeUnavailable("tai_runtime_unavailable", "On-device AI runtime service did not return a result.");
         return request.result;
+    }
+
+    /**
+     * A timeout only stops this caller waiting; the runtime's load or generation goes on. For a
+     * momentary load (the living-still director) the caller's own unload is skipped when the model
+     * had not finished loading, so the model would stay resident until the idle timer (review T3).
+     * Send a cancel and then an unload, without waiting for them: the runtime unloads whatever is
+     * loading or generating, and its own three-minute deadline backs this up when the service
+     * cannot be reached here.
+     */
+    private void releaseAbandonedMomentaryLoad(@NonNull String operation, @Nullable String body) {
+        if (TaiRuntimeService.momentaryModelId(operation, body) == null) return;
+        try {
+            send(TaiRuntimeIpc.OP_CANCEL, "{}", false, null);
+            send(TaiRuntimeIpc.OP_UNLOAD_MODEL, "{}", false, null);
+        } catch (JSONException | RuntimeException ignored) {
+        }
     }
 
     public void stream(@NonNull String operation, @Nullable String body, @NonNull TaiManager.OpenAiStreamSink sink)

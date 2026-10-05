@@ -17,6 +17,7 @@ import android.os.Messenger;
 import android.os.PowerManager;
 import android.os.Process;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -138,8 +139,6 @@ public final class TaiRuntimeService extends Service {
     @Nullable private PowerManager.WakeLock benchWakeLock;
     private final Messenger messenger = new Messenger(new IncomingHandler());
     private volatile boolean foreground;
-    /** Slow enough to be invisible in battery stats, fast enough for a per-second countdown. */
-    private static final long WATCH_INTERVAL_MS = 2_000L;
     private final ScheduledExecutorService watchScheduler =
         Executors.newSingleThreadScheduledExecutor(runnable -> {
             Thread thread = new Thread(runnable, "tai-runtime-watch");
@@ -147,6 +146,16 @@ public final class TaiRuntimeService extends Service {
             return thread;
         });
     @Nullable private ScheduledFuture<?> watch;
+    /** Bumped on every start and stop, so a tick that outlives its watch does not schedule another. */
+    private int watchEpoch;
+    /** When the watch last did its slow work (publish, idle checks); the pressure read runs on every tick. */
+    private long lastSlowTickMs;
+    /**
+     * The deadline armed for a momentary load: the runtime itself unloads that model when it
+     * passes, whether or not the caller is still waiting (review T3). Guarded by {@code this}.
+     */
+    @Nullable private ScheduledFuture<?> momentaryDeadline;
+    @Nullable private String momentaryModelId;
     @Nullable private ScheduledFuture<?> idleExitCheck;
     /** Whether the watch has published the runtime's idle state since chat last went quiet. */
     private volatile boolean publishedIdle;
@@ -186,6 +195,7 @@ public final class TaiRuntimeService extends Service {
         // The process is going away with a model still resident only when it was killed; publishing
         // the last known state keeps the UI glyph from counting down against a runtime that is gone.
         stopRuntimeWatch();
+        clearMomentaryDeadline();
         cancelIdleExitCheck();
         releaseBenchWakeLock();
         watchScheduler.shutdownNow();
@@ -207,26 +217,6 @@ public final class TaiRuntimeService extends Service {
             Log.i(LOG_TAG, "idle exit: unbound, process exiting");
             Process.killProcess(Process.myPid());
         }
-    }
-
-    /**
-     * The running levels are the system saying it is low while this process runs; they map to the
-     * eviction tiers the poll would reach on its own and stop being delivered from Android 14. The
-     * background levels and {@code UI_HIDDEN} are lifecycle, not pressure — backgrounding the
-     * launcher must not drop a warm model — and {@link TaiPressureWatch#tierForTrimLevel} ignores them.
-     */
-    @Override
-    public void onTrimMemory(int level) {
-        super.onTrimMemory(level);
-        TaiPressureWatch.Tier tier = TaiPressureWatch.tierForTrimLevel(level);
-        if (tier == TaiPressureWatch.Tier.NONE) return;
-        MultiBackendTaiRuntime router = MultiBackendTaiRuntime.processInstance();
-        if (router == null) return;
-        ActivityManager.MemoryInfo info = memoryInfo();
-        long availMem = info == null ? 0L : info.availMem;
-        long threshold = info == null ? 0L : info.threshold;
-        long floor = info == null ? 0L : TaiLoadBudget.floorBytes(info.threshold, info.totalMem);
-        applyTier(tier, router.residency().snapshot(), availMem, floor, threshold, "trim " + level);
     }
 
     private final class IncomingHandler extends Handler {
@@ -365,8 +355,13 @@ public final class TaiRuntimeService extends Service {
         if (vision) visionInFlight.incrementAndGet();
         try {
             String payload = body != null ? body : readBodyFile(bodyFile);
+            // The deadline runs from here, the start of the load, not from the caller's request.
+            trackMomentaryLoad(operation, payload);
+            if (TaiRuntimeIpc.OP_UNLOAD_MODEL.equals(operation)) clearMomentaryDeadline();
             if (bench) acquireBenchWakeLock();
             if (isForegroundOperation(operation)) {
+                // Before the work, so a first load is watched too: nothing else starts the watch until it ends.
+                startRuntimeWatch();
                 ensureForeground("On-device AI runtime", speech ? "Speaking" : image ? "Generating an image"
                     : vision ? "Analysing a wallpaper" : bench ? "Benchmarking" : "Preparing " + operation);
             }
@@ -568,44 +563,64 @@ public final class TaiRuntimeService extends Service {
     }
 
     /**
-     * The runtime's slow tick while anything is resident. It publishes the runtime state for the UI
+     * The runtime's tick while anything is resident. It publishes the runtime state for the UI
      * glyph (the idle unload fires on a backend's own scheduler, with no operation to hang a publish
      * off — without this the glyph would keep counting down past a model that is already gone),
-     * reads the phone's memory once and applies the pressure tier it is in, and closes residents
+     * reads the phone's memory and applies the pressure tier it is in, and closes residents
      * that have sat idle past their kind's limit. Decisions are {@link TaiPressureWatch}'s; the
      * tick holds no lock — the registry is read lock-free and the actions go to
-     * {@link #pressureExecutor}. It stops itself once nothing but the baseline is left and arms
-     * the idle exit.
+     * {@link #pressureExecutor}. The pressure read runs every {@link TaiPressureWatch#POLL_BUSY_MS}
+     * while a load or first prefill is running and every {@link TaiPressureWatch#POLL_IDLE_MS}
+     * otherwise; the publish and idle checks always keep the slow beat. It stops itself once
+     * nothing but the baseline is left and arms the idle exit.
      */
     private synchronized void startRuntimeWatch() {
         if (watch != null && !watch.isCancelled()) return;
         modelsGoneAtMs = 0L;
-        watch = watchScheduler.scheduleWithFixedDelay(() -> {
-            try {
-                TaiManager manager = TaiManager.getRuntimeProcessInstance(this);
-                TaiRuntimeState state = manager.getRuntimeState();
-                boolean chat = chatActive(state);
-                // Every tick while chat is held (the countdown), once more when it goes quiet, and
-                // not at all for an embedding-only residency — the glyph does not show those.
+        // The first look comes soon: the watch is usually started at the edge of a load, and the tick
+        // after it sets its own pace.
+        scheduleWatchTick(++watchEpoch, TaiPressureWatch.POLL_BUSY_MS);
+    }
+
+    private synchronized void scheduleWatchTick(int epoch, long delayMs) {
+        watch = watchScheduler.schedule(() -> watchTick(epoch), delayMs, TimeUnit.MILLISECONDS);
+    }
+
+    private void watchTick(int epoch) {
+        try {
+            TaiManager manager = TaiManager.getRuntimeProcessInstance(this);
+            TaiRuntimeState state = manager.getRuntimeState();
+            boolean chat = chatActive(state);
+            long now = SystemClock.elapsedRealtime();
+            boolean slow = now - lastSlowTickMs >= TaiPressureWatch.POLL_IDLE_MS;
+            if (slow) {
+                lastSlowTickMs = now;
+                // Every slow tick while chat is held (the countdown), once more when it goes quiet,
+                // and not at all for an embedding-only residency — the glyph does not show those.
                 if (chat || !publishedIdle) TaiRuntimePresence.publish(this, state, manager.residentChatBytes());
                 publishedIdle = !chat;
-                MultiBackendTaiRuntime router = MultiBackendTaiRuntime.processInstance();
-                List<TaiResidency.Entry> residents = router == null
-                    ? Collections.<TaiResidency.Entry>emptyList() : router.residency().snapshot();
-                if (!chat && (router == null || !router.residency().hasModels())) {
-                    stopRuntimeWatch();
-                    noteModelsGone();
-                    return;
-                }
-                modelsGoneAtMs = 0L;
-                evaluatePressure(residents);
-                evaluateIdle(residents);
-            } catch (Exception ignored) {
             }
-        }, WATCH_INTERVAL_MS, WATCH_INTERVAL_MS, TimeUnit.MILLISECONDS);
+            MultiBackendTaiRuntime router = MultiBackendTaiRuntime.processInstance();
+            List<TaiResidency.Entry> residents = router == null
+                ? Collections.<TaiResidency.Entry>emptyList() : router.residency().snapshot();
+            if (!chat && (router == null || !router.residency().hasModels())) {
+                stopRuntimeWatch();
+                noteModelsGone();
+                return;
+            }
+            modelsGoneAtMs = 0L;
+            evaluatePressure(residents);
+            if (slow) evaluateIdle(residents);
+        } catch (Exception ignored) {
+        }
+        synchronized (this) {
+            if (epoch != watchEpoch || watch == null) return;
+            scheduleWatchTick(epoch, TaiPressureWatch.pollIntervalMs(TaiLoadMeter.anyActive()));
+        }
     }
 
     private synchronized void stopRuntimeWatch() {
+        watchEpoch++;
         if (watch == null) return;
         watch.cancel(false);
         watch = null;
@@ -623,29 +638,34 @@ public final class TaiRuntimeService extends Service {
 
     /**
      * Reads the phone once and acts on the tier it is in. From Android 14 the running trim levels
-     * are no longer delivered, so the watch asks instead of waiting to be told. The floor is the
-     * budget's ({@link TaiLoadBudget#floorBytes}: twice {@code MemoryInfo.threshold}, at least
-     * 512 MiB), so the watch starts reclaiming at the same line a load stops being admitted.
+     * are no longer delivered, so the watch asks instead of waiting to be told. Free memory is
+     * {@link TaiMemInfo}'s (MemAvailable on every release) and the floors are the budget's
+     * ({@link TaiLoadBudget#floorBytes}), so the watch starts reclaiming at the line a load stops
+     * being admitted: the hold floor for tier 1, the lower peak floor for tier 2.
      */
     private void evaluatePressure(@NonNull List<TaiResidency.Entry> residents) {
         ActivityManager.MemoryInfo info = memoryInfo();
         if (info == null) return;
-        long floor = TaiLoadBudget.floorBytes(info.threshold, info.totalMem);
-        TaiPressureWatch.Tier tier = TaiPressureWatch.tier(info.availMem, floor, info.threshold, info.lowMemory);
-        applyTier(tier, residents, info.availMem, floor, info.threshold, "poll");
+        TaiMemInfo.Reading memory = TaiMemInfo.read(this);
+        TaiLoadBudget.Conditions conditions = TaiMemInfo.conditions(this, memory);
+        long ramClass = TaiLoadBudget.ramClassBytes(info.totalMem);
+        long hold = TaiLoadBudget.floorBytes(ramClass, false, conditions);
+        long peak = TaiLoadBudget.floorBytes(ramClass, true, conditions);
+        TaiPressureWatch.Tier tier = TaiPressureWatch.tier(memory.availBytes, hold, peak, info.lowMemory);
+        applyTier(tier, residents, memory.availBytes, hold, peak, "poll");
     }
 
     /**
      * Carries out one tier: tier 3 cancels and unloads everything; tiers 1 and 2 give up the one
      * resident {@link TaiPressureWatch#nextVictim} names, and the next tick looks again. A tier
      * with nothing idle to give (a busy chat model alone) does nothing and logs nothing — it would
-     * log every two seconds otherwise.
+     * log every tick otherwise.
      */
     private void applyTier(@NonNull TaiPressureWatch.Tier tier, @NonNull List<TaiResidency.Entry> residents,
-                           long availMem, long floor, long threshold, @NonNull String source) {
+                           long availMem, long hold, long peak, @NonNull String source) {
         if (tier == TaiPressureWatch.Tier.NONE) return;
-        String reading = String.format(Locale.US, "availMem=%d MB floor=%d MB threshold=%d MB",
-            availMem / MIB, floor / MIB, threshold / MIB);
+        String reading = String.format(Locale.US, "avail=%d MB hold=%d MB peak=%d MB",
+            availMem / MIB, hold / MIB, peak / MIB);
         if (tier == TaiPressureWatch.Tier.RELEASE_ALL) {
             queuePressureAction(() -> releaseAll("pressure tier 3 (" + source + "): lowMemory, " + reading));
             return;
@@ -666,6 +686,103 @@ public final class TaiRuntimeService extends Service {
         List<TaiResidency.Entry> expired = TaiPressureWatch.idleExpired(residents, System.currentTimeMillis(), sttIdleMs);
         if (expired.isEmpty()) return;
         queuePressureAction(() -> evict(expired, "idle"));
+    }
+
+    // ---- Momentary loads ------------------------------------------------------------------------
+
+    /** Requests that may load a chat model: an explicit load, or a chat or completion that loads on demand. */
+    static boolean isLoadingOperation(@NonNull String operation) {
+        return TaiRuntimeIpc.OP_LOAD_MODEL.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_CHAT.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_COMPLETION.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation);
+    }
+
+    /**
+     * The model a request wants loaded for a moment: its {@code model} when the body declares
+     * {@code "load_class": "momentary"} on a load or a chat that may load; {@code null} for anything
+     * else, a body without a model included (the default model is the app's, not a momentary one).
+     * The cheap substring test keeps a large image body from being parsed twice.
+     */
+    @Nullable
+    static String momentaryModelId(@NonNull String operation, @Nullable String body) {
+        if (body == null || !isLoadingOperation(operation) || !body.contains("\"load_class\"")) return null;
+        try {
+            JSONObject request = new JSONObject(body);
+            if (!"momentary".equals(request.optString("load_class", "").trim())) return null;
+            String model = request.optString("model", request.optString("modelId", "")).trim();
+            return model.isEmpty() ? null : TaiSettings.migrateBuiltInModelId(model);
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
+    /** Whether a momentary load armed at {@code armedAtMs} has outlived {@link TaiLoadBudget#MOMENTARY_DEADLINE_MS}. */
+    static boolean momentaryDeadlineDue(long armedAtMs, long nowMs) {
+        return nowMs - armedAtMs >= TaiLoadBudget.MOMENTARY_DEADLINE_MS;
+    }
+
+    /**
+     * Whether the deadline for {@code armedModelId} has anything to unload: that model is the loaded
+     * one (idle, or generating, which the unload cancels), or a load is still in progress and no
+     * model is loaded yet. A different model, or nothing, means the caller already did its part.
+     */
+    static boolean unloadAtDeadline(@NonNull String armedModelId, @Nullable String loadedModelId, @Nullable String runtimeState) {
+        if (armedModelId.equals(loadedModelId)) return true;
+        return loadedModelId == null && "loading".equals(runtimeState);
+    }
+
+    /**
+     * Arms the three-minute deadline for a momentary load that is about to start, from now: the
+     * runtime then unloads the model itself, whether or not the caller's IPC wait has already timed
+     * out (review T3: the director's 180 s ran out during a load, the unload was skipped because
+     * nothing was loaded yet, and E4B stayed resident for the idle timer). A model that is already
+     * resident is not this call's load and is left alone. Any other request for the armed model
+     * disarms it, because someone now wants the model kept.
+     */
+    private synchronized void trackMomentaryLoad(@NonNull String operation, @Nullable String body) {
+        if (!isLoadingOperation(operation)) return;
+        String momentary = momentaryModelId(operation, body);
+        if (momentary == null) {
+            if (momentaryModelId != null && body != null && body.contains(momentaryModelId)) clearMomentaryDeadline();
+            return;
+        }
+        MultiBackendTaiRuntime router = MultiBackendTaiRuntime.processInstance();
+        if (router != null && router.residency().isResident(TaiResidency.Kind.CHAT, momentary)) return;
+        clearMomentaryDeadline();
+        momentaryModelId = momentary;
+        final String armedModelId = momentary;
+        momentaryDeadline = watchScheduler.schedule(() -> momentaryDeadlineExpired(armedModelId),
+            TaiLoadBudget.MOMENTARY_DEADLINE_MS, TimeUnit.MILLISECONDS);
+    }
+
+    private synchronized void clearMomentaryDeadline() {
+        if (momentaryDeadline != null) momentaryDeadline.cancel(false);
+        momentaryDeadline = null;
+        momentaryModelId = null;
+    }
+
+    private void momentaryDeadlineExpired(@NonNull String modelId) {
+        synchronized (this) {
+            if (!modelId.equals(momentaryModelId)) return;
+            momentaryDeadline = null;
+            momentaryModelId = null;
+        }
+        // On the control lane: the serial lane may be the very load or generation being ended.
+        controlExecutor.execute(() -> {
+            try {
+                TaiManager manager = TaiManager.getRuntimeProcessInstance(this);
+                TaiRuntimeState state = manager.getRuntimeState();
+                if (!unloadAtDeadline(modelId, state.loadedModelId, state.state)) return;
+                Log.i(LOG_TAG, "momentary deadline: cancelling and unloading " + modelId);
+                manager.cancelRuntime();
+                manager.unloadModel();
+                updateForegroundAfterOperation();
+            } catch (Exception e) {
+                Log.w(LOG_TAG, "momentary deadline unload failed: " + message(e));
+            }
+        });
     }
 
     private interface MemoryAction {

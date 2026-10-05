@@ -55,6 +55,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
     });
 
     private LlmSession session;
+    /** The loaded model's meter waiting for its first request; taken by the next generation. Guarded by {@code this}. */
+    @Nullable private TaiLoadMeter.Pending pendingPrefill;
     private ScheduledFuture<?> idleUnloadFuture;
     private long idleUnloadAtMs;
     private String runtimeState = "unloaded";
@@ -272,18 +274,24 @@ public final class MnnTaiRuntime implements TaiRuntime {
 
         LlmSession initialized;
         long measured;
+        TaiLoadMeter loadMeter = null;
         try {
             JSONObject mergedConfigObj = mergedConfigJson(config, modelSpec, options);
             String mergedConfig = mergedConfigObj.toString();
             String extraConfig = extraConfigJson(modelSpec, mergedConfigObj, config);
             initialized = new LlmSession();
-            // MemAvailable is sampled across native init only; the figure is booked below, so a
-            // failed load never records one.
+            // MemAvailable is sampled across native init and then on to the first request's first
+            // token (see TaiLoadMeter); the load figure is booked below, so a failed load never
+            // records one.
             TaiLoadMeter meter = TaiLoadMeter.start(appContext);
+            boolean loadedOk = false;
             try {
                 initialized.load(config.getAbsolutePath(), null, mergedConfig, extraConfig);
+                measured = meter.endLoad();
+                loadMeter = meter;
+                loadedOk = true;
             } finally {
-                measured = meter.stop();
+                if (!loadedOk) meter.stop();
             }
         } catch (Throwable t) {
             TaiRuntimeCrashMarker.clear(appContext);
@@ -315,6 +323,9 @@ public final class MnnTaiRuntime implements TaiRuntime {
                 TaiRuntimeHistory.recordMeasuredLoad(appContext, modelSpec, deviceCapabilities,
                     TaiModelSpec.BACKEND_MNN_LLM, accelerator, loadedContext, measured);
             }
+            if (pendingPrefill != null) pendingPrefill.abandon();
+            pendingPrefill = loadMeter == null ? null : new TaiLoadMeter.Pending(loadMeter, modelSpec,
+                deviceCapabilities, TaiModelSpec.BACKEND_MNN_LLM, accelerator, loadedContext);
             residency.register(TaiResidency.Entry.chat(modelSpec, TaiModelSpec.BACKEND_MNN_LLM, accelerator, loadedContext)
                 .withMeasured(measured >= 0L ? measured : null));
             TaiRuntimeHistory.recordSuccess(appContext, modelSpec, deviceCapabilities,
@@ -352,6 +363,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         LlmSession activeSession;
         String generationId;
         long startedAt;
+        TaiLoadMeter.Pending prefill;
         synchronized (this) {
             JSONObject availabilityError = ensureLoadedForGenerationLocked(modelId);
             if (availabilityError != null) return availabilityError;
@@ -361,6 +373,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
             applyRequestConfigLocked(activeSession, options, request);
             generationId = beginGenerationLocked();
             startedAt = activeGenerationStartedAtMs;
+            prefill = pendingPrefill;
+            pendingPrefill = null;
         }
 
         StringBuilder responseBuilder = new StringBuilder();
@@ -374,6 +388,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
             HashMap<String, Object> nativeResult = activeSession.generateHistory(history, progress -> {
                 if (cancelRequested) return true;
                 if (progress == null) return false;
+                // The first token ends the first-prefill measurement of a fresh load.
+                if (prefill != null) prefill.firstToken();
                 synchronized (responseBuilder) {
                     responseBuilder.append(progress);
                 }
@@ -394,6 +410,10 @@ public final class MnnTaiRuntime implements TaiRuntime {
                 wasCancelled = cancelRequested;
                 finishGenerationLocked(errorRef.get());
             }
+        }
+        if (prefill != null) {
+            prefill.finish(appContext, Math.max(0, metricInt(metrics, "prompt_len", "prompt_tokens", "prefill_tokens", "promptLen")),
+                errorRef.get() == null && !wasCancelled);
         }
 
         Throwable throwable = errorRef.get();
@@ -709,6 +729,10 @@ public final class MnnTaiRuntime implements TaiRuntime {
         // Every release funnels through here: unload, the idle / keep-warm timer, the release
         // before a replacing load, and the pending unload after a cancelled generation.
         if (loadedModelId != null) residency.deregister(TaiResidency.Kind.CHAT, loadedModelId);
+        if (pendingPrefill != null) {
+            pendingPrefill.abandon();
+            pendingPrefill = null;
+        }
         loadedModelId = null;
         loadedModelPath = null;
         loadedTemplateSupportsTools = false;
