@@ -234,13 +234,17 @@ public final class WallpaperPickerLogic {
                                        int maxHeightPx, int minGapPx) {
         int shortSide = Math.max(1, Math.min(screenShort, screenLong));
         int longSide = Math.max(1, Math.max(screenShort, screenLong));
-        int w = thumbWidth(maxHeightPx, shortSide, longSide);
+        int natural = thumbWidth(maxHeightPx, shortSide, longSide);
+        int w = natural;
         if (availablePx > 0 && tileCount > 0) {
             int cellW = availablePx / tileCount;
             w = Math.min(w, cellW - Math.max(0, minGapPx));
         }
         w = Math.max(1, w);
-        int h = Math.max(1, Math.min(maxHeightPx, Math.round(w * (longSide / (float) shortSide))));
+        // At the natural width the height is the budget itself: rounding the width and back
+        // would otherwise lose a pixel.
+        int h = w >= natural ? maxHeightPx
+            : Math.max(1, Math.min(maxHeightPx, Math.round(w * (longSide / (float) shortSide))));
         return new int[] {w, h};
     }
 }

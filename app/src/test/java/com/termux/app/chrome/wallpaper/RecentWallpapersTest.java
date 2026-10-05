@@ -106,7 +106,7 @@ public class RecentWallpapersTest {
         assertTrue(store.isLiving(alive));
         // An old two-token index line parses as not living.
         Files.write(new File(store.directory(), "index").toPath(),
-            ("p.png abc\n").getBytes(StandardCharsets.UTF_8));
+            (plain.getName() + " abc\n").getBytes(StandardCharsets.UTF_8));
         assertEquals(1, store.entries().size());
         assertFalse(store.entries().get(0).living);
         assertEquals("abc", store.entries().get(0).hash);
