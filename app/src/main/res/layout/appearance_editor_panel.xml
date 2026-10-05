@@ -224,7 +224,8 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_editor_trail"
                 style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
+                android:layout_weight="1"
                 android:layout_height="48dp"
                 android:layout_marginStart="8dp"
                 android:ellipsize="end"
@@ -237,7 +238,8 @@
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/appearance_editor_effect"
                 style="?attr/materialButtonOutlinedStyle"
-                android:layout_width="wrap_content"
+                android:layout_width="0dp"
+                android:layout_weight="1"
                 android:layout_height="48dp"
                 android:layout_marginStart="8dp"
                 android:ellipsize="end"
