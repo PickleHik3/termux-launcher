@@ -66,9 +66,9 @@ public class SurfacePresetsTest {
         SurfacePresets.Preset tint = preset("stock");
         SurfacePresets.apply(preferences, tint);
 
-        assertEquals(6, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(10, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertEquals(46, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
-        assertEquals(14, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(10, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
         // A Look never detaches a surface and never touches Style.
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows())
             assertTrue(row.slot + "/" + row.property,

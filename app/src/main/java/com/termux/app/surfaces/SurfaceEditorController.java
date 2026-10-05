@@ -809,6 +809,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (picture != null) {
                     mEditorWallpaper = picture;
                     showEditorWallpaper(picture);
+                } else if (mPageListener != null) {
+                    mPageListener.onFrameWallpaperMissing();
                 }
                 wallpaperSettled();
             });

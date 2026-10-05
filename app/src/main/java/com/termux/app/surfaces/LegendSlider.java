@@ -56,7 +56,7 @@ public final class LegendSlider extends Slider {
     public LegendSlider(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         setLabelBehavior(LabelFormatter.LABEL_GONE);
-        mEndInsetPx = 4f * context.getResources().getDisplayMetrics().density;
+        mEndInsetPx = 10f * context.getResources().getDisplayMetrics().density;
         resolvePaint();
         resolveInk();
     }
@@ -120,6 +120,21 @@ public final class LegendSlider extends Slider {
             com.google.android.material.R.attr.colorOnSecondaryContainer, 0xFF000000);
     }
 
+    /**
+     * A column's width is the share the row gives it: the stock slider measures a vertical track
+     * at its own thickness whatever width it is offered, which left the columns thin and bunched
+     * at the start in a weighted row.
+     */
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        int width = MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.EXACTLY
+            ? MeasureSpec.getSize(widthMeasureSpec) : getMeasuredWidth();
+        int height = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY
+            ? MeasureSpec.getSize(heightMeasureSpec) : getMeasuredHeight();
+        setMeasuredDimension(width, height);
+    }
+
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
@@ -127,32 +142,37 @@ public final class LegendSlider extends Slider {
             return;
         float width = getWidth();
         float height = getHeight();
-        float pad = getTrackSidePadding();
-        float top = pad;
-        float bottom = height - pad;
+        // The track's rounded ends reach the view's ends; the legend runs along the track's centre
+        // line, so only a small inset keeps it off the curve of each cap.
+        float top = mEndInsetPx;
+        float bottom = height - mEndInsetPx;
         float length = bottom - top;
-        if (length <= 2f * mEndInsetPx)
+        if (length <= 0f)
             return;
+        float pad = getTrackSidePadding();
+        float travel = Math.max(1f, height - 2f * pad);
         float span = getValueTo() - getValueFrom();
         float fraction = span <= 0f ? 0f
             : Math.max(0f, Math.min(1f, (getValue() - getValueFrom()) / span));
         // A vertical slider fills from the bottom: the thumb stands higher as the value grows.
-        float thumb = bottom - fraction * length;
-        float half = Math.min(getThumbWidth(), getThumbHeight()) / 2f + getThumbTrackGapSize();
+        float thumb = height - pad - fraction * travel;
+        // Only the handle's own bar interrupts the legend; the gaps either side of it are the
+        // sheet's colour, where the inactive ink still reads.
+        float half = Math.min(getThumbWidth(), getThumbHeight()) / 2f;
         float cx = width / 2f;
-        float cy = (top + bottom) / 2f;
+        float cy = height / 2f;
 
-        mFitRoomPx = length - 2f * mEndInsetPx;
+        mFitRoomPx = length;
         mShown = fit(mLegend.getFormattedValue(getValue()), mFitRoomPx);
         float textWidth = mPaint.measureText(mShown, 0, mShown.length());
         Paint.FontMetrics metrics = mPaint.getFontMetrics();
         float baseline = cy - (metrics.ascent + metrics.descent) / 2f;
         int alpha = isEnabled() ? 255 : 97;
 
-        // Over the filled part: from just under the handle's gap down to the track's end.
+        // Over the filled part: from just under the handle down to the track's end.
         drawPass(canvas, cx, cy, baseline, textWidth, 0f, Math.min(height, thumb + half), height,
             mActiveInk, alpha);
-        // Over the rest: from the track's end down to just above the handle's gap.
+        // Over the rest: from the track's top down to just above the handle.
         drawPass(canvas, cx, cy, baseline, textWidth, 0f, 0f, Math.max(0f, thumb - half),
             mInactiveInk, alpha);
     }

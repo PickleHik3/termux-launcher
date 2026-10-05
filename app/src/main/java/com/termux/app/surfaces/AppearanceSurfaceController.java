@@ -127,6 +127,12 @@ public final class AppearanceSurfaceController {
         void onModeChanged(boolean layout);
 
         void onDirtyChanged(boolean dirty);
+
+        /**
+         * The frame has no wallpaper to show: passthrough mode, and the system's picture could
+         * not be read. The scrim then stays clear so the window's own wallpaper shows through.
+         */
+        void onFrameWallpaperMissing();
     }
 
     /**
@@ -506,6 +512,10 @@ public final class AppearanceSurfaceController {
 
             @Override public void onDirtyChanged(boolean dirty) {
                 built.setDirty(dirty);
+            }
+
+            @Override public void onFrameWallpaperMissing() {
+                fadeScrim(0f);
             }
         });
         return built;
