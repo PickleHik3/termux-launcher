@@ -158,8 +158,9 @@ public class LayoutModeViewsTest {
             assertTrue(isInside(button, head));
             assertEquals(View.GONE, button.getVisibility());
         }
-        assertNull("the soften toggle and the wallpaper's row are gone",
-            panel.findViewById(R.id.appearance_editor_row2_barrier));
+        assertEquals("the soften toggle and the wallpaper's row are gone", 0,
+            panel.getResources().getIdentifier("appearance_editor_row2_barrier", "id",
+                panel.getContext().getPackageName()));
     }
 
     /**
