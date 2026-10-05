@@ -173,3 +173,20 @@ colour under Clear/Mist/Tint against the dock; slider ends and legend legibility
   anything touched in the last 10 minutes, only touches 16-hex folder names under the living root,
   never follows symlinks, and deletes nothing if any hash fails. It runs after a photo apply (the
   only moment a recent can fall out) and once per process at startup, on the wallpaper worker.
+
+## 11. Pong round 3 (2026-10-05, evening)
+
+- **Flash, second cause.** Every Overview open now covers the launcher at once: while the host faded
+  in, the live backdrop had already been stopped underneath, so the window's wallpaper (the lock
+  engine's picture) showed for a few frames. The page fades in over the cover.
+- **Frame fits the sheet.** The scaled launcher grows to the room the current sheet leaves (Look
+  stops, Layout) and shrinks for Custom, on the sheet's own animation; cap 0.86. Layout's landscape
+  model is a landscape rectangle fitted in the frame's area with the live root faded under it; the
+  1dp ring around the model is covered (host 1px past the launcher's clip, +1px radius).
+- **One shell.** All three pages share the bar: back · `Wallpaper | Look | Layout` pill (the selected
+  segment carries its label, the others their glyph) · Undo (dirty editor) · Done. Apply and its
+  Home-only/Lock-only menu moved under the wallpaper cards. Icon pack keeps a text title.
+- **"May close apps running in the background"** is no longer a standing line. Bring to life runs a
+  dry-run load plan for the wallpaper reader's model off the main thread (`TaiManager.previewMomentaryLoad`);
+  a remote reader or a model that fits starts at once; only a local model that would need room from
+  other apps gets a Low memory dialog with the shortfall in MB and Not now / Continue.
