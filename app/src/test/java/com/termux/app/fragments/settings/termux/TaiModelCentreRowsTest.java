@@ -258,10 +258,15 @@ public class TaiModelCentreRowsTest {
     }
 
     @Test
-    public void deepLinkSegmentsResolveAndAnUnknownOneOpensInstalled() {
-        assertEquals(0, TaiModelCentreFragment.segmentIndex(TaiModelCentreFragment.SEGMENT_INSTALLED));
-        assertEquals(1, TaiModelCentreFragment.segmentIndex(TaiModelCentreFragment.SEGMENT_CHAT));
+    public void deepLinkSegmentsResolveAndAnUnknownOneOpensFunctions() {
+        assertEquals(0, TaiModelCentreFragment.segmentIndex(TaiModelCentreFragment.SEGMENT_FUNCTIONS));
+        assertEquals(1, TaiModelCentreFragment.segmentIndex(TaiModelCentreFragment.SEGMENT_INSTALLED));
+        assertEquals(2, TaiModelCentreFragment.segmentIndex(TaiModelCentreFragment.SEGMENT_GET));
+        // The old Chat and Speech segments are Get models now.
+        assertEquals(2, TaiModelCentreFragment.segmentIndex(TaiModelCentreFragment.SEGMENT_CHAT));
         assertEquals(2, TaiModelCentreFragment.segmentIndex(TaiModelCentreFragment.SEGMENT_SPEECH));
+        assertEquals(2, TaiModelCentreFragment.segmentIndex("chat"));
+        assertEquals(2, TaiModelCentreFragment.segmentIndex("speech"));
         assertEquals(0, TaiModelCentreFragment.segmentIndex("downloads"));
         assertEquals(0, TaiModelCentreFragment.segmentIndex(null));
     }

@@ -17,8 +17,8 @@ import java.util.Set;
 
 /**
  * Every function's model pick, and the one rule that turns a pick into a model (tai-device-tiers
- * spec §4.5). A stored value is {@code ""} (Automatic), a model id, {@code remote/<id>} (reserved
- * for the BYO-key provider, which is not built: it resolves as unavailable) or {@code off}.
+ * spec §4.5). A stored value is {@code ""} (Automatic), a model id, {@code remote/<id>} (the BYO-key
+ * provider's model) or {@code off}.
  *
  * <p>{@link #resolve} goes: the pick, if it is installed and the platform allows it; else Automatic
  * ({@link TaiTierPolicy#automatic}); else the first installed link of the chain ({@link
@@ -93,6 +93,48 @@ public final class TaiFunctionModels {
         void put(@NonNull String key, @NonNull String value);
     }
 
+    /**
+     * The BYO-key provider as the resolver sees it, behind a seam so tests can fake it. A remote model has
+     * no file, so it never goes through {@link Installed}. {@link #NONE} is "not configured".
+     */
+    public interface Remote {
+        boolean configured();
+
+        /** The server's own model id, without the {@code remote/} prefix. */
+        @NonNull String modelId();
+
+        boolean understandsImages();
+
+        /** The "Prefer remote" routing setting: Automatic then resolves to the remote model. */
+        boolean prefersRemote();
+
+        Remote NONE = new Remote() {
+            @Override public boolean configured() { return false; }
+            @NonNull @Override public String modelId() { return ""; }
+            @Override public boolean understandsImages() { return false; }
+            @Override public boolean prefersRemote() { return false; }
+        };
+    }
+
+    /**
+     * Whether {@code function} can run on a remote model at all: not voice typing, read aloud or
+     * embeddings (the app's audio and embedding paths are local), and not the depth model. The
+     * reader needs a remote model that understands images ({@code understandsImages}).
+     */
+    public static boolean remoteAllowed(@NonNull TaiFunction function, boolean understandsImages) {
+        switch (function) {
+            case VOICE_TYPING:
+            case READ_ALOUD:
+            case EMBEDDINGS:
+            case WALLPAPER_DEPTH:
+                return false;
+            case WALLPAPER_READER:
+                return understandsImages;
+            default:
+                return true;
+        }
+    }
+
     /** The outcome of {@link #resolve}; immutable. */
     public static final class Resolution {
         /** The model to load (the reader's carries the {@code -vision} suffix), {@code null} without one. */
@@ -122,11 +164,18 @@ public final class TaiFunctionModels {
     private final TaiTierPolicy.Env env;
     private final Store store;
     private final Installed installed;
+    private final Remote remote;
 
     public TaiFunctionModels(@NonNull TaiTierPolicy.Env env, @NonNull Store store, @NonNull Installed installed) {
+        this(env, store, installed, Remote.NONE);
+    }
+
+    public TaiFunctionModels(@NonNull TaiTierPolicy.Env env, @NonNull Store store, @NonNull Installed installed,
+                             @NonNull Remote remote) {
         this.env = env;
         this.store = store;
         this.installed = installed;
+        this.remote = remote;
     }
 
     /**
@@ -172,7 +221,14 @@ public final class TaiFunctionModels {
             for (TaiModelSpec spec : specs.values()) out.put(spec.id, ModelInfo.of(spec));
             return out;
         };
-        return new TaiFunctionModels(TaiTierPolicy.Env.forDevice(app), store, installed);
+        final TaiRemoteProvider provider = new TaiRemoteProvider(app);
+        Remote remote = new Remote() {
+            @Override public boolean configured() { return provider.isConfigured(); }
+            @NonNull @Override public String modelId() { return provider.modelId(); }
+            @Override public boolean understandsImages() { return provider.understandsImages(); }
+            @Override public boolean prefersRemote() { return provider.prefersRemote(); }
+        };
+        return new TaiFunctionModels(TaiTierPolicy.Env.forDevice(app), store, installed, remote);
     }
 
     @NonNull
@@ -217,6 +273,17 @@ public final class TaiFunctionModels {
         return resolve(function, installed.models());
     }
 
+    /**
+     * What {@code function} would resolve to if {@code removedModelId} were deleted: the Model Centre's
+     * delete confirmation names it for each function that uses the model.
+     */
+    @NonNull
+    public Resolution resolveWithout(@NonNull TaiFunction function, @NonNull String removedModelId) {
+        Map<String, ModelInfo> rest = new LinkedHashMap<>(installed.models());
+        rest.remove(baseId(removedModelId));
+        return resolve(function, rest);
+    }
+
     private Resolution resolve(TaiFunction function, Map<String, ModelInfo> models) {
         List<TaiTierPolicy.Choice> chain = TaiTierPolicy.fallbackChain(env, function);
         if (!TaiTierPolicy.functionAvailable(env, function)) {
@@ -229,7 +296,11 @@ public final class TaiFunctionModels {
                 ? function.withoutModel : TaiTierPolicy.WithoutModel.OFF;
             return new Resolution(null, null, Source.PICK, off, chain, false);
         }
-        // remote/<id> is reserved and unavailable until the provider exists: it falls through to Automatic.
+        // remote/<id> resolves while the provider is set up and the function can run remotely; else it
+        // falls through to Automatic, as a pick that is not installed does.
+        if (isRemote(pick) && remoteUsable(function)) {
+            return remoteResolution(Source.PICK, chain);
+        }
         if (!pick.isEmpty() && !isRemote(pick)) {
             ModelInfo info = serving(function, models, pick);
             if (info != null) {
@@ -237,6 +308,11 @@ public final class TaiFunctionModels {
                 String accel = stored.isEmpty() ? TaiTierPolicy.defaultAccelerator(env) : stored;
                 return withModel(function, info, accel, Source.PICK, chain);
             }
+        }
+
+        // "Prefer remote": Automatic itself means the remote model, wherever the function can use it.
+        if (remote.prefersRemote() && remoteUsable(function)) {
+            return remoteResolution(Source.AUTOMATIC, chain);
         }
 
         TaiTierPolicy.Choice auto = TaiTierPolicy.automatic(env, function);
@@ -256,6 +332,16 @@ public final class TaiFunctionModels {
             }
         }
         return new Resolution(null, null, Source.NONE, function.withoutModel, chain, false);
+    }
+
+    private boolean remoteUsable(TaiFunction function) {
+        return remote.configured() && !remote.modelId().isEmpty()
+            && remoteAllowed(function, remote.understandsImages());
+    }
+
+    /** {@code remote/<id>}: no accelerator, and no background warning (nothing loads here). */
+    private Resolution remoteResolution(Source source, List<TaiTierPolicy.Choice> chain) {
+        return new Resolution(REMOTE_PREFIX + remote.modelId(), null, source, TaiTierPolicy.WithoutModel.NONE, chain, false);
     }
 
     private Resolution withModel(TaiFunction function, ModelInfo info, @Nullable String accelerator, Source source,
@@ -319,7 +405,8 @@ public final class TaiFunctionModels {
         return TaiModelSpec.BACKEND_MNN_LLM.equals(info.backend) ? env.mnnAbiOk : env.liteRtAbiOk;
     }
 
-    static boolean canServe(@NonNull TaiFunction function, @NonNull ModelInfo info) {
+    /** Whether a model with these capabilities can serve {@code function}; the Model Centre's "For:" and "Use for" lists read it. */
+    public static boolean canServe(@NonNull TaiFunction function, @NonNull ModelInfo info) {
         Set<String> caps = info.capabilities;
         switch (function) {
             case VOICE_TYPING:

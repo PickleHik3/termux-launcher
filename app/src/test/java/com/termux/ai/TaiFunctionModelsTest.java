@@ -47,6 +47,17 @@ public class TaiFunctionModelsTest {
         install(E4B, E4B_BYTES, TaiModelSpec.CAPABILITY_TEXT_CHAT, TaiModelSpec.CAPABILITY_IMAGE_INPUT);
     }
 
+    private boolean remoteConfigured;
+    private boolean remoteImages;
+    private boolean remotePrefers;
+
+    private final TaiFunctionModels.Remote fakeRemote = new TaiFunctionModels.Remote() {
+        @Override public boolean configured() { return remoteConfigured; }
+        @Override public String modelId() { return remoteConfigured ? "gpt-x" : ""; }
+        @Override public boolean understandsImages() { return remoteImages; }
+        @Override public boolean prefersRemote() { return remotePrefers; }
+    };
+
     private TaiFunctionModels models(Env env) {
         TaiFunctionModels.Store store = new TaiFunctionModels.Store() {
             @Override public String get(String key) {
@@ -59,7 +70,7 @@ public class TaiFunctionModelsTest {
                 else prefs.put(key, value);
             }
         };
-        return new TaiFunctionModels(env, store, () -> installed);
+        return new TaiFunctionModels(env, store, () -> installed, fakeRemote);
     }
 
     private static Env env(int gb, int sdk, GpuPath gpu) {
@@ -185,7 +196,7 @@ public class TaiFunctionModelsTest {
     }
 
     @Test
-    public void aRemotePickIsStoredButUnavailableForNow() {
+    public void aRemotePickIsStoredButUnavailableWhileNoProviderIsSetUp() {
         installGemma();
         TaiFunctionModels models = pong();
         models.set(TaiFunction.ASSISTANT, "remote/some-model");
@@ -198,6 +209,74 @@ public class TaiFunctionModelsTest {
         assertFalse(TaiFunctionModels.isRemote("remote:old"));
         assertFalse(TaiFunctionModels.isRemote(E2B));
         assertFalse(TaiFunctionModels.isRemote(null));
+    }
+
+    @Test
+    public void aRemotePickResolvesWhenTheProviderIsConfigured() {
+        installGemma();
+        remoteConfigured = true;
+        TaiFunctionModels models = pong();
+        models.set(TaiFunction.ASSISTANT, "remote/gpt-x");
+        Resolution resolution = models.resolve(TaiFunction.ASSISTANT);
+        assertEquals("remote/gpt-x", resolution.modelId);
+        assertEquals(Source.PICK, resolution.source);
+        assertNull(resolution.accelerator);
+        assertFalse(resolution.warnBackground);
+        // The remote model uses no local file, so nothing local is "used by" it.
+        assertTrue(models.usedBy(E2B).isEmpty());
+    }
+
+    @Test
+    public void remoteNeverServesVoiceTypingReadAloudOrEmbeddings() {
+        installGemma();
+        install("kitten", 90L * 1024 * 1024, TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH);
+        remoteConfigured = true;
+        TaiFunctionModels models = pong();
+        models.set(TaiFunction.READ_ALOUD, "remote/gpt-x");
+        models.set(TaiFunction.EMBEDDINGS, "remote/gpt-x");
+        assertFalse(TaiFunctionModels.remoteAllowed(TaiFunction.VOICE_TYPING, true));
+        assertFalse(TaiFunctionModels.remoteAllowed(TaiFunction.READ_ALOUD, true));
+        assertFalse(TaiFunctionModels.remoteAllowed(TaiFunction.EMBEDDINGS, true));
+        assertFalse(TaiFunctionModels.remoteAllowed(TaiFunction.WALLPAPER_DEPTH, true));
+        assertTrue(TaiFunctionModels.remoteAllowed(TaiFunction.TIDY_DICTATION, false));
+        assertFalse(TaiFunctionModels.isRemote(models.resolve(TaiFunction.READ_ALOUD).modelId));
+        assertFalse(TaiFunctionModels.isRemote(models.resolve(TaiFunction.EMBEDDINGS).modelId));
+    }
+
+    @Test
+    public void theReaderUsesARemoteModelOnlyWhenItUnderstandsImages() {
+        installGemma();
+        remoteConfigured = true;
+        TaiFunctionModels models = pong();
+        models.set(TaiFunction.WALLPAPER_READER, "remote/gpt-x");
+        // Text-only remote model: the pick falls through to Automatic.
+        assertEquals(E4B + "-vision", models.resolve(TaiFunction.WALLPAPER_READER).modelId);
+        remoteImages = true;
+        Resolution resolution = models.resolve(TaiFunction.WALLPAPER_READER);
+        assertEquals("remote/gpt-x", resolution.modelId);
+        assertEquals(Source.PICK, resolution.source);
+    }
+
+    @Test
+    public void preferRemoteMakesAutomaticTheRemoteModelButKeepsLocalPicks() {
+        installGemma();
+        remoteConfigured = true;
+        remotePrefers = true;
+        TaiFunctionModels models = pong();
+        Resolution automatic = models.resolve(TaiFunction.ASSISTANT);
+        assertEquals("remote/gpt-x", automatic.modelId);
+        assertEquals(Source.AUTOMATIC, automatic.source);
+        assertNull(automatic.accelerator);
+        // A local pick is the user's word and wins.
+        models.set(TaiFunction.ASSISTANT, E4B);
+        assertEquals(E4B, models.resolve(TaiFunction.ASSISTANT).modelId);
+        // The reader needs images; the audio functions stay local.
+        assertEquals(E4B + "-vision", models.resolve(TaiFunction.WALLPAPER_READER).modelId);
+        assertFalse(TaiFunctionModels.isRemote(models.resolve(TaiFunction.EMBEDDINGS).modelId));
+        // Not configured: the preference means nothing.
+        remoteConfigured = false;
+        models.set(TaiFunction.ASSISTANT, "");
+        assertEquals(E2B, models.resolve(TaiFunction.ASSISTANT).modelId);
     }
 
     @Test

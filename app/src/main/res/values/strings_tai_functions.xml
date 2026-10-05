@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Model Centre: Functions | Installed | Get models, and the function picker sheet
+     (tai-device-tiers spec section 4). -->
+<resources>
+    <string name="tai_fn_segment_functions">Functions</string>
+    <string name="tai_fn_segment_get">Get models</string>
+    <string name="tai_fn_segments_desc">Show what each function uses, the installed models, or models to get</string>
+
+    <!-- Function names. -->
+    <string name="tai_fn_name_assistant">Assistant and endpoint</string>
+    <string name="tai_fn_name_voice_typing">Voice typing</string>
+    <string name="tai_fn_name_tidy_dictation">Tidy dictation</string>
+    <string name="tai_fn_name_read_aloud">Read aloud</string>
+    <string name="tai_fn_name_app_categories">App categories</string>
+    <string name="tai_fn_name_wallpaper">Wallpaper creator</string>
+    <string name="tai_fn_name_embeddings">Search and memory</string>
+    <string name="tai_fn_chooser_reader">Wallpaper reader</string>
+    <string name="tai_fn_chooser_depth">Wallpaper depth</string>
+
+    <!-- What a function row says. -->
+    <string name="tai_fn_automatic">Automatic (%1$s)</string>
+    <string name="tai_fn_automatic_bare">Automatic</string>
+    <string name="tai_fn_rules_only">Rules only</string>
+    <string name="tai_fn_raw_text">Raw text</string>
+    <string name="tai_fn_off">Off</string>
+    <string name="tai_fn_not_set">Not set · Add a model</string>
+    <string name="tai_fn_remote">Remote · %1$s</string>
+    <string name="tai_fn_remote_setup">Set up a remote model</string>
+    <string name="tai_fn_gpu">GPU</string>
+    <string name="tai_fn_cpu">CPU</string>
+    <string name="tai_fn_reader_depth">Reader: %1$s · Depth: %2$s</string>
+    <string name="tai_fn_level_light">Light</string>
+    <string name="tai_fn_level_polished">Polished</string>
+    <string name="tai_fn_background_warning">May close apps running in the background</string>
+    <string name="tai_fn_row_desc">%1$s, %2$s</string>
+
+    <!-- Fit lines, used by the picker, Get models and Installed. -->
+    <string name="tai_fn_fit_fits">Fits this phone</string>
+    <string name="tai_fn_fit_room">When the phone has room</string>
+    <string name="tai_fn_fit_bigger">Made for bigger phones</string>
+    <string name="tai_fn_used_by">Used by: %1$s</string>
+    <string name="tai_fn_for">For: %1$s</string>
+    <string name="tai_fn_for_cutout">Wallpaper creator (cut-out)</string>
+    <string name="tai_fn_chain">If it can’t load: %1$s</string>
+
+    <!-- Installed: Use for... and delete. -->
+    <string name="tai_fn_use_for">Use for…</string>
+    <string name="tai_fn_use_for_title">Use %1$s for</string>
+    <string name="tai_fn_use_for_none">This model does not serve a function on this phone.</string>
+    <string name="tai_fn_delete_in_use">In use by %1$s. If you delete it:</string>
+    <string name="tai_fn_delete_line">%1$s: %2$s</string>
+    <string name="tai_fn_empty_installed_summary">Get a model under Get models, or paste a link there.</string>
+
+    <!-- Get models groups. -->
+    <string name="tai_fn_group_assistants">Assistants</string>
+    <string name="tai_fn_group_speech">Speech</string>
+    <string name="tai_fn_group_voice">Voice output</string>
+    <string name="tai_fn_group_search">Search</string>
+    <string name="tai_fn_group_vision">Wallpaper vision</string>
+    <string name="tai_fn_get_empty">Every model in the catalogue is installed or on its way. Paste a link above to add any other.</string>
+    <string name="tai_fn_pill_suggested">Suggested</string>
+
+    <!-- The picker sheet. -->
+    <string name="tai_fn_sheet_subtitle">Pick what this function uses.</string>
+    <string name="tai_fn_section_automatic">Automatic</string>
+    <string name="tai_fn_section_on_phone">On this phone</string>
+    <string name="tai_fn_section_remote">Remote</string>
+    <string name="tai_fn_section_without">Without a model</string>
+    <string name="tai_fn_section_get">Get a model</string>
+    <string name="tai_fn_section_depth">Depth model</string>
+    <string name="tai_fn_section_extras">Settings</string>
+    <string name="tai_fn_nothing_on_phone">No installed model serves this yet.</string>
+    <string name="tai_fn_runs_on">Runs on</string>
+    <string name="tai_fn_get_action">Get</string>
+    <string name="tai_fn_get_starting">Starting…</string>
+    <string name="tai_fn_get_started">Downloading</string>
+    <string name="tai_fn_get_size">%1$s · %2$s</string>
+    <string name="tai_fn_cutout_line">Cut-out: U-2-Net, part of the wallpaper creator. Nothing to pick.</string>
+    <string name="tai_fn_tidy_level">Cleanup level</string>
+    <string name="tai_fn_voice_title">Voice</string>
+    <string name="tai_fn_speed_title">Speed</string>
+    <string name="tai_fn_speed_value">%1$s×</string>
+    <string name="tai_fn_window_title">Voice typing window</string>
+    <string name="tai_fn_window_value">%1$d seconds · Change</string>
+</resources>
