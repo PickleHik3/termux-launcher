@@ -153,3 +153,23 @@ to read.
 
 Installed on pong 443aee3db (phone was dozing; activity started, not driven). Checks owed: bar
 colour under Clear/Mist/Tint against the dock; slider ends and legend legibility; the pill in the bar.
+
+## 10. Pong round 2 (2026-10-05, afternoon)
+
+- **Done on the overview.** A check icon button at the bar's end (a text Done did not fit the 360dp
+  bar beside the title and the Apply split; the bar's end padding and Apply's padding tightened).
+- **Flash on open.** A screen recording showed the cause: after Settings closed, the launcher's home
+  screen was drawn for several frames before the Overview faded in. An Overview opened from another
+  activity now covers the launcher at once (opaque colorSurface host at full alpha) and fades its
+  page in over that cover (`AppearanceSurfaceController.coverNextOpen`). Re-recorded: no home frames.
+- **Recent wallpapers.** Five kept instead of three; the strip's thumbs shrink to the row (pure
+  `WallpaperPickerLogic.stripThumbSize`, never clipped, aspect kept). The index line carries a
+  `living` token for a photo last applied as a living still, and such tiles wear the bring-to-life
+  glyph. The animation data itself was already keyed by the photo's content hash and survives any
+  switch; what was missing was cleanup.
+- **Pruning living stills.** `living/LivingStillPruner` deletes `files/wallpaper/living/<hash16>/`
+  folders that nothing names: not a recent, not the Home or Lock still, not a pending crop, the Lock
+  photo or the Home exact copy. It skips folders without `recipe.json` (a build in progress) and
+  anything touched in the last 10 minutes, only touches 16-hex folder names under the living root,
+  never follows symlinks, and deletes nothing if any hash fails. It runs after a photo apply (the
+  only moment a recent can fall out) and once per process at startup, on the wallpaper worker.
