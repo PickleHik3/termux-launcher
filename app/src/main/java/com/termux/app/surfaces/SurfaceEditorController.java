@@ -566,7 +566,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             frame = (FrameLayout) inflated;
             frame.setOutlineProvider(new ViewOutlineProvider() {
                 @Override public void getOutline(View view, Outline outline) {
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), mFrameCornerPx);
+                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
+                        mFrameCornerPx + RING_PX);
                 }
             });
             frame.setClipToOutline(true);
@@ -590,6 +591,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (liftCanvas != null)
             // The lifted copy follows the finger over the whole editor, the sheet included.
             liftCanvas.setLiftOverlayHost(content);
+        LayoutCanvasView shapeCanvas = frame.findViewById(R.id.layout_editor_canvas);
+        if (shapeCanvas != null)
+            shapeCanvas.setOnModelResizedListener(this::onModelShapeChanged);
         if (mLayoutViews == null) {
             LayoutCanvasView canvas = frame.findViewById(R.id.layout_editor_canvas);
             MaterialButton move = mLayoutMove;
@@ -680,6 +684,76 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             }
         };
 
+    // ---- the other orientation's phone model ------------------------------------------------------
+
+    private static final long MODEL_MS = 250L;
+    private boolean mModelShape;
+    private float mModelProgress;
+    @Nullable private android.animation.ValueAnimator mModelAnimator;
+
+    /**
+     * Layout mode shows the other orientation (landscape in a portrait editor): the canvas draws
+     * a landscape phone model of its own, so the portrait host's ground and the live launcher
+     * under it, which cannot show landscape, fade away beneath it. Cross-fades over 250ms; with
+     * reduced motion it jumps.
+     */
+    private void applyModelShape(boolean resized, boolean animate) {
+        if (resized == mModelShape && mModelAnimator == null && mModelProgress == (resized ? 1f : 0f))
+            return;
+        mModelShape = resized;
+        FrameLayout host = mLayoutFrame;
+        if (mModelAnimator != null) {
+            mModelAnimator.cancel();
+            mModelAnimator = null;
+        }
+        final float to = resized ? 1f : 0f;
+        if (!animate || ReducedMotion.isEnabled(mHost.context()) || host == null || !mOpen) {
+            setModelProgress(to);
+            return;
+        }
+        android.animation.ValueAnimator animator =
+            android.animation.ValueAnimator.ofFloat(mModelProgress, to);
+        animator.setDuration(MODEL_MS);
+        animator.setInterpolator(Motion.settle());
+        animator.addUpdateListener(a -> setModelProgress((Float) a.getAnimatedValue()));
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator a) {
+                if (mModelAnimator == animator)
+                    mModelAnimator = null;
+            }
+        });
+        mModelAnimator = animator;
+        animator.start();
+    }
+
+    /** 0 is the host's own phone over the launcher, 1 the free-standing model. */
+    private void setModelProgress(float progress) {
+        mModelProgress = progress;
+        AppearanceEditorFrame frame = mFrame;
+        if (frame != null)
+            frame.root().setAlpha(1f - progress);
+        FrameLayout host = mLayoutFrame;
+        if (host != null && host.getBackground() != null)
+            host.getBackground().mutate().setAlpha(Math.round(255f * (1f - progress)));
+    }
+
+    /** The canvas changed between the host's own shape and the other orientation's model. */
+    private void onModelShapeChanged() {
+        if (!mOpen || !mLayoutMode || mLayoutFrame == null)
+            return;
+        LayoutCanvasView canvas = mLayoutFrame.findViewById(R.id.layout_editor_canvas);
+        if (canvas == null)
+            return;
+        applyModelShape(canvas.isModelResized(), true);
+        if (!ReducedMotion.isEnabled(mHost.context())) {
+            // The model itself morphs in: the new outline fades up as the old one leaves.
+            canvas.animate().cancel();
+            canvas.setAlpha(0f);
+            canvas.animate().alpha(1f).setDuration(MODEL_MS).setInterpolator(Motion.settle())
+                .start();
+        }
+    }
+
     /** Stands the canvas's host exactly over the frame's rect, at the frame's corner. */
     private void positionLayoutFrame() {
         FrameLayout frame = mLayoutFrame;
@@ -690,21 +764,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (!(raw instanceof FrameLayout.LayoutParams))
             return;
         FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) raw;
-        int width = Math.max(1, rect[2] - rect[0]);
-        int height = Math.max(1, rect[3] - rect[1]);
-        if (params.width != width || params.height != height || params.leftMargin != rect[0]
-            || params.topMargin != rect[1]) {
+        // One pixel past the scaled launcher on every side: two anti-aliased edges (the launcher's
+        // clip and this host's) never add up to full cover, so the host reaches past instead.
+        int left = rect[0] - RING_PX;
+        int top = rect[1] - RING_PX;
+        int width = Math.max(1, rect[2] - rect[0] + 2 * RING_PX);
+        int height = Math.max(1, rect[3] - rect[1] + 2 * RING_PX);
+        if (params.width != width || params.height != height || params.leftMargin != left
+            || params.topMargin != top) {
             params.width = width;
             params.height = height;
-            params.leftMargin = rect[0];
-            params.topMargin = rect[1];
+            params.leftMargin = left;
+            params.topMargin = top;
             params.gravity = Gravity.TOP | Gravity.LEFT;
             frame.setLayoutParams(params);
         }
         frame.invalidateOutline();
         LayoutCanvasView canvas = frame.findViewById(R.id.layout_editor_canvas);
         if (canvas != null)
-            canvas.setFrameCornerRadiusPx(mFrameCornerPx);
+            canvas.setFrameCornerRadiusPx(mFrameCornerPx + RING_PX);
     }
 
     /**
@@ -747,7 +825,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 pushLayoutShape(editor);
                 editor.sync();
             }
+            LayoutCanvasView shown = mLayoutFrame == null ? null
+                : mLayoutFrame.findViewById(R.id.layout_editor_canvas);
+            applyModelShape(shown != null && shown.isModelResized(), animate);
         } else {
+            applyModelShape(false, animate);
             positionTargets();
             // The move control stands outside the frame, so the frame's fade does not take it.
             if (mLayoutMove != null)
@@ -927,7 +1009,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mAppearanceHeightPx = panel.measureTallest(false, mPanelWidthPx);
         mLayoutHeightPx = panel.measureTallest(true, mPanelWidthPx);
         mRestHeightPx = Math.max(mAppearanceHeightPx, mLayoutHeightPx);
-        applyPanelHeight(false);
+        mInLayoutFrame = true;
+        try {
+            applyPanelHeight(false);
+        } finally {
+            mInLayoutFrame = false;
+        }
 
         int[] parentOffset = new int[2];
         if (!AppearanceEditorFrame.offsetIn((View) root.getParent(), content, parentOffset))
@@ -939,20 +1026,133 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             + dp(FRAME_GAP_DP);
         // Nothing stands between the frame and the sheet any more (DECISIONS item 2): the hide
         // zone's 56dp are the frame's.
-        int frameBottom = windowHeight - mRestHeightPx - dp(FRAME_GAP_DP);
-        float scale = AppearanceEditorFrame.fitScale(root.getHeight(), frameTop, frameBottom);
-        frame.show(scale, frameTop - containerTop, animate);
-        // Where the scaled container lands (pivot at its top centre): the rect Layout mode's
-        // canvas stands in, at the same corner, so nothing jumps between the two modes.
-        float scaledLeft = containerLeft + root.getWidth() * (1f - scale) / 2f;
-        mFrameRectInContent = new int[] {Math.round(scaledLeft), frameTop,
-            Math.round(scaledLeft + root.getWidth() * scale),
-            Math.round(frameTop + root.getHeight() * scale)};
-        mFrameCornerPx = AppearanceEditorFrame.deviceCornerRadiusPx(root) * scale;
+        mFrameCtxValid = true;
+        mWindowHeightPx = windowHeight;
+        mFrameTopPx = frameTop;
+        mContainerTopPx = containerTop;
+        mContainerLeftPx = containerLeft;
+        cancelFrameAnimator();
+        // The frame fits the room the sheet leaves NOW (a Look stop's one row, or Custom's
+        // sliders), not the tallest it gets: refitFrame follows every later change of the sheet.
+        int frameBottom = windowHeight - panel.measureFor(mLayoutMode, mPanelWidthPx)
+            - dp(FRAME_GAP_DP);
+        float scale = AppearanceEditorFrame.fitScale(root.getHeight(), frameTop, frameBottom,
+            AppearanceEditorFrame.MAX_SCALE);
+        float ty = frameTop - containerTop;
+        frame.show(scale, ty, animate);
+        mTargetScale = scale;
+        mTargetTy = ty;
+        setFrameRect(scale);
         positionLayoutFrame();
         // A rotation moved the decor around the container: the picture is cropped to it again.
         if (mEditorWallpaper != null)
             showEditorWallpaper(mEditorWallpaper);
+    }
+
+    // ---- the frame follows the sheet -------------------------------------------------------------
+
+    private boolean mFrameCtxValid;
+    private boolean mInLayoutFrame;
+    private int mWindowHeightPx;
+    private int mFrameTopPx;
+    private int mContainerTopPx;
+    private int mContainerLeftPx;
+    private float mTargetScale = -1f;
+    private float mTargetTy;
+    @Nullable private android.animation.ValueAnimator mFrameAnimator;
+    /** The layout canvas host reaches this far past the scaled launcher, so no seam shows. */
+    private static final int RING_PX = 1;
+
+    private void cancelFrameAnimator() {
+        android.animation.ValueAnimator animator = mFrameAnimator;
+        mFrameAnimator = null;
+        if (animator != null)
+            animator.cancel();
+    }
+
+    /** The scaled container's rect in the content view, widened to whole pixels. */
+    private void setFrameRect(float scale) {
+        AppearanceEditorFrame frame = mFrame;
+        if (frame == null)
+            return;
+        View root = frame.root();
+        float scaledLeft = mContainerLeftPx + root.getWidth() * (1f - scale) / 2f;
+        mFrameRectInContent = new int[] {(int) Math.floor(scaledLeft), mFrameTopPx,
+            (int) Math.ceil(scaledLeft + root.getWidth() * scale),
+            (int) Math.ceil(mFrameTopPx + root.getHeight() * scale)};
+        mFrameCornerPx = AppearanceEditorFrame.deviceCornerRadiusPx(root) * scale;
+    }
+
+    /**
+     * The sheet took a new height: the frame grows into the room a shorter sheet gives it, or
+     * shrinks out of a taller one's way, on the sheet's own clock (same duration and curve), the
+     * layout canvas and the tap targets following every tick.
+     */
+    private void refitFrame(int sheetPx, boolean animate) {
+        AppearanceEditorFrame frame = mFrame;
+        if (frame == null || !mFrameCtxValid || mInLayoutFrame || !mOpen)
+            return;
+        View root = frame.root();
+        if (root.getHeight() <= 0)
+            return;
+        int bottom = mWindowHeightPx - sheetPx - dp(FRAME_GAP_DP);
+        float scale = AppearanceEditorFrame.fitScale(root.getHeight(), mFrameTopPx, bottom,
+            AppearanceEditorFrame.MAX_SCALE);
+        float ty = mFrameTopPx - mContainerTopPx;
+        if (scale == mTargetScale && ty == mTargetTy)
+            return;
+        mTargetScale = scale;
+        mTargetTy = ty;
+        cancelFrameAnimator();
+        if (!mFramed) {
+            // Still arriving: the opening hop re-aims at the new pose.
+            frame.show(scale, ty, !ReducedMotion.isEnabled(mHost.context()));
+            setFrameRect(scale);
+            positionLayoutFrame();
+            return;
+        }
+        if (!animate || ReducedMotion.isEnabled(mHost.context())) {
+            frame.show(scale, ty, false);
+            setFrameRect(scale);
+            positionLayoutFrame();
+            positionTargets();
+            return;
+        }
+        root.animate().cancel();
+        final float fromScale = root.getScaleX();
+        final float fromTy = root.getTranslationY();
+        final float toScale = scale;
+        final float toTy = ty;
+        android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        animator.setDuration(PANEL_MS);
+        animator.setInterpolator(Motion.settle());
+        animator.addUpdateListener(a -> {
+            float f = (Float) a.getAnimatedValue();
+            float s = fromScale + (toScale - fromScale) * f;
+            frame.setPose(s, fromTy + (toTy - fromTy) * f);
+            setFrameRect(s);
+            positionLayoutFrame();
+        });
+        animator.addListener(new android.animation.AnimatorListenerAdapter() {
+            private boolean mCancelled;
+
+            @Override public void onAnimationCancel(android.animation.Animator a) {
+                mCancelled = true;
+            }
+
+            @Override public void onAnimationEnd(android.animation.Animator a) {
+                if (mFrameAnimator == animator)
+                    mFrameAnimator = null;
+                if (mCancelled || !mOpen)
+                    return;
+                frame.setPose(toScale, toTy);
+                setFrameRect(toScale);
+                positionLayoutFrame();
+                positionTargets();
+            }
+        });
+        mFrameAnimator = animator;
+        animator.start();
     }
 
     /**
@@ -971,13 +1171,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (params == null)
             return;
         if (mPanelAnimator != null) {
-            if (mPanelTargetPx == height)
+            if (mPanelTargetPx == height) {
+                refitFrame(height, animate);
                 return;
+            }
             // A change cut short lands where it was going; the new one starts from there.
             finishPanelAnimation(view);
         }
-        if (params.height == height)
+        if (params.height == height) {
+            refitFrame(height, animate);
             return;
+        }
         int from = params.height > 0 ? params.height : view.getHeight();
         boolean instant = !animate || from <= 0 || !view.isAttachedToWindow()
             || view.getVisibility() != View.VISIBLE || mPanelRevealing
@@ -985,8 +1189,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (instant) {
             params.height = height;
             view.setLayoutParams(params);
+            refitFrame(height, false);
             return;
         }
+        refitFrame(height, true);
         // One layout pass, then the sheet's top edge travels by translation: growing, the sheet
         // takes its new height at once and starts pushed down by the difference; shrinking, it
         // keeps its height and slides down by the difference, and takes the new one at the end,
@@ -2420,6 +2626,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         boolean wasLayout = mLayoutMode;
         mLayoutMode = false;
+        cancelFrameAnimator();
+        mFrameCtxValid = false;
+        mTargetScale = -1f;
+        applyModelShape(false, false);
         fadeLayoutFrame(false, wasLayout, 0L);
         setOverlayVisible(false);
         unregisterLayoutListener();
