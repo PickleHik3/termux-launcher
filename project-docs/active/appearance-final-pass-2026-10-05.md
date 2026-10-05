@@ -127,3 +127,29 @@ Owed on pong: Clear/Mist/Tint on a real wallpaper; the pane veil cap on a light 
 expanded clock with media and with notifications; the lock wallpaper flash on open; the Keyboard
 theme page's chip rows at 360dp (the row titles sit beside wrapping chips, which could become a
 title line above each row); the terminal Contrast slider's three palettes in a shell.
+
+## 9. Pong round 1 (2026-10-05, afternoon)
+
+Developer's report on the first pong install: the status bar did not follow the Looks, the vertical
+sliders were clipped at both ends with 0/100 off the track's ends, and the inset legends were hard
+to read.
+
+- **Status bar.** Pixel samples of the developer's four screenshots: the bar was rgb(75,106,144) under
+  Clear, (72,96,128) under Mist, (79,111,149) under Tint over a (158,191,238) sky, while the dock
+  followed each Look. The chrome band's legibility veil (up to 0.55 dark) was filling in whatever the
+  Look left out, and `syncStatusBarInk` passed `primary` as both inks so the text could never
+  re-tone. Fix: every chrome band veils only up to the pane's ceiling
+  `min(0.55, max(0.20, opacity + 0.15))` of its own glass tint, and the status bar hands ChromeInk a
+  dark/pale primary pair (tones 30 / 85) so the ink flips where the ceiling binds.
+- **Sliders.** `LegendSlider` is now a hand-drawn vertical M3 slider (no `Slider` subclass): the track
+  spans the column, 0 at the bottom edge and the maximum at the top edge, 4dp handle with 6dp gaps and
+  2dp inside corners, stop indicator; the legend stands beside the track as vertical text in
+  `onSurfaceVariant` (the developer's call: inside the pill was illegible).
+- **Sheet height.** The Look | Layout pill moved into the page bar in place of the title; the sheet
+  starts at the Look slider.
+- Opening the editor by the launch intent while the launcher is already front toggles the app drawer
+  first (the frame then shows the drawer). Open it from Settings › Appearance › Surface style or the
+  terminal sheet when driving by adb.
+
+Installed on pong 443aee3db (phone was dozing; activity started, not driven). Checks owed: bar
+colour under Clear/Mist/Tint against the dock; slider ends and legend legibility; the pill in the bar.
