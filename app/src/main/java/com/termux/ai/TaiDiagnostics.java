@@ -47,9 +47,28 @@ public final class TaiDiagnostics {
         }
         File file = new File(directory, FILE_NAME);
         try (FileOutputStream output = new FileOutputStream(file, false)) {
-            output.write(compose(System.currentTimeMillis(), events, history, marker).getBytes(StandardCharsets.UTF_8));
+            String text = compose(System.currentTimeMillis(), events, history, marker);
+            output.write(redactSecrets(text, remoteApiKey(context)).getBytes(StandardCharsets.UTF_8));
         }
         return file;
+    }
+
+    /**
+     * The file is meant to be shared, so the remote provider's key and any {@code Authorization}
+     * value are scrubbed from it even though nothing is supposed to log them.
+     */
+    @NonNull
+    static String redactSecrets(@NonNull String text, @Nullable String... secrets) {
+        return TaiRemoteClient.redact(text, secrets);
+    }
+
+    @Nullable
+    private static String remoteApiKey(@NonNull Context context) {
+        try {
+            return new TaiRemoteSettings(context).apiKey();
+        } catch (RuntimeException e) {
+            return null;
+        }
     }
 
     /** The shared text: a header line, then one titled section per source. */
