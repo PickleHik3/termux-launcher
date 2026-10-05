@@ -147,7 +147,11 @@ Phones set to English get the `.en` Whisper files; others get the multilingual o
 
 | Tier 1 | Tier 2 (8 GB) | Tier 2 (10–12 GB) | Tier 3 |
 |---|---|---|---|
-| Off, unless the user picks a model they added. The paste route stays. | E2B | E4B → E2B | E4B → E2B |
+| Off, unless the user picks a model they added. The paste route stays. | E2B | E2B | E4B (the resident assistant) → E2B |
+
+E2B for all of Tier 2: on pong E4B matched E2B's accuracy at twice the time and about 3× the memory
+(`reference/voice-ai/daytoday-settings-bench-2026-10-05.md`). Categories and tidy dictation send speculative
+decoding on, thinking off, and leave the window on Automatic.
 
 ### 3.4 Search and memory (embeddings)
 
