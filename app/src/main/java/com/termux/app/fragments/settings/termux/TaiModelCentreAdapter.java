@@ -28,6 +28,7 @@ import com.google.android.material.progressindicator.CircularProgressIndicator;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.termux.R;
 import com.termux.ai.TaiDownloadHub;
+import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelSpec;
 
@@ -52,6 +53,10 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
     static final int TYPE_MODEL = 5;
     static final int TYPE_EMPTY = 6;
     static final int TYPE_SETTING = 7;
+    /** The device line on top of every segment. */
+    static final int TYPE_HEADER = 8;
+    /** One Functions row. */
+    static final int TYPE_FUNCTION = 9;
 
     /** What a tap on the list asks the fragment to do. */
     interface Callbacks {
@@ -73,6 +78,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         void onBannerAction(@NonNull Banner banner);
         void onBannerDismiss(@NonNull Banner banner);
         void onParallelSelected(int parallel);
+        /** A Functions row was tapped: open that function's picker sheet. */
+        void onFunctionClicked(@NonNull TaiFunction function);
     }
 
     /** One entry of the list. {@link #signature} is what DiffUtil compares for "same content". */
@@ -100,6 +107,14 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         LinkBar(@NonNull String text, @NonNull String error) {
             this.text = text;
             this.error = error;
+        }
+    }
+
+    static final class Header {
+        @NonNull final String text;
+
+        Header(@NonNull String text) {
+            this.text = text;
         }
     }
 
@@ -161,6 +176,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         boolean vision;
         /** Brought into view from a deep link: ringed for a moment so the eye finds it. */
         boolean highlighted;
+        /** "Used by: Assistant" on an installed model; the fit line and "For: ..." on a catalogue one. */
+        @NonNull String extra = "";
 
         ModelRow(@NonNull String modelId, boolean speech, @Nullable TaiModelSpec installed,
                  @Nullable TaiModelCatalog.CatalogEntry entry) {
@@ -173,7 +190,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         @NonNull
         String signature() {
             return title + '|' + subtitle + '|' + pillPrimary + '|' + tonePrimary + '|' + pillSecondary + '|'
-                + pillBackend + '|' + pillSpeed + '|' + installable + '|' + installing + '|' + note + '|' + noteIsError + '|' + tokenAction + '|' + highlighted;
+                + pillBackend + '|' + pillSpeed + '|' + extra + '|' + installable + '|' + installing + '|' + note + '|' + noteIsError + '|' + tokenAction + '|' + highlighted;
         }
     }
 
@@ -271,6 +288,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             case TYPE_BANNER: return new BannerHolder(inflater.inflate(R.layout.item_tai_centre_banner, parent, false));
             case TYPE_SEGMENTS: return new SegmentsHolder(inflater.inflate(R.layout.item_tai_centre_segments, parent, false));
             case TYPE_MODEL: return new ModelHolder(inflater.inflate(R.layout.item_tai_centre_model, parent, false));
+            case TYPE_HEADER: return new HeaderHolder(inflater.inflate(R.layout.item_tai_centre_header, parent, false));
+            case TYPE_FUNCTION: return new FunctionHolder(inflater.inflate(R.layout.item_tai_centre_function, parent, false));
             case TYPE_SETTING: return new SettingHolder(inflater.inflate(R.layout.item_tai_centre_setting, parent, false));
             default: return new EmptyHolder(inflater.inflate(R.layout.item_tai_centre_empty, parent, false));
         }
@@ -286,6 +305,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         else if (holder instanceof SegmentsHolder) ((SegmentsHolder) holder).bind((Segments) item.data);
         else if (holder instanceof ModelHolder) ((ModelHolder) holder).bind((ModelRow) item.data);
         else if (holder instanceof SettingHolder) ((SettingHolder) holder).bind((Integer) item.data);
+        else if (holder instanceof HeaderHolder) ((HeaderHolder) holder).bind((Header) item.data);
+        else if (holder instanceof FunctionHolder) ((FunctionHolder) holder).bind((TaiFunctionRows.FunctionRow) item.data);
         else if (holder instanceof EmptyHolder) ((EmptyHolder) holder).bind((Empty) item.data);
         if (item.arrive && arrived.add(item.type + ":" + item.key)) {
             View target = holder.itemView.findViewById(item.type == TYPE_BANNER ? R.id.tai_centre_banner : R.id.tai_centre_shell);
@@ -638,6 +659,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         final TextView install;
         final CircularProgressIndicator ring;
         final MaterialButton more;
+        final TextView extra;
         final TextView note;
         final TextView noteAction;
         @Nullable ModelRow row;
@@ -655,6 +677,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             install = view.findViewById(R.id.tai_centre_install);
             ring = view.findViewById(R.id.tai_centre_install_ring);
             more = view.findViewById(R.id.tai_centre_more);
+            extra = view.findViewById(R.id.tai_centre_extra);
             note = view.findViewById(R.id.tai_centre_note);
             noteAction = view.findViewById(R.id.tai_centre_note_action);
             noteAction.setOnClickListener(v -> {
@@ -686,6 +709,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
                 : next.speech ? R.drawable.ic_tai_wave : R.drawable.ic_tai_chat);
             setText(title, next.title);
             setText(subtitle, next.subtitle);
+            setText(extra, next.extra);
             setText(pillSpeed, next.pillSpeed);
             setText(pillBackend, next.pillBackend);
             setText(pillPrimary, next.pillPrimary);
@@ -705,6 +729,49 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             note.setTextColor(role(context, next.noteIsError ? androidx.appcompat.R.attr.colorError
                 : com.google.android.material.R.attr.colorOnSurfaceVariant));
             setText(noteAction, next.tokenAction ? context.getString(R.string.tai_centre_action_add_token) : "");
+        }
+    }
+
+    private static final class HeaderHolder extends RecyclerView.ViewHolder {
+        final TextView line;
+
+        HeaderHolder(@NonNull View view) {
+            super(view);
+            line = view.findViewById(R.id.tai_centre_device_line);
+        }
+
+        void bind(@NonNull Header header) {
+            setText(line, header.text);
+        }
+    }
+
+    private final class FunctionHolder extends RecyclerView.ViewHolder {
+        final View core;
+        final TextView name;
+        final TextView badge;
+        final TextView summary;
+        final TextView warning;
+        @Nullable TaiFunctionRows.FunctionRow row;
+
+        FunctionHolder(@NonNull View view) {
+            super(view);
+            core = view.findViewById(R.id.tai_centre_shell);
+            name = view.findViewById(R.id.tai_fn_name);
+            badge = view.findViewById(R.id.tai_fn_badge);
+            summary = view.findViewById(R.id.tai_fn_summary);
+            warning = view.findViewById(R.id.tai_fn_warning);
+            core.setOnClickListener(v -> {
+                if (row != null) callbacks.onFunctionClicked(row.function);
+            });
+        }
+
+        void bind(@NonNull TaiFunctionRows.FunctionRow next) {
+            row = next;
+            setText(name, next.name);
+            setText(badge, next.badge);
+            setText(summary, next.summary);
+            warning.setVisibility(next.warnBackground ? View.VISIBLE : View.GONE);
+            core.setContentDescription(itemView.getContext().getString(R.string.tai_fn_row_desc, next.name, next.summary));
         }
     }
 

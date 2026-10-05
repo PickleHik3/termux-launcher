@@ -28,9 +28,9 @@ import org.robolectric.annotation.ConscryptMode;
 import org.robolectric.shadows.ShadowLooper;
 
 /**
- * The Model centre opens on the segment a deep link names (the notification, the speech model
- * picker's "Get more", the cleanup screen), and lays out its list: link bar, segments, the
- * segment's rows and the simultaneous-downloads setting.
+ * The Model centre opens on Functions, or on the segment a deep link names (the notification, the
+ * speech model picker's "Get more", the cleanup screen), and lays out its list: the device line,
+ * segments, the segment's rows (the import bar leads Get models) and the simultaneous-downloads setting.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -64,31 +64,42 @@ public class TaiModelCentreFragmentTest {
     }
 
     @Test
-    public void aDeepLinkOpensTheNamedSegment() {
-        assertEquals(TaiModelCentreFragment.SEGMENT_SPEECH, launch(TaiModelCentreFragment.SEGMENT_SPEECH).currentSegment());
-        assertEquals(TaiModelCentreFragment.SEGMENT_CHAT, launch(TaiModelCentreFragment.SEGMENT_CHAT).currentSegment());
+    public void theCentreOpensOnFunctionsAndADeepLinkOpensTheNamedSegment() {
+        assertEquals(TaiModelCentreFragment.SEGMENT_FUNCTIONS, launch(null).currentSegment());
+        assertEquals(TaiModelCentreFragment.SEGMENT_INSTALLED, launch(TaiModelCentreFragment.SEGMENT_INSTALLED).currentSegment());
+        assertEquals(TaiModelCentreFragment.SEGMENT_GET, launch(TaiModelCentreFragment.SEGMENT_GET).currentSegment());
+        // The old segment names land on Get models.
+        assertEquals(TaiModelCentreFragment.SEGMENT_GET, launch(TaiModelCentreFragment.SEGMENT_SPEECH).currentSegment());
     }
 
     @Test
-    public void theChatSegmentListsTheCatalogueWithTheLinkBarOnTopAndTheSettingAtTheBottom() {
-        TaiModelCentreFragment fragment = launch(TaiModelCentreFragment.SEGMENT_CHAT);
+    public void functionsListsTheDeviceLineThenTheSegmentsThenTheFunctionRows() {
+        TaiModelCentreFragment fragment = launch(TaiModelCentreFragment.SEGMENT_FUNCTIONS);
         RecyclerView list = (RecyclerView) fragment.getView();
         assertNotNull(list);
         RecyclerView.Adapter<?> adapter = list.getAdapter();
         assertNotNull(adapter);
-        // Link bar, segments, two Gemma 4 rows (nothing installed, nothing downloading), the
-        // Embeddings section (heading and its one row), the wallpaper vision section (heading and
-        // its four rows), the setting.
-        assertEquals(TaiModelCentreAdapter.TYPE_LINK, adapter.getItemViewType(0));
+        assertEquals(TaiModelCentreAdapter.TYPE_HEADER, adapter.getItemViewType(0));
         assertEquals(TaiModelCentreAdapter.TYPE_SEGMENTS, adapter.getItemViewType(1));
-        assertEquals(TaiModelCentreAdapter.TYPE_MODEL, adapter.getItemViewType(2));
-        assertEquals(TaiModelCentreAdapter.TYPE_MODEL, adapter.getItemViewType(3));
-        assertEquals(TaiModelCentreAdapter.TYPE_SECTION, adapter.getItemViewType(4));
-        assertEquals(TaiModelCentreAdapter.TYPE_MODEL, adapter.getItemViewType(5));
-        assertEquals(TaiModelCentreAdapter.TYPE_SECTION, adapter.getItemViewType(6));
-        for (int i = 7; i <= 10; i++) assertEquals(TaiModelCentreAdapter.TYPE_MODEL, adapter.getItemViewType(i));
+        assertEquals(TaiModelCentreAdapter.TYPE_FUNCTION, adapter.getItemViewType(2));
+        // No import bar and no downloads setting on this segment.
+        for (int i = 0; i < adapter.getItemCount(); i++) {
+            assertTrue(adapter.getItemViewType(i) != TaiModelCentreAdapter.TYPE_LINK);
+            assertTrue(adapter.getItemViewType(i) != TaiModelCentreAdapter.TYPE_SETTING);
+        }
+    }
+
+    @Test
+    public void getModelsLeadsWithTheImportBarAndEndsWithTheDownloadsSetting() {
+        TaiModelCentreFragment fragment = launch(TaiModelCentreFragment.SEGMENT_GET);
+        RecyclerView list = (RecyclerView) fragment.getView();
+        assertNotNull(list);
+        RecyclerView.Adapter<?> adapter = list.getAdapter();
+        assertNotNull(adapter);
+        assertEquals(TaiModelCentreAdapter.TYPE_HEADER, adapter.getItemViewType(0));
+        assertEquals(TaiModelCentreAdapter.TYPE_SEGMENTS, adapter.getItemViewType(1));
+        assertEquals(TaiModelCentreAdapter.TYPE_LINK, adapter.getItemViewType(2));
         assertEquals(TaiModelCentreAdapter.TYPE_SETTING, adapter.getItemViewType(adapter.getItemCount() - 1));
-        assertEquals(12, adapter.getItemCount());
     }
 
     @Test
@@ -98,6 +109,7 @@ public class TaiModelCentreFragmentTest {
         assertNotNull(list);
         RecyclerView.Adapter<?> adapter = list.getAdapter();
         assertNotNull(adapter);
+        assertEquals(TaiModelCentreAdapter.TYPE_HEADER, adapter.getItemViewType(0));
         assertEquals(TaiModelCentreAdapter.TYPE_EMPTY, adapter.getItemViewType(2));
     }
 }

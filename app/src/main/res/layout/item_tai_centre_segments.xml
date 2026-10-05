@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Model centre: the Installed | Chat | Speech segmented button. It switches which list the
+<!-- Model centre: the Functions | Installed | Get models segmented button. It switches which list the
      screen shows (a filter over one surface), so it is a segmented control, not tab navigation. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -13,5 +13,5 @@
         android:id="@+id/tai_centre_segments"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:contentDescription="@string/tai_centre_segments_desc" />
+        android:contentDescription="@string/tai_fn_segments_desc" />
 </FrameLayout>

@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -32,17 +33,21 @@ import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiDownloadEngine;
 import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiDownloadQueue;
+import com.termux.ai.TaiFunction;
+import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.ai.TaiSettings;
 import com.termux.ai.TaiSpeechModels;
+import com.termux.ai.TaiTierPolicy;
 import com.termux.ai.TaiReadAloud;
 import com.termux.ai.TaiTtsModels;
 import com.termux.ai.TaiVisionModels;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.notice.AppNotice;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -53,6 +58,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -60,10 +66,11 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The Model centre (D2): one screen that gets, downloads and manages every model, chat and
- * speech. A link bar on top (paste a Hugging Face link, or pick a file), the live Downloads with
- * pause, resume, "start now", retry and cancel, then one list under an Installed | Chat | Speech
- * segmented control: what is on the phone, and what the catalogue offers that is not.
+ * The Model centre: one screen that shows what each function uses and gets, downloads and manages
+ * every model (tai-device-tiers spec §4). A device line on top, the live Downloads with pause,
+ * resume, "start now", retry and cancel, then one list under a Functions | Installed | Get models
+ * segmented control: a row per function that opens its picker sheet, what is on the phone with the
+ * functions that use it, and what the catalogue offers (with the link bar for any other model).
  *
  * <p>A plain {@link Fragment} over a RecyclerView rather than a preference screen: the rows are
  * nested cards with several live controls each (a bar, two round buttons, a pill), the top has a
@@ -82,10 +89,16 @@ public class TaiModelCentreFragment extends Fragment
     implements TaiDownloadHub.Listener, TaiImportFlow.Host, TaiModelCentreAdapter.Callbacks {
 
     /** Deep-link segments, passed as {@link SettingsActivity#EXTRA_INITIAL_PLACE}. */
+    public static final String SEGMENT_FUNCTIONS = "functions";
     public static final String SEGMENT_INSTALLED = "installed";
-    public static final String SEGMENT_CHAT = "chat";
-    public static final String SEGMENT_SPEECH = "speech";
-    private static final String[] SEGMENTS = {SEGMENT_INSTALLED, SEGMENT_CHAT, SEGMENT_SPEECH};
+    public static final String SEGMENT_GET = "get";
+    /** The old Chat and Speech segments are one Get models segment now; the names still open it. */
+    public static final String SEGMENT_CHAT = SEGMENT_GET;
+    public static final String SEGMENT_SPEECH = SEGMENT_GET;
+    private static final String[] SEGMENTS = {SEGMENT_FUNCTIONS, SEGMENT_INSTALLED, SEGMENT_GET};
+    private static final int SEGMENT_FUNCTIONS_INDEX = 0;
+    private static final int SEGMENT_INSTALLED_INDEX = 1;
+    private static final int SEGMENT_GET_INDEX = 2;
     /** How long a row brought into view by a deep link keeps its ring. */
     private static final long HIGHLIGHT_MS = 2400L;
     private static final String STATE_SEGMENT = "tai_centre_segment";
@@ -132,6 +145,13 @@ public class TaiModelCentreFragment extends Fragment
     @NonNull private List<TaiModelSpec> installedVoice = Collections.emptyList();
     /** Installed wallpaper vision graphs; their own group under Installed, never in a chat list. */
     @NonNull private List<TaiModelSpec> installedVision = Collections.emptyList();
+    /** The resolver for this phone's picks, rebuilt with the installed models; the Functions rows read it. */
+    @Nullable private TaiFunctionModels functionModels;
+    @NonNull private String deviceLine = "";
+    @NonNull private List<TaiFunctionRows.FunctionRow> functionRows = Collections.emptyList();
+    /** "Used by: ..." per installed model id, empty text for a model no function uses. */
+    @NonNull private Map<String, String> usedBy = Collections.emptyMap();
+    @NonNull private String tidyLevel = "polished";
     /** The depth model the analysis prefers, for its "In use" pill. */
     @Nullable private String depthId;
     /** A model row a deep link asked for: scrolled to and ringed on the next {@link #rebuild}, then cleared. */
@@ -171,26 +191,29 @@ public class TaiModelCentreFragment extends Fragment
     }
 
     /**
-     * Opens the centre on the Chat segment, where the vision graphs close the list, scrolled to {@code modelId}'s row, which is ringed for
-     * a moment: the wallpaper picker's "download the missing models" lands here.
+     * Opens the centre on Installed (scrolled to {@code modelId}'s row, which is ringed for a moment)
+     * when the model is on the phone, else on Get models: the wallpaper picker's "download the
+     * missing models" lands there.
      */
     public static void openForModel(@Nullable Activity activity, @NonNull String modelId) {
         if (activity == null) return;
+        String segment = new TaiModelStore(activity).getInstalledUserModels().containsKey(modelId)
+            ? SEGMENT_INSTALLED : SEGMENT_GET;
         if (activity instanceof SettingsActivity) {
-            Bundle arguments = arguments(SEGMENT_CHAT);
+            Bundle arguments = arguments(segment);
             arguments.putString(SettingsActivity.EXTRA_SCROLL_TO_KEY, modelId);
             ((SettingsActivity) activity).openScreen(TaiModelCentreFragment.class, R.string.tai_model_centre_title, arguments);
         } else {
             activity.startActivity(SettingsActivity.createFragmentIntent(activity, TaiModelCentreFragment.class,
-                R.string.tai_model_centre_title, SEGMENT_CHAT, modelId));
+                R.string.tai_model_centre_title, segment, modelId));
         }
     }
 
+    /** The segment a deep link names; the old "chat" and "speech" are Get models, anything else Functions. */
     static int segmentIndex(@Nullable String segment) {
-        for (int i = 0; i < SEGMENTS.length; i++) {
-            if (SEGMENTS[i].equals(segment)) return i;
-        }
-        return 0;
+        if (SEGMENT_INSTALLED.equals(segment)) return SEGMENT_INSTALLED_INDEX;
+        if (SEGMENT_GET.equals(segment) || "chat".equals(segment) || "speech".equals(segment)) return SEGMENT_GET_INDEX;
+        return SEGMENT_FUNCTIONS_INDEX;
     }
 
     @Override
@@ -335,6 +358,28 @@ public class TaiModelCentreFragment extends Fragment
         TaiModelSpec active = TaiSpeechModels.chooseActive(settings.getSttModelId(), installedSpeech);
         voiceId = active == null ? null : active.id;
         parallel = settings.getDownloadParallel();
+        loadFunctions(context);
+    }
+
+    /**
+     * The Functions rows, the device line and the "Used by" lines: resolved once per change of what is
+     * installed (a resolve reads the model store), never on a progress tick.
+     */
+    private void loadFunctions(@NonNull Context context) {
+        TaiFunctionModels models = TaiFunctionModels.forContext(context);
+        functionModels = models;
+        TaiFunctionLabels labels = new TaiFunctionLabels(context, installedAll);
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, true);
+        tidyLevel = prefs == null ? "polished" : prefs.getInAppKeyboardVoicePolishLevel();
+        functionRows = TaiFunctionRows.functionRows(models, labels, tidyLevel);
+        TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
+        String soc = capabilities.socModel == null || capabilities.socModel.trim().isEmpty() ? capabilities.model : capabilities.socModel;
+        deviceLine = TaiFunctionRows.deviceLine(models.env(), soc, Build.VERSION.RELEASE);
+        Map<String, String> used = new HashMap<>();
+        for (String id : installedAll.keySet()) {
+            used.put(id, TaiFunctionRows.usedByLine(models.usedBy(id), labels));
+        }
+        usedBy = used;
     }
 
     /** The runtime status is a blocking IPC; read it off the main thread for the "In use" pill. */
@@ -387,7 +432,7 @@ public class TaiModelCentreFragment extends Fragment
         if (context == null) return;
         // A deep link's row is ringed from the rebuild that shows it; the ring clears itself after a moment.
         String scrollTarget = null;
-        if (pendingScrollKey != null && SEGMENTS[segment].equals(SEGMENT_CHAT)) {
+        if (pendingScrollKey != null && segment != SEGMENT_FUNCTIONS_INDEX) {
             scrollTarget = pendingScrollKey;
             highlightKey = pendingScrollKey;
             pendingScrollKey = null;
@@ -397,35 +442,171 @@ public class TaiModelCentreFragment extends Fragment
             }, HIGHLIGHT_MS);
         }
         List<TaiModelCentreAdapter.Item> items = new ArrayList<>();
-        items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_LINK, "link",
-            "link|" + linkText + "|" + linkError, new TaiModelCentreAdapter.LinkBar(linkText, linkError), false));
+        items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_HEADER, "header", "header|" + deviceLine,
+            new TaiModelCentreAdapter.Header(deviceLine), false));
 
         Set<String> busy = addDownloads(context, items);
         addBanners(context, items);
 
         CharSequence[] labels = {
+            getString(R.string.tai_fn_segment_functions),
             getString(R.string.tai_centre_segment_installed),
-            getString(R.string.tai_centre_segment_chat),
-            getString(R.string.tai_centre_segment_speech)};
+            getString(R.string.tai_fn_segment_get)};
         items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SEGMENTS, "segments", "segments|" + segment,
             new TaiModelCentreAdapter.Segments(segment, labels), false));
-        switch (SEGMENTS[segment]) {
-            case SEGMENT_CHAT:
-                addCatalogue(context, items, TaiModelCatalog.chatEntries().values(), false, busy);
-                addEmbeddings(context, items, busy);
-                // The wallpaper vision graphs close the list, as embeddings do: no tab of their own.
-                addVision(context, items, busy);
+        switch (segment) {
+            case SEGMENT_INSTALLED_INDEX:
+                addInstalled(context, items);
                 break;
-            case SEGMENT_SPEECH:
-                addCatalogue(context, items, TaiModelCatalog.speechEntries().values(), true, busy);
-                addVoiceOutput(context, items, busy);
+            case SEGMENT_GET_INDEX:
+                // The import bar leads the segment: a link or a file is how any model outside the catalogue arrives.
+                items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_LINK, "link",
+                    "link|" + linkText + "|" + linkError, new TaiModelCentreAdapter.LinkBar(linkText, linkError), false));
+                addGetModels(context, items, busy);
                 break;
-            default: addInstalled(context, items); break;
+            default:
+                addFunctions(items);
+                break;
         }
-        items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SETTING, "parallel", "parallel|" + parallel,
-            parallel, false));
+        if (segment != SEGMENT_FUNCTIONS_INDEX) {
+            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SETTING, "parallel", "parallel|" + parallel,
+                parallel, false));
+        }
         adapter.submit(items);
         if (scrollTarget != null) scrollToModel(scrollTarget);
+    }
+
+    /** The catalogue as the Get models grouping reads it (what each entry is, by capability). */
+    @NonNull
+    private static List<TaiFunctionRows.CatalogItem> catalogueItems() {
+        List<TaiFunctionRows.CatalogItem> out = new ArrayList<>();
+        for (TaiModelCatalog.CatalogEntry entry : TaiModelCatalog.entries().values()) {
+            Set<String> capabilities = new LinkedHashSet<>(entry.capabilities);
+            capabilities.addAll(entry.sourceCapabilities);
+            capabilities.addAll(entry.endpointCapabilities);
+            out.add(new TaiFunctionRows.CatalogItem(new TaiFunctionModels.ModelInfo(entry.modelId, entry.sizeBytes,
+                capabilities, entry.backend), entry.downloadAvailable));
+        }
+        return out;
+    }
+
+    /**
+     * The Get models list: the catalogue under Assistants, Speech, Voice output, Search and Wallpaper
+     * vision, minus what is installed or downloading. Image generation has no group (spec §3.6);
+     * wallpaper vision is gone below API 34. Each entry says its size, how it fits this phone and what
+     * it can serve.
+     */
+    private void addGetModels(@NonNull Context context, @NonNull List<TaiModelCentreAdapter.Item> items,
+                              @NonNull Set<String> busy) {
+        TaiFunctionModels models = functionModels;
+        if (models == null) return;
+        TaiTierPolicy.Env env = models.env();
+        Set<String> skip = new HashSet<>(installedAll.keySet());
+        skip.addAll(busy);
+        Map<TaiFunctionRows.Group, List<TaiFunctionRows.GetEntry>> groups = TaiFunctionRows.getModels(env, catalogueItems(), skip);
+        if (groups.isEmpty()) {
+            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_EMPTY, "empty-get", "empty-get",
+                new TaiModelCentreAdapter.Empty("", getString(R.string.tai_fn_get_empty)), false));
+            return;
+        }
+        TaiFunctionLabels labels = new TaiFunctionLabels(context, installedAll);
+        for (Map.Entry<TaiFunctionRows.Group, List<TaiFunctionRows.GetEntry>> group : groups.entrySet()) {
+            String header = getString(groupTitle(group.getKey()));
+            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SECTION, "get-" + group.getKey().name(),
+                "get-" + group.getKey().name() + "|" + header, new TaiModelCentreAdapter.Section(header, "", ""), false));
+            for (TaiFunctionRows.GetEntry get : group.getValue()) {
+                TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(get.item.info.id);
+                if (entry != null) addModelRow(items, getRow(context, labels, env, get, entry));
+            }
+        }
+    }
+
+    private static int groupTitle(@NonNull TaiFunctionRows.Group group) {
+        switch (group) {
+            case SPEECH: return R.string.tai_fn_group_speech;
+            case VOICE_OUTPUT: return R.string.tai_fn_group_voice;
+            case SEARCH: return R.string.tai_fn_group_search;
+            case WALLPAPER_VISION: return R.string.tai_fn_group_vision;
+            default: return R.string.tai_fn_group_assistants;
+        }
+    }
+
+    /** One catalogue row: kind and size, the fit line, "For: ...", the notes the old catalogue rows carried. */
+    @NonNull
+    private TaiModelCentreAdapter.ModelRow getRow(@NonNull Context context, @NonNull TaiFunctionLabels labels,
+                                                  @NonNull TaiTierPolicy.Env env, @NonNull TaiFunctionRows.GetEntry get,
+                                                  @NonNull TaiModelCatalog.CatalogEntry entry) {
+        TaiFunctionRows.Group group = get.group;
+        boolean speech = group == TaiFunctionRows.Group.SPEECH || group == TaiFunctionRows.Group.VOICE_OUTPUT;
+        TaiModelCentreAdapter.ModelRow row = new TaiModelCentreAdapter.ModelRow(entry.modelId, speech, null, entry);
+        row.voiceOutput = group == TaiFunctionRows.Group.VOICE_OUTPUT;
+        row.vision = group == TaiFunctionRows.Group.WALLPAPER_VISION;
+        row.highlighted = entry.modelId.equals(highlightKey);
+        row.title = group == TaiFunctionRows.Group.SPEECH ? centreName(entry.modelId, entry.displayName, null, true) : entry.displayName;
+        String size = entry.sizeEstimate == null || entry.sizeEstimate.isEmpty()
+            ? TaiModelCentreRows.formatBytes(entry.sizeBytes) : entry.sizeEstimate;
+        switch (group) {
+            case SPEECH:
+                row.subtitle = getString(R.string.tai_centre_kind_speech) + " · " + size;
+                break;
+            case VOICE_OUTPUT:
+                row.subtitle = getString(R.string.tai_centre_kind_voice) + " · " + size + " · " + getString(R.string.tai_centre_voice_names);
+                break;
+            case SEARCH:
+                row.subtitle = getString(R.string.tai_centre_kind_embeddings) + " · " + size;
+                break;
+            case WALLPAPER_VISION: {
+                String what = visionLine(context, entry.modelId);
+                row.subtitle = what.isEmpty() ? visionKindLine(context, entry.sizeBytes)
+                    : what + " · " + TaiModelCentreRows.formatBytes(entry.sizeBytes);
+                break;
+            }
+            default:
+                row.subtitle = getString(R.string.tai_centre_kind_chat) + " · " + size;
+                break;
+        }
+        if (group == TaiFunctionRows.Group.ASSISTANTS || group == TaiFunctionRows.Group.SEARCH) {
+            row.pillBackend = backendPill(entry.backend);
+        }
+        row.pillPrimary = get.suggested ? getString(R.string.tai_fn_pill_suggested) : "";
+        List<String> lines = new ArrayList<>();
+        String fit = TaiFunctionRows.fitLine(get.fit, labels);
+        if (!fit.isEmpty()) lines.add(fit);
+        String forLine = TaiFunctionRows.forLine(env, get.item.info, labels);
+        if (!forLine.isEmpty()) lines.add(forLine);
+        row.extra = TaiFunctionRows.join(lines, "\n");
+        row.installable = entry.downloadAvailable;
+        row.installing = installing.contains(entry.modelId);
+
+        String error = errors.get(entry.modelId);
+        boolean gatedNote = false;
+        if (error != null) {
+            row.note = error;
+            row.noteIsError = true;
+        } else if (TaiModelCatalog.PARAKEET_TDT_V3_ID.equals(entry.modelId)) {
+            String warning = TaiSpeechActions.parakeetRamWarning(context, deviceMemory(context));
+            row.note = warning == null ? "" : warning;
+        } else if (group == TaiFunctionRows.Group.SPEECH && TaiSpeechActions.isSmall(entry.modelId) && deviceMemory(context) > 0L
+            && deviceMemory(context) < TaiSpeechActions.SMALL_MIN_MEMORY_BYTES) {
+            row.note = getString(R.string.tai_centre_small_ram_note);
+        } else if (!entry.downloadAvailable) {
+            row.note = entry.unavailableReason == null ? "" : entry.unavailableReason;
+        } else if (entry.gated && new TaiSettings(context).getHuggingFaceToken().trim().isEmpty()) {
+            row.note = getString(R.string.tai_centre_gated_note);
+            gatedNote = true;
+        } else if (TaiModelCatalog.SEGFORMER_B0_ADE20K_ID.equals(entry.modelId)) {
+            row.note = getString(R.string.tai_centre_vision_noncommercial);
+        }
+        row.tokenAction = TaiModelCentreRows.showsTokenAction(gatedNote, error);
+        return row;
+    }
+
+    /** One row per function the platform allows; a tap opens that function's picker sheet. */
+    private void addFunctions(@NonNull List<TaiModelCentreAdapter.Item> items) {
+        for (TaiFunctionRows.FunctionRow row : functionRows) {
+            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_FUNCTION, row.function.name(),
+                row.signature(), row, false));
+        }
     }
 
     /** Brings a deep-linked model row to the top of the list once it is there. */
@@ -557,6 +738,7 @@ public class TaiModelCentreFragment extends Fragment
             row.pillBackend = backendPill(spec.backend);
             Double speed = benchmarkSpeeds.get(spec.id);
             row.pillSpeed = speed == null ? "" : getString(R.string.tai_bench_tps, TaiBenchLeaderboard.formatTpsValue(speed));
+            row.extra = usedBy.getOrDefault(spec.id, "");
             addModelRow(items, row);
         }
         List<TaiModelSpec> speech = new ArrayList<>(installedSpeech);
@@ -574,6 +756,7 @@ public class TaiModelCentreFragment extends Fragment
             if (spec.id.equals(voiceId)) subtitle.append(" · ").append(getString(R.string.tai_centre_meta_voice_input));
             row.subtitle = subtitle.toString();
             row.pillPrimary = spec.id.equals(voiceId) ? getString(R.string.tai_centre_pill_in_use) : "";
+            row.extra = usedBy.getOrDefault(spec.id, "");
             addModelRow(items, row);
         }
         for (TaiModelSpec spec : installedVoice) {
@@ -581,6 +764,7 @@ public class TaiModelCentreFragment extends Fragment
             row.voiceOutput = true;
             row.title = spec.displayName;
             row.subtitle = voiceKindLine(context, spec.sizeBytes) + " · " + new TaiSettings(context).getTtsVoice();
+            row.extra = usedBy.getOrDefault(spec.id, "");
             addModelRow(items, row);
         }
         if (!installedImage.isEmpty()) {
@@ -603,125 +787,22 @@ public class TaiModelCentreFragment extends Fragment
             items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SECTION, "vision-models", "vision-models|" + header,
                 new TaiModelCentreAdapter.Section(header, "", getString(R.string.tai_centre_vision_sub)), false));
             for (TaiModelSpec spec : installedVision) {
-                addModelRow(items, visionRow(context, spec.id, spec, TaiModelCatalog.get(spec.id)));
+                TaiModelCentreAdapter.ModelRow vision = visionRow(context, spec.id, spec, TaiModelCatalog.get(spec.id));
+                vision.extra = usedBy.getOrDefault(spec.id, "");
+                addModelRow(items, vision);
             }
         }
         if (chat.isEmpty() && speech.isEmpty() && installedVoice.isEmpty() && installedImage.isEmpty()
                 && installedVision.isEmpty()) {
             items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_EMPTY, "empty-installed", "empty-installed",
                 new TaiModelCentreAdapter.Empty(getString(R.string.tai_centre_empty_installed_title),
-                    getString(R.string.tai_centre_empty_installed_summary)), false));
+                    getString(R.string.tai_fn_empty_installed_summary)), false));
         }
     }
 
-    private void addCatalogue(@NonNull Context context, @NonNull List<TaiModelCentreAdapter.Item> items,
-                              @NonNull Iterable<TaiModelCatalog.CatalogEntry> entries, boolean speech,
-                              @NonNull Set<String> busy) {
-        int added = 0;
-        for (TaiModelCatalog.CatalogEntry entry : entries) {
-            // What is on the phone is under Installed; what is on its way is under Downloads.
-            if (installedAll.containsKey(entry.modelId) || busy.contains(entry.modelId)) continue;
-            TaiModelCentreAdapter.ModelRow row = new TaiModelCentreAdapter.ModelRow(entry.modelId, speech, null, entry);
-            row.title = speech ? centreName(entry.modelId, entry.displayName, null, true) : entry.displayName;
-            String size = entry.sizeEstimate == null || entry.sizeEstimate.isEmpty()
-                ? TaiModelCentreRows.formatBytes(entry.sizeBytes) : entry.sizeEstimate;
-            StringBuilder subtitle = new StringBuilder(getString(speech ? R.string.tai_centre_kind_speech : R.string.tai_centre_kind_chat))
-                .append(" · ").append(size);
-            if (entry.ramTier != null && !entry.ramTier.isEmpty()) subtitle.append(" · ").append(entry.ramTier);
-            row.subtitle = subtitle.toString();
-            if (!speech) row.pillBackend = backendPill(entry.backend);
-            row.installable = entry.downloadAvailable;
-            row.installing = installing.contains(entry.modelId);
-            String error = errors.get(entry.modelId);
-            boolean gatedNote = false;
-            if (error != null) {
-                row.note = error;
-                row.noteIsError = true;
-            } else if (TaiModelCatalog.PARAKEET_TDT_V3_ID.equals(entry.modelId)) {
-                String warning = TaiSpeechActions.parakeetRamWarning(context, deviceMemory(context));
-                row.note = warning == null ? "" : warning;
-            } else if (TaiSpeechActions.isSmall(entry.modelId) && deviceMemory(context) > 0L
-                && deviceMemory(context) < TaiSpeechActions.SMALL_MIN_MEMORY_BYTES) {
-                row.note = getString(R.string.tai_centre_small_ram_note);
-            } else if (!entry.downloadAvailable) {
-                row.note = entry.unavailableReason == null ? "" : entry.unavailableReason;
-            } else if (entry.gated && new TaiSettings(context).getHuggingFaceToken().trim().isEmpty()) {
-                row.note = getString(R.string.tai_centre_gated_note);
-                gatedNote = true;
-            }
-            row.tokenAction = TaiModelCentreRows.showsTokenAction(gatedNote, error);
-            addModelRow(items, row);
-            added++;
-        }
-        if (added == 0) {
-            String key = speech ? "empty-speech" : "empty-chat";
-            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_EMPTY, key, key,
-                new TaiModelCentreAdapter.Empty("", getString(speech ? R.string.tai_centre_empty_speech
-                    : R.string.tai_centre_empty_chat)), false));
-        }
-    }
-
-    private static void addModelRow(@NonNull List<TaiModelCentreAdapter.Item> items, @NonNull TaiModelCentreAdapter.ModelRow row) {
+    private void addModelRow(@NonNull List<TaiModelCentreAdapter.Item> items, @NonNull TaiModelCentreAdapter.ModelRow row) {
+        if (row.modelId.equals(highlightKey)) row.highlighted = true;
         items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_MODEL, row.modelId, row.signature(), row, false));
-    }
-
-    /**
-     * The Chat segment's "Embeddings" section: the embedding catalogue (EmbeddingGemma) under its
-     * own heading below the chat models, or a line saying it is installed. Apps on the phone (dawn)
-     * reach an installed embedder through /v1/embeddings; it is never a chat model.
-     */
-    private void addEmbeddings(@NonNull Context context, @NonNull List<TaiModelCentreAdapter.Item> items,
-                               @NonNull Set<String> busy) {
-        String header = getString(R.string.tai_centre_embeddings_header);
-        items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SECTION, "embeddings", "embeddings|" + header,
-            new TaiModelCentreAdapter.Section(header, "", getString(R.string.tai_centre_embeddings_sub)), false));
-        int added = 0;
-        for (TaiModelCatalog.CatalogEntry entry : TaiModelCatalog.embeddingEntries().values()) {
-            if (installedAll.containsKey(entry.modelId) || busy.contains(entry.modelId)) continue;
-            TaiModelCentreAdapter.ModelRow row = new TaiModelCentreAdapter.ModelRow(entry.modelId, false, null, entry);
-            row.title = entry.displayName;
-            String size = entry.sizeEstimate == null || entry.sizeEstimate.isEmpty()
-                ? TaiModelCentreRows.formatBytes(entry.sizeBytes) : entry.sizeEstimate;
-            StringBuilder subtitle = new StringBuilder(getString(R.string.tai_centre_kind_embeddings))
-                .append(" · ").append(size);
-            if (entry.ramTier != null && !entry.ramTier.isEmpty()) subtitle.append(" · ").append(entry.ramTier);
-            row.subtitle = subtitle.toString();
-            row.pillBackend = backendPill(entry.backend);
-            row.installable = entry.downloadAvailable;
-            row.installing = installing.contains(entry.modelId);
-            String error = errors.get(entry.modelId);
-            boolean gatedNote = false;
-            if (error != null) {
-                row.note = error;
-                row.noteIsError = true;
-            } else if (entry.gated && new TaiSettings(context).getHuggingFaceToken().trim().isEmpty()) {
-                row.note = getString(R.string.tai_centre_gated_note);
-                gatedNote = true;
-            }
-            row.tokenAction = TaiModelCentreRows.showsTokenAction(gatedNote, error);
-            addModelRow(items, row);
-            added++;
-        }
-        if (added == 0) {
-            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_EMPTY, "empty-embeddings", "empty-embeddings",
-                new TaiModelCentreAdapter.Empty("", getString(R.string.tai_centre_empty_embeddings)), false));
-        }
-    }
-
-    /**
-     * The Vision segment: the four wallpaper graphs, installed or not, under one heading with a
-     * line each on what they do for wallpapers. The wallpaper picker's missing-models link lands here.
-     */
-    private void addVision(@NonNull Context context, @NonNull List<TaiModelCentreAdapter.Item> items,
-                           @NonNull Set<String> busy) {
-        String header = getString(R.string.tai_centre_vision_header);
-        items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SECTION, "vision", "vision|" + header,
-            new TaiModelCentreAdapter.Section(header, "", getString(R.string.tai_centre_vision_sub)), false));
-        for (TaiModelCatalog.CatalogEntry entry : TaiModelCatalog.visionEntries().values()) {
-            TaiModelSpec installed = installedAll.get(entry.modelId);
-            if (installed == null && busy.contains(entry.modelId)) continue; // under Downloads
-            addModelRow(items, visionRow(context, entry.modelId, installed, entry));
-        }
     }
 
     /** One vision row: what it does for wallpapers and its size, "In use" on the chosen depth model. */
@@ -787,42 +868,6 @@ public class TaiModelCentreFragment extends Fragment
         StringBuilder line = new StringBuilder(context.getString(R.string.tai_centre_kind_embeddings));
         if (sizeBytes > 0L) line.append(" · ").append(TaiModelCentreRows.formatBytes(sizeBytes));
         return line.toString();
-    }
-
-    /**
-     * The Speech segment's "Voice output" section: the speech-output catalogue (KittenTTS) under
-     * its own heading, below the speech-to-text models, or a line saying it is installed.
-     */
-    private void addVoiceOutput(@NonNull Context context, @NonNull List<TaiModelCentreAdapter.Item> items,
-                                @NonNull Set<String> busy) {
-        String header = getString(R.string.tai_centre_voice_output_header);
-        items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SECTION, "voice-output", "voice-output|" + header,
-            new TaiModelCentreAdapter.Section(header, "", getString(R.string.tai_centre_voice_output_sub)), false));
-        int added = 0;
-        for (TaiModelCatalog.CatalogEntry entry : TaiModelCatalog.ttsEntries().values()) {
-            if (installedAll.containsKey(entry.modelId) || busy.contains(entry.modelId)) continue;
-            TaiModelCentreAdapter.ModelRow row = new TaiModelCentreAdapter.ModelRow(entry.modelId, true, null, entry);
-            row.voiceOutput = true;
-            row.title = entry.displayName;
-            String size = entry.sizeEstimate == null || entry.sizeEstimate.isEmpty()
-                ? TaiModelCentreRows.formatBytes(entry.sizeBytes) : entry.sizeEstimate;
-            row.subtitle = getString(R.string.tai_centre_kind_voice) + " · " + size + " · "
-                + getString(R.string.tai_centre_voice_names);
-            row.installable = entry.downloadAvailable;
-            row.installing = installing.contains(entry.modelId);
-            String error = errors.get(entry.modelId);
-            if (error != null) {
-                row.note = error;
-                row.noteIsError = true;
-            }
-            row.tokenAction = TaiModelCentreRows.showsTokenAction(false, error);
-            addModelRow(items, row);
-            added++;
-        }
-        if (added == 0) {
-            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_EMPTY, "empty-voice", "empty-voice",
-                new TaiModelCentreAdapter.Empty("", getString(R.string.tai_centre_empty_voice)), false));
-        }
     }
 
     /** "voice · 90 MB". */
@@ -1030,60 +1075,106 @@ public class TaiModelCentreFragment extends Fragment
 
     // ---- install ----
 
+    /** Where an install request stands; always delivered on the main thread. */
+    interface InstallListener {
+        /** {@code installing}: the request is on its way. Else done, with {@code error} null on success. */
+        void onInstallState(@NonNull String modelId, boolean installing, @Nullable String error);
+    }
+
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    private static final ExecutorService INSTALLER = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "tai-model-install");
+        thread.setDaemon(true);
+        return thread;
+    });
+
     @Override
     public void onInstall(@NonNull TaiModelCentreAdapter.ModelRow row, @NonNull View source) {
         Context context = getContext();
         TaiModelCatalog.CatalogEntry entry = row.entry;
         if (context == null || entry == null || row.installing) return;
         TaiMotion.tick(source);
-        if (row.voiceOutput) {
-            // A voice model is a plain catalogue download: no window, no "use for" choice.
-            install(entry.modelId, false, 0, source);
-            return;
-        }
-        if (row.speech && TaiSpeechActions.isWhisper(entry.modelId)) {
-            TaiSpeechInstallSheet.show(context, entry.modelId, new TaiSettings(context).getSttWindowSeconds(),
-                deviceMemory(context), (modelId, window) -> install(modelId, true, window, source));
-            return;
-        }
-        install(entry.modelId, row.speech, row.speech ? TaiSpeechActions.PARAKEET_WINDOW_SECONDS : 0, source);
+        installEntry(context, entry, (modelId, working, error) -> {
+            if (!isAdded()) return;
+            if (working) {
+                // Said on the row itself, before anything starts; the pill shakes where it was tapped.
+                errors.remove(modelId);
+                installing.add(modelId);
+            } else {
+                installing.remove(modelId);
+                if (error != null) {
+                    errors.put(modelId, error);
+                    if (source.isAttachedToWindow()) TaiMotion.shake(source);
+                } else {
+                    loadInstalled(requireContext());
+                }
+            }
+            rebuild();
+        });
     }
 
-    private void install(@NonNull String modelId, boolean speech, int windowSeconds, @NonNull View source) {
-        Context context = getContext();
+    /**
+     * Starts the download of a catalogue entry, the way the Centre's Install button and the function
+     * picker sheet both do: a voice model is a plain download, a Whisper model first asks size,
+     * language and window, anything else just starts. {@code context} must be an activity (the Whisper
+     * sheet is a dialog).
+     */
+    static void installEntry(@NonNull Context context, @NonNull TaiModelCatalog.CatalogEntry entry,
+                             @NonNull InstallListener listener) {
+        String modelId = entry.modelId;
+        if (TaiModelCatalog.ttsEntries().containsKey(modelId)) {
+            // A voice model needs no window and no "use for" choice.
+            requestInstall(context, modelId, false, 0, listener);
+            return;
+        }
+        boolean speech = entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)
+            || TaiModelCatalog.speechEntries().containsKey(modelId);
+        if (speech && TaiSpeechActions.isWhisper(modelId)) {
+            TaiSpeechInstallSheet.show(context, modelId, new TaiSettings(context).getSttWindowSeconds(),
+                TaiDeviceCapabilities.detect(context).memoryBytes,
+                (chosen, window) -> requestInstall(context, chosen, true, window, listener));
+            return;
+        }
+        requestInstall(context, modelId, speech, speech ? TaiSpeechActions.PARAKEET_WINDOW_SECONDS : 0, listener);
+    }
+
+    /**
+     * The request itself: the space pre-check the engine would apply anyway (so a refusal is said
+     * before anything starts), then the download call off the main thread. A speech model that is
+     * already here (the Whisper sheet can land on one) is a choice of voice model, not a download.
+     */
+    static void requestInstall(@NonNull Context context, @NonNull String modelId, boolean speech, int windowSeconds,
+                               @NonNull InstallListener listener) {
+        Context app = context.getApplicationContext();
         TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(modelId);
-        if (context == null || entry == null) return;
-        TaiModelSpec already = installedAll.get(modelId);
+        if (entry == null) return;
+        TaiModelSpec already = new TaiModelStore(app).getInstalledUserModels().get(modelId);
         if (already != null) {
-            // The sheet can land on a size and language that is already here: that is a choice
-            // of voice model, not a download.
-            if (speech) useForVoice(context, already);
+            if (speech) {
+                TaiSpeechModels.activate(new TaiSettings(app), already.id);
+                AppNotice.show(app, app.getString(R.string.tai_centre_now_voice,
+                    centreName(already.id, already.displayName, already.localPath, true)), false);
+            }
+            listener.onInstallState(modelId, false, null);
             return;
         }
         long needed = windowSeconds > 0 ? entry.withWindow(windowSeconds).sizeBytes : entry.sizeBytes;
-        File volume = modelsVolume(context);
-        String refusal = spaceRefusal(context, volume.getUsableSpace(), volume.getTotalSpace(), needed);
+        File volume = modelsVolume(app);
+        String refusal = spaceRefusal(app, volume.getUsableSpace(), volume.getTotalSpace(), needed);
         if (refusal != null) {
-            // Said on the row itself, before anything starts; the pill shakes where it was tapped.
-            errors.put(modelId, refusal);
-            TaiMotion.shake(source);
-            rebuild();
+            listener.onInstallState(modelId, false, refusal);
             return;
         }
-        errors.remove(modelId);
-        installing.add(modelId);
-        rebuild();
-        if (executor.isShutdown()) return;
-        Context app = context.getApplicationContext();
-        boolean firstVoiceModel = speech && installedSpeech.isEmpty();
-        executor.execute(() -> {
+        listener.onInstallState(modelId, true, null);
+        boolean firstVoiceModel = speech && TaiSpeechModels.installed(new TaiModelStore(app)).isEmpty();
+        INSTALLER.execute(() -> {
             JSONObject result = null;
             try {
                 if (!speech) {
                     result = TaiManager.getInstance(app).downloadCatalogModel(modelId);
                 } else if (firstVoiceModel && noPendingVoiceChoice(app)) {
                     // The first speech model on the phone becomes the one voice input uses as
-                    // soon as it lands; later ones wait for "Use for voice".
+                    // soon as it lands; later ones wait for "Use for...".
                     result = TaiSpeechModels.startDownload(app, modelId, windowSeconds);
                 } else {
                     result = TaiManager.getInstance(app).downloadSpeechModel(modelId, windowSeconds);
@@ -1091,14 +1182,13 @@ public class TaiModelCentreFragment extends Fragment
             } catch (JSONException | RuntimeException ignored) {
             }
             JSONObject finalResult = result;
-            handler.post(() -> {
-                installing.remove(modelId);
-                if (!isAdded()) return;
+            MAIN.post(() -> {
+                String failure = null;
                 if (finalResult == null || !finalResult.optBoolean("ok", false)) {
-                    errors.put(modelId, finalResult == null ? getString(R.string.termux_ai_model_action_failed)
-                        : finalResult.optString("message", getString(R.string.termux_ai_model_action_failed)));
+                    failure = finalResult == null ? app.getString(R.string.termux_ai_model_action_failed)
+                        : finalResult.optString("message", app.getString(R.string.termux_ai_model_action_failed));
                 }
-                rebuild();
+                listener.onInstallState(modelId, false, failure);
             });
         });
     }
@@ -1120,15 +1210,11 @@ public class TaiModelCentreFragment extends Fragment
         Menu items = menu.getMenu();
         if (row.vision) {
             // Run by the wallpaper analysis: only a depth model can be chosen, and any can be deleted.
-            boolean depth = TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID.equals(spec.id)
-                || TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID.equals(spec.id);
-            if (depth && !spec.id.equals(depthId)) items.add(Menu.NONE, 1, Menu.NONE, R.string.tai_centre_use_depth);
+            if (!servedFunctions(spec).isEmpty()) items.add(Menu.NONE, 1, Menu.NONE, R.string.tai_fn_use_for);
             items.add(Menu.NONE, 4, Menu.NONE, R.string.termux_ai_model_delete_action);
             menu.setOnMenuItemClickListener(item -> {
                 if (item.getItemId() == 1) {
-                    TaiVisionModels.setDepthModel(context, spec.id);
-                    depthId = spec.id;
-                    rebuild();
+                    showUseFor(context, spec);
                 } else {
                     confirmDeleteChat(context, spec);
                 }
@@ -1150,13 +1236,13 @@ public class TaiModelCentreFragment extends Fragment
                 return true;
             });
         } else if (row.speech) {
-            if (!spec.id.equals(voiceId)) items.add(Menu.NONE, 1, Menu.NONE, R.string.tai_centre_use_voice);
+            if (!servedFunctions(spec).isEmpty()) items.add(Menu.NONE, 1, Menu.NONE, R.string.tai_fn_use_for);
             int other = TaiSpeechActions.otherWindow(spec);
             if (other > 0) items.add(Menu.NONE, 2, Menu.NONE, R.string.speech_model_action_window);
             items.add(Menu.NONE, 3, Menu.NONE, R.string.speech_model_action_delete);
             menu.setOnMenuItemClickListener(item -> {
                 switch (item.getItemId()) {
-                    case 1: useForVoice(context, spec); break;
+                    case 1: showUseFor(context, spec); break;
                     case 2: TaiSpeechActions.showWindowDialog(context, spec, other, this::rebuild); break;
                     default: confirmDeleteSpeech(context, spec); break;
                 }
@@ -1164,15 +1250,17 @@ public class TaiModelCentreFragment extends Fragment
             });
         } else if (isEmbedder(spec)) {
             // Served on demand by /v1/embeddings: nothing to load, make default, tune or bench.
+            if (!servedFunctions(spec).isEmpty()) items.add(Menu.NONE, 1, Menu.NONE, R.string.tai_fn_use_for);
             items.add(Menu.NONE, 4, Menu.NONE, R.string.termux_ai_model_delete_action);
             menu.setOnMenuItemClickListener(item -> {
-                confirmDeleteChat(context, spec);
+                if (item.getItemId() == 1) showUseFor(context, spec);
+                else confirmDeleteChat(context, spec);
                 return true;
             });
         } else {
             boolean loaded = spec.id.equals(loadedId);
             if (!loaded) items.add(Menu.NONE, 1, Menu.NONE, R.string.termux_ai_model_load_action);
-            if (!spec.id.equals(defaultId)) items.add(Menu.NONE, 2, Menu.NONE, R.string.termux_ai_model_set_active_action);
+            if (!servedFunctions(spec).isEmpty()) items.add(Menu.NONE, 2, Menu.NONE, R.string.tai_fn_use_for);
             items.add(Menu.NONE, 3, Menu.NONE, R.string.termux_ai_model_tune_action);
             items.add(Menu.NONE, 5, Menu.NONE, R.string.tai_bench_title);
             items.add(Menu.NONE, 4, Menu.NONE, loaded ? R.string.termux_ai_model_delete_action_loaded
@@ -1180,7 +1268,7 @@ public class TaiModelCentreFragment extends Fragment
             menu.setOnMenuItemClickListener(item -> {
                 switch (item.getItemId()) {
                     case 1: loadModel(context, spec.id); break;
-                    case 2: setDefault(context, spec.id); break;
+                    case 2: showUseFor(context, spec); break;
                     case 3: openParameters(spec); break;
                     case 5: TaiBenchHomeFragment.open(getActivity(), spec.id); break;
                     default:
@@ -1192,6 +1280,59 @@ public class TaiModelCentreFragment extends Fragment
             });
         }
         menu.show();
+    }
+
+    /** The functions an installed model can serve on this phone (none for a cut-out or scene model). */
+    @NonNull
+    private List<TaiFunction> servedFunctions(@NonNull TaiModelSpec spec) {
+        TaiFunctionModels models = functionModels;
+        if (models == null) return Collections.emptyList();
+        Set<String> capabilities = new LinkedHashSet<>(spec.capabilities);
+        capabilities.addAll(spec.sourceCapabilities);
+        return TaiFunctionRows.servedBy(models.env(),
+            new TaiFunctionModels.ModelInfo(spec.id, spec.sizeBytes, capabilities, spec.backend));
+    }
+
+    /**
+     * The one "Use for..." item: a small chooser of the functions the model can serve. The choice is
+     * written at once and the function's picker sheet opens on it, to adjust GPU or CPU, the extras or
+     * to undo.
+     */
+    private void showUseFor(@NonNull Context context, @NonNull TaiModelSpec spec) {
+        TaiFunctionModels models = functionModels;
+        List<TaiFunction> functions = servedFunctions(spec);
+        if (models == null || functions.isEmpty()) {
+            AppNotice.show(context, R.string.tai_fn_use_for_none, true);
+            return;
+        }
+        TaiFunctionLabels labels = new TaiFunctionLabels(context, installedAll);
+        String[] names = new String[functions.size()];
+        for (int i = 0; i < names.length; i++) names[i] = TaiFunctionRows.chooserName(functions.get(i), labels);
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(getString(R.string.tai_fn_use_for_title, labels.modelName(spec.id)))
+            .setItems(names, (dialog, which) -> {
+                TaiFunction function = functions.get(which);
+                models.set(function, spec.id);
+                if (function == TaiFunction.VOICE_TYPING) TaiSpeechModels.activate(new TaiSettings(context), spec.id);
+                loadInstalled(context);
+                rebuild();
+                TaiFunctionPickerSheet.show(this, function, changed -> onFunctionChanged());
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    @Override
+    public void onFunctionClicked(@NonNull TaiFunction function) {
+        TaiFunctionPickerSheet.show(this, function, changed -> onFunctionChanged());
+    }
+
+    /** A pick changed in the sheet: the Functions rows and the "Used by" lines follow. */
+    private void onFunctionChanged() {
+        Context context = getContext();
+        if (context == null || !isAdded()) return;
+        loadInstalled(context);
+        rebuild();
     }
 
     @Override
@@ -1294,10 +1435,22 @@ public class TaiModelCentreFragment extends Fragment
     private void confirmDeleteChat(@NonNull Context context, @NonNull TaiModelSpec spec) {
         new MaterialAlertDialogBuilder(context)
             .setTitle(getString(R.string.tai_centre_delete_chat_title, spec.displayName))
-            .setMessage(R.string.termux_ai_model_delete_message)
+            .setMessage(deleteMessage(context, getString(R.string.termux_ai_model_delete_message), spec.id))
             .setPositiveButton(R.string.termux_ai_model_delete_action, (dialog, which) -> deleteModel(context, spec.id, null))
             .setNegativeButton(android.R.string.cancel, null)
             .show();
+    }
+
+    /**
+     * The confirmation text, with the functions that use the model and what each falls back to
+     * appended when the model is in use (spec §4.2).
+     */
+    @NonNull
+    private String deleteMessage(@NonNull Context context, @NonNull String plain, @NonNull String modelId) {
+        TaiFunctionModels models = functionModels;
+        if (models == null) return plain;
+        String warning = TaiFunctionRows.deleteWarning(models, modelId, new TaiFunctionLabels(context, installedAll));
+        return warning.isEmpty() ? plain : plain + "\n\n" + warning;
     }
 
     /** The voice picker lives with the speech settings (Keyboard > Voice input > Speech model). */
@@ -1311,7 +1464,7 @@ public class TaiModelCentreFragment extends Fragment
     private void confirmDeleteVoice(@NonNull Context context, @NonNull TaiModelSpec spec) {
         new MaterialAlertDialogBuilder(context)
             .setTitle(getString(R.string.tai_centre_delete_voice_title, spec.displayName))
-            .setMessage(R.string.tai_centre_delete_voice_message)
+            .setMessage(deleteMessage(context, getString(R.string.tai_centre_delete_voice_message), spec.id))
             .setPositiveButton(R.string.speech_model_action_delete, (dialog, which) -> {
                 TaiReadAloud.stop(context);
                 deleteModel(context, spec.id, null);
@@ -1330,7 +1483,7 @@ public class TaiModelCentreFragment extends Fragment
         String nextId = active ? (next == null ? "" : next.id) : null;
         new MaterialAlertDialogBuilder(context)
             .setTitle(getString(R.string.speech_model_delete_title, centreName(spec.id, spec.displayName, spec.localPath, true)))
-            .setMessage(message)
+            .setMessage(deleteMessage(context, message, spec.id))
             .setPositiveButton(R.string.speech_model_action_delete, (dialog, which) -> deleteModel(context, spec.id, nextId))
             .setNegativeButton(android.R.string.cancel, null)
             .show();
