@@ -18,18 +18,18 @@ import com.termux.R;
 
 /**
  * The Appearance surface's one bar, as a page frame: the shared {@code appearance_page_frame}
- * (back arrow, the Wallpaper | Look | Layout pill or the page's title, Undo while there is
+ * (back arrow, the Wallpaper | Look | Layout | Icon pack pill, Undo while there is
  * something to undo, Done) over a content region. Every page of the surface wears the same bar;
  * only the pill's selection and the end actions change between pages.
  *
  * <p>Three kinds: the Overview ({@link #overview}, the wallpaper page in the content region, the
- * pill on Wallpaper), the Icon pack page ({@link #icons}, a title in the pill's place), and the
+ * pill on Wallpaper), the Icon pack page ({@link #icons}, the pill on Icon pack), and the
  * editor (Look and Layout, built by the surface). The editor's frame is not in this view: it is the
  * launcher's container, scaled underneath, standing in the region below the bar ({@link #BAR_DP}
  * plus the status inset is where {@link SurfaceEditorController} puts the frame's top), so the
  * editor kind is transparent and takes no touch outside the bar's own buttons.</p>
  *
- * <p>The pill's labels show on the selected segment only, so three segments and Undo fit the
+ * <p>The pill's labels show on the selected segment only, so four segments and Undo fit the
  * 64dp bar at 360dp; each unselected segment keeps its glyph, and its name as its content
  * description. A tap on a segment asks the surface to go there and the pill then snaps back to the
  * page that is showing: it moves when the page does (or when the editor's mode does), never ahead of
@@ -41,7 +41,7 @@ public final class AppearanceEditorPage {
     static final int BAR_DP = 64;
 
     /** The pill's segments, one per page of the surface. */
-    public enum Segment { WALLPAPER, LOOK, LAYOUT }
+    public enum Segment { WALLPAPER, LOOK, LAYOUT, ICON_PACK }
 
     /** What the bar's buttons ask of the surface. */
     interface Callbacks {
@@ -66,9 +66,11 @@ public final class AppearanceEditorPage {
     @NonNull private final MaterialButton mWallpaper;
     @NonNull private final MaterialButton mLook;
     @NonNull private final MaterialButton mLayout;
+    @NonNull private final MaterialButton mIconPack;
     @NonNull private final CharSequence mWallpaperLabel;
     @NonNull private final CharSequence mLookLabel;
     @NonNull private final CharSequence mLayoutLabel;
+    @NonNull private final CharSequence mIconPackLabel;
     /** The segment of the page that is showing; the pill returns to it after a tap. */
     @NonNull private Segment mCurrent;
     private boolean mRestating;
@@ -102,7 +104,9 @@ public final class AppearanceEditorPage {
             }
 
             @Override public void onSegment(@NonNull Segment segment) {
-                if (segment == Segment.LOOK)
+                if (segment == Segment.ICON_PACK)
+                    navigator.openIcons();
+                else if (segment == Segment.LOOK)
                     navigator.openLook();
                 else if (segment == Segment.LAYOUT)
                     navigator.openLayout();
@@ -110,7 +114,7 @@ public final class AppearanceEditorPage {
         }, Kind.OVERVIEW, null, content);
     }
 
-    /** The Icon pack page: back and {@code title} (no pill), Done, over {@code content}. */
+    /** The Icon pack page: back, the pill on Icon pack (no title), Done, over {@code content}. */
     @NonNull
     public static AppearanceEditorPage icons(@NonNull Context context,
                                              @NonNull AppearanceSurfaceController.Navigator navigator,
@@ -128,6 +132,13 @@ public final class AppearanceEditorPage {
             }
 
             @Override public void onSegment(@NonNull Segment segment) {
+                // Wallpaper is one page back; Look and Layout go through the Overview.
+                if (segment == Segment.WALLPAPER)
+                    navigator.back();
+                else if (segment == Segment.LOOK)
+                    navigator.openLook();
+                else if (segment == Segment.LAYOUT)
+                    navigator.openLayout();
             }
         }, Kind.ICONS, title, content);
     }
@@ -143,6 +154,8 @@ public final class AppearanceEditorPage {
         mWallpaper = mRoot.findViewById(R.id.appearance_page_mode_wallpaper);
         mLook = mRoot.findViewById(R.id.appearance_page_mode_look);
         mLayout = mRoot.findViewById(R.id.appearance_page_mode_layout);
+        mIconPack = mRoot.findViewById(R.id.appearance_page_mode_icon_pack);
+        mIconPackLabel = mIconPack.getText();
         mWallpaperLabel = mWallpaper.getText();
         mLookLabel = mLook.getText();
         mLayoutLabel = mLayout.getText();
@@ -151,16 +164,14 @@ public final class AppearanceEditorPage {
         mRoot.findViewById(R.id.appearance_page_back).setOnClickListener(v -> callbacks.onBack());
         mUndo.setOnClickListener(v -> callbacks.onUndo());
         mDone.setOnClickListener(v -> callbacks.onDone());
+        if (title != null)
+            mTitle.setText(title);
         mUndo.setVisibility(View.GONE);
         mDone.setVisibility(View.VISIBLE);
-        mCurrent = kind == Kind.OVERVIEW ? Segment.WALLPAPER : Segment.LOOK;
+        mCurrent = kind == Kind.OVERVIEW ? Segment.WALLPAPER : kind == Kind.ICONS ? Segment.ICON_PACK : Segment.LOOK;
 
         ViewGroup region = mRoot.findViewById(R.id.appearance_page_content);
-        if (kind == Kind.ICONS) {
-            mTitle.setText(title);
-            mTitle.setVisibility(View.VISIBLE);
-            mModeSlot.setVisibility(View.GONE);
-        } else {
+        {
             // The pill stands in the title's place; the title text stays for the shared frame.
             mTitle.setVisibility(View.GONE);
             mModeSlot.setVisibility(View.VISIBLE);
@@ -168,6 +179,7 @@ public final class AppearanceEditorPage {
                 if (mRestating || !isChecked)
                     return;
                 Segment tapped = checkedId == R.id.appearance_page_mode_wallpaper ? Segment.WALLPAPER
+                    : checkedId == R.id.appearance_page_mode_icon_pack ? Segment.ICON_PACK
                     : checkedId == R.id.appearance_page_mode_layout ? Segment.LAYOUT : Segment.LOOK;
                 mDispatching = true;
                 try {
@@ -195,6 +207,8 @@ public final class AppearanceEditorPage {
             }
             if (kind == Kind.OVERVIEW)
                 select(Segment.WALLPAPER);
+            else if (kind == Kind.ICONS)
+                select(Segment.ICON_PACK);
         }
     }
 
@@ -265,13 +279,15 @@ public final class AppearanceEditorPage {
     private void apply() {
         Segment segment = mCurrent;
         int id = segment == Segment.WALLPAPER ? R.id.appearance_page_mode_wallpaper
-            : segment == Segment.LAYOUT ? R.id.appearance_page_mode_layout : R.id.appearance_page_mode_look;
+            : segment == Segment.LAYOUT ? R.id.appearance_page_mode_layout
+            : segment == Segment.ICON_PACK ? R.id.appearance_page_mode_icon_pack : R.id.appearance_page_mode_look;
         mRestating = true;
         if (mMode.getCheckedButtonId() != id)
             mMode.check(id);
         label(mWallpaper, mWallpaperLabel, segment == Segment.WALLPAPER);
         label(mLook, mLookLabel, segment == Segment.LOOK);
         label(mLayout, mLayoutLabel, segment == Segment.LAYOUT);
+        label(mIconPack, mIconPackLabel, segment == Segment.ICON_PACK);
         mRestating = false;
     }
 

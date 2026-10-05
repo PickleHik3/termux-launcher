@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The one bar of the Appearance surface, over each page's own content: back, then either the
-     title (the Icon pack page) or the Wallpaper | Look | Layout pill (appearance_page_mode_slot,
+<!-- The one bar of the Appearance surface, over each page's own content: back, then the
+     Wallpaper | Look | Layout | Icon pack pill (appearance_page_mode_slot,
      GONE until AppearanceEditorPage shows it; centred in the title's slot, 40dp segments in the
-     64dp bar), then Undo (Look and Layout, while there is something to undo) and Done. The
+     64dp bar; 8dp side padding so four segments, Undo and Done fit 360dp), then Undo (Look and Layout, while there is something to undo) and Done. The
      bar is the same on every page: only the pill's selection and the end actions change. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -70,6 +70,10 @@
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:minWidth="0dp"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
                 app:icon="@drawable/segment_icon_wallpaper"
                 android:text="@string/appearance_page_wallpaper" />
 
@@ -82,6 +86,10 @@
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:minWidth="0dp"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
                 app:icon="@drawable/segment_icon_look"
                 android:text="@string/appearance_editor_mode_look" />
 
@@ -94,8 +102,28 @@
                 android:insetTop="0dp"
                 android:insetBottom="0dp"
                 android:minWidth="0dp"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
                 app:icon="@drawable/segment_icon_layout"
                 android:text="@string/action_layout_editor" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/appearance_page_mode_icon_pack"
+                style="@style/Widget.Termux.Editor.Segment"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:ellipsize="none"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                android:minWidth="0dp"
+                android:paddingLeft="8dp"
+                android:paddingRight="8dp"
+                android:paddingStart="8dp"
+                android:paddingEnd="8dp"
+                app:icon="@drawable/segment_icon_icon_pack"
+                android:text="@string/wallpaper_picker_icon_pack" />
             </com.google.android.material.button.MaterialButtonToggleGroup>
         </FrameLayout>
 
@@ -118,6 +146,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
+            android:paddingLeft="8dp"
+            android:paddingRight="8dp"
             android:maxLines="1"
             android:text="@string/appearance_editor_done"
             android:visibility="gone" />

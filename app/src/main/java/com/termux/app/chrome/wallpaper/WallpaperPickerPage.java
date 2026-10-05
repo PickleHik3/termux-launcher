@@ -69,7 +69,7 @@ import java.util.function.Supplier;
  * The Appearance surface's Overview (appearance-round-2026-10-04.md; it began as the wallpaper
  * picker page of lock-live-wallpaper.md, "The picker page"): the fixed heading Appearance, two slot
  * previews (Lock, then Home, each under a small label) in a snap pager, the Lock slot's Motion
- * toggle, the Look / Icon pack / Layout shortcuts, the thumbnail strip and the Apply split button.
+ * toggle, and one row of the Apply split button and Motion over the thumbnail strip.
  *
  * <p>The page reads and writes the slots only through {@link Slots}, which in the app wraps
  * {@link WallpaperSlots}; it never names WallpaperManager or a slot preference. Tapping a
@@ -546,7 +546,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private final MaterialButton mApply;
     private final View mApplyRow;
     private final MaterialButton mApplyMore;
-    private final View mIconPack;
     private final LinearProgressIndicator mProgress;
     private final RecyclerView mPager;
     private final LinearLayoutManager mPagerLayout;
@@ -566,7 +565,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private final LinearLayout mStrip;
     private final MaterialButton mPhoto;
     private final View mStripCard;
-    private final View mShortcuts;
     @Nullable private Drawable mBackground;
 
     @NonNull private WallpaperSlots.State mStored;
@@ -681,11 +679,9 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
 
         mRoot = LayoutInflater.from(context).inflate(R.layout.wallpaper_picker_page, null, false);
         mStripCard = mRoot.findViewById(R.id.wallpaper_picker_strip_card);
-        mShortcuts = mRoot.findViewById(R.id.wallpaper_picker_shortcuts);
         mApply = mRoot.findViewById(R.id.wallpaper_picker_apply);
         mApplyRow = mRoot.findViewById(R.id.wallpaper_picker_apply_row);
         mApplyMore = mRoot.findViewById(R.id.wallpaper_picker_apply_more);
-        mIconPack = mRoot.findViewById(R.id.wallpaper_picker_icon_pack);
         mProgress = mRoot.findViewById(R.id.wallpaper_picker_progress);
         mPager = mRoot.findViewById(R.id.wallpaper_picker_pager);
         mMotionRow = mRoot.findViewById(R.id.wallpaper_picker_motion_row);
@@ -711,7 +707,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             mHandedOff = true;
             mListener.onPickPhoto(slot, back);
         });
-        mRoot.findViewById(R.id.wallpaper_picker_look).setOnClickListener(v -> openEditor(false));
         mRoot.findViewById(R.id.wallpaper_picker_more_settings).setOnClickListener(v -> {
             if (!mReleased) mSlots.openMoreSettings();
         });
@@ -720,10 +715,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mRoot.findViewById(R.id.wallpaper_picker_living_cancel).setOnClickListener(v -> {
             if (mLivingJob != null) mLivingJob.cancel();
         });
-        mIconPack.setOnClickListener(v -> {
-            if (!mBusy && !mReleased) mListener.onOpenIcons();
-        });
-        mRoot.findViewById(R.id.wallpaper_picker_layout).setOnClickListener(v -> openEditor(true));
 
         mMotion.setChecked(motionOf(mCentred));
         mMotion.setOnCheckedChangeListener((b, on) -> onMotionToggled(on));
@@ -809,7 +800,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     @NonNull
     @Override
     public List<View> leavingViews() {
-        return Arrays.asList(mApplyRow, mStripCard, mMotionRow, mShortcuts);
+        return Arrays.asList(mApplyRow, mStripCard);
     }
 
     @NonNull
@@ -1110,13 +1101,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mSettingMotion = true;
         mMotion.setChecked(on);
         mSettingMotion = false;
-    }
-
-    /** Look or Layout: the surface shows the editor; this page stays built, hidden, behind it. */
-    private void openEditor(boolean layout) {
-        if (mBusy || mReleased) return;
-        if (layout) mListener.onOpenLayout();
-        else mListener.onOpenLook();
     }
 
     /**

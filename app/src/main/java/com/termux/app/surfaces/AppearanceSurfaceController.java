@@ -311,6 +311,8 @@ public final class AppearanceSurfaceController {
     /** Bumped on every open and close, so a late callback of an older surface does nothing. */
     private int mToken;
     @Nullable private PageId mQueued;
+    /** A page to go to once the Overview is reached (the Icon pack pill from the editor, or the reverse). */
+    @Nullable private PageId mThen;
     private final List<Animator> mRunning = new ArrayList<>();
 
     public AppearanceSurfaceController(@NonNull Host host, @NonNull Editor editor) {
@@ -559,7 +561,12 @@ public final class AppearanceSurfaceController {
                 @Override public void onSegment(@NonNull AppearanceEditorPage.Segment segment) {
                     if (mTransitioning)
                         return;
-                    if (segment == AppearanceEditorPage.Segment.WALLPAPER) {
+                    if (segment == AppearanceEditorPage.Segment.ICON_PACK) {
+                        if (!mDirect) {
+                            mThen = PageId.ICONS;
+                            mEditor.requestLeave(AppearanceSurfaceController.this::hopToOverview);
+                        }
+                    } else if (segment == AppearanceEditorPage.Segment.WALLPAPER) {
                         // Leaving for the Overview asks the unsaved-changes question; the pill is
                         // on Wallpaper only once the answer lets it go.
                         if (!mDirect)
@@ -679,7 +686,10 @@ public final class AppearanceSurfaceController {
         } else if (from == PageId.OVERVIEW && target == PageId.ICONS) {
             slideToIcons();
         } else if (from == PageId.ICONS && target == PageId.OVERVIEW) {
-            slideToOverview();
+            slideToOverview(null);
+        } else if (from == PageId.ICONS && toEditor) {
+            // Icon pack to Look or Layout: back to the Overview, then the usual hop into the editor.
+            slideToOverview(target);
         }
     }
 
@@ -806,8 +816,12 @@ public final class AppearanceSurfaceController {
             // so it never lands on the last frame of the hop. A Done on Look or Layout closes the
             // surface from here, over the Overview, as a Done on the Overview does.
             View view = mView;
+            final PageId then = mThen;
+            mThen = null;
             Runnable restore = () -> {
                 mEditor.restoreLauncher();
+                if (then != null && mOpen && token == mToken && !closeAfter)
+                    go(then);
                 if (closeAfter && mOpen && token == mToken)
                     closeAnimated();
             };
@@ -916,12 +930,21 @@ public final class AppearanceSurfaceController {
         slide(overview, icons, true, () -> mShown = PageId.ICONS);
     }
 
-    private void slideToOverview() {
+    private void slideToOverview(@Nullable PageId then) {
         final OverviewPage overview = mOverview;
         final Page icons = mIcons;
         if (overview == null || icons == null)
             return;
-        slide(icons, overview, false, () -> mShown = PageId.OVERVIEW);
+        final int token = mToken;
+        slide(icons, overview, false, () -> {
+            mShown = PageId.OVERVIEW;
+            View view = mView;
+            if (then != null && view != null)
+                view.post(() -> {
+                    if (mOpen && token == mToken)
+                        go(then);
+                });
+        });
     }
 
     /** One page out and the other in, a quarter of the width apart, on the settle curve. */

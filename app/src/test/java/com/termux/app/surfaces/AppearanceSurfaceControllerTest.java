@@ -473,6 +473,21 @@ public class AppearanceSurfaceControllerTest {
     }
 
     @Test
+    public void theEditorsIconPackSegmentLeavesTheEditorThenSlidesToTheIconPackPage() {
+        toLook();
+        ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
+        View bar = host.getChildAt(host.getChildCount() - 1);
+        bar.findViewById(R.id.appearance_page_mode_icon_pack).performClick();
+        idle();
+        assertEquals("the editor goes down first", 1, mEditor.count("dismiss"));
+        mEditor.finishHide();
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2));
+        assertEquals(PageId.ICONS, mSurface.shownPage());
+        assertTrue(mSurface.onBack());
+        assertEquals("back from Icon pack goes to Wallpaper", PageId.OVERVIEW, mSurface.shownPage());
+    }
+
+    @Test
     public void theEditorsPillSwitchesBetweenLookAndLayoutAndAnOverviewlessOpenHasNoWallpaperSegment() {
         toLook();
         ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
