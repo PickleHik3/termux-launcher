@@ -21414,9 +21414,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!ink.bandRect(com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR, mStatusInkRect))
             return;
         int primary = statusInkSeed(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
+        // A real ink pair: the primary role toned dark (about 30) for pale glass and pale (about
+        // 85) for dark glass, so the band can flip with the chrome's polarity rather than buying
+        // a veil to keep one ink legible.
+        double primaryTone = com.termux.app.theme.SchemeTone.tone(primary);
+        int darkPrimary = com.termux.app.theme.SchemeTone.toneShift(primary, 30d - primaryTone);
+        int palePrimary = com.termux.app.theme.SchemeTone.toneShift(primary, 85d - primaryTone);
         com.termux.app.chrome.OnGlass.Resolution band = ink.onGlass(
             com.termux.app.chrome.GlassBackdropCache.Band.STATUS_BAR, mStatusInkRect,
-            primary, primary, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
+            darkPrimary, palePrimary, com.termux.app.chrome.OnGlass.TARGET_BODY_TEXT);
 
         // A muted widget is the AI glyph's few seconds of afterlife: the state is said by the
         // neutral role, and the fade is allowed only as far as the backdrop can carry it.

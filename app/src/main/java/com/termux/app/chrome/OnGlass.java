@@ -405,13 +405,20 @@ public final class OnGlass {
      */
     public static int veilAlphaFor(@ColorInt int backdrop, @ColorInt int ink,
                                    @ColorInt int veilColor, double target) {
+        return veilAlphaFor(backdrop, ink, veilColor, target, MAX_VEIL_ALPHA_255);
+    }
+
+    /** {@link #veilAlphaFor(int, int, int, double)} with the search held to {@code maxVeilAlpha255}. */
+    public static int veilAlphaFor(@ColorInt int backdrop, @ColorInt int ink,
+                                   @ColorInt int veilColor, double target, int maxVeilAlpha255) {
+        int ceiling = Math.max(0, Math.min(MAX_VEIL_ALPHA_255, maxVeilAlpha255));
         int opaqueBackdrop = opaque(backdrop);
         if (ratio(ink, opaqueBackdrop) >= target) return 0;
-        for (int alpha = 1; alpha <= MAX_VEIL_ALPHA_255; alpha++) {
+        for (int alpha = 1; alpha <= ceiling; alpha++) {
             int surface = composite(withAlpha(veilColor, alpha), opaqueBackdrop);
             if (ratio(ink, surface) >= target) return alpha;
         }
-        return MAX_VEIL_ALPHA_255;
+        return ceiling;
     }
 
     /** {@code color} with its alpha channel replaced by an 8-bit {@code alpha}. */
@@ -478,6 +485,20 @@ public final class OnGlass {
     public static Resolution resolve(@ColorInt int backdrop, @ColorInt int preferredInk,
                                      @ColorInt int alternateInk, @ColorInt int veilColor,
                                      double target, @Nullable Boolean paleSide) {
+        return resolve(backdrop, preferredInk, alternateInk, veilColor, target, paleSide,
+            MAX_VEIL_ALPHA_255);
+    }
+
+    /**
+     * {@link #resolve(int, int, int, int, double, Boolean)} with the veil held to
+     * {@code maxVeilAlpha255}: where that ceiling binds the ink moves instead.
+     */
+    @NonNull
+    public static Resolution resolve(@ColorInt int backdrop, @ColorInt int preferredInk,
+                                     @ColorInt int alternateInk, @ColorInt int veilColor,
+                                     double target, @Nullable Boolean paleSide,
+                                     int maxVeilAlpha255) {
+        int ceiling = Math.max(0, Math.min(MAX_VEIL_ALPHA_255, maxVeilAlpha255));
         int base = opaque(backdrop);
         double bare = ratio(preferredInk, base);
         if (bare >= target) {
@@ -489,13 +510,13 @@ public final class OnGlass {
             return new Resolution(Color.TRANSPARENT, base, alternateInk, bareAlternate, target,
                 false, true, false);
         }
-        int alpha = veilAlphaFor(base, preferredInk, veilColor, target);
+        int alpha = veilAlphaFor(base, preferredInk, veilColor, target, ceiling);
         int veil = alpha <= 0 ? Color.TRANSPARENT : withAlpha(veilColor, alpha);
         int surface = alpha <= 0 ? base : opaque(composite(veil, base));
         double achieved = ratio(preferredInk, surface);
         if (achieved >= target) {
             return new Resolution(veil, surface, preferredInk, achieved, target,
-                alpha >= MAX_VEIL_ALPHA_255, false, false);
+                alpha >= ceiling, false, false);
         }
         int toned = toneOf(surface, preferredInk, target, paleSide);
         double tonedRatio = ratio(toned, surface);
