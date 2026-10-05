@@ -44,6 +44,8 @@ public final class LegendSlider extends Slider {
     /** The legend, ellipsised for the track length it was last measured against. */
     @NonNull private CharSequence mShown = "";
     private float mFitRoomPx;
+    /** The width the stock slider measured itself at: the track's own width. */
+    private int mNaturalWidth;
 
     public LegendSlider(@NonNull Context context) {
         this(context, null);
@@ -128,6 +130,7 @@ public final class LegendSlider extends Slider {
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        mNaturalWidth = getMeasuredWidth();
         int width = MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.EXACTLY
             ? MeasureSpec.getSize(widthMeasureSpec) : getMeasuredWidth();
         int height = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.EXACTLY
@@ -137,7 +140,13 @@ public final class LegendSlider extends Slider {
 
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
+        // The stock slider draws a vertical track at the view's start; a column wider than the
+        // track's own width centres it, so the legend and the track share one axis.
+        float shift = Math.max(0f, (getWidth() - mNaturalWidth) / 2f);
+        canvas.save();
+        canvas.translate(shift, 0f);
         super.onDraw(canvas);
+        canvas.restore();
         if (mLegend == null || getWidth() <= 0 || getHeight() <= 0)
             return;
         float width = getWidth();
