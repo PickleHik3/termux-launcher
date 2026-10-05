@@ -139,6 +139,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         configureOverrides(context);
         configureEndpointPreferences(context);
         configureModelCentreRow();
+        configureWelcomeCardRow();
         configureBenchmarkRow();
         configureHuggingFaceToken();
         configureRemoteRow();
@@ -804,6 +805,18 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         if (centre == null) return;
         centre.setOnPreferenceClickListener(preference -> {
             TaiModelCentreFragment.open(getActivity(), TaiModelCentreFragment.SEGMENT_INSTALLED);
+            return true;
+        });
+    }
+
+    /** Reopens the "What runs on this phone" card any time; it does not count as the automatic raise. */
+    private void configureWelcomeCardRow() {
+        Preference row = findPreference("tai_welcome_card");
+        if (row == null) return;
+        row.setOnPreferenceClickListener(preference -> {
+            if (getActivity() != null) {
+                com.termux.app.firstrun.TaiWelcomeCardHost.show(getActivity(), false, null);
+            }
             return true;
         });
     }
