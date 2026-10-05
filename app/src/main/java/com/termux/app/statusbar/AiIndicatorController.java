@@ -79,6 +79,8 @@ public final class AiIndicatorController {
         this.context = widget.getContext().getApplicationContext();
         widget.setIconResource(R.drawable.ic_symbol_smart_toy);
         widget.setColorRole(StatusBarWidgetView.ColorRole.TERTIARY);
+        // The dot beside the glyph is the glyph's own tier: the AI is the one tertiary mark.
+        dot.setColorRole(StatusBarWidgetView.ColorRole.TERTIARY);
     }
 
     /** Starts ticking. Safe to call repeatedly; the activity calls it from every resume. */

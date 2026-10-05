@@ -2,7 +2,7 @@ package com.termux.app.statusbar;
 
 /**
  * Derived state of the 68dp widget slot. Priority order is pinned notifications, then media, then
- * the clock at full size. The clock form follows from how much of the slot is already claimed.
+ * the clock at full size. The clock keeps its full face and scales to what the others leave.
  *
  * <p>Media only shares the slot with a single pinned card: the contention layout needs 40dp for the
  * card plus a 6dp gap plus the 20dp media strip, so a second card leaves no room for the strip.
@@ -52,17 +52,11 @@ public enum TopPaneSlotMode {
     }
 
     /**
-     * Anything sharing the slot leaves the clock its compact face. Nothing drops it to the mono
-     * chip any more: that was the three-row stack, which the scrolling cards replaced.
+     * The clock always draws its full face; what sharing changes is the room, not the form. The
+     * slot hands it a height and width budget and the clock scales as one entity to fill it, with
+     * the compact face's size as the floor.
      */
     public TopPaneClockForm clockForm(int pinnedCount) {
-        switch (this) {
-            case NOTIFICATIONS:
-            case NOTIFICATIONS_AND_MEDIA:
-            case MEDIA:
-                return TopPaneClockForm.COMPACT;
-            default:
-                return TopPaneClockForm.FULL;
-        }
+        return TopPaneClockForm.FULL;
     }
 }

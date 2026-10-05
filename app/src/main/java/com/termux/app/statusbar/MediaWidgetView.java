@@ -70,6 +70,10 @@ public final class MediaWidgetView extends View {
     private int mOnSurface;
     private int mOnSurfaceVariant;
     private int mPrimary;
+    private int mPanelHigh;
+    private int mOutlineVariant;
+    private int mPrimaryContainer;
+    private int mOnPrimaryContainer;
 
     public MediaWidgetView(Context context) {
         this(context, null);
@@ -91,6 +95,24 @@ public final class MediaWidgetView extends View {
             com.termux.shared.R.attr.termuxColorOnSurfaceVariant, mOnSurface);
         mPrimary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
+        mPanelHigh = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+            ContextCompat.getColor(context, R.color.termux_surface_panel_high));
+        mOutlineVariant = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOutlineVariant,
+            ContextCompat.getColor(context, R.color.termux_outline_variant));
+        mPrimaryContainer = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorPrimaryContainer,
+            ContextCompat.getColor(context, R.color.termux_primary_container));
+        mOnPrimaryContainer = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorOnPrimaryContainer,
+            ContextCompat.getColor(context, R.color.termux_on_primary_container));
+    }
+
+    /** The bar re-inked or the scheme changed: resolve the roles again. */
+    public void onThemeChanged() {
+        resolveColors();
+        invalidate();
     }
 
     public void setForm(@NonNull Form form) {
@@ -152,7 +174,7 @@ public final class MediaWidgetView extends View {
     private void drawStrip(Canvas canvas, @NonNull TopPaneMediaState state) {
         mRect.set(0f, 0f, getWidth(), getHeight());
         mFillPaint.setShader(null);
-        mFillPaint.setColor(ColorUtils.setAlphaComponent(mPrimary, 20));
+        mFillPaint.setColor(mPanelHigh);
         canvas.drawRoundRect(mRect, dp(8f), dp(8f), mFillPaint);
 
         float art = dp(12f);
@@ -196,7 +218,7 @@ public final class MediaWidgetView extends View {
             mFillPaint.setShader(null);
         } else {
             mFillPaint.setShader(null);
-            mFillPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface, 20));
+            mFillPaint.setColor(mPanelHigh);
             canvas.drawRoundRect(mRect, radius, radius, mFillPaint);
             Drawable icon = mAppIcon;
             if (icon != null) {
@@ -212,7 +234,7 @@ public final class MediaWidgetView extends View {
         mFillPaint.setStrokeWidth(dp(1f));
         // The mode's own on-surface ink, not a frozen near-white: a white rim is invisible on
         // light glass, and this pane stands on the same glass as the rest of the bar.
-        mFillPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface, 15));
+        mFillPaint.setColor(mOutlineVariant);
         mRect.inset(dp(.5f), dp(.5f));
         canvas.drawRoundRect(mRect, radius, radius, mFillPaint);
         mFillPaint.setStyle(Paint.Style.FILL);
@@ -221,7 +243,7 @@ public final class MediaWidgetView extends View {
     private void drawProgress(Canvas canvas, float left, float top, float width, float progress) {
         mFillPaint.setShader(null);
         mRect.set(left, top, left + width, top + dp(2f));
-        mFillPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface, 36));
+        mFillPaint.setColor(mOutlineVariant);
         canvas.drawRoundRect(mRect, dp(1f), dp(1f), mFillPaint);
         if (progress <= 0f) return;
         mRect.set(left, top, left + width * progress, top + dp(2f));
@@ -240,11 +262,13 @@ public final class MediaWidgetView extends View {
 
         setRect(mPlayPauseRect, x, centerY, playBox);
         mFillPaint.setShader(null);
-        mFillPaint.setColor(ColorUtils.setAlphaComponent(mOnSurface,
-            mPressedTarget == TARGET_PLAY_PAUSE ? 51 : 31));
+        // The play disc is the tonal pair; a press is the on-colour's state layer over it.
+        mFillPaint.setColor(mPressedTarget == TARGET_PLAY_PAUSE
+            ? ColorUtils.blendARGB(mPrimaryContainer, mOnPrimaryContainer, .12f)
+            : mPrimaryContainer);
         canvas.drawCircle(mPlayPauseRect.centerX(), mPlayPauseRect.centerY(), playBox / 2f, mFillPaint);
         drawGlyph(canvas, playing ? R.drawable.ic_media_pause : R.drawable.ic_media_play_arrow,
-            mPlayPauseRect, glyph, alpha, false);
+            mPlayPauseRect, glyph, 255, false, mOnPrimaryContainer);
         x += playBox + gap;
 
         setRect(mNextRect, x, centerY, box);
@@ -259,10 +283,15 @@ public final class MediaWidgetView extends View {
 
     private void drawGlyph(Canvas canvas, int drawableRes, Rect box, float glyph, int alpha,
                            boolean pressed) {
+        drawGlyph(canvas, drawableRes, box, glyph, alpha, pressed, mOnSurface);
+    }
+
+    private void drawGlyph(Canvas canvas, int drawableRes, Rect box, float glyph, int alpha,
+                           boolean pressed, int tint) {
         Drawable icon = AppCompatResources.getDrawable(getContext(), drawableRes);
         if (icon == null) return;
         icon = icon.mutate();
-        icon.setTint(mOnSurface);
+        icon.setTint(tint);
         icon.setAlpha(pressed ? Math.min(255, alpha + 40) : alpha);
         int half = Math.round(glyph / 2f);
         icon.setBounds(box.centerX() - half, box.centerY() - half,

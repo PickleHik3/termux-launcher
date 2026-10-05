@@ -1537,7 +1537,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private int plusTint(int accent) {
         WindowChipInk.Palette glass = mGlassPalette;
         if (glass == null || mChromeInk == null) {
-            return ColorUtils.setAlphaComponent(accent, 184);
+            // No band was measured: the role itself, opaque; the icon tier is only ever tuned on
+            // a measured band, never faded by a fixed alpha.
+            return accent;
         }
         return WindowChipInk.towardPolarity(glass.band, accent,
             mChromeInk.polarity() == com.termux.app.chrome.ChromeInk.Polarity.PALE_INK,
@@ -1557,18 +1559,17 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         int secondary = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorSecondary,
             ContextCompat.getColor(context, R.color.termux_secondary));
-        // Tertiary for the ring, like the row's other "something is happening" accents. Error for
-        // the bell and a failed progress report: it is the one Material role that is warm in every
+        // Secondary for the ring ("something is happening"), tertiary for done, error for the
+        // bell and a failed progress report: error is the one Material role that is warm in every
         // generated palette, and a window waiting on the user has to be findable without reading
-        // any label.
-        mBusyColor = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorTertiary, primary);
+        // any label. Done and busy are different roles, so a finished chip never reads as one
+        // that is still going.
+        mBusyColor = secondary;
         mAttentionColor = MaterialColors.getColor(context,
-            androidx.appcompat.R.attr.colorError,
+            com.termux.shared.R.attr.termuxColorError,
             ContextCompat.getColor(context, R.color.termux_error));
-        // Material has no success role, and the busy accent cannot stand in for one: a chip that
-        // has finished must not be the colour of a chip that is still going.
-        mDoneColor = ContextCompat.getColor(context, R.color.termux_chip_done);
+        mDoneColor = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorTertiary, primary);
 
         WindowChipInk.Palette glass = measureBand(primary);
         if (glass == null) {

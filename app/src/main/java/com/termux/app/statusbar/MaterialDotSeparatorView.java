@@ -69,7 +69,7 @@ public final class MaterialDotSeparatorView extends View {
             com.termux.shared.R.attr.termuxColorSecondary,
             ContextCompat.getColor(context, R.color.termux_secondary));
         int tertiary = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorTertiary, primary);
+            com.termux.shared.R.attr.termuxColorTertiary, primary);
         mPaint.setColor(mRole == StatusBarWidgetView.ColorRole.TERTIARY ? tertiary
             : mRole == StatusBarWidgetView.ColorRole.PRIMARY ? primary : secondary);
     }

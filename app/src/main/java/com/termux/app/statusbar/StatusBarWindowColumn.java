@@ -321,7 +321,10 @@ public final class StatusBarWindowColumn extends ScrollView {
         WindowChipInk.Palette glass = mGlassPalette;
         if (glass == null) {
             if (selected) {
-                shape.setColor(ColorStateList.valueOf(ColorUtils.setAlphaComponent(mAccent, 74)));
+                // The pair: the container role under its own on-colour label (see dress()).
+                shape.setColor(ColorStateList.valueOf(MaterialColors.getColor(this,
+                    com.termux.shared.R.attr.termuxColorAccentContainer,
+                    ContextCompat.getColor(getContext(), R.color.termux_surface_panel_high))));
                 shape.setStroke(Math.round(density()), ColorUtils.setAlphaComponent(mAccent, 190));
             } else {
                 shape.setColor(ColorStateList.valueOf(Color.TRANSPARENT));
