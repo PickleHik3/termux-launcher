@@ -216,16 +216,34 @@ public class AppearanceEditorPageTest {
     }
 
     @Test
-    public void theIconPackPageKeepsItsTitleWithBackAndDoneButNoPill() {
+    public void theIconPackPageWearsThePillOnIconPackWithBackAndDoneAndGoesWhereTheSegmentsSay() {
         RecordingNavigator navigator = new RecordingNavigator();
         AppearanceEditorPage icons = AppearanceEditorPage.icons(mThemed, navigator, "Icon pack",
             new FrameLayout(mThemed));
-        assertFalse(icons.isModeShown());
-        assertTrue(icons.isTitleShown());
-        assertEquals("Icon pack", icons.title().toString());
-        icons.root().findViewById(R.id.appearance_page_back).performClick();
-        icons.root().findViewById(R.id.appearance_page_done).performClick();
-        assertEquals(Arrays.asList("back", "close"), navigator.calls);
+        View root = icons.root();
+        assertTrue(icons.isModeShown());
+        assertFalse("the pill replaces the title", icons.isTitleShown());
+        assertFalse("no Undo", icons.isUndoShown());
+        assertTrue(icons.isDoneShown());
+        assertTrue(checked(root.findViewById(R.id.appearance_page_mode_icon_pack)));
+        assertEquals("Icon pack", ((TextView) root.findViewById(R.id.appearance_page_mode_icon_pack)).getText().toString());
+        root.findViewById(R.id.appearance_page_mode_wallpaper).performClick();
+        idle();
+        root.findViewById(R.id.appearance_page_mode_look).performClick();
+        idle();
+        root.findViewById(R.id.appearance_page_mode_layout).performClick();
+        idle();
+        root.findViewById(R.id.appearance_page_back).performClick();
+        root.findViewById(R.id.appearance_page_done).performClick();
+        assertEquals(Arrays.asList("back", "look", "layout", "back", "close"), navigator.calls);
+    }
+
+    @Test
+    public void theOverviewsIconPackSegmentAsksForTheIconsPage() {
+        RecordingNavigator navigator = new RecordingNavigator();
+        AppearanceEditorPage overview = AppearanceEditorPage.overview(mThemed, navigator, new FrameLayout(mThemed));
+        overview.root().findViewById(R.id.appearance_page_mode_icon_pack).performClick();
+        assertEquals(Arrays.asList("icons"), navigator.calls);
     }
 
     @Test

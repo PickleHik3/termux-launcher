@@ -52,8 +52,8 @@ import java.util.List;
  * The Appearance Overview at the subclass's width: it lays out with nothing cut off, the heading is
  * fixed ("Appearance") while each card carries its own label, Same as Home shows only for Lock,
  * Apply is enabled only when the pending choice differs, Apply puts the background on Home and
- * points Lock at it while its menu items apply one slot, the shortcuts ask the surface for Look,
- * Icons and Layout, the shortcut glyphs sit centred, and Motion is hidden below API 34. The strip
+ * points Lock at it while its menu items apply one slot, there is no shortcut row,
+ * Apply and Motion share one row above the strip, and Motion is hidden below API 34. The strip
  * holds Same as Home and the recent photos, evenly spaced, and no pre-made backgrounds. Photos: a
  * cropped photo comes back pending and Apply sets it, the current photo shows in its card, below
  * API 34 the page holds photos only, and releasing without Apply discards the pending file. A
@@ -255,9 +255,12 @@ public abstract class WallpaperPickerPageTestBase {
         assertTrue("the card is sized", card.getHeight() > dp(100) && card.getWidth() > dp(40));
         assertTrue("the card fits the pager", card.getHeight() <= pager.getHeight());
 
-        for (int id : new int[] {R.id.wallpaper_picker_apply,
-            R.id.wallpaper_picker_apply_more, R.id.wallpaper_picker_look, R.id.wallpaper_picker_icon_pack, R.id.wallpaper_picker_layout,
-            R.id.wallpaper_picker_photo, R.id.wallpaper_picker_motion}) {
+        for (int id : new int[] {R.id.wallpaper_picker_apply, R.id.wallpaper_picker_apply_more}) {
+            View v = root.findViewById(id);
+            assertTrue(v.getResources().getResourceEntryName(id) + " is a 40dp button",
+                v.getHeight() >= dp(40) && v.getWidth() >= dp(40));
+        }
+        for (int id : new int[] {R.id.wallpaper_picker_photo, R.id.wallpaper_picker_motion}) {
             View v = root.findViewById(id);
             assertTrue(v.getResources().getResourceEntryName(id) + " is a 48dp target",
                 v.getHeight() >= dp(48) && v.getWidth() >= dp(48));
@@ -388,14 +391,11 @@ public abstract class WallpaperPickerPageTestBase {
     }
 
     @Test
-    public void lookAndLayoutAreAskedOfTheSurfaceAndThePageStaysBuilt() {
+    public void theShortcutRowIsGoneAndThePendingChoiceSurvivesAHide() {
         WallpaperPickerPage page = open(34);
         page.centre(WallpaperSlots.Slot.HOME);
         page.choose(WallpaperSlots.Choice.animated("tide"));
-        page.root().findViewById(R.id.wallpaper_picker_look).performClick();
-        assertEquals("look", mListener.calls.get(mListener.calls.size() - 1));
-        page.root().findViewById(R.id.wallpaper_picker_layout).performClick();
-        assertEquals("layout", mListener.calls.get(mListener.calls.size() - 1));
+        assertNull(page.root().findViewById(R.id.wallpaper_picker_shortcuts));
         // The page is hidden behind the editor, not rebuilt: its pending choices are where they were.
         page.onHidden();
         page.onShown();
@@ -405,32 +405,20 @@ public abstract class WallpaperPickerPageTestBase {
     }
 
     @Test
-    public void theIconPackButtonAsksTheSurfaceForTheIconsPage() {
+    public void theCardsSitAboveTheApplyRowAndTheRowAboveTheStrip() {
         WallpaperPickerPage page = open(34);
-        page.root().findViewById(R.id.wallpaper_picker_icon_pack).performClick();
-        assertEquals("icons", mListener.calls.get(mListener.calls.size() - 1));
-    }
-
-    @Test
-    public void theShortcutGlyphsSitCentred() {
-        WallpaperPickerPage page = open(34);
-        for (int id : new int[] {R.id.wallpaper_picker_look, R.id.wallpaper_picker_icon_pack,
-            R.id.wallpaper_picker_layout}) {
-            MaterialButton button = page.root().findViewById(id);
-            String name = button.getResources().getResourceEntryName(id);
-            Drawable icon = button.getIcon();
-            assertTrue(name + " has a glyph", icon != null);
-            Rect b = icon.getBounds();
-            assertEquals(name + " glyph is 24dp", dp(24), b.width());
-            // Where TextView draws a start (left) compound drawable: across from the left padding,
-            // down from the top padding with the leftover height split evenly, then its bounds.
-            float cx = button.getPaddingLeft() + b.left + b.width() / 2f;
-            int top = button.getCompoundPaddingTop();
-            int vspace = button.getHeight() - top - button.getCompoundPaddingBottom();
-            float cy = top + (vspace - b.height()) / 2 + b.top + b.height() / 2f;
-            assertEquals(name + " centred across", button.getWidth() / 2f, cx, 1f);
-            assertEquals(name + " centred down", button.getHeight() / 2f, cy, 1f);
-        }
+        View root = page.root();
+        View pager = root.findViewById(R.id.wallpaper_picker_pager);
+        View row = root.findViewById(R.id.wallpaper_picker_apply_row);
+        View strip = root.findViewById(R.id.wallpaper_picker_strip_card);
+        assertTrue("cards end above the row", pager.getBottom() <= row.getTop());
+        assertTrue("the row ends above the strip card", row.getBottom() <= strip.getTop());
+        View apply = root.findViewById(R.id.wallpaper_picker_apply);
+        View motion = root.findViewById(R.id.wallpaper_picker_motion_row);
+        assertTrue("Apply and Motion share the row", apply.getTop() >= row.getTop()
+            && apply.getBottom() <= row.getBottom() && motion.getTop() >= row.getTop()
+            && motion.getBottom() <= row.getBottom());
+        assertTrue("Motion is at the row's end", motion.getLeft() >= apply.getRight());
     }
 
     @Test

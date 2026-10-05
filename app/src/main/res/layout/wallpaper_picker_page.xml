@@ -11,22 +11,20 @@
        the pager (the rest of the height): Lock then Home, each a small label ("Lock screen",
          "Home screen") over a card at the 360x800 aspect of the lock cutout, the neighbour peeking
          (WallpaperPickerPage sizes the cards, less the label, and the padding);
-       Apply: a filled button and its more icon button, centred right under the cards;
-       Motion 48: Lock centred only; INVISIBLE on Home so the pager never jumps, GONE below API 34.
-         For a photo it holds the living-still control instead (living-stills.md, Part D): the Bring
-         to life button, then a determinate bar with the stage and a cancel while it runs, then the
-         Motion switch for that slot with an AI-star icon button, Read again;
-       the shortcut row: three 64dp tonal round buttons with a label under each, the 24dp glyph
-         centred both ways (no padding, textStart gravity: an icon-only button centres its icon);
+       the pager (the rest of the height): Lock then Home, cards at the 360x800 aspect, the
+         height-driven size filling the room between the bar and the row below;
+       one row: Apply (40) and its more icon (40) at the start, Motion at the end: the switch
+         with the AI-star Read again, or (a photo with no living still) the Bring to life button,
+         or the determinate bar with the stage and a cancel while it runs; INVISIBLE switch on Home
+         so the row never jumps, the Motion cell GONE below API 34;
        the thumbnail strip card: Same as Home (Lock only) then up to five photos last applied
          (six tiles), in equal cells across the row (no heading, no pre-made backgrounds); each
          thumbnail is at most 112 tall and shrinks, aspect kept, so six fit the row's width
          (WallpaperPickerLogic.stripThumbSize), never clipped; then Photo… beside More settings
          (the old Look page).
 
-     Fixed heights, dp: 4 + (4 + 40 + 4) + 48 + (8 + 64 + 4 + 20 + 8) + (8 + 12 + 112 + 4 + 48 + 4 + 16) = 424,
-     so the pager gets 356 at 780 tall and about 290 under real system bars, 24 + 2 of it the label.
-     No hint text. The page follows the locale's direction; the cards' content does not mirror. -->
+     Fixed heights, dp: 4 + (8 + 48 + 4) + (4 + 12 + 112 + 4 + 48 + 4 + 16); the pager gets the rest.
+     The page follows the locale's direction; the cards' content does not mirror. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/wallpaper_picker_page"
@@ -58,10 +56,10 @@
         android:id="@+id/wallpaper_picker_apply_row"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center"
+        android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="16dp"
-        android:paddingTop="4dp"
+        android:paddingTop="8dp"
         android:paddingEnd="16dp"
         android:paddingBottom="4dp">
 
@@ -69,33 +67,45 @@
             android:id="@+id/wallpaper_picker_apply"
             style="@style/Widget.Material3.Button"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="40dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
             android:text="@string/wallpaper_picker_apply" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/wallpaper_picker_apply_more"
             style="?attr/materialIconButtonFilledStyle"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:layout_marginStart="8dp"
+            android:insetLeft="0dp"
+            android:insetTop="0dp"
+            android:insetRight="0dp"
+            android:insetBottom="0dp"
+            android:padding="0dp"
+            app:iconGravity="textStart"
+            app:iconPadding="0dp"
             android:checkable="true"
             android:contentDescription="@string/wallpaper_picker_apply_more"
             android:tooltipText="@string/wallpaper_picker_apply_more"
             app:icon="@drawable/m3_split_button_chevron_avd"
             app:iconSize="24dp" />
-    </LinearLayout>
 
-    <FrameLayout
-        android:id="@+id/wallpaper_picker_motion_row"
-        android:layout_width="match_parent"
-        android:layout_height="48dp">
+        <!-- Motion: at the row's end, beside Apply. Its states (the switch with the sparkle,
+             Bring to life, the working bar) fill this cell, end-aligned. -->
+        <FrameLayout
+            android:id="@+id/wallpaper_picker_motion_row"
+            android:layout_width="0dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:layout_weight="1">
 
         <!-- The Motion switch with, for a living still, the small "Read again" beside it. -->
         <LinearLayout
             android:id="@+id/wallpaper_picker_motion_group"
             android:layout_width="wrap_content"
             android:layout_height="48dp"
-            android:layout_gravity="center"
+            android:layout_gravity="end|center_vertical"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -129,8 +139,8 @@
             android:id="@+id/wallpaper_picker_living_offer"
             style="@style/Widget.Material3.Button.TonalButton.Icon"
             android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:layout_gravity="center"
+            android:layout_height="40dp"
+            android:layout_gravity="end|center_vertical"
             android:insetTop="0dp"
             android:insetBottom="0dp"
             android:text="@string/living_bring_to_life"
@@ -145,8 +155,8 @@
             android:layout_height="48dp"
             android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:paddingStart="32dp"
-            android:paddingEnd="8dp"
+            android:paddingStart="8dp"
+            android:paddingEnd="0dp"
             android:visibility="gone">
 
             <LinearLayout
@@ -185,132 +195,7 @@
                 app:iconSize="24dp"
                 app:iconTint="?attr/colorOnSurface" />
         </LinearLayout>
-    </FrameLayout>
-
-    <LinearLayout
-        android:id="@+id/wallpaper_picker_shortcuts"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:baselineAligned="false"
-        android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="8dp">
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/wallpaper_picker_look"
-                style="?attr/materialIconButtonFilledTonalStyle"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:insetLeft="0dp"
-                android:insetTop="0dp"
-                android:insetRight="0dp"
-                android:insetBottom="0dp"
-                android:padding="0dp"
-                android:contentDescription="@string/wallpaper_picker_look"
-                app:icon="@drawable/ic_symbol_palette"
-                app:iconGravity="textStart"
-                app:iconPadding="0dp"
-                app:iconSize="24dp"
-                app:shapeAppearance="?attr/shapeAppearanceCornerFull" />
-
-            <TextView
-                android:id="@+id/wallpaper_picker_look_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minHeight="20dp"
-                android:layout_marginTop="4dp"
-                android:ellipsize="end"
-                android:importantForAccessibility="no"
-                android:maxLines="1"
-                android:text="@string/wallpaper_picker_look"
-                android:textAppearance="?attr/textAppearanceLabelLarge"
-                android:textColor="?attr/colorOnSurface" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/wallpaper_picker_icon_pack"
-                style="?attr/materialIconButtonFilledTonalStyle"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:insetLeft="0dp"
-                android:insetTop="0dp"
-                android:insetRight="0dp"
-                android:insetBottom="0dp"
-                android:padding="0dp"
-                android:contentDescription="@string/wallpaper_picker_icon_pack"
-                app:icon="@drawable/ic_symbol_apps"
-                app:iconGravity="textStart"
-                app:iconPadding="0dp"
-                app:iconSize="24dp"
-                app:shapeAppearance="?attr/shapeAppearanceCornerFull" />
-
-            <TextView
-                android:id="@+id/wallpaper_picker_icon_pack_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minHeight="20dp"
-                android:layout_marginTop="4dp"
-                android:ellipsize="end"
-                android:importantForAccessibility="no"
-                android:maxLines="1"
-                android:text="@string/wallpaper_picker_icon_pack"
-                android:textAppearance="?attr/textAppearanceLabelLarge"
-                android:textColor="?attr/colorOnSurface" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="center_horizontal"
-            android:orientation="vertical">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/wallpaper_picker_layout"
-                style="?attr/materialIconButtonFilledTonalStyle"
-                android:layout_width="64dp"
-                android:layout_height="64dp"
-                android:insetLeft="0dp"
-                android:insetTop="0dp"
-                android:insetRight="0dp"
-                android:insetBottom="0dp"
-                android:padding="0dp"
-                android:contentDescription="@string/wallpaper_picker_layout"
-                app:icon="@drawable/ic_symbol_grid_view"
-                app:iconGravity="textStart"
-                app:iconPadding="0dp"
-                app:iconSize="24dp"
-                app:shapeAppearance="?attr/shapeAppearanceCornerFull" />
-
-            <TextView
-                android:id="@+id/wallpaper_picker_layout_label"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minHeight="20dp"
-                android:layout_marginTop="4dp"
-                android:ellipsize="end"
-                android:importantForAccessibility="no"
-                android:maxLines="1"
-                android:text="@string/wallpaper_picker_layout"
-                android:textAppearance="?attr/textAppearanceLabelLarge"
-                android:textColor="?attr/colorOnSurface" />
-        </LinearLayout>
+        </FrameLayout>
     </LinearLayout>
 
     <com.google.android.material.card.MaterialCardView
@@ -319,7 +204,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
         android:layout_marginEnd="16dp"
         android:layout_marginBottom="16dp">
 
