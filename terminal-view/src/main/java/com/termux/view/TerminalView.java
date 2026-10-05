@@ -54,6 +54,7 @@ import com.termux.terminal.KeyHandler;
 import com.termux.terminal.KittyKeyEncoder;
 import com.termux.terminal.TerminalBuffer;
 import com.termux.terminal.TerminalEmulator;
+import com.termux.terminal.TerminalLinks;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.TextStyle;
 import com.termux.view.textselection.TextSelectionCursorController;
@@ -305,6 +306,13 @@ public final class TerminalView extends View {
      * Decided once at touch-up, because reading the latch consumes it.
      */
     private boolean mTapShiftBypass;
+    /**
+     * The link under the finger when it lifted for what may be a tap. Read at the lift, offered at
+     * the confirmation 300 ms later, by which time a program may have redrawn the screen.
+     */
+    private TerminalLinks.Link mTapLink;
+    /** Whether a tap reads addresses out of the text, or only OSC 8 hyperlinks. */
+    private boolean mUrlTapEnabled;
 
     /** Modifier bits of the left press in flight, so its motion and release carry the same ones. */
     private int mMousePressModifiers;
@@ -490,14 +498,18 @@ public final class TerminalView extends View {
                 mScrollXRemainder = 0.0f;
                 if (mScroller.isFinished())
                     settleScrollOffset();
+                mTapLink = null;
                 if (mTouchMouseDragReported)
                     return true;
                 if (mHoldConsumedGesture)
                     return true;
-                if (mEmulator != null && mRenderer != null && mEmulator.isMouseTrackingActive() && !event.isFromSource(InputDevice.SOURCE_MOUSE) && !isSelectingText() && !mScrollDelivery.delivered()) {
+                if (isSelectingText() || mScrollDelivery.delivered())
+                    return false;
+                mTapLink = linkUnderTap(event);
+                if (mEmulator != null && mRenderer != null && mEmulator.isMouseTrackingActive() && !event.isFromSource(InputDevice.SOURCE_MOUSE)) {
                     if (takeShiftForTap(event)) {
                         // Shift bypasses the program: no click goes to it, and the confirmed tap
-                        // that follows opens whatever link is there.
+                        // that follows offers whatever link is there.
                         mTapShiftBypass = true;
                         return false;
                     }
@@ -524,12 +536,17 @@ public final class TerminalView extends View {
                     return true;
                 }
                 requestFocus();
+                TerminalLinks.Link link = mTapLink;
+                mTapLink = null;
                 if (mEmulator.isMouseTrackingActive()) {
-                    // The program already got this tap as its click (see onUp), so the app's own
-                    // link handling stays out of it - unless Shift sent the tap here instead.
-                    boolean bypass = mTapShiftBypass;
+                    // The program already got this tap as its click (see onUp), unless Shift held
+                    // it back; either way a link under the finger is still offered, as in a shell.
                     mTapShiftBypass = false;
-                    if (bypass) mClient.onMouseTrackingBypassTap(event);
+                    if (link != null) mClient.onLinkTap(link, event);
+                    return true;
+                }
+                if (link != null) {
+                    mClient.onLinkTap(link, event);
                     return true;
                 }
                 mClient.onSingleTapUp(event);
@@ -1389,6 +1406,18 @@ public final class TerminalView extends View {
             row += mTopRow;
         }
         return new int[] { column, row };
+    }
+
+    /** The link under a lifted finger, or null; see {@link TerminalLinks#at}. */
+    private TerminalLinks.Link linkUnderTap(MotionEvent event) {
+        if (mEmulator == null || mRenderer == null) return null;
+        int[] cell = getColumnAndRow(event, true);
+        return TerminalLinks.at(mEmulator, cell[0], cell[1], mUrlTapEnabled);
+    }
+
+    /** Whether a tap reads addresses out of the text; OSC 8 hyperlinks are always offered. */
+    public void setUrlTapEnabled(boolean enabled) {
+        mUrlTapEnabled = enabled;
     }
 
     /** The renderer's line spacing in pixels, or 0 before a renderer exists. */
