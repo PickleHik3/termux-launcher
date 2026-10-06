@@ -75,3 +75,21 @@ below for a decision, not quietly dropped.
 
 Unit suites per module in this session; Waydroid for visual equivalence; trace counts (passes per
 keyboard transition, binder calls per apply) on the HTC hub; pong only for the final feel, when asked.
+
+## Second round (2026-10-06 evening), on this branch
+
+Approved held items landed: geometry scheduler (one pass and one grid reflow per keyboard,
+insets, layout or slide transition; the status fold still relayouts per frame but runs no chrome
+pass until it lands; fold-by-translation is a follow-up), Look slider overlay (live preview from an
+in-memory batch, written on release), async icons with a 180 ms fade (warm cells bind instantly).
+Also: one preview area for Look (every stop), Layout and Icon pack, clear of the page bar, the frame
+wrapping the status bar; Motion blur, Railgun and Torpedo trails made distinct; the keyboard font
+picker browses internal storage; icon glyphs keep the symbols font under a custom label font.
+
+Device-verified on pong (Nothing Phone 2, build installed 21:22): one `Accessory.geometry.KEYBOARD`
+and one `Terminal.updateSize` per keyboard hide and show (perfetto); four distinct trails; editor
+previews clear of the pill; space-bar icons present under a custom serif font; drawer opens with
+warm icons and no tiles.
+
+Test suite: the app suite sits at the 2 GB test-JVM ceiling; runs beside another suite die late
+with "Java heap space" on every branch, the base included. Verify with single runs only.
