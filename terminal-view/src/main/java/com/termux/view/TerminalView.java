@@ -469,7 +469,33 @@ public final class TerminalView extends View {
      */
     private String[] mAutoFillHints = new String[0];
 
-    private final boolean mAccessibilityEnabled;
+    private final AccessibilityManager mAccessibilityManager;
+
+    /** Text-changed events for a screen reader: only while one reads, and folded per burst. */
+    private final AccessibilityTextUpdates mAccessibilityTextUpdates =
+        new AccessibilityTextUpdates(new AccessibilityTextUpdates.Host() {
+            @Override
+            public void postDelayed(Runnable action, long delayMs) {
+                TerminalView.this.postDelayed(action, delayMs);
+            }
+
+            @Override
+            public void removeCallbacks(Runnable action) {
+                TerminalView.this.removeCallbacks(action);
+            }
+
+            @Override
+            public void sendTextChanged() {
+                // The service reads the text it is handed in onPopulateAccessibilityEvent.
+                sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED);
+            }
+        });
+
+    private final AccessibilityManager.AccessibilityStateChangeListener mAccessibilityStateListener =
+        enabled -> refreshAccessibilityServiceState();
+
+    private final AccessibilityManager.TouchExplorationStateChangeListener mTouchExplorationListener =
+        enabled -> refreshAccessibilityServiceState();
 
     /**
      * The {@link KeyEvent} is generated from a virtual keyboard, like manually with the {@link KeyEvent#KeyEvent(int, int)} constructor.
@@ -691,8 +717,8 @@ public final class TerminalView extends View {
         });
         mScroller = new Scroller(context);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        AccessibilityManager am = (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
-        mAccessibilityEnabled = am.isEnabled();
+        mAccessibilityManager = (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
+        refreshAccessibilityServiceState();
 
         // A view is important for accessibility if it fires accessibility events
         // and if it is reported to accessibility services that query the screen.
@@ -920,11 +946,14 @@ public final class TerminalView extends View {
         }
         mEmulator.clearScrollCounter();
         invalidate();
-        if (mAccessibilityEnabled) {
-            // fire off events that the content of this control changed,
-            // so that the accessibility service gets the updated text
-            sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED);
-        }
+        // Tell a screen reader the content of this control changed, so that it gets the updated text.
+        mAccessibilityTextUpdates.onScreenUpdated();
+    }
+
+    private void refreshAccessibilityServiceState() {
+        if (mAccessibilityManager == null) return;
+        mAccessibilityTextUpdates.setServiceState(mAccessibilityManager.isEnabled(),
+            mAccessibilityManager.isTouchExplorationEnabled());
     }
 
     // ultimately called as a result of the code in updateScreen
@@ -4105,6 +4134,11 @@ public final class TerminalView extends View {
         if (mTextSelectionCursorController != null) {
             getViewTreeObserver().addOnTouchModeChangeListener(mTextSelectionCursorController);
         }
+        if (mAccessibilityManager != null) {
+            mAccessibilityManager.addAccessibilityStateChangeListener(mAccessibilityStateListener);
+            mAccessibilityManager.addTouchExplorationStateChangeListener(mTouchExplorationListener);
+            refreshAccessibilityServiceState();
+        }
     }
 
     /**
@@ -4194,6 +4228,11 @@ public final class TerminalView extends View {
         releaseHoldDownEvent();
         updateKittyAnimationVisibility();
         clearReflowFrost();
+        if (mAccessibilityManager != null) {
+            mAccessibilityManager.removeAccessibilityStateChangeListener(mAccessibilityStateListener);
+            mAccessibilityManager.removeTouchExplorationStateChangeListener(mTouchExplorationListener);
+        }
+        mAccessibilityTextUpdates.cancel();
         if (mTextSelectionCursorController != null) {
             // Might solve the following exception
             // android.view.WindowLeaked: Activity com.termux.app.TermuxActivity has leaked window android.widget.PopupWindow
