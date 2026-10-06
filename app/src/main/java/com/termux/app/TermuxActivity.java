@@ -1109,6 +1109,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mLastLaunchWasLauncherEntry;
 
     /**
+     * Whether the first shell's styling broadcast still has something to apply: only after a
+     * bootstrap install, which ran its config installers after this activity styled itself in
+     * onCreate. Every other first shell is asked for by an activity that has just styled from the
+     * very files a reload would read again, and that reload (the whole extra keys, keyboard,
+     * place layout and chrome pass) was a quarter of a second of main thread right after the
+     * first frame of every cold start.
+     */
+    private boolean mFirstSessionRestyleWanted;
+
+    /**
      * If activity was restarted like due to call to {@link #recreate()} after receiving
      * {@link TERMUX_ACTIVITY#ACTION_RELOAD_STYLE}, system dark night mode was changed or activity
      * was killed by android.
@@ -8436,7 +8446,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void startBootstrapAndSession(@Nullable Intent intent) {
+        // A prefix already in place answers synchronously; anything later is an install (or its
+        // error dialog's way on), whose installers may have written what styling reads.
+        final boolean[] bootstrapReturned = {false};
         TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
+            if (bootstrapReturned[0]) mFirstSessionRestyleWanted = true;
             // Bootstrap setup may complete after app startup; re-attempt launcher CLI script install.
             LauncherCtlApiServer.getInstance().ensureCliScriptsInstalled();
             TermuxShellIntegrationInstaller.ensureInstalled(this);
@@ -8465,6 +8479,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mEmptySessionRecoveryInProgress = false;
             }
         });
+        bootstrapReturned[0] = true;
     }
 
     private void maybeRecoverFromEmptySession(@NonNull String source) {
@@ -24212,6 +24227,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(context, LOG_TAG);
                         return;
                     case TERMUX_ACTIVITY.ACTION_RELOAD_STYLE:
+                        if (intent.getBooleanExtra(TermuxService.EXTRA_FIRST_SESSION_RESTYLE, false)) {
+                            if (!mFirstSessionRestyleWanted) {
+                                Logger.logDebug(LOG_TAG, "First shell's styling already on screen; not reloading");
+                                return;
+                            }
+                            mFirstSessionRestyleWanted = false;
+                        }
                         Logger.logDebug(LOG_TAG, "Received intent to reload styling");
                         sPendingStyleReloadOnNextResume = false;
                         sPendingStyleReloadRecreateActivity = true;
