@@ -12,12 +12,14 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewParent;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.constraintlayout.widget.Group;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.slider.Slider;
 
@@ -147,7 +149,11 @@ public class LayoutModeViewsTest {
         assertNotNull(panel.findViewById(R.id.appearance_editor_row2_name));
     }
 
-    /** The buttons are in the heading row, hidden until the selection shows them. */
+    /**
+     * The buttons are in the heading row, hidden until the selection shows them: Keyboard theme
+     * and Clock are buttons, the terminal's Cursor trail and Terminal effect are pills (a card
+     * holding a heading over the chosen option) that take a tap.
+     */
     @Test
     public void rowTwoCarriesItsButtonsInTheHeadingRowHidden() {
         View panel = inflate(R.layout.appearance_editor_panel);
@@ -156,10 +162,18 @@ public class LayoutModeViewsTest {
                 R.id.appearance_editor_door_clock, R.id.appearance_editor_trail,
                 R.id.appearance_editor_effect}) {
             View button = panel.findViewById(id);
-            assertTrue(button instanceof MaterialButton);
+            boolean pill = id == R.id.appearance_editor_trail || id == R.id.appearance_editor_effect;
+            assertTrue(pill ? button instanceof MaterialCardView : button instanceof MaterialButton);
+            assertTrue("takes a tap", button.isClickable());
             assertTrue(isInside(button, head));
             assertEquals(View.GONE, button.getVisibility());
         }
+        TextView trailTitle = panel.findViewById(R.id.appearance_editor_trail_title);
+        TextView effectTitle = panel.findViewById(R.id.appearance_editor_effect_title);
+        assertEquals("Cursor trail", trailTitle.getText().toString());
+        assertEquals("Terminal effect", effectTitle.getText().toString());
+        assertNotNull(panel.findViewById(R.id.appearance_editor_trail_value));
+        assertNotNull(panel.findViewById(R.id.appearance_editor_effect_value));
         assertEquals("the soften toggle and the wallpaper's row are gone", 0,
             panel.getResources().getIdentifier("appearance_editor_row2_barrier", "id",
                 panel.getContext().getPackageName()));
@@ -366,11 +380,42 @@ public class LayoutModeViewsTest {
             R.id.appearance_editor_door_keyboard_theme);
         assertEquals("Keyboard theme", theme.getText().toString());
         assertTrue(theme.isEnabled());
+        assertTrue("the keyboard keeps its name", panel.isRow2NameShown());
         panel.setDoors(AppearanceLooks.doors(AppearanceLooks.Target.TERMINAL));
         assertEquals(java.util.Arrays.asList(AppearanceLooks.Door.TRAIL,
             AppearanceLooks.Door.EFFECT), panel.shownDoors());
+        assertFalse("the terminal's pills take the name's place", panel.isRow2NameShown());
+        panel.setTerminalLooks("default", "crt_amber");
+        View trail = panel.view().findViewById(R.id.appearance_editor_trail);
+        View effect = panel.view().findViewById(R.id.appearance_editor_effect);
+        TextView trailValue = panel.view().findViewById(R.id.appearance_editor_trail_value);
+        assertEquals("Cursor trail, " + trailValue.getText(), trail.getContentDescription().toString());
+        assertTrue(effect.getContentDescription().toString().startsWith("Terminal effect, "));
         panel.setDoors(AppearanceLooks.doors(null));
         assertTrue(panel.shownDoors().isEmpty());
+        assertTrue(panel.isRow2NameShown());
+    }
+
+    /**
+     * A switch into or out of Icons fades the rows that show in over the sheet; rows that do not
+     * show are left opaque, and a zero fade (or a cut-short one) settles everything at full alpha.
+     */
+    @Test
+    public void theRowsThatShowFadeInAndAZeroFadeSettlesThem() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ContextThemeWrapper themed = new ContextThemeWrapper(activity,
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
+        View root = panel.view();
+        View look = root.findViewById(R.id.appearance_editor_look);
+        View orientation = root.findViewById(R.id.layout_editor_orientation);
+        panel.showAppearanceMode();
+        panel.fadeInRows(240L);
+        assertEquals("a row that shows starts clear", 0f, look.getAlpha(), 0f);
+        assertEquals("a row that does not show is left opaque", 1f, orientation.getAlpha(), 0f);
+        panel.fadeInRows(0L);
+        assertEquals(1f, look.getAlpha(), 0f);
+        assertEquals(1f, orientation.getAlpha(), 0f);
     }
 
     private static boolean isInside(View view, View ancestor) {

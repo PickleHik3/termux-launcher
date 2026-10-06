@@ -149,6 +149,15 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             else lock = picked;
             return new ReturnState(slot, home, lock);
         }
+
+        /**
+         * A fresh page centred on {@code slot}, with nothing pending: where the Appearance surface
+         * reopens when it remembers the card the person last had in the middle.
+         */
+        @NonNull
+        public static ReturnState centredOn(@NonNull WallpaperSlots.Slot slot, @NonNull Loaded loaded) {
+            return new ReturnState(slot, loaded.state.home, loaded.state.lock);
+        }
     }
 
     /** {@link WallpaperSlots} for this activity. */
@@ -490,8 +499,9 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         return mRoot;
     }
 
+    /** The card standing in the middle: the one Photo… and the strip act on. */
     @NonNull
-    WallpaperSlots.Slot centredSlot() {
+    public WallpaperSlots.Slot centredSlot() {
         return mCentred;
     }
 

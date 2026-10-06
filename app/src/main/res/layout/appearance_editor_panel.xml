@@ -23,13 +23,14 @@
      off them). Row B (the Custom stop only): a heading row, 48dp tall, then up to five vertical
      Material 3 sliders (LegendSlider, 40dp track, the legend beside it) in equal columns.
      The heading is the selection's name ("All surfaces" for nothing tapped) and leads the row;
-     the buttons the selection has follow it (Keyboard theme; Clock; Trail and Effect), each 48dp
-     tall and 8dp apart. The sliders are one fixed length, so the sheet is the same height for
+     the buttons the selection has follow it (Keyboard theme; Clock), each 48dp tall and 8dp
+     apart. The terminal has no name there: its two pills (Cursor trail, Terminal effect; a
+     heading over the chosen option) share the whole row. The sliders are one fixed length, so the sheet is the same height for
      every selection; Row B is GONE at a Look stop. Sets, top to bottom of each legend:
        nothing  Blur, Grain, Opacity, Margin, Corner radius
        keyboard Blur, Grain, Opacity, Key radius, Key spacing   (button: Keyboard theme)
        dock     Blur, Grain, Opacity, Size, App icons
-       terminal Blur, Grain, Opacity, Contrast                  (buttons: Trail, Effect)
+       terminal Blur, Grain, Opacity, Contrast                  (pills: Cursor trail, Terminal effect)
        status   Blur, Grain, Opacity                            (button: Clock)
 
      Layout rows (layout editor v2, DECISIONS items 2, 3 and 10). Row A: Orientation (two 48dp
@@ -135,8 +136,10 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/appearance_editor_look_labels">
 
-        <!-- The heading row: always 48dp tall, so the sheet is one height whatever is selected.
-             The name leads (it gives way first); the buttons keep their size, 8dp apart. -->
+        <!-- The heading row: one height for every selection (48dp, or the terminal's two-line
+             pills where they are taller: the panel reserves it), so the sheet is one height
+             whatever is selected. The name leads (it gives way first); the buttons keep their
+             size, 8dp apart. -->
         <LinearLayout
             android:id="@+id/appearance_editor_row2_head"
             android:layout_width="match_parent"
@@ -155,8 +158,8 @@
                 android:textAppearance="?attr/textAppearanceLabelLarge"
                 android:textColor="?attr/colorOnSurfaceVariant" />
 
-            <!-- Pushes a lone door (Keyboard theme, Clock) to the row's end; GONE while Trail
-                 and Effect share the row's width. -->
+            <!-- Pushes a lone door (Keyboard theme, Clock) to the row's end; GONE while the
+                 terminal's two pills share the row's width. -->
             <Space
                 android:id="@+id/appearance_editor_row2_space"
                 android:layout_width="0dp"
@@ -195,35 +198,138 @@
                 android:text="@string/appearance_editor_clock"
                 android:visibility="gone" />
 
-            <!-- The terminal's Trail and Effect: outlined buttons naming the chosen option and
-                 opening a menu of the choices. Effect is GONE below API 33. -->
-            <com.google.android.material.button.MaterialButton
+            <!-- The terminal's two pills, Cursor trail and Terminal effect: each a heading over
+                 the chosen option, opening a menu of the choices. They own the heading row (the
+                 name is GONE for the terminal) and share it equally, 8dp apart; Terminal effect is
+                 GONE below API 33, and Cursor trail then takes the whole row. Each line is one
+                 line, ellipsized; the panel reserves their height for every selection's heading
+                 row (AppearanceEditorPanel.reserveHeadingHeight), so Row B is one height. -->
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/appearance_editor_trail"
-                style="?attr/materialButtonOutlinedStyle"
+                style="@style/Widget.Material3.CardView.Outlined"
                 android:layout_width="0dp"
+                android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:layout_height="48dp"
-                android:layout_marginStart="8dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:minWidth="0dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:minHeight="48dp"
                 android:visibility="gone"
-                app:icon="@drawable/ic_arrow_drop_down_16"
-                app:iconGravity="end" />
+                app:cardBackgroundColor="@android:color/transparent"
+                app:shapeAppearance="?attr/shapeAppearanceCornerLarge"
+                app:strokeColor="?attr/colorOutline">
 
-            <com.google.android.material.button.MaterialButton
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:paddingStart="12dp"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="4dp">
+
+                    <TextView
+                        android:id="@+id/appearance_editor_trail_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:importantForAccessibility="no"
+                        android:maxLines="1"
+                        android:text="@string/appearance_editor_trail_title"
+                        android:textAppearance="?attr/textAppearanceTitleSmall"
+                        android:textColor="?attr/colorOnSurface" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/appearance_editor_trail_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:ellipsize="end"
+                            android:importantForAccessibility="no"
+                            android:maxLines="1"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:layout_marginStart="4dp"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_arrow_drop_down_16"
+                            app:tint="?attr/colorOnSurfaceVariant" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <com.google.android.material.card.MaterialCardView
                 android:id="@+id/appearance_editor_effect"
-                style="?attr/materialButtonOutlinedStyle"
+                style="@style/Widget.Material3.CardView.Outlined"
                 android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="48dp"
+                android:layout_height="wrap_content"
                 android:layout_marginStart="8dp"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:minWidth="0dp"
+                android:layout_weight="1"
+                android:clickable="true"
+                android:focusable="true"
+                android:minHeight="48dp"
                 android:visibility="gone"
-                app:icon="@drawable/ic_arrow_drop_down_16"
-                app:iconGravity="end" />
+                app:cardBackgroundColor="@android:color/transparent"
+                app:shapeAppearance="?attr/shapeAppearanceCornerLarge"
+                app:strokeColor="?attr/colorOutline">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:orientation="vertical"
+                    android:paddingStart="12dp"
+                    android:paddingTop="4dp"
+                    android:paddingEnd="8dp"
+                    android:paddingBottom="4dp">
+
+                    <TextView
+                        android:id="@+id/appearance_editor_effect_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:ellipsize="end"
+                        android:importantForAccessibility="no"
+                        android:maxLines="1"
+                        android:text="@string/appearance_editor_effect_title"
+                        android:textAppearance="?attr/textAppearanceTitleSmall"
+                        android:textColor="?attr/colorOnSurface" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:id="@+id/appearance_editor_effect_value"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:ellipsize="end"
+                            android:importantForAccessibility="no"
+                            android:maxLines="1"
+                            android:textAppearance="?attr/textAppearanceBodySmall"
+                            android:textColor="?attr/colorOnSurfaceVariant" />
+
+                        <ImageView
+                            android:layout_width="16dp"
+                            android:layout_height="16dp"
+                            android:layout_marginStart="4dp"
+                            android:importantForAccessibility="no"
+                            android:src="@drawable/ic_arrow_drop_down_16"
+                            app:tint="?attr/colorOnSurfaceVariant" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
 
         <!-- The sliders: equal columns 12dp apart (the gaps are set in code, so a hidden column

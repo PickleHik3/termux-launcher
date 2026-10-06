@@ -66,6 +66,13 @@ import java.util.function.Consumer;
  * end of the frame's hide, never one frame into it. Everything the hop needs is built before it
  * starts; the launcher is put right (repainted, the raised keyboard taken down) only after the
  * Overview covers it again. With animations off every step lands at once.</p>
+ *
+ * <p><b>Where it was left.</b> Every way out (Done, Back out of the surface, Home, a close nobody
+ * announced) writes down the page and what it comes back to ({@link AppearanceReturnState}) with
+ * the time. An Overview open within Settings' 30-minute window opens on the remembered card and
+ * queues the remembered editor page behind it, reached by the ordinary hop, with the editor told
+ * where to stand ({@link Editor#restoreNext}); after the window it opens as before. A door that
+ * names a page opens that page and ignores the memory.</p>
  */
 public final class AppearanceSurfaceController {
     private static final String LOG_TAG = "AppearanceSurface";
@@ -100,6 +107,23 @@ public final class AppearanceSurfaceController {
         default View slidingPart() {
             return root();
         }
+
+        /**
+         * {@code changed} runs when the page's content changes size by itself (a list that lands
+         * after the page is built), so whoever holds it can measure it again. Nothing by default.
+         */
+        default void setOnContentChanged(@Nullable Runnable changed) {}
+
+        /** How far the content is scrolled sideways, px, for the surface to remember. 0 by default. */
+        default int scrollPosition() {
+            return 0;
+        }
+
+        /**
+         * Scrolls the content back to {@code px} once it is laid out and holds that much (less
+         * where it holds less). Nothing by default.
+         */
+        default void restoreScrollPosition(int px) {}
     }
 
     /** The Overview: a {@link Page} that also tells the surface what its hop moves. */
@@ -124,6 +148,15 @@ public final class AppearanceSurfaceController {
          * again once the editor has left. Nothing by default.
          */
         default void setBarVisible(boolean visible) {}
+
+        /**
+         * The wallpaper card standing in the middle, as its slot's name, for the surface to
+         * remember; null where it cannot say.
+         */
+        @Nullable
+        default String centredSlot() {
+            return null;
+        }
 
         /** Whether the page holds a choice nothing has applied yet: what Done would set. */
         default boolean hasPendingChanges() {
@@ -246,6 +279,20 @@ public final class AppearanceSurfaceController {
 
         /** The activity stopped with the surface up. */
         void onStopWhileOpen();
+
+        /**
+         * Fills in where the editor stands on its page, for the surface to remember: Look's
+         * selection and whether it is at the Custom stop, Layout's place, the Icons row's scroll.
+         * Nothing while it is not presented.
+         */
+        default void describe(@NonNull AppearanceReturnState.Builder out) {}
+
+        /**
+         * The next presentation of {@code state}'s page opens where it says (the selection and
+         * the Custom stop, the place, the row's scroll) instead of at its defaults; a
+         * presentation of another page forgets it. Null forgets it now.
+         */
+        default void restoreNext(@Nullable AppearanceReturnState state) {}
     }
 
     /** What the surface needs from the activity. */
@@ -260,6 +307,29 @@ public final class AppearanceSurfaceController {
          * {@code ready} on the main thread.
          */
         void createOverview(@NonNull Navigator navigator, @NonNull Consumer<OverviewPage> ready);
+
+        /**
+         * {@link #createOverview(Navigator, Consumer)} with the card the surface remembers in the
+         * middle ({@code centredSlot}, a slot's name), or the page's own choice for null.
+         */
+        default void createOverview(@NonNull Navigator navigator, @Nullable String centredSlot,
+                                    @NonNull Consumer<OverviewPage> ready) {
+            createOverview(navigator, ready);
+        }
+
+        /** Where the person last left the surface ({@link AppearanceReturnState#serialize}), or null. */
+        @Nullable
+        default String readReturnState() {
+            return null;
+        }
+
+        /** Keeps where the person left the surface, across the launcher being killed. */
+        default void writeReturnState(@NonNull String state) {}
+
+        /** Wall-clock time, which the remembered place's window is measured in. */
+        default long now() {
+            return System.currentTimeMillis();
+        }
 
         /** The surface closed, by any path. */
         void onClosed();
@@ -345,6 +415,11 @@ public final class AppearanceSurfaceController {
     }
     /** Bumped on every open and close, so a late callback of an older surface does nothing. */
     private int mToken;
+    /**
+     * Where the person is has been written down for the leave under way (Done on an editor page
+     * hops to the Overview before it closes, and the close must not overwrite the editor page).
+     */
+    private boolean mLeaveRemembered;
     @Nullable private PageId mQueued;
     private final List<Animator> mRunning = new ArrayList<>();
 
@@ -422,6 +497,7 @@ public final class AppearanceSurfaceController {
             return;
         mOpen = true;
         mToken++;
+        mLeaveRemembered = false;
         final int token = mToken;
         mEditor.setOnDone(this::onEditorDone);
         mEditor.beginSession();
@@ -443,6 +519,17 @@ public final class AppearanceSurfaceController {
         }
         mDirect = false;
         mShown = PageId.OVERVIEW;
+        // Within the window since the person last left, the surface comes back where they were:
+        // the Overview opens on the card it had centred, and an editor page they were on is
+        // queued behind it, reached by the normal hop once the Overview stands (never a direct
+        // open, which would hide the Wallpaper segment and make Done and Back close).
+        final AppearanceReturnState back =
+            AppearanceReturnState.freshFrom(mHost.readReturnState(), mHost.now());
+        mEditor.restoreNext(null);
+        if (back != null && isEditorPage(back.page)) {
+            mQueued = back.page;
+            mEditor.restoreNext(back);
+        }
         // Every Overview open covers at once (2026-10-05, pong): the page fades in over the cover.
         final boolean cover = true;
         mCoverNextOpen = false;
@@ -454,7 +541,7 @@ public final class AppearanceSurfaceController {
         } else {
             view.setAlpha(0f);
         }
-        mHost.createOverview(mNavigator, overview -> {
+        mHost.createOverview(mNavigator, back == null ? null : back.wallpaperSlot, overview -> {
             if (!mOpen || token != mToken || mView != view) {
                 overview.release();
                 return;
@@ -611,6 +698,7 @@ public final class AppearanceSurfaceController {
                         if (!mDirect)
                             go(PageId.OVERVIEW);
                     } else {
+                        mLeaveRemembered = false;
                         mEditor.setMode(segment == AppearanceEditorPage.Segment.LAYOUT ? EditorMode.LAYOUT
                             : segment == AppearanceEditorPage.Segment.ICON_PACK ? EditorMode.ICONS
                             : EditorMode.LOOK);
@@ -713,6 +801,8 @@ public final class AppearanceSurfaceController {
         PageId from = shownPage();
         if (from == null || from == target)
             return;
+        // A leave the person called off (Keep editing) is behind them once they move on.
+        mLeaveRemembered = false;
         boolean toEditor = isEditorPage(target);
         boolean fromEditor = isEditorPage(from);
         if (fromEditor && toEditor) {
@@ -735,8 +825,11 @@ public final class AppearanceSurfaceController {
             return true;
         PageId page = shownPage();
         if (page == null || page == PageId.OVERVIEW) {
+            rememberWhere();
             leaveOverview(this::closeAnimated);
         } else {
+            if (mDirect)
+                rememberWhere();
             mEditor.requestLeave(mDirect ? this::closeAnimated : this::hopToOverview);
         }
         return true;
@@ -748,6 +841,7 @@ public final class AppearanceSurfaceController {
             return;
         if (mCommitting)
             return;
+        rememberWhere();
         PageId page = shownPage();
         if (isEditorPage(page)) {
             if (hasPendingWallpaper())
@@ -824,6 +918,7 @@ public final class AppearanceSurfaceController {
         if (isEditorPage(page)) {
             mEditor.done();
         } else {
+            rememberWhere();
             finishFromOverview();
         }
     }
@@ -843,12 +938,33 @@ public final class AppearanceSurfaceController {
     private void onEditorDone() {
         if (!mOpen || mTransitioning)
             return;
+        // The editor page is where they were, though the close runs from the Overview.
+        rememberWhere();
         if (mDirect) {
             closeAnimated();
         } else {
             mCloseAfterHop = true;
             hopToOverview();
         }
+    }
+
+    /**
+     * Writes down where the person is (the page, the Overview's centred card, and what the editor
+     * says of its own page) with the time, so the next Overview open within the window comes
+     * back here. Every way out calls it before anything is taken down.
+     */
+    private void rememberWhere() {
+        PageId page = shownPage();
+        if (!mOpen || page == null)
+            return;
+        AppearanceReturnState.Builder where = new AppearanceReturnState.Builder(page);
+        OverviewPage overview = mOverview;
+        if (overview != null)
+            where.wallpaperSlot(overview.centredSlot());
+        if (isEditorPage(page) && mEditor.isPresented())
+            mEditor.describe(where);
+        mHost.writeReturnState(where.build(mHost.now()).serialize());
+        mLeaveRemembered = true;
     }
 
     // ---------------------------------------------------------------------------------- the hops
@@ -1044,6 +1160,10 @@ public final class AppearanceSurfaceController {
     public void closeNow() {
         if (!mOpen)
             return;
+        // A close nobody announced (the photo picker's hand-off, a failed load) is a leave too.
+        if (!mLeaveRemembered)
+            rememberWhere();
+        mEditor.restoreNext(null);
         mOpen = false;
         mToken++;
         mTransitioning = false;

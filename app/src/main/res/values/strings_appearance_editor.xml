@@ -39,9 +39,9 @@
     <string name="appearance_editor_key_corners">Radius · %1$d dp</string>
     <string name="appearance_editor_legibility_normal">Contrast · Default</string>
     <string name="appearance_editor_legibility_high">Contrast · Harder</string>
-    <!-- The terminal's Trail and Effect menu buttons: the name and the chosen option. -->
-    <string name="appearance_editor_trail_button">Trail · %1$s</string>
-    <string name="appearance_editor_effect_button">Effect · %1$s</string>
+    <!-- The terminal's two menu pills: the heading over the chosen option. -->
+    <string name="appearance_editor_trail_title">Cursor trail</string>
+    <string name="appearance_editor_effect_title">Terminal effect</string>
     <!-- The status bar's button: opens the clock face and position popup. -->
     <string name="appearance_editor_clock">Clock</string>
     <!-- The Custom row's own legends; the number is the slider's read-out. -->

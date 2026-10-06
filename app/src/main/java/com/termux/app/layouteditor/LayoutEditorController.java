@@ -270,7 +270,6 @@ public final class LayoutEditorController {
 
     /** The place the session is open on, or null while it is not. */
     @Nullable
-    @VisibleForTesting
     public PaneWallPage editedPlace() {
         return mPlan == null ? null : mPlan.place();
     }

@@ -128,6 +128,21 @@ public class AppearanceSurfaceControllerTest {
 
         @Override public void done() { calls.add("done"); }
 
+        /** What the editor says of its page when the surface writes down where the person is. */
+        @Nullable String describedTarget;
+        boolean describedCustom;
+        int describedScroll;
+        /** The remembered place the surface handed over for the next presentation. */
+        @Nullable AppearanceReturnState restored;
+
+        @Override public void describe(@NonNull AppearanceReturnState.Builder out) {
+            if (!presented) return;
+            if (mode == EditorMode.LOOK) out.look(describedTarget, describedCustom);
+            else if (mode == EditorMode.ICONS) out.iconsScroll(describedScroll);
+        }
+
+        @Override public void restoreNext(@Nullable AppearanceReturnState state) { restored = state; }
+
         /** The frame has settled in the editor. */
         void settle() {
             Runnable r = settled;
@@ -204,6 +219,10 @@ public class AppearanceSurfaceControllerTest {
         @NonNull @Override public List<View> leavingViews() { return Collections.singletonList(strip); }
         @NonNull @Override public List<View> fadingViews() { return Collections.singletonList(pager); }
         @Override public void setBackgroundAlpha(float alpha) { background = alpha; }
+
+        @Nullable String centred;
+
+        @Nullable @Override public String centredSlot() { return centred; }
     }
 
     private static class FakeHost implements AppearanceSurfaceController.Host {
@@ -212,9 +231,28 @@ public class AppearanceSurfaceControllerTest {
         int closed;
         int closedByUser;
 
+        /** The preferences' copy of where the person left, and the clock it is measured on. */
+        @Nullable String stored;
+        long now = 1_700_000_000_000L;
+        /** The card the last Overview was asked to open on. */
+        @Nullable String askedCentred;
+
         FakeHost(Activity activity) {
             this.activity = activity;
         }
+
+        @Override public void createOverview(@NonNull AppearanceSurfaceController.Navigator navigator,
+                                             @Nullable String centredSlot,
+                                             @NonNull Consumer<AppearanceSurfaceController.OverviewPage> ready) {
+            askedCentred = centredSlot;
+            createOverview(navigator, ready);
+        }
+
+        @Nullable @Override public String readReturnState() { return stored; }
+
+        @Override public void writeReturnState(@NonNull String state) { stored = state; }
+
+        @Override public long now() { return now; }
 
         @NonNull @Override public Context context() { return activity; }
 
@@ -833,5 +871,107 @@ public class AppearanceSurfaceControllerTest {
         mSurface.onStop();
         assertTrue(mSurface.isOpen());
         assertEquals(1, mEditor.count("stop"));
+    }
+
+    // ------------------------------------------------------------ where the person left it
+
+    @Test
+    public void doneOnLookIsRememberedAndTheNextOpenComesBackThroughTheOverview() {
+        toLook();
+        mEditor.describedTarget = "TERMINAL";
+        mEditor.describedCustom = true;
+        mEditor.onDone.run();
+        AppearanceReturnState saved = AppearanceReturnState.parse(mHost.stored);
+        assertNotNull(saved);
+        assertEquals(PageId.LOOK, saved.page);
+        assertEquals("TERMINAL", saved.target);
+        assertTrue(saved.custom);
+        mEditor.finishHide();
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2));
+        assertFalse(mSurface.isOpen());
+        assertEquals("the close from the Overview keeps the editor page", PageId.LOOK,
+            AppearanceReturnState.parse(mHost.stored).page);
+        assertNull("nothing is left for a later presentation", mEditor.restored);
+
+        mHost.now += 60_000L;
+        mSurface.open(PageId.OVERVIEW);
+        idle();
+        assertNotNull("the Overview opens first", mHost.overview);
+        assertEquals("then the normal hop into the remembered page", 2, mEditor.count("present look"));
+        assertNotNull(mEditor.restored);
+        assertEquals("TERMINAL", mEditor.restored.target);
+        mEditor.settle();
+        assertEquals(PageId.LOOK, mSurface.shownPage());
+        ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
+        View bar = host.getChildAt(host.getChildCount() - 1);
+        assertEquals("not a direct open: Wallpaper is offered", View.VISIBLE,
+            bar.findViewById(R.id.appearance_page_mode_wallpaper).getVisibility());
+        mSurface.onBack();
+        mEditor.finishHide();
+        idle();
+        assertTrue("Back goes to the Overview, not out", mSurface.isOpen());
+        assertEquals(PageId.OVERVIEW, mSurface.shownPage());
+    }
+
+    @Test
+    public void homeOnIconPackRemembersTheRowsScroll() {
+        toIcons();
+        mEditor.describedScroll = 240;
+        mSurface.requestExit();
+        AppearanceReturnState saved = AppearanceReturnState.parse(mHost.stored);
+        assertNotNull(saved);
+        assertEquals(PageId.ICONS, saved.page);
+        assertEquals(240, saved.iconsScrollPx);
+    }
+
+    @Test
+    public void backOutOfTheOverviewRemembersItsCentredCard() {
+        mSurface.open(PageId.OVERVIEW);
+        mHost.overview.centred = "LOCK";
+        mNavigator.back();
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2));
+        assertFalse(mSurface.isOpen());
+        AppearanceReturnState saved = AppearanceReturnState.parse(mHost.stored);
+        assertNotNull(saved);
+        assertEquals(PageId.OVERVIEW, saved.page);
+        assertEquals("LOCK", saved.wallpaperSlot);
+
+        mSurface.open(PageId.OVERVIEW);
+        assertEquals("the next Overview opens on that card", "LOCK", mHost.askedCentred);
+        assertEquals(PageId.OVERVIEW, mSurface.shownPage());
+        assertEquals("and stays there", 0, mEditor.count("present look"));
+    }
+
+    @Test
+    public void afterTheWindowTheSurfaceOpensOnTheOverviewAsBefore() {
+        mHost.stored = new AppearanceReturnState.Builder(PageId.LAYOUT).place("WIDGETS")
+            .wallpaperSlot("LOCK").build(mHost.now).serialize();
+        mHost.now += com.termux.app.activities.SettingsBackStackState.RETAIN_WINDOW_MS + 1L;
+        mSurface.open(PageId.OVERVIEW);
+        idle();
+        assertEquals(PageId.OVERVIEW, mSurface.shownPage());
+        assertEquals(0, mEditor.count("present layout"));
+        assertNull(mEditor.restored);
+        assertNull("the default card", mHost.askedCentred);
+    }
+
+    @Test
+    public void anUnreadableStateOpensTheOverview() {
+        mHost.stored = "{\"page\": \"SOMEWHERE\"";
+        mSurface.open(PageId.OVERVIEW);
+        idle();
+        assertEquals(PageId.OVERVIEW, mSurface.shownPage());
+        assertEquals(0, mEditor.count("present look"));
+        assertNull(mEditor.restored);
+    }
+
+    @Test
+    public void aDoorNamingAPageOpensItDirectAndIgnoresTheMemory() {
+        mHost.stored = new AppearanceReturnState.Builder(PageId.ICONS).iconsScroll(80)
+            .build(mHost.now).serialize();
+        mSurface.open(PageId.LAYOUT);
+        assertEquals(PageId.LAYOUT, mSurface.shownPage());
+        assertEquals(0, mEditor.count("present icons"));
+        assertNull(mEditor.restored);
     }
 }

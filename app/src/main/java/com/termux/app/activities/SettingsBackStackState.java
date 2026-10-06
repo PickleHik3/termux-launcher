@@ -18,16 +18,18 @@ import java.util.List;
  * does the actual reading/writing of SharedPreferences and this class only turns the stack into a
  * string and back, which unit tests exercise directly, without Robolectric.
  */
-final class SettingsBackStackState {
+public final class SettingsBackStackState {
 
     /**
      * Android's historical task-reset timeout: a background task older than this reopens at its
      * root rather than where the user left it (the platform's own ACTIVITY_INACTIVE_RESET_TIME
      * behaviour, from the days before excludeFromRecents tasks were reliably kept warm). Settings
      * is an excludeFromRecents singleTask task, which the platform never resets on its own, so it
-     * enforces the same 30-minute rule itself instead of relying on the OS to do it.
+     * enforces the same 30-minute rule itself instead of relying on the OS to do it. The
+     * Appearance surface keeps where it was left for the same window
+     * ({@code com.termux.app.surfaces.AppearanceReturnState}).
      */
-    static final long RETAIN_WINDOW_MS = 30 * 60 * 1000L;
+    public static final long RETAIN_WINDOW_MS = 30 * 60 * 1000L;
 
     private static final String JSON_KEY_STOPPED_AT = "stopped_at_epoch_ms";
     private static final String JSON_KEY_ENTRIES = "entries";

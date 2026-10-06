@@ -88,6 +88,7 @@ public class IconPackPageTest {
     private ContextThemeWrapper mThemed;
     private FakeBackend mBackend;
     private int mApplied;
+    private int mContentChanged;
 
     @Before
     public void setUp() {
@@ -95,6 +96,7 @@ public class IconPackPageTest {
         mThemed = new ContextThemeWrapper(mActivity, R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         mBackend = new FakeBackend();
         mApplied = 0;
+        mContentChanged = 0;
     }
 
     /** The background executor, when a test wants to hold it: tasks wait until {@link #runBackground}. */
@@ -114,6 +116,10 @@ public class IconPackPageTest {
         IconPackPage page = new IconPackPage(mThemed, new IconPackPage.Host() {
             @Override public void onApplied() {
                 mApplied++;
+            }
+
+            @Override public void onContentChanged() {
+                mContentChanged++;
             }
         }, mBackend, background, Runnable::run);
         mActivity.setContentView(page.root());
@@ -264,6 +270,81 @@ public class IconPackPageTest {
         assertEquals(Arrays.asList(IconPackChoices.KEY_PINNED + "=pack.alpha"), mBackend.writes);
         runBackground();
         assertEquals("the late parse writes nothing more", 1, mBackend.writes.size());
+    }
+
+    /**
+     * Coming back into view with the same packs and the same choice keeps the very tiles that are
+     * there: nothing is torn down and inflated again, so the sheet does not blink.
+     */
+    @Test
+    public void aSecondShowWithNothingChangedKeepsTheSameTiles() {
+        IconPackPage page = open();
+        List<View> before = tiles(page);
+        int changed = mContentChanged;
+        page.onHidden();
+        page.onShown();
+        assertEquals("the same tile views", before, tiles(page));
+        assertEquals("the sheet is not told to measure again", changed, mContentChanged);
+        assertTrue(page.tilesView().getChildAt(0).isSelected());
+    }
+
+    /** A tap moves the ring on the tiles already there. */
+    @Test
+    public void aTapMovesTheRingInPlace() {
+        IconPackPage page = open();
+        List<View> before = tiles(page);
+        page.tilesView().getChildAt(2).performClick();
+        assertEquals("the same tile views", before, tiles(page));
+        assertTrue(page.tilesView().getChildAt(2).isSelected());
+        assertFalse(page.tilesView().getChildAt(0).isSelected());
+        assertEquals(1, selectedCount(page));
+    }
+
+    /**
+     * A listing that lands with a different set of packs builds the row again and tells the host,
+     * so the sheet can take the row's new height; the first listing is such a change.
+     */
+    @Test
+    public void aListingWithNewPacksRebuildsTheRowAndTellsTheHost() {
+        mHoldBackground = true;
+        IconPackPage page = open();
+        assertEquals("only Default before the listing lands", 1, page.tilesView().getChildCount());
+        runBackground();
+        assertEquals(4, page.tilesView().getChildCount());
+        assertEquals("the first listing changed the row", 1, mContentChanged);
+
+        mBackend.packs = Arrays.asList(new IconPackChoices.Entry("Alpha", "pack.alpha"),
+            new IconPackChoices.Entry("Gamma", "pack.gamma"));
+        page.onHidden();
+        page.onShown();
+        runBackground();
+        assertEquals(Arrays.asList("Same as app icons", "Alpha", "Gamma"), labels(page));
+        assertEquals(2, mContentChanged);
+    }
+
+    /**
+     * The Appearance surface's memory of the row's scroll comes back once the row is laid out
+     * with the packs in it, and is reported back as the row's own scroll.
+     */
+    @Test
+    public void aRememberedScrollComesBackOnceTheRowIsLaidOut() {
+        List<IconPackChoices.Entry> many = new ArrayList<>();
+        for (int i = 0; i < 10; i++) many.add(new IconPackChoices.Entry("Pack " + i, "pack." + i));
+        mBackend.packs = many;
+        IconPackPage page = open();
+        page.restoreTileScrollX(120);
+        View root = page.root();
+        root.measure(View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        root.layout(0, 0, 360, root.getMeasuredHeight());
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(120, page.tileScrollX());
+    }
+
+    private static List<View> tiles(@NonNull IconPackPage page) {
+        List<View> out = new ArrayList<>();
+        for (int i = 0; i < page.tilesView().getChildCount(); i++) out.add(page.tilesView().getChildAt(i));
+        return out;
     }
 
     private static int selectedCount(@NonNull IconPackPage page) {
