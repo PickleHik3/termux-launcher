@@ -260,8 +260,8 @@ public final class KittyCursorTrail {
         // Moving to a different window is a change of context, so kitty always trails it.
         if ((config.thresholdXCells > 0 || config.thresholdYCells > 0) && !mNeedsRender
             && !mWindowChanged && cellWidthPx > 0f && cellHeightPx > 0f) {
-            int dx = Math.round((mCornerX[0] - mEdgeRight) / cellWidthPx);
-            int dy = Math.round((mCornerY[0] - mEdgeTop) / cellHeightPx);
+            int dx = roundHalfAway((mCornerX[0] - mEdgeRight) / cellWidthPx);
+            int dy = roundHalfAway((mCornerY[0] - mEdgeTop) / cellHeightPx);
             if (Math.abs(dx) <= config.thresholdXCells && Math.abs(dy) <= config.thresholdYCells)
                 return true;
         }
@@ -319,10 +319,14 @@ public final class KittyCursorTrail {
             float dot = (dx * (targetX - centerX) + dy * (targetY - centerY))
                 / halfDiag / norm(dx, dy);
             mScratchDot[i] = dot;
-            if (dot < minDot) minDot = dot;
-            if (dot > maxDot) maxDot = dot;
         }
         if (!anyMoving) return;
+        // Over all four corners, as kitty does: a corner that has already arrived counts with a
+        // dot of zero, so the corners still moving are spread between fast and slow against it.
+        for (int i = 0; i < CORNERS; i++) {
+            minDot = Math.min(minDot, mScratchDot[i]);
+            maxDot = Math.max(maxDot, mScratchDot[i]);
+        }
 
         for (int i = 0; i < CORNERS; i++) {
             if (mScratchDx[i] == 0f && mScratchDy[i] == 0f) continue;
@@ -369,6 +373,11 @@ public final class KittyCursorTrail {
 
     private float edgeY(int index) {
         return index == 0 ? mEdgeTop : mEdgeBottom;
+    }
+
+    /** C's {@code round}: halves go away from zero, where {@link Math#round} sends -2.5 to -2. */
+    private static int roundHalfAway(float value) {
+        return value < 0f ? -Math.round(-value) : Math.round(value);
     }
 
     private static float norm(float x, float y) {

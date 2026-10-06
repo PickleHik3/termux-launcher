@@ -117,6 +117,23 @@ public class KittyCursorTrailTest {
             leadingRemaining < trailingRemaining);
     }
 
+    /**
+     * kitty spreads decay over the dots of all four corners, a corner that has arrived counting as
+     * zero: when an underline cursor turns into a block in place, only the top corners move, and
+     * against the settled bottom ones they lead, so they ease with decay_fast.
+     */
+    @Test
+    public void cornersStillMovingAreSpreadAgainstArrivedOnes() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(0, 0, 0);
+        float underlineTop = CELL_H * 3f / 4f;
+        trail.update(0L, 0f, underlineTop, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        trail.update(16L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        // decay_fast 0.1 s over 16 ms covers 1 - 2^-1.6 = 67% of the way; decay_slow only 24%.
+        float covered = (underlineTop - trail.cornerY(0)) / underlineTop;
+        assertEquals(1f - (float) Math.pow(2.0, -1.6), covered, 1e-3f);
+    }
+
     /** DECTCEM on fades the trail in; off, it fades back out. Both driven by decay_slow. */
     @Test
     public void opacityFadesInWhenCursorIsShownAndOutWhenHidden() {
