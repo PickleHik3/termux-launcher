@@ -48,7 +48,7 @@ public class TaiRuntimeServiceClientBinderDeathTest {
 
     @Before
     public void connectToAFakeRuntime() throws Exception {
-        client = new TaiRuntimeServiceClient(context);
+        client = new TaiRuntimeServiceClient(context, Looper.getMainLooper());
         connection = (ServiceConnection) field(client, "connection");
         runtime = new SilentRuntime();
         // Stands in for the bound service: a Messenger on this process's main looper that takes
