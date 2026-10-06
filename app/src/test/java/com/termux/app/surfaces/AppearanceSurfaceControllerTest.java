@@ -55,6 +55,9 @@ public class AppearanceSurfaceControllerTest {
         @Nullable Runnable settled;
         @Nullable Runnable hidden;
         @Nullable Runnable pendingLeave;
+        /** The one question for a leave with the wallpaper pending: Save and Discard, as the dialog would run them. */
+        @Nullable Runnable confirmSave;
+        @Nullable Runnable confirmDiscard;
 
         int count(String call) {
             return Collections.frequency(calls, call);
@@ -85,6 +88,12 @@ public class AppearanceSurfaceControllerTest {
                 return;
             }
             pendingLeave = proceed;
+        }
+
+        @Override public void confirmLeave(@NonNull Runnable onSave, @NonNull Runnable onDiscard) {
+            calls.add("confirm?");
+            confirmSave = onSave;
+            confirmDiscard = onDiscard;
         }
 
         @Override public void dismiss(float toScale, float toTranslationY, @Nullable Runnable onHidden) {
@@ -151,6 +160,27 @@ public class AppearanceSurfaceControllerTest {
         final View strip;
         final View pager;
         float background = 1f;
+        boolean pending;
+        int commits;
+        @Nullable Runnable commitDone;
+        @Nullable Runnable commitFailed;
+
+        @Override public boolean hasPendingChanges() { return pending; }
+
+        @Override public void commit(@NonNull Runnable done, @NonNull Runnable failed) {
+            commits++;
+            commitDone = done;
+            commitFailed = failed;
+        }
+
+        /** The apply the page started ends: it is set (and nothing is pending), or it failed. */
+        void finishCommit(boolean ok) {
+            Runnable r = ok ? commitDone : commitFailed;
+            if (ok) pending = false;
+            commitDone = null;
+            commitFailed = null;
+            if (r != null) r.run();
+        }
 
         FakeOverview(Context context) {
             page = new FakePage(context);
@@ -534,6 +564,213 @@ public class AppearanceSurfaceControllerTest {
         mEditor.pendingLeave.run();
         assertFalse(mSurface.isOpen());
         assertEquals(1, mEditor.count("end"));
+    }
+
+    private void settleClose() {
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2));
+    }
+
+    @Test
+    public void doneOnTheOverviewWithNothingPendingJustCloses() {
+        mSurface.open(PageId.OVERVIEW);
+        mNavigator.done();
+        settleClose();
+        assertFalse(mSurface.isOpen());
+        assertEquals(0, mHost.overview.commits);
+        assertEquals(1, mHost.closedByUser);
+    }
+
+    @Test
+    public void doneOnTheOverviewAppliesWhatIsPendingThenCloses() {
+        mSurface.open(PageId.OVERVIEW);
+        mHost.overview.pending = true;
+        mNavigator.done();
+        assertEquals(1, mHost.overview.commits);
+        assertTrue("open while it applies", mSurface.isOpen());
+        mHost.overview.finishCommit(true);
+        settleClose();
+        assertFalse(mSurface.isOpen());
+        assertEquals(1, mHost.closedByUser);
+    }
+
+    @Test
+    public void doneBackAndThePillWaitWhileTheCommitRuns() {
+        mSurface.open(PageId.OVERVIEW);
+        mHost.overview.pending = true;
+        mNavigator.done();
+        mNavigator.done();
+        assertEquals("the second Done does nothing", 1, mHost.overview.commits);
+        assertTrue("Back is spent, not acted on", mSurface.onBack());
+        mNavigator.openLook();
+        mNavigator.openIcons();
+        mSurface.requestExit();
+        assertTrue(mSurface.isOpen());
+        assertEquals(PageId.OVERVIEW, mSurface.shownPage());
+        assertEquals(0, mEditor.count("confirm?"));
+        assertEquals(0, mEditor.count("present look"));
+    }
+
+    @Test
+    public void aFailedCommitStaysOnTheOverviewAndDoneTriesAgain() {
+        mSurface.open(PageId.OVERVIEW);
+        mHost.overview.pending = true;
+        mNavigator.done();
+        mHost.overview.finishCommit(false);
+        settleClose();
+        assertTrue("still open", mSurface.isOpen());
+        assertEquals(PageId.OVERVIEW, mSurface.shownPage());
+        mNavigator.done();
+        assertEquals(2, mHost.overview.commits);
+        mHost.overview.finishCommit(true);
+        settleClose();
+        assertFalse(mSurface.isOpen());
+    }
+
+    @Test
+    public void aCommitThatEndsAfterTheSurfaceClosedDoesNothing() {
+        mSurface.open(PageId.OVERVIEW);
+        mHost.overview.pending = true;
+        mNavigator.done();
+        FakeOverview old = mHost.overview;
+        mSurface.closeNow();
+        old.finishCommit(true);
+        assertFalse(mSurface.isOpen());
+        assertEquals(1, mHost.closed);
+    }
+
+    @Test
+    public void doneOnTheIconPackPageSlidesBackAndAppliesTheWallpaperThenCloses() {
+        mSurface.open(PageId.OVERVIEW);
+        mHost.overview.pending = true;
+        mNavigator.openIcons();
+        assertEquals(PageId.ICONS, mSurface.shownPage());
+        mNavigator.done();
+        idle();
+        assertEquals(PageId.OVERVIEW, mSurface.shownPage());
+        assertEquals(1, mHost.overview.commits);
+        mHost.overview.finishCommit(true);
+        settleClose();
+        assertFalse(mSurface.isOpen());
+    }
+
+    @Test
+    public void doneOnTheIconPackPageWithNothingPendingCloses() {
+        mSurface.open(PageId.OVERVIEW);
+        mNavigator.openIcons();
+        mNavigator.done();
+        settleClose();
+        assertFalse(mSurface.isOpen());
+        assertEquals(0, mHost.overview.commits);
+    }
+
+    @Test
+    public void doneInAnEditorSavesThenAppliesTheWallpaperOverTheOverviewThenCloses() {
+        toLook();
+        mHost.overview.pending = true;
+        ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
+        View bar = host.getChildAt(host.getChildCount() - 1);
+        bar.findViewById(R.id.appearance_page_done).performClick();
+        assertEquals("the editor saves its look", 1, mEditor.count("done"));
+        mEditor.onDone.run();
+        mEditor.finishHide();
+        idle();
+        assertEquals("the Overview shows while it applies", PageId.OVERVIEW, mSurface.shownPage());
+        assertEquals(1, mHost.overview.commits);
+        mHost.overview.finishCommit(true);
+        settleClose();
+        assertFalse(mSurface.isOpen());
+    }
+
+    @Test
+    public void backOnTheOverviewWithAPendingWallpaperAsksOnce() {
+        mSurface.open(PageId.OVERVIEW);
+        mHost.overview.pending = true;
+        assertTrue(mSurface.onBack());
+        assertEquals(1, mEditor.count("confirm?"));
+        assertTrue("Keep editing: nothing happens", mSurface.isOpen());
+        assertEquals(0, mHost.overview.commits);
+
+        mEditor.confirmDiscard.run();
+        settleClose();
+        assertFalse("Discard closes without applying", mSurface.isOpen());
+        assertEquals(0, mHost.overview.commits);
+        assertTrue(mHost.overview.page.released);
+    }
+
+    @Test
+    public void saveOnTheLeaveQuestionAppliesThenCloses() {
+        mSurface.open(PageId.OVERVIEW);
+        mHost.overview.pending = true;
+        mSurface.onBack();
+        mEditor.confirmSave.run();
+        assertEquals(1, mHost.overview.commits);
+        mHost.overview.finishCommit(true);
+        settleClose();
+        assertFalse(mSurface.isOpen());
+    }
+
+    @Test
+    public void backWithNothingPendingNeverAsks() {
+        mSurface.open(PageId.OVERVIEW);
+        mSurface.onBack();
+        settleClose();
+        assertFalse(mSurface.isOpen());
+        assertEquals(0, mEditor.count("confirm?"));
+    }
+
+    @Test
+    public void homeWithADirtyEditorAndAPendingWallpaperAsksOneQuestion() {
+        toLook();
+        mEditor.dirty = true;
+        mHost.overview.pending = true;
+        mSurface.requestExit();
+        assertEquals("one dialog covers both", 1, mEditor.count("confirm?"));
+        assertEquals("not the editor's own as well", 0, mEditor.count("leave?"));
+        assertTrue(mSurface.isOpen());
+
+        mEditor.confirmSave.run();
+        assertEquals(1, mHost.overview.commits);
+        mHost.overview.finishCommit(true);
+        assertFalse(mSurface.isOpen());
+    }
+
+    @Test
+    public void homeDiscardClosesWithoutApplying() {
+        toLook();
+        mHost.overview.pending = true;
+        mSurface.requestExit();
+        mEditor.confirmDiscard.run();
+        assertFalse(mSurface.isOpen());
+        assertEquals(0, mHost.overview.commits);
+    }
+
+    @Test
+    public void homeOnTheOverviewWithAPendingWallpaperAsks() {
+        mSurface.open(PageId.OVERVIEW);
+        mHost.overview.pending = true;
+        mSurface.requestExit();
+        assertEquals(1, mEditor.count("confirm?"));
+        assertTrue(mSurface.isOpen());
+    }
+
+    @Test
+    public void switchingPagesNeverAsksAboutTheWallpaper() {
+        toLook();
+        mHost.overview.pending = true;
+        ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
+        View bar = host.getChildAt(host.getChildCount() - 1);
+        bar.findViewById(R.id.appearance_page_mode_wallpaper).performClick();
+        idle();
+        assertEquals(0, mEditor.count("confirm?"));
+        assertEquals("the editor's own rule only", 1, mEditor.count("leave?"));
+        assertEquals(1, mEditor.count("dismiss"));
+        mEditor.finishHide();
+        idle();
+        assertTrue("the pick is still pending", mHost.overview.pending);
+        mNavigator.openIcons();
+        mNavigator.back();
+        assertEquals(0, mEditor.count("confirm?"));
+        assertTrue(mSurface.isOpen());
     }
 
     @Test

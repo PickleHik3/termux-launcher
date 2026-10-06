@@ -5,20 +5,19 @@
      it; the surface adds it to the activity's content and sets the system bar insets as padding.
 
      Top to bottom:
-       (no bar: back, the Wallpaper | Look | Layout pill and Done are the surface's shared frame,
+       (no bar: back, the Wallpaper | Look | Layout | Icon pack pill and Done are the surface's shared frame,
          appearance_page_frame, around this page);
-       a 4dp progress bar, invisible until Apply runs;
+       a 4dp progress bar, invisible until Done is applying;
        the pager (the rest of the height): Lock then Home, each a small label ("Lock screen",
          "Home screen") over a card at the 360x800 aspect of the lock cutout, the neighbour peeking
          (WallpaperPickerPage sizes the cards, less the label, and the padding);
-       one row: Apply (40) and its more icon (40) at the start, at least 60 tall with its padding;
        the thumbnail strip card: Same as Home (Lock only) then up to five photos last applied
          (six tiles), in equal cells across the row (no heading, no pre-made backgrounds); each
          thumbnail is at most 112 tall and shrinks, aspect kept, so six fit the row's width
          (WallpaperPickerLogic.stripThumbSize), never clipped; then Photo… beside More settings
          (the old Look page).
 
-     Fixed heights, dp: 4 + (8 + 48 + 4) + (4 + 12 + 112 + 4 + 48 + 4 + 16); the pager gets the rest.
+     Fixed heights, dp: 4 + (4 + 12 + 112 + 4 + 48 + 4 + 16); the pager gets the rest.
      The page follows the locale's direction; the cards' content does not mirror. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -43,50 +42,6 @@
         android:layout_weight="1"
         android:clipToPadding="false"
         android:overScrollMode="never" />
-
-    <!-- Apply, under the cards: the filled button puts the centred card's background on Home and
-         points Lock at it; the icon beside it opens Home screen only / Lock screen only. The bar
-         with back, the pill and Done is the Appearance surface's shared frame, not this page's. -->
-    <LinearLayout
-        android:id="@+id/wallpaper_picker_apply_row"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:minHeight="60dp"
-        android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="4dp">
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/wallpaper_picker_apply"
-            style="@style/Widget.Material3.Button"
-            android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:text="@string/wallpaper_picker_apply" />
-
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/wallpaper_picker_apply_more"
-            style="?attr/materialIconButtonFilledStyle"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:layout_marginStart="8dp"
-            android:insetLeft="0dp"
-            android:insetTop="0dp"
-            android:insetRight="0dp"
-            android:insetBottom="0dp"
-            android:padding="0dp"
-            app:iconGravity="textStart"
-            app:iconPadding="0dp"
-            android:checkable="true"
-            android:contentDescription="@string/wallpaper_picker_apply_more"
-            android:tooltipText="@string/wallpaper_picker_apply_more"
-            app:icon="@drawable/m3_split_button_chevron_avd"
-            app:iconSize="24dp" />
-    </LinearLayout>
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/wallpaper_picker_strip_card"

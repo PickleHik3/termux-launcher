@@ -93,14 +93,14 @@ public final class AppearanceEditorPage {
                                                 @NonNull View content) {
         return new AppearanceEditorPage(context, new Callbacks() {
             @Override public void onBack() {
-                navigator.close();
+                navigator.back();
             }
 
             @Override public void onUndo() {
             }
 
             @Override public void onDone() {
-                navigator.close();
+                navigator.done();
             }
 
             @Override public void onSegment(@NonNull Segment segment) {
@@ -128,7 +128,7 @@ public final class AppearanceEditorPage {
             }
 
             @Override public void onDone() {
-                navigator.close();
+                navigator.done();
             }
 
             @Override public void onSegment(@NonNull Segment segment) {

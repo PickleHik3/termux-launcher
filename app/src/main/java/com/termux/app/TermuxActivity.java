@@ -16903,6 +16903,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         picker.setBackgroundAlpha(alpha);
                     }
                     @Override public void setBarVisible(boolean visible) { shell.setBarVisible(visible); }
+                    @Override public boolean hasPendingChanges() { return picker.hasPendingChanges(); }
+                    @Override public void commit(@NonNull Runnable done, @NonNull Runnable failed) {
+                        picker.commit(done, failed);
+                    }
                 });
             });
         }

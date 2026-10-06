@@ -38,13 +38,6 @@ public class WallpaperPickerLogicTest {
     }
 
     @Test
-    public void applyOnlyWhenPendingDiffersAndIdle() {
-        assertFalse(WallpaperPickerLogic.applyEnabled(A, WallpaperSlots.Choice.photo(new java.io.File("/p/a.png")), false));
-        assertTrue(WallpaperPickerLogic.applyEnabled(A, WallpaperSlots.Choice.sameAsHome(), false));
-        assertFalse(WallpaperPickerLogic.applyEnabled(A, WallpaperSlots.Choice.sameAsHome(), true));
-    }
-
-    @Test
     public void sameAsHomeIsLockOnly() {
         assertTrue(WallpaperPickerLogic.showsSameAsHome(WallpaperSlots.Slot.LOCK));
         assertFalse(WallpaperPickerLogic.showsSameAsHome(WallpaperSlots.Slot.HOME));
@@ -58,42 +51,15 @@ public class WallpaperPickerLogicTest {
     private static final WallpaperSlots.Choice PHOTO = WallpaperSlots.Choice.photo();
 
     @Test
-    public void applyTakesTheCentredCardsBackground() {
+    public void doneAppliesAPendingChoiceThatDiffersFromItsSlot() {
         WallpaperSlots.Slot home = WallpaperSlots.Slot.HOME;
         WallpaperSlots.Slot lock = WallpaperSlots.Slot.LOCK;
-        assertEquals(FILE_B, WallpaperPickerLogic.primaryChoice(home, B, A).photoFile);
-        assertEquals(FILE_A, WallpaperPickerLogic.primaryChoice(lock, B, A).photoFile);
-        assertEquals("Same as Home resolves to Home's pick", FILE_B,
-            WallpaperPickerLogic.primaryChoice(lock, B, SAME).photoFile);
-    }
-
-    @Test
-    public void applyBothIsEnabledWhenEitherSlotChanges() {
-        assertTrue("Home changes", WallpaperPickerLogic.applyBothEnabled(B, A, SAME, false));
-        assertTrue("Lock starts following", WallpaperPickerLogic.applyBothEnabled(A, A, B, false));
-        assertFalse("nothing changes", WallpaperPickerLogic.applyBothEnabled(A, A, SAME, false));
-        assertFalse("busy", WallpaperPickerLogic.applyBothEnabled(B, A, SAME, true));
-        assertFalse("a Lock photo cannot reach Home", WallpaperPickerLogic.applyBothEnabled(PHOTO, SAME, PHOTO, false));
-        assertTrue("Home's photo can be followed", WallpaperPickerLogic.applyBothEnabled(PHOTO, PHOTO, B, false));
-        assertTrue(WallpaperPickerLogic.homeChanges(B, A));
-        assertFalse(WallpaperPickerLogic.homeChanges(A, A));
-    }
-
-    @Test
-    public void slotOnlyItemsApplyTheirSlot() {
-        WallpaperSlots.Slot home = WallpaperSlots.Slot.HOME;
-        WallpaperSlots.Slot lock = WallpaperSlots.Slot.LOCK;
-        assertEquals(FILE_B, WallpaperPickerLogic.slotOnlyChoice(home, lock, B, SAME).photoFile);
-        assertTrue("Lock only keeps Same as Home", WallpaperPickerLogic.slotOnlyChoice(lock, lock, B, SAME).sameAsHome);
-        assertEquals("from Home, Lock takes Home's pick", FILE_B,
-            WallpaperPickerLogic.slotOnlyChoice(lock, home, B, A).photoFile);
-
-        assertTrue(WallpaperPickerLogic.applyOneEnabled(home, B, A, false));
-        assertFalse(WallpaperPickerLogic.applyOneEnabled(home, A, A, false));
-        assertFalse("Home cannot follow itself", WallpaperPickerLogic.applyOneEnabled(home, SAME, A, false));
-        assertTrue(WallpaperPickerLogic.applyOneEnabled(lock, SAME, B, false));
-        assertFalse("photos go through Photo…", WallpaperPickerLogic.applyOneEnabled(lock, PHOTO, B, false));
-        assertFalse("busy", WallpaperPickerLogic.applyOneEnabled(lock, B, SAME, true));
+        assertTrue(WallpaperPickerLogic.pendingApplies(home, B, A));
+        assertFalse("nothing changed", WallpaperPickerLogic.pendingApplies(home, A, A));
+        assertFalse("Home cannot follow itself", WallpaperPickerLogic.pendingApplies(home, SAME, A));
+        assertTrue(WallpaperPickerLogic.pendingApplies(lock, SAME, B));
+        assertFalse("a photo with no picture is not applied", WallpaperPickerLogic.pendingApplies(lock, PHOTO, B));
+        assertFalse("null", WallpaperPickerLogic.pendingApplies(lock, null, B));
     }
 
     @Test
@@ -127,11 +93,10 @@ public class WallpaperPickerLogicTest {
         WallpaperSlots.Choice kept = WallpaperSlots.Choice.photo(new java.io.File("/p/exact.png"));
         assertTrue(WallpaperPickerLogic.photoWithPicture(picked));
         assertFalse(WallpaperPickerLogic.photoWithPicture(PHOTO));
-        assertTrue("a picked photo reaches Home", WallpaperPickerLogic.applyBothEnabled(picked, A, SAME, false));
-        assertTrue("a different picture", WallpaperPickerLogic.applyBothEnabled(picked, kept, SAME, false));
-        assertFalse("the same picture", WallpaperPickerLogic.applyBothEnabled(kept, kept, SAME, false));
-        assertTrue(WallpaperPickerLogic.applyOneEnabled(WallpaperSlots.Slot.LOCK, picked, B, false));
-        assertTrue(WallpaperPickerLogic.applyOneEnabled(WallpaperSlots.Slot.HOME, picked, kept, false));
+        assertTrue("a picked photo reaches Home", WallpaperPickerLogic.pendingApplies(WallpaperSlots.Slot.HOME, picked, A));
+        assertTrue("a different picture", WallpaperPickerLogic.pendingApplies(WallpaperSlots.Slot.HOME, picked, kept));
+        assertFalse("the same picture", WallpaperPickerLogic.pendingApplies(WallpaperSlots.Slot.HOME, kept, kept));
+        assertTrue(WallpaperPickerLogic.pendingApplies(WallpaperSlots.Slot.LOCK, picked, B));
         assertFalse(WallpaperPickerLogic.sameChoice(picked, kept));
         assertTrue(WallpaperPickerLogic.sameChoice(picked,
             WallpaperSlots.Choice.photo(new java.io.File("/p/1.png"))));

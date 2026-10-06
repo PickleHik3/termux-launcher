@@ -3,7 +3,6 @@ package com.termux.app.chrome.wallpaper;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.robolectric.Shadows.shadowOf;
 
@@ -38,11 +37,12 @@ import java.util.List;
 /**
  * The Appearance Overview at the subclass's width: it lays out with nothing cut off, the heading is
  * fixed ("Appearance") while each card carries its own label, Same as Home shows only for Lock,
- * Apply is enabled only when the pending choice differs, Apply puts the background on Home and
- * points Lock at it while its menu items apply one slot, there is no shortcut row, and Apply sits
- * in one row above the strip. The strip holds Same as Home and the recent photos, evenly spaced,
- * and no pre-made backgrounds. Photos: a cropped photo comes back pending and Apply sets it, the
- * current photo shows in its card, and releasing without Apply discards the pending file. A fake
+ * the page holds pending changes only when a card's choice differs from its slot, committing
+ * applies each card's own choice to its own slot (Home first), there is no Apply row, and the
+ * cards sit directly above the strip. The strip holds Same as Home and the recent photos, evenly
+ * spaced, and no pre-made backgrounds. Photos: a cropped photo comes back pending and the commit
+ * sets it, the current photo shows in its card, and releasing uncommitted discards the pending
+ * file. A fake
  * {@link WallpaperPickerPage.Slots} stands in for {@link WallpaperSlots}, and reads run inline.
  * Native graphics, so text has real metrics.
  */
@@ -59,6 +59,8 @@ public abstract class WallpaperPickerPageTestBase {
         final List<File> discarded = new ArrayList<>();
         /** Where an applied photo is "kept": the stored choice names this, not the pending file. */
         @Nullable File keptPhoto;
+        /** Every apply reports failure while set. */
+        boolean fail;
 
         @NonNull @Override public List<File> recents() {
             return recents;
@@ -76,6 +78,10 @@ public abstract class WallpaperPickerPageTestBase {
                                     @Nullable WallpaperSlots.Callback cb) {
             calls.add("apply " + slot);
             applied.add(choice);
+            if (fail) {
+                if (cb != null) cb.onDone(false, "failed");
+                return;
+            }
             if (choice.photo && choice.photoFile != null && keptPhoto != null) {
                 choice = WallpaperSlots.Choice.photo(keptPhoto);
             }
@@ -189,11 +195,6 @@ public abstract class WallpaperPickerPageTestBase {
         assertTrue("the card is sized", card.getHeight() > dp(100) && card.getWidth() > dp(40));
         assertTrue("the card fits the pager", card.getHeight() <= pager.getHeight());
 
-        for (int id : new int[] {R.id.wallpaper_picker_apply, R.id.wallpaper_picker_apply_more}) {
-            View v = root.findViewById(id);
-            assertTrue(v.getResources().getResourceEntryName(id) + " is a 40dp button",
-                v.getHeight() >= dp(40) && v.getWidth() >= dp(40));
-        }
         View photo = root.findViewById(R.id.wallpaper_picker_photo);
         assertTrue("Photo is a 48dp target", photo.getHeight() >= dp(48) && photo.getWidth() >= dp(48));
         assertEquals("Same as Home alone: no backgrounds, no recents", 1, page.tileCount());
@@ -237,122 +238,161 @@ public abstract class WallpaperPickerPageTestBase {
         assertFalse(page.pending(WallpaperSlots.Slot.HOME).sameAsHome);
     }
 
+    /** Commits the page's pending choices and returns "done", "failed" or "waiting" by what ran. */
+    @NonNull
+    private static String commit(@NonNull WallpaperPickerPage page) {
+        String[] out = {"waiting"};
+        page.commitPending(() -> out[0] = "done", () -> out[0] = "failed");
+        return out[0];
+    }
+
     @Test
-    public void applyIsEnabledOnlyWhenThePendingChoiceDiffers() {
+    public void thePageHoldsPendingChangesOnlyWhenAChoiceDiffers() {
         WallpaperPickerPage page = open();
+        assertFalse("nothing chosen", page.hasPendingChanges());
         page.centre(WallpaperSlots.Slot.LOCK);
-        View apply = page.root().findViewById(R.id.wallpaper_picker_apply);
-        assertFalse("Lock holds what is stored", apply.isEnabled());
         page.choose(picture("one.png"));
-        assertTrue(apply.isEnabled());
+        assertTrue(page.hasPendingChanges());
         page.choose(WallpaperSlots.Choice.sameAsHome());
-        assertFalse(apply.isEnabled());
+        assertFalse("Lock holds what is stored again", page.hasPendingChanges());
 
         page.centre(WallpaperSlots.Slot.HOME);
-        assertFalse("Home holds what is stored", apply.isEnabled());
         page.choose(WallpaperSlots.Choice.photo());
-        assertFalse(apply.isEnabled());
+        assertFalse("a photo with no picture is the stored one", page.hasPendingChanges());
         File two = photoFile("two.png");
         page.choose(WallpaperSlots.Choice.photo(two));
-        assertTrue(apply.isEnabled());
+        assertTrue(page.hasPendingChanges());
 
         // Swiping keeps each slot's pending choice.
         page.centre(WallpaperSlots.Slot.LOCK);
         assertTrue(page.pending(WallpaperSlots.Slot.LOCK).sameAsHome);
         page.centre(WallpaperSlots.Slot.HOME);
         assertEquals(two, page.pending(WallpaperSlots.Slot.HOME).photoFile);
-
-        apply.performClick();
-        assertTrue(mSlots.calls.contains("apply HOME"));
-        assertTrue(mListener.calls.contains("applied HOME"));
-        assertFalse("stored now matches", apply.isEnabled());
     }
 
     @Test
-    public void applyPutsThePhotoOnHomeAndLockFollows() {
-        mSlots.state = new WallpaperSlots.State(picture("home.png"), picture("lock.png"));
+    public void nothingPendingCommitsAtOnceAndAppliesNothing() {
         WallpaperPickerPage page = open();
-        page.centre(WallpaperSlots.Slot.HOME);
+        assertEquals("done", commit(page));
+        assertTrue(mSlots.calls.isEmpty());
+    }
+
+    @Test
+    public void aHomeOnlyPickGoesToHomeAndALockThatFollowsIsCoveredByThePlan() {
+        mSlots.state = new WallpaperSlots.State(picture("home.png"), WallpaperSlots.Choice.sameAsHome());
+        WallpaperPickerPage page = open();
         File chosen = photoFile("chosen.png");
         page.choose(WallpaperSlots.Choice.photo(chosen));
-        View apply = page.root().findViewById(R.id.wallpaper_picker_apply);
-        assertTrue(apply.isEnabled());
+        assertTrue(page.hasPendingChanges());
 
-        apply.performClick();
+        assertEquals("done", commit(page));
+        assertEquals("Lock already follows Home: one apply", Arrays.asList("apply HOME"), mSlots.calls);
+        assertEquals(chosen, mSlots.applied.get(0).photoFile);
+        assertTrue(mListener.calls.contains("applied HOME"));
+        assertTrue(mSlots.state.lock.sameAsHome);
+        assertFalse("stored now matches", page.hasPendingChanges());
+    }
+
+    @Test
+    public void aLockOnlyPickGoesToLockAlone() {
+        File homePicture = photoFile("stored-home.png");
+        mSlots.state = new WallpaperSlots.State(WallpaperSlots.Choice.photo(homePicture),
+            WallpaperSlots.Choice.sameAsHome());
+        WallpaperPickerPage page = open();
+        page.centre(WallpaperSlots.Slot.LOCK);
+        File chosen = photoFile("lock-pick.png");
+        page.choose(WallpaperSlots.Choice.photo(chosen));
+
+        assertEquals("done", commit(page));
+        assertEquals(Arrays.asList("apply LOCK"), mSlots.calls);
+        assertEquals(chosen, mSlots.applied.get(0).photoFile);
+        assertEquals("Home untouched", homePicture, mSlots.state.home.photoFile);
+        assertEquals(chosen, mSlots.state.lock.photoFile);
+    }
+
+    @Test
+    public void bothPicksGoToTheirOwnSlotsHomeFirst() {
+        mSlots.state = new WallpaperSlots.State(picture("home.png"), picture("lock.png"));
+        WallpaperPickerPage page = open();
+        File home = photoFile("home-pick.png");
+        File lock = photoFile("lock-pick.png");
+        page.choose(WallpaperSlots.Choice.photo(home));
+        page.centre(WallpaperSlots.Slot.LOCK);
+        page.choose(WallpaperSlots.Choice.photo(lock));
+
+        assertEquals("done", commit(page));
+        assertEquals(Arrays.asList("apply HOME", "apply LOCK"), mSlots.calls);
+        assertEquals(home, mSlots.applied.get(0).photoFile);
+        assertEquals(lock, mSlots.applied.get(1).photoFile);
+        assertTrue(mListener.calls.contains("applied HOME"));
+        assertTrue(mListener.calls.contains("applied LOCK"));
+        assertFalse(page.hasPendingChanges());
+    }
+
+    @Test
+    public void lockSameAsHomeAfterAHomePhotoCopiesThePhoto() {
+        mSlots.state = new WallpaperSlots.State(picture("home.png"), picture("lock.png"));
+        WallpaperPickerPage page = open();
+        File chosen = photoFile("chosen-2.png");
+        page.choose(WallpaperSlots.Choice.photo(chosen));
+        page.centre(WallpaperSlots.Slot.LOCK);
+        page.choose(WallpaperSlots.Choice.sameAsHome());
+
+        assertEquals("done", commit(page));
         assertEquals(Arrays.asList("apply HOME", "apply LOCK"), mSlots.calls);
         assertEquals(chosen, mSlots.applied.get(0).photoFile);
         assertTrue("Lock follows Home", mSlots.applied.get(1).sameAsHome);
-        assertTrue(mListener.calls.contains("applied HOME"));
-        assertTrue(mListener.calls.contains("applied LOCK"));
-        assertEquals(chosen, mSlots.state.home.photoFile);
         assertTrue(mSlots.state.lock.sameAsHome);
         assertTrue(page.pending(WallpaperSlots.Slot.LOCK).sameAsHome);
-        assertFalse("both slots hold it now", apply.isEnabled());
     }
 
     @Test
-    public void applyFromLockPutsLocksPickOnHomeToo() {
+    public void aFailedApplyReportsFailureAndLeavesThePickPending() {
         WallpaperPickerPage page = open();
-        File chosen = photoFile("lock-pick.png");
-        page.choose(WallpaperSlots.Choice.photo(chosen));
-        page.root().findViewById(R.id.wallpaper_picker_apply).performClick();
-        assertEquals(Arrays.asList("apply HOME", "apply LOCK"), mSlots.calls);
-        assertEquals(chosen, mSlots.applied.get(0).photoFile);
-        assertTrue(mSlots.applied.get(1).sameAsHome);
+        page.choose(picture("will-fail.png"));
+        mSlots.fail = true;
+        assertEquals("failed", commit(page));
+        assertTrue("still pending", page.hasPendingChanges());
+        mSlots.fail = false;
+        assertEquals("a second try works", "done", commit(page));
+        assertFalse(page.hasPendingChanges());
     }
 
     @Test
-    public void theMenuItemsApplyOneSlotOnly() {
+    public void aReleasedPageDoesNotHangTheCommit() {
         WallpaperPickerPage page = open();
-        page.centre(WallpaperSlots.Slot.HOME);
-        File first = photoFile("first.png");
-        page.choose(WallpaperSlots.Choice.photo(first));
-        assertTrue(page.slotOnlyEnabled(WallpaperSlots.Slot.HOME));
-        assertTrue(page.slotOnlyEnabled(WallpaperSlots.Slot.LOCK));
-        assertTrue(page.root().findViewById(R.id.wallpaper_picker_apply_more).isEnabled());
-
-        page.applySlotOnly(WallpaperSlots.Slot.HOME);
-        assertEquals(Arrays.asList("apply HOME"), mSlots.calls);
-        assertEquals(first, mSlots.applied.get(0).photoFile);
-        assertFalse("Home holds it now", page.slotOnlyEnabled(WallpaperSlots.Slot.HOME));
-
-        File second = photoFile("second.png");
-        page.choose(WallpaperSlots.Choice.photo(second));
-        page.applySlotOnly(WallpaperSlots.Slot.LOCK);
-        assertEquals(Arrays.asList("apply HOME", "apply LOCK"), mSlots.calls);
-        assertEquals(second, mSlots.applied.get(1).photoFile);
-        assertEquals("Home untouched", first, mSlots.state.home.photoFile);
-        assertEquals(second, mSlots.state.lock.photoFile);
+        page.choose(picture("late.png"));
+        page.release();
+        assertEquals("failed", commit(page));
     }
 
     @Test
-    public void theShortcutRowIsGoneAndThePendingChoiceSurvivesAHide() {
+    public void thePendingChoiceSurvivesAHideAndThereIsNoApplyRow() {
         WallpaperPickerPage page = open();
         page.centre(WallpaperSlots.Slot.HOME);
         File chosen = photoFile("kept.png");
         page.choose(WallpaperSlots.Choice.photo(chosen));
         assertEquals("the shortcut row is gone", 0, page.root().getResources().getIdentifier(
             "wallpaper_picker_shortcuts", "id", page.root().getContext().getPackageName()));
+        assertEquals("the Apply row is gone", 0, page.root().getResources().getIdentifier(
+            "wallpaper_picker_apply_row", "id", page.root().getContext().getPackageName()));
         // The page is hidden behind the editor, not rebuilt: its pending choices are where they were.
         page.onHidden();
         page.onShown();
         assertEquals(chosen, page.pending(WallpaperSlots.Slot.HOME).photoFile);
         assertTrue("still pending, not applied", mSlots.calls.isEmpty());
-        assertTrue(page.root().findViewById(R.id.wallpaper_picker_apply).isEnabled());
+        assertTrue(page.hasPendingChanges());
     }
 
     @Test
-    public void theCardsSitAboveTheApplyRowAndTheRowAboveTheStrip() {
+    public void theCardsFillTheSpaceAboveTheStrip() {
         WallpaperPickerPage page = open();
         View root = page.root();
         View pager = root.findViewById(R.id.wallpaper_picker_pager);
-        View row = root.findViewById(R.id.wallpaper_picker_apply_row);
         View strip = root.findViewById(R.id.wallpaper_picker_strip_card);
-        assertTrue("cards end above the row", pager.getBottom() <= row.getTop());
-        assertTrue("the row ends above the strip card", row.getBottom() <= strip.getTop());
-        assertTrue("the row keeps its 60dp", row.getHeight() >= dp(60));
-        View apply = root.findViewById(R.id.wallpaper_picker_apply);
-        assertSame("Apply is in the row", row, apply.getParent());
+        assertTrue("cards end above the strip card", pager.getBottom() <= strip.getTop());
+        assertTrue("with no row between them", strip.getTop() - pager.getBottom() <= dp(8));
+        assertEquals(Collections.singletonList(strip), page.leavingViews());
     }
 
     @Test
@@ -370,7 +410,7 @@ public abstract class WallpaperPickerPageTestBase {
     // --- photos ---
 
     @Test
-    public void aCroppedPhotoComesBackPendingAndApplySetsIt() {
+    public void aCroppedPhotoComesBackPendingAndCommitSetsIt() {
         WallpaperPickerPage page = open();
         page.root().findViewById(R.id.wallpaper_picker_photo).performClick();
         assertEquals("photo HOME", mListener.calls.get(mListener.calls.size() - 1));
@@ -385,17 +425,15 @@ public abstract class WallpaperPickerPageTestBase {
         assertEquals(WallpaperSlots.Slot.HOME, again.centredSlot());
         assertEquals(cropped, again.pending(WallpaperSlots.Slot.HOME).photoFile);
         assertTrue("previewed, not applied", mSlots.calls.isEmpty());
-        View apply = again.root().findViewById(R.id.wallpaper_picker_apply);
-        assertTrue("a pending photo enables Apply", apply.isEnabled());
+        assertTrue("a pending photo is a pending change", again.hasPendingChanges());
 
-        apply.performClick();
-        assertEquals(Arrays.asList("apply HOME", "apply LOCK"), mSlots.calls);
+        assertEquals("done", commit(again));
+        assertEquals("Lock already follows Home", Arrays.asList("apply HOME"), mSlots.calls);
         assertTrue(mSlots.applied.get(0).photo);
         assertEquals(cropped, mSlots.applied.get(0).photoFile);
-        assertTrue("Lock follows", mSlots.applied.get(1).sameAsHome);
         assertEquals("the page now shows what is kept", mSlots.keptPhoto,
             again.pending(WallpaperSlots.Slot.HOME).photoFile);
-        assertFalse(apply.isEnabled());
+        assertFalse(again.hasPendingChanges());
     }
 
     @Test
@@ -408,8 +446,8 @@ public abstract class WallpaperPickerPageTestBase {
             WallpaperSlots.Slot.LOCK, cropped, mSlots.state);
         WallpaperPickerPage page = open(restore);
         assertEquals(WallpaperSlots.Slot.LOCK, page.centredSlot());
-        assertTrue(page.slotOnlyEnabled(WallpaperSlots.Slot.LOCK));
-        page.applySlotOnly(WallpaperSlots.Slot.LOCK);
+        assertTrue(page.hasPendingChanges());
+        assertEquals("done", commit(page));
         assertEquals(Arrays.asList("apply LOCK"), mSlots.calls);
         assertEquals(cropped, mSlots.applied.get(0).photoFile);
         assertEquals("Home untouched", homePicture, mSlots.state.home.photoFile);
@@ -446,7 +484,7 @@ public abstract class WallpaperPickerPageTestBase {
     }
 
     @Test
-    public void backWithoutApplyDiscardsThePendingPhoto() {
+    public void releasingUncommittedDiscardsThePendingPhoto() {
         File cropped = photoFile("discard.png");
         WallpaperPickerPage page = open(WallpaperPickerPage.ReturnState.withPhoto(null,
             WallpaperSlots.Slot.HOME, cropped, mSlots.state));
@@ -485,9 +523,8 @@ public abstract class WallpaperPickerPageTestBase {
         assertTrue("thumbnails decoded", mDecoded.containsAll(Arrays.asList(a, b)));
 
         page.choose(WallpaperSlots.Choice.photo(b));
-        View apply = page.root().findViewById(R.id.wallpaper_picker_apply);
-        assertTrue(apply.isEnabled());
-        apply.performClick();
+        assertTrue(page.hasPendingChanges());
+        assertEquals("done", commit(page));
         assertEquals("no new crop: the recent file itself", b, mSlots.applied.get(0).photoFile);
     }
 
@@ -528,9 +565,9 @@ public abstract class WallpaperPickerPageTestBase {
         page.centre(WallpaperSlots.Slot.LOCK);
         assertEquals(View.VISIBLE, page.sameAsHomeTile().getVisibility());
         page.choose(WallpaperSlots.Choice.photo(mSlots.recents.get(0)));
-        page.applySlotOnly(WallpaperSlots.Slot.LOCK);
+        assertEquals("done", commit(page));
         page.choose(WallpaperSlots.Choice.sameAsHome());
-        page.applySlotOnly(WallpaperSlots.Slot.LOCK);
+        assertEquals("done", commit(page));
         assertEquals(Arrays.asList("apply LOCK", "apply LOCK"), mSlots.calls);
         assertTrue(mSlots.state.lock.sameAsHome);
     }
@@ -543,7 +580,7 @@ public abstract class WallpaperPickerPageTestBase {
         assertInside(page.root(), more);
         more.performClick();
         assertEquals(Arrays.asList("more settings"), mSlots.calls);
-        assertFalse("the page stays open", page.root().findViewById(R.id.wallpaper_picker_apply) == null);
+        assertFalse("the page stays open", page.root().findViewById(R.id.wallpaper_picker_pager) == null);
     }
 
     /** Every shown view lies inside the root, and no shown text is cut short. */
@@ -567,21 +604,5 @@ public abstract class WallpaperPickerPageTestBase {
             ViewGroup g = (ViewGroup) v;
             for (int i = 0; i < g.getChildCount(); i++) assertInside(root, g.getChildAt(i));
         }
-    }
-
-    @Test
-    public void applyAndItsMoreButtonSitInOneRowUnderTheCards() {
-        WallpaperPickerPage page = open();
-        settle();
-        View root = page.root();
-        View pager = root.findViewById(R.id.wallpaper_picker_pager);
-        View row = root.findViewById(R.id.wallpaper_picker_apply_row);
-        View apply = root.findViewById(R.id.wallpaper_picker_apply);
-        View more = root.findViewById(R.id.wallpaper_picker_apply_more);
-        assertSame("both are in the row", row, apply.getParent());
-        assertSame(row, more.getParent());
-        assertTrue("under the cards", row.getTop() >= pager.getBottom());
-        assertTrue("one row, side by side", more.getLeft() > apply.getLeft());
-        assertTrue(page.leavingViews().contains(row));
     }
 }

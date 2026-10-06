@@ -2570,20 +2570,43 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             proceed.run();
             return;
         }
+        showUnsavedDialog(() -> {
+            commitLook();
+            proceed.run();
+        }, proceed);
+    }
+
+    /**
+     * Leaving with something besides the editor unsaved (the Overview's pending wallpaper): the
+     * one question, asked whether or not the editor is dirty. Discard reverts the editor when it
+     * is up; Save keeps the look.
+     */
+    @Override
+    public void confirmLeave(@NonNull Runnable onSave, @NonNull Runnable onDiscard) {
+        LayoutEditorController layoutEditor = mHost.layoutEditor();
+        if (mOpen && mLayoutMode && layoutEditor != null && layoutEditor.cancelGesture())
+            return;
+        showUnsavedDialog(() -> {
+            if (mOpen)
+                commitLook();
+            onSave.run();
+        }, onDiscard);
+    }
+
+    /** Keep editing (nothing runs) / Discard (the editor back to how it was at open, then {@code discard}) / Save. */
+    private void showUnsavedDialog(@NonNull Runnable save, @NonNull Runnable discard) {
         new MaterialAlertDialogBuilder(mHost.context())
             .setTitle(R.string.termux_surface_tuning_unsaved_title)
             .setMessage(R.string.termux_layout_editor_unsaved_message)
             .setNeutralButton(R.string.termux_surface_tuning_unsaved_keep_editing, null)
             .setNegativeButton(R.string.termux_surface_tuning_unsaved_discard,
                 (dialog, which) -> {
-                    revertToEntry();
-                    proceed.run();
+                    if (mOpen)
+                        revertToEntry();
+                    discard.run();
                 })
             .setPositiveButton(R.string.termux_surface_tuning_unsaved_save,
-                (dialog, which) -> {
-                    commitLook();
-                    proceed.run();
-                })
+                (dialog, which) -> save.run())
             .show();
     }
 

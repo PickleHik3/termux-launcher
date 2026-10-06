@@ -2,7 +2,7 @@
 <!-- The one bar of the Appearance surface, over each page's own content: back, then the
      Wallpaper | Look | Layout | Icon pack pill (appearance_page_mode_slot,
      GONE until AppearanceEditorPage shows it; centred in the title's slot, 40dp segments in the
-     64dp bar; 8dp side padding so four segments, Undo and Done fit 360dp), then Undo (Look and Layout, while there is something to undo) and Done. The
+     64dp bar; 8dp side padding so four segments, Undo and Done fit 360dp), then Undo (Look and Layout, while there is something to undo) and Done (the filled button: it commits every page's pending changes and closes). The
      bar is the same on every page: only the pill's selection and the end actions change. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -142,12 +142,16 @@
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/appearance_page_done"
-            style="@style/Widget.Material3.Button.TextButton"
+            style="@style/Widget.Material3.Button"
             android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:layout_height="40dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
             android:minWidth="0dp"
-            android:paddingLeft="8dp"
-            android:paddingRight="8dp"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
             android:maxLines="1"
             android:text="@string/appearance_editor_done"
             android:visibility="gone" />
