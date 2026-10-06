@@ -105,7 +105,10 @@ public final class PaneMotionOverlayView extends View {
      * notify on every one of those; see {@code TerminalView.CursorTrailListener} for what does push.
      */
     public interface CursorTargetProvider {
-        /** @return false when there is no pane to track right now (no focus, or it left the screen). */
+        /**
+         * @return false when there is no cursor to track right now: no focused pane, it left the
+         *         screen, or it is scrolled back into its history
+         */
         boolean provideCursorTarget(@NonNull CursorTarget out);
     }
 
@@ -279,6 +282,9 @@ public final class PaneMotionOverlayView extends View {
         boolean needsFrame = false;
         boolean moved = false;
         if (hasTarget) {
+            // Coming back from no target (scrolled back, no focused pane on screen): the old
+            // corners belong to a picture that is gone, so land on the cursor rather than smear in.
+            if (!mCursorTargetValid) mCursorTrail.requestSnapOnNextUpdate();
             mCursorTargetValid = true;
             RectF previous = mPreviousTrailBounds;
             previous.set(cursorTrailBounds());
@@ -290,8 +296,8 @@ public final class PaneMotionOverlayView extends View {
             previous.union(cursorTrailBounds());
             invalidateRect(previous);
         } else if (mCursorTargetValid) {
-            // Nothing to track (no focused pane on screen): the trail sits wherever it was and is
-            // no longer drawn. Effects already launched still play out.
+            // Nothing to track (scrolled back, or no focused pane on screen): the trail is no
+            // longer drawn, and snaps when tracking resumes. Effects already launched play out.
             mCursorTargetValid = false;
             invalidate();
         }
