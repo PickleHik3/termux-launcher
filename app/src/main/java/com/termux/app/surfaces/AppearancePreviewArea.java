@@ -11,11 +11,12 @@ package com.termux.app.surfaces;
  *   {@link AppearanceSurfaceController} pads the page bar), then the {@value #BAR_DP}dp bar, then
  *   {@value #GAP_DP}dp. The miniature's visible top edge is that line, never above it, on every
  *   page.</li>
- *   <li><b>Bottom</b>: {@value #GAP_DP}dp above the sheet. A page's sheet is at least the sheet
- *   reserve tall, the tallest resting sheet of the three pages (Look at a stop, Layout, Icon
- *   pack), so its top edge is one line on every page and the miniature one size. Only the Look
- *   page's Custom row, raised on request, stands taller and takes its room from the preview,
- *   which it gives back when it goes.</li>
+ *   <li><b>Bottom</b>: {@value #GAP_DP}dp above the sheet, which is the sheet reserve tall on
+ *   every page and at every stop: the tallest sheet of the three pages (Look with its Custom row
+ *   up, Layout, Icon pack), but never so tall that the preview would fall below
+ *   {@link AppearanceEditorFrame#MIN_SCALE} ({@link #reservePx}). Its top edge is one line and the
+ *   miniature one size everywhere; where the Custom row is taller than the reserve (a short phone,
+ *   Large text) it scrolls inside the sheet instead of growing it.</li>
  *   <li><b>Size</b>: the visible miniature is the launcher's container plus the bands of the
  *   display the frame shows above and below it ({@link #topRevealPx}, and the navigation bar's),
  *   scaled to fit between the two lines, at most {@link AppearanceEditorFrame#MAX_SCALE}.</li>
@@ -52,6 +53,26 @@ final class AppearancePreviewArea {
     /** A page's sheet: its content's height, but never shorter than the shared reserve. */
     static int sheetPx(int reservePx, int contentPx) {
         return Math.max(Math.max(0, reservePx), contentPx);
+    }
+
+    /**
+     * The tallest sheet that still leaves the preview at {@link AppearanceEditorFrame#MIN_SCALE}:
+     * the room under the preview's top line less the miniature at that scale and the gap.
+     */
+    static int sheetCapPx(int windowHeightPx, int topPx, int containerHeightPx, int revealTopPx,
+                          int revealBottomPx, float density) {
+        int visible = containerHeightPx + Math.max(0, revealTopPx) + Math.max(0, revealBottomPx);
+        return windowHeightPx - Math.round(GAP_DP * density) - topPx
+            - (int) Math.ceil(visible * AppearanceEditorFrame.MIN_SCALE);
+    }
+
+    /**
+     * The sheet reserve: the Custom row's sheet ({@code customPx}, the tallest the Look page gets)
+     * where it fits under {@code capPx}, else the cap, and never shorter than the other pages'
+     * resting sheets ({@code restingPx}), which do not scroll.
+     */
+    static int reservePx(int restingPx, int customPx, int capPx) {
+        return Math.max(Math.max(0, restingPx), Math.min(customPx, capPx));
     }
 
     /**

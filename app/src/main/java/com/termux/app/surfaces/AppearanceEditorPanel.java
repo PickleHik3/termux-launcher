@@ -1064,6 +1064,9 @@ final class AppearanceEditorPanel {
         for (View button : new View[] {mKeyboardTheme, mClock, mTrail, mEffect})
             button.setEnabled(shown);
         mRow2.setVisibility(shown && mMode == EditorMode.LOOK ? View.VISIBLE : View.GONE);
+        // Where Row B scrolls inside the sheet, it comes up at its heading.
+        if (shown)
+            mRow2.scrollTo(0, 0);
     }
 
     /**
