@@ -52,6 +52,7 @@ import com.termux.shared.view.KeyboardUtils;
 import com.termux.shared.view.ViewUtils;
 import com.termux.terminal.KeyHandler;
 import com.termux.terminal.TerminalEmulator;
+import com.termux.terminal.TerminalLinks;
 import com.termux.terminal.TerminalSession;
 import com.termux.terminal.UrlDetector;
 import com.termux.view.TerminalView;
@@ -204,6 +205,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 androidx.appcompat.R.attr.colorPrimary, 0);
         }
         view.setUrlUnderlineColor(color);
+        view.setUrlTapEnabled(color != 0);
     }
 
     /**
@@ -312,8 +314,6 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     @Override
     public void onSingleTapUp(MotionEvent e) {
         TerminalEmulator term = mHost.currentSession().getEmulator();
-        // A tap that went to a mouse-tracking program as its click is that program's alone.
-        if (!term.isMouseTrackingActive() && handleLinkTap(term, e)) return;
         if (!term.isMouseTrackingActive() && !e.isFromSource(InputDevice.SOURCE_MOUSE)) {
             // Switched off, a tap is only a tap: the keyboard waits for its own key.
             if (isKeyboardTurnedOff()) return;
@@ -329,32 +329,13 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     /**
-     * Shift+tap on a program that tracks the mouse: the program got no click, so the app's own
-     * hyperlink and URL handling takes the tap, as on a plain shell.
+     * A tapped link, OSC 8 or an address in the text, asks with a strip above the line before
+     * anything opens: the same offer wherever the tap lands, in a shell or over a TUI that got the
+     * tap as its click too.
      */
     @Override
-    public void onMouseTrackingBypassTap(MotionEvent e) {
-        handleLinkTap(mHost.currentSession().getEmulator(), e);
-    }
-
-    /** Open the OSC 8 link or the URL under a tap; false when there is neither. */
-    private boolean handleLinkTap(TerminalEmulator term, MotionEvent e) {
-        int[] tappedColumnAndRow = mHost.focusedView().getColumnAndRow(e, true);
-        String hyperlink = term.getHyperlinkUriAt(tappedColumnAndRow[1], tappedColumnAndRow[0]);
-        if (hyperlink != null) {
-            // An OSC 8 link was tapped. Confirm before acting on it: unlike the URL regex below, the
-            // target is chosen by the application and need not resemble the text that was tapped.
-            showHyperlinkStrip(hyperlink, hyperlinkStripAnchor(e));
-            return true;
-        }
-        if (mHost.properties().shouldOpenTerminalTranscriptURLOnClick()) {
-            String url = urlAtTap(term, tappedColumnAndRow[0], tappedColumnAndRow[1]);
-            if (url != null) {
-                ShareUtils.openUrl(mContext, url);
-                return true;
-            }
-        }
-        return false;
+    public void onLinkTap(TerminalLinks.Link link, MotionEvent e) {
+        showLinkStrip(link.uri, linkStripAnchor(e));
     }
 
     /**
@@ -1323,11 +1304,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         "http", "https", "mailto", "tel", "sms", "geo", "ftp", "ftps"));
 
     /**
-     * Where the hyperlink strip's bottom edge should land: one text row above the tap, so the strip
+     * Where the link strip's bottom edge should land: one text row above the tap, so the strip
      * sits over the line above and the tapped link itself stays visible under it.
      */
     @Nullable
-    private PointF hyperlinkStripAnchor(@NonNull MotionEvent e) {
+    private PointF linkStripAnchor(@NonNull MotionEvent e) {
         TerminalView view = mHost.focusedView();
         if (view == null) return null;
         int[] onScreen = new int[2];
@@ -1337,25 +1318,27 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     /**
-     * Ask what to do with a tapped OSC 8 hyperlink. A thin two-action strip above the tapped line
-     * rather than a page: an outside tap is the cancel, and the transcript — including the link
-     * itself — stays readable behind it, which is also what shows what is about to be opened.
+     * Ask what to do with a tapped link. A thin two-action strip above the tapped line rather than
+     * a page: an outside tap is the cancel, and the transcript — including the link itself — stays
+     * readable behind it, which is also what shows what is about to be opened. An OSC 8 target is
+     * chosen by the program and need not resemble the text that was tapped, so it is never opened
+     * unasked; a plain address gets the same strip so one tap means one thing.
      */
-    private void showHyperlinkStrip(String uri, @Nullable PointF anchor) {
+    private void showLinkStrip(String uri, @Nullable PointF anchor) {
         String scheme = Uri.parse(uri).getScheme();
         boolean openable = scheme != null && OPENABLE_HYPERLINK_SCHEMES.contains(scheme.toLowerCase(Locale.ROOT));
         TerminalSheetController sheet = mHost.sheetController();
         LinearLayout strip = new LinearLayout(mContext);
         strip.setOrientation(LinearLayout.HORIZONTAL);
         strip.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        addHyperlinkStripAction(strip, mContext.getString(R.string.action_hyperlink_copy), () -> {
+        addLinkStripAction(strip, mContext.getString(R.string.action_hyperlink_copy), () -> {
             sheet.dismiss();
             ShareUtils.copyTextToClipboard(mContext, uri,
                 mContext.getString(R.string.msg_select_url_copied_to_clipboard));
             ClipboardHistory.get(mContext).record(uri);
         });
         if (openable) {
-            addHyperlinkStripAction(strip, mContext.getString(R.string.action_hyperlink_open),
+            addLinkStripAction(strip, mContext.getString(R.string.action_hyperlink_open),
                 () -> {
                     sheet.dismiss();
                     ShareUtils.openUrl(mContext, uri);
@@ -1365,7 +1348,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             TerminalSheetController.Placement.stripAbove(anchor));
     }
 
-    private void addHyperlinkStripAction(@NonNull LinearLayout strip, @NonNull CharSequence label,
+    private void addLinkStripAction(@NonNull LinearLayout strip, @NonNull CharSequence label,
                                          @NonNull Runnable action) {
         int density = Math.round(mContext.getResources().getDisplayMetrics().density);
         TextView button = new TextView(mContext);
@@ -1385,16 +1368,6 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         strip.addView(button, new LinearLayout.LayoutParams(
             android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
             android.view.ViewGroup.LayoutParams.WRAP_CONTENT));
-    }
-
-    /**
-     * The URL under a tap, or null: the address whose underlined cells include the tapped one, so
-     * what opens is exactly what the screen marked as openable.
-     */
-    @Nullable
-    private static String urlAtTap(@NonNull TerminalEmulator term, int column, int row) {
-        UrlDetector.UrlSpan span = UrlDetector.at(term.getScreen(), column, row);
-        return span == null ? null : span.url;
     }
 
     public void showUrlSelection() {

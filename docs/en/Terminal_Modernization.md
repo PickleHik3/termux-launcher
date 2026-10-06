@@ -891,16 +891,17 @@ choose a result to scroll directly to its emulator row.
 
 ### Safe hyperlinks
 
-Applications may emit OSC 8 hyperlinks. Linked cells are visibly underlined and tapping one shows
-the full target before anything opens. Only `http`, `https`, `mailto`, `tel`, `sms`, `geo`, `ftp`,
-and `ftps` can be opened. Other schemes, including `file`, can only be copied.
+Applications may emit OSC 8 hyperlinks. Linked cells are visibly underlined, as are web addresses
+found in ordinary output, and tapping either shows a small Copy / Open strip above the line with the
+full target before anything opens. Only `http`, `https`, `mailto`, `tel`, `sms`, `geo`, `ftp`, and
+`ftps` can be opened. Other schemes, including `file`, can only be copied. The link is read the
+moment your finger lifts, so a screen that keeps redrawing does not move it out from under the tap.
 
-While a program tracks the mouse (a TUI such as herdr or tmux with mouse on), a tap goes only to
-that program as its click, so the app opens no link of its own. The extra-keys row's Ctrl, Alt and
-Shift, and a hardware keyboard's, are sent along with the click the way xterm does; a latched Ctrl
-covers one click and is then spent, so Ctrl+tap lets such a program open its own links. Hold or
-latch Shift for the tap instead and nothing goes to the program: the app opens the OSC 8 link or the
-URL under your finger, as it does in a plain shell.
+While a program tracks the mouse (a TUI such as herdr or tmux with mouse on), a tap goes to that
+program as its click, and a link under the finger still gets its strip. The extra-keys row's Ctrl,
+Alt and Shift, and a hardware keyboard's, are sent along with the click the way xterm does; a latched
+Ctrl covers one click and is then spent, so Ctrl+tap lets such a program open its own links. Hold or
+latch Shift for the tap instead and nothing goes to the program: only the strip appears.
 
 The implementation bounds URI length and link-pool size. If the pool is exhausted, new links degrade
 to ordinary text instead of consuming unbounded memory.
