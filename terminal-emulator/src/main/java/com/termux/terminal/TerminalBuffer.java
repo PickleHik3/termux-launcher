@@ -685,8 +685,8 @@ public final class TerminalBuffer {
             mLines[blankRow] = new TerminalRow(mColumns, style);
         } else {
             // find if a bitmap is completely scrolled out
-            Set<Integer> used = new HashSet<Integer>();
             if (mLines[blankRow].mHasBitmap) {
+                Set<Integer> used = new HashSet<Integer>();
                 for (int column = 0; column < mColumns; column++) {
                     final long st = mLines[blankRow].getStyle(column);
                     if (TextStyle.isBitmap(st)) {

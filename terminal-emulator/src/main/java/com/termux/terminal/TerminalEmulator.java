@@ -4389,15 +4389,26 @@ public final class TerminalEmulator {
         }
     }
 
+    /**
+     * Raise the length limit for the OSCs that carry payloads. The prefix is tested once, when the
+     * sequence first reaches its length: it never changes after that, and both prefixes are ASCII,
+     * so a surrogate pair stepping over that length cannot be one of them.
+     */
     private void updateOscHandling() {
-        if (mOSCOrDeviceControlArgs.length() >= 5 &&
-            mOSCOrDeviceControlArgs.substring(0, 5).equals("1337;")) {
+        final int length = mOSCOrDeviceControlArgs.length();
+        if (length == 5 && startsWith(mOSCOrDeviceControlArgs, "1337;")) {
             mIgnoreCrLfForOsc = true;
             mOscStringMaxLength = MAX_IMAGE_SEQUENCE_LENGTH;
-        } else if (mOSCOrDeviceControlArgs.length() >= 3 &&
-            mOSCOrDeviceControlArgs.substring(0, 3).equals("52;")) {
+        } else if (length == 3 && startsWith(mOSCOrDeviceControlArgs, "52;")) {
             mOscStringMaxLength = MAX_CLIPBOARD_SEQUENCE_LENGTH;
         }
+    }
+
+    private static boolean startsWith(CharSequence text, String prefix) {
+        if (text.length() < prefix.length()) return false;
+        for (int i = 0; i < prefix.length(); i++)
+            if (text.charAt(i) != prefix.charAt(i)) return false;
+        return true;
     }
 
     private boolean appendStringSequenceCodePoint(int codePoint) {

@@ -223,13 +223,19 @@ public final class TerminalFontLoader {
     @NonNull
     private static FontFamilyIndex familyIndex(@NonNull TerminalFontConfig.Result config) {
         if (!namesAFamily(config)) return FontFamilyIndex.EMPTY;
+        return FontFamilyIndex.of(familyRoots());
+    }
+
+    /** The directories a {@code family=} name is looked for in, in search order. */
+    @NonNull
+    static List<File> familyRoots() {
         List<File> roots = new ArrayList<>(FAMILY_DIRECTORIES.length);
         for (String directory : FAMILY_DIRECTORIES)
             roots.add(new File(TermuxConstants.TERMUX_HOME_DIR_PATH + directory));
-        return FontFamilyIndex.of(roots);
+        return roots;
     }
 
-    private static boolean namesAFamily(@NonNull TerminalFontConfig.Result config) {
+    static boolean namesAFamily(@NonNull TerminalFontConfig.Result config) {
         for (TerminalFontConfig.FaceSpec spec : config.faces.values())
             if (spec.type == TerminalFontConfig.SourceType.FAMILY) return true;
         for (TerminalFontConfig.SymbolMapSpec map : config.symbolMaps)
