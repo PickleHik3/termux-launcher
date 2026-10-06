@@ -600,8 +600,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean mStatusBarFoldDragging;
     private int mStatusBarFoldDragStartHeight;
-    private int mStatusBarFoldDragResizeGeneration;
-    private int mStatusBarTerminalResizeGeneration;
+    @Nullable private GeometryScheduler.Transition mStatusBarFoldDragTransition;
     /**
      * Whether the pane's top border has a bar to fold (syncBorderStatusSwipe): the bar shown,
      * along the top, where it can unfold. Kept as a field because the wall reads it on every
@@ -13383,8 +13382,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (layout.slot(Element.STATUS).hidden) {
             if (host.getVisibility() != View.GONE) {
                 cancelTopStatusBarAnimator();
-                int dragLease = endTopStatusBarDrag();
-                if (dragLease >= 0) finishStatusBarTerminalResizeAfterLayout(host, dragLease);
+                finishStatusBarTerminalResize(endTopStatusBarDrag(), true);
                 host.setVisibility(View.GONE);
                 applyTerminalWindowBarBackdropInsets();
                 if (mTermuxActivityRootView != null) ViewCompat.requestApplyInsets(mTermuxActivityRootView);
@@ -13410,8 +13408,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A fold under way on the old edge — animated or under a finger — is dropped; the new
             // edge is laid out at rest below. The drag's lease is returned with it.
             cancelTopStatusBarAnimator();
-            int dragLease = endTopStatusBarDrag();
-            if (dragLease >= 0 && host != null) finishStatusBarTerminalResizeAfterLayout(host, dragLease);
+            finishStatusBarTerminalResize(endTopStatusBarDrag(), true);
         }
         mStatusBarEdge = edge;
         boolean first = !mStatusBarEdgeApplied;
@@ -20961,14 +20958,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean vertical = isStatusBarVertical();
         ViewGroup.LayoutParams params = host.getLayoutParams();
         if (vertical ? params.width != height : params.height != height) {
+            int bandBeforePx = bottomStatusBandPx();
             if (vertical) params.width = height;
             else params.height = height;
             host.setLayoutParams(params);
             // A bar along the bottom is a band of the accessory stack, whose height is arithmetic
-            // rather than wrap_content — so the stack has to be re-added up as the bar grows, or
-            // the fold would open into a container that never made room for it. Without the
-            // terminal resize: that is a SIGWINCH per frame, and the settle at the end owns it.
-            if (mStatusBarEdge == PlaceLayout.Edge.BOTTOM) setTerminalToolbarHeight(false);
+            // rather than wrap_content — so the stack has to grow with the bar, or the fold would
+            // open into a container that never made room for it. By the band's change alone: the
+            // whole geometry pass per frame was a full chrome apply per frame, and the fold's
+            // settle runs the one pass that lays everything else out
+            // (beginStatusBarTerminalResize).
+            if (mStatusBarEdge == PlaceLayout.Edge.BOTTOM)
+                growAccessoryStackBy(bottomStatusBandPx() - bandBeforePx);
         }
         int collapsedHeight = targetStatusBarHeightPx(capsule, true);
         int expandedHeight = targetStatusBarHeightPx(capsule, false);
@@ -21078,6 +21079,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return geometry;
     }
 
+    /**
+     * Grows the accessory stack's explicit height by a band's change, without the pass that
+     * computes it: one height write for a frame of a bottom bar's fold. The stack is the sum of its
+     * bands ({@link #computeAccessoryStackHeight}), so this is exact until the stack meets its
+     * ceiling, where the settle's pass sheds the dock's rows as it always has.
+     */
+    private void growAccessoryStackBy(int deltaPx) {
+        if (deltaPx == 0) return;
+        View stack = findViewById(R.id.accessory_stack_container);
+        ViewGroup.LayoutParams params = stack == null ? null : stack.getLayoutParams();
+        if (params == null || params.height < 0) return;
+        params.height = Math.max(0, params.height + deltaPx);
+        stack.setLayoutParams(params);
+    }
+
     /** The bar's thickness across its own axis right now, whichever axis that is. */
     private int currentTopStatusBarHeight(View host) {
         ViewGroup.LayoutParams params = host.getLayoutParams();
@@ -21087,26 +21103,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return params != null && params.height > 0 ? params.height : host.getHeight();
     }
 
-    private int beginStatusBarTerminalResize() {
-        int generation = ++mStatusBarTerminalResizeGeneration;
-        if (mPaneController != null) mPaneController.beginHostSurfaceResize();
-        // The display page shares the wall's height: without this every animation frame would
-        // resize the X screen, and the bar's motion would judder along with it.
-        com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
-            ? null : mPaneWallController.displayPage();
-        if (display != null) display.beginHostResize();
-        return generation;
+    /**
+     * Opens the fold's transition: the panes' grid and the display's screen are held, and the
+     * layout the fold moves every frame books no geometry pass, until
+     * {@link #finishStatusBarTerminalResize}. Each pane then sends one final row/column update
+     * instead of a SIGWINCH for every frame.
+     */
+    @NonNull
+    private GeometryScheduler.Transition beginStatusBarTerminalResize() {
+        return mGeometry.begin(GeometryScheduler.Reason.STATUS_FOLD, true, true);
     }
 
-    private void finishStatusBarTerminalResizeAfterLayout(View host, int generation) {
-        // The posted resume runs after the requested terminal-surface layout. Each pane then sends
-        // exactly one final row/column update instead of a SIGWINCH for every animation frame.
-        host.post(() -> {
-            if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
-            com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
-                ? null : mPaneWallController.displayPage();
-            if (display != null) display.finishHostResize();
-        });
+    /**
+     * Ends a fold's transition. A landing ({@code settle}) books the one geometry pass for the
+     * bar's new height; a fold taken over by another hands what it moved to the one taking over,
+     * which opened its own transition first. Either way the grid resumes behind that pass's layout.
+     */
+    private void finishStatusBarTerminalResize(@Nullable GeometryScheduler.Transition fold,
+                                               boolean settle) {
+        mGeometry.settle(fold, settle);
     }
 
     private void setTopStatusBarCollapsed(boolean requestedCollapsed, boolean animate) {
@@ -21146,7 +21161,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void setTopStatusBarCollapsed(boolean requestedCollapsed, boolean animate,
                                           float towardOpenVelocityPxPerSec) {
         if (mPreferences == null) return;
-        int dragLease = endTopStatusBarDrag();
+        GeometryScheduler.Transition dragLease = endTopStatusBarDrag();
         // A bar down a side never rests expanded; isStatusBarCompact() already reflects that, so
         // this coercion never lands on a preference write below — it only refuses the request.
         boolean collapsed = requestedCollapsed
@@ -21174,24 +21189,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // opened would end the keyboard's or an animation's early and let panes settle on a
             // size they never reported.
             refreshTerminalWindowBar();
-            if (host != null && dragLease >= 0) finishStatusBarTerminalResizeAfterLayout(host, dragLease);
+            finishStatusBarTerminalResize(dragLease, true);
             return;
         }
         if (preferenceChanged) setStatusBarCompact(collapsed);
         if (mFirstBootTour != null) mFirstBootTour.onStatusBarCollapsedSettled(collapsed);
         if (host == null) {
             refreshTerminalWindowBar();
+            finishStatusBarTerminalResize(dragLease, true);
             return;
         }
         if (!animate || isReducedMotionEnabled()) {
-            int resizeGeneration = dragLease >= 0 ? dragLease : beginStatusBarTerminalResize();
+            GeometryScheduler.Transition snap = dragLease != null ? dragLease
+                : beginStatusBarTerminalResize();
             refreshTerminalWindowBar();
-            finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
+            finishStatusBarTerminalResize(snap, true);
             return;
         }
 
+        // Opened before the landing still running is cancelled, so what that one moved is this
+        // one's to settle rather than a pass of its own.
+        final GeometryScheduler.Transition foldTransition = dragLease != null ? dragLease
+            : beginStatusBarTerminalResize();
         cancelTopStatusBarAnimator();
-        final int resizeGeneration = dragLease >= 0 ? dragLease : beginStatusBarTerminalResize();
         int startHeight = currentTopStatusBarHeight(host);
         if (startHeight <= 0) startHeight = targetStatusBarHeightPx(capsule, !collapsed);
         applyTopStatusBarInteractiveHeight(host, topWidgets, startHeight, capsule);
@@ -21222,7 +21242,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // Taken over — by a finger, another landing, or a new edge — from wherever the
                     // bar stands: whoever took over owns its geometry now, and only the lease
                     // this landing held is returned.
-                    finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
+                    finishStatusBarTerminalResize(foldTransition, false);
                     return;
                 }
                 if (topWidgets != null) {
@@ -21233,7 +21253,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         ? View.GONE : View.VISIBLE);
                 }
                 refreshTerminalWindowBar();
-                finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
+                finishStatusBarTerminalResize(foldTransition, true);
             }
         });
         mStatusBarCollapseAnimator = fold;
@@ -21253,11 +21273,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         fold.cancel();
     }
 
-    /** Ends a finger's fold, returning the resize lease it held, or -1 when none was under way. */
-    private int endTopStatusBarDrag() {
-        if (!mStatusBarFoldDragging) return -1;
+    /** Ends a finger's fold, returning the transition it held, or null when none was under way. */
+    @Nullable
+    private GeometryScheduler.Transition endTopStatusBarDrag() {
+        if (!mStatusBarFoldDragging) return null;
         mStatusBarFoldDragging = false;
-        return mStatusBarFoldDragResizeGeneration;
+        GeometryScheduler.Transition drag = mStatusBarFoldDragTransition;
+        mStatusBarFoldDragTransition = null;
+        return drag;
     }
 
     /**
@@ -21277,10 +21300,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View topWidgets = findViewById(R.id.terminal_top_widget_area);
         boolean capsule = isRoundedDockStyle();
         if (!mStatusBarFoldDragging) {
+            // The drag's transition first: a landing it takes over hands it what that one moved.
+            GeometryScheduler.Transition drag = beginStatusBarTerminalResize();
             cancelTopStatusBarAnimator();
             mStatusBarFoldDragging = true;
             mStatusBarFoldDragStartHeight = currentTopStatusBarHeight(host);
-            mStatusBarFoldDragResizeGeneration = beginStatusBarTerminalResize();
+            mStatusBarFoldDragTransition = drag;
         }
         int height = com.termux.app.statusbar.StatusBarFoldMotion.heightForDrag(
             mStatusBarFoldDragStartHeight, towardOpenPx, targetStatusBarHeightPx(capsule, true),
