@@ -151,6 +151,31 @@ public class KittyCursorTrailTest {
         assertFalse(trail.needsRender());
     }
 
+    /**
+     * kitty stops rendering once every corner is within half a <em>pixel</em> of its edge
+     * ({@code g.dx / cell_size.width * 0.5}), not half a cell: a trail that stopped half a cell
+     * early left its trailing edge frozen as a strip beside the cursor.
+     */
+    @Test
+    public void trailStopsOnlyWithinHalfAPixelOfTheCursor() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(0, 0, 0);
+        trail.update(0L, 400f, 0f, 410f, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        // Enter: from column 40 to the first column, three lines down.
+        float left = 0f, top = CELL_H * 3, right = CELL_W, bottom = CELL_H * 4;
+        long t = 16L;
+        while (trail.update(t, left, top, right, bottom, true, 0L, false, CELL_W, CELL_H, cfg)) {
+            t += 16L;
+            assertTrue("the trail must settle", t < 5_000L);
+        }
+        for (int i = 0; i < KittyCursorTrail.CORNERS; i++) {
+            float edgeX = (i == 0 || i == 1) ? right : left;
+            float edgeY = (i == 0 || i == 3) ? top : bottom;
+            assertEquals("corner " + i + " x", edgeX, trail.cornerX(i), 0.5f);
+            assertEquals("corner " + i + " y", edgeY, trail.cornerY(i), 0.5f);
+        }
+    }
+
     /** A live-resize-style discontinuity snaps the corners with no smear across the jump. */
     @Test
     public void snapRequestSkipsTheSmearOnce() {

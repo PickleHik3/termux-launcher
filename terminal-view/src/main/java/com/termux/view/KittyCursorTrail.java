@@ -46,6 +46,9 @@ public final class KittyCursorTrail {
     private static final int[] CORNER_X_EDGE = {1, 1, 0, 0};
     private static final int[] CORNER_Y_EDGE = {0, 1, 1, 0};
 
+    /** How close every corner must be to its edge, in pixels, before the trail stops rendering. */
+    private static final float SETTLED_PX = 0.5f;
+
     /** Below this, a corner is considered to have arrived; guards a division by a near-zero delta. */
     private static final float EPSILON = 1e-6f;
 
@@ -183,7 +186,7 @@ public final class KittyCursorTrail {
         updateOpacity(dt, dectcemOn, config);
 
         boolean needsRenderPrev = mNeedsRender;
-        updateNeedsRender(cellWidthPx, cellHeightPx);
+        updateNeedsRender();
 
         mPreviousFrameMillis = nowMillis;
         mHasPreviousFrame = true;
@@ -290,15 +293,18 @@ public final class KittyCursorTrail {
         }
     }
 
-    /** {@code update_cursor_trail_needs_render}: any corner still at least half a cell off. */
-    private void updateNeedsRender(float cellWidthPx, float cellHeightPx) {
-        float dxThreshold = cellWidthPx * 0.5f;
-        float dyThreshold = cellHeightPx * 0.5f;
+    /**
+     * {@code update_cursor_trail_needs_render}: any corner still at least half a pixel off. kitty
+     * writes the threshold as {@code g.dx / cell_size.width * 0.5}: one cell's NDC width over its
+     * width in pixels is one pixel in NDC, so this is half a pixel, not half a cell. Stopping half a
+     * cell early froze the quad with its trailing edge still up to half a cell behind the cursor.
+     */
+    private void updateNeedsRender() {
         boolean needs = false;
         for (int i = 0; i < CORNERS; i++) {
             float dx = Math.abs(edgeX(CORNER_X_EDGE[i]) - mCornerX[i]);
             float dy = Math.abs(edgeY(CORNER_Y_EDGE[i]) - mCornerY[i]);
-            if (dx >= dxThreshold || dy >= dyThreshold) {
+            if (dx >= SETTLED_PX || dy >= SETTLED_PX) {
                 needs = true;
                 break;
             }
@@ -354,7 +360,10 @@ public final class KittyCursorTrail {
         return mOpacity;
     }
 
-    /** Whether any corner is still more than half a cell from its target, as of the last update. */
+    /**
+     * Whether any corner is still half a pixel or more from its target, as of the last update. The
+     * quad is drawn only while this holds, as kitty draws its trail only while {@code needs_render}.
+     */
     public boolean needsRender() {
         return mNeedsRender;
     }

@@ -394,11 +394,16 @@ public final class PaneMotionOverlayView extends View {
             mComet.draw(canvas, color, opacity, mFrameMs, getResources().getDisplayMetrics().density);
             if (clipped) canvas.restore();
         } else {
-            boolean blurred = style == CursorTrailStyle.MOTION_BLUR
-                && mMotionBlur.draw(canvas, mCursorTrail, color, baseAlpha / 255f * opacity,
-                    mCursorTarget.left, mCursorTarget.top, mCursorTarget.right,
-                    mCursorTarget.bottom);
-            if (!blurred) drawQuad(canvas, color, baseAlpha, opacity);
+            // kitty draws its trail only while needs_render holds (shaders.c draw_cursor_trail
+            // call; cursor_trail_color.a is zero for custom shaders otherwise): a settled trail
+            // leaves nothing behind, however much opacity it still has.
+            if (mCursorTrail.needsRender()) {
+                boolean blurred = style == CursorTrailStyle.MOTION_BLUR
+                    && mMotionBlur.draw(canvas, mCursorTrail, color, baseAlpha / 255f * opacity,
+                        mCursorTarget.left, mCursorTarget.top, mCursorTarget.right,
+                        mCursorTarget.bottom);
+                if (!blurred) drawQuad(canvas, color, baseAlpha, opacity);
+            }
             boolean clipped = style != CursorTrailStyle.DEFAULT && style != CursorTrailStyle.MOTION_BLUR
                 && clipToPane(canvas);
             if (style == CursorTrailStyle.RAILGUN) {
