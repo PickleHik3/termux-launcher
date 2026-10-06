@@ -16449,8 +16449,63 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     void termuxSessionListNotifyUpdated() {
+        // A shell retitling itself arrives here too, several times a second under an agent's
+        // spinner. While the sessions browser is shut nothing lists the titles but the chips, so a
+        // notification that moved nothing the drawer list is built from takes the chips' coalesced
+        // refresh (the same 250 ms beat the title change already asked for) instead of the full
+        // rebuild — the window bar's glass, blur and preferences pass behind it.
+        if (mSessionBrowserRefreshCallback == null && mDrawerShape.isRecorded()) {
+            mDrawerShape.beginProbe();
+            feedDrawerShape();
+            if (mDrawerShape.endProbe()) {
+                // The full pass would also have restarted the foreground poll, which is what turns
+                // a new title's command into the chip's label: the coalesced refresh does it.
+                mWindowLabelPollOwed = true;
+                scheduleWindowBarRefresh();
+                return;
+            }
+        }
         // Rebuild the filtered drawer list (also calls notifyDataSetChanged).
         rebuildDrawerSessions();
+    }
+
+    /** What {@link #rebuildDrawerSessions} last built the drawer list from; see {@link #feedDrawerShape}. */
+    private final com.termux.app.terminal.IdentitySequence mDrawerShape =
+        new com.termux.app.terminal.IdentitySequence();
+    /** Set when a skipped rebuild owes the window labels a foreground poll; see refreshShellActivityIndication. */
+    private boolean mWindowLabelPollOwed;
+
+    /**
+     * Everything {@link #rebuildDrawerSessions} reads, by identity: the service and controller,
+     * the current session, and per session its name, current window and windows — each window's
+     * name and shells. A rename sets a new string, so it shows as a new identity.
+     */
+    private void feedDrawerShape() {
+        com.termux.app.terminal.IdentitySequence shape = mDrawerShape;
+        shape.add(mTermuxService);
+        shape.add(mPaneController);
+        shape.add(mCurrentWSession);
+        shape.addInt(mWSessions.size());
+        for (WSession ws : mWSessions) {
+            shape.add(ws);
+            shape.add(ws.name);
+            shape.addInt(ws.current);
+            shape.addInt(ws.windows.size());
+            // The entry the drawer lists for it, as the service holds it now.
+            if (mTermuxService != null && mPaneController != null && !ws.windows.isEmpty()
+                && ws.current >= 0 && ws.current < ws.windows.size()) {
+                shape.add(findTermuxSession(mPaneController.windowActiveSession(ws.currentWindow())));
+            }
+            for (com.termux.app.terminal.TerminalPaneController.Window window : ws.windows) {
+                shape.add(window);
+                if (mPaneController == null) continue;
+                shape.add(mPaneController.windowName(window));
+                shape.add(mPaneController.windowActiveSession(window));
+                java.util.List<TerminalSession> shells = mPaneController.shellsOf(window);
+                shape.addInt(shells.size());
+                for (TerminalSession shell : shells) shape.add(shell);
+            }
+        }
     }
 
     public boolean isVisible() {
@@ -17549,6 +17604,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mFirstBootTour.onSessionsSettled(sessionCountForTour(), currentSessionIdForTour());
             mFirstBootTour.onActiveWindowSettled(currentWindowIdForTour());
         }
+        mDrawerShape.beginRecord();
+        feedDrawerShape();
+        mDrawerShape.endRecord();
         refreshTerminalWindowBar();
         refreshSessionsDrawer();
     }
@@ -21549,8 +21607,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void refreshShellActivityIndication() {
         mShellActivityRefreshPending = false;
+        boolean labelPollOwed = mWindowLabelPollOwed;
+        mWindowLabelPollOwed = false;
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
-        if (bar != null && isSplitPanesEnabled()) syncWindowBarItems(bar);
+        if (bar != null && isSplitPanesEnabled()) {
+            java.util.List<Integer> foregroundPids = syncWindowBarItems(bar);
+            if (labelPollOwed) scheduleWindowLabelPoll(foregroundPids);
+        }
         scheduleShellActivityDecay();
     }
 
