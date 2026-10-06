@@ -143,6 +143,13 @@ public final class GeometryScheduler {
      */
     static final long HOLD_BACKSTOP_MS = 500L;
 
+    /**
+     * How many passes in a row may be booked from inside a pass. A pass that asks for another is
+     * legitimate once (a keyboard its own layout showed); one that keeps asking would otherwise
+     * run forever, a pass per dispatch, so the chain is cut and the grid let go.
+     */
+    static final int MAX_CHAINED_PASSES = 3;
+
     @NonNull private final Host mHost;
 
     private boolean mPassPending;
@@ -162,6 +169,11 @@ public final class GeometryScheduler {
     private long mLastPassKey;
 
     private boolean mSettlePassPosted;
+    /** The pending pass was asked for from inside the pass before it. */
+    private boolean mPendingFromPass;
+    private int mChainedPasses;
+    /** The window is gone: nothing is posted, run or held any more. */
+    private boolean mDisposed;
 
     private final Runnable mFrame = this::onFrame;
     private final Runnable mSettlePass = this::onSettlePass;
@@ -176,7 +188,7 @@ public final class GeometryScheduler {
 
     /** Books a pass for the end of the current dispatch; requests until then share it. */
     public void request(@NonNull Reason reason, @NonNull ResizePolicy policy) {
-        if (!accept(reason, policy)) return;
+        if (mDisposed || !accept(reason, policy)) return;
         if (mInPass || mBatchDepth > 0) return;
         postFrame();
     }
@@ -186,7 +198,7 @@ public final class GeometryScheduler {
      * batch is open, when the batch's end runs it, or a pass is running, when it follows that one.
      */
     public void requestNow(@NonNull Reason reason, @NonNull ResizePolicy policy) {
-        if (!accept(reason, policy)) return;
+        if (mDisposed || !accept(reason, policy)) return;
         if (mInPass) {
             postFrame();
             return;
@@ -202,7 +214,7 @@ public final class GeometryScheduler {
 
     public void endBatch() {
         if (mBatchDepth == 0) return;
-        if (--mBatchDepth > 0) return;
+        if (--mBatchDepth > 0 || mDisposed) return;
         if (!mInPass) runPendingPass();
         if (mHoldOpen && !mPassPending) postSettleCheck();
     }
@@ -212,6 +224,7 @@ public final class GeometryScheduler {
      * of its layout is measured against the facts it saw.
      */
     public void notePassInputs() {
+        if (mDisposed) return;
         mLastPassKey = mHost.layoutInputsKey();
         mHasPassKey = true;
     }
@@ -221,6 +234,7 @@ public final class GeometryScheduler {
      * resumed once after the layout this pass booked — or at the settle of a transition open.
      */
     public void resizeGridAfterLayout() {
+        if (mDisposed) return;
         openHold();
         // Behind the traversal the caller's layout writes have just booked.
         postSettleCheck();
@@ -242,12 +256,13 @@ public final class GeometryScheduler {
         if (policy != ResizePolicy.NONE) openHold();
         if (!mPassPending || (mPendingReason != null && mPendingReason.isEcho()))
             mPendingReason = reason;
+        if (!mPassPending) mPendingFromPass = mInPass;
         mPassPending = true;
         return true;
     }
 
     private void postFrame() {
-        if (mFramePosted) return;
+        if (mFramePosted || mDisposed) return;
         mFramePosted = true;
         mHost.postFrame(mFrame);
     }
@@ -257,7 +272,7 @@ public final class GeometryScheduler {
      * transition ended on — the bar's last height — rather than the one before it.
      */
     private void postSettlePass() {
-        if (mSettlePassPosted) return;
+        if (mSettlePassPosted || mDisposed) return;
         mSettlePassPosted = true;
         mHost.postAfterLayout(mSettlePass);
     }
@@ -288,6 +303,13 @@ public final class GeometryScheduler {
         Reason reason = mPendingReason != null ? mPendingReason : Reason.LAYOUT;
         mPassPending = false;
         mPendingReason = null;
+        mChainedPasses = mPendingFromPass ? mChainedPasses + 1 : 0;
+        mPendingFromPass = false;
+        if (mChainedPasses > MAX_CHAINED_PASSES || !mHost.isAlive()) {
+            mChainedPasses = 0;
+            if (mHoldOpen) postSettleCheck();
+            return;
+        }
         mInPass = true;
         try {
             mHost.runPass(reason);
@@ -310,6 +332,10 @@ public final class GeometryScheduler {
     @NonNull
     public Transition begin(@NonNull Reason reason, boolean defersEchoes, boolean holdsDisplay) {
         Transition transition = new Transition(reason, defersEchoes, holdsDisplay);
+        if (mDisposed) {
+            transition.settled = true;
+            return transition;
+        }
         mOpenTransitions++;
         if (defersEchoes) mDeferringTransitions++;
         openHold();
@@ -326,7 +352,7 @@ public final class GeometryScheduler {
      * the layout of the last pass booked, once nothing else holds it.
      */
     public void settle(@Nullable Transition transition, boolean runPass) {
-        if (transition == null || transition.settled) return;
+        if (transition == null || transition.settled || mDisposed) return;
         transition.settled = true;
         mOpenTransitions = Math.max(0, mOpenTransitions - 1);
         boolean echoed = false;
@@ -348,7 +374,7 @@ public final class GeometryScheduler {
     // ------------------------------------------------------------------ the hold
 
     private void openHold() {
-        if (mHoldOpen) return;
+        if (mHoldOpen || mDisposed) return;
         mHoldOpen = true;
         mHost.beginGridHold();
         mHost.removeCallbacks(mBackstop);
@@ -360,6 +386,7 @@ public final class GeometryScheduler {
      * otherwise run ahead of a traversal booked since.
      */
     private void postSettleCheck() {
+        if (mDisposed) return;
         if (mSettleCheckPosted) mHost.removeCallbacks(mSettleCheck);
         mSettleCheckPosted = true;
         mHost.postAfterLayout(mSettleCheck);
@@ -388,6 +415,31 @@ public final class GeometryScheduler {
             mDisplayHoldOpen = false;
             mHost.finishDisplayHold();
         }
+    }
+
+    /**
+     * The window is being destroyed: every callback this scheduler posted is withdrawn, so no
+     * message left on the main looper — the hold's fail-safe least of all, 500 ms out — keeps
+     * the host and the window behind it reachable, and nothing asks for anything again. Holds are
+     * dropped rather than resumed: the panes go with the window.
+     */
+    public void dispose() {
+        if (mDisposed) return;
+        mDisposed = true;
+        mHost.removeCallbacks(mFrame);
+        mHost.removeCallbacks(mSettlePass);
+        mHost.removeCallbacks(mSettleCheck);
+        mHost.removeCallbacks(mBackstop);
+        mFramePosted = false;
+        mSettlePassPosted = false;
+        mSettleCheckPosted = false;
+        mPassPending = false;
+        mPendingReason = null;
+        mHoldOpen = false;
+        mDisplayHoldOpen = false;
+        mOpenTransitions = 0;
+        mDeferringTransitions = 0;
+        mEchoDeferred = false;
     }
 
     /** Whether the grid is paused by this scheduler right now. */

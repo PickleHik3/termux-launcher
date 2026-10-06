@@ -7664,52 +7664,70 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateAzOverflowAffordance();
     }
 
-    /** Where the scheduler posts: the main looper, its frame work ahead of booked traversals. */
-    private final Handler mGeometryHandler = new Handler(Looper.getMainLooper());
-
     /**
      * The one owner of when the chrome geometry pass runs and of the panes' grid pause around it.
      * Keyboard, insets, layout echoes, font metrics, slides, divider drags and the status fold all
-     * ask here; see {@link GeometryScheduler}.
+     * ask here; see {@link GeometryScheduler}. Disposed in {@link #onDestroy}.
      */
-    private final GeometryScheduler mGeometry = new GeometryScheduler(new GeometryScheduler.Host() {
+    private final GeometryScheduler mGeometry = new GeometryScheduler(new GeometryHost(this));
 
+    /**
+     * The scheduler's window side. Static, and weak to the activity and to what it holds paused:
+     * the scheduler's callbacks sit on the process-wide main looper (the hold's fail-safe is 500 ms
+     * out), and a message still queued there must not keep a destroyed activity — its whole view
+     * tree with it — reachable. {@link #onDestroy} withdraws them as well.
+     */
+    private static final class GeometryHost implements GeometryScheduler.Host {
+
+        @NonNull private final java.lang.ref.WeakReference<TermuxActivity> mActivity;
+        /** Where the scheduler posts: the main looper, frame work ahead of booked traversals. */
+        private final Handler mHandler = new Handler(Looper.getMainLooper());
         /** The pane controller whose grid this scheduler paused, so the resume reaches it. */
-        @Nullable private com.termux.app.terminal.TerminalPaneController mHeldPanes;
-        @Nullable private com.termux.app.x11.X11PaneFrame mHeldDisplay;
+        @Nullable private java.lang.ref.WeakReference<
+            com.termux.app.terminal.TerminalPaneController> mHeldPanes;
+        @Nullable private java.lang.ref.WeakReference<com.termux.app.x11.X11PaneFrame> mHeldDisplay;
+
+        GeometryHost(@NonNull TermuxActivity activity) {
+            mActivity = new java.lang.ref.WeakReference<>(activity);
+        }
 
         @Override public void postFrame(@NonNull Runnable frame) {
             // Asynchronous, so a traversal already booked does not hold it back behind its barrier:
             // the pass's writes then reach that traversal instead of booking the next one.
-            android.os.Message message = android.os.Message.obtain(mGeometryHandler, frame);
+            android.os.Message message = android.os.Message.obtain(mHandler, frame);
             message.setAsynchronous(true);
-            mGeometryHandler.sendMessage(message);
+            mHandler.sendMessage(message);
         }
 
         @Override public void postAfterLayout(@NonNull Runnable afterLayout) {
             // Ordinary: a booked traversal's barrier holds it until that layout has run.
-            mGeometryHandler.post(afterLayout);
+            mHandler.post(afterLayout);
         }
 
         @Override public void postDelayed(@NonNull Runnable runnable, long delayMs) {
-            mGeometryHandler.postDelayed(runnable, delayMs);
+            mHandler.postDelayed(runnable, delayMs);
         }
 
         @Override public void removeCallbacks(@NonNull Runnable runnable) {
-            mGeometryHandler.removeCallbacks(runnable);
+            mHandler.removeCallbacks(runnable);
         }
 
         @Override public void runPass(@NonNull GeometryScheduler.Reason reason) {
-            runAccessoryGeometryPass(reason);
+            TermuxActivity activity = mActivity.get();
+            if (activity != null) activity.runAccessoryGeometryPass(reason);
         }
 
         @Override public void beginGridHold() {
-            mHeldPanes = mPaneController;
-            if (mHeldPanes != null) mHeldPanes.beginHostSurfaceResize();
+            TermuxActivity activity = mActivity.get();
+            com.termux.app.terminal.TerminalPaneController panes =
+                activity == null ? null : activity.mPaneController;
+            mHeldPanes = panes == null ? null : new java.lang.ref.WeakReference<>(panes);
+            if (panes != null) panes.beginHostSurfaceResize();
         }
 
         @Override public void finishGridHold() {
-            com.termux.app.terminal.TerminalPaneController panes = mHeldPanes;
+            com.termux.app.terminal.TerminalPaneController panes =
+                mHeldPanes == null ? null : mHeldPanes.get();
             mHeldPanes = null;
             if (panes != null) panes.finishHostSurfaceResizeKeepingBottom();
         }
@@ -7717,24 +7735,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void beginDisplayHold() {
             // The display page shares the wall's height: without this every frame of a fold would
             // resize the X screen, and the bar's motion would judder along with it.
-            mHeldDisplay = mPaneWallController == null ? null : mPaneWallController.displayPage();
-            if (mHeldDisplay != null) mHeldDisplay.beginHostResize();
+            TermuxActivity activity = mActivity.get();
+            com.termux.app.x11.X11PaneFrame display = activity == null
+                || activity.mPaneWallController == null
+                ? null : activity.mPaneWallController.displayPage();
+            mHeldDisplay = display == null ? null : new java.lang.ref.WeakReference<>(display);
+            if (display != null) display.beginHostResize();
         }
 
         @Override public void finishDisplayHold() {
-            com.termux.app.x11.X11PaneFrame display = mHeldDisplay;
+            com.termux.app.x11.X11PaneFrame display =
+                mHeldDisplay == null ? null : mHeldDisplay.get();
             mHeldDisplay = null;
             if (display != null) display.finishHostResize();
         }
 
         @Override public long layoutInputsKey() {
-            return geometryInputsKey();
+            TermuxActivity activity = mActivity.get();
+            return activity == null ? 0L : activity.geometryInputsKey();
         }
 
         @Override public boolean isAlive() {
-            return !isFinishing() && !isDestroyed();
+            TermuxActivity activity = mActivity.get();
+            return activity != null && !activity.isFinishing() && !activity.isDestroyed();
         }
-    });
+    }
 
     /**
      * The in-app keyboard's geometry and its flash-free reveal choreography: the measurement memo,
@@ -8534,6 +8559,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onDestroy() {
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
+        // First: what follows (the keyboard's teardown among it) must not book passes or holds
+        // on the main looper for a window that is going away.
+        mGeometry.dispose();
+        if (mTermuxActivityRootView != null) mTermuxActivityRootView.setBottomMarginWriter(null);
+        if (mPaneController != null) mPaneController.setGeometryScheduler(null);
         com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(terminalHost());
         mTerminalFrameMetricsMonitor.stop();
         mManagedWallpaperSource.clear();
