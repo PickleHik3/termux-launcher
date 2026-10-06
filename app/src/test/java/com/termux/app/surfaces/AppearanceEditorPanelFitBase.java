@@ -119,13 +119,16 @@ public abstract class AppearanceEditorPanelFitBase {
         LegendSlider a = mPanel.sliderFor(AppearanceLooks.Control.BLUR);
         LegendSlider b = mPanel.sliderFor(AppearanceLooks.Control.GRAIN);
         LegendSlider c = mPanel.sliderFor(AppearanceLooks.Control.OPACITY);
+        LegendSlider d = mPanel.sliderFor(AppearanceLooks.Control.TINT);
         assertNotNull(a);
         assertNotNull(b);
         assertNotNull(c);
+        assertNotNull(d);
         assertEquals(a.getWidth(), b.getWidth(), 1);
         assertEquals(b.getWidth(), c.getWidth(), 1);
+        assertEquals(c.getWidth(), d.getWidth(), 1);
         View row = mPanel.view().findViewById(R.id.appearance_editor_sliders);
-        assertEquals("the last column ends at the content edge", row.getWidth(), c.getRight(), 1);
+        assertEquals("the last column ends at the content edge", row.getWidth(), d.getRight(), 1);
     }
 
     /**
