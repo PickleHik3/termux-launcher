@@ -72,7 +72,7 @@ public final class LauncherAppDataProvider {
     private LauncherAppDataProvider(@NonNull Context context) {
         this.context = context.getApplicationContext();
         this.iconResolver = new LauncherIconResolver(this.context);
-        this.iconPackRepository = new IconPackRepository(this.context);
+        this.iconPackRepository = IconPackRepository.getInstance(this.context);
         this.hiddenAppsStore = new LauncherHiddenAppsStore(this.context);
         this.iconStore = new LauncherIconStore(
             this.context.getResources(),
@@ -250,9 +250,10 @@ public final class LauncherAppDataProvider {
      */
     public void invalidateIconArtwork(boolean keepParsedPacks) {
         iconStore.invalidateAll();
+        // The resolver and this provider share the process-wide repository, so this one call
+        // drops the parsed packs and the pack resources, and keeping them means not calling it.
         if (!keepParsedPacks)
             iconResolver.clearCache();
-        iconPackRepository.clearCache();
         invalidate();
         mainHandler.post(this::notifyIconArtworkInvalidated);
     }
