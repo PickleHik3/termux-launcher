@@ -470,4 +470,46 @@ public class SurfaceInheritanceTest {
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.BLUR));
         assertEquals(29, preferences.getStatusBarBlurRadius());
     }
+
+    // ---------------------------------------------------------------- tint strength
+
+    @Test
+    public void tint_followsBaseUntilDetachedAndWritesThroughTheLink() {
+        assertEquals("ships at the full tint", 100, preferences.getDockTintStrength());
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 60);
+        assertEquals(60, preferences.getDockTintStrength());
+        assertEquals(60, preferences.getStatusBarTintStrength());
+        assertEquals(60, preferences.getTerminalTintStrength());
+        assertEquals(60, preferences.getInAppKeyboardTintStrength());
+
+        // A setter while linked moves Base instead of detaching.
+        preferences.setStatusBarTintStrength(35);
+        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT));
+        assertEquals(35, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(35, preferences.getDockTintStrength());
+
+        // Detached, the surface holds its own and leaves the others alone.
+        preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.TINT, 80);
+        assertEquals(80, preferences.getTerminalTintStrength());
+        assertEquals(35, preferences.getDockTintStrength());
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 10);
+        assertEquals(80, preferences.getTerminalTintStrength());
+        assertEquals(10, preferences.getInAppKeyboardTintStrength());
+        assertEquals("its own key, not a neighbour's inset", 1,
+            preferences.surfaceOverrideCount(SurfaceSlot.CANVAS));
+        assertEquals(80, preferences.getSurfaceOverrideValue(SurfaceSlot.CANVAS,
+            SurfaceProperty.TINT));
+    }
+
+    @Test
+    public void tint_hasItsOwnKeyOnEverySurface() {
+        java.util.HashSet<String> keys = new java.util.HashSet<>();
+        for (SurfaceSlot slot : SurfaceSlot.values()) {
+            assertTrue(slot.toString(),
+                TermuxAppSharedPreferences.hasSurfaceProperty(slot, SurfaceProperty.TINT));
+            String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, SurfaceProperty.TINT);
+            assertTrue(slot + " has a key of its own: " + key, key != null && keys.add(key));
+            assertTrue(key.contains("tint"));
+        }
+    }
 }

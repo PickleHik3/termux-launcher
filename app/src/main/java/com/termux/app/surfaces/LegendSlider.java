@@ -32,15 +32,15 @@ import java.util.List;
  * A vertical Material 3 slider for the Look editor's Custom row, drawn by hand so the track is
  * exactly the column's height: 0 at the bottom edge, the maximum at the top edge, nothing
  * clipped, and the legend ("Blur · 12 dp") standing beside the track as vertical text that reads
- * upward. It follows the M3 slider spec's "M" size: a 40dp track with full outer corners and 2dp
+ * upward. It follows the M3 slider spec's "M" size: a 28dp track with full outer corners and 2dp
  * inside corners at the handle, a 4 x 44dp handle with a 6dp gap to either track, and a 4dp stop
  * indicator at the far end of the inactive track. Active track and handle are {@code colorPrimary},
  * the inactive track {@code colorSecondaryContainer}, the legend {@code colorOnSurfaceVariant}.
  *
  * <p>The legend sits outside the track (2026-10-05, the developer's call after the inset legend
  * proved hard to read): the track takes the column's start and the legend the rest, the pair
- * centred in the column. The track narrows (never under 24dp) when the column cannot hold both at
- * 40dp. A legend that would overrun the column's height shrinks to 0.8x of LabelMedium first, then
+ * centred in the column. The track narrows (never under 20dp) when the column cannot hold both at
+ * 28dp. A legend that would overrun the column's height shrinks to 0.8x of LabelMedium first, then
  * gives up its name's tail.</p>
  *
  * <p>The API is the subset of Material's {@code Slider} the panel used: value, range, step,
@@ -111,7 +111,7 @@ public final class LegendSlider extends View {
         super(context, attrs, defStyleAttr);
         float density = context.getResources().getDisplayMetrics().density;
         mTrackWidthPx = context.getResources().getDimension(R.dimen.appearance_editor_slider_track);
-        mMinTrackWidthPx = 24f * density;
+        mMinTrackWidthPx = 20f * density;
         mInsideCornerPx = context.getResources()
             .getDimension(R.dimen.appearance_editor_slider_inside_corner);
         mHandleWidthPx = context.getResources()
@@ -275,7 +275,7 @@ public final class LegendSlider extends View {
         return metrics.descent - metrics.ascent;
     }
 
-    /** The track's width in this column: 40dp where the legend still fits beside it. */
+    /** The track's width in this column: 28dp where the legend still fits beside it. */
     private float trackWidthPx() {
         float band = legendBandPx() + mLegendGapPx + 2f * mHandleOverhangPx;
         float room = getWidth() - band;

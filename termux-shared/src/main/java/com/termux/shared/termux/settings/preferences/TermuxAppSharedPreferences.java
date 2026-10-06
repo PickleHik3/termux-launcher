@@ -332,6 +332,50 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_STATUS_BAR_OPACITY, DataUtils.clamp(value, 0, 100));
     }
 
+    public int getStatusBarTintStrength() {
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_STATUS_BAR_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT), 0, 100);
+    }
+
+    public void setStatusBarTintStrength(int value) {
+        writeSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_STATUS_BAR_TINT_STRENGTH, DataUtils.clamp(value, 0, 100));
+    }
+
+    /** How much of the Material colour tint the terminal's glass wears, percent. */
+    public int getTerminalTintStrength() {
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT), 0, 100);
+    }
+
+    public void setTerminalTintStrength(int value) {
+        writeSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH, DataUtils.clamp(value, 0, 100));
+    }
+
+    /** How much of the Material colour tint the keyboard's glass wears, percent. */
+    public int getInAppKeyboardTintStrength() {
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT),
+            0, 100);
+    }
+
+    public void setInAppKeyboardTintStrength(int value) {
+        writeSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_TINT_STRENGTH, DataUtils.clamp(value, 0, 100));
+    }
+
+    /** How much of the Material colour tint the dock's glass wears, percent. */
+    public int getDockTintStrength() {
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_DOCK_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT), 0, 100);
+    }
+
+    public void setDockTintStrength(int value) {
+        writeSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_DOCK_TINT_STRENGTH, DataUtils.clamp(value, 0, 100));
+    }
+
     public int getStatusBarGrain() {
         return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN,
             TERMUX_APP.KEY_STATUS_BAR_GRAIN, TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN), 0, 100);
@@ -2797,6 +2841,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                     case BLUR: return TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS;
                     case OPACITY: return TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
                     case GRAIN: return TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN;
+                    case TINT: return TERMUX_APP.KEY_IN_APP_KEYBOARD_TINT_STRENGTH;
                     default: return TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET;
                 }
             case STATUS:
@@ -2804,6 +2849,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                     case BLUR: return TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS;
                     case OPACITY: return TERMUX_APP.KEY_STATUS_BAR_OPACITY;
                     case GRAIN: return TERMUX_APP.KEY_STATUS_BAR_GRAIN;
+                    case TINT: return TERMUX_APP.KEY_STATUS_BAR_TINT_STRENGTH;
                     case CORNER_RADIUS: return TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS;
                     default: return TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET;
                 }
@@ -2811,6 +2857,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 switch (property) {
                     case BLUR: return TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS;
                     case GRAIN: return TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN;
+                    case TINT: return TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH;
                     default: return TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY;
                 }
             default:
@@ -2818,6 +2865,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                     case BLUR: return TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS;
                     case OPACITY: return TERMUX_APP.KEY_APP_BAR_OPACITY;
                     case GRAIN: return TERMUX_APP.KEY_DOCK_GLASS_GRAIN;
+                    case TINT: return TERMUX_APP.KEY_DOCK_TINT_STRENGTH;
                     case CORNER_RADIUS: return TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS;
                     default: return TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET;
                 }
@@ -2845,6 +2893,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         BLUR("blur", TERMUX_APP.KEY_SURFACE_BASE_BLUR, TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR),
         OPACITY("opacity", TERMUX_APP.KEY_SURFACE_BASE_OPACITY, TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY),
         GRAIN("grain", TERMUX_APP.KEY_SURFACE_BASE_GRAIN, TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN),
+        TINT("tint", TERMUX_APP.KEY_SURFACE_BASE_TINT, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT),
         CORNER_RADIUS("corner_radius", TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS,
             TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS),
         SIDE_GAP("side_gap", TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP, TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP);
@@ -2883,7 +2932,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 return property != SurfaceProperty.CORNER_RADIUS;
             case CANVAS:
                 return property == SurfaceProperty.BLUR || property == SurfaceProperty.OPACITY
-                    || property == SurfaceProperty.GRAIN;
+                    || property == SurfaceProperty.GRAIN || property == SurfaceProperty.TINT;
             default:
                 return true;
         }
@@ -3071,6 +3120,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                     case BLUR: return TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR;
                     case OPACITY: return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
                     case GRAIN: return TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN;
+                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
                     default: return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET;
                 }
             case STATUS:
@@ -3078,6 +3128,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                     case BLUR: return TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS;
                     case OPACITY: return TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY;
                     case GRAIN: return TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
+                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
                     case CORNER_RADIUS: return TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS;
                     default: return TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
                 }
@@ -3085,6 +3136,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 switch (property) {
                     case BLUR: return TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS;
                     case GRAIN: return TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN;
+                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
                     default: return TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY;
                 }
             default:
@@ -3092,6 +3144,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                     case BLUR: return TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS;
                     case OPACITY: return TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY;
                     case GRAIN: return TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
+                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
                     case CORNER_RADIUS: return TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
                     default: return TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
                 }

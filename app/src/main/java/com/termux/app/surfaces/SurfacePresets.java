@@ -122,6 +122,8 @@ public final class SurfacePresets {
         look.put(TERMUX_APP.KEY_SURFACE_BASE_BLUR, blur);
         look.put(TERMUX_APP.KEY_SURFACE_BASE_OPACITY, opacity);
         look.put(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, grain);
+        // Every Look wears the full Material tint; a Look never dims it.
+        look.put(TERMUX_APP.KEY_SURFACE_BASE_TINT, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT);
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_BEND, bend);
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, edgeWidth);
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, edgeLight);
@@ -291,6 +293,9 @@ public final class SurfacePresets {
                 look.put(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR, 0);
             if (!look.containsKey(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION))
                 look.put(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION, 0);
+            // The tint strength came later still; before it every look wore the full tint.
+            if (!look.containsKey(TERMUX_APP.KEY_SURFACE_BASE_TINT))
+                look.put(TERMUX_APP.KEY_SURFACE_BASE_TINT, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT);
         }
         return look;
     }

@@ -197,7 +197,7 @@ final class AppearanceEditorPanel {
         mSliderRow = root.findViewById(R.id.appearance_editor_sliders);
         int[] sliderIds = {R.id.appearance_editor_slider_0, R.id.appearance_editor_slider_1,
             R.id.appearance_editor_slider_2, R.id.appearance_editor_slider_3,
-            R.id.appearance_editor_slider_4};
+            R.id.appearance_editor_slider_4, R.id.appearance_editor_slider_5};
         for (int i = 0; i < mSliders.length; i++)
             mSliders[i] = root.findViewById(sliderIds[i]);
         mKeyboardTheme = root.findViewById(R.id.appearance_editor_door_keyboard_theme);

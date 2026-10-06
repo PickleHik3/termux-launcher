@@ -128,14 +128,14 @@ public class LayoutModeViewsTest {
 
     /** Row B holds five vertical LegendSliders in one row, apart from the heading row. */
     @Test
-    public void rowTwoCarriesFiveVerticalLegendSliders() {
+    public void rowTwoCarriesSixVerticalLegendSliders() {
         View panel = inflate(R.layout.appearance_editor_panel);
         View row2 = panel.findViewById(R.id.appearance_editor_row2);
         View sliders = panel.findViewById(R.id.appearance_editor_sliders);
         assertTrue(isInside(sliders, row2));
         int[] ids = {R.id.appearance_editor_slider_0, R.id.appearance_editor_slider_1,
             R.id.appearance_editor_slider_2, R.id.appearance_editor_slider_3,
-            R.id.appearance_editor_slider_4};
+            R.id.appearance_editor_slider_4, R.id.appearance_editor_slider_5};
         for (int id : ids) {
             View slider = panel.findViewById(id);
             assertTrue(slider instanceof LegendSlider);

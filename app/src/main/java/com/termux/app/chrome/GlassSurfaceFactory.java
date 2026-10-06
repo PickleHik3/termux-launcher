@@ -69,6 +69,19 @@ public final class GlassSurfaceFactory {
         return look.withMaterialColors(container, primary);
     }
 
+    /** This factory's look wearing {@code tintStrengthPercent} of its tint (the Tint control). */
+    @NonNull
+    public GlassLook look(int tintStrengthPercent) {
+        return look().withStrengthPercent(tintStrengthPercent);
+    }
+
+    /** The dock's tint strength, percent: what every dock-material surface wears. */
+    private int dockTintStrength() {
+        TermuxAppSharedPreferences preferences = mSurfaces.preferences();
+        return preferences != null ? preferences.getDockTintStrength()
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+    }
+
     /**
      * Builds the Material-tinted glass surface: an opaque neutral base with a faint top-down sheen
      * layered on top. The earlier corner-to-corner (TL->BR) accent wash read as a "digital"
@@ -110,11 +123,28 @@ public final class GlassSurfaceFactory {
      */
     @NonNull
     public Drawable dockSurface(float barAlpha, float sliceStart, float sliceEnd, boolean withFoot) {
+        return dockSurface(barAlpha, sliceStart, sliceEnd, withFoot, dockTintStrength());
+    }
+
+    /**
+     * The dock's glass wearing {@code tintStrengthPercent} of the tint: for a surface that is the
+     * dock's material but belongs to another slot's Tint control (the status bar's fills).
+     */
+    @NonNull
+    public Drawable dockSurface(float barAlpha, float sliceStart, float sliceEnd, boolean withFoot,
+                                int tintStrengthPercent) {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         int grain = preferences != null
             ? preferences.getDockGlassGrain()
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
-        return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain);
+        return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, tintStrengthPercent);
+    }
+
+    /** The status bar's tint strength, percent. */
+    public int statusTintStrength() {
+        TermuxAppSharedPreferences preferences = mSurfaces.preferences();
+        return preferences != null ? preferences.getStatusBarTintStrength()
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
     }
 
     @NonNull
@@ -169,13 +199,22 @@ public final class GlassSurfaceFactory {
             ? mSurfaces.statusBarRimCornerRadiusPx()
             : 0f;
         return surface(barAlpha, sliceStart, sliceEnd, true, grain, cornerRadiusPx, strokeEdges,
-            band, band);
+            band, band, statusTintStrength());
     }
 
+    /** The dock's material: {@code grain} given, the tint the dock's. */
     @NonNull
     public Drawable surface(float barAlpha, float sliceStart, float sliceEnd, boolean withFoot,
                             int grain) {
         return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, 0f, false);
+    }
+
+    /** A surface wearing {@code tintStrengthPercent} of the tint: the keyboard's strip. */
+    @NonNull
+    public Drawable surface(float barAlpha, float sliceStart, float sliceEnd, boolean withFoot,
+                            int grain, int tintStrengthPercent) {
+        return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, 0f,
+            ChromeEdgeRule.NONE, null, null, tintStrengthPercent);
     }
 
     @NonNull
@@ -200,8 +239,17 @@ public final class GlassSurfaceFactory {
     public Drawable surface(float barAlpha, float sliceStart, float sliceEnd, boolean withFoot,
                             int grain, float cornerRadiusPx, boolean withRim,
                             @Nullable GlassBackdropCache.Band band) {
+        return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, cornerRadiusPx, withRim,
+            band, dockTintStrength());
+    }
+
+    /** {@link #surface} wearing {@code tintStrengthPercent} of the tint (the stack's own slot). */
+    @NonNull
+    public Drawable surface(float barAlpha, float sliceStart, float sliceEnd, boolean withFoot,
+                            int grain, float cornerRadiusPx, boolean withRim,
+                            @Nullable GlassBackdropCache.Band band, int tintStrengthPercent) {
         return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, cornerRadiusPx,
-            withRim ? ChromeEdgeRule.ALL : ChromeEdgeRule.NONE, band, band);
+            withRim ? ChromeEdgeRule.ALL : ChromeEdgeRule.NONE, band, band, tintStrengthPercent);
     }
 
     /**
@@ -226,7 +274,7 @@ public final class GlassSurfaceFactory {
             ? preferences.getStatusBarGrain()
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
         return surface(barAlpha, sliceStart, sliceEnd, true, grain, 0f, ChromeEdgeRule.NONE, null,
-            veilOf);
+            veilOf, statusTintStrength());
     }
 
     /**
@@ -240,8 +288,8 @@ public final class GlassSurfaceFactory {
     private Drawable surface(float barAlpha, float sliceStart, float sliceEnd, boolean withFoot,
                              int grain, float cornerRadiusPx, int strokeEdges,
                              @Nullable GlassBackdropCache.Band glassBand,
-                             @Nullable GlassBackdropCache.Band veilBand) {
-        GlassLook look = look();
+                             @Nullable GlassBackdropCache.Band veilBand, int tintStrengthPercent) {
+        GlassLook look = look(tintStrengthPercent);
         int base = look.tintBase(mSurfaces.glassBaseColor());
         int accent = mSurfaces.accentColor();
         float clamped = barAlpha < 0f ? 0f : (barAlpha > 1f ? 1f : barAlpha);
@@ -263,7 +311,7 @@ public final class GlassSurfaceFactory {
         int[] sliceColors = look.obsidianTint
             ? new int[] {GlassLook.wash(), GlassLook.wash()}
             : DockGlassRendering.lightModelSlice(accent, topSheenAlpha, midSheenAlpha,
-                bottomFootAlpha, sliceStart, sliceEnd);
+                bottomFootAlpha, sliceStart, sliceEnd, look.strength());
         GradientDrawable lightLayer = new GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM, sliceColors);
         lightLayer.setDither(true);

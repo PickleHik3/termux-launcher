@@ -47,12 +47,15 @@ public final class GlassStack {
          * resolves for it; null for glass no content is measured against.
          */
         @Nullable public final GlassBackdropCache.Band band;
+        /** How much of the tint the glass wears, in percent; 100 is the shipped tint. */
+        public final int tintStrengthPercent;
 
         private Spec(int blurRadiusDp, float tintAlpha, int grainPercent, float cornerRadiusPx,
                      boolean rim, @NonNull GlassRefraction.Look look, int seams, float sliceEnd,
                      boolean foot, int stackAlphaPercent, @Nullable Integer tintColor,
-                     @Nullable GlassBackdropCache.Band band) {
+                     @Nullable GlassBackdropCache.Band band, int tintStrengthPercent) {
             this.band = band;
+            this.tintStrengthPercent = tintStrengthPercent;
             this.blurRadiusDp = blurRadiusDp;
             this.tintAlpha = tintAlpha;
             this.grainPercent = grainPercent;
@@ -71,43 +74,50 @@ public final class GlassStack {
         public static Spec of(int blurRadiusDp, float tintAlpha, int grainPercent,
                               float cornerRadiusPx, @Nullable GlassRefraction.Look fancierLook) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, false,
-                lookFor(fancierLook), 0, 1f, false, 100, null, null);
+                lookFor(fancierLook), 0, 1f, false, 100, null, null, 100);
         }
 
         @NonNull public Spec withBlur(int dp) {
             return new Spec(dp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                sliceEnd, foot, stackAlphaPercent, tintColor, band);
+                sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
         }
 
         @NonNull public Spec withRim(boolean on) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, on, look, seams,
-                sliceEnd, foot, stackAlphaPercent, tintColor, band);
+                sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
         }
 
         @NonNull public Spec withSeams(int edges) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, edges,
-                sliceEnd, foot, stackAlphaPercent, tintColor, band);
+                sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
         }
 
         @NonNull public Spec withSlice(float end, boolean withFoot) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                end, withFoot, stackAlphaPercent, tintColor, band);
+                end, withFoot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
         }
 
         @NonNull public Spec withStackAlpha(int percent) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                sliceEnd, foot, percent, tintColor, band);
+                sliceEnd, foot, percent, tintColor, band, tintStrengthPercent);
         }
 
         @NonNull public Spec withTintColor(@Nullable Integer argb) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                sliceEnd, foot, stackAlphaPercent, argb, band);
+                sliceEnd, foot, stackAlphaPercent, argb, band, tintStrengthPercent);
+        }
+
+        /** This glass wearing {@code percent} of its tint (the Tint control). */
+        @NonNull public Spec withTintStrength(int percent) {
+            return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
+                sliceEnd, foot, stackAlphaPercent, tintColor, band,
+                Math.max(0, Math.min(100, percent)));
         }
 
         /** This glass as {@code band}'s, measured and veiled for it; null for none. */
         @NonNull public Spec withBand(@Nullable GlassBackdropCache.Band band) {
             return new Spec(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx, rim, look, seams,
-                sliceEnd, foot, stackAlphaPercent, tintColor, band);
+                sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
         }
 
         @Override
@@ -120,13 +130,14 @@ public final class GlassStack {
                 && rim == that.rim && look.equals(that.look) && seams == that.seams
                 && sliceEnd == that.sliceEnd && foot == that.foot
                 && stackAlphaPercent == that.stackAlphaPercent
-                && java.util.Objects.equals(tintColor, that.tintColor) && band == that.band;
+                && java.util.Objects.equals(tintColor, that.tintColor) && band == that.band
+                && tintStrengthPercent == that.tintStrengthPercent;
         }
 
         @Override
         public int hashCode() {
             return java.util.Objects.hash(blurRadiusDp, tintAlpha, grainPercent, cornerRadiusPx,
-                rim, look, seams, sliceEnd, foot, stackAlphaPercent, tintColor, band);
+                rim, look, seams, sliceEnd, foot, stackAlphaPercent, tintColor, band, tintStrengthPercent);
         }
     }
 
@@ -157,6 +168,7 @@ public final class GlassStack {
         float tint = linked ? dockAlpha : preferences.getInAppKeyboardBackgroundOpacity() / 100f;
         return Spec.of(preferences.getInAppKeyboardBlurRadius(), tint,
             preferences.getInAppKeyboardGrain(), cornerRadiusPx, fancierLook)
+            .withTintStrength(preferences.getInAppKeyboardTintStrength())
             .withStackAlpha(keyboardStackAlphaPercent(preferences));
     }
 
@@ -201,7 +213,8 @@ public final class GlassStack {
             if (spec.rim) layers.add(glass.rimDrawable(spec.cornerRadiusPx));
         } else {
             layers.add(glass.surface(spec.tintAlpha, 0f, spec.sliceEnd, spec.foot,
-                spec.grainPercent, spec.cornerRadiusPx, spec.rim, spec.band));
+                spec.grainPercent, spec.cornerRadiusPx, spec.rim, spec.band,
+                spec.tintStrengthPercent));
         }
         Drawable material = layers.size() == 1
             ? layers.get(0) : new LayerDrawable(layers.toArray(new Drawable[0]));

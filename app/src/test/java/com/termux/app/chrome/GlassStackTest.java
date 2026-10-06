@@ -247,4 +247,17 @@ public class GlassStackTest {
             ((GradientDrawable) keyboard.getDrawable(0)).getColor().getDefaultColor());
         assertEquals(255, keyboard.getAlpha());
     }
+
+    @Test
+    public void theKeyboardSpecWearsItsOwnTintStrength() {
+        assertEquals("the shipped tint", 100, keyboardSpec(null).tintStrengthPercent);
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 60);
+        assertEquals(60, keyboardSpec(null).tintStrengthPercent);
+
+        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT, 25);
+        assertEquals(25, keyboardSpec(null).tintStrengthPercent);
+        assertEquals("the dock keeps following Base", 60, preferences.getDockTintStrength());
+        assertNotEquals(keyboardSpec(null).withTintStrength(60), keyboardSpec(null));
+        assertEquals(100, dockSpec(null).tintStrengthPercent);
+    }
 }

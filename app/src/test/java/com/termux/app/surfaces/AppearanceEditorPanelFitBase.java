@@ -54,7 +54,7 @@ public abstract class AppearanceEditorPanelFitBase {
 
     /**
      * Every selection's Custom row at its widest legends: its sliders are whole columns inside the
-     * sheet, 12dp apart, one height, each wider than the 40dp track; each legend fits its track
+     * sheet, 12dp apart, one height, each wider than the 28dp track (36dp at the least); each legend fits its track
      * (or is cut to it); the buttons are 48dp touch targets inside the sheet.
      */
     @Test
@@ -66,7 +66,7 @@ public abstract class AppearanceEditorPanelFitBase {
             List<AppearanceLooks.Control> expected = AppearanceLooks.controls(target);
             assertEquals(String.valueOf(target), expected, mPanel.shownControls());
             float density = mPanel.view().getResources().getDisplayMetrics().density;
-            int track = Math.round(40 * density);
+            int track = Math.round(36 * density);
             int gap = Math.round(12 * density);
             LegendSlider previous = null;
             for (AppearanceLooks.Control control : expected) {
@@ -101,12 +101,12 @@ public abstract class AppearanceEditorPanelFitBase {
         }
     }
 
-    /** A control with the global set's five columns shows five legends reading upward. */
+    /** The global set's six columns show six legends reading upward. */
     @Test
-    public void theGlobalSetHasFiveColumnsAndNoButtons() {
+    public void theGlobalSetHasSixColumnsAndNoButtons() {
         showControls(null);
         layOut(mPanel.measureFor(false, mWidthPx));
-        assertEquals(5, mPanel.shownControls().size());
+        assertEquals(6, mPanel.shownControls().size());
         assertTrue(mPanel.shownDoors().isEmpty());
         assertFits();
     }
@@ -339,6 +339,7 @@ public abstract class AppearanceEditorPanelFitBase {
             case BLUR: return context.getString(R.string.appearance_editor_blur, 48);
             case GRAIN: return context.getString(R.string.appearance_editor_grain, 100);
             case OPACITY: return context.getString(R.string.appearance_editor_opacity, 100);
+            case TINT: return context.getString(R.string.appearance_editor_tint, 100);
             case MARGIN: return context.getString(R.string.appearance_editor_margin, 48);
             case CORNER_RADIUS: return context.getString(R.string.appearance_editor_corners, 40);
             case KEY_RADIUS: return context.getString(R.string.appearance_editor_key_corners, 24);

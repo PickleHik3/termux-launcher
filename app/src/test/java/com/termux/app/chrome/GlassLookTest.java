@@ -63,4 +63,69 @@ public class GlassLookTest {
         assertFalse(GlassLook.of("obsidian", "hairline").equals(GlassLook.SCHEME));
         assertEquals(0, look.flatTint(0x00202020) >>> 24);
     }
+
+    // ------------------------------------------------------------------------ the tint strength
+
+    @Test
+    public void fullStrengthIsTheLookAsItWas() {
+        int surface = 0x80202A44;
+        GlassLook material = GlassLook.material(true, 0xFF4060C0, 0xFF6080FF);
+        assertSame(material, material.withStrengthPercent(100));
+        assertEquals(material.tintBase(surface),
+            material.withStrengthPercent(100).tintBase(surface));
+        assertEquals(material.flatTint(surface), material.withStrength(1f).flatTint(surface));
+        assertSame(GlassLook.SCHEME, GlassLook.SCHEME.withStrengthPercent(100));
+        GlassLook obsidian = GlassLook.of("obsidian", "hairline");
+        assertEquals(obsidian.tintBase(surface), obsidian.withStrength(1f).tintBase(surface));
+        assertEquals(obsidian.flatTint(surface), obsidian.withStrength(1f).flatTint(surface));
+    }
+
+    @Test
+    public void noStrengthLeavesTheMaterialLookAsTheUntintedBase() {
+        int surface = 0x80202A44;
+        GlassLook none = GlassLook.material(false, 0xFF4060C0, 0xFF6080FF).withStrengthPercent(0);
+        assertEquals(surface, none.tintBase(surface));
+        assertEquals(surface, none.flatTint(surface));
+        assertEquals(0, none.flatTint(0x00123456) >>> 24);
+    }
+
+    @Test
+    public void theMaterialTintGrowsWithTheStrength() {
+        int surface = 0xFF202A44;
+        GlassLook full = GlassLook.material(false, 0xFF4060C0, 0xFF6080FF);
+        int previous = surface & 0xFF;
+        for (int percent = 10; percent <= 100; percent += 10) {
+            int blue = full.withStrengthPercent(percent).tintBase(surface) & 0xFF;
+            assertTrue(percent + "% is no less tinted than the step before", blue >= previous);
+            previous = blue;
+        }
+        assertTrue(previous > (surface & 0xFF));
+    }
+
+    @Test
+    public void aLessStrongSchemeOrObsidianTintMovesTowardItsGrey() {
+        int surface = 0x80204080;
+        int grey = Math.round(0.299f * 0x20 + 0.587f * 0x40 + 0.114f * 0x80);
+        int out = GlassLook.SCHEME.withStrengthPercent(0).tintBase(surface);
+        assertEquals("alpha is kept", 0x80, out >>> 24);
+        assertEquals(grey, (out >> 16) & 0xFF, 1);
+        assertEquals(grey, (out >> 8) & 0xFF, 1);
+        assertEquals(grey, out & 0xFF, 1);
+        int half = GlassLook.SCHEME.withStrengthPercent(50).tintBase(surface);
+        assertTrue((half & 0xFF) < 0x80 && (half & 0xFF) > grey);
+
+        GlassLook obsidian = GlassLook.of("obsidian", "hairline").withStrengthPercent(0);
+        int ink = obsidian.tintBase(0x99202020);
+        assertEquals((ink >> 16) & 0xFF, ink & 0xFF);
+        assertEquals((ink >> 8) & 0xFF, ink & 0xFF);
+    }
+
+    @Test
+    public void strengthIsPartOfALooksIdentity() {
+        GlassLook full = GlassLook.of("obsidian", "hairline");
+        assertFalse(full.equals(full.withStrengthPercent(40)));
+        assertEquals(full.withStrengthPercent(40), full.withStrengthPercent(40));
+        assertEquals(0.4f, full.withStrengthPercent(40).strength(), 1e-6f);
+        assertEquals(1f, full.withStrengthPercent(400).strength(), 0f);
+    }
 }

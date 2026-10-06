@@ -125,6 +125,7 @@ public final class AppearanceLooks {
         BLUR(0, BLUR_MAX_DP, 1),
         GRAIN(0, GRAIN_MAX, 1),
         OPACITY(0, OPACITY_MAX, 1),
+        TINT(0, TINT_MAX, 1),
         MARGIN(0, MARGIN_MAX_DP, 1),
         CORNER_RADIUS(0, CORNERS_MAX_DP, 1),
         KEY_RADIUS(0, KEY_CORNERS_MAX_DP, 1),
@@ -174,27 +175,28 @@ public final class AppearanceLooks {
 
     /**
      * The sliders of the Custom row for a selection, in legend order (left to right): the global
-     * set for nothing tapped (null), or the element's own. Blur, Grain and Opacity come first for
-     * everything, so the same three columns stay under the user's thumb as the selection changes.
+     * set for nothing tapped (null), or the element's own. Blur, Grain, Opacity and Tint come first for
+     * everything, so the same four columns stay under the user's thumb as the selection changes.
      */
     @NonNull
     public static List<Control> controls(@Nullable Target target) {
         if (target == null)
-            return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.MARGIN,
-                Control.CORNER_RADIUS);
+            return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
+                Control.MARGIN, Control.CORNER_RADIUS);
         switch (target) {
             case KEYBOARD:
                 return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
-                    Control.KEY_RADIUS, Control.KEY_SPACING);
+                    Control.TINT, Control.KEY_RADIUS, Control.KEY_SPACING);
             case DOCK:
                 return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
-                    Control.DOCK_SIZE, Control.APP_ICONS);
+                    Control.TINT, Control.DOCK_SIZE, Control.APP_ICONS);
             case TERMINAL:
                 return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
-                    Control.CONTRAST);
+                    Control.TINT, Control.CONTRAST);
             case STATUS:
             default:
-                return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY);
+                return Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
+                    Control.TINT);
         }
     }
 
@@ -217,7 +219,7 @@ public final class AppearanceLooks {
     }
 
     /** The most sliders any selection has: the columns the sheet is built for. */
-    public static final int MAX_CONTROLS = 5;
+    public static final int MAX_CONTROLS = 6;
 
     /** The name in a legend such as "Blur · 12 dp": the part before the separator. */
     @NonNull
@@ -299,6 +301,13 @@ public final class AppearanceLooks {
 
     public static int grainPercent(int value) {
         return clamp(value, 0, GRAIN_MAX);
+    }
+
+    /** Tint is how much of the Material colour tint a surface wears, in percent; 100 is as before. */
+    public static final int TINT_MAX = 100;
+
+    public static int tintPercent(int value) {
+        return clamp(value, 0, TINT_MAX);
     }
 
     /** Blur is one value for every surface, in dp. */

@@ -182,4 +182,25 @@ public class AppearanceSnapshotTest {
         assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
         assertEquals(session.signature(), AppearanceSnapshot.signatureOf(preferences));
     }
+
+    @Test
+    public void undoPutsTheTintBack() {
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 70);
+        preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT, 55);
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        String signature = entry.signature();
+
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 5);
+        preferences.setSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT, true);
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT, 9);
+        assertNotEquals(signature, AppearanceSnapshot.signatureOf(preferences));
+
+        entry.restore(preferences);
+
+        assertEquals(70, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT));
+        assertEquals(55, preferences.getStatusBarTintStrength());
+        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT));
+        assertEquals(signature, AppearanceSnapshot.signatureOf(preferences));
+    }
 }

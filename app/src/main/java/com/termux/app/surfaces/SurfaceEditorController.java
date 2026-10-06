@@ -1375,6 +1375,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return AppearanceLooks.opacityPercent(mTarget == null
                     ? prefs.getSurfaceBaseValue(SurfaceProperty.OPACITY)
                     : opacityOf(prefs, mTarget));
+            case TINT:
+                return AppearanceLooks.tintPercent(mTarget == null
+                    ? prefs.getSurfaceBaseValue(SurfaceProperty.TINT)
+                    : tintOf(prefs, mTarget.slot));
             case MARGIN:
                 return AppearanceLooks.marginValueFor(mHost.isFloatingDock(),
                     prefs.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP),
@@ -1416,6 +1420,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case BLUR: return getString(R.string.appearance_editor_blur, value);
             case GRAIN: return getString(R.string.appearance_editor_grain, value);
             case OPACITY: return getString(R.string.appearance_editor_opacity, value);
+            case TINT: return getString(R.string.appearance_editor_tint, value);
             case MARGIN: return getString(R.string.appearance_editor_margin, value);
             case CORNER_RADIUS: return getString(R.string.appearance_editor_corners, value);
             case KEY_RADIUS: return getString(R.string.appearance_editor_key_corners, value);
@@ -1585,6 +1590,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (mTarget == null) writeGlobal(SurfaceProperty.OPACITY, value);
                 else writeElement(mTarget, SurfaceProperty.OPACITY, value);
                 break;
+            case TINT:
+                if (mTarget == null) writeGlobal(SurfaceProperty.TINT, value);
+                else writeElement(mTarget, SurfaceProperty.TINT, value);
+                break;
             case MARGIN: writeMargin(value); break;
             case CORNER_RADIUS: writeCorners(value); break;
             case KEY_RADIUS: writeKeyCorners(value); break;
@@ -1649,6 +1658,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
+    /** The tint strength a surface draws with now, in percent. */
+    private static int tintOf(@NonNull TermuxAppSharedPreferences prefs, @Nullable SurfaceSlot slot) {
+        if (slot == null)
+            return AppearanceLooks.TINT_MAX;
+        switch (slot) {
+            case STATUS: return AppearanceLooks.tintPercent(prefs.getStatusBarTintStrength());
+            case CANVAS: return AppearanceLooks.tintPercent(prefs.getTerminalTintStrength());
+            case KEYBOARD: return AppearanceLooks.tintPercent(prefs.getInAppKeyboardTintStrength());
+            case DOCK: return AppearanceLooks.tintPercent(prefs.getDockTintStrength());
+            default: return AppearanceLooks.TINT_MAX;
+        }
+    }
+
     /** The blur a surface draws with now, in dp. */
     private static int blurOf(@NonNull TermuxAppSharedPreferences prefs, @NonNull Target target) {
         switch (target.slot) {
@@ -1692,6 +1714,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             case GRAIN:
                 written = AppearanceLooks.grainPercent(value);
+                break;
+            case TINT:
+                written = AppearanceLooks.tintPercent(value);
                 break;
             default:
                 written = AppearanceLooks.opacityPercent(value);
