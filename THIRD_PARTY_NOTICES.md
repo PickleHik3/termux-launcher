@@ -20,8 +20,10 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   Lippincott) and `app/.../terminal/CursorTrailParticles.java` ports `cursor-trail-particles.slang`
   (railgun, torpedo, pixiedust) to a CPU particle model; the graphics animation handling in
   `terminal-emulator/.../KittyImageStore.java` also follows kitty's `graphics.c`. These are
-  adaptations shipped inside the APK, separate from the external `kitten` tool below. The original
-  port commits did not record an exact upstream revision; the Java files document local changes.
+  adaptations shipped inside the APK, separate from the external `kitten` tool below. The cursor
+  trail files were ported from, and last checked against, kitty `master` at commit
+  `ce459fb1a44b72a2e40a223b74c7aa078d7df5f1` (`kitty/cursor_trail.c`, `kitty/shaders/trail.slang`
+  and `kitty/shaders/custom/cursor-trail-*`); the Java files document local changes.
 - **[herdr](https://github.com/herdrdev/herdr)** — Apache-2.0 — herdr contributors.
   `AgentTitleRules.java` and `AgentScreenRules.java` adapt the agent-detection manifests recorded
   on 2026-09-11 into ordered Java rules. The original work is credited here separately from the

@@ -31,20 +31,15 @@ public final class KittyCursorTrail {
     public static final int CORNERS = 4;
 
     /**
-     * A stalled render loop (backgrounded app, dropped frames) must not be integrated as one huge
-     * step once it resumes, or the trail would visibly teleport across the screen. Matches the
-     * clamp the previous per-pane implementations each applied at their call site; owned by the
-     * engine now that there is only one of them.
-     */
-    private static final float MAX_DT_SECONDS = 1f / 20f;
-
-    /**
      * Which edge of the target rect each corner tracks, exactly kitty's {@code corner_index[2][4]}.
      * Corner 0 is top-right, 1 bottom-right, 2 bottom-left, 3 top-left — the winding does not
      * matter to the engine itself, only that {@link #cornerX} and {@link #cornerY} agree with it.
      */
     private static final int[] CORNER_X_EDGE = {1, 1, 0, 0};
     private static final int[] CORNER_Y_EDGE = {0, 1, 1, 0};
+
+    /** How close every corner must be to its edge, in pixels, before the trail stops rendering. */
+    private static final float SETTLED_PX = 0.5f;
 
     /** Below this, a corner is considered to have arrived; guards a division by a near-zero delta. */
     private static final float EPSILON = 1e-6f;
@@ -108,7 +103,13 @@ public final class KittyCursorTrail {
     private boolean mCornersInitialized;
     private boolean mHasPreviousFrame;
     private long mPreviousFrameMillis;
+    /** The last {@link #update} asked for no further frame: the caller's loop has gone quiet. */
+    private boolean mIdle = true;
     private boolean mSnapPending;
+    /** kitty's {@code window_id}: whose cursor the trail last followed, 0 when unknown. */
+    private long mOwnerId;
+    /** kitty's {@code window_changed}: the target just moved to a different owner. */
+    private boolean mWindowChanged;
 
     /** Forget everything: the next {@link #update} snaps to its target with no visible trail. */
     public void reset() {
@@ -116,15 +117,18 @@ public final class KittyCursorTrail {
         mNeedsRender = false;
         mCornersInitialized = false;
         mHasPreviousFrame = false;
+        mIdle = true;
         mSnapPending = false;
+        mOwnerId = 0L;
+        mWindowChanged = false;
     }
 
     /**
-     * The next {@link #update} snaps every corner straight to the target, once, instead of
-     * animating the usual smear. For a discontinuity that is not a live cursor move — kitty's own
-     * example is a live resize — but that should not simply be dropped as {@link #reset()} would:
-     * the trail keeps its opacity and keeps following, it just does not draw a streak across the
-     * jump itself.
+     * The next {@link #update} that is not paused snaps every corner straight to the target it is
+     * handed, delay or no delay, once, instead of animating the usual smear. For a discontinuity
+     * that is not a live cursor move — kitty's own example is a live resize — but that should not
+     * simply be dropped as {@link #reset()} would: the trail keeps its opacity and keeps following,
+     * it just does not draw a streak across the jump itself.
      */
     public void requestSnapOnNextUpdate() {
         mSnapPending = true;
@@ -149,29 +153,47 @@ public final class KittyCursorTrail {
                           float targetRight, float targetBottom, boolean dectcemOn,
                           long positionChangedAtMillis, boolean paused,
                           float cellWidthPx, float cellHeightPx, Config config) {
+        return update(nowMillis, targetLeft, targetTop, targetRight, targetBottom, dectcemOn,
+            positionChangedAtMillis, paused, 0L, cellWidthPx, cellHeightPx, config);
+    }
+
+    /**
+     * {@link #update(long, float, float, float, float, boolean, long, boolean, float, float, Config)}
+     * for a target owned by one of several windows.
+     *
+     * @param targetOwnerId which window (pane) the cursor belongs to, 0 when unknown. A move to a
+     *                      different owner always trails, past the start threshold, as kitty's
+     *                      {@code window_changed} does: it is a change of context.
+     */
+    public boolean update(long nowMillis, float targetLeft, float targetTop,
+                          float targetRight, float targetBottom, boolean dectcemOn,
+                          long positionChangedAtMillis, boolean paused, long targetOwnerId,
+                          float cellWidthPx, float cellHeightPx, Config config) {
         boolean pendingDelay = false;
         System.arraycopy(mCornerX, 0, mPrevCornerX, 0, CORNERS);
         System.arraycopy(mCornerY, 0, mPrevCornerY, 0, CORNERS);
         mMoveStarted = false;
         mTargetReplaced = false;
+        // A snap is spent on the target it lands on, so it takes the target now even inside the
+        // delay: kitty's live-resize skip also snaps to the edges it has just updated. Holding the
+        // old target instead spent the snap on a no-op, and the next frame smeared the trail
+        // across the very discontinuity the snap was asked for.
+        boolean forceSnap = mSnapPending && !paused;
         if (!paused) {
             long sinceMoved = nowMillis - positionChangedAtMillis;
-            if (sinceMoved >= config.delayMs) {
-                updateTarget(targetLeft, targetTop, targetRight, targetBottom);
+            if (forceSnap || sinceMoved >= config.delayMs) {
+                updateTarget(targetLeft, targetTop, targetRight, targetBottom, targetOwnerId);
             } else {
                 pendingDelay = true;
             }
         }
+        if (forceSnap) mSnapPending = false;
 
         float dt = 0f;
         if (mHasPreviousFrame) {
-            dt = (nowMillis - mPreviousFrameMillis) / 1000f;
-            if (dt < 0f) dt = 0f;
-            if (dt > MAX_DT_SECONDS) dt = MAX_DT_SECONDS;
+            dt = Math.max(0L, nowMillis - clockFrom(nowMillis, positionChangedAtMillis)) / 1000f;
         }
 
-        boolean forceSnap = mSnapPending;
-        mSnapPending = false;
         updateCorners(dt, dectcemOn, cellWidthPx, cellHeightPx, config, forceSnap);
         if (mMoveStarted) {
             System.arraycopy(mReplacedFrom, 0, mMoveFrom, 0, 4);
@@ -183,15 +205,40 @@ public final class KittyCursorTrail {
         updateOpacity(dt, dectcemOn, config);
 
         boolean needsRenderPrev = mNeedsRender;
-        updateNeedsRender(cellWidthPx, cellHeightPx);
+        updateNeedsRender();
 
         mPreviousFrameMillis = nowMillis;
         mHasPreviousFrame = true;
 
-        return mNeedsRender || needsRenderPrev || pendingDelay;
+        boolean wantsFrame = mNeedsRender || needsRenderPrev || pendingDelay;
+        mIdle = !wantsFrame;
+        return wantsFrame;
     }
 
-    private void updateTarget(float left, float top, float right, float bottom) {
+    /**
+     * Where this update's time step starts. kitty integrates {@code now - updated_at} with no clamp
+     * ({@code update_cursor_trail_corners}), and runs {@code update_cursor_trail} on every wakeup of
+     * its loop ({@code render()} → {@code prepare_to_render_os_window}), including the one that
+     * reads the output that moved the cursor — always inside the {@code cursor_trail} delay, so
+     * that update only advances {@code updated_at}. The move is then integrated from about when
+     * the cursor moved, never from whenever the loop last ran.
+     * <p>
+     * This caller only runs frames while something is moving, so once it has gone quiet the last
+     * update can be seconds old; the client's move stands in for the wakeup kitty would have had.
+     * While frames are running the previous frame is that wakeup, as it is in kitty.
+     */
+    private long clockFrom(long nowMillis, long positionChangedAtMillis) {
+        if (mIdle && positionChangedAtMillis > mPreviousFrameMillis)
+            return Math.min(nowMillis, positionChangedAtMillis);
+        return mPreviousFrameMillis;
+    }
+
+    /** {@code update_cursor_trail_target}. */
+    private void updateTarget(float left, float top, float right, float bottom, long ownerId) {
+        if (left != mEdgeLeft || top != mEdgeTop || right != mEdgeRight || bottom != mEdgeBottom) {
+            mWindowChanged = mOwnerId != 0L && mOwnerId != ownerId;
+            mOwnerId = ownerId;
+        }
         if (mCornersInitialized && (left != mEdgeLeft || top != mEdgeTop
             || right != mEdgeRight || bottom != mEdgeBottom)) {
             mReplacedFrom[0] = mEdgeLeft;
@@ -210,19 +257,26 @@ public final class KittyCursorTrail {
     private boolean shouldSkipUpdate(boolean dectcemOn, float cellWidthPx, float cellHeightPx,
                                      Config config) {
         if (!dectcemOn && mOpacity <= 0f) return true;
+        // Moving to a different window is a change of context, so kitty always trails it.
         if ((config.thresholdXCells > 0 || config.thresholdYCells > 0) && !mNeedsRender
-            && cellWidthPx > 0f && cellHeightPx > 0f) {
-            int dx = Math.round((mCornerX[0] - mEdgeRight) / cellWidthPx);
-            int dy = Math.round((mCornerY[0] - mEdgeTop) / cellHeightPx);
+            && !mWindowChanged && cellWidthPx > 0f && cellHeightPx > 0f) {
+            int dx = roundHalfAway((mCornerX[0] - mEdgeRight) / cellWidthPx);
+            int dy = roundHalfAway((mCornerY[0] - mEdgeTop) / cellHeightPx);
             if (Math.abs(dx) <= config.thresholdXCells && Math.abs(dy) <= config.thresholdYCells)
                 return true;
         }
         return false;
     }
 
-    /** {@code update_cursor_trail_corners}. */
+    /** {@code update_cursor_trail_corners}, which ends by clearing {@code window_changed}. */
     private void updateCorners(float dt, boolean dectcemOn, float cellWidthPx, float cellHeightPx,
                                Config config, boolean forceSnap) {
+        easeCorners(dt, dectcemOn, cellWidthPx, cellHeightPx, config, forceSnap);
+        mWindowChanged = false;
+    }
+
+    private void easeCorners(float dt, boolean dectcemOn, float cellWidthPx, float cellHeightPx,
+                             Config config, boolean forceSnap) {
         boolean skip = !mCornersInitialized || forceSnap
             || shouldSkipUpdate(dectcemOn, cellWidthPx, cellHeightPx, config);
         if (skip) {
@@ -265,10 +319,14 @@ public final class KittyCursorTrail {
             float dot = (dx * (targetX - centerX) + dy * (targetY - centerY))
                 / halfDiag / norm(dx, dy);
             mScratchDot[i] = dot;
-            if (dot < minDot) minDot = dot;
-            if (dot > maxDot) maxDot = dot;
         }
         if (!anyMoving) return;
+        // Over all four corners, as kitty does: a corner that has already arrived counts with a
+        // dot of zero, so the corners still moving are spread between fast and slow against it.
+        for (int i = 0; i < CORNERS; i++) {
+            minDot = Math.min(minDot, mScratchDot[i]);
+            maxDot = Math.max(maxDot, mScratchDot[i]);
+        }
 
         for (int i = 0; i < CORNERS; i++) {
             if (mScratchDx[i] == 0f && mScratchDy[i] == 0f) continue;
@@ -290,15 +348,18 @@ public final class KittyCursorTrail {
         }
     }
 
-    /** {@code update_cursor_trail_needs_render}: any corner still at least half a cell off. */
-    private void updateNeedsRender(float cellWidthPx, float cellHeightPx) {
-        float dxThreshold = cellWidthPx * 0.5f;
-        float dyThreshold = cellHeightPx * 0.5f;
+    /**
+     * {@code update_cursor_trail_needs_render}: any corner still at least half a pixel off. kitty
+     * writes the threshold as {@code g.dx / cell_size.width * 0.5}: one cell's NDC width over its
+     * width in pixels is one pixel in NDC, so this is half a pixel, not half a cell. Stopping half a
+     * cell early froze the quad with its trailing edge still up to half a cell behind the cursor.
+     */
+    private void updateNeedsRender() {
         boolean needs = false;
         for (int i = 0; i < CORNERS; i++) {
             float dx = Math.abs(edgeX(CORNER_X_EDGE[i]) - mCornerX[i]);
             float dy = Math.abs(edgeY(CORNER_Y_EDGE[i]) - mCornerY[i]);
-            if (dx >= dxThreshold || dy >= dyThreshold) {
+            if (dx >= SETTLED_PX || dy >= SETTLED_PX) {
                 needs = true;
                 break;
             }
@@ -312,6 +373,11 @@ public final class KittyCursorTrail {
 
     private float edgeY(int index) {
         return index == 0 ? mEdgeTop : mEdgeBottom;
+    }
+
+    /** C's {@code round}: halves go away from zero, where {@link Math#round} sends -2.5 to -2. */
+    private static int roundHalfAway(float value) {
+        return value < 0f ? -Math.round(-value) : Math.round(value);
     }
 
     private static float norm(float x, float y) {
@@ -354,7 +420,10 @@ public final class KittyCursorTrail {
         return mOpacity;
     }
 
-    /** Whether any corner is still more than half a cell from its target, as of the last update. */
+    /**
+     * Whether any corner is still half a pixel or more from its target, as of the last update. The
+     * quad is drawn only while this holds, as kitty draws its trail only while {@code needs_render}.
+     */
     public boolean needsRender() {
         return mNeedsRender;
     }

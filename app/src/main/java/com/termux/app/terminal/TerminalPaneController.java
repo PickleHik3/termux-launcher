@@ -392,7 +392,10 @@ public class TerminalPaneController {
         if (!canAnimateView(view)) return false;
         TerminalEmulator emulator = view.mEmulator;
         if (emulator == null) return false;
-        int row = emulator.getCursorRow() - view.getTopRow();
+        // Scrolled back, kitty draws no cursor (collect_cursor_info) and scrolling never moves its
+        // trail's target; with no target here, a scroll can never smear a trail across the pane.
+        if (view.getTopRow() != 0) return false;
+        int row = emulator.getCursorRow();
         if (row < 0 || row >= emulator.mRows) return false;
         float cellWidth = view.getTerminalCellWidthPixels();
         float cellHeight = view.getTerminalCellHeightPixels();
@@ -447,6 +450,8 @@ public class TerminalPaneController {
         out.cellHeightPx = cellHeight;
         out.dectcemOn = emulator.isCursorEnabled();
         out.positionChangedAtMillis = emulator.getCursorPositionChangedAtMillis();
+        // Any stable non-zero identity will do: it only has to tell one pane from another.
+        out.ownerId = System.identityHashCode(view) | (1L << 32);
         out.color = cursorColorOf(view);
         return true;
     }
