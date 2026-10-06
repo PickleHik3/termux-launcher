@@ -176,6 +176,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
          * wallpaper and scales with the container, and nothing is read or painted for the editor.
          */
         boolean editorPaintsWallpaper();
+        /**
+         * Icons mode's content for the sheet: the pack tiles and the Pinned-only switch, built
+         * once per session (shown, hidden and released with the mode). Null where there is none.
+         */
+        @Nullable
+        default AppearanceSurfaceController.Page createIconsContent() {
+            return null;
+        }
     }
 
     @NonNull private final Host mHost;
@@ -398,7 +406,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * Shows the editor over the launcher: the frame, the sheet, the tap targets. Layout mode when
-     * {@code layoutMode}, on {@code place} (the place on screen for null); {@code initialSection}
+     * {@code mode} is Layout, on {@code place} (the place on screen for null); Icons shows the real
+     * dock in the frame over the pack controls, with no tap targets, no status-bar expansion and
+     * no raised keyboard; {@code initialSection}
      * may name a surface (a settings deep link), selected at the Custom stop and ignored at a Look
      * so that opening the editor never changes the look. With {@code fromScale} above zero the
      * frame starts at that scale and offset (the Overview's Home card) and settles into place;
@@ -406,7 +416,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * settled, and {@code onSettled} runs then. Already presented, it moves to that mode.
      */
     @Override
-    public void present(boolean layoutMode, @Nullable PaneWallPage place,
+    public void present(@NonNull EditorMode mode, @Nullable PaneWallPage place,
                         @Nullable String initialSection, float fromScale, float fromTranslationY,
                         @Nullable Runnable onSettled) {
         TermuxAppSharedPreferences prefs = prefs();
@@ -415,6 +425,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         beginSession();
         if (!mSession)
             return;
+        final boolean layoutMode = mode == EditorMode.LAYOUT;
         if (mOpen) {
             LayoutEditorController layout = mHost.layoutEditor();
             if (layoutMode) {
@@ -422,10 +433,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     pushLayoutShape(layout);
                     layout.begin(place);
                 }
-                if (mFramed) setLayoutMode(true, true);
-                else mOpenInLayout = true;
+                if (mFramed) setModeInternal(EditorMode.LAYOUT, true, 0L);
+                else {
+                    mOpenInLayout = true;
+                    if (mIconsMode) setModeInternal(EditorMode.LOOK, false, 0L);
+                }
+            } else if (mode == EditorMode.ICONS) {
+                mOpenInLayout = false;
+                if (!mIconsMode) setModeInternal(EditorMode.ICONS, true, 0L);
             } else {
-                if (mLayoutMode) setLayoutMode(false, true);
+                if (mLayoutMode || mIconsMode) setModeInternal(EditorMode.LOOK, true, 0L);
                 selectSection(initialSection);
             }
             if (onSettled != null)
@@ -446,6 +463,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // The in-app keyboard is one of the things the frame offers; it is raised after the frame
         // has settled (the relayout and the terminal's resize would land on the animation).
         mRaisedKeyboard = false;
+        mKeyboardOwed = false;
 
         if (mFrame == null || mFrame.root() != rootContainer)
             mFrame = new AppearanceEditorFrame(rootContainer);
@@ -462,13 +480,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 Gravity.BOTTOM));
         }
         mLayoutMode = false;
+        mIconsMode = mode == EditorMode.ICONS;
         mOpenInLayout = layoutMode;
-        mPanel.showAppearanceMode();
+        if (mIconsMode) ensureIconsContent();
+        mPanel.setMode(mIconsMode ? EditorMode.ICONS : EditorMode.LOOK);
         mPanel.hideRow2();
         syncPanel();
+        if (mIconsMode) showIconsPage(true);
         // The bar's title is the mode the page opens in, so it never reads Look for a frame.
         if (mPageListener != null)
-            mPageListener.onModeChanged(layoutMode);
+            mPageListener.onModeChanged(mIconsMode ? EditorMode.ICONS : EditorMode.LOOK);
         notifyDirty();
         panelView.setVisibility(View.INVISIBLE);
 
@@ -498,16 +519,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mFramed = true;
             revealPanel();
             // The Look page holds the status bar open, animating with the sheet's reveal; the
-            // Layout page leaves it as it is stored.
-            if (!mOpenInLayout)
+            // Layout and Icons pages leave it as it is stored.
+            if (!mOpenInLayout && !mIconsMode)
                 applyStatusExpansion(true);
             positionTargets();
             if (mOpenInLayout) {
                 mOpenInLayout = false;
                 // The canvas fades in with the frame (not after it): the cross-fade reads as the
                 // same frame changing what it shows.
-                setLayoutMode(true, true, 0L);
-            } else {
+                setModeInternal(EditorMode.LAYOUT, true, 0L);
+            } else if (!mIconsMode) {
                 selectSection(initialSection);
             }
             long wait = ReducedMotion.isEnabled(mHost.context()) ? 0L
@@ -515,7 +536,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             content.postDelayed(() -> {
                 if (!mOpen || token != mPresentToken)
                     return;
-                if (!mHost.isInAppKeyboardShown())
+                // Icons shows the dock only: the keyboard comes when the editor leaves that mode.
+                if (mIconsMode)
+                    mKeyboardOwed = true;
+                else if (!mHost.isInAppKeyboardShown())
                     mRaisedKeyboard = mHost.showInAppKeyboardForEditor();
                 if (onSettled != null)
                     onSettled.run();
@@ -528,10 +552,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** Whether the frame is showing the layout canvas. */
     private boolean mLayoutMode;
 
-    /** The session is on the Layout page rather than Look. */
+    /** The session is on the Icons page: the real dock in the frame over the pack controls. */
+    private boolean mIconsMode;
+    /** The keyboard was not raised for Icons mode: it is raised when another mode shows. */
+    private boolean mKeyboardOwed;
+    /** Icons mode's content, built on first use and released with the session. */
+    @Nullable private AppearanceSurfaceController.Page mIconsPage;
+
+    /** The mode the editor shows. */
     @Override
-    public boolean isLayoutMode() {
-        return mLayoutMode;
+    @NonNull
+    public EditorMode mode() {
+        return mIconsMode ? EditorMode.ICONS : mLayoutMode ? EditorMode.LAYOUT : EditorMode.LOOK;
     }
     /** A Layout door opened the editor; Layout mode is shown once the frame is placed. */
     private boolean mOpenInLayout;
@@ -790,30 +822,53 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * resets anything.
      */
     @Override
-    public void setLayoutMode(boolean layout) {
-        if (layout != mLayoutMode)
-            setLayoutMode(layout, true);
+    public void setMode(@NonNull EditorMode mode) {
+        if (mode != mode())
+            setModeInternal(mode, true, 0L);
     }
 
-    private void setLayoutMode(boolean layout, boolean animate) {
-        setLayoutMode(layout, animate, 0L);
+    /** Builds Icons mode's content once and hands it to the sheet. */
+    private void ensureIconsContent() {
+        AppearanceEditorPanel panel = mPanel;
+        if (panel == null || mIconsPage != null)
+            return;
+        AppearanceSurfaceController.Page page = mHost.createIconsContent();
+        if (page == null)
+            return;
+        mIconsPage = page;
+        panel.setIconsContent(page.root());
+    }
+
+    /** The content is on screen (true) or has left it: it re-reads the choice, or stops loading. */
+    private void showIconsPage(boolean shown) {
+        AppearanceSurfaceController.Page page = mIconsPage;
+        if (page == null)
+            return;
+        if (shown) page.onShown();
+        else page.onHidden();
     }
 
     /**
      * Swaps what the frame and the bottom area are for. The frame stays put: the canvas's host
      * is the frame's own rect, so the cross-fade changes the picture and nothing moves.
      */
-    private void setLayoutMode(boolean layout, boolean animate, long delayMs) {
+    private void setModeInternal(@NonNull EditorMode mode, boolean animate, long delayMs) {
         AppearanceEditorPanel panel = mPanel;
         if (!mOpen || panel == null)
             return;
+        final boolean layout = mode == EditorMode.LAYOUT;
+        final boolean wasIcons = mIconsMode;
         mLayoutMode = layout;
-        panel.setMode(layout);
+        mIconsMode = mode == EditorMode.ICONS;
+        if (mIconsMode) ensureIconsContent();
+        panel.setMode(mode);
+        if (wasIcons != mIconsMode)
+            showIconsPage(mIconsMode);
         if (mPageListener != null)
-            mPageListener.onModeChanged(layout);
+            mPageListener.onModeChanged(mode);
         // Corners and Margin are the Custom row's too: each page reads what the other wrote.
         syncLayoutControls();
-        if (!layout)
+        if (mode == EditorMode.LOOK)
             syncPanel();
         applyStatusExpansion(animate);
         applyPanelHeight(animate);
@@ -836,6 +891,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 mLayoutMove.setVisibility(View.GONE);
         }
         fadeLayoutFrame(layout, animate, delayMs);
+        if (!mIconsMode && mKeyboardOwed && mFramed) {
+            mKeyboardOwed = false;
+            if (!mHost.isInAppKeyboardShown())
+                mRaisedKeyboard = mHost.showInAppKeyboardForEditor();
+        }
         syncDirty();
     }
 
@@ -1006,8 +1066,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // (Appearance with Row B up, or Layout), so it never moves when Row B comes and goes or
         // when the mode pill does, and no sheet ever covers it.
         mPanelWidthPx = content.getWidth();
-        mAppearanceHeightPx = panel.measureTallest(false, mPanelWidthPx);
-        mLayoutHeightPx = panel.measureTallest(true, mPanelWidthPx);
+        mAppearanceHeightPx = panel.measureTallest(EditorMode.LOOK, mPanelWidthPx);
+        mLayoutHeightPx = panel.measureTallest(EditorMode.LAYOUT, mPanelWidthPx);
         mRestHeightPx = Math.max(mAppearanceHeightPx, mLayoutHeightPx);
         mInLayoutFrame = true;
         try {
@@ -1034,7 +1094,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         cancelFrameAnimator();
         // The frame fits the room the sheet leaves NOW (a Look stop's one row, or Custom's
         // sliders), not the tallest it gets: refitFrame follows every later change of the sheet.
-        int frameBottom = windowHeight - panel.measureFor(mLayoutMode, mPanelWidthPx)
+        int frameBottom = windowHeight - panel.measureFor(mode(), mPanelWidthPx)
             - dp(FRAME_GAP_DP);
         float scale = AppearanceEditorFrame.fitScale(root.getHeight(), frameTop, frameBottom,
             AppearanceEditorFrame.MAX_SCALE);
@@ -1165,7 +1225,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         AppearanceEditorPanel panel = mPanel;
         if (panel == null || mRestHeightPx <= 0 || mPanelWidthPx <= 0)
             return;
-        int height = panel.measureFor(mLayoutMode, mPanelWidthPx);
+        int height = panel.measureFor(mode(), mPanelWidthPx);
         View view = panel.view();
         ViewGroup.LayoutParams params = view.getLayoutParams();
         if (params == null)
@@ -1414,7 +1474,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     public void setPageListener(@Nullable AppearanceSurfaceController.PageListener listener) {
         mPageListener = listener;
         if (listener != null) {
-            listener.onModeChanged(mLayoutMode);
+            listener.onModeChanged(mode());
             listener.onDirtyChanged(mOpen && isDirty());
         }
     }
@@ -1460,7 +1520,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void applyStatusExpansion(boolean animate) {
         if (prefs() == null || !mOpen)
             return;
-        mHost.setTopStatusBarExpandedForEditor(!mLayoutMode, animate);
+        mHost.setTopStatusBarExpandedForEditor(mode() == EditorMode.LOOK, animate);
     }
 
     /** The bottom area's events, turned into writes. */
@@ -1967,6 +2027,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             group.setContentDescription(getString(R.string.appearance_editor_target_description,
                 getString(nameOf(target))));
             group.setOnClickListener(view -> {
+                // Icons mode has no targets: the launcher is only to be looked at.
+                if (mIconsMode)
+                    return;
                 if (target == null) tapWallpaper();
                 else select(target);
             });
@@ -2069,6 +2132,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             View group = mHost.findView(GROUP_IDS[i]);
             if (group == null)
                 continue;
+            // Icons mode: the bare-wallpaper group alone stands over the whole frame as a touch
+            // sink, so the launcher takes no tap; no element is a target.
+            if (mIconsMode && GROUP_TARGETS[i] != null) {
+                group.setVisibility(View.GONE);
+                continue;
+            }
             int[] rect = rectOf(GROUP_TARGETS[i], overlay);
             if (rect == null) {
                 group.setVisibility(View.GONE);
@@ -2109,7 +2178,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         View outline = mHost.findView(R.id.surface_editor_selection_outline);
         if (overlay == null || outline == null)
             return;
-        Target target = mOpen && AppearanceLooks.isCustomStop(mStop) ? mTarget : null;
+        Target target = mOpen && !mIconsMode && AppearanceLooks.isCustomStop(mStop) ? mTarget : null;
         int[] rect = target == null ? null : rectOf(target, overlay);
         if (rect == null) {
             outline.setVisibility(View.GONE);
@@ -2648,7 +2717,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             layout.setOnChangedListener(null);
         }
         boolean wasLayout = mLayoutMode;
+        if (mIconsMode)
+            showIconsPage(false);
         mLayoutMode = false;
+        mIconsMode = false;
         cancelFrameAnimator();
         mFrameCtxValid = false;
         mTargetScale = -1f;
@@ -2733,6 +2805,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mWallpaperSettled = false;
         mWallpaperWaiter = null;
         mEditorWallpaper = null;
+        mKeyboardOwed = false;
+        releaseIconsContent();
         AppearanceEditorFrame frame = mFrame;
         if (frame != null) {
             frame.hide(false, null);
@@ -2747,6 +2821,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mRaisedKeyboard = false;
         mHost.holdPaneWall(false);
         mHost.setTopStatusBarExpandedForEditor(false, false);
+    }
+
+    private void releaseIconsContent() {
+        AppearanceSurfaceController.Page page = mIconsPage;
+        mIconsPage = null;
+        AppearanceEditorPanel panel = mPanel;
+        if (panel != null)
+            panel.setIconsContent(null);
+        if (page != null)
+            page.release();
     }
 
     /** The activity stopped with the surface up: the status pane's borrowed shape goes back. */

@@ -238,11 +238,28 @@ public final class LauncherAppDataProvider {
      * therefore kept drawing the previous pack until some unrelated gesture rebound its rows.
      */
     public void invalidateIconArtwork() {
+        invalidateIconArtwork(false);
+    }
+
+    /**
+     * {@link #invalidateIconArtwork()}, optionally keeping the parsed packs (a pack's name map,
+     * no pixels; at most two are held, and a pack whose version moved is parsed again when it is
+     * next asked for). The Icons mode parses the chosen pack off the main thread first
+     * ({@link #warmIconPack}) and then switches with this, so the dock's redraw on the main thread
+     * finds the parse waiting.
+     */
+    public void invalidateIconArtwork(boolean keepParsedPacks) {
         iconStore.invalidateAll();
-        iconResolver.clearCache();
+        if (!keepParsedPacks)
+            iconResolver.clearCache();
         iconPackRepository.clearCache();
         invalidate();
         mainHandler.post(this::notifyIconArtworkInvalidated);
+    }
+
+    /** Parses {@code packageName} so the next icon from it is quick; slow, so off the main thread. */
+    public void warmIconPack(@Nullable String packageName) {
+        iconResolver.warmPack(packageName);
     }
 
     /**

@@ -271,7 +271,7 @@ public class LayoutModeViewsTest {
         View root = panel.view();
         int width = Math.round(360 * root.getResources().getDisplayMetrics().density);
         panel.showLayoutMode();
-        int closed = panel.measureFor(true, width);
+        int closed = panel.measureFor(EditorMode.LAYOUT, width);
         View tools = root.findViewById(R.id.layout_editor_keyboard_tools);
         View corners = root.findViewById(R.id.appearance_editor_corners);
 
@@ -280,8 +280,8 @@ public class LayoutModeViewsTest {
         assertEquals(View.VISIBLE, tools.getVisibility());
         assertEquals("kept for its height, not shown", View.INVISIBLE, corners.getVisibility());
         assertFalse(corners.isEnabled());
-        assertEquals("the sheet does not move", closed, panel.measureFor(true, width));
-        assertEquals(closed, panel.measureTallest(true, width));
+        assertEquals("the sheet does not move", closed, panel.measureFor(EditorMode.LAYOUT, width));
+        assertEquals(closed, panel.measureTallest(EditorMode.LAYOUT, width));
 
         panel.setHiddenTilesOpen(true);
         assertEquals("the tiles win while both would", View.GONE, tools.getVisibility());
@@ -307,7 +307,7 @@ public class LayoutModeViewsTest {
         View root = panel.view();
         int width = Math.round(360 * root.getResources().getDisplayMetrics().density);
         panel.showLayoutMode();
-        int closed = panel.measureFor(true, width);
+        int closed = panel.measureFor(EditorMode.LAYOUT, width);
         View tiles = root.findViewById(R.id.layout_editor_hidden_tiles);
         View corners = root.findViewById(R.id.appearance_editor_corners);
         assertEquals(View.GONE, tiles.getVisibility());
@@ -318,7 +318,7 @@ public class LayoutModeViewsTest {
         assertEquals(View.VISIBLE, tiles.getVisibility());
         assertEquals("kept for its height, not shown", View.INVISIBLE, corners.getVisibility());
         assertFalse(corners.isEnabled());
-        assertEquals("the sheet does not move", closed, panel.measureFor(true, width));
+        assertEquals("the sheet does not move", closed, panel.measureFor(EditorMode.LAYOUT, width));
 
         panel.showAppearanceMode();
         assertEquals("Appearance never shows the tiles", View.GONE, tiles.getVisibility());

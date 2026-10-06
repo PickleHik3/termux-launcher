@@ -10904,6 +10904,43 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void redressChrome() {
             TermuxActivity.this.redressChromeFromState();
+            // Icon packs were applied live while the surface was open (the dock followed, nothing
+            // else restyled): the one full restyle comes now, the container back at full size.
+            if (mIconPackAppliedLive) {
+                mIconPackAppliedLive = false;
+                requestTermuxActivityStylingOnNextResume(TermuxActivity.this, false);
+            }
+        }
+
+        /**
+         * Icons mode's sheet content: the pack tiles and "Pinned app icons only". A pack applies
+         * to the preference and the artwork at once (the real dock in the frame shows it); the
+         * activity's restyle waits for the end of the session.
+         */
+        @Nullable @Override public com.termux.app.surfaces.AppearanceSurfaceController.Page createIconsContent() {
+            final com.termux.app.chrome.appearance.IconPackPage page =
+                new com.termux.app.chrome.appearance.IconPackPage(TermuxActivity.this,
+                    new com.termux.app.chrome.appearance.IconPackPage.Host() {
+                        @Override public void onApplied() {
+                            mIconPackAppliedLive = true;
+                        }
+                    });
+            return new com.termux.app.surfaces.AppearanceSurfaceController.Page() {
+                // The page loaded itself when it was built: the mode's first onShown is that.
+                private boolean mFirstShown = true;
+
+                @NonNull @Override public View root() { return page.root(); }
+                @NonNull @Override public CharSequence title() { return page.title(); }
+                @Override public void onShown() {
+                    if (mFirstShown) {
+                        mFirstShown = false;
+                        return;
+                    }
+                    page.onShown();
+                }
+                @Override public void onHidden() { page.onHidden(); }
+                @Override public void release() { page.release(); }
+            };
         }
 
         @Override public void refreshTerminalWindowBar() {
@@ -16911,42 +16948,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
         }
 
-        @Nullable @Override public com.termux.app.surfaces.AppearanceSurfaceController.Page createIconsPage(
-                @NonNull com.termux.app.surfaces.AppearanceSurfaceController.Navigator navigator) {
-            // The Icon pack page: a home-screen preview with the dock's apps in the previewed pack,
-            // the row of packs and "Pinned app icons only". It applies a pack itself; its preview
-            // still is a small copy of the Home photo, decoded off the main thread, and the page
-            // re-reads once it lands.
-            final android.graphics.Bitmap[] still = new android.graphics.Bitmap[1];
-            final com.termux.app.chrome.appearance.IconPackPage page =
-                new com.termux.app.chrome.appearance.IconPackPage(TermuxActivity.this,
-                    new com.termux.app.chrome.appearance.IconPackPage.Host() {
-                        @Nullable @Override public android.graphics.Bitmap homeStill() {
-                            return still[0];
-                        }
-                    });
-            new Thread(() -> {
-                android.graphics.Bitmap decoded = decodeIconPreviewStill();
-                if (decoded == null) return;
-                runOnUiThread(() -> {
-                    still[0] = decoded;
-                    if (page.root().isShown()) page.onShown();
-                });
-            }, "appearance-icons-still").start();
-            // The page brings no bar of its own: the surface's shared bar (back, the title, Done).
-            final com.termux.app.surfaces.AppearanceEditorPage shell =
-                com.termux.app.surfaces.AppearanceEditorPage.icons(TermuxActivity.this, navigator,
-                    page.title(), page.root());
-            return new com.termux.app.surfaces.AppearanceSurfaceController.Page() {
-                @NonNull @Override public View root() { return shell.root(); }
-                @NonNull @Override public View slidingPart() { return shell.content(); }
-                @NonNull @Override public CharSequence title() { return page.title(); }
-                @Override public void onShown() { page.onShown(); }
-                @Override public void onHidden() { page.onHidden(); }
-                @Override public void release() { page.release(); }
-            };
-        }
-
         @Override public void onClosed() {
             mOverviewRestore = null;
         }
@@ -16960,25 +16961,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /**
-     * The Home photo at about the Icon pack preview's size (the managed exact copy, sampled down to
-     * a 540 px wide decode), or null when there is none. Call it off the main thread.
-     */
-    @Nullable
-    private android.graphics.Bitmap decodeIconPreviewStill() {
-        java.io.File file = com.termux.app.chrome.WallpaperPictureReader.managedWallpaperExactFile(this);
-        if (!file.isFile()) return null;
-        android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options();
-        bounds.inJustDecodeBounds = true;
-        android.graphics.BitmapFactory.decodeFile(file.getPath(), bounds);
-        if (bounds.outWidth <= 0) return null;
-        android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
-        options.inSampleSize = Math.max(1, Integer.highestOneBit(bounds.outWidth / 540));
-        return android.graphics.BitmapFactory.decodeFile(file.getPath(), options);
-    }
-
     /** The open surface came from Settings' Appearance row; a close by the person goes back there. */
     private boolean mAppearanceFromSettings;
+    /** An icon pack was applied live while the Appearance surface was open: a restyle is owed at its end. */
+    private boolean mIconPackAppliedLive;
 
     /** What the Overview asks of the activity. */
     @NonNull

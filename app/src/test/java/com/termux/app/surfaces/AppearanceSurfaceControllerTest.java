@@ -37,7 +37,7 @@ import java.util.List;
 import java.util.function.Consumer;
 
 /**
- * The Appearance surface's navigation, with a scripted editor and a fake Overview and Icons page:
+ * The Appearance surface's navigation, with a scripted editor and a fake Overview:
  * which page Back goes to, that Look, Layout and the Overview share one session, and that the
  * swap back to the Overview waits for the end of the editor's hide. Animations are off (the animator scale is zero), so every hop the
  * surface itself plays lands at once; the editor's own steps are completed by the test.
@@ -49,7 +49,7 @@ public class AppearanceSurfaceControllerTest {
     private static final class FakeEditor implements AppearanceSurfaceController.Editor {
         final List<String> calls = new ArrayList<>();
         boolean presented;
-        boolean layoutMode;
+        EditorMode mode = EditorMode.LOOK;
         boolean dirty;
         @Nullable Runnable onDone;
         @Nullable Runnable settled;
@@ -67,19 +67,22 @@ public class AppearanceSurfaceControllerTest {
 
         @Override public void awaitWallpaper(@NonNull Runnable ready) { ready.run(); }
 
-        @Override public void present(boolean layout, @Nullable PaneWallPage place, @Nullable String section,
+        @Override public void present(@NonNull EditorMode mode, @Nullable PaneWallPage place, @Nullable String section,
                                       float fromScale, float fromTranslationY, @Nullable Runnable onSettled) {
-            calls.add("present " + (layout ? "layout" : "look"));
+            calls.add("present " + mode.name().toLowerCase(java.util.Locale.ROOT));
             presented = true;
-            layoutMode = layout;
+            this.mode = mode;
             settled = onSettled;
         }
 
         @Override public boolean isPresented() { return presented; }
 
-        @Override public boolean isLayoutMode() { return presented && layoutMode; }
+        @NonNull @Override public EditorMode mode() { return presented ? mode : EditorMode.LOOK; }
 
-        @Override public void setLayoutMode(boolean layout) { layoutMode = layout; }
+        @Override public void setMode(@NonNull EditorMode mode) {
+            calls.add("mode " + mode.name().toLowerCase(java.util.Locale.ROOT));
+            this.mode = mode;
+        }
 
         @Override public void requestLeave(@NonNull Runnable proceed) {
             calls.add("leave?");
@@ -204,7 +207,6 @@ public class AppearanceSurfaceControllerTest {
     private static class FakeHost implements AppearanceSurfaceController.Host {
         final Activity activity;
         FakeOverview overview;
-        FakePage icons;
         int closed;
         int closedByUser;
 
@@ -220,12 +222,6 @@ public class AppearanceSurfaceControllerTest {
                                              @NonNull Consumer<AppearanceSurfaceController.OverviewPage> ready) {
             overview = new FakeOverview(activity);
             ready.accept(overview);
-        }
-
-        @Nullable @Override public AppearanceSurfaceController.Page createIconsPage(
-                @NonNull AppearanceSurfaceController.Navigator navigator) {
-            icons = new FakePage(activity);
-            return icons;
         }
 
         @Override public void onClosed() { closed++; }
@@ -265,6 +261,12 @@ public class AppearanceSurfaceControllerTest {
     private void toLook() {
         mSurface.open(PageId.OVERVIEW);
         mNavigator.openLook();
+        mEditor.settle();
+    }
+
+    private void toIcons() {
+        mSurface.open(PageId.OVERVIEW);
+        mNavigator.openIcons();
         mEditor.settle();
     }
 
@@ -315,7 +317,7 @@ public class AppearanceSurfaceControllerTest {
     }
 
     @Test
-    public void anEditorPageHasTheIconsPagesBarAndAScrimStandsUnderTheLauncher() {
+    public void anEditorPageHasTheSharedBarAndAScrimStandsUnderTheLauncher() {
         mSurface.open(PageId.OVERVIEW);
         ViewGroup content = mActivity.findViewById(android.R.id.content);
         assertSame("colorSurface scrim at index 0 of the content view", mSurface.scrim(),
@@ -328,7 +330,7 @@ public class AppearanceSurfaceControllerTest {
         assertEquals("Look", title.getText().toString());
         assertEquals(View.VISIBLE, bar.getVisibility());
         assertNotNull(mEditor.pageListener);
-        mEditor.pageListener.onModeChanged(true);
+        mEditor.pageListener.onModeChanged(EditorMode.LAYOUT);
         assertEquals("Layout", title.getText().toString());
         assertEquals(View.GONE, bar.findViewById(R.id.appearance_page_undo).getVisibility());
         mEditor.pageListener.onDirtyChanged(true);
@@ -395,23 +397,43 @@ public class AppearanceSurfaceControllerTest {
 
     @Test
     public void backGoesIconsToOverviewToTheLauncher() {
-        mSurface.open(PageId.OVERVIEW);
-        mNavigator.openIcons();
+        toIcons();
+        assertEquals(1, mEditor.count("present icons"));
         assertEquals(PageId.ICONS, mSurface.shownPage());
-        assertNotNull(mHost.icons);
         assertEquals(View.INVISIBLE, mHost.overview.root().getVisibility());
 
         assertTrue(mSurface.onBack());
+        assertEquals("the editor leaves through its own rule", 1, mEditor.count("leave?"));
+        assertEquals(1, mEditor.count("dismiss"));
+        mEditor.finishHide();
+        idle();
         assertEquals("Icons goes back to the Overview", PageId.OVERVIEW, mSurface.shownPage());
         assertTrue(mSurface.isOpen());
         assertEquals(View.VISIBLE, mHost.overview.root().getVisibility());
 
         assertTrue(mSurface.onBack());
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2));
         assertFalse("the Overview's Back closes", mSurface.isOpen());
         assertTrue(mHost.overview.page.released);
-        assertTrue(mHost.icons.released);
         assertEquals(1, mEditor.count("end"));
         assertFalse("nothing is left to take a Back", mSurface.onBack());
+    }
+
+    @Test
+    public void theOverviewsIconPackHopPresentsTheEditorInIconsMode() {
+        mSurface.open(PageId.OVERVIEW);
+        mNavigator.openIcons();
+        assertEquals("one hop, into the editor", 1, mEditor.count("present icons"));
+        assertTrue(mSurface.isTransitioning());
+        mEditor.settle();
+        assertEquals(PageId.ICONS, mSurface.shownPage());
+        assertEquals(1, mHost.overview.page.hiddenCalls);
+        ViewGroup content = mActivity.findViewById(android.R.id.content);
+        View host = content.findViewById(R.id.appearance_surface_host);
+        assertFalse("the launcher is looked at, the host takes no touch", host.isClickable());
+        ViewGroup bar = (ViewGroup) ((ViewGroup) host).getChildAt(((ViewGroup) host).getChildCount() - 1);
+        assertTrue(((com.google.android.material.button.MaterialButton)
+            bar.findViewById(R.id.appearance_page_mode_icon_pack)).isChecked());
     }
 
     @Test
@@ -498,18 +520,34 @@ public class AppearanceSurfaceControllerTest {
     }
 
     @Test
-    public void theEditorsIconPackSegmentLeavesTheEditorThenSlidesToTheIconPackPage() {
+    public void theEditorsIconPackSegmentSwitchesTheModeInPlaceFromLookAndLayout() {
         toLook();
         ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
         View bar = host.getChildAt(host.getChildCount() - 1);
         bar.findViewById(R.id.appearance_page_mode_icon_pack).performClick();
         idle();
-        assertEquals("the editor goes down first", 1, mEditor.count("dismiss"));
-        mEditor.finishHide();
-        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2));
+        assertEquals("in place: the editor's mode moves", EditorMode.ICONS, mEditor.mode);
+        assertEquals("no question, no hop", 0, mEditor.count("leave?"));
+        assertEquals(0, mEditor.count("dismiss"));
+        mEditor.pageListener.onModeChanged(EditorMode.ICONS);
         assertEquals(PageId.ICONS, mSurface.shownPage());
-        assertTrue(mSurface.onBack());
-        assertEquals("back from Icon pack goes to Wallpaper", PageId.OVERVIEW, mSurface.shownPage());
+        bar.findViewById(R.id.appearance_page_mode_layout).performClick();
+        idle();
+        assertEquals(EditorMode.LAYOUT, mEditor.mode);
+        bar.findViewById(R.id.appearance_page_mode_icon_pack).performClick();
+        idle();
+        assertEquals(EditorMode.ICONS, mEditor.mode);
+        assertEquals("one session, one presentation", 1, mEditor.count("begin"));
+        assertEquals(1, mEditor.count("present look"));
+    }
+
+    @Test
+    public void openingIconsWhileTheEditorIsUpPresentsInPlace() {
+        toLook();
+        mSurface.open(PageId.ICONS);
+        assertEquals(1, mEditor.count("present icons"));
+        assertEquals(PageId.ICONS, mSurface.shownPage());
+        assertEquals(0, mEditor.count("dismiss"));
     }
 
     @Test
@@ -518,7 +556,7 @@ public class AppearanceSurfaceControllerTest {
         ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
         View bar = host.getChildAt(host.getChildCount() - 1);
         bar.findViewById(R.id.appearance_page_mode_layout).performClick();
-        assertTrue("the editor's mode is the pill's", mEditor.layoutMode);
+        assertEquals("the editor's mode is the pill's", EditorMode.LAYOUT, mEditor.mode);
         mSurface.closeNow();
         mSurface.open(PageId.LOOK);
         ViewGroup direct = mActivity.findViewById(R.id.appearance_surface_host);
@@ -538,8 +576,12 @@ public class AppearanceSurfaceControllerTest {
         mEditor.finishHide();
         idle();
         mNavigator.openIcons();
+        mEditor.settle();
         mSurface.onBack();
+        mEditor.finishHide();
+        idle();
         mSurface.onBack();
+        settleClose();
         assertEquals(1, mHost.closed);
     }
 
@@ -639,12 +681,16 @@ public class AppearanceSurfaceControllerTest {
     }
 
     @Test
-    public void doneOnTheIconPackPageSlidesBackAndAppliesTheWallpaperThenCloses() {
+    public void doneOnTheIconPackPageSavesHopsBackAppliesTheWallpaperThenCloses() {
         mSurface.open(PageId.OVERVIEW);
         mHost.overview.pending = true;
         mNavigator.openIcons();
+        mEditor.settle();
         assertEquals(PageId.ICONS, mSurface.shownPage());
         mNavigator.done();
+        assertEquals("the editor saves its look", 1, mEditor.count("done"));
+        mEditor.onDone.run();
+        mEditor.finishHide();
         idle();
         assertEquals(PageId.OVERVIEW, mSurface.shownPage());
         assertEquals(1, mHost.overview.commits);
@@ -655,9 +701,11 @@ public class AppearanceSurfaceControllerTest {
 
     @Test
     public void doneOnTheIconPackPageWithNothingPendingCloses() {
-        mSurface.open(PageId.OVERVIEW);
-        mNavigator.openIcons();
+        toIcons();
         mNavigator.done();
+        mEditor.onDone.run();
+        mEditor.finishHide();
+        idle();
         settleClose();
         assertFalse(mSurface.isOpen());
         assertEquals(0, mHost.overview.commits);
@@ -768,9 +816,13 @@ public class AppearanceSurfaceControllerTest {
         idle();
         assertTrue("the pick is still pending", mHost.overview.pending);
         mNavigator.openIcons();
+        mEditor.settle();
         mNavigator.back();
+        mEditor.finishHide();
+        idle();
         assertEquals(0, mEditor.count("confirm?"));
         assertTrue(mSurface.isOpen());
+        assertEquals(PageId.OVERVIEW, mSurface.shownPage());
     }
 
     @Test

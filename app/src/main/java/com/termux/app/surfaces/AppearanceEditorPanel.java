@@ -123,6 +123,8 @@ final class AppearanceEditorPanel {
 
     private final Group mAppearanceGroup;
     private final Group mLayoutGroup;
+    /** Icons mode's one row: the content the activity lends (setIconsContent). */
+    private final FrameLayout mIconsSlot;
 
     private final Slider mLook;
     private final FrameLayout mLookLabels;
@@ -168,6 +170,8 @@ final class AppearanceEditorPanel {
 
     /** Whether Layout mode's rows are showing in place of Appearance's. */
     private boolean mLayoutMode;
+    /** The mode whose rows show. */
+    @NonNull private EditorMode mMode = EditorMode.LOOK;
     /** Whether Row B is up (an element is tapped at the Custom stop); kept across Layout mode. */
     private boolean mRow2Shown;
     @NonNull private String mTrailId = "default";
@@ -190,6 +194,7 @@ final class AppearanceEditorPanel {
         mBasePaddingEnd = root.getPaddingEnd();
         mAppearanceGroup = root.findViewById(R.id.appearance_editor_appearance_group);
         mLayoutGroup = root.findViewById(R.id.appearance_editor_layout_group);
+        mIconsSlot = root.findViewById(R.id.appearance_editor_icons_slot);
         mLook = root.findViewById(R.id.appearance_editor_look);
         mLookLabels = root.findViewById(R.id.appearance_editor_look_labels);
         mRow2 = root.findViewById(R.id.appearance_editor_row2);
@@ -226,7 +231,7 @@ final class AppearanceEditorPanel {
             R.id.appearance_editor_look_labels});
         mLayoutGroup.setReferencedIds(new int[] {R.id.layout_editor_orientation,
             R.id.appearance_editor_style, R.id.layout_editor_hidden});
-        applyGroups(false);
+        applyGroups(EditorMode.LOOK);
         applyRow2(false);
         paintSheet();
         paintSelectedSegments(mOrientation);
@@ -301,9 +306,9 @@ final class AppearanceEditorPanel {
      * shows now: Appearance is Row A alone until an element is tapped, then Row A + Row B. The
      * mode showing is restored before returning.
      */
-    int measureFor(boolean layout, int widthPx) {
-        boolean shown = mLayoutMode;
-        applyGroups(layout);
+    int measureFor(@NonNull EditorMode mode, int widthPx) {
+        EditorMode shown = mMode;
+        applyGroups(mode);
         int height = measureNow(widthPx);
         applyGroups(shown);
         return height;
@@ -316,13 +321,20 @@ final class AppearanceEditorPanel {
      * stands above it: it never moves when Row B comes and goes. Layout mode's rows are the same
      * at every moment.
      */
-    int measureTallest(boolean layout, int widthPx) {
-        if (layout)
+    int measureTallest(@NonNull EditorMode mode, int widthPx) {
+        if (mode == EditorMode.LAYOUT)
             return measureLayoutTallest(widthPx);
-        boolean shown = mLayoutMode;
+        if (mode == EditorMode.ICONS) {
+            EditorMode shownMode = mMode;
+            applyGroups(EditorMode.ICONS);
+            int height = measureNow(widthPx);
+            applyGroups(shownMode);
+            return height;
+        }
+        EditorMode shown = mMode;
         boolean rowShown = mRow2Shown;
         mRow2Shown = true;
-        applyGroups(false);
+        applyGroups(EditorMode.LOOK);
         int height = measureNow(widthPx);
         mRow2Shown = rowShown;
         applyGroups(shown);
@@ -335,12 +347,12 @@ final class AppearanceEditorPanel {
      * selected. The state showing is restored before returning.
      */
     private int measureLayoutTallest(int widthPx) {
-        boolean shown = mLayoutMode;
+        EditorMode shown = mMode;
         boolean tools = mKeyboardToolsShown;
         boolean tiles = mHiddenTilesOpen;
         mHiddenTilesOpen = false;
         mKeyboardToolsShown = false;
-        applyGroups(true);
+        applyGroups(EditorMode.LAYOUT);
         int height = measureNow(widthPx);
         mKeyboardToolsShown = true;
         applyLayoutRow2();
@@ -701,27 +713,56 @@ final class AppearanceEditorPanel {
     // ------------------------------------------------------------------------------ the modes
 
     void showAppearanceMode() {
-        setMode(false);
+        setMode(EditorMode.LOOK);
     }
 
     void showLayoutMode() {
-        setMode(true);
+        setMode(EditorMode.LAYOUT);
+    }
+
+    void showIconsMode() {
+        setMode(EditorMode.ICONS);
     }
 
     /**
      * Shows one mode's rows (the pill is the page bar's, not the sheet's). Row B keeps its state
      * across a visit to Layout mode: it is Appearance's, so it goes and comes back with that group.
      */
-    void setMode(boolean layout) {
-        applyGroups(layout);
+    void setMode(@NonNull EditorMode mode) {
+        applyGroups(mode);
     }
 
-    private void applyGroups(boolean layout) {
+    private void applyGroups(@NonNull EditorMode mode) {
+        mMode = mode;
+        boolean layout = mode == EditorMode.LAYOUT;
+        boolean look = mode == EditorMode.LOOK;
         mLayoutMode = layout;
-        mAppearanceGroup.setVisibility(layout ? View.GONE : View.VISIBLE);
+        mAppearanceGroup.setVisibility(look ? View.VISIBLE : View.GONE);
         mLayoutGroup.setVisibility(layout ? View.VISIBLE : View.GONE);
-        mRow2.setVisibility(!layout && mRow2Shown ? View.VISIBLE : View.GONE);
+        mRow2.setVisibility(look && mRow2Shown ? View.VISIBLE : View.GONE);
+        mIconsSlot.setVisibility(mode == EditorMode.ICONS && mIconsSlot.getChildCount() > 0
+            ? View.VISIBLE : View.GONE);
         applyLayoutRow2();
+    }
+
+    /**
+     * The Icons mode's content (the pack tiles and the Pinned-only switch), built by the activity:
+     * the sheet shows exactly it in that mode and is as tall as it is.
+     */
+    void setIconsContent(@Nullable View content) {
+        mIconsSlot.removeAllViews();
+        if (content != null) {
+            if (content.getParent() instanceof ViewGroup)
+                ((ViewGroup) content.getParent()).removeView(content);
+            mIconsSlot.addView(content, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+        applyGroups(mMode);
+    }
+
+    @NonNull
+    EditorMode mode() {
+        return mMode;
     }
 
     /**
@@ -885,7 +926,7 @@ final class AppearanceEditorPanel {
             mSliders[i].setEnabled(shown && mSliderEnabled[i]);
         for (MaterialButton button : new MaterialButton[] {mKeyboardTheme, mClock, mTrail, mEffect})
             button.setEnabled(shown);
-        mRow2.setVisibility(shown && !mLayoutMode ? View.VISIBLE : View.GONE);
+        mRow2.setVisibility(shown && mMode == EditorMode.LOOK ? View.VISIBLE : View.GONE);
     }
 
     /**

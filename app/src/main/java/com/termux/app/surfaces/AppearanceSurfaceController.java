@@ -39,25 +39,25 @@ import java.util.function.Consumer;
  * <p><b>Pages.</b> The Overview (the wallpaper page) is built once per session and hidden, not
  * destroyed, while another page shows; its thumbnails live until the surface closes. Look and Layout are the editor ({@link Editor}), presented over
  * the launcher by the surface: the editor's frame and sheet are not in the host view, they are the
- * launcher's container scaled and a sheet over it, as they always were. Icons is a page of its own
- * ({@link Page}); the host supplies it. Back goes to the previous page, then closes: Icons to
- * Overview, an editor to Overview (after its unsaved-changes question), Overview to the launcher. A
+ * launcher's container scaled and a sheet over it, as they always were; Icons is the editor's third
+ * mode (the real dock in the frame, the pack controls in the sheet). Back goes to the previous
+ * page, then closes: an editor to Overview (after its unsaved-changes question), Overview to the launcher. A
  * surface opened straight into an editor (a corner tab's Look or Layout, a deep link) has no
  * Overview behind it: Done and Back close it.</p>
  *
  * <p><b>Shell.</b> Every page wears the same bar ({@link AppearanceEditorPage}): back arrow, the
- * Wallpaper | Look | Layout pill (a title on the Icon pack page), Undo while the editor is dirty,
+ * Wallpaper | Look | Layout | Icon pack pill, Undo while the editor is dirty,
  * and Done, over the page's content. The Overview is the Wallpaper segment, Look and Layout the
- * other two. Look and Layout's content is the scaled launcher itself, so their bar is over a
+ * other three. The editor's content is the scaled launcher itself, so their bar is over a
  * transparent region, with a colorSurface scrim behind the container in the content view; the sheet
  * below the frame keeps only its controls. The bar never moves between pages: the Overview's and
- * the editor's stand exactly over each other through a hop, and only the content slides to Icons.
+ * the editor's stand exactly over each other through a hop.
  * Back goes one page toward Wallpaper and then closes; Done closes the surface (saving first in an
  * editor), after the editor's unsaved-changes question when leaving it.</p>
  *
  * <p><b>One session.</b> The editor's session (the held wall, its wallpaper decoded when the
  * surface opens in passthrough mode only, the launcher left as it was) begins when the
- * surface opens and ends when it closes; Look, Layout and the Overview move inside it.</p>
+ * surface opens and ends when it closes; Look, Layout, Icons and the Overview move inside it.</p>
  *
  * <p><b>The hop.</b> Overview to editor: the strip and the shortcut row slide down
  * and fade while the editor's sheet slides up; the launcher's container, primed at the Home card's
@@ -74,8 +74,8 @@ public final class AppearanceSurfaceController {
     public enum PageId { OVERVIEW, LOOK, LAYOUT, ICONS }
 
     /**
-     * A page the surface can show. Look and Layout are the editor's and are not pages in this
-     * sense. The Icon pack page plugs in through {@link Host#createIconsPage}.
+     * A page the surface can show. Look, Layout and Icon pack are the editor's modes and are not
+     * pages in this sense.
      */
     public interface Page {
         /** The page's view tree, added to the host once and kept. */
@@ -159,13 +159,13 @@ public final class AppearanceSurfaceController {
             close();
         }
 
-        /** One page back: Icons to the Overview. Spent as a Back press is. */
+        /** One page back. Spent as a Back press is. */
         void back();
     }
 
     /** What the editor tells the page bar over its frame: the mode (the title) and the dirty state (Undo). */
     public interface PageListener {
-        void onModeChanged(boolean layout);
+        void onModeChanged(@NonNull EditorMode mode);
 
         void onDirtyChanged(boolean dirty);
 
@@ -192,15 +192,16 @@ public final class AppearanceSurfaceController {
          * vertical offset (the Home card) and settles into place; {@code onSettled} runs when it
          * has.
          */
-        void present(boolean layoutMode, @Nullable PaneWallPage place, @Nullable String section,
+        void present(@NonNull EditorMode mode, @Nullable PaneWallPage place, @Nullable String section,
                      float fromScale, float fromTranslationY, @Nullable Runnable onSettled);
 
         boolean isPresented();
 
-        boolean isLayoutMode();
+        /** The mode the editor shows (Look while it is not presented). */
+        @NonNull EditorMode mode();
 
-        /** The page bar's Look | Layout pill: switches the editor's mode (no question, no reset). */
-        void setLayoutMode(boolean layout);
+        /** The page bar's pill: switches the editor's mode in place (no question, no reset). */
+        void setMode(@NonNull EditorMode mode);
 
         /**
          * Leaving the editor page: asks the unsaved-changes question when there is something to
@@ -260,9 +261,6 @@ public final class AppearanceSurfaceController {
          */
         void createOverview(@NonNull Navigator navigator, @NonNull Consumer<OverviewPage> ready);
 
-        /** The Icons page, or null where there is none yet. */
-        @Nullable Page createIconsPage(@NonNull Navigator navigator);
-
         /** The surface closed, by any path. */
         void onClosed();
 
@@ -274,7 +272,7 @@ public final class AppearanceSurfaceController {
     static final long HOP_ENTER_MS = AppearanceEditorFrame.ENTER_MS + 40L;
     /** Editor to Overview. */
     static final long HOP_EXIT_MS = AppearanceEditorFrame.EXIT_MS + 40L;
-    /** Overview to Icons and back. */
+    /** The editor's bar easing in on a direct open. */
     static final long PAGE_MS = 260L;
     /** The host fading in on open and out on close. */
     static final long FADE_MS = 180L;
@@ -326,13 +324,10 @@ public final class AppearanceSurfaceController {
     private int mCommitSeq;
     /** How long Done or Save may hold the surface before Done and Back work again. */
     private static final long COMMIT_BACKSTOP_MS = 20_000L;
-    /** Done on the Icon pack page with a pending wallpaper: the slide back to the Overview ends in the commit. */
-    private boolean mDoneAfterSlide;
-    /** Which page is showing: Overview, an editor (Look or Layout by the editor's mode) or Icons. */
+    /** Which page is showing: the Overview, or the editor (Look, Layout or Icons by the editor's mode). */
     @Nullable private PageId mShown;
     @Nullable private FrameLayout mView;
     @Nullable private OverviewPage mOverview;
-    @Nullable private Page mIcons;
     /** Look and Layout's page bar over the scaled frame; built on the first editor open. */
     @Nullable private AppearanceEditorPage mEditorPage;
     /** colorSurface behind the scaled launcher, at index 0 of the content view, while open. */
@@ -351,8 +346,6 @@ public final class AppearanceSurfaceController {
     /** Bumped on every open and close, so a late callback of an older surface does nothing. */
     private int mToken;
     @Nullable private PageId mQueued;
-    /** A page to go to once the Overview is reached (the Icon pack pill from the editor, or the reverse). */
-    @Nullable private PageId mThen;
     private final List<Animator> mRunning = new ArrayList<>();
 
     public AppearanceSurfaceController(@NonNull Host host, @NonNull Editor editor) {
@@ -366,14 +359,30 @@ public final class AppearanceSurfaceController {
         return mOpen;
     }
 
-    /** The page on screen now (Look or Layout by the editor's mode); null while closed. */
+    /** The page on screen now (Look, Layout or Icons by the editor's mode); null while closed. */
     @Nullable
     public PageId shownPage() {
         if (!mOpen || mShown == null)
             return null;
-        if (mShown == PageId.LOOK || mShown == PageId.LAYOUT)
-            return mEditor.isLayoutMode() ? PageId.LAYOUT : PageId.LOOK;
+        if (isEditorPage(mShown))
+            return pageOf(mEditor.mode());
         return mShown;
+    }
+
+    private static boolean isEditorPage(@Nullable PageId page) {
+        return page == PageId.LOOK || page == PageId.LAYOUT || page == PageId.ICONS;
+    }
+
+    @NonNull
+    private static EditorMode modeOf(@NonNull PageId page) {
+        return page == PageId.LAYOUT ? EditorMode.LAYOUT
+            : page == PageId.ICONS ? EditorMode.ICONS : EditorMode.LOOK;
+    }
+
+    @NonNull
+    private static PageId pageOf(@NonNull EditorMode mode) {
+        return mode == EditorMode.LAYOUT ? PageId.LAYOUT
+            : mode == EditorMode.ICONS ? PageId.ICONS : PageId.LOOK;
     }
 
     /** Whether a hop is playing: Back is spent on it and navigation waits. */
@@ -395,15 +404,15 @@ public final class AppearanceSurfaceController {
     }
 
     /**
-     * Opens the surface on {@code page}: the Overview, or straight into Look or Layout (a corner
+     * Opens the surface on {@code page}: the Overview, or straight into Look, Layout or Icons (a corner
      * tab's door, a settings deep link naming {@code section}, a Layout door naming {@code place}).
      * Open already, it goes to that page; an editor already up moves to that mode and place.
      */
     public void open(@NonNull PageId page, @Nullable String section, @Nullable PaneWallPage place) {
-        boolean editorPage = page == PageId.LOOK || page == PageId.LAYOUT;
+        boolean editorPage = isEditorPage(page);
         if (mOpen) {
             if (editorPage && mEditor.isPresented() && !mTransitioning)
-                mEditor.present(page == PageId.LAYOUT, place, section, 0f, 0f, null);
+                mEditor.present(modeOf(page), place, section, 0f, 0f, null);
             else
                 go(page);
             return;
@@ -418,7 +427,7 @@ public final class AppearanceSurfaceController {
         mEditor.beginSession();
         FrameLayout view = hostView(content);
         showScrim(content);
-        if (page == PageId.LOOK || page == PageId.LAYOUT) {
+        if (editorPage) {
             // Straight into an editor: nothing behind it. The backdrop is not covered (it is the
             // frame's picture, scaled), the host takes no touches, the bar eases
             // in and the scrim fades up behind the frame as it scales.
@@ -429,7 +438,7 @@ public final class AppearanceSurfaceController {
             bar.root().setVisibility(View.VISIBLE);
             animateEditorPageIn();
             fadeScrim(1f);
-            mEditor.present(page == PageId.LAYOUT, place, section, 0f, 0f, null);
+            mEditor.present(modeOf(page), place, section, 0f, 0f, null);
             return;
         }
         mDirect = false;
@@ -596,18 +605,15 @@ public final class AppearanceSurfaceController {
                 @Override public void onSegment(@NonNull AppearanceEditorPage.Segment segment) {
                     if (mTransitioning || mCommitting)
                         return;
-                    if (segment == AppearanceEditorPage.Segment.ICON_PACK) {
-                        if (!mDirect) {
-                            mThen = PageId.ICONS;
-                            mEditor.requestLeave(AppearanceSurfaceController.this::hopToOverview);
-                        }
-                    } else if (segment == AppearanceEditorPage.Segment.WALLPAPER) {
+                    if (segment == AppearanceEditorPage.Segment.WALLPAPER) {
                         // Leaving for the Overview asks the unsaved-changes question; the pill is
                         // on Wallpaper only once the answer lets it go.
                         if (!mDirect)
                             go(PageId.OVERVIEW);
                     } else {
-                        mEditor.setLayoutMode(segment == AppearanceEditorPage.Segment.LAYOUT);
+                        mEditor.setMode(segment == AppearanceEditorPage.Segment.LAYOUT ? EditorMode.LAYOUT
+                            : segment == AppearanceEditorPage.Segment.ICON_PACK ? EditorMode.ICONS
+                            : EditorMode.LOOK);
                     }
                 }
             });
@@ -616,8 +622,8 @@ public final class AppearanceSurfaceController {
         built.root().setVisibility(View.INVISIBLE);
         addPage(built.root());
         mEditor.setPageListener(new PageListener() {
-            @Override public void onModeChanged(boolean layout) {
-                built.setLayoutMode(layout);
+            @Override public void onModeChanged(@NonNull EditorMode mode) {
+                built.setMode(mode);
             }
 
             @Override public void onDirtyChanged(boolean dirty) {
@@ -633,7 +639,7 @@ public final class AppearanceSurfaceController {
 
     /**
      * The editor page's bar at {@code in} (0 hidden, 1 at rest) on linear time for the fade, and
-     * {@code travel} for the quarter-width slide: the same slide and fade as Overview to Icons.
+     * {@code travel} for the quarter-width slide: the slide and fade of a page arriving.
      */
     private void applyEditorPage(float in, float travel) {
         AppearanceEditorPage page = mEditorPage;
@@ -707,24 +713,17 @@ public final class AppearanceSurfaceController {
         PageId from = shownPage();
         if (from == null || from == target)
             return;
-        boolean toEditor = target == PageId.LOOK || target == PageId.LAYOUT;
-        boolean fromEditor = from == PageId.LOOK || from == PageId.LAYOUT;
+        boolean toEditor = isEditorPage(target);
+        boolean fromEditor = isEditorPage(from);
         if (fromEditor && toEditor) {
-            // Look and Layout are one presentation: the mode changes, the frame stays.
-            mEditor.present(target == PageId.LAYOUT, null, null, 0f, 0f, null);
+            // Look, Layout and Icons are one presentation: the mode changes, the frame stays.
+            mEditor.present(modeOf(target), null, null, 0f, 0f, null);
             return;
         }
         if (from == PageId.OVERVIEW && toEditor) {
-            hopIntoEditor(target == PageId.LAYOUT);
+            hopIntoEditor(modeOf(target));
         } else if (fromEditor && target == PageId.OVERVIEW && !mDirect) {
             mEditor.requestLeave(this::hopToOverview);
-        } else if (from == PageId.OVERVIEW && target == PageId.ICONS) {
-            slideToIcons();
-        } else if (from == PageId.ICONS && target == PageId.OVERVIEW) {
-            slideToOverview(null);
-        } else if (from == PageId.ICONS && toEditor) {
-            // Icon pack to Look or Layout: back to the Overview, then the usual hop into the editor.
-            slideToOverview(target);
         }
     }
 
@@ -737,8 +736,6 @@ public final class AppearanceSurfaceController {
         PageId page = shownPage();
         if (page == null || page == PageId.OVERVIEW) {
             leaveOverview(this::closeAnimated);
-        } else if (page == PageId.ICONS) {
-            go(PageId.OVERVIEW);
         } else {
             mEditor.requestLeave(mDirect ? this::closeAnimated : this::hopToOverview);
         }
@@ -752,7 +749,7 @@ public final class AppearanceSurfaceController {
         if (mCommitting)
             return;
         PageId page = shownPage();
-        if (page == PageId.LOOK || page == PageId.LAYOUT) {
+        if (isEditorPage(page)) {
             if (hasPendingWallpaper())
                 mEditor.confirmLeave(() -> commitThen(this::closeNow), this::closeNow);
             else
@@ -768,7 +765,7 @@ public final class AppearanceSurfaceController {
     }
 
     /**
-     * Leaves the Overview or the Icon pack page for good ({@code leave}): at once when nothing is
+     * Leaves the Overview for good ({@code leave}): at once when nothing is
      * pending, else after the one question (Keep editing / Discard / Save), where Discard drops
      * the pending choices (the page's release does) and Save applies them first.
      */
@@ -816,7 +813,7 @@ public final class AppearanceSurfaceController {
     }
 
     /**
-     * Done, from any page: the editor saves its look first; then the Overview's pending changes
+     * Done, from any page: the editor (Look, Layout or Icons) saves its look first; then the Overview's pending changes
      * are applied with the Overview showing (its progress is where the wait is seen), and the
      * surface closes. A failure stays on the Overview.
      */
@@ -824,13 +821,8 @@ public final class AppearanceSurfaceController {
         if (!mOpen || mTransitioning || mCommitting)
             return;
         PageId page = shownPage();
-        if (page == PageId.LOOK || page == PageId.LAYOUT) {
+        if (isEditorPage(page)) {
             mEditor.done();
-        } else if (page == PageId.ICONS && hasPendingWallpaper()) {
-            mDoneAfterSlide = true;
-            go(PageId.OVERVIEW);
-            if (!mTransitioning)
-                mDoneAfterSlide = false;
         } else {
             finishFromOverview();
         }
@@ -861,8 +853,8 @@ public final class AppearanceSurfaceController {
 
     // ---------------------------------------------------------------------------------- the hops
 
-    /** Overview to Look or Layout. */
-    private void hopIntoEditor(boolean layout) {
+    /** Overview to Look, Layout or Icons. */
+    private void hopIntoEditor(@NonNull EditorMode mode) {
         final OverviewPage overview = mOverview;
         if (overview == null)
             return;
@@ -874,7 +866,7 @@ public final class AppearanceSurfaceController {
             float[] pose = cardPose(overview);
             // The bar does not move between pages: the editor's bar stands over the Overview's at
             // once, with only the pill's selection and the end actions different.
-            ensureEditorPage().setLayoutMode(layout);
+            ensureEditorPage().setMode(mode);
             applyEditorPage(1f, 1f);
             final int[] pending = {2};
             Runnable done = () -> {
@@ -882,13 +874,13 @@ public final class AppearanceSurfaceController {
                     return;
                 overview.root().setVisibility(View.INVISIBLE);
                 overview.onHidden();
-                mShown = layout ? PageId.LAYOUT : PageId.LOOK;
+                mShown = pageOf(mode);
                 mTransitioning = false;
                 // The editor's own overlay lies under this host: with no page of ours showing the
                 // host must not take touches, or a tap on a launcher element never reaches it.
                 setTakesTouches(false);
             };
-            mEditor.present(layout, null, null, pose == null ? 0f : pose[0],
+            mEditor.present(mode, null, null, pose == null ? 0f : pose[0],
                 pose == null ? 0f : pose[1], done);
             if (!mEditor.isPresented()) {
                 // The editor could not open (no preferences, no container): stay on the Overview.
@@ -903,7 +895,7 @@ public final class AppearanceSurfaceController {
         });
     }
 
-    /** Look or Layout to Overview: the editor goes down to the card while the Overview comes back. */
+    /** Look, Layout or Icons to Overview: the editor goes down to the card while the Overview comes back. */
     private void hopToOverview() {
         final OverviewPage overview = mOverview;
         if (overview == null || !mOpen) {
@@ -936,12 +928,8 @@ public final class AppearanceSurfaceController {
             // so it never lands on the last frame of the hop. A Done on Look or Layout closes the
             // surface from here, over the Overview, as a Done on the Overview does.
             View view = mView;
-            final PageId then = mThen;
-            mThen = null;
             Runnable restore = () -> {
                 mEditor.restoreLauncher();
-                if (then != null && mOpen && token == mToken && !closeAfter)
-                    go(then);
                 if (closeAfter && mOpen && token == mToken)
                     finishFromOverview();
             };
@@ -1033,93 +1021,6 @@ public final class AppearanceSurfaceController {
         return Math.max(0f, Math.min(1f, v));
     }
 
-    // -------------------------------------------------------------------------------- Icons page
-
-    private void slideToIcons() {
-        final OverviewPage overview = mOverview;
-        if (overview == null)
-            return;
-        Page icons = mIcons;
-        if (icons == null) {
-            icons = mHost.createIconsPage(mNavigator);
-            mIcons = icons;
-        }
-        if (icons == null)
-            return;
-        addPage(icons.root());
-        slide(overview, icons, true, () -> mShown = PageId.ICONS);
-    }
-
-    private void slideToOverview(@Nullable PageId then) {
-        final OverviewPage overview = mOverview;
-        final Page icons = mIcons;
-        if (overview == null || icons == null)
-            return;
-        final int token = mToken;
-        slide(icons, overview, false, () -> {
-            mShown = PageId.OVERVIEW;
-            View view = mView;
-            final boolean done = mDoneAfterSlide;
-            mDoneAfterSlide = false;
-            if ((then != null || done) && view != null)
-                view.post(() -> {
-                    if (!mOpen || token != mToken)
-                        return;
-                    if (done)
-                        finishFromOverview();
-                    else
-                        go(then);
-                });
-        });
-    }
-
-    /** One page out and the other in, a quarter of the width apart, on the settle curve. */
-    private void slide(@NonNull Page out, @NonNull Page in, boolean forward,
-                       @NonNull Runnable landed) {
-        mTransitioning = true;
-        final int token = mToken;
-        final View outRoot = out.root();
-        final View inRoot = in.root();
-        // Only the content travels: the bar stays put, as the pages' bars crossfade in place.
-        final View outSlide = out.slidingPart();
-        final View inSlide = in.slidingPart();
-        final float shift = (mView == null ? 0 : mView.getWidth()) * 0.25f * (forward ? 1f : -1f);
-        inRoot.setVisibility(View.VISIBLE);
-        in.onShown();
-        Runnable finish = () -> {
-            if (!mOpen || token != mToken)
-                return;
-            outRoot.setVisibility(View.INVISIBLE);
-            outRoot.setAlpha(1f);
-            outSlide.setTranslationX(0f);
-            inRoot.setAlpha(1f);
-            inSlide.setTranslationX(0f);
-            out.onHidden();
-            landed.run();
-            mTransitioning = false;
-        };
-        if (ReducedMotion.isEnabled(mHost.context())) {
-            finish.run();
-            return;
-        }
-        final Interpolator settle = Motion.settle();
-        ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
-        animator.setDuration(PAGE_MS);
-        animator.setInterpolator(new LinearInterpolator());
-        animator.addUpdateListener(a -> {
-            float f = (Float) a.getAnimatedValue();
-            float e = settle.getInterpolation(f);
-            outRoot.setAlpha(1f - clamp01(f * 1.6f));
-            outSlide.setTranslationX(-shift * e);
-            inRoot.setAlpha(clamp01((f - 0.2f) * 1.25f));
-            inSlide.setTranslationX(shift * (1f - e));
-        });
-        inRoot.setAlpha(0f);
-        inSlide.setTranslationX(shift);
-        track(animator, finish);
-        animator.start();
-    }
-
     // ------------------------------------------------------------------------------------ close
 
     /** The Overview's own close, or an editor's Done for a direct open: fades out, then ends. */
@@ -1128,7 +1029,7 @@ public final class AppearanceSurfaceController {
             return;
         mClosingByUser = true;
         FrameLayout view = mView;
-        if (view == null || (mShown != PageId.OVERVIEW && mShown != PageId.ICONS) || ReducedMotion.isEnabled(mHost.context())) {
+        if (view == null || mShown != PageId.OVERVIEW || ReducedMotion.isEnabled(mHost.context())) {
             closeNow();
             return;
         }
@@ -1152,15 +1053,9 @@ public final class AppearanceSurfaceController {
         mRunning.clear();
         OverviewPage overview = mOverview;
         mOverview = null;
-        Page icons = mIcons;
-        mIcons = null;
         if (overview != null) {
             overview.onHidden();
             overview.release();
-        }
-        if (icons != null) {
-            icons.onHidden();
-            icons.release();
         }
         FrameLayout view = mView;
         mView = null;
@@ -1173,7 +1068,6 @@ public final class AppearanceSurfaceController {
         mDirect = false;
         mCloseAfterHop = false;
         mCommitting = false;
-        mDoneAfterSlide = false;
         mEditor.setOnDone(null);
         mEditor.endSession();
         boolean byUser = mClosingByUser;
