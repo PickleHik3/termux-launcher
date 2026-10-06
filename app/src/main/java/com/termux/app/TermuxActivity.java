@@ -15883,7 +15883,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 indicator.showAsHeard(R.string.voice_input_ready);
                 settleVoiceDictation(raw, false);
             } else {
-                indicator.showCleaned(command, R.string.voice_input_formatted_command);
+                indicator.showCleaned(command, R.string.voice_input_cleaned_up);
                 settleVoiceDictation(command, true);
             }
             return;

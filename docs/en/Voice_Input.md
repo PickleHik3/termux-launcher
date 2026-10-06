@@ -41,41 +41,49 @@ Leaving the app stops listening. The text heard so far stays in the panel.
 
 ## The pill and the panel
 
-While a dictation is up, a pill sits at the top right of the place, under the status bar, in the
+While a dictation is up, one card sits at the top right of the place, under the status bar, in the
 same corner on Home, Terminal and Display (you can move it; see
-[Moving the pill](#moving-the-pill)). The pill is as long as what it holds, and no longer:
+[Moving the pill](#moving-the-pill)). It is whole from the moment it shows: a thin strip on top, the
+text, then one row of controls.
 
-- a scrolling **waveform** of your voice, resting as a dim line whenever the microphone is closed;
+The strip holds, from the left:
+
 - the state: **Listening…**, **Transcribing…**, **Cleaning up…**, then what became of the text
-  (**Ready**, **Cleaned up**, **Formatted as a command** or **Kept as heard**);
-- a **Warming up** chip while the speech model or the cleanup model is still loading. Recording has
-  already started, so keep talking;
-- **pause / resume**. Pause closes the microphone: the phrases still transcribing arrive, then the
-  cleanup runs by itself. Resume listens again and carries on the same text. It waits, disabled,
-  until the last phrases are in. The voice key and the Dictate key do the same thing;
-- **×**, which discards: it stops listening if need be, throws the text away and closes the pill.
-  Swiping the card sideways does the same. × never means stop; use pause for that.
+  (**Ready**, **Cleaned up** or **Kept as heard**). It is in the accent
+  colour only while the microphone is open. A small ring turns beside it while something is loading
+  or running, and a few words of detail follow it: **· warming up** while the speech model or the
+  cleanup model is still loading (recording has already started, so keep talking), **· cleanup
+  undone**, **· at the cursor**, **· to the clipboard**;
+- a short handle in the middle, which is also where you grab the card;
+- **×** on the right, which discards: it stops listening if need be, throws the text away and
+  closes the card. Swiping the card sideways does the same. × never means stop; use pause for that.
 
-The pill grows downward into the **panel**, which shows the dictation's text: seven lines, the
-oldest scrolling off the top (fewer lines where there is less room, such as landscape with the
-keyboard up). A shimmer line stands in for a phrase while it transcribes, then its words type out.
+Under the strip is the **panel**, which shows the dictation's text: seven lines, the oldest
+scrolling off the top (fewer lines where there is less room, such as landscape with the keyboard
+up). A soft ghost bar after the text stands in for a phrase while it transcribes, then its words
+type out.
 
 The text shows which version it is at a glance. **As heard**, while a cleanup is still to come and
 again after undo, it is *italic* in the dimmer secondary text colour. **Cleaned**, it is upright in
 the normal text colour. Text that is final as heard (cleanup off, or **Kept as heard**) has nothing
 to be told apart from and shows upright too.
 
-At the bottom of the panel, one long rounded bar holds three controls, spread evenly across it:
+The controls row is there from the start, so you can pause before any text has come:
 
-- **undo** (**Undo the cleanup**), there only when a cleanup or command formatting changed
-  something. It puts back the text as it went in, and turns into redo;
+- **Pause**, while listening, with your voice's waveform inside it. It closes the microphone: the
+  phrases still transcribing arrive, then the cleanup runs by itself. The voice key and the Dictate
+  key do the same thing;
+- **Resume**, in its place once the microphone is closed. It listens again and carries on the same
+  text. While the last phrases are still coming in it shows its label, dimmed, and waits;
+- **Undo** (**Undo the cleanup**), there only when a cleanup or command formatting changed
+  something. It puts back the text as it went in, and turns into **Redo**;
 - **Copy**, which puts the text on the clipboard;
-- **✓** (**Insert at the cursor**), which types the text once where the keyboard would type. It
-  never presses Enter, and the text never contains a line break.
+- **Insert** (**Insert at the cursor**), which types the text once where the keyboard would type.
+  It never presses Enter, and the text never contains a line break.
 
-You can press **Copy** or **✓** early, while still listening or cleaning up. The dictation stops and
-the press is carried out as soon as the text is final. Afterwards the pill says **Inserted** or
-**Copied** and closes a moment later.
+You can press **Copy** or **Insert** early, while still listening or cleaning up. The dictation
+stops and the press is carried out as soon as the text is final. Afterwards the controls go, the
+strip says **Inserted** or **Copied**, and the card closes a moment later.
 
 Nothing reaches the terminal while you dictate. The panel is the only place the text lives until
 you use it. Starting a new dictation while text is still waiting carries on from that text, so it
@@ -83,14 +91,13 @@ is not lost.
 
 ### Moving the pill
 
-Under the panel sits a short grab handle, the same one the floating keyboard has. Drag it to put
-the pill and its panel anywhere on the place: it stays under the status bar and the top bars and
-above the keyboard. The pill comes back there on the next dictation. Portrait and landscape each
-remember their own spot. **Double-tap the handle** to put the pill back in the top right corner.
+The whole strip on top of the card is a grab handle, the same gesture the floating keyboard has.
+Drag it to put the card anywhere on the place: it stays under the status bar and the top bars and
+above the keyboard. The card comes back there on the next dictation. Portrait and landscape each
+remember their own spot. **Double-tap the strip** to put the card back in the top right corner.
 
-Placed low, the panel grows upward instead of down, and shows fewer lines if the room is short, so
-it never runs off the screen. The handle shows only while the panel does; a pill with no text yet
-stays where it was left.
+Placed low, the card grows upward instead of down, and shows fewer lines if the room is short, so
+it never runs off the screen.
 
 ### Where ✓ types
 
@@ -155,8 +162,8 @@ The text is **Kept as heard** when:
 ## Spoken commands
 
 A dictation that starts with a command name is written as a command, with fixed rules and no model.
-This happens whether cleanup is on or off and however long the dictation is. The pill says
-**Formatted as a command**, and undo takes it back.
+This happens whether cleanup is on or off and however long the dictation is. The strip says
+**Cleaned up**, as for any cleanup, and undo takes it back.
 
 | You say | You get |
 | --- | --- |
