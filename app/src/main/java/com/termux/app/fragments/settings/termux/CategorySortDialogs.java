@@ -186,6 +186,28 @@ final class CategorySortDialogs {
         if (onDeviceNote != null && plan.warnBackground) {
             onDeviceNote += "\n" + context.getString(R.string.tai_warn_background_apps);
         }
+        // The row's one way forward, when it has one: a speed test when it runs unmeasured (a
+        // suggestion, never a gate: the row still starts the sort without it), or the Model centre
+        // when there is no model to run. A device that cannot run the model gets neither.
+        boolean missingModel = !plan.remote && model == null;
+        String suggestion = null;
+        String link = null;
+        Runnable onSuggestion = null;
+        if (load != null && !load.benchmarked) {
+            link = context.getString(R.string.settings_app_drawer_category_sort_speed_test_link);
+            suggestion = context.getString(R.string.settings_app_drawer_category_sort_speed_test_hint, link);
+            onSuggestion = () -> {
+                dialog.dismiss();
+                TaiBenchHomeFragment.open(activityOf(context), plan.model);
+            };
+        } else if (missingModel) {
+            link = context.getString(R.string.tai_model_centre_title);
+            suggestion = context.getString(R.string.settings_app_drawer_category_sort_get_model_hint, link);
+            onSuggestion = () -> {
+                dialog.dismiss();
+                TaiModelCentreFragment.open(activityOf(context), TaiModelCentreFragment.SEGMENT_GET);
+            };
+        }
         container.addView(buildRow(context,
             R.drawable.ic_symbol_smart_toy,
             context.getString(R.string.settings_app_drawer_category_sort_on_device),
@@ -196,16 +218,7 @@ final class CategorySortDialogs {
                 dialog.dismiss();
                 onDeviceChosen.run();
             },
-            // A suggestion, never a gate: the row still starts the sort without a speed test.
-            load != null && !load.benchmarked
-                ? context.getString(R.string.settings_app_drawer_category_sort_speed_test_hint,
-                    context.getString(R.string.settings_app_drawer_category_sort_speed_test_link))
-                : null,
-            context.getString(R.string.settings_app_drawer_category_sort_speed_test_link),
-            () -> {
-                dialog.dismiss();
-                TaiBenchHomeFragment.open(activityOf(context), plan.model);
-            }));
+            suggestion, link, onSuggestion));
 
         if (onChangeModel != null) {
             container.addView(buildRow(context,

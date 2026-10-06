@@ -521,6 +521,7 @@
     <string name="settings_app_drawer_category_sort_paste_summary">Paste it into any AI chat, then paste the answer back</string>
     <string name="settings_app_drawer_category_sort_paste_warning">Sends your installed-app list to that service</string>
     <string name="settings_app_drawer_category_sort_unavailable_model">Not available — model not downloaded</string>
+    <string name="settings_app_drawer_category_sort_get_model_hint">Download one in %1$s.</string>
     <string name="settings_app_drawer_category_sort_unavailable_memory">Not available — needs %1$s of RAM</string>
     <string name="settings_app_drawer_category_sort_load_failed">Couldn\'t start sorting. %1$s</string>
     <string name="settings_app_drawer_category_refresh_title">Re-sort apps</string>
