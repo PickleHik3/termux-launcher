@@ -429,8 +429,8 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
                                       @NonNull WidgetPickerCardTemplate template, float density) {
         int slotWidth = template.widthPx(density);
         int slotHeight = template.heightPx(density);
-        int naturalWidth = Math.max(1, item.info.minWidth);
-        int naturalHeight = Math.max(1, item.info.minHeight);
+        int naturalWidth = Math.max(1, item.info == null ? slotWidth : item.info.minWidth);
+        int naturalHeight = Math.max(1, item.info == null ? slotHeight : item.info.minHeight);
         float scale = Math.min(slotWidth / (float) naturalWidth,
             slotHeight / (float) naturalHeight);
         FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(naturalWidth, naturalHeight);
@@ -538,7 +538,7 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         static String key(Object row) {
             if (row instanceof Section) return "h " + ((Section) row).group.key();
             WidgetProviderItem item = (WidgetProviderItem) row;
-            return "p " + item.profileSerial + " " + item.info.provider.flattenToString();
+            return "p " + item.profileSerial + " " + item.identity();
         }
     }
     private final class Holder extends RecyclerView.ViewHolder {

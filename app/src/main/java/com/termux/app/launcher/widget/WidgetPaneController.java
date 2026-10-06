@@ -19,6 +19,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.termux.app.launcher.widget.builtin.BuiltinWidgetConfigSheet;
+import com.termux.app.launcher.widget.builtin.BuiltinWidgetHost;
+import com.termux.app.launcher.widget.builtin.BuiltinWidgetKind;
+import com.termux.app.launcher.widget.builtin.BuiltinWidgetServices;
+import com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle;
+
 /** Production coordinator from the real picker through placement into the A-1 transaction. */
 public final class WidgetPaneController implements LauncherWidgetHostController.Listener {
     public interface Host {
@@ -44,12 +50,21 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
          * from one place rather than from each way in and out.
          */
         default void onWidgetEditSessionChanged(boolean editing) { }
+        /** How the launcher's own widgets are drawn, and on what. */
+        @NonNull default BuiltinWidgetStyle.Direction builtinWidgetDirection() {
+            return BuiltinWidgetStyle.Direction.TONAL;
+        }
+        /** True while the widgets page is glass, so built-in cards go translucent with a rim. */
+        default boolean isWidgetSurfaceGlass() { return false; }
+        /** The activity-side services the built-in widgets need; null keeps them inert. */
+        @Nullable default BuiltinWidgetServices.Host builtinWidgetHost() { return null; }
     }
 
     private final WidgetPaneView pane;
     private final LauncherWidgetHostController widgets;
     private final WidgetProviderCatalogLoader catalog;
     private final Host host;
+    @NonNull private final BuiltinWidgetHost builtins;
     private String liveOrigin;
     private boolean awaitingExternal;
     private int currentPage;
@@ -66,6 +81,18 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                          @NonNull LauncherWidgetHostController widgets,
                          @NonNull Host host, @NonNull WidgetProviderCatalogLoader catalog) {
         this.pane = pane; this.widgets = widgets; this.host = host; this.catalog = catalog;
+        BuiltinWidgetServices.Host builtinHost = host.builtinWidgetHost();
+        builtins = new BuiltinWidgetHost(pane.getContext(),
+            new BuiltinWidgetServices(pane.getContext(),
+                builtinHost != null ? builtinHost : new InertBuiltinHost()),
+            new BuiltinWidgetHost.StyleSource() {
+                @Override @NonNull public BuiltinWidgetStyle.Direction direction() {
+                    return host.builtinWidgetDirection();
+                }
+                @Override public boolean glass() { return host.isWidgetSurfaceGlass(); }
+            });
+        pane.grid().setBuiltinFactory(builtins);
+        catalog.setBuiltinSource(builtins);
         pane.grid().bind(widgets); pane.picker().setReducedMotion(host.reducedMotion());
         pane.setReducedMotion(host.reducedMotion());
         pane.picker().adapter().setPreviewLoader(catalog);
@@ -115,6 +142,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     public void onStart() { render(); }
     /** Draw the pane again from the repository — the layout under it changed without a grid change. */
     public void redraw() { render(); }
+    /** The theme, the Look or the widget style setting changed: the built-ins redress. */
+    public void onLookChanged() { builtins.onStyleChanged(); }
+    /** The activity answered a calendar permission request. */
+    public void onCalendarPermissionChanged() { builtins.services().onCalendarPermissionChanged(); }
+    /** The built-in widgets' services, for the activity to reach a widget's sources. */
+    @NonNull public BuiltinWidgetHost builtins() { return builtins; }
     public void onStop() {
         abortCarry();
         catalog.cancel(); pane.picker().closeImmediate(); dismissPaneMenu();
@@ -149,6 +182,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         return pane.onBackPressed();
     }
     public void destroy() {
+        builtins.destroy();
         abortCarry();
         pane.removeCallbacks(edgeFlip);
         widgets.setListener(null); catalog.cancel(); dismissPaneMenu();
@@ -248,7 +282,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     public void openPicker() {
-        if (widgets.capability() != LauncherWidgetHostController.Capability.AVAILABLE) return;
+        // Built-in widgets need nothing from the platform, so the picker opens even where app
+        // widgets are unsupported; the catalogue simply lists the launcher's own.
         pane.picker().setReducedMotion(host.reducedMotion());
         pane.picker().open(); pane.picker().showLoading();
         if (pane.grid().getWidth() == 0 || pane.grid().getHeight() == 0) {
@@ -316,6 +351,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private LauncherWidgetHostController.AddResult beginAddAt(@NonNull WidgetProviderItem item,
                                                               @NonNull WidgetCellRect rect,
                                                               int page, long revision) {
+        if (item.info == null) {
+            // One of the launcher's own: a single durable write, no consent, no configure.
+            if (item.builtinKind == null) return LauncherWidgetHostController.AddResult.FAILED;
+            return widgets.addBuiltin(item.builtinKind, rect, page, revision, null);
+        }
         Rect bounds = pane.grid().metrics().boundsFor(rect);
         // The first options describe the same area the grid will report once the cell is laid
         // out: inside the cell's gutter and the framework's own widget padding. Sizing the bind
@@ -499,7 +539,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         WidgetGridMetrics metrics = pane.grid().metrics();
         int minColumns = 1, minRows = 1;
         boolean horizontal = false, vertical = false;
-        if (info != null && record.state == LauncherWidgetRecord.State.ACTIVE) {
+        if (record.isBuiltin()) {
+            // Designed at five spans and drawn at the nearest: any size the grid allows.
+            horizontal = true; vertical = true;
+        } else if (info != null && record.state == LauncherWidgetRecord.State.ACTIVE) {
             horizontal = (info.resizeMode
                 & AppWidgetProviderInfo.RESIZE_HORIZONTAL) != 0;
             vertical = (info.resizeMode
@@ -515,7 +558,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         WidgetEditOverlayView overlay = pane.widgetEditOverlay();
         overlay.setListener(overlayListener);
         overlay.show(paneBounds(record.cell), horizontal, vertical, editableOutlines(appWidgetId),
-            widgets.canReconfigure(appWidgetId));
+            record.isBuiltin() ? builtins.hasSettings(record) : widgets.canReconfigure(appWidgetId));
         syncEditSession();
         return true;
     }
@@ -527,6 +570,20 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * would be wrong if the provider resized itself.
      */
     private void openWidgetSettings(int appWidgetId) {
+        LauncherWidgetRecord builtin = widgets.repository().get(appWidgetId);
+        if (builtin != null && builtin.isBuiltin()) {
+            // The launcher's own sheet, over the page: nothing leaves, the session simply ends.
+            exitEditMode();
+            BuiltinWidgetKind kind = BuiltinWidgetKind.fromId(builtin.builtinKind);
+            CharSequence title = pane.getResources().getString(
+                R.string.builtin_widget_settings_title,
+                kind == null ? builtin.builtinKind : pane.getResources().getString(kind.label));
+            BuiltinWidgetConfigSheet.show(pane.getContext(), title, builtins.configFields(builtin),
+                builtin.sizeOptions(), config -> {
+                    if (widgets.updateBuiltinConfig(appWidgetId, config)) render();
+                });
+            return;
+        }
         exitEditMode();
         host.captureWidgetSurfaceOrigin();
         LauncherWidgetHostController.AddResult result = widgets.reconfigureWidget(appWidgetId);
@@ -1200,5 +1257,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             case WALL_RESET: return pane.getContext().getString(R.string.widget_wall_reset);
             default: return pane.getContext().getString(R.string.widget_add_failed);
         }
+    }
+
+    /** What the built-ins get when the host offers nothing: no permission, no window, no face. */
+    private static final class InertBuiltinHost implements BuiltinWidgetServices.Host {
+        @Override public void requestCalendarPermission() { }
+        @Override public boolean openCommandWindow(@NonNull List<String> command,
+                                                   @Nullable String title) { return false; }
+        @Override @Nullable public android.graphics.Typeface monoTypeface() { return null; }
     }
 }

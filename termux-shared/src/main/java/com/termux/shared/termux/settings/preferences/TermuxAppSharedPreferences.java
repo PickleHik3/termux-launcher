@@ -880,6 +880,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED, value, false);
     }
 
+    /** The direction the launcher's own widgets are drawn in: "tonal" or "pane". */
+    public String getAppLauncherBuiltinWidgetStyle() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, true);
+    }
+
+    public void setAppLauncherBuiltinWidgetStyle(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, value, false);
+    }
+
     public boolean isX11DisplayEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_X11_DISPLAY_ENABLED, TERMUX_APP.DEFAULT_X11_DISPLAY_ENABLED);
