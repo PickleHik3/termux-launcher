@@ -657,7 +657,12 @@ public final class LauncherWidgetRepository {
             LinkedHashMap<Integer, LauncherWidgetRecord> loaded = decodeRecords(root, true);
             WidgetAddTransaction loadedPending = root.has("pending")
                 ? decodeTransaction(root.getJSONObject("pending"), true, 0, 0) : null;
-            if (!validatePaged(loadedGrid, loaded, loadedPending, loadedPages)) return;
+            if (!validatePaged(loadedGrid, loaded, loadedPending, loadedPages)) {
+                // Refused silently once, and the wall simply looked empty: say so.
+                android.util.Log.e("LauncherWidgets", "stored wall refused: " + loaded.size()
+                    + " records on " + loadedPages + " page(s), grid " + loadedGrid);
+                return;
+            }
             records = loaded;
             pending = loadedPending;
             grid = loadedGrid;
@@ -670,7 +675,8 @@ public final class LauncherWidgetRepository {
                 ? null : loadedOrientation;
             layouts = decodeLayouts(root.optJSONObject("layouts"), orientation);
             revision = Math.max(0, root.optLong("revision", 0));
-        } catch (JSONException | IllegalArgumentException ignored) {
+        } catch (JSONException | IllegalArgumentException exception) {
+            android.util.Log.e("LauncherWidgets", "stored wall unreadable", exception);
             // Preserve an empty in-memory recovery target; never overwrite an unknown/corrupt value.
         }
     }
