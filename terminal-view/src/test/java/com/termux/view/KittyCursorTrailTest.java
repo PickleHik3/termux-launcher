@@ -226,6 +226,28 @@ public class KittyCursorTrailTest {
         assertFalse(trail.needsRender());
     }
 
+    /**
+     * A snap asked for while the cursor's own move is still inside the delay (a keyboard resize
+     * reflowing the prompt) lands on the new target at once; it must not be spent on the old one
+     * and leave the next frame to smear across the resize.
+     */
+    @Test
+    public void snapInsideTheDelayLandsOnTheNewTarget() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(10, 2, 2);
+        trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        trail.requestSnapOnNextUpdate();
+        // The reflow moved the cursor 20 rows at t=1000; the first frame lands 4 ms later.
+        trail.update(1_004L, 0f, 400f, CELL_W, 420f, true, 1_000L, false, CELL_W, CELL_H, cfg);
+        assertEquals(400f, trail.cornerY(0), 1e-4f);
+        assertFalse(trail.moveStartedOnLastUpdate());
+        // Past the delay, nothing is left to trail.
+        assertFalse(trail.update(1_020L, 0f, 400f, CELL_W, 420f, true, 1_000L, false,
+            CELL_W, CELL_H, cfg));
+        assertFalse(trail.moveStartedOnLastUpdate());
+        assertFalse(trail.needsRender());
+    }
+
     @Test
     public void prevCornersHoldTheLastFramesCorners() {
         KittyCursorTrail trail = new KittyCursorTrail();

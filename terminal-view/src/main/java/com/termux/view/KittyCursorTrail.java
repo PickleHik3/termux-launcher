@@ -118,11 +118,11 @@ public final class KittyCursorTrail {
     }
 
     /**
-     * The next {@link #update} snaps every corner straight to the target, once, instead of
-     * animating the usual smear. For a discontinuity that is not a live cursor move — kitty's own
-     * example is a live resize — but that should not simply be dropped as {@link #reset()} would:
-     * the trail keeps its opacity and keeps following, it just does not draw a streak across the
-     * jump itself.
+     * The next {@link #update} that is not paused snaps every corner straight to the target it is
+     * handed, delay or no delay, once, instead of animating the usual smear. For a discontinuity
+     * that is not a live cursor move — kitty's own example is a live resize — but that should not
+     * simply be dropped as {@link #reset()} would: the trail keeps its opacity and keeps following,
+     * it just does not draw a streak across the jump itself.
      */
     public void requestSnapOnNextUpdate() {
         mSnapPending = true;
@@ -152,22 +152,26 @@ public final class KittyCursorTrail {
         System.arraycopy(mCornerY, 0, mPrevCornerY, 0, CORNERS);
         mMoveStarted = false;
         mTargetReplaced = false;
+        // A snap is spent on the target it lands on, so it takes the target now even inside the
+        // delay: kitty's live-resize skip also snaps to the edges it has just updated. Holding the
+        // old target instead spent the snap on a no-op, and the next frame smeared the trail
+        // across the very discontinuity the snap was asked for.
+        boolean forceSnap = mSnapPending && !paused;
         if (!paused) {
             long sinceMoved = nowMillis - positionChangedAtMillis;
-            if (sinceMoved >= config.delayMs) {
+            if (forceSnap || sinceMoved >= config.delayMs) {
                 updateTarget(targetLeft, targetTop, targetRight, targetBottom);
             } else {
                 pendingDelay = true;
             }
         }
+        if (forceSnap) mSnapPending = false;
 
         float dt = 0f;
         if (mHasPreviousFrame) {
             dt = Math.max(0L, nowMillis - clockFrom(nowMillis, positionChangedAtMillis)) / 1000f;
         }
 
-        boolean forceSnap = mSnapPending;
-        mSnapPending = false;
         updateCorners(dt, dectcemOn, cellWidthPx, cellHeightPx, config, forceSnap);
         if (mMoveStarted) {
             System.arraycopy(mReplacedFrom, 0, mMoveFrom, 0, 4);
