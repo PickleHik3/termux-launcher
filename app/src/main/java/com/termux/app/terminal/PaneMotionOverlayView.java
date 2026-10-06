@@ -287,13 +287,24 @@ public final class PaneMotionOverlayView extends View {
             mCursorTargetValid = true;
             RectF previous = mPreviousTrailBounds;
             previous.set(cursorTrailBounds());
+            float previousOpacity = mCursorTrail.opacity();
+            boolean previousRender = mCursorTrail.needsRender();
             needsFrame = mCursorTrail.update(now, mCursorTarget.left, mCursorTarget.top,
                 mCursorTarget.right, mCursorTarget.bottom, mCursorTarget.dectcemOn,
                 mCursorTarget.positionChangedAtMillis, false, mCursorTarget.ownerId,
                 mCursorTarget.cellWidthPx, mCursorTarget.cellHeightPx, mCursorTrailConfig);
             moved = mCursorTrail.moveStartedOnLastUpdate();
-            previous.union(cursorTrailBounds());
-            invalidateRect(previous);
+            RectF current = cursorTrailBounds();
+            // A settled trail draws nothing and drew nothing last time (the quad is painted only
+            // while needsRender holds, and update() asks for a frame whenever it did or does), so
+            // the many calls a pane makes per output burst or blink repaint nothing. Anything the
+            // quad could show differently — a frame asked for, a corner or opacity that moved —
+            // still repaints the union of where it was and where it is.
+            if (needsFrame || previousRender != mCursorTrail.needsRender()
+                || previousOpacity != mCursorTrail.opacity() || !previous.equals(current)) {
+                previous.union(current);
+                invalidateRect(previous);
+            }
         } else if (mCursorTargetValid) {
             // Nothing to track (scrolled back, or no focused pane on screen): the trail is no
             // longer drawn, and snaps when tracking resumes. Effects already launched play out.
