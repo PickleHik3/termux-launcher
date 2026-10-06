@@ -19587,7 +19587,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
         mLinuxAppRunnerHook = entry -> {
             if (mLinuxApps == null) return false;
-            com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxApp(entry.appRef);
+            com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxAppForLaunch(entry);
             if (app == null) {
                 showToast(getString(R.string.termux_x11_app_gone), true);
                 refreshLinuxApps(true);
@@ -19600,10 +19600,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTerminalAppRunnerHook = new com.termux.app.launcher.LauncherAppLauncher.TerminalAppRunner() {
             @Override public boolean handles(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
                 com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxApp(entry.appRef);
+                // Held for the run that follows in this same launch, whichever runner takes it.
+                rememberLinuxAppResolution(entry, app);
                 return app != null && app.terminal;
             }
             @Override public boolean run(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
-                com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxApp(entry.appRef);
+                com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxAppForLaunch(entry);
                 if (app == null) {
                     showToast(getString(R.string.termux_x11_app_gone), true);
                     refreshLinuxApps(true);
@@ -19630,6 +19632,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The Linux app an entry's id names, re-read from the live catalogue (nothing is cached or
      * watched, so an app installed a moment ago is simply there). Null once the app is gone.
      */
+    /**
+     * The answer {@code LauncherAppLauncher}'s {@code handles} just read for this launch, so the
+     * runner it hands the entry to does not scan every root again a moment later: one scan per
+     * tap instead of two. Valid only for the same entry, on the same thread, within
+     * {@link #LINUX_APP_RESOLUTION_REUSE_MS}, and used once.
+     */
+    @Nullable private com.termux.app.launcher.model.LauncherAppEntry mResolvedLinuxEntry;
+    @Nullable private com.termux.app.x11.LinuxAppCatalog.LinuxApp mResolvedLinuxApp;
+    @Nullable private Thread mResolvedLinuxThread;
+    private long mResolvedLinuxAtMs;
+    private static final long LINUX_APP_RESOLUTION_REUSE_MS = 1000L;
+    /** launcherctl launches from its own thread, so the memo is guarded. */
+    private final Object mResolvedLinuxLock = new Object();
+
+    private void rememberLinuxAppResolution(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry,
+                                            @Nullable com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
+        synchronized (mResolvedLinuxLock) {
+            mResolvedLinuxEntry = entry;
+            mResolvedLinuxApp = app;
+            mResolvedLinuxThread = Thread.currentThread();
+            mResolvedLinuxAtMs = android.os.SystemClock.uptimeMillis();
+        }
+    }
+
+    /** The Linux app for a launch: the resolution {@code handles} just made for it, else a scan. */
+    @Nullable
+    private com.termux.app.x11.LinuxAppCatalog.LinuxApp resolveLinuxAppForLaunch(
+            @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+        synchronized (mResolvedLinuxLock) {
+            boolean reusable = mResolvedLinuxEntry == entry
+                && mResolvedLinuxThread == Thread.currentThread()
+                && android.os.SystemClock.uptimeMillis() - mResolvedLinuxAtMs
+                    <= LINUX_APP_RESOLUTION_REUSE_MS;
+            com.termux.app.x11.LinuxAppCatalog.LinuxApp app = mResolvedLinuxApp;
+            mResolvedLinuxEntry = null;
+            mResolvedLinuxApp = null;
+            mResolvedLinuxThread = null;
+            if (reusable) return app;
+        }
+        return resolveLinuxApp(entry.appRef);
+    }
+
     @Nullable
     private com.termux.app.x11.LinuxAppCatalog.LinuxApp resolveLinuxApp(
             @NonNull com.termux.app.launcher.model.AppRef ref) {
