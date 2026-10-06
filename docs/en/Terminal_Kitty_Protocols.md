@@ -141,8 +141,10 @@ The trail's look is a choice of style: Default, Motion blur, Railgun, Torpedo, P
 set in Settings, Terminal, Cursor trail. `kitty.conf` can pick one too with
 `custom_shaders cursor-trail-motion-blur | cursor-trail-railgun | cursor-trail-torpedo | cursor-trail-pixiedust | cursor-trail-default`;
 that overrides the Settings choice, and any other kitty shader name is ignored. Separately,
-Settings, Terminal, Terminal effect applies a CRT, green or amber CRT, or TFT grid look to every
-terminal pane (Android 13 and newer only).
+Settings, Terminal, Terminal effect applies a CRT, green or amber CRT, or TFT grid look to the whole
+home screen: every terminal pane, and the status bar, dock, bars and keyboard around them, with the
+scanlines running straight across all of them (Android 13 and newer only). Only the terminal panes
+curve like a tube; the bars stay flat so every key and icon is where you touch it.
 
 ## Kitty graphics Tier 2
 
