@@ -31,14 +31,6 @@ public final class KittyCursorTrail {
     public static final int CORNERS = 4;
 
     /**
-     * A stalled render loop (backgrounded app, dropped frames) must not be integrated as one huge
-     * step once it resumes, or the trail would visibly teleport across the screen. Matches the
-     * clamp the previous per-pane implementations each applied at their call site; owned by the
-     * engine now that there is only one of them.
-     */
-    private static final float MAX_DT_SECONDS = 1f / 20f;
-
-    /**
      * Which edge of the target rect each corner tracks, exactly kitty's {@code corner_index[2][4]}.
      * Corner 0 is top-right, 1 bottom-right, 2 bottom-left, 3 top-left — the winding does not
      * matter to the engine itself, only that {@link #cornerX} and {@link #cornerY} agree with it.
@@ -111,6 +103,8 @@ public final class KittyCursorTrail {
     private boolean mCornersInitialized;
     private boolean mHasPreviousFrame;
     private long mPreviousFrameMillis;
+    /** The last {@link #update} asked for no further frame: the caller's loop has gone quiet. */
+    private boolean mIdle = true;
     private boolean mSnapPending;
 
     /** Forget everything: the next {@link #update} snaps to its target with no visible trail. */
@@ -119,6 +113,7 @@ public final class KittyCursorTrail {
         mNeedsRender = false;
         mCornersInitialized = false;
         mHasPreviousFrame = false;
+        mIdle = true;
         mSnapPending = false;
     }
 
@@ -168,9 +163,7 @@ public final class KittyCursorTrail {
 
         float dt = 0f;
         if (mHasPreviousFrame) {
-            dt = (nowMillis - mPreviousFrameMillis) / 1000f;
-            if (dt < 0f) dt = 0f;
-            if (dt > MAX_DT_SECONDS) dt = MAX_DT_SECONDS;
+            dt = Math.max(0L, nowMillis - clockFrom(nowMillis, positionChangedAtMillis)) / 1000f;
         }
 
         boolean forceSnap = mSnapPending;
@@ -191,7 +184,27 @@ public final class KittyCursorTrail {
         mPreviousFrameMillis = nowMillis;
         mHasPreviousFrame = true;
 
-        return mNeedsRender || needsRenderPrev || pendingDelay;
+        boolean wantsFrame = mNeedsRender || needsRenderPrev || pendingDelay;
+        mIdle = !wantsFrame;
+        return wantsFrame;
+    }
+
+    /**
+     * Where this update's time step starts. kitty integrates {@code now - updated_at} with no clamp
+     * ({@code update_cursor_trail_corners}), and runs {@code update_cursor_trail} on every wakeup of
+     * its loop ({@code render()} → {@code prepare_to_render_os_window}), including the one that
+     * reads the output that moved the cursor — always inside the {@code cursor_trail} delay, so
+     * that update only advances {@code updated_at}. The move is then integrated from about when
+     * the cursor moved, never from whenever the loop last ran.
+     * <p>
+     * This caller only runs frames while something is moving, so once it has gone quiet the last
+     * update can be seconds old; the client's move stands in for the wakeup kitty would have had.
+     * While frames are running the previous frame is that wakeup, as it is in kitty.
+     */
+    private long clockFrom(long nowMillis, long positionChangedAtMillis) {
+        if (mIdle && positionChangedAtMillis > mPreviousFrameMillis)
+            return Math.min(nowMillis, positionChangedAtMillis);
+        return mPreviousFrameMillis;
     }
 
     private void updateTarget(float left, float top, float right, float bottom) {

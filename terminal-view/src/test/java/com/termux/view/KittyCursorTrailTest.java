@@ -104,8 +104,7 @@ public class KittyCursorTrailTest {
         // First frame has no elapsed time to integrate over, so opacity starts at zero.
         trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
         assertEquals(0f, trail.opacity(), 1e-4f);
-        // DECTCEM on: opacity climbs towards one over decay_slow seconds. Driven in 16 ms frames,
-        // since the engine clamps a single step to 1/20 s so a paused app cannot jump the trail.
+        // DECTCEM on: opacity climbs towards one over decay_slow seconds, driven in 16 ms frames.
         long t = runFrames(trail, 0L, 200L, true, cfg);
         assertTrue(trail.opacity() > 0f);
         assertTrue(trail.opacity() < 1f);
@@ -174,6 +173,45 @@ public class KittyCursorTrailTest {
             assertEquals("corner " + i + " x", edgeX, trail.cornerX(i), 0.5f);
             assertEquals("corner " + i + " y", edgeY, trail.cornerY(i), 0.5f);
         }
+    }
+
+    /**
+     * kitty's loop wakes for the output that moves the cursor, inside the delay, so the move is
+     * integrated from about when the cursor moved. Seconds of idle before it must not be folded
+     * into the first step, or every trail would start mostly finished.
+     */
+    @Test
+    public void moveAfterLongIdleStartsFromTheOldCursor() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(10, 2, 2);
+        assertFalse(trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg));
+        assertFalse(trail.update(1_000L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H,
+            cfg));
+        // Five seconds later the cursor jumps 50 cells; the first frame lands 12 ms after it.
+        long movedAt = 6_000L;
+        assertTrue(trail.update(movedAt + 12L, 500f, 0f, 510f, CELL_H, true, movedAt, false,
+            CELL_W, CELL_H, cfg));
+        assertTrue(trail.moveStartedOnLastUpdate());
+        // 12 ms of decay_slow (0.4 s) moves a trailing corner about 19% of the way, and 12 ms of
+        // decay_fast about 56%; the old 50 ms clamp moved them 58% and 97%.
+        float trailingCovered = trail.cornerX(3) / 500f;
+        assertTrue("trailing corner covered " + trailingCovered, trailingCovered < 0.3f);
+        float leadingCovered = (trail.cornerX(0) - CELL_W) / 500f;
+        assertTrue("leading corner covered " + leadingCovered, leadingCovered < 0.7f);
+    }
+
+    /** kitty does not clamp the step: a stalled loop resumes by finishing the trail, not by jumping. */
+    @Test
+    public void stalledLoopFinishesTheTrail() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(0, 0, 0);
+        trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        assertTrue(trail.update(16L, 500f, 0f, 510f, CELL_H, true, 0L, false, CELL_W, CELL_H,
+            cfg));
+        trail.update(3_000L, 500f, 0f, 510f, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        assertFalse(trail.needsRender());
+        assertEquals(510f, trail.cornerX(0), 0.5f);
+        assertEquals(500f, trail.cornerX(3), 0.5f);
     }
 
     /** A live-resize-style discontinuity snaps the corners with no smear across the jump. */
