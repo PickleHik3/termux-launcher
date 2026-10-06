@@ -86,6 +86,9 @@ public final class StatusBarLensView extends View {
     /** Each place's colour toned onto {@link #mBandSurface}; rebuilt when the band moves. */
     private final int[] mTonedAccents = new int[PaneWallPage.values().length];
     private boolean mTonedAccentsValid;
+    /** Each place's glyph ink at the alphas a drag has walked it through; see {@link StatusBarInk.AlphaInkMemo}. */
+    private final StatusBarInk.AlphaInkMemo[] mGlyphInks =
+        new StatusBarInk.AlphaInkMemo[PaneWallPage.values().length];
 
     @NonNull private List<PaneWallPage> mPages = Collections.singletonList(PaneWallPage.TERMINAL);
     @NonNull private PaneWallPage mCurrent = PaneWallPage.TERMINAL;
@@ -122,6 +125,7 @@ public final class StatusBarLensView extends View {
         mFadePaint.setXfermode(new android.graphics.PorterDuffXfermode(
             android.graphics.PorterDuff.Mode.DST_IN));
         for (int i = 0; i < mHitRects.length; i++) mHitRects[i] = new RectF();
+        for (int i = 0; i < mGlyphInks.length; i++) mGlyphInks[i] = new StatusBarInk.AlphaInkMemo();
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         setWillNotDraw(false);
     }
@@ -372,7 +376,7 @@ public final class StatusBarLensView extends View {
             int glyphAlpha = Math.round(StatusBarLensMetrics.GLYPH_ALPHA * mark.glyphInk);
             mGlyphPaint.setColor(mBandSurface == null
                 ? ColorUtils.setAlphaComponent(accent, glyphAlpha)
-                : StatusBarInk.inkAtAlpha(mBandSurface, accent, glyphAlpha,
+                : mGlyphInks[mark.page.ordinal()].inkAtAlpha(mBandSurface, accent, glyphAlpha,
                     OnGlass.TARGET_LARGE_TEXT));
             mGlyphPaint.setTextSize(mark.glyphSizePx);
             // A neighbour dissolves towards the end it peeks past: its own layer, then a gradient
