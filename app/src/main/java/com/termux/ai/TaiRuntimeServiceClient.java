@@ -77,7 +77,7 @@ public final class TaiRuntimeServiceClient {
 
     /**
      * A timeout only stops this caller waiting; the runtime's load or generation goes on. For a
-     * momentary load (the living-still director) the caller's own unload is skipped when the model
+     * momentary load the caller's own unload is skipped when the model
      * had not finished loading, so the model would stay resident until the idle timer (review T3).
      * Send a cancel and then an unload, without waiting for them: the runtime unloads whatever is
      * loading or generating, and its own three-minute deadline backs this up when the service

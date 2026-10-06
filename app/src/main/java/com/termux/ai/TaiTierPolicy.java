@@ -19,9 +19,9 @@ import java.util.Locale;
  * offer(function, model) = tierPolicy(tier, ramClass, function, model)  ∩  platform(abi, sdk, gpuPath)
  * </pre>
  *
- * <p>The platform only takes things away: below API 34 the wallpaper functions go; with no usable
+ * <p>The platform only takes things away: with no usable
  * ABI there are no local models; with no GPU path the Tier 2 and 3 assistant runs E2B on the CPU,
- * and the reader and categories run E4B on the CPU; a CPU-first GPU preselects the CPU.
+ * and categories run E4B on the CPU; a CPU-first GPU preselects the CPU.
  *
  * <p>Image generation is deliberately absent: it has no function, no catalogue row, no welcome row
  * and no suggestion (spec §3.6). It stays reachable through the API, {@code tai image} and import.
@@ -51,8 +51,6 @@ public final class TaiTierPolicy {
 
     private static final String E2B = TaiModelRegistry.MODEL_GEMMA_4_E2B_IT;
     private static final String E4B = TaiModelRegistry.MODEL_GEMMA_4_E4B_IT;
-    private static final String E2B_VISION = E2B + TaiModelVariants.SUFFIX_VISION;
-    private static final String E4B_VISION = E4B + TaiModelVariants.SUFFIX_VISION;
 
     /** How a model is shown for this phone: ticked, listed as a fit, listed as "for bigger phones", or not shown. */
     public enum Offer { PRESELECTED, SUGGESTED, LISTED, HIDDEN }
@@ -109,11 +107,6 @@ public final class TaiTierPolicy {
             return tier == TaiDeviceTier.TIER_2 && ramClassBytes <= 8L * GIB;
         }
 
-        /** The wallpaper creator needs API 34. */
-        public boolean wallpaperSupported() {
-            return sdkInt >= 34;
-        }
-
         /** With neither LiteRT-LM nor MNN usable, no local model is offered. */
         public boolean localModelsSupported() {
             return liteRtAbiOk || mnnAbiOk;
@@ -129,7 +122,7 @@ public final class TaiTierPolicy {
 
     /**
      * One link of a function's choice: a model on an accelerator, or a without-model end. Model ids
-     * are catalogue ids; the wallpaper reader's carry the {@code -vision} suffix.
+     * are catalogue ids.
      */
     public static final class Choice {
         /** {@code null} for a without-model choice, or "nothing" ({@link #NOTHING}). */
@@ -167,18 +160,13 @@ public final class TaiTierPolicy {
 
     // ------------------------------------------------------------------- availability and platform
 
-    /** False when the platform removes the function (the wallpaper creator below API 34). */
-    public static boolean functionAvailable(@NonNull Env env, @NonNull TaiFunction function) {
-        return !function.needsApi34() || env.wallpaperSupported();
-    }
-
     /**
-     * Whether the platform allows {@code modelId} to serve {@code function}: the function exists
-     * here and some local backend runs. (The model's own backend is checked where the installed
+     * Whether the platform allows {@code modelId} to serve {@code function}: some local
+     * backend runs. (The model's own backend is checked where the installed
      * model is known: {@link TaiFunctionModels}.)
      */
     public static boolean platformAllows(@NonNull Env env, @NonNull TaiFunction function) {
-        return functionAvailable(env, function) && env.localModelsSupported();
+        return env.localModelsSupported();
     }
 
     /** {@code "gpu"} when the GPU path is yes or unconfirmed, {@code "cpu"} when it is CPU-first or absent. */
@@ -225,15 +213,13 @@ public final class TaiTierPolicy {
 
     /**
      * What Automatic means for {@code function} (spec §3). The accelerator is chosen from the GPU
-     * path. {@link Choice#NOTHING} when the platform removes the function or the tier has no default.
+     * path. {@link Choice#NOTHING} when the tier has no default.
      */
     @NonNull
     public static Choice automatic(@NonNull Env env, @NonNull TaiFunction function) {
-        if (!functionAvailable(env, function)) return Choice.NOTHING;
         String accel = defaultAccelerator(env);
         TaiDeviceTier tier = env.tier;
         boolean t1 = tier == TaiDeviceTier.TIER_1;
-        boolean eight = env.isEightGb();
         switch (function) {
             case ASSISTANT:
                 if (t1) return Choice.NOTHING;
@@ -251,12 +237,6 @@ public final class TaiTierPolicy {
                 // The pong benchmark (2026-10-05): E4B sorted 11 of 12 apps, as E2B did, at twice the time
                 // and three times the memory. Only Tier 3, where E4B is the resident assistant, keeps it.
                 return Choice.model(tier == TaiDeviceTier.TIER_3 ? E4B : E2B, accel);
-            case WALLPAPER_READER:
-                if (t1) return Choice.without(WithoutModel.RULES_ONLY);
-                return Choice.model(eight ? E2B_VISION : E4B_VISION, accel);
-            case WALLPAPER_DEPTH:
-                return Choice.model(t1 || eight ? TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID
-                    : TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, null);
             case EMBEDDINGS:
                 return Choice.model(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID, null);
             default:
@@ -272,11 +252,9 @@ public final class TaiTierPolicy {
     @NonNull
     public static List<Choice> fallbackChain(@NonNull Env env, @NonNull TaiFunction function) {
         List<Choice> chain = new ArrayList<>();
-        if (!functionAvailable(env, function)) return chain;
         String accel = defaultAccelerator(env);
         TaiDeviceTier tier = env.tier;
         boolean t1 = tier == TaiDeviceTier.TIER_1;
-        boolean eight = env.isEightGb();
         switch (function) {
             case ASSISTANT:
                 if (tier == TaiDeviceTier.TIER_3 && !env.noGpu()) chain.add(Choice.model(E2B, accel));
@@ -298,16 +276,6 @@ public final class TaiTierPolicy {
                     chain.add(Choice.without(WithoutModel.OFF));
                 }
                 break;
-            case WALLPAPER_READER:
-                if (!t1) {
-                    if (!eight) chain.add(Choice.model(E2B_VISION, accel));
-                    chain.add(Choice.without(WithoutModel.RULES_ONLY));
-                }
-                break;
-            case WALLPAPER_DEPTH:
-                chain.add(Choice.model(t1 || eight ? TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID
-                    : TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID, null));
-                break;
             default:
                 break;
         }
@@ -324,7 +292,7 @@ public final class TaiTierPolicy {
 
     /**
      * How the Model Centre and the welcome card treat {@code modelId} on this phone (spec §3). An id
-     * the policy does not name (an imported model, an image model, SegFormer) is {@code HIDDEN}: it
+     * the policy does not name (an imported model, an image model) is {@code HIDDEN}: it
      * stays installable by import and shows once installed, but is never suggested.
      */
     @NonNull
@@ -340,7 +308,7 @@ public final class TaiTierPolicy {
                 return t1 ? Offer.LISTED : Offer.PRESELECTED;
             case E4B:
                 if (t1 || eight) return Offer.LISTED;
-                // On 10 and 12 GB it is the reader's choice, offered but not ticked; on Tier 3 it is the assistant.
+                // On 10 and 12 GB it is offered but not ticked; on Tier 3 it is the assistant.
                 if (t3) return env.noGpu() ? Offer.SUGGESTED : Offer.PRESELECTED;
                 return Offer.SUGGESTED;
             case TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M:
@@ -359,16 +327,6 @@ public final class TaiTierPolicy {
                 return t1 ? Offer.SUGGESTED : Offer.PRESELECTED;
             case TaiModelCatalog.EMBEDDING_GEMMA_300M_ID:
                 return t1 ? Offer.SUGGESTED : Offer.PRESELECTED;
-            case TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID:
-                if (!env.wallpaperSupported()) return Offer.HIDDEN;
-                if (t1) return Offer.SUGGESTED;
-                return eight ? Offer.PRESELECTED : Offer.LISTED;
-            case TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID:
-                if (!env.wallpaperSupported()) return Offer.HIDDEN;
-                return t1 || eight ? Offer.LISTED : Offer.PRESELECTED;
-            case TaiModelCatalog.U2NET_ID:
-                if (!env.wallpaperSupported()) return Offer.HIDDEN;
-                return t1 ? Offer.SUGGESTED : Offer.PRESELECTED;
             default:
                 return Offer.HIDDEN;
         }
@@ -378,12 +336,9 @@ public final class TaiTierPolicy {
 
     /** One row of the welcome card "What runs on this phone" (spec §5.2, §5.3). */
     public static final class WelcomeRow {
-        /** A stable key: {@code voice_typing}, {@code read_aloud}, {@code e4b_assistant}, {@code assistant}, {@code dawn_notes}, {@code wallpaper_creator}. */
+        /** A stable key: {@code voice_typing}, {@code read_aloud}, {@code e4b_assistant}, {@code assistant}, {@code dawn_notes}. */
         @NonNull public final String id;
-        /**
-         * The downloads the row stands for, in order; the wallpaper creator has depth then the
-         * cut-out, then E4B (its reader) on a 12 GB Tier 2 phone.
-         */
+        /** The downloads the row stands for, in order. */
         @NonNull public final List<String> modelIds;
         /** The functions the row's ticked download serves. */
         @NonNull public final List<TaiFunction> functions;
@@ -401,9 +356,9 @@ public final class TaiTierPolicy {
     /**
      * The card's rows for this phone, in display order, with the fixed preselection of spec §5.3.
      * Depends only on the device: nothing on how full the phone is today (storage can disable
-     * Download, never change a tick). A row the platform removes is absent; Tier 1 has no assistant
+     * Download, never change a tick). Tier 1 has no assistant
      * rows (the card adds its own Model Centre line); Tier 3's E4B assistant row is unticked on a
-     * phone with no GPU path. E4B has no row of its own on Tier 2: it is part of the wallpaper creator.
+     * phone with no GPU path. E4B has no row on Tier 2.
      */
     @NonNull
     public static List<WelcomeRow> welcomeRows(@NonNull Env env) {
@@ -412,16 +367,15 @@ public final class TaiTierPolicy {
         TaiDeviceTier tier = env.tier;
         boolean t1 = tier == TaiDeviceTier.TIER_1;
         boolean t3 = tier == TaiDeviceTier.TIER_3;
-        boolean eight = env.isEightGb();
 
         rows.add(new WelcomeRow("voice_typing", ids(whisper(t1 ? "base" : "small", env)),
             fns(TaiFunction.VOICE_TYPING), !t1));
         rows.add(new WelcomeRow("read_aloud", ids(TaiModelCatalog.KITTEN_TTS_NANO_ID),
             fns(TaiFunction.READ_ALOUD), !t1));
         if (t3) {
-            // Tier 3's assistant is E4B, which also reads wallpapers; E2B is the tidy-dictation helper only.
+            // Tier 3's assistant is E4B; E2B is the tidy-dictation helper only.
             rows.add(new WelcomeRow("e4b_assistant", ids(E4B),
-                fns(TaiFunction.ASSISTANT, TaiFunction.WALLPAPER_READER, TaiFunction.APP_CATEGORIES), !env.noGpu()));
+                fns(TaiFunction.ASSISTANT, TaiFunction.APP_CATEGORIES), !env.noGpu()));
             rows.add(new WelcomeRow("assistant", ids(E2B), fns(TaiFunction.TIDY_DICTATION), true));
         } else if (!t1) {
             rows.add(new WelcomeRow("assistant", ids(E2B),
@@ -429,16 +383,6 @@ public final class TaiTierPolicy {
         }
         rows.add(new WelcomeRow("dawn_notes", ids(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID),
             fns(TaiFunction.EMBEDDINGS), !t1));
-        if (env.wallpaperSupported()) {
-            String depth = t1 || eight ? TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID : TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID;
-            // A 12 GB Tier 2 phone reads its wallpapers with E4B: the reader rides in this row, one tick.
-            boolean reader = tier == TaiDeviceTier.TIER_2 && !eight;
-            rows.add(reader
-                ? new WelcomeRow("wallpaper_creator", ids(depth, TaiModelCatalog.U2NET_ID, E4B),
-                    fns(TaiFunction.WALLPAPER_DEPTH, TaiFunction.WALLPAPER_READER), true)
-                : new WelcomeRow("wallpaper_creator", ids(depth, TaiModelCatalog.U2NET_ID),
-                    fns(TaiFunction.WALLPAPER_DEPTH), !t1));
-        }
         return rows;
     }
 

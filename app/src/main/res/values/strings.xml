@@ -1441,15 +1441,6 @@
         <string name="tai_centre_voice_settings">Voice settings</string>
         <string name="tai_centre_delete_voice_title">Delete %1$s?</string>
         <string name="tai_centre_delete_voice_message">Read aloud stops working until you download it again.</string>
-        <string name="tai_centre_vision_header">Wallpaper vision</string>
-        <string name="tai_centre_vision_sub">Depth, scene and subject maps for living wallpapers</string>
-        <string name="tai_centre_kind_vision">vision</string>
-        <string name="tai_centre_vision_da3">Depth map for wallpapers, the sharper one</string>
-        <string name="tai_centre_vision_da2">Depth map for wallpapers, smaller and faster</string>
-        <string name="tai_centre_vision_segformer">Finds water, sky, trees and lights in a photo</string>
-        <string name="tai_centre_vision_u2net">Cuts out the main subject of a photo</string>
-        <string name="tai_centre_vision_noncommercial">NVIDIA licence: non-commercial, for testing only</string>
-        <string name="tai_centre_use_depth">Use for depth maps</string>
         <string name="tai_centre_small_ram_note">Best on phones with 8 GB of RAM or more</string>
         <string name="tai_centre_parallel_title">Simultaneous downloads</string>
         <string name="tai_centre_parallel_summary">Two usually fill a home connection; more only split it.</string>

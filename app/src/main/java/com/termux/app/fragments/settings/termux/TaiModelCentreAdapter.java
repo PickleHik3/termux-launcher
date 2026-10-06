@@ -172,8 +172,6 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         boolean voiceOutput;
         /** A text-to-image model: the picture icon, and a menu with Delete only. */
         boolean image;
-        /** A wallpaper vision graph: the picture icon, and a menu with "Use for depth maps" and Delete only. */
-        boolean vision;
         /** Brought into view from a deep link: ringed for a moment so the eye finds it. */
         boolean highlighted;
         /** "Used by: Assistant" on an installed model; the fit line and "For: ..." on a catalogue one. */
@@ -533,9 +531,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             row = next;
             boundId = next.snapshot.id;
             TaiModelCentreRows.State state = next.state;
-            kind.setImageResource(next.speech ? R.drawable.ic_tai_wave
-                : TaiModelCatalog.visionEntries().containsKey(next.snapshot.modelId) ? R.drawable.ic_tai_image
-                : R.drawable.ic_tai_chat);
+            kind.setImageResource(next.speech ? R.drawable.ic_tai_wave : R.drawable.ic_tai_chat);
             setText(title, next.title);
             setText(subtitle, next.subtitle);
             setText(pill, state.pill);
@@ -705,7 +701,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         void bind(@NonNull ModelRow next) {
             Context context = itemView.getContext();
             row = next;
-            kind.setImageResource(next.image || next.vision ? R.drawable.ic_tai_image
+            kind.setImageResource(next.image ? R.drawable.ic_tai_image
                 : next.speech ? R.drawable.ic_tai_wave : R.drawable.ic_tai_chat);
             setText(title, next.title);
             setText(subtitle, next.subtitle);

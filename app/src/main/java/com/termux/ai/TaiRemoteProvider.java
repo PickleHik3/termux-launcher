@@ -20,7 +20,7 @@ import java.io.IOException;
  * {@code shouldDelegateRuntime()}: a request whose model is {@code remote/<id>}
  * ({@link TaiCallerRequests#isRemoteRequest}) goes to {@link #chatCompletions}/{@link #stream} here,
  * in the app process, and the {@code :tai_runtime} process is never woken. The feature callers
- * (categories, wallpaper reader, dictation cleanup) reach it through their function's pick
+ * (categories, dictation cleanup) reach it through their function's pick
  * ({@link TaiFunctionModels.Resolution#remoteModel}).
  */
 public final class TaiRemoteProvider {

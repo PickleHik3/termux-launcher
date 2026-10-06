@@ -7,7 +7,6 @@ import androidx.annotation.StringRes;
 
 import com.termux.R;
 import com.termux.ai.TaiDeviceTier;
-import com.termux.ai.TaiModelRegistry;
 import com.termux.ai.TaiTierPolicy;
 
 import java.util.ArrayList;
@@ -218,16 +217,10 @@ public final class TaiWelcomeCard {
                     glyphRes = R.drawable.ic_symbol_ai_star;
                     lineRes = R.string.tai_welcome_row_e4b_assistant_line;
                     break;
-                case "dawn_notes":
+                default: // dawn_notes
                     titleRes = R.string.tai_welcome_row_dawn_title;
                     glyphRes = R.drawable.ic_symbol_search;
                     lineRes = R.string.tai_welcome_row_dawn_line;
-                    break;
-                default: // wallpaper_creator
-                    titleRes = R.string.tai_welcome_row_wallpaper_title;
-                    glyphRes = R.drawable.ic_symbol_wallpaper;
-                    lineRes = policyRow.modelIds.contains(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT)
-                        ? R.string.tai_welcome_row_wallpaper_reader_line : R.string.tai_welcome_row_wallpaper_line;
                     break;
             }
             rows.add(new Row(policyRow.id, titleRes, glyphRes, lineRes, modelNames(policyRow),
@@ -249,10 +242,8 @@ public final class TaiWelcomeCard {
                 return "Gemma 4 E2B";
             case "e4b_assistant":
                 return "Gemma 4 E4B";
-            case "dawn_notes":
+            default: // dawn_notes
                 return "EmbeddingGemma";
-            default:
-                return row.modelIds.contains(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT) ? "Depth, cut-out and Gemma 4 E4B" : "Depth and cut-out";
         }
     }
 

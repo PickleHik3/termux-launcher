@@ -33,10 +33,10 @@ final class TaiFunctionRows {
 
     private static final long GIB = 1024L * 1024L * 1024L;
     private static final String VISION = "-vision";
-    /** The order of the Functions rows. The depth model has no row: it sits inside the wallpaper creator's. */
+    /** The order of the Functions rows. */
     static final List<TaiFunction> ROW_FUNCTIONS = Collections.unmodifiableList(Arrays.asList(
         TaiFunction.ASSISTANT, TaiFunction.VOICE_TYPING, TaiFunction.TIDY_DICTATION, TaiFunction.READ_ALOUD,
-        TaiFunction.APP_CATEGORIES, TaiFunction.WALLPAPER_READER, TaiFunction.EMBEDDINGS));
+        TaiFunction.APP_CATEGORIES, TaiFunction.EMBEDDINGS));
 
     /** The sentences the rows are built from; the fragment maps each to a string resource. */
     enum Msg {
@@ -52,31 +52,25 @@ final class TaiFunctionRows {
         /** "Set up a remote model". */
         REMOTE_SETUP,
         GPU, CPU,
-        /** "Reader: %1$s · Depth: %2$s". */
-        READER_DEPTH,
         FIT_FITS, FIT_ROOM, FIT_BIGGER,
         /** "Used by: %s". */
         USED_BY,
         /** "For: %s". */
         FOR,
-        /** "Wallpaper creator (cut-out)". */
-        FOR_CUTOUT,
         /** "If it can't load: %s". */
         CHAIN,
         /** "In use by %s. If you delete it:". */
         DELETE_IN_USE,
         /** "%1$s: %2$s". */
         DELETE_LINE,
-        LEVEL_LIGHT, LEVEL_POLISHED,
-        /** "Wallpaper reader" and "Wallpaper depth", the Use for... chooser's two wallpaper entries. */
-        CHOOSER_READER, CHOOSER_DEPTH
+        LEVEL_LIGHT, LEVEL_POLISHED
     }
 
     /** Words for the rows. {@code args} fill the {@code %s} slots of the message. */
     interface Labels {
         @NonNull String text(@NonNull Msg msg, @NonNull Object... args);
 
-        /** "Assistant and endpoint", "Voice typing", ...; both wallpaper functions are "Wallpaper creator". */
+        /** "Assistant and endpoint", "Voice typing", .... */
         @NonNull String functionName(@NonNull TaiFunction function);
 
         /** The model's name as people read it; a {@code -vision} id and the file are the same name. */
@@ -125,8 +119,7 @@ final class TaiFunctionRows {
     }
 
     /**
-     * The rows for the functions the platform allows ({@link TaiTierPolicy#functionAvailable}); image
-     * generation has none (spec §3.6). {@code tidyLevel} is the stored cleanup level ({@code light} or
+     * The rows for the functions; image generation has none (spec §3.6). {@code tidyLevel} is the stored cleanup level ({@code light} or
      * {@code polished}).
      */
     @NonNull
@@ -134,12 +127,8 @@ final class TaiFunctionRows {
                                           @Nullable String tidyLevel) {
         List<FunctionRow> rows = new ArrayList<>();
         for (TaiFunction function : ROW_FUNCTIONS) {
-            if (!TaiTierPolicy.functionAvailable(models.env(), function)) continue;
             Resolution resolution = models.resolve(function);
             String summary = summary(resolution, labels);
-            if (function == TaiFunction.WALLPAPER_READER && TaiTierPolicy.functionAvailable(models.env(), TaiFunction.WALLPAPER_DEPTH)) {
-                summary = labels.text(Msg.READER_DEPTH, summary, summary(models.resolve(TaiFunction.WALLPAPER_DEPTH), labels));
-            }
             String badge = "";
             if (function == TaiFunction.TIDY_DICTATION) {
                 badge = labels.text("light".equals(tidyLevel) ? Msg.LEVEL_LIGHT : Msg.LEVEL_POLISHED);
@@ -236,8 +225,7 @@ final class TaiFunctionRows {
     }
 
     /**
-     * The functions a model can serve on this phone, for "For:" and the Use for... chooser. The
-     * wallpaper reader and the depth model are two entries here; {@link #functionNames} folds them.
+     * The functions a model can serve on this phone, for "For:" and the Use for... chooser.
      */
     @NonNull
     static List<TaiFunction> servedBy(@NonNull TaiTierPolicy.Env env, @NonNull ModelInfo info) {
@@ -252,10 +240,6 @@ final class TaiFunctionRows {
     @NonNull
     static String forLine(@NonNull TaiTierPolicy.Env env, @NonNull ModelInfo info, @NonNull Labels labels) {
         Set<String> names = functionNames(servedBy(env, info), labels);
-        // The cut-out and the scene model serve no pick, but they are part of the wallpaper creator.
-        boolean tool = info.capabilities.contains(TaiModelSpec.CAPABILITY_SUBJECT_SEGMENTATION)
-            || info.capabilities.contains(TaiModelSpec.CAPABILITY_SCENE_SEGMENTATION);
-        if (names.isEmpty() && tool && env.wallpaperSupported()) names.add(labels.text(Msg.FOR_CUTOUT));
         return names.isEmpty() ? "" : labels.text(Msg.FOR, join(names, ", "));
     }
 
@@ -264,14 +248,6 @@ final class TaiFunctionRows {
         Set<String> names = new LinkedHashSet<>();
         for (TaiFunction function : functions) names.add(labels.functionName(function));
         return names;
-    }
-
-    /** The name the Use for... chooser gives a function: the two wallpaper models are told apart. */
-    @NonNull
-    static String chooserName(@NonNull TaiFunction function, @NonNull Labels labels) {
-        if (function == TaiFunction.WALLPAPER_READER) return labels.text(Msg.CHOOSER_READER);
-        if (function == TaiFunction.WALLPAPER_DEPTH) return labels.text(Msg.CHOOSER_DEPTH);
-        return labels.functionName(function);
     }
 
     // ------------------------------------------------------------------------------ delete warning
@@ -288,7 +264,7 @@ final class TaiFunctionRows {
         StringBuilder text = new StringBuilder(labels.text(Msg.DELETE_IN_USE, join(functionNames(users, labels), ", ")));
         for (TaiFunction function : users) {
             Resolution after = models.resolveWithout(function, modelId);
-            text.append('\n').append(labels.text(Msg.DELETE_LINE, chooserName(function, labels), summary(after, labels)));
+            text.append('\n').append(labels.text(Msg.DELETE_LINE, labels.functionName(function), summary(after, labels)));
         }
         return text.toString();
     }
@@ -296,7 +272,7 @@ final class TaiFunctionRows {
     // ---------------------------------------------------------------------------------- Get models
 
     /** The catalogue groups of the Get models segment, in display order. Image generation has none. */
-    enum Group { ASSISTANTS, SPEECH, VOICE_OUTPUT, SEARCH, WALLPAPER_VISION }
+    enum Group { ASSISTANTS, SPEECH, VOICE_OUTPUT, SEARCH }
 
     /** A catalogue entry as the grouping reads it; built from a {@code CatalogEntry} by the fragment. */
     static final class CatalogItem {
@@ -324,22 +300,22 @@ final class TaiFunctionRows {
         }
     }
 
-    /** The group a model belongs to, or {@code null} for one that never shows (image generation). */
+    /** The group a model belongs to, or {@code null} for one that never shows (image generation, vision tools). */
     @Nullable
     static Group groupOf(@NonNull ModelInfo info) {
         Set<String> caps = info.capabilities;
         if (caps.contains(TaiModelSpec.CAPABILITY_IMAGE_GENERATION) || TaiModelSpec.BACKEND_MNN_DIFFUSION.equals(info.backend)) return null;
         if (caps.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) return Group.SPEECH;
         if (caps.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) return Group.VOICE_OUTPUT;
-        if (TaiModelSpec.isVisionTool(caps)) return Group.WALLPAPER_VISION;
+        if (TaiModelSpec.isVisionTool(caps)) return null;
         if (caps.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS) && !caps.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT)) return Group.SEARCH;
         return caps.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT) ? Group.ASSISTANTS : null;
     }
 
     /**
      * The catalogue for the Get models segment: grouped, in the catalogue's order inside a group,
-     * without what is installed or on its way ({@code skip}), without image generation, and with the
-     * wallpaper vision group gone below API 34. Empty groups are absent.
+     * without what is installed or on its way ({@code skip}), without image generation. Empty
+     * groups are absent.
      */
     @NonNull
     static Map<Group, List<GetEntry>> getModels(@NonNull TaiTierPolicy.Env env, @NonNull Collection<CatalogItem> catalogue,
@@ -350,7 +326,6 @@ final class TaiFunctionRows {
             ModelInfo info = item.info;
             Group group = groupOf(info);
             if (group == null || skip.contains(info.id)) continue;
-            if (group == Group.WALLPAPER_VISION && !TaiTierPolicy.functionAvailable(env, TaiFunction.WALLPAPER_DEPTH)) continue;
             boolean chat = group == Group.ASSISTANTS;
             GetEntry entry = new GetEntry(group, item, fit(env, info.id, info.sizeBytes), suggested(env, info.id, chat));
             List<GetEntry> list = out.get(group);

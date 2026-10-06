@@ -71,14 +71,6 @@ final class TaiRuntimeIpc {
     static final String OP_IMAGE_GENERATE = "imageGenerate";
     static final String OP_IMAGE_CANCEL = "imageCancel";
 
-    /**
-     * The one-shot wallpaper analysis (depth, scene, subject on one photo). Analyze is a stream
-     * (one {@code stage} event per step, then the result) on the service's own vision lane; cancel
-     * runs on the control lane so it reaches a run in progress instead of queuing behind it.
-     */
-    static final String OP_VISION_ANALYZE = "visionAnalyze";
-    static final String OP_VISION_CANCEL = "visionCancel";
-
     private TaiRuntimeIpc() {
     }
 }
