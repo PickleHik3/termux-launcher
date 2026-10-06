@@ -13123,7 +13123,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyTerminalSurfaceAppearance();
             if (mPaneController != null) mPaneController.refreshPaneLayout();
             refreshTerminalWindowBar();
-            if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
+            // Only the sizes moved: the keyboard takes its rows' heights directly, without the
+            // full preference reload that re-reads the tap-correction model from disk.
+            if (mInAppKeyboard != null && mPreferences != null) {
+                mInAppKeyboard.setPlaceSizes(mPreferences.getInAppKeyboardHeightScale(),
+                    mPreferences.getInAppKeyboardFloatingHeightScale());
+            }
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_BACKDROPS
                 | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
