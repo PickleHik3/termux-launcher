@@ -38,6 +38,8 @@ public final class BuiltinWidgetServices {
          * keyboard insets; it has to hear this first or the keyboard's insets are ignored.
          */
         default void onSystemImeRequested() { }
+        /** That dialog is gone: the keyboard with it, and the terminal's own arrangement back. */
+        default void onSystemImeReleased() { }
     }
 
     /** A once-a-minute heartbeat, aligned to the system's minute tick. */

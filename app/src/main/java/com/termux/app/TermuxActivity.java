@@ -20237,11 +20237,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                 new String[] {permission}, REQUEST_CODE_WIDGET_CALENDAR);
                         }
                         @Override public void onSystemImeRequested() {
+                            if (mInAppKeyboard != null && mInAppKeyboard.isEnabled()) {
+                                mInAppKeyboard.beginExternalTextInput();
+                            }
                             TermuxActivity.this.onSystemImeRequested();
+                        }
+                        @Override public void onSystemImeReleased() {
+                            View focus = getCurrentFocus();
+                            KeyboardUtils.hideSoftKeyboard(TermuxActivity.this,
+                                focus != null ? focus : getWindow().getDecorView());
+                            if (mInAppKeyboard != null) mInAppKeyboard.endExternalTextInput();
                         }
                         @Override public boolean openCommandWindow(@NonNull java.util.List<String> command,
                                                                    @Nullable String title) {
-                            return TermuxActivity.this.openCommandWindow(command, null, title, true) != null;
+                            if (TermuxActivity.this.openCommandWindow(command, null, title, true) == null) {
+                                return false;
+                            }
+                            // The window is the point: the wall turns to the terminal to show it.
+                            if (mPaneWallController != null) {
+                                mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL,
+                                    isVisible());
+                            }
+                            return true;
                         }
                         @Override @Nullable public android.graphics.Typeface monoTypeface() {
                             TerminalView view = getTerminalView();

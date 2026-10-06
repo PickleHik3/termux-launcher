@@ -53,8 +53,10 @@ public final class WidgetProviderItem {
     public static WidgetProviderItem builtin(long profileSerial, @NonNull String kind,
                                              @NonNull String label, int columnSpan, int rowSpan,
                                              boolean fits) {
+        // The minimum equals the offered span so the card names one size; edit mode decides
+        // how small a built-in may really go.
         return new WidgetProviderItem(profileSerial, null, kind, label, columnSpan, rowSpan,
-            1, 1, fits);
+            columnSpan, rowSpan, fits);
     }
 
     public boolean isBuiltin() { return builtinKind != null; }

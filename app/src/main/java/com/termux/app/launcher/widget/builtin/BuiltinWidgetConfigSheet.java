@@ -34,6 +34,14 @@ public final class BuiltinWidgetConfigSheet {
     public static void show(@NonNull Context context, @NonNull CharSequence title,
                             @NonNull List<BuiltinWidgetView.ConfigField> fields,
                             @NonNull Bundle current, @NonNull Listener listener) {
+        show(context, title, fields, current, listener, null);
+    }
+
+    /** As {@link #show(Context, CharSequence, List, Bundle, Listener)}, with a dismiss callback. */
+    public static void show(@NonNull Context context, @NonNull CharSequence title,
+                            @NonNull List<BuiltinWidgetView.ConfigField> fields,
+                            @NonNull Bundle current, @NonNull Listener listener,
+                            @Nullable Runnable onDismiss) {
         float density = context.getResources().getDisplayMetrics().density;
         int pad = Math.round(24 * density);
         LinearLayout column = new LinearLayout(context);
@@ -82,6 +90,7 @@ public final class BuiltinWidgetConfigSheet {
                 }
                 listener.onSaved(BuiltinWidgetHost.configOf(values));
             })
+            .setOnDismissListener(dialog -> { if (onDismiss != null) onDismiss.run(); })
             .show();
     }
 

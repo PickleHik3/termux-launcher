@@ -257,6 +257,7 @@ public class TasksWidgetView extends BuiltinWidgetView implements MarkdownFileSo
             dialog.getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE);
         }
         input.requestFocus();
+        dialog.setOnDismissListener(d -> services.host().onSystemImeReleased());
         dialog.show();
     }
 
