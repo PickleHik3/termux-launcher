@@ -3050,10 +3050,20 @@ public final class TerminalView extends View {
         return Math.max(2f, mRenderer == null ? 8f : mRenderer.mFontLineSpacing * 0.45f);
     }
 
+    /** The blur radius last handed to setRenderEffect, on the half-pixel grid; 0 for none. */
+    private float mAppliedReflowFrostRadiusPx;
+
+    /**
+     * Sets the frost's blur. The radius is taken to the nearest half pixel, finer than the eye can
+     * tell, and an animator tick that lands on the radius already set builds no new effect.
+     */
     @RequiresApi(Build.VERSION_CODES.S)
     private void applyReflowFrost(float radiusPx) {
-        setRenderEffect(radiusPx < 0.5f ? null
-            : RenderEffect.createBlurEffect(radiusPx, radiusPx, Shader.TileMode.CLAMP));
+        float radius = radiusPx < 0.5f ? 0f : Math.round(radiusPx * 2f) / 2f;
+        if (radius == mAppliedReflowFrostRadiusPx) return;
+        mAppliedReflowFrostRadiusPx = radius;
+        setRenderEffect(radius == 0f ? null
+            : RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP));
     }
 
     /** Coalesce transient layout changes without forwarding every one to the attached PTY. */
@@ -3168,12 +3178,30 @@ public final class TerminalView extends View {
             // render the text selection handles
             renderTextSelection();
             long drawEndNanos = SystemClock.elapsedRealtimeNanos();
-            android.view.Display display = getDisplay();
-            float refreshRate = display == null ? 60f : display.getRefreshRate();
-            long frameBudgetNanos = refreshRate > 0f
-                ? (long) (1_000_000_000d / refreshRate) : 16_666_667L;
-            mRenderMetrics.recordDraw(drawStartNanos, drawEndNanos, frameBudgetNanos);
+            mRenderMetrics.recordDraw(drawStartNanos, drawEndNanos, mFrameBudgetNanos);
         }
+    }
+
+    /** One frame at the display's refresh rate, for the render metrics; read on attach and on display change. */
+    private long mFrameBudgetNanos = 16_666_667L;
+
+    private final android.hardware.display.DisplayManager.DisplayListener mDisplayListener =
+        new android.hardware.display.DisplayManager.DisplayListener() {
+            @Override public void onDisplayAdded(int displayId) { }
+
+            @Override public void onDisplayRemoved(int displayId) { }
+
+            @Override public void onDisplayChanged(int displayId) {
+                android.view.Display display = getDisplay();
+                if (display != null && display.getDisplayId() == displayId) refreshFrameBudget();
+            }
+        };
+
+    private void refreshFrameBudget() {
+        android.view.Display display = getDisplay();
+        float refreshRate = display == null ? 60f : display.getRefreshRate();
+        mFrameBudgetNanos = refreshRate > 0f
+            ? (long) (1_000_000_000d / refreshRate) : 16_666_667L;
     }
 
     /** Snapshot of this pane's renderer counters. Percentiles allocate only when queried. */
@@ -4134,6 +4162,10 @@ public final class TerminalView extends View {
         if (mTextSelectionCursorController != null) {
             getViewTreeObserver().addOnTouchModeChangeListener(mTextSelectionCursorController);
         }
+        refreshFrameBudget();
+        android.hardware.display.DisplayManager displayManager =
+            getContext().getSystemService(android.hardware.display.DisplayManager.class);
+        if (displayManager != null) displayManager.registerDisplayListener(mDisplayListener, null);
         if (mAccessibilityManager != null) {
             mAccessibilityManager.addAccessibilityStateChangeListener(mAccessibilityStateListener);
             mAccessibilityManager.addTouchExplorationStateChangeListener(mTouchExplorationListener);
@@ -4228,6 +4260,9 @@ public final class TerminalView extends View {
         releaseHoldDownEvent();
         updateKittyAnimationVisibility();
         clearReflowFrost();
+        android.hardware.display.DisplayManager displayManager =
+            getContext().getSystemService(android.hardware.display.DisplayManager.class);
+        if (displayManager != null) displayManager.unregisterDisplayListener(mDisplayListener);
         if (mAccessibilityManager != null) {
             mAccessibilityManager.removeAccessibilityStateChangeListener(mAccessibilityStateListener);
             mAccessibilityManager.removeTouchExplorationStateChangeListener(mTouchExplorationListener);
