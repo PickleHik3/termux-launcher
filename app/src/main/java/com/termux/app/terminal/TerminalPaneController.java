@@ -447,6 +447,8 @@ public class TerminalPaneController {
         out.cellHeightPx = cellHeight;
         out.dectcemOn = emulator.isCursorEnabled();
         out.positionChangedAtMillis = emulator.getCursorPositionChangedAtMillis();
+        // Any stable non-zero identity will do: it only has to tell one pane from another.
+        out.ownerId = System.identityHashCode(view) | (1L << 32);
         out.color = cursorColorOf(view);
         return true;
     }

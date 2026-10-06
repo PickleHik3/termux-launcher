@@ -59,6 +59,27 @@ public class KittyCursorTrailTest {
         assertTrue(trail.cornerX(0) < 11 * CELL_W);
     }
 
+    /**
+     * kitty's {@code window_changed}: a move into another window always trails, even one that lands
+     * inside the start threshold; the same small move inside one window does not.
+     */
+    @Test
+    public void moveIntoAnotherPaneTrailsInsideTheThreshold() {
+        KittyCursorTrail.Config cfg = config(0, 2, 2);
+        KittyCursorTrail samePane = new KittyCursorTrail();
+        samePane.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, 7L, CELL_W, CELL_H, cfg);
+        samePane.update(16L, CELL_W, 0f, 2 * CELL_W, CELL_H, true, 0L, false, 7L,
+            CELL_W, CELL_H, cfg);
+        assertFalse(samePane.moveStartedOnLastUpdate());
+
+        KittyCursorTrail otherPane = new KittyCursorTrail();
+        otherPane.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, 7L, CELL_W, CELL_H, cfg);
+        assertTrue(otherPane.update(16L, CELL_W, 0f, 2 * CELL_W, CELL_H, true, 0L, false, 8L,
+            CELL_W, CELL_H, cfg));
+        assertTrue(otherPane.moveStartedOnLastUpdate());
+        assertTrue(otherPane.needsRender());
+    }
+
     /** Until {@code cursor_trail}'s delay elapses, the target must not move at all. */
     @Test
     public void delayGatesWhenTheTargetIsPickedUp() {

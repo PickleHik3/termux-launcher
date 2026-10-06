@@ -116,6 +116,12 @@ public final class PaneMotionOverlayView extends View {
         public float cellWidthPx, cellHeightPx;
         public boolean dectcemOn;
         public long positionChangedAtMillis;
+        /**
+         * Which pane the cursor belongs to, never 0 for a real pane. A move into another pane
+         * always trails, whatever the start threshold, as kitty always trails a move into another
+         * window.
+         */
+        public long ownerId;
         public int color;
         /**
          * The focused pane's card, in this overlay's pixels. Particles and the comet stay inside
@@ -283,8 +289,8 @@ public final class PaneMotionOverlayView extends View {
         mFrameMs = now;
         boolean needsFrame = mCursorTrail.update(now, mCursorTarget.left, mCursorTarget.top,
             mCursorTarget.right, mCursorTarget.bottom, mCursorTarget.dectcemOn,
-            mCursorTarget.positionChangedAtMillis, false, mCursorTarget.cellWidthPx,
-            mCursorTarget.cellHeightPx, mCursorTrailConfig);
+            mCursorTarget.positionChangedAtMillis, false, mCursorTarget.ownerId,
+            mCursorTarget.cellWidthPx, mCursorTarget.cellHeightPx, mCursorTrailConfig);
         previous.union(cursorTrailBounds());
         invalidateRect(previous);
         boolean styleLive = updateStyleEffects(now);

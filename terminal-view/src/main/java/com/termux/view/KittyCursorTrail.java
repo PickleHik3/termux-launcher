@@ -106,6 +106,10 @@ public final class KittyCursorTrail {
     /** The last {@link #update} asked for no further frame: the caller's loop has gone quiet. */
     private boolean mIdle = true;
     private boolean mSnapPending;
+    /** kitty's {@code window_id}: whose cursor the trail last followed, 0 when unknown. */
+    private long mOwnerId;
+    /** kitty's {@code window_changed}: the target just moved to a different owner. */
+    private boolean mWindowChanged;
 
     /** Forget everything: the next {@link #update} snaps to its target with no visible trail. */
     public void reset() {
@@ -115,6 +119,8 @@ public final class KittyCursorTrail {
         mHasPreviousFrame = false;
         mIdle = true;
         mSnapPending = false;
+        mOwnerId = 0L;
+        mWindowChanged = false;
     }
 
     /**
@@ -147,6 +153,22 @@ public final class KittyCursorTrail {
                           float targetRight, float targetBottom, boolean dectcemOn,
                           long positionChangedAtMillis, boolean paused,
                           float cellWidthPx, float cellHeightPx, Config config) {
+        return update(nowMillis, targetLeft, targetTop, targetRight, targetBottom, dectcemOn,
+            positionChangedAtMillis, paused, 0L, cellWidthPx, cellHeightPx, config);
+    }
+
+    /**
+     * {@link #update(long, float, float, float, float, boolean, long, boolean, float, float, Config)}
+     * for a target owned by one of several windows.
+     *
+     * @param targetOwnerId which window (pane) the cursor belongs to, 0 when unknown. A move to a
+     *                      different owner always trails, past the start threshold, as kitty's
+     *                      {@code window_changed} does: it is a change of context.
+     */
+    public boolean update(long nowMillis, float targetLeft, float targetTop,
+                          float targetRight, float targetBottom, boolean dectcemOn,
+                          long positionChangedAtMillis, boolean paused, long targetOwnerId,
+                          float cellWidthPx, float cellHeightPx, Config config) {
         boolean pendingDelay = false;
         System.arraycopy(mCornerX, 0, mPrevCornerX, 0, CORNERS);
         System.arraycopy(mCornerY, 0, mPrevCornerY, 0, CORNERS);
@@ -160,7 +182,7 @@ public final class KittyCursorTrail {
         if (!paused) {
             long sinceMoved = nowMillis - positionChangedAtMillis;
             if (forceSnap || sinceMoved >= config.delayMs) {
-                updateTarget(targetLeft, targetTop, targetRight, targetBottom);
+                updateTarget(targetLeft, targetTop, targetRight, targetBottom, targetOwnerId);
             } else {
                 pendingDelay = true;
             }
@@ -211,7 +233,12 @@ public final class KittyCursorTrail {
         return mPreviousFrameMillis;
     }
 
-    private void updateTarget(float left, float top, float right, float bottom) {
+    /** {@code update_cursor_trail_target}. */
+    private void updateTarget(float left, float top, float right, float bottom, long ownerId) {
+        if (left != mEdgeLeft || top != mEdgeTop || right != mEdgeRight || bottom != mEdgeBottom) {
+            mWindowChanged = mOwnerId != 0L && mOwnerId != ownerId;
+            mOwnerId = ownerId;
+        }
         if (mCornersInitialized && (left != mEdgeLeft || top != mEdgeTop
             || right != mEdgeRight || bottom != mEdgeBottom)) {
             mReplacedFrom[0] = mEdgeLeft;
@@ -230,8 +257,9 @@ public final class KittyCursorTrail {
     private boolean shouldSkipUpdate(boolean dectcemOn, float cellWidthPx, float cellHeightPx,
                                      Config config) {
         if (!dectcemOn && mOpacity <= 0f) return true;
+        // Moving to a different window is a change of context, so kitty always trails it.
         if ((config.thresholdXCells > 0 || config.thresholdYCells > 0) && !mNeedsRender
-            && cellWidthPx > 0f && cellHeightPx > 0f) {
+            && !mWindowChanged && cellWidthPx > 0f && cellHeightPx > 0f) {
             int dx = Math.round((mCornerX[0] - mEdgeRight) / cellWidthPx);
             int dy = Math.round((mCornerY[0] - mEdgeTop) / cellHeightPx);
             if (Math.abs(dx) <= config.thresholdXCells && Math.abs(dy) <= config.thresholdYCells)
@@ -240,9 +268,15 @@ public final class KittyCursorTrail {
         return false;
     }
 
-    /** {@code update_cursor_trail_corners}. */
+    /** {@code update_cursor_trail_corners}, which ends by clearing {@code window_changed}. */
     private void updateCorners(float dt, boolean dectcemOn, float cellWidthPx, float cellHeightPx,
                                Config config, boolean forceSnap) {
+        easeCorners(dt, dectcemOn, cellWidthPx, cellHeightPx, config, forceSnap);
+        mWindowChanged = false;
+    }
+
+    private void easeCorners(float dt, boolean dectcemOn, float cellWidthPx, float cellHeightPx,
+                             Config config, boolean forceSnap) {
         boolean skip = !mCornersInitialized || forceSnap
             || shouldSkipUpdate(dectcemOn, cellWidthPx, cellHeightPx, config);
         if (skip) {
