@@ -117,18 +117,14 @@ public final class LauncherAppLauncher {
             explicitNoCategory.setComponent(new ComponentName(entry.appRef.packageName, activityName));
         }
 
-        Intent packageDefault = packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
-        ComponentName packageDefaultComponent = packageDefault != null ? packageDefault.getComponent() : null;
-        ComponentName explicitComponent = explicit != null ? explicit.getComponent() : null;
-        boolean explicitIsPackageDefault = sameComponent(explicitComponent, packageDefaultComponent);
-
-        if (explicitIsPackageDefault && tryStartActivity(context, packageDefault)) {
-            return true;
-        }
+        // The catalogue already names the component: start it as it is and ask the package
+        // manager for the package's own launch intent only when that fails, rather than resolving
+        // it on every tap. A Launcher3-style launch intent is exactly this explicit one.
         if (tryStartActivity(context, explicit)) {
             return true;
         }
-        if (!explicitIsPackageDefault && tryStartActivity(context, packageDefault)) {
+        Intent packageDefault = packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
+        if (tryStartActivity(context, packageDefault)) {
             return true;
         }
 
@@ -233,10 +229,6 @@ public final class LauncherAppLauncher {
         } catch (Throwable ignored) {
             return false;
         }
-    }
-
-    private static boolean sameComponent(@Nullable ComponentName first, @Nullable ComponentName second) {
-        return first != null && second != null && first.equals(second);
     }
 
     private static boolean tryStartMainActivity(@NonNull Context context, @Nullable ComponentName componentName) {

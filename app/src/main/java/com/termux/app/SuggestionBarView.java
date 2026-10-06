@@ -3639,18 +3639,14 @@ public final class SuggestionBarView extends GridLayout
             ? buildLaunchAnimationContext(launchSourceView)
             : null;
 
-        Intent pkgDefault = packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
-        ComponentName pkgDefaultComponent = pkgDefault != null ? pkgDefault.getComponent() : null;
-        ComponentName explicitComponent = explicit != null ? explicit.getComponent() : null;
-        boolean explicitIsPackageDefault = sameComponent(explicitComponent, pkgDefaultComponent);
-
-        boolean launched = false;
-        if (explicitIsPackageDefault && tryStartActivity(context, pkgDefault, launchAnimationContext)) {
-            launched = true;
-        } else if (tryStartActivity(context, explicit, launchAnimationContext)) {
-            launched = true;
-        } else if (!explicitIsPackageDefault && tryStartActivity(context, pkgDefault, launchAnimationContext)) {
-            launched = true;
+        // The catalogue already names the component: start it as it is and ask the package
+        // manager for the package's own launch intent only when that fails, rather than resolving
+        // it on every tap. A Launcher3-style launch intent is exactly this explicit one.
+        boolean launched = tryStartActivity(context, explicit, launchAnimationContext);
+        Intent pkgDefault = null;
+        if (!launched) {
+            pkgDefault = packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
+            launched = tryStartActivity(context, pkgDefault, launchAnimationContext);
         }
 
         Intent resolveFallback = null;
@@ -4013,10 +4009,6 @@ public final class SuggestionBarView extends GridLayout
             Log.d(LOG_TAG, "launch failed for intent " + intent + ": " + e.getMessage());
             return false;
         }
-    }
-
-    private static boolean sameComponent(@Nullable ComponentName first, @Nullable ComponentName second) {
-        return first != null && second != null && first.equals(second);
     }
 
     @Nullable
