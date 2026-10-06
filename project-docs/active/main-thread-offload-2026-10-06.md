@@ -52,7 +52,7 @@ below for a decision, not quietly dropped.
 
 ## Held: would change something visible (decision needed)
 
-- **Geometry scheduler** (one pass per keyboard transition) and **status fold by translation**: changes
+- DONE 2026-10-06 (second round): **geometry scheduler** (one pass per transition; the fold still relayouts per frame but runs no chrome pass until it lands; translation+clip for the fold is a follow-up), **Look slider overlay**, **async icons with a 180 ms fade**, plus the editor preview area and distinct cursor trails. Originally held because it changes
   when the terminal reflows and how the fold clips. The biggest felt win; needs the grilling loop.
 - **Live-preview pipeline** (Look slider deferred to release, dock size through the drag gate): the Look
   stop would stop previewing mid-drag unless an in-memory overlay is built first.
