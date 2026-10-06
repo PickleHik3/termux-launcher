@@ -2389,7 +2389,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean isOnDockPlankKeySurface(float rawX, float rawY) {
         for (int viewId : DOCK_PLANK_KEY_SURFACE_IDS) {
-            View view = findViewById(viewId);
+            View view = hotView(viewId);
             if (view == null || view.getVisibility() != View.VISIBLE
                 || view.getWidth() <= 0 || view.getHeight() <= 0) {
                 continue;
@@ -3083,8 +3083,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The same two numbers the frame is laid out with, for a surface that has to meet its edge. */
     private int terminalFrameInsetPx(boolean vertical) {
+        return terminalFrameInsetPx(chromeShape(), vertical);
+    }
+
+    /**
+     * Both of {@link #terminalFrameInsetPx(boolean)}'s numbers off one chrome shape, for the
+     * callers that need the pair: {@code out[0]} the horizontal inset, {@code out[1]} the
+     * vertical. The shape is the same answer both calls built, built once.
+     */
+    private void terminalFrameInsetsPx(@NonNull int[] out) {
         com.termux.app.place.ChromeShape shape = chromeShape();
-        View root = findViewById(R.id.activity_termux_root_view);
+        out[0] = terminalFrameInsetPx(shape, false);
+        out[1] = terminalFrameInsetPx(shape, true);
+    }
+
+    /** Scratch for {@link #terminalFrameInsetsPx}; main thread only. */
+    @NonNull private final int[] mTmpFrameInsets = new int[2];
+
+    private int terminalFrameInsetPx(@NonNull com.termux.app.place.ChromeShape shape,
+                                     boolean vertical) {
+        View root = hotView(R.id.activity_termux_root_view);
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
         float width = root != null && root.getWidth() > 0 ? root.getWidth() : metrics.widthPixels;
         float height = root != null && root.getHeight() > 0 ? root.getHeight() : metrics.heightPixels;
@@ -3125,8 +3143,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         //
         // Keyed off the preference rather than off `enabled`, so splitting a window does not shift
         // the terminal: the pane borders land exactly where the terminal border was.
-        int borderVerticalInsetPx = terminalFrameInsetPx(true, preferBorder || glass);
-        int borderHorizontalInsetPx = terminalFrameInsetPx(false, preferBorder || glass);
+        terminalFrameInsetsPx(mTmpFrameInsets);
+        int borderVerticalInsetPx = mTmpFrameInsets[1];
+        int borderHorizontalInsetPx = mTmpFrameInsets[0];
         // The side stacks flank the canvas, so their bars start and end where the terminal's own
         // frame does rather than at the raw edges of the band it sits in. Under a joined Docked
         // frame the model stands the side bars flush between the top and bottom stacks, and the
@@ -4362,7 +4381,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean isReducedMotionEnabled() {
-        return com.termux.app.ReducedMotion.isEnabled(this);
+        Boolean held = mReducedMotion;
+        if (held != null) return held;
+        boolean enabled = com.termux.app.ReducedMotion.isEnabled(this);
+        // Held only while an observer will say when it moves; without one, every ask reads.
+        if (ensureReducedMotionObserver()) mReducedMotion = enabled;
+        return enabled;
+    }
+
+    /**
+     * The animator scale's answer, held between changes: it was a Settings.Global read on every
+     * MOVE of a pane touch and every frame of a slide. Null until read, and again whenever the
+     * observer says the setting moved.
+     */
+    @Nullable private volatile Boolean mReducedMotion;
+    @Nullable private android.database.ContentObserver mReducedMotionObserver;
+
+    private boolean ensureReducedMotionObserver() {
+        if (mReducedMotionObserver != null) return true;
+        if (isDestroyed()) return false;
+        android.database.ContentObserver observer = new android.database.ContentObserver(
+                new Handler(Looper.getMainLooper())) {
+            @Override public void onChange(boolean selfChange) {
+                mReducedMotion = null;
+            }
+        };
+        try {
+            getContentResolver().registerContentObserver(
+                Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, observer);
+        } catch (Throwable t) {
+            return false;
+        }
+        mReducedMotionObserver = observer;
+        return true;
+    }
+
+    private void unregisterReducedMotionObserver() {
+        android.database.ContentObserver observer = mReducedMotionObserver;
+        mReducedMotionObserver = null;
+        mReducedMotion = null;
+        if (observer == null) return;
+        try {
+            getContentResolver().unregisterContentObserver(observer);
+        } catch (Throwable ignored) {
+            // Already gone with the resolver.
+        }
     }
 
     private void playAppLaunchRipple(@NonNull String packageName, @Nullable Drawable icon,
@@ -4829,7 +4892,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The same, for a layout in hand: it may not be the stored one during a slide or a pre-roll. */
     @NonNull
     private com.termux.app.place.ChromeShape chromeShape(@NonNull PlaceLayout stored) {
-        View root = findViewById(R.id.activity_termux_root_view);
+        View root = hotView(R.id.activity_termux_root_view);
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
         int width = root != null && root.getWidth() > 0 ? root.getWidth() : metrics.widthPixels;
         int height = root != null && root.getHeight() > 0 ? root.getHeight() : metrics.heightPixels;
@@ -4842,7 +4905,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float apps = chromeThicknessPx(Element.APPS, layout);
         float az = chromeThicknessPx(Element.AZ, layout);
         float keys = chromeThicknessPx(Element.EXTRA_KEYS, layout);
-        View keyboardHost = findViewById(R.id.inapp_keyboard_view_host);
+        View keyboardHost = hotView(R.id.inapp_keyboard_view_host);
         // Before its first layout the host has no height yet: the last measure stands in, so the
         // piece is not a zero-height one whose radius clamps to nothing.
         float keyboard = keyboardUp && keyboardHost != null
@@ -5557,8 +5620,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         int[] location = new int[2];
         host.getLocationOnScreen(location);
-        int sideInset = terminalFrameInsetPx(false);
-        int verticalInset = terminalFrameInsetPx(true);
+        terminalFrameInsetsPx(mTmpFrameInsets);
+        int sideInset = mTmpFrameInsets[0];
+        int verticalInset = mTmpFrameInsets[1];
         out.set(location[0] + sideInset, location[1] + verticalInset,
             location[0] + host.getWidth() - sideInset,
             location[1] + host.getHeight() - verticalInset);
@@ -8391,6 +8455,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTerminalFrameMetricsMonitor.stop();
         mManagedWallpaperSource.clear();
         if (mPackageQueryExecutor != null) mPackageQueryExecutor.shutdown();
+        unregisterReducedMotionObserver();
         // The inspector holds this Activity strongly for the life of its overlay, so it has to go
         // with the Activity rather than outlive it.
         com.termux.app.terminal.TerminalKeyInspector.close();
@@ -11237,8 +11302,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return null;
             // The same two numbers the border overlay and the pane host are laid out with, so the
             // editor's outline cannot disagree with the frame about where the frame is.
-            int horizontal = terminalFrameInsetPx(false);
-            int vertical = terminalFrameInsetPx(true);
+            terminalFrameInsetsPx(mTmpFrameInsets);
+            int horizontal = mTmpFrameInsets[0];
+            int vertical = mTmpFrameInsets[1];
             return new int[] {
                 location[0] + horizontal,
                 location[1] + vertical,
@@ -18518,8 +18584,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override @Nullable public int[] borderInsetsPx() {
                     // The pane card's rim under Floating; the opening's own edge, with no inset,
                     // under Docked.
-                    int horizontal = terminalFrameInsetPx(false);
-                    int vertical = terminalFrameInsetPx(true);
+                    // One chrome shape for both numbers, per border touch.
+                    terminalFrameInsetsPx(mTmpFrameInsets);
+                    int horizontal = mTmpFrameInsets[0];
+                    int vertical = mTmpFrameInsets[1];
                     return new int[] {horizontal, vertical, horizontal, vertical};
                 }
 
