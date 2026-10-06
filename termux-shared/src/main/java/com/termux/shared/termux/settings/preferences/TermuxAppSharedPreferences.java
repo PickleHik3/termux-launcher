@@ -17,6 +17,8 @@ import com.termux.shared.data.DataUtils;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
+import java.util.WeakHashMap;
+
 public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     private int MIN_FONTSIZE;
@@ -41,6 +43,33 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     /**
+     * The {@link TermuxConstants#TERMUX_PACKAGE_NAME} package context made for each caller, so a
+     * {@link #build} does not create one per call: the dock, the chrome and every pane build a
+     * handle on each pass. Keyed by the caller, since a package context carries its caller's
+     * activity token and display, and weakly, so a finished activity is not kept alive by it. The
+     * preference lookups themselves still run on every build, so {@code MODE_MULTI_PROCESS} keeps
+     * re-checking the file exactly as before.
+     */
+    private static final WeakHashMap<Context, Context> sPackageContexts = new WeakHashMap<>();
+
+    /** The cached package context for {@code caller}, or null when it has none yet. */
+    @Nullable
+    private static Context cachedPackageContext(@NonNull Context caller) {
+        synchronized (sPackageContexts) {
+            return sPackageContexts.get(caller);
+        }
+    }
+
+    @Nullable
+    private static Context rememberPackageContext(@NonNull Context caller, @Nullable Context packageContext) {
+        if (packageContext == null) return null;
+        synchronized (sPackageContexts) {
+            sPackageContexts.put(caller, packageContext);
+        }
+        return packageContext;
+    }
+
+    /**
      * Get {@link TermuxAppSharedPreferences}.
      *
      * @param context The {@link Context} to use to get the {@link Context} of the
@@ -49,7 +78,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      */
     @Nullable
     public static TermuxAppSharedPreferences build(@NonNull final Context context) {
-        Context termuxPackageContext = PackageUtils.getContextForPackage(context, TermuxConstants.TERMUX_PACKAGE_NAME);
+        Context termuxPackageContext = cachedPackageContext(context);
+        if (termuxPackageContext == null)
+            termuxPackageContext = rememberPackageContext(context,
+                PackageUtils.getContextForPackage(context, TermuxConstants.TERMUX_PACKAGE_NAME));
         if (termuxPackageContext == null)
             return null;
         else
@@ -66,7 +98,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * @return Returns the {@link TermuxAppSharedPreferences}. This will {@code null} if an exception is raised.
      */
     public static TermuxAppSharedPreferences build(@NonNull final Context context, final boolean exitAppOnError) {
-        Context termuxPackageContext = TermuxUtils.getContextForPackageOrExitApp(context, TermuxConstants.TERMUX_PACKAGE_NAME, exitAppOnError);
+        Context termuxPackageContext = cachedPackageContext(context);
+        if (termuxPackageContext == null)
+            termuxPackageContext = rememberPackageContext(context,
+                TermuxUtils.getContextForPackageOrExitApp(context, TermuxConstants.TERMUX_PACKAGE_NAME, exitAppOnError));
         if (termuxPackageContext == null)
             return null;
         else
