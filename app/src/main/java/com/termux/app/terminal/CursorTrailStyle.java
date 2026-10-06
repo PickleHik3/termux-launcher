@@ -4,9 +4,12 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 /**
- * The looks the cursor trail can take. {@link #DEFAULT} is kitty's own quad; the next four are
- * adaptations of kitty's bundled {@code cursor-trail-*} shaders, and {@link #COMET} is this app's
- * own.
+ * The looks the cursor trail can take. {@link #DEFAULT} is kitty's own quad and
+ * {@link #PIXIEDUST} adds kitty's pixiedust particles to it. {@link #MOTION_BLUR},
+ * {@link #RAILGUN} and {@link #TORPEDO} are named after kitty's bundled {@code cursor-trail-*}
+ * shaders but drawn this app's own way, each with one trait nobody can mistake (a soft lagging
+ * smear, a thin hot beam with sparks, a tapered body with a wake), and {@link #COMET} is this
+ * app's own.
  */
 public enum CursorTrailStyle {
     DEFAULT("default"),
