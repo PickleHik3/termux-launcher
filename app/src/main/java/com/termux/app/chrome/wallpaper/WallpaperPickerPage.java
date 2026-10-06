@@ -505,6 +505,12 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         return mCentred;
     }
 
+    @Nullable
+    @Override
+    public String centredSlotName() {
+        return mCentred.name();
+    }
+
     /** Where the page is now, for {@link Listener#onOpenLook} and {@link Listener#onOpenLayout}. */
     @NonNull
     ReturnState returnState() {

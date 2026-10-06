@@ -154,7 +154,7 @@ public final class AppearanceSurfaceController {
          * remember; null where it cannot say.
          */
         @Nullable
-        default String centredSlot() {
+        default String centredSlotName() {
             return null;
         }
 
@@ -960,7 +960,7 @@ public final class AppearanceSurfaceController {
         AppearanceReturnState.Builder where = new AppearanceReturnState.Builder(page);
         OverviewPage overview = mOverview;
         if (overview != null)
-            where.wallpaperSlot(overview.centredSlot());
+            where.wallpaperSlot(overview.centredSlotName());
         if (isEditorPage(page) && mEditor.isPresented())
             mEditor.describe(where);
         mHost.writeReturnState(where.build(mHost.now()).serialize());

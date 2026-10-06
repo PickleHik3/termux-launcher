@@ -222,7 +222,7 @@ public class AppearanceSurfaceControllerTest {
 
         @Nullable String centred;
 
-        @Nullable @Override public String centredSlot() { return centred; }
+        @Nullable @Override public String centredSlotName() { return centred; }
     }
 
     private static class FakeHost implements AppearanceSurfaceController.Host {
