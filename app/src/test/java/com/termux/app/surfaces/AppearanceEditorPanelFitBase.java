@@ -172,13 +172,14 @@ public abstract class AppearanceEditorPanelFitBase {
     }
 
     /**
-     * The shared preview contract on this phone: the three pages' resting sheets are held to one
-     * reserve, so Look (at a stop), Layout and Icon pack stand the preview on the same rect, 8dp
-     * under the page bar (whose height is the contract's) and 8dp over the sheet, at a scale that
-     * stays readable.
+     * The shared preview contract on this phone: one sheet reserve for every page and every stop
+     * (Look at a stop, the Custom row for every selection, Layout, Icon pack), so the preview is
+     * the same rect everywhere, 8dp under the page bar (whose height is the contract's) and 8dp
+     * over the sheet, never below the least scale. Where the Custom row is taller than the
+     * reserve it scrolls inside the sheet, its heading at the top and its sliders whole.
      */
     @Test
-    public void everyPageSharesOnePreviewArea() {
+    public void everyPageAndStopSharesOnePreviewArea() {
         android.content.res.Resources res = mPanel.view().getResources();
         float density = res.getDisplayMetrics().density;
         assertEquals(Math.round(AppearancePreviewArea.BAR_DP * density),
@@ -186,22 +187,43 @@ public abstract class AppearanceEditorPanelFitBase {
         int window = Math.round(res.getConfiguration().screenHeightDp * density);
         int status = Math.round(24 * density);
         int container = window - status;
-        int reserve = 0;
-        for (EditorMode page : EditorMode.values())
-            reserve = Math.max(reserve, mPanel.measureResting(page, mWidthPx));
         int top = AppearancePreviewArea.topPx(status, density);
-        float shared = -1f;
-        for (EditorMode page : EditorMode.values()) {
-            int sheet = AppearancePreviewArea.sheetPx(reserve, mPanel.measureResting(page, mWidthPx));
-            assertEquals(page + " rests on the reserve", reserve, sheet);
-            float scale = AppearancePreviewArea.scale(container, 0, 0, top,
-                AppearancePreviewArea.bottomPx(window, sheet, density));
-            if (shared < 0f) shared = scale;
-            assertEquals(page + " shares the preview", shared, scale, 0f);
-            assertTrue(page + " stays readable: " + scale, scale > AppearanceEditorFrame.MIN_SCALE);
+        int resting = 0;
+        for (EditorMode page : EditorMode.values())
+            resting = Math.max(resting, mPanel.measureResting(page, mWidthPx));
+        int custom = mPanel.measureTallest(EditorMode.LOOK, mWidthPx);
+        int reserve = AppearancePreviewArea.reservePx(resting, custom,
+            AppearancePreviewArea.sheetCapPx(window, top, container, 0, 0, density));
+        float shared = AppearancePreviewArea.scale(container, 0, 0, top,
+            AppearancePreviewArea.bottomPx(window, reserve, density));
+        assertTrue("the preview stays readable: " + shared,
+            shared >= AppearanceEditorFrame.MIN_SCALE - 1e-3f);
+
+        java.util.List<Integer> sheets = new java.util.ArrayList<>();
+        for (EditorMode page : EditorMode.values())
+            sheets.add(mPanel.measureResting(page, mWidthPx));
+        for (AppearanceLooks.Target target : targets()) {
+            showControls(target);
+            int content = mPanel.measureFor(EditorMode.LOOK, mWidthPx);
+            sheets.add(Math.min(content, reserve));
+            layOut(reserve);
+            View row2 = mPanel.view().findViewById(R.id.appearance_editor_row2);
+            View sliders = mPanel.view().findViewById(R.id.appearance_editor_sliders);
+            assertEquals(target + ": Row B shows", View.VISIBLE, row2.getVisibility());
+            assertTrue(target + ": Row B stays inside the sheet", row2.getBottom()
+                <= mPanel.view().getHeight() - mPanel.view().getPaddingBottom());
+            assertEquals(target + ": the sliders keep their length",
+                res.getDimensionPixelSize(R.dimen.appearance_editor_slider_length),
+                sliders.getHeight());
+            assertEquals(target + ": scrolls only where it is taller", content > reserve,
+                row2.canScrollVertically(1));
         }
-        // The Custom row is the one sheet that stands taller than the reserve.
-        assertTrue(mPanel.measureTallest(EditorMode.LOOK, mWidthPx) > reserve);
+        for (int content : sheets) {
+            int sheet = AppearancePreviewArea.sheetPx(reserve, content);
+            assertEquals("one sheet height", reserve, sheet);
+            assertEquals("one preview", shared, AppearancePreviewArea.scale(container, 0, 0, top,
+                AppearancePreviewArea.bottomPx(window, sheet, density)), 0f);
+        }
     }
 
     /** The global set's six columns show six legends reading upward. */

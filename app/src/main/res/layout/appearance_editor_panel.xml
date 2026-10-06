@@ -4,10 +4,11 @@
      its fill (colorSurfaceContainer) and its top corners (shapeAppearanceCornerExtraLarge);
      SurfaceEditorController adds the navigation inset to the bottom padding and sets the height:
      AppearanceEditorPanel.measureFor(mode), measured from the rows that mode shows, held to the
-     tallest resting sheet of the three pages (AppearancePreviewArea), so the sheet's top edge and
-     the preview above it stand still when the page changes. The rows hang from the top; a page
-     whose rows are shorter than that shows plain sheet under them. Nothing in it scrolls, and
-     nothing in it is weighted.
+     sheet reserve (AppearancePreviewArea: the tallest of the three pages, the Custom row
+     included, as far as the preview's least scale allows), so the sheet's top edge and the
+     preview above it stand still on every page and stop. The rows hang from the top; a page
+     whose rows are shorter shows plain sheet under them. Only Row B scrolls, and only where it
+     is taller than the sheet; nothing in it is weighted.
 
      One ConstraintLayout. Each mode's rows are a Group
      (appearance_editor_appearance_group / appearance_editor_layout_group), and a mode switch
@@ -127,17 +128,30 @@
 
     <!-- Row B: a heading row over the Custom row's vertical sliders. GONE until Look mode is at
          the Custom stop (the global set shows with nothing tapped). Code fills it: the heading,
-         the buttons the selection has, and up to five LegendSliders (AppearanceLooks.controls). -->
-    <LinearLayout
+         the buttons the selection has, and up to five LegendSliders (AppearanceLooks.controls).
+         The sheet is one height on every page and stop (AppearancePreviewArea's reserve); where
+         that is shorter than Row B (a short phone, Large text) Row B scrolls inside it rather
+         than the sheet growing. A slider keeps its own drag (it claims the touch on down), so
+         the row scrolls from its heading and the gaps. -->
+    <ScrollView
         android:id="@+id/appearance_editor_row2"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:orientation="vertical"
+        android:overScrollMode="never"
         android:visibility="gone"
+        app:layout_constrainedHeight="true"
+        app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/appearance_editor_look_labels">
+        app:layout_constraintTop_toBottomOf="@id/appearance_editor_look_labels"
+        app:layout_constraintVertical_bias="0">
+
+    <LinearLayout
+        android:id="@+id/appearance_editor_row2_content"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
 
         <!-- The heading row: one height for every selection (48dp, or the terminal's two-line
              pills where they are taller: the panel reserves it), so the sheet is one height
@@ -395,6 +409,7 @@
                 android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
+    </ScrollView>
 
     <androidx.constraintlayout.widget.Group
         android:id="@+id/appearance_editor_appearance_group"

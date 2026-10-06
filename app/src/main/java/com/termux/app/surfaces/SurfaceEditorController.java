@@ -293,8 +293,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mLayoutHeightPx;
     private int mRestHeightPx;
     /**
-     * The tallest resting sheet of the three pages (Look at a stop, Layout, Icon pack): every
-     * page's sheet is at least this tall, so the preview above it is one size on every page.
+     * The one sheet height of every page and stop (AppearancePreviewArea.reservePx): the tallest
+     * of the three pages, the Custom row's included, as far as the preview's least scale allows.
+     * The preview above it is one size everywhere.
      */
     private int mSheetReservePx;
     private int mNavInsetPx;
@@ -1238,8 +1239,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /**
      * Places the frame and sizes the bottom area by the shared preview contract
      * ({@link AppearancePreviewArea}): the frame's visible top {@code GAP_DP} under the page bar,
-     * its bottom {@code GAP_DP} over a sheet held to the tallest resting sheet of the three pages,
-     * so Look, Layout and Icon pack show the launcher on the same rect.
+     * its bottom {@code GAP_DP} over the one sheet reserve, so Look (at any stop, Custom
+     * included), Layout and Icon pack show the launcher on the same rect.
      */
     private void layoutFrame(boolean animate) {
         AppearanceEditorFrame frame = mFrame;
@@ -1274,21 +1275,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         panel.setSideInsets(
             Math.max(0, sides.left - contentInWindow[0]),
             Math.max(0, sides.right - (decorWidth - (contentInWindow[0] + content.getWidth()))));
-        // Every page's sheet is held to the tallest resting sheet of the three, so its top edge,
-        // and the preview over it, stay put when the pill changes page; only the Look page's
-        // Custom row stands taller, and takes its room from the preview while it shows.
         mPanelWidthPx = content.getWidth();
-        mSheetReservePx = measureSheetReserve(panel);
-        mAppearanceHeightPx = panel.measureTallest(EditorMode.LOOK, mPanelWidthPx);
-        mLayoutHeightPx = panel.measureTallest(EditorMode.LAYOUT, mPanelWidthPx);
-        mRestHeightPx = Math.max(mSheetReservePx, Math.max(mAppearanceHeightPx, mLayoutHeightPx));
-        mInLayoutFrame = true;
-        try {
-            applyPanelHeight(false);
-        } finally {
-            mInLayoutFrame = false;
-        }
-
         int[] parentOffset = new int[2];
         if (!AppearanceEditorFrame.offsetIn((View) root.getParent(), content, parentOffset))
             return;
@@ -1306,6 +1293,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // The display bands the frame shows round the container go into the fit, so it is the
         // visible miniature, not the container alone, that stands between the two lines.
         pushDisplayInsets(content);
+        // Every page's sheet, at every stop, is the one reserve: the tallest of the three pages
+        // with the Custom row up, as far as the preview's least scale allows. The sheet's top
+        // edge and the preview over it never move; a Custom row taller than that scrolls.
+        mSheetReservePx = measureSheetReserve(panel);
+        mAppearanceHeightPx = panel.measureTallest(EditorMode.LOOK, mPanelWidthPx);
+        mLayoutHeightPx = panel.measureTallest(EditorMode.LAYOUT, mPanelWidthPx);
+        mRestHeightPx = Math.max(mSheetReservePx, mLayoutHeightPx);
+        mInLayoutFrame = true;
+        try {
+            applyPanelHeight(false);
+        } finally {
+            mInLayoutFrame = false;
+        }
         int frameBottom = AppearancePreviewArea.bottomPx(windowHeight, sheetHeightPx(panel),
             density());
         float scale = AppearancePreviewArea.scale(root.getHeight(), mRevealTopPx,
@@ -1404,21 +1404,38 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (measureTopReveal(frame.root()) == mRevealTopPx)
             return;
         pushDisplayInsets(content);
+        AppearanceEditorPanel panel = mPanel;
+        if (panel != null && mPanelWidthPx > 0)
+            mSheetReservePx = measureSheetReserve(panel);
         applyPanelHeight(true);
     }
 
-    /** The reserve every page's sheet is held to: the tallest resting sheet of the three. */
+    /**
+     * The reserve every page's sheet is: the tallest of the three pages, the Custom row's included,
+     * held under the height that keeps the preview at its least scale. Needs the frame's geometry
+     * ({@link #pushDisplayInsets}) first.
+     */
     private int measureSheetReserve(@NonNull AppearanceEditorPanel panel) {
-        int reserve = 0;
+        int resting = 0;
         for (EditorMode page : EditorMode.values())
-            reserve = Math.max(reserve, panel.measureResting(page, mPanelWidthPx));
-        return reserve;
+            resting = Math.max(resting, panel.measureResting(page, mPanelWidthPx));
+        AppearanceEditorFrame frame = mFrame;
+        int cap = frame == null || frame.root().getHeight() <= 0 ? Integer.MAX_VALUE
+            : AppearancePreviewArea.sheetCapPx(mWindowHeightPx, mFrameTopPx,
+                frame.root().getHeight(), mRevealTopPx, mDisplayInsetBottomPx, density());
+        return AppearancePreviewArea.reservePx(resting,
+            panel.measureTallest(EditorMode.LOOK, mPanelWidthPx), cap);
     }
 
-    /** The sheet's height on the page showing: its content's, held to the shared reserve. */
+    /**
+     * The sheet's height on the page showing: the shared reserve. Layout and Icon pack never
+     * stand taller than it; the Look page's Custom row may, and then scrolls inside it.
+     */
     private int sheetHeightPx(@NonNull AppearanceEditorPanel panel) {
-        return AppearancePreviewArea.sheetPx(mSheetReservePx,
-            panel.measureFor(mode(), mPanelWidthPx));
+        int content = panel.measureFor(mode(), mPanelWidthPx);
+        if (mode() == EditorMode.LOOK)
+            content = Math.min(content, mSheetReservePx);
+        return AppearancePreviewArea.sheetPx(mSheetReservePx, content);
     }
 
     private float density() {

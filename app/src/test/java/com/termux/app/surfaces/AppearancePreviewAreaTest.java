@@ -41,15 +41,19 @@ public class AppearancePreviewAreaTest {
     }
 
     @Test
-    public void everyRestingPageGetsTheSameRectAndOnlyCustomTakesRoom() {
+    public void everyPageAndStopGetsTheSameRectCustomIncluded() {
         int look = Math.round(80 * DENSITY);
         int layout = Math.round(136 * DENSITY);
         int icons = Math.round(184 * DENSITY);
         int custom = Math.round(312 * DENSITY);
-        int reserve = Math.max(look, Math.max(layout, icons));
         int top = AppearancePreviewArea.topPx(STATUS_PX, DENSITY);
+        int cap = AppearancePreviewArea.sheetCapPx(WINDOW_H, top, CONTAINER_H, 0, NAV_PX, DENSITY);
+        int reserve = AppearancePreviewArea.reservePx(Math.max(look, Math.max(layout, icons)),
+            custom, cap);
+        // The phone has the room: the reserve is the Custom row's own height.
+        assertEquals(custom, reserve);
         float rest = -1f;
-        for (int page : new int[] {look, layout, icons}) {
+        for (int page : new int[] {look, layout, icons, custom}) {
             int sheet = AppearancePreviewArea.sheetPx(reserve, page);
             assertEquals(reserve, sheet);
             float scale = AppearancePreviewArea.scale(CONTAINER_H, 0, NAV_PX, top,
@@ -57,10 +61,22 @@ public class AppearancePreviewAreaTest {
             if (rest < 0f) rest = scale;
             assertEquals(rest, scale, 0f);
         }
-        int customSheet = AppearancePreviewArea.sheetPx(reserve, custom);
-        assertEquals(custom, customSheet);
-        assertTrue(AppearancePreviewArea.scale(CONTAINER_H, 0, NAV_PX, top,
-            AppearancePreviewArea.bottomPx(WINDOW_H, customSheet, DENSITY)) < rest);
+        assertTrue(rest > AppearanceEditorFrame.MIN_SCALE);
+    }
+
+    @Test
+    public void onAShortPhoneTheReserveStopsWhereThePreviewWouldTurnUnreadable() {
+        int window = 780;
+        int top = AppearancePreviewArea.topPx(24, 1f);
+        int container = window - 24;
+        int cap = AppearancePreviewArea.sheetCapPx(window, top, container, 0, 0, 1f);
+        int reserve = AppearancePreviewArea.reservePx(160, 340, cap);
+        assertEquals("the Custom row scrolls inside the cap", cap, reserve);
+        float scale = AppearancePreviewArea.scale(container, 0, 0, top,
+            AppearancePreviewArea.bottomPx(window, reserve, 1f));
+        assertEquals(AppearanceEditorFrame.MIN_SCALE, scale, 0.002f);
+        // The other pages never scroll: their tallest is the floor, cap or not.
+        assertEquals(200, AppearancePreviewArea.reservePx(200, 340, 150));
     }
 
     @Test
