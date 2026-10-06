@@ -115,6 +115,8 @@ public final class VoiceListeningIndicator {
     private static final int GAP_DP = 8;
     /** How far a finger may wander on the strip and still be a tap. */
     private static final int HANDLE_SLOP_DP = 6;
+    /** The state's share of the strip, out of two, the × taking the rest. */
+    private static final float LEFT_SHARE = 1.3f;
 
     private final Activity activity;
     /** The place viewport: the room the card sits in, under whatever bars are above it and above the keyboard. */
@@ -251,7 +253,12 @@ public final class VoiceListeningIndicator {
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         noteParams.setMarginStart(dp(6));
         left.addView(note, noteParams);
-        header.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        // The state's side gets a little more of the strip than the ×'s (the handle sits a touch
+        // right of centre, which the eye does not catch), and a long state ("Inserted · at the
+        // cursor") stops short of the handle rather than touching it.
+        LinearLayout.LayoutParams leftParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, LEFT_SHARE);
+        leftParams.setMarginEnd(dp(8));
+        header.addView(left, leftParams);
 
         View grip = new View(context);
         GradientDrawable gripShape = new GradientDrawable();
@@ -267,7 +274,7 @@ public final class VoiceListeningIndicator {
         ImageView closeButton = closeButton(context, onSurfaceVariant);
         closeButton.setOnClickListener(v -> callbacks.onClose());
         right.addView(closeButton, new LinearLayout.LayoutParams(dp(32), dp(32)));
-        header.addView(right, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        header.addView(right, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 2f - LEFT_SHARE));
         view.addView(header, new LinearLayout.LayoutParams(panelWidth, dp(HEADER_DP)));
 
         VoiceTranscriptPanel transcript = new VoiceTranscriptPanel(context, onSurface, onSurfaceVariant,
@@ -442,7 +449,23 @@ public final class VoiceListeningIndicator {
             text = activity.getString(R.string.voice_input_meta_copied);
         }
         note.setText(text);
-        note.setVisibility(text.length() > 0 ? View.VISIBLE : View.GONE);
+        note.setVisibility(text.length() > 0 && metaFits(label, note, busyVisibility == View.VISIBLE)
+            ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * Whether the meta fits beside the whole state in the strip's left group. The state is the
+     * one thing the strip must say; where the two together would be cut, the meta goes rather
+     * than either being cut short.
+     */
+    private boolean metaFits(@NonNull TextView label, @NonNull TextView note, boolean ringShown) {
+        View group = (View) label.getParent();
+        int available = group != null && group.getWidth() > 0 ? group.getWidth()
+            : Math.round((panelWidth - dp(16) - dp(4) - dp(28) - dp(8)) * (LEFT_SHARE / 2f));
+        float needed = label.getPaint().measureText(label.getText().toString()) + dp(6)
+            + note.getPaint().measureText(note.getText().toString());
+        if (ringShown) needed += dp(8) + dp(6);
+        return needed <= available;
     }
 
     /** The VAD has closed a segment: a ghost bar stands in for it until it transcribes. */
