@@ -15,6 +15,7 @@ import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.ViewGroup;
+import android.view.animation.LinearInterpolator;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
@@ -24,6 +25,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.widget.PopupMenu;
+import androidx.constraintlayout.widget.ConstraintHelper;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.constraintlayout.widget.Group;
 import androidx.appcompat.widget.TooltipCompat;
@@ -763,6 +765,31 @@ final class AppearanceEditorPanel {
     @NonNull
     EditorMode mode() {
         return mMode;
+    }
+
+    /**
+     * The rows that show now fade in over the sheet's own surface, on linear time: what a switch
+     * into or out of Icons puts in the sheet arrives under one fade (the rows it replaced are
+     * already gone) instead of appearing in a single frame. Zero puts every row at full alpha at
+     * once, which is also how a fade cut short is settled.
+     */
+    void fadeInRows(long durationMs) {
+        if (!(mRoot instanceof ViewGroup))
+            return;
+        ViewGroup root = (ViewGroup) mRoot;
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View child = root.getChildAt(i);
+            if (child instanceof ConstraintHelper)
+                continue;
+            child.animate().cancel();
+            if (durationMs <= 0L || child.getVisibility() != View.VISIBLE) {
+                child.setAlpha(1f);
+                continue;
+            }
+            child.setAlpha(0f);
+            child.animate().alpha(1f).setStartDelay(0L).setDuration(durationMs)
+                .setInterpolator(new LinearInterpolator()).start();
+        }
     }
 
     /**

@@ -57,6 +57,12 @@ public final class IconPackPage {
     public interface Host {
         /** The choice was written live (nothing restyled): the host owes a restyle when it closes. */
         default void onApplied() {}
+
+        /**
+         * The tile row was rebuilt with a different set of packs (the listing landed): the page
+         * may now be a different height, so the sheet holding it measures it again.
+         */
+        default void onContentChanged() {}
     }
 
     /**
@@ -141,6 +147,12 @@ public final class IconPackPage {
     private volatile int applyGeneration;
     /** A tap has not been written yet: a release writes it rather than lose it. */
     private boolean writePending;
+    /**
+     * The tile set the row holds now (the scope and every pack's value and label), or null before
+     * the first build: a choice or a listing that leaves it the same moves the ring in place and
+     * never tears the row down, so nothing in the sheet blinks.
+     */
+    @Nullable private String shownTiles;
 
     /** The production page: loads on its own single background thread, until {@link #release}. */
     public IconPackPage(@NonNull Context context, @NonNull Host host) {
@@ -174,7 +186,7 @@ public final class IconPackPage {
             if (checked == pinnedOnlyOn) return;
             pinnedOnlyOn = checked;
             commitChoice();
-            rebuildTiles();
+            showTiles();
         });
         onShown();
     }
@@ -191,19 +203,22 @@ public final class IconPackPage {
         return context.getString(R.string.icon_pack_page_title);
     }
 
-    /** The page came into view: re-read the choice and the packs. */
+    /**
+     * The page came into view: re-read the choice and the packs. A row that already holds the
+     * same tiles only moves its ring; a listing that lands with the same packs changes nothing.
+     */
     public void onShown() {
         if (released) return;
         readChoice();
         pinnedOnly.setChecked(pinnedOnlyOn);
-        rebuildTiles();
+        showTiles();
         final int gen = ++loadGeneration;
         background.execute(() -> {
             final List<IconPackChoices.Entry> loadedPacks = backend.packs();
             main.execute(() -> {
                 if (released || gen != loadGeneration) return;
                 packs = new ArrayList<>(loadedPacks);
-                rebuildTiles();
+                if (showTiles()) host.onContentChanged();
             });
         });
     }
@@ -293,7 +308,7 @@ public final class IconPackPage {
     private void select(@NonNull String pack) {
         selected = pack;
         commitChoice();
-        rebuildTiles();
+        showTiles();
     }
 
     private int dp(float v) {
@@ -313,11 +328,52 @@ public final class IconPackPage {
         return g;
     }
 
-    private void rebuildTiles() {
+    /**
+     * Puts the row in step with the scope, the packs and the choice. The tiles are built again
+     * only when the set of them changed (a new listing, the Default tile's name with the scope);
+     * otherwise the ring moves on the tiles already there.
+     *
+     * @return whether the row was built again, and so may have a new height
+     */
+    private boolean showTiles() {
+        String set = tileSet();
+        if (set.equals(shownTiles) && tiles.getChildCount() == packs.size() + 1) {
+            for (int i = 0; i < tiles.getChildCount(); i++) {
+                View tile = tiles.getChildAt(i);
+                Object value = tile.getTag();
+                TextView text = tile.findViewById(R.id.icon_pack_tile_label);
+                styleTile(tile, text.getText(), value instanceof String ? (String) value : "");
+            }
+            return false;
+        }
+        shownTiles = set;
         tiles.removeAllViews();
         addTile(context.getString(pinnedOnlyOn
             ? R.string.icon_pack_page_default_global : R.string.icon_pack_page_default_system), "");
         for (IconPackChoices.Entry pack : packs) addTile(pack.label, pack.value);
+        return true;
+    }
+
+    /** What the row's tiles are: the scope (it names the Default tile) and each pack in order. */
+    @NonNull
+    private String tileSet() {
+        StringBuilder set = new StringBuilder(pinnedOnlyOn ? "pinned" : "global");
+        for (IconPackChoices.Entry pack : packs)
+            set.append('\n').append(pack.value).append('\t').append(pack.label);
+        return set.toString();
+    }
+
+    /** The ring, the selected state and the spoken name of one tile for the current choice. */
+    private void styleTile(@NonNull View tile, @NonNull CharSequence label, @NonNull String value) {
+        ImageView image = tile.findViewById(R.id.icon_pack_tile_art);
+        boolean on = value.equals(selected);
+        // The ring: 3dp primary on the selected tile, a 1dp outline on the rest.
+        image.setBackground(circle(color(com.google.android.material.R.attr.colorSurfaceContainerHigh),
+            on ? color(androidx.appcompat.R.attr.colorPrimary)
+                : color(com.google.android.material.R.attr.colorOutlineVariant), dp(on ? 3 : 1)));
+        tile.setSelected(on);
+        tile.setContentDescription(on
+            ? context.getString(R.string.icon_pack_page_tile_selected, label) : label);
     }
 
     private void addTile(@NonNull CharSequence label, @NonNull final String value) {
@@ -325,15 +381,8 @@ public final class IconPackPage {
         final ImageView image = tile.findViewById(R.id.icon_pack_tile_art);
         TextView text = tile.findViewById(R.id.icon_pack_tile_label);
         text.setText(label);
-        boolean on = value.equals(selected);
-        // The ring: 3dp primary on the selected tile, a 1dp outline on the rest.
-        image.setBackground(circle(color(com.google.android.material.R.attr.colorSurfaceContainerHigh),
-            on ? color(androidx.appcompat.R.attr.colorPrimary)
-                : color(com.google.android.material.R.attr.colorOutlineVariant), dp(on ? 3 : 1)));
-        tile.setSelected(on);
         tile.setTag(value);
-        tile.setContentDescription(on
-            ? context.getString(R.string.icon_pack_page_tile_selected, label) : label);
+        styleTile(tile, label, value);
         tile.setOnClickListener(v -> select(value));
         tiles.addView(tile);
 

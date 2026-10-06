@@ -373,6 +373,28 @@ public class LayoutModeViewsTest {
         assertTrue(panel.shownDoors().isEmpty());
     }
 
+    /**
+     * A switch into or out of Icons fades the rows that show in over the sheet; rows that do not
+     * show are left opaque, and a zero fade (or a cut-short one) settles everything at full alpha.
+     */
+    @Test
+    public void theRowsThatShowFadeInAndAZeroFadeSettlesThem() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ContextThemeWrapper themed = new ContextThemeWrapper(activity,
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
+        View root = panel.view();
+        View look = root.findViewById(R.id.appearance_editor_look);
+        View orientation = root.findViewById(R.id.layout_editor_orientation);
+        panel.showAppearanceMode();
+        panel.fadeInRows(240L);
+        assertEquals("a row that shows starts clear", 0f, look.getAlpha(), 0f);
+        assertEquals("a row that does not show is left opaque", 1f, orientation.getAlpha(), 0f);
+        panel.fadeInRows(0L);
+        assertEquals(1f, look.getAlpha(), 0f);
+        assertEquals(1f, orientation.getAlpha(), 0f);
+    }
+
     private static boolean isInside(View view, View ancestor) {
         for (ViewParent parent = view.getParent(); parent != null; parent = parent.getParent()) {
             if (parent == ancestor)

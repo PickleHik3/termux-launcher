@@ -484,8 +484,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mLayoutMode = false;
         mIconsMode = mode == EditorMode.ICONS;
         mOpenInLayout = layoutMode;
-        if (mIconsMode) ensureIconsContent();
+        // Icons' content is built now, whatever the mode, while the sheet is still hidden: its
+        // pack listing loads behind the other modes, and a pill switch into Icons later finds
+        // the tiles there and measured instead of building and loading them at the tap.
+        ensureIconsContent();
         mPanel.setMode(mIconsMode ? EditorMode.ICONS : EditorMode.LOOK);
+        mPanel.fadeInRows(0L);
         mPanel.hideRow2();
         syncPanel();
         if (mIconsMode) showIconsPage(true);
@@ -831,7 +835,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             setModeInternal(mode, true, 0L);
     }
 
-    /** Builds Icons mode's content once and hands it to the sheet. */
+    /** Builds Icons mode's content once per session and hands it to the sheet. */
     private void ensureIconsContent() {
         AppearanceEditorPanel panel = mPanel;
         if (panel == null || mIconsPage != null)
@@ -841,6 +845,30 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         mIconsPage = page;
         panel.setIconsContent(page.root());
+        page.setOnContentChanged(this::onIconsContentChanged);
+    }
+
+    /**
+     * The tile row was built again for a listing that landed with other packs: while Icons shows,
+     * the sheet takes the content's new height (a two-line pack name is never cut off), and the
+     * frame follows on the sheet's clock. Another mode measures it on the way in.
+     */
+    private void onIconsContentChanged() {
+        if (mOpen && mIconsMode && mFramed)
+            applyPanelHeight(true);
+    }
+
+    /**
+     * Icons shows the dock alone, as it does when it opens from the Overview: a keyboard the
+     * editor raised goes down with the switch, and comes back when another mode shows. One the
+     * person had up already stays, as it does on that path.
+     */
+    private void lowerRaisedKeyboardForIcons() {
+        if (!mRaisedKeyboard)
+            return;
+        mHost.hideInAppKeyboardForEditor();
+        mRaisedKeyboard = false;
+        mKeyboardOwed = true;
     }
 
     /** The content is on screen (true) or has left it: it re-reads the choice, or stops loading. */
@@ -855,6 +883,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /**
      * Swaps what the frame and the bottom area are for. The frame stays put: the canvas's host
      * is the frame's own rect, so the cross-fade changes the picture and nothing moves.
+     *
+     * <p>Into or out of Icons nothing covers the frame (Look and Layout hide their change under
+     * the canvas's fade), so the switch lands the state the Overview's hop into Icons lands (the
+     * status pane as stored, no keyboard the editor raised, the frame over the Icons sheet) in
+     * one move: the status pane's fold, the keyboard, the sheet's height and the frame's refit
+     * all start from this call, the sheet's new rows fade in over it, and the Icons content was
+     * built and loaded while the sheet was hidden ({@link #present}).</p>
      */
     private void setModeInternal(@NonNull EditorMode mode, boolean animate, long delayMs) {
         AppearanceEditorPanel panel = mPanel;
@@ -864,9 +899,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         final boolean wasIcons = mIconsMode;
         mLayoutMode = layout;
         mIconsMode = mode == EditorMode.ICONS;
+        final boolean iconsSwitch = wasIcons != mIconsMode;
         if (mIconsMode) ensureIconsContent();
         panel.setMode(mode);
-        if (wasIcons != mIconsMode)
+        if (iconsSwitch)
             showIconsPage(mIconsMode);
         if (mPageListener != null)
             mPageListener.onModeChanged(mode);
@@ -874,8 +910,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         syncLayoutControls();
         if (mode == EditorMode.LOOK)
             syncPanel();
+        if (mIconsMode && !wasIcons && mFramed)
+            lowerRaisedKeyboardForIcons();
+        if (!mIconsMode && mKeyboardOwed && mFramed) {
+            mKeyboardOwed = false;
+            if (!mHost.isInAppKeyboardShown())
+                mRaisedKeyboard = mHost.showInAppKeyboardForEditor();
+        }
         applyStatusExpansion(animate);
         applyPanelHeight(animate);
+        if (iconsSwitch)
+            panel.fadeInRows(animate && mFramed && !ReducedMotion.isEnabled(mHost.context())
+                ? PANEL_MS : 0L);
         LayoutEditorController editor = mHost.layoutEditor();
         if (layout) {
             dismissClockDropdown();
@@ -895,11 +941,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 mLayoutMove.setVisibility(View.GONE);
         }
         fadeLayoutFrame(layout, animate, delayMs);
-        if (!mIconsMode && mKeyboardOwed && mFramed) {
-            mKeyboardOwed = false;
-            if (!mHost.isInAppKeyboardShown())
-                mRaisedKeyboard = mHost.showInAppKeyboardForEditor();
-        }
         syncDirty();
     }
 

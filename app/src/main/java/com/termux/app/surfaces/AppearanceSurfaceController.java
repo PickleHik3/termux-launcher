@@ -100,6 +100,12 @@ public final class AppearanceSurfaceController {
         default View slidingPart() {
             return root();
         }
+
+        /**
+         * {@code changed} runs when the page's content changes size by itself (a list that lands
+         * after the page is built), so whoever holds it can measure it again. Nothing by default.
+         */
+        default void setOnContentChanged(@Nullable Runnable changed) {}
     }
 
     /** The Overview: a {@link Page} that also tells the surface what its hop moves. */

@@ -10931,11 +10931,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
          * activity's restyle waits for the end of the session.
          */
         @Nullable @Override public com.termux.app.surfaces.AppearanceSurfaceController.Page createIconsContent() {
+            // The editor's listener for a tile row that changed height, set after the page exists.
+            final Runnable[] contentChanged = {null};
             final com.termux.app.chrome.appearance.IconPackPage page =
                 new com.termux.app.chrome.appearance.IconPackPage(TermuxActivity.this,
                     new com.termux.app.chrome.appearance.IconPackPage.Host() {
                         @Override public void onApplied() {
                             mIconPackAppliedLive = true;
+                        }
+
+                        @Override public void onContentChanged() {
+                            Runnable changed = contentChanged[0];
+                            if (changed != null) changed.run();
                         }
                     });
             return new com.termux.app.surfaces.AppearanceSurfaceController.Page() {
@@ -10953,6 +10960,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onHidden() { page.onHidden(); }
                 @Override public void release() { page.release(); }
+                @Override public void setOnContentChanged(@Nullable Runnable changed) {
+                    contentChanged[0] = changed;
+                }
             };
         }
 
