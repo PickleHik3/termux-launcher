@@ -8,6 +8,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -130,6 +131,7 @@ public final class IconPackPage {
     @Nullable private final ExecutorService ownedExecutor;
 
     @NonNull private final View root;
+    @NonNull private final HorizontalScrollView tileScroll;
     @NonNull private final LinearLayout tiles;
     @NonNull private final MaterialSwitch pinnedOnly;
 
@@ -153,6 +155,10 @@ public final class IconPackPage {
      * never tears the row down, so nothing in the sheet blinks.
      */
     @Nullable private String shownTiles;
+    /** A pack listing has landed since the page was built: the row holds all it will. */
+    private boolean listed;
+    /** A scroll to put the row back to once it holds the packs, px; -1 for none. */
+    private int pendingScrollX = -1;
 
     /** The production page: loads on its own single background thread, until {@link #release}. */
     public IconPackPage(@NonNull Context context, @NonNull Host host) {
@@ -179,7 +185,12 @@ public final class IconPackPage {
         }
 
         root = LayoutInflater.from(context).inflate(R.layout.icon_pack_page, null, false);
+        tileScroll = root.findViewById(R.id.icon_pack_tiles_scroll);
         tiles = root.findViewById(R.id.icon_pack_tiles);
+        // A remembered scroll waits for the row to be laid out with the packs in it.
+        tiles.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (pendingScrollX >= 0) tileScroll.post(this::applyPendingScroll);
+        });
         pinnedOnly = root.findViewById(R.id.icon_pack_pinned_only);
 
         pinnedOnly.setOnCheckedChangeListener((button, checked) -> {
@@ -218,7 +229,9 @@ public final class IconPackPage {
             main.execute(() -> {
                 if (released || gen != loadGeneration) return;
                 packs = new ArrayList<>(loadedPacks);
+                listed = true;
                 if (showTiles()) host.onContentChanged();
+                else if (pendingScrollX >= 0) tileScroll.post(this::applyPendingScroll);
             });
         });
     }
@@ -239,6 +252,30 @@ public final class IconPackPage {
         applyGeneration++;
         art.clear();
         if (ownedExecutor != null) ownedExecutor.shutdownNow();
+    }
+
+    /** How far the tile row is scrolled, px. */
+    public int tileScrollX() {
+        return tileScroll.getScrollX();
+    }
+
+    /**
+     * Puts the tile row back at {@code px} (the Appearance surface's memory of where it was left)
+     * once the row is laid out with the packs in it; a row that holds less scrolls as far as it
+     * can.
+     */
+    public void restoreTileScrollX(int px) {
+        pendingScrollX = Math.max(0, px);
+        tileScroll.post(this::applyPendingScroll);
+    }
+
+    private void applyPendingScroll() {
+        if (released || pendingScrollX < 0 || tiles.getWidth() <= 0 || tileScroll.getWidth() <= 0)
+            return;
+        tileScroll.scrollTo(pendingScrollX, 0);
+        // Until the listing lands the row holds Default alone; the scroll is kept for it.
+        if (listed)
+            pendingScrollX = -1;
     }
 
     /** The pack in force for the scope the switch names ("" for Default). */

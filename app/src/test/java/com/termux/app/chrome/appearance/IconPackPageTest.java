@@ -322,6 +322,25 @@ public class IconPackPageTest {
         assertEquals(2, mContentChanged);
     }
 
+    /**
+     * The Appearance surface's memory of the row's scroll comes back once the row is laid out
+     * with the packs in it, and is reported back as the row's own scroll.
+     */
+    @Test
+    public void aRememberedScrollComesBackOnceTheRowIsLaidOut() {
+        List<IconPackChoices.Entry> many = new ArrayList<>();
+        for (int i = 0; i < 10; i++) many.add(new IconPackChoices.Entry("Pack " + i, "pack." + i));
+        mBackend.packs = many;
+        IconPackPage page = open();
+        page.restoreTileScrollX(120);
+        View root = page.root();
+        root.measure(View.MeasureSpec.makeMeasureSpec(360, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        root.layout(0, 0, 360, root.getMeasuredHeight());
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(120, page.tileScrollX());
+    }
+
     private static List<View> tiles(@NonNull IconPackPage page) {
         List<View> out = new ArrayList<>();
         for (int i = 0; i < page.tilesView().getChildCount(); i++) out.add(page.tilesView().getChildAt(i));

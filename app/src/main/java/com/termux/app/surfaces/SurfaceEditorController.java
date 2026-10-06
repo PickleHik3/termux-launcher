@@ -266,6 +266,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable private Target mTarget;
     /** Whether the editor raised the in-app keyboard itself, and so owes taking it down. */
     private boolean mRaisedKeyboard;
+    /**
+     * Where the next presentation of its page opens, as the surface remembered it (the person
+     * left from there within the window); used by that presentation and then forgotten.
+     */
+    @Nullable private AppearanceReturnState mRestore;
+    /**
+     * A remembered selection the frame did not offer yet: the keyboard is raised only once the
+     * frame has settled, so its selection is made then.
+     */
+    @Nullable private Target mRestoreTarget;
 
     @Nullable private AppearanceEditorFrame mFrame;
     @Nullable private AppearanceEditorPanel mPanel;
@@ -455,13 +465,26 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (rootContainer == null || content == null)
             return;
         final int token = ++mPresentToken;
+        // Where the person left this page, when the surface remembers it: the Custom stop and
+        // the selection (Look), the place (Layout), the row's scroll (Icons).
+        AppearanceReturnState restore = mRestore;
+        mRestore = null;
+        if (restore != null && restore.editorMode() != mode)
+            restore = null;
+        if (restore != null && layoutMode && place == null)
+            place = placeNamed(restore.place);
         mOpen = true;
         mEntry = AppearanceSnapshot.capture(prefs);
         mEntrySignature = mEntry.signature();
         mSessionCustom = null;
         mStop = matchingStop();
+        // At the Custom stop as it was left: the slider moves there without writing anything,
+        // as a tap on an element at a Look stop does; Undo comes back to it.
+        if (restore != null && restore.custom)
+            mStop = AppearanceLooks.CUSTOM_STOP;
         mEntryStop = mStop;
         mTarget = null;
+        mRestoreTarget = restore == null ? null : targetNamed(restore.target);
         // The in-app keyboard is one of the things the frame offers; it is raised after the frame
         // has settled (the relayout and the terminal's resize would land on the animation).
         mRaisedKeyboard = false;
@@ -488,6 +511,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         // pack listing loads behind the other modes, and a pill switch into Icons later finds
         // the tiles there and measured instead of building and loading them at the tap.
         ensureIconsContent();
+        if (restore != null && mIconsMode && mIconsPage != null)
+            mIconsPage.restoreScrollPosition(restore.iconsScrollPx);
         mPanel.setMode(mIconsMode ? EditorMode.ICONS : EditorMode.LOOK);
         mPanel.fadeInRows(0L);
         mPanel.hideRow2();
@@ -538,6 +563,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 setModeInternal(EditorMode.LAYOUT, true, 0L);
             } else if (!mIconsMode) {
                 selectSection(initialSection);
+                selectRestoredTarget();
             }
             long wait = ReducedMotion.isEnabled(mHost.context()) ? 0L
                 : AppearanceEditorFrame.ENTER_MS + 20L;
@@ -549,6 +575,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     mKeyboardOwed = true;
                 else if (!mHost.isInAppKeyboardShown())
                     mRaisedKeyboard = mHost.showInAppKeyboardForEditor();
+                // A remembered keyboard selection is offered only now; past here it is dropped.
+                selectRestoredTarget();
+                mRestoreTarget = null;
                 if (onSettled != null)
                     onSettled.run();
             }, wait);
@@ -1036,6 +1065,64 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         Target target = Target.forSlot(slotForSectionKey(section));
         if (target != null && AppearanceLooks.isCustomStop(mStop))
             select(target);
+    }
+
+    /**
+     * The remembered selection, once the frame offers it, at the Custom stop on the Look page;
+     * nothing when a deep link already chose one or the person has moved on.
+     */
+    private void selectRestoredTarget() {
+        Target target = mRestoreTarget;
+        if (target == null || !mOpen || mLayoutMode || mIconsMode || mTarget != null
+            || !AppearanceLooks.isCustomStop(mStop))
+            return;
+        select(target);
+        if (mTarget == target)
+            mRestoreTarget = null;
+    }
+
+    @Nullable
+    private static Target targetNamed(@Nullable String name) {
+        if (name == null)
+            return null;
+        for (Target target : Target.values()) {
+            if (target.name().equals(name))
+                return target;
+        }
+        return null;
+    }
+
+    @Nullable
+    private static PaneWallPage placeNamed(@Nullable String name) {
+        if (name == null)
+            return null;
+        for (PaneWallPage page : PaneWallPage.values()) {
+            if (page.name().equals(name))
+                return page;
+        }
+        return null;
+    }
+
+    @Override
+    public void restoreNext(@Nullable AppearanceReturnState state) {
+        mRestore = state;
+    }
+
+    /** Where the editor stands on its page, for the surface to remember. */
+    @Override
+    public void describe(@NonNull AppearanceReturnState.Builder out) {
+        if (!mOpen)
+            return;
+        if (mIconsMode) {
+            AppearanceSurfaceController.Page icons = mIconsPage;
+            out.iconsScroll(icons == null ? 0 : icons.scrollPosition());
+        } else if (mLayoutMode) {
+            LayoutEditorController layout = mHost.layoutEditor();
+            PaneWallPage place = layout == null ? null : layout.editedPlace();
+            out.place(place == null ? null : place.name());
+        } else {
+            out.look(mTarget == null ? null : mTarget.name(), AppearanceLooks.isCustomStop(mStop));
+        }
     }
 
     /**
@@ -2805,6 +2892,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mEntry = null;
         mEntrySignature = null;
         mTarget = null;
+        mRestoreTarget = null;
         mOpenInLayout = false;
         mPanelRevealing = false;
         LayoutEditorController layout = mHost.layoutEditor();
@@ -2897,6 +2985,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mOpen || !mSession)
             return;
         mSession = false;
+        mRestore = null;
         mWallpaperToken++;
         mWallpaperSettled = false;
         mWallpaperWaiter = null;

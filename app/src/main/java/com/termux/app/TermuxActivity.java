@@ -10963,6 +10963,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void setOnContentChanged(@Nullable Runnable changed) {
                     contentChanged[0] = changed;
                 }
+                @Override public int scrollPosition() { return page.tileScrollX(); }
+                @Override public void restoreScrollPosition(int px) { page.restoreTileScrollX(px); }
             };
         }
 
@@ -16919,6 +16921,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void createOverview(
                 @NonNull com.termux.app.surfaces.AppearanceSurfaceController.Navigator navigator,
                 @NonNull java.util.function.Consumer<com.termux.app.surfaces.AppearanceSurfaceController.OverviewPage> ready) {
+            createOverview(navigator, null, ready);
+        }
+
+        @Override public void createOverview(
+                @NonNull com.termux.app.surfaces.AppearanceSurfaceController.Navigator navigator,
+                @Nullable String centredSlot,
+                @NonNull java.util.function.Consumer<com.termux.app.surfaces.AppearanceSurfaceController.OverviewPage> ready) {
             final com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState restore = mOverviewRestore;
             mOverviewRestore = null;
             final com.termux.app.chrome.wallpaper.WallpaperPickerPage.Slots slots =
@@ -16939,10 +16948,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     navigator.close();
                     return;
                 }
+                // A photo's return state wins; else the card the surface remembers, nothing pending.
+                com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState start = restore;
+                com.termux.app.chrome.wallpaper.WallpaperSlots.Slot remembered =
+                    wallpaperSlotNamed(centredSlot);
+                if (start == null && remembered != null) {
+                    start = com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState
+                        .centredOn(remembered, loaded);
+                }
                 final com.termux.app.chrome.wallpaper.WallpaperPickerPage picker =
                     new com.termux.app.chrome.wallpaper.WallpaperPickerPage(TermuxActivity.this,
                         slots, overviewListener(), navigator::close,
-                        restore, new com.termux.app.chrome.wallpaper.WallpaperThumbs(), loaded, io);
+                        start, new com.termux.app.chrome.wallpaper.WallpaperThumbs(), loaded, io);
                 // The surface's one bar (back, the Wallpaper | Look | Layout pill, Done) around
                 // the page; the Wallpaper segment is this page.
                 final com.termux.app.surfaces.AppearanceEditorPage shell =
@@ -16963,6 +16980,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         picker.setBackgroundAlpha(alpha);
                     }
                     @Override public void setBarVisible(boolean visible) { shell.setBarVisible(visible); }
+                    @Nullable @Override public String centredSlot() { return picker.centredSlot().name(); }
                     @Override public boolean hasPendingChanges() { return picker.hasPendingChanges(); }
                     @Override public void commit(@NonNull Runnable done, @NonNull Runnable failed) {
                         picker.commit(done, failed);
@@ -16973,6 +16991,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onClosed() {
             mOverviewRestore = null;
+        }
+
+        /** In the default preferences, as Settings keeps its own place, so a killed launcher keeps it. */
+        @Nullable @Override public String readReturnState() {
+            try {
+                return appearanceReturnPreferences().getString(
+                    com.termux.app.surfaces.AppearanceReturnState.PREFS_KEY, null);
+            } catch (RuntimeException e) {
+                return null;
+            }
+        }
+
+        @Override public void writeReturnState(@NonNull String state) {
+            appearanceReturnPreferences().edit()
+                .putString(com.termux.app.surfaces.AppearanceReturnState.PREFS_KEY, state).apply();
+        }
+
+        @NonNull
+        private android.content.SharedPreferences appearanceReturnPreferences() {
+            return getApplicationContext().getSharedPreferences(
+                TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+                Context.MODE_PRIVATE);
+        }
+
+        @Nullable
+        private com.termux.app.chrome.wallpaper.WallpaperSlots.Slot wallpaperSlotNamed(
+                @Nullable String name) {
+            if (name == null) return null;
+            for (com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot
+                    : com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.values()) {
+                if (slot.name().equals(name)) return slot;
+            }
+            return null;
         }
 
         @Override public void onClosedByUser() {
