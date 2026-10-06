@@ -2242,7 +2242,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mX11Display != null && isDisplayPageShowing() && !mPaneWallController.wall().isMoving()) {
             syncDisplayPageAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
         }
+        // The default home can have been changed while we were stopped.
+        mDefaultHomeApp = null;
         syncRecentsVisibilityPolicy();
+        mRecentsPolicySyncedSinceStart = true;
         mChrome.requestSync(ChromeRenderer.SCOPE_BLUR_HEALTH);
         registerTermuxActivityBroadcastReceiver();
         // Only something that lists apps hears about packages: the catalogue behind the dock and
@@ -2500,7 +2503,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncTerminalWallpaperRenderingMode();
             applySeamlessStatusBackgroundModeIfNeeded();
             applyTerminalSurfaceAppearance();
-            syncRecentsVisibilityPolicy();
+            // Once per visible pass: onStart has just done it on an arrival. A resume with no
+            // start before it (a dialog such as the home-role request shown over us) re-reads.
+            if (mRecentsPolicySyncedSinceStart) {
+                mRecentsPolicySyncedSinceStart = false;
+            } else {
+                mDefaultHomeApp = null;
+                syncRecentsVisibilityPolicy();
+            }
             applyWallpaperOffsetFixIfNeeded();
             mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_BLUR_HEALTH);
@@ -8983,7 +8993,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return showWhenNotHomeEnabled && !isDefaultHome;
     }
 
+    /**
+     * Whether this app is the default home, as last resolved; null until asked. Cleared where the
+     * answer can have changed: onStart, a resume with no start before it, and the preferred
+     * activity broadcast.
+     */
+    @Nullable private Boolean mDefaultHomeApp;
+    /** Set by onStart's recents sync so the onResume that follows does not repeat it. */
+    private boolean mRecentsPolicySyncedSinceStart;
+
     private boolean isDefaultHomeApp() {
+        Boolean held = mDefaultHomeApp;
+        if (held != null) return held;
+        boolean answer = resolveIsDefaultHomeApp();
+        mDefaultHomeApp = answer;
+        return answer;
+    }
+
+    private boolean resolveIsDefaultHomeApp() {
         Intent home = new Intent(Intent.ACTION_MAIN);
         home.addCategory(Intent.CATEGORY_HOME);
         PackageManager packageManager = getPackageManager();
@@ -23953,6 +23980,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             public void onReceive(Context context, Intent intent) {
                 if (intent == null || !ACTION_PREFERRED_ACTIVITY_CHANGED.equals(intent.getAction()))
                     return;
+                mDefaultHomeApp = null;
                 syncRecentsVisibilityPolicy();
             }
         };
