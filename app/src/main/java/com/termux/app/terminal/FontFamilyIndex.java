@@ -96,6 +96,48 @@ final class FontFamilyIndex {
         return mFamilies.isEmpty();
     }
 
+    /** Entries {@link #treeStamp} will look at before it gives up and reports "changed". */
+    private static final int MAX_STAMPED_ENTRIES = 4 * MAX_FILES;
+
+    /**
+     * A value that changes whenever anything {@link #of} could read under these roots changes: an
+     * entry added, removed or renamed, or a file rewritten. A tree too large to stamp within the
+     * bound answers {@code null}, meaning "treat it as changed".
+     */
+    @Nullable
+    static Long treeStamp(@NonNull List<File> roots) {
+        long[] stamp = {1125899906842597L};
+        int budget = MAX_STAMPED_ENTRIES;
+        for (File root : roots) {
+            budget = stampTree(root, 0, budget, stamp);
+            if (budget < 0) return null;
+        }
+        return stamp[0];
+    }
+
+    private static int stampTree(@NonNull File dir, int depth, int budget, @NonNull long[] stamp) {
+        stamp[0] = stamp[0] * 31 + dir.getPath().hashCode();
+        if (depth > MAX_DEPTH || !dir.isDirectory()) {
+            stamp[0] = stamp[0] * 31 + 1;
+            return budget;
+        }
+        stamp[0] = stamp[0] * 31 + dir.lastModified();
+        File[] entries = dir.listFiles();
+        if (entries == null) return budget;
+        Arrays.sort(entries, (first, second) -> first.getName().compareTo(second.getName()));
+        for (File entry : entries) {
+            if (--budget < 0) return budget;
+            if (entry.isDirectory()) {
+                budget = stampTree(entry, depth + 1, budget, stamp);
+                if (budget < 0) return budget;
+                continue;
+            }
+            stamp[0] = ((stamp[0] * 31 + entry.getName().hashCode()) * 31
+                + entry.lastModified()) * 31 + entry.length();
+        }
+        return budget;
+    }
+
     private static int scan(@NonNull File dir, int depth, int budget,
                             @NonNull List<File> files) {
         if (budget <= 0 || depth > MAX_DEPTH || !dir.isDirectory()) return budget;

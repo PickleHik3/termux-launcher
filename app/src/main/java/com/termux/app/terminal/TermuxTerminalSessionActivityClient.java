@@ -83,6 +83,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     /** Cheap stamp (mtime, length) of colors.properties at the last non-dynamic apply. */
     private long mLastColorsFileStamp = Long.MIN_VALUE;
     @NonNull private String mLastFontErrorSummary = "";
+    /** The resolved faces, so a new pane does not re-read and re-scan the font config. */
+    private final TerminalFontMemo mFontMemo = new TerminalFontMemo();
     private final Runnable mForegroundTerminalRefreshRunnable;
 
     /**
@@ -1027,8 +1029,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     /** Load the configured faces and apply them to every pane that has a renderer. */
     public void applyTerminalFonts() {
         try {
-            TerminalFontConfig.Result config = TerminalFontConfig.load();
-            TerminalFontLoader.Faces faces = TerminalFontLoader.load(config);
+            // Always a fresh load: this is the path a config edit or a return from Settings takes.
+            TerminalFontMemo.Entry loaded = mFontMemo.reload();
+            TerminalFontConfig.Result config = loaded.config;
+            TerminalFontLoader.Faces faces = loaded.faces;
             reportFontErrors(faces.errors);
             for (com.termux.view.TerminalView v : mHost.paneViews()) {
                 if (v.isFontInitialized())
@@ -1052,7 +1056,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (view == null || !view.isFontInitialized())
             return;
         try {
-            TerminalFontLoader.Faces faces = TerminalFontLoader.load(TerminalFontConfig.load());
+            TerminalFontLoader.Faces faces = mFontMemo.current().faces;
             for (String error : faces.errors) Logger.logError(LOG_TAG, "Font config: " + error);
             view.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
                 faces.symbolMaps, faces.ligaturePolicy, faces.fontFeatures,
