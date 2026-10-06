@@ -409,7 +409,13 @@ final class VoiceTranscriptPanel extends LinearLayout {
         int removedColor = (onSurface & 0x00FFFFFF) | (0x99 << 24);
         SpannableStringBuilder builder = new SpannableStringBuilder();
         for (VoiceWordDiff.Op op : current) {
-            if (builder.length() > 0) builder.append(' ');
+            if (builder.length() > 0) {
+                if (op.breaks > 0) {
+                    for (int b = 0; b < op.breaks; b++) builder.append('\n');
+                } else {
+                    builder.append(' ');
+                }
+            }
             int start = builder.length();
             builder.append(op.word);
             int end = builder.length();

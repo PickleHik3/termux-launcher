@@ -747,6 +747,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override
+            public boolean acceptsBracketedPaste(@NonNull TerminalSession session) {
+                TerminalEmulator emulator = session.getEmulator();
+                return session.isRunning() && emulator != null && emulator.isBracketedPasteMode();
+            }
+
+            @Override
             public void write(@NonNull TerminalSession session, @NonNull String data) {
                 session.write(data);
             }
