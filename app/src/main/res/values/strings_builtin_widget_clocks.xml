@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Analog clock settings: the two extra cities beside the phone's own. -->
+    <string name="bw_clocks_zone1_label">Second clock: city or time zone</string>
+    <string name="bw_clocks_zone2_label">Third clock: city or time zone</string>
+
+    <!-- A world clock's line under its time: how it differs from the phone's clock. -->
+    <string name="bw_clocks_today">Today</string>
+    <!-- %1$s is the offset, like "+9 h". -->
+    <string name="bw_clocks_offset_tomorrow">%1$s tomorrow</string>
+    <string name="bw_clocks_offset_yesterday">%1$s yesterday</string>
+
+    <!-- The caption a Pane-style clock shows, styled like a path. -->
+    <string name="bw_clocks_pane_caption">clock</string>
+
+    <string name="bw_clocks_day">Day</string>
+    <string name="bw_clocks_year">Year</string>
+    <string name="bw_clocks_percent">%1$d%%</string>
+
+    <!-- Read aloud for the widget: %1$s the time, %2$s the date. -->
+    <string name="bw_clocks_description">Clock, %1$s, %2$s</string>
+    <!-- Appended per world clock: %1$s the city, %2$s its time. -->
+    <string name="bw_clocks_description_zone">%1$s %2$s</string>
+    <string name="bw_clocks_description_progress">Day %1$d percent done, year %2$d percent done</string>
+    <string name="bw_clocks_description_sun">Sunrise %1$s, sunset %2$s</string>
+</resources>
