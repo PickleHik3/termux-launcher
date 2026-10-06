@@ -32,22 +32,22 @@ final class IconPackResourcesCache<T> {
         @Nullable T load(@NonNull String packageName);
     }
 
-    private static final class Entry<T> {
+    private static final class Loaded<T> {
         @NonNull final String apkPath;
         @NonNull final T value;
 
-        Entry(@NonNull String apkPath, @NonNull T value) {
+        Loaded(@NonNull String apkPath, @NonNull T value) {
             this.apkPath = apkPath;
             this.value = value;
         }
     }
 
-    private final Map<String, Entry<T>> mEntries;
+    private final Map<String, Loaded<T>> mEntries;
 
     IconPackResourcesCache(int capacity) {
-        mEntries = new LinkedHashMap<String, Entry<T>>(capacity + 1, 0.75f, true) {
+        mEntries = new LinkedHashMap<String, Loaded<T>>(capacity + 1, 0.75f, true) {
             @Override
-            protected boolean removeEldestEntry(Map.Entry<String, Entry<T>> eldest) {
+            protected boolean removeEldestEntry(Map.Entry<String, Loaded<T>> eldest) {
                 return size() > capacity;
             }
         };
@@ -64,7 +64,7 @@ final class IconPackResourcesCache<T> {
                 mEntries.remove(packageName);
                 return null;
             }
-            Entry<T> entry = mEntries.get(packageName);
+            Loaded<T> entry = mEntries.get(packageName);
             if (entry != null && entry.apkPath.equals(apkPath)) return entry.value;
         }
         T value = loader.load(packageName);
@@ -73,7 +73,7 @@ final class IconPackResourcesCache<T> {
                 mEntries.remove(packageName);
                 return null;
             }
-            mEntries.put(packageName, new Entry<>(apkPath, value));
+            mEntries.put(packageName, new Loaded<>(apkPath, value));
         }
         return value;
     }
