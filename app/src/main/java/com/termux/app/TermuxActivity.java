@@ -1196,6 +1196,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mWallpaperParallaxSparePx;
     /** Scratch for the managed picture's pixel size; never allocated per ask. */
     @NonNull private final int[] mManagedWallpaperSize = new int[2];
+    /**
+     * The system wallpaper id and the managed copy's facts, as last read; see
+     * {@link #refreshWallpaperSourceFacts()}. Null until the first ask reads them.
+     */
+    @Nullable private com.termux.app.chrome.WallpaperSourceFacts mWallpaperSourceFacts;
+    /** The managed exact copy's path, resolved (and its directory made) once. */
+    @Nullable private File mManagedWallpaperExactFile;
     /** The frost views that follow the parallax, looked up once; see {@link #syncWallpaperParallax}. */
     @Nullable private View[] mParallaxFrostViews;
     /**
@@ -1488,11 +1495,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public int systemWallpaperId() {
-            return getCurrentSystemWallpaperId();
+            return wallpaperSourceFacts().systemWallpaperId;
         }
 
         @NonNull @Override public java.io.File managedWallpaperExactFile() {
             return getManagedWallpaperExactFile();
+        }
+
+        @Override public long managedWallpaperLastModified() {
+            return wallpaperSourceFacts().managedLastModified;
+        }
+
+        @Override public long managedWallpaperLength() {
+            return wallpaperSourceFacts().managedLength;
         }
 
         @Nullable @Override public com.termux.app.chrome.WallpaperBlurCache.FrameCapture beginCapture(
@@ -3650,10 +3665,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private Rect getWallpaperCaptureFrameRect() {
         Rect frame = getManagedWallpaperFrameRect();
         int spanPx = frame.width();
-        if (isWallpaperParallaxAvailable()
-            && mManagedWallpaperSource.readSize(getManagedWallpaperExactFile(), mManagedWallpaperSize)) {
-            spanPx = com.termux.app.wall.WallParallax.spanPx(mManagedWallpaperSize[0],
-                mManagedWallpaperSize[1], frame.width(), frame.height());
+        if (isWallpaperParallaxAvailable()) {
+            com.termux.app.chrome.WallpaperSourceFacts facts = wallpaperSourceFacts();
+            if (facts.hasManagedSize()) {
+                spanPx = com.termux.app.wall.WallParallax.spanPx(facts.managedWidth,
+                    facts.managedHeight, frame.width(), frame.height());
+            }
         }
         mWallpaperParallaxSparePx = Math.max(0, spanPx - frame.width());
         frame.right = frame.left + spanPx;
@@ -3881,12 +3898,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
             mWallpaperColorsChangedListener = (WallpaperColors colors, int which) -> {
+                // The new id first, so nothing that runs from here on cuts a frame for the old one.
+                com.termux.app.chrome.WallpaperSourceFacts facts = refreshWallpaperSourceFacts();
                 // A wallpaper set outside the launcher is still a wallpaper change: tagged so the
                 // surface that refills each radius crossfades into it instead of swapping outright.
                 mChrome.blurCache().clearForWallpaperChange();
                 // How a wallpaper set outside the launcher reaches us: the picture can have gone
                 // from a still to a live wallpaper, or back, and every glass turns on that.
-                refreshWallpaperPicture();
+                refreshWallpaperPicture(facts);
                 if (!mIsVisible) {
                     return;
                 }
@@ -5403,7 +5422,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * @return true when the picture changed, so the caller can skip a redraw nothing needs
      */
     private boolean refreshWallpaperPicture() {
-        WallpaperPicture picture = WallpaperPictureReader.read(this, mPreferences);
+        return refreshWallpaperPicture(refreshWallpaperSourceFacts());
+    }
+
+    /** {@link #refreshWallpaperPicture()} with source facts the caller has just read. */
+    private boolean refreshWallpaperPicture(@NonNull com.termux.app.chrome.WallpaperSourceFacts facts) {
+        WallpaperPicture picture = WallpaperPictureReader.read(this, mPreferences,
+            facts.systemWallpaperId);
         if (picture == mWallpaperPicture) return false;
         mWallpaperPicture = picture;
         return true;
@@ -6677,11 +6702,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null) {
             return false;
         }
-        int storedWallpaperId = mPreferences.getManagedWallpaperSystemId();
-        if (storedWallpaperId <= 0 || storedWallpaperId != getCurrentSystemWallpaperId()) {
-            return false;
+        return wallpaperSourceFacts().managedOnScreen();
+    }
+
+    /**
+     * The wallpaper source facts every glass surface reads in a pass, read once and held: the
+     * system id is a binder call and the file's facts are stats, and the blur cache alone asked
+     * for them once per surface per obtain.
+     */
+    @NonNull
+    private com.termux.app.chrome.WallpaperSourceFacts wallpaperSourceFacts() {
+        com.termux.app.chrome.WallpaperSourceFacts facts = mWallpaperSourceFacts;
+        // The stored id is a preference held in memory, so it is checked on every ask: the picker
+        // (or a command) writes it once the picture is on disk, and a moved id reads again.
+        if (facts == null || facts.isStaleFor(storedManagedWallpaperSystemId())) {
+            facts = refreshWallpaperSourceFacts();
         }
-        return getManagedWallpaperExactFile().isFile();
+        return facts;
+    }
+
+    private int storedManagedWallpaperSystemId() {
+        return mPreferences == null ? 0 : mPreferences.getManagedWallpaperSystemId();
+    }
+
+    /**
+     * Reads the wallpaper source facts afresh. Called wherever the wallpaper can have changed —
+     * {@link #refreshWallpaperPicture()} (every arrival and the picker's apply), the colours
+     * listener and the managed picture landing — and always before the capture that follows, so
+     * the blur cache's identity check sees the same id the capture is cut for.
+     */
+    @NonNull
+    private com.termux.app.chrome.WallpaperSourceFacts refreshWallpaperSourceFacts() {
+        File exact = getManagedWallpaperExactFile();
+        boolean present = exact.isFile();
+        int width = 0, height = 0;
+        if (present && mManagedWallpaperSource.readSize(exact, mManagedWallpaperSize)) {
+            width = mManagedWallpaperSize[0];
+            height = mManagedWallpaperSize[1];
+        }
+        com.termux.app.chrome.WallpaperSourceFacts facts = com.termux.app.chrome.WallpaperSourceFacts.of(
+            storedManagedWallpaperSystemId(), getCurrentSystemWallpaperId(), present,
+            exact.lastModified(), exact.length(), width, height);
+        mWallpaperSourceFacts = facts;
+        return facts;
     }
 
     private int computeAccessoryBackdropHorizontalOverscanPx(int blurRadiusDp) {
@@ -6753,6 +6816,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Bitmap sourceBitmap = mManagedWallpaperSource.obtain(sourceFile, frameRect.width(),
             frameRect.height(), () -> {
                 if (isFinishing() || isDestroyed()) return;
+                // The file that just landed is the one the facts must describe from here on.
+                refreshWallpaperSourceFacts();
                 // The managed file landing is a new wallpaper picture; tagged the same way, so the
                 // surface that refills each radius crossfades into it instead of swapping outright.
                 mChrome.blurCache().clearForWallpaperChange();
@@ -13872,8 +13937,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @NonNull
     private File getManagedWallpaperExactFile() {
-        // One statement of the path, shared with the settings page's own check.
-        return com.termux.app.chrome.WallpaperPictureReader.managedWallpaperExactFile(this);
+        // One statement of the path, shared with the settings page's own check. Resolved once:
+        // the reader makes the directory on every call, and the writers make it themselves.
+        File exact = mManagedWallpaperExactFile;
+        if (exact == null) {
+            exact = com.termux.app.chrome.WallpaperPictureReader.managedWallpaperExactFile(this);
+            mManagedWallpaperExactFile = exact;
+        }
+        return exact;
     }
 
     @NonNull
