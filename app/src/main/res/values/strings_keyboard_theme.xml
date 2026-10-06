@@ -2,7 +2,4 @@
 <resources>
     <string name="keyboard_theme_title">Keyboard theme</string>
     <string name="keyboard_theme_summary">Colors and typeface</string>
-    <string name="keyboard_theme_row_hints">Hints</string>
-    <string name="keyboard_theme_row_keyboard">Keyboard</string>
-    <string name="keyboard_theme_row_labels">Labels</string>
 </resources>

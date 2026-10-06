@@ -44,7 +44,6 @@ import com.termux.ai.TaiSpeechModels;
 import com.termux.ai.TaiTierPolicy;
 import com.termux.ai.TaiReadAloud;
 import com.termux.ai.TaiTtsModels;
-import com.termux.ai.TaiVisionModels;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.notice.AppNotice;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -143,8 +142,6 @@ public class TaiModelCentreFragment extends Fragment
     @NonNull private List<TaiModelSpec> installedImage = Collections.emptyList();
     /** Installed speech-output (voice) models; shown under Installed and never as chat or speech-to-text. */
     @NonNull private List<TaiModelSpec> installedVoice = Collections.emptyList();
-    /** Installed wallpaper vision graphs; their own group under Installed, never in a chat list. */
-    @NonNull private List<TaiModelSpec> installedVision = Collections.emptyList();
     /** The resolver for this phone's picks, rebuilt with the installed models; the Functions rows read it. */
     @Nullable private TaiFunctionModels functionModels;
     @NonNull private String deviceLine = "";
@@ -152,8 +149,6 @@ public class TaiModelCentreFragment extends Fragment
     /** "Used by: ..." per installed model id, empty text for a model no function uses. */
     @NonNull private Map<String, String> usedBy = Collections.emptyMap();
     @NonNull private String tidyLevel = "polished";
-    /** The depth model the analysis prefers, for its "In use" pill. */
-    @Nullable private String depthId;
     /** A model row a deep link asked for: scrolled to and ringed on the next {@link #rebuild}, then cleared. */
     @Nullable private String pendingScrollKey;
     /** The row ringed right now, until {@link #HIGHLIGHT_MS} passes. */
@@ -187,25 +182,6 @@ public class TaiModelCentreFragment extends Fragment
         } else {
             activity.startActivity(SettingsActivity.createFragmentIntent(activity, TaiModelCentreFragment.class,
                 R.string.tai_model_centre_title, segment, null));
-        }
-    }
-
-    /**
-     * Opens the centre on Installed (scrolled to {@code modelId}'s row, which is ringed for a moment)
-     * when the model is on the phone, else on Get models: the wallpaper picker's "download the
-     * missing models" lands there.
-     */
-    public static void openForModel(@Nullable Activity activity, @NonNull String modelId) {
-        if (activity == null) return;
-        String segment = new TaiModelStore(activity).getInstalledUserModels().containsKey(modelId)
-            ? SEGMENT_INSTALLED : SEGMENT_GET;
-        if (activity instanceof SettingsActivity) {
-            Bundle arguments = arguments(segment);
-            arguments.putString(SettingsActivity.EXTRA_SCROLL_TO_KEY, modelId);
-            ((SettingsActivity) activity).openScreen(TaiModelCentreFragment.class, R.string.tai_model_centre_title, arguments);
-        } else {
-            activity.startActivity(SettingsActivity.createFragmentIntent(activity, TaiModelCentreFragment.class,
-                R.string.tai_model_centre_title, segment, modelId));
         }
     }
 
@@ -342,12 +318,6 @@ public class TaiModelCentreFragment extends Fragment
                 && !spec.isVisionTool()) chat.add(spec);
         }
         installedChat = chat;
-        List<TaiModelSpec> vision = new ArrayList<>();
-        for (TaiModelSpec spec : installedAll.values()) {
-            if (spec.isVisionTool()) vision.add(spec);
-        }
-        installedVision = vision;
-        depthId = TaiVisionModels.depthModel(context);
         installedImage = TaiModelCentreRows.imageModels(installedAll.values());
         installedSpeech = TaiSpeechModels.installed(store);
         installedVoice = TaiTtsModels.installed(store);
@@ -491,9 +461,8 @@ public class TaiModelCentreFragment extends Fragment
     }
 
     /**
-     * The Get models list: the catalogue under Assistants, Speech, Voice output, Search and Wallpaper
-     * vision, minus what is installed or downloading. Image generation has no group (spec §3.6);
-     * wallpaper vision is gone below API 34. Each entry says its size, how it fits this phone and what
+     * The Get models list: the catalogue under Assistants, Speech, Voice output and Search, minus what
+     * is installed or downloading. Image generation has no group (spec §3.6). Each entry says its size, how it fits this phone and what
      * it can serve.
      */
     private void addGetModels(@NonNull Context context, @NonNull List<TaiModelCentreAdapter.Item> items,
@@ -526,7 +495,6 @@ public class TaiModelCentreFragment extends Fragment
             case SPEECH: return R.string.tai_fn_group_speech;
             case VOICE_OUTPUT: return R.string.tai_fn_group_voice;
             case SEARCH: return R.string.tai_fn_group_search;
-            case WALLPAPER_VISION: return R.string.tai_fn_group_vision;
             default: return R.string.tai_fn_group_assistants;
         }
     }
@@ -540,7 +508,6 @@ public class TaiModelCentreFragment extends Fragment
         boolean speech = group == TaiFunctionRows.Group.SPEECH || group == TaiFunctionRows.Group.VOICE_OUTPUT;
         TaiModelCentreAdapter.ModelRow row = new TaiModelCentreAdapter.ModelRow(entry.modelId, speech, null, entry);
         row.voiceOutput = group == TaiFunctionRows.Group.VOICE_OUTPUT;
-        row.vision = group == TaiFunctionRows.Group.WALLPAPER_VISION;
         row.highlighted = entry.modelId.equals(highlightKey);
         row.title = group == TaiFunctionRows.Group.SPEECH ? centreName(entry.modelId, entry.displayName, null, true) : entry.displayName;
         String size = entry.sizeEstimate == null || entry.sizeEstimate.isEmpty()
@@ -555,12 +522,6 @@ public class TaiModelCentreFragment extends Fragment
             case SEARCH:
                 row.subtitle = getString(R.string.tai_centre_kind_embeddings) + " · " + size;
                 break;
-            case WALLPAPER_VISION: {
-                String what = visionLine(context, entry.modelId);
-                row.subtitle = what.isEmpty() ? visionKindLine(context, entry.sizeBytes)
-                    : what + " · " + TaiModelCentreRows.formatBytes(entry.sizeBytes);
-                break;
-            }
             default:
                 row.subtitle = getString(R.string.tai_centre_kind_chat) + " · " + size;
                 break;
@@ -594,8 +555,6 @@ public class TaiModelCentreFragment extends Fragment
         } else if (entry.gated && new TaiSettings(context).getHuggingFaceToken().trim().isEmpty()) {
             row.note = getString(R.string.tai_centre_gated_note);
             gatedNote = true;
-        } else if (TaiModelCatalog.SEGFORMER_B0_ADE20K_ID.equals(entry.modelId)) {
-            row.note = getString(R.string.tai_centre_vision_noncommercial);
         }
         row.tokenAction = TaiModelCentreRows.showsTokenAction(gatedNote, error);
         return row;
@@ -666,7 +625,6 @@ public class TaiModelCentreFragment extends Fragment
                     : centreName(item.modelId, item.displayName, item.record.optString("path", ""), speech);
                 long size = item.totalBytes > 0L ? item.totalBytes : catalogueSize(item.modelId);
                 String subtitle = voice ? voiceKindLine(context, size)
-                    : TaiModelCatalog.visionEntries().containsKey(item.modelId) ? visionKindLine(context, size)
                     : TaiModelCatalog.embeddingEntries().containsKey(item.modelId) ? embeddingKindLine(context, size)
                     : kindLine(context, speech, size, !TaiModelCatalog.entries().containsKey(item.modelId));
                 String signature = title + '|' + subtitle + '|' + state.phase + '|' + state.pill + '|' + state.metaStart
@@ -703,8 +661,6 @@ public class TaiModelCentreFragment extends Fragment
             String modelId = entry.getKey();
             // A voice model needs no "use as" choice: it simply speaks once installed.
             if (TaiModelCatalog.ttsEntries().containsKey(modelId)) continue;
-            // A vision graph is run by the wallpaper analysis; there is nothing to switch to.
-            if (TaiModelCatalog.visionEntries().containsKey(modelId)) continue;
             boolean speech = entry.getValue();
             TaiModelSpec spec = installedAll.get(modelId);
             String name = spec == null ? modelId : centreName(modelId, spec.displayName, spec.localPath, speech);
@@ -782,18 +738,7 @@ public class TaiModelCentreFragment extends Fragment
                 addModelRow(items, row);
             }
         }
-        if (!installedVision.isEmpty()) {
-            String header = getString(R.string.tai_centre_vision_header);
-            items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_SECTION, "vision-models", "vision-models|" + header,
-                new TaiModelCentreAdapter.Section(header, "", getString(R.string.tai_centre_vision_sub)), false));
-            for (TaiModelSpec spec : installedVision) {
-                TaiModelCentreAdapter.ModelRow vision = visionRow(context, spec.id, spec, TaiModelCatalog.get(spec.id));
-                vision.extra = usedBy.getOrDefault(spec.id, "");
-                addModelRow(items, vision);
-            }
-        }
-        if (chat.isEmpty() && speech.isEmpty() && installedVoice.isEmpty() && installedImage.isEmpty()
-                && installedVision.isEmpty()) {
+        if (chat.isEmpty() && speech.isEmpty() && installedVoice.isEmpty() && installedImage.isEmpty()) {
             items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_EMPTY, "empty-installed", "empty-installed",
                 new TaiModelCentreAdapter.Empty(getString(R.string.tai_centre_empty_installed_title),
                     getString(R.string.tai_fn_empty_installed_summary)), false));
@@ -803,57 +748,6 @@ public class TaiModelCentreFragment extends Fragment
     private void addModelRow(@NonNull List<TaiModelCentreAdapter.Item> items, @NonNull TaiModelCentreAdapter.ModelRow row) {
         if (row.modelId.equals(highlightKey)) row.highlighted = true;
         items.add(new TaiModelCentreAdapter.Item(TaiModelCentreAdapter.TYPE_MODEL, row.modelId, row.signature(), row, false));
-    }
-
-    /** One vision row: what it does for wallpapers and its size, "In use" on the chosen depth model. */
-    @NonNull
-    private TaiModelCentreAdapter.ModelRow visionRow(@NonNull Context context, @NonNull String modelId,
-                                                     @Nullable TaiModelSpec installed,
-                                                     @Nullable TaiModelCatalog.CatalogEntry entry) {
-        TaiModelCentreAdapter.ModelRow row = new TaiModelCentreAdapter.ModelRow(modelId, false, installed, entry);
-        row.vision = true;
-        row.highlighted = modelId.equals(highlightKey);
-        row.title = installed != null ? installed.displayName : entry == null ? modelId : entry.displayName;
-        long size = installed != null ? installed.sizeBytes : entry == null ? 0L : entry.sizeBytes;
-        String what = visionLine(context, modelId);
-        row.subtitle = what.isEmpty() ? visionKindLine(context, size)
-            : what + " · " + TaiModelCentreRows.formatBytes(size);
-        boolean depth = TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID.equals(modelId)
-            || TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID.equals(modelId);
-        row.pillPrimary = installed != null && depth && modelId.equals(depthId) ? getString(R.string.tai_centre_pill_in_use) : "";
-        if (installed == null && entry != null) {
-            row.installable = entry.downloadAvailable;
-            row.installing = installing.contains(modelId);
-        }
-        String error = errors.get(modelId);
-        if (error != null) {
-            row.note = error;
-            row.noteIsError = true;
-        } else if (TaiModelCatalog.SEGFORMER_B0_ADE20K_ID.equals(modelId)) {
-            row.note = getString(R.string.tai_centre_vision_noncommercial);
-        }
-        row.tokenAction = TaiModelCentreRows.showsTokenAction(false, error);
-        return row;
-    }
-
-    /** The one line on what a vision model does for wallpapers; empty for a model this build does not name. */
-    @NonNull
-    private static String visionLine(@NonNull Context context, @NonNull String modelId) {
-        switch (modelId) {
-            case TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID: return context.getString(R.string.tai_centre_vision_da3);
-            case TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID: return context.getString(R.string.tai_centre_vision_da2);
-            case TaiModelCatalog.SEGFORMER_B0_ADE20K_ID: return context.getString(R.string.tai_centre_vision_segformer);
-            case TaiModelCatalog.U2NET_ID: return context.getString(R.string.tai_centre_vision_u2net);
-            default: return "";
-        }
-    }
-
-    /** "vision · 55 MB". */
-    @NonNull
-    private static String visionKindLine(@NonNull Context context, long sizeBytes) {
-        StringBuilder line = new StringBuilder(context.getString(R.string.tai_centre_kind_vision));
-        if (sizeBytes > 0L) line.append(" · ").append(TaiModelCentreRows.formatBytes(sizeBytes));
-        return line.toString();
     }
 
     /** An installed embedding-only model: served on demand, so no load, default or tuning. */
@@ -1208,19 +1102,7 @@ public class TaiModelCentreFragment extends Fragment
         if (context == null || spec == null) return;
         PopupMenu menu = new PopupMenu(context, anchor);
         Menu items = menu.getMenu();
-        if (row.vision) {
-            // Run by the wallpaper analysis: only a depth model can be chosen, and any can be deleted.
-            if (!servedFunctions(spec).isEmpty()) items.add(Menu.NONE, 1, Menu.NONE, R.string.tai_fn_use_for);
-            items.add(Menu.NONE, 4, Menu.NONE, R.string.termux_ai_model_delete_action);
-            menu.setOnMenuItemClickListener(item -> {
-                if (item.getItemId() == 1) {
-                    showUseFor(context, spec);
-                } else {
-                    confirmDeleteChat(context, spec);
-                }
-                return true;
-            });
-        } else if (row.image) {
+        if (row.image) {
             // Served on demand by the image routes: nothing to load, make default, tune or bench.
             items.add(Menu.NONE, 4, Menu.NONE, R.string.termux_ai_model_delete_action);
             menu.setOnMenuItemClickListener(item -> {
@@ -1307,7 +1189,7 @@ public class TaiModelCentreFragment extends Fragment
         }
         TaiFunctionLabels labels = new TaiFunctionLabels(context, installedAll);
         String[] names = new String[functions.size()];
-        for (int i = 0; i < names.length; i++) names[i] = TaiFunctionRows.chooserName(functions.get(i), labels);
+        for (int i = 0; i < names.length; i++) names[i] = labels.functionName(functions.get(i));
         new MaterialAlertDialogBuilder(context)
             .setTitle(getString(R.string.tai_fn_use_for_title, labels.modelName(spec.id)))
             .setItems(names, (dialog, which) -> {

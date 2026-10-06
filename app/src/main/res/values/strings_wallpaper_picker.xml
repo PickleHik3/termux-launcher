@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  The wallpaper picker page (project-docs/active/animated-wallpaper/lock-live-wallpaper.md, "The
-  picker page"): two slot previews, the Motion toggle, the shortcut row, the thumbnail strip and
+  The wallpaper picker page: two slot previews, the shortcut row, the thumbnail strip and
   Apply. No hint text.
 -->
 <resources>
@@ -10,11 +9,6 @@
     <string name="wallpaper_picker_slot_lock">Lock screen</string>
     <string name="wallpaper_picker_slot_home">Home screen</string>
     <string name="wallpaper_picker_back">Back</string>
-    <string name="wallpaper_picker_apply">Apply</string>
-    <string name="wallpaper_picker_apply_more">More ways to apply</string>
-    <string name="wallpaper_picker_apply_home_only">Home screen only</string>
-    <string name="wallpaper_picker_apply_lock_only">Lock screen only</string>
-    <string name="wallpaper_picker_motion">Motion</string>
     <string name="wallpaper_picker_look">Surface style</string>
     <string name="wallpaper_picker_icon_pack">Icon pack</string>
     <string name="wallpaper_picker_layout">Layout</string>
@@ -28,9 +22,4 @@
     <!-- A recent photo tile, for TalkBack: "Recent photo 1" is the newest. -->
     <string name="wallpaper_picker_recent_photo">Recent photo %1$d</string>
     <string name="wallpaper_picker_apply_failed">Could not apply the background</string>
-    <string name="wallpaper_picker_motion_failed">Could not change Motion</string>
-    <!-- Before Bring to life when the on-device reader needs room from other apps; %1$d is the shortfall in MB. -->
-    <string name="living_low_memory_title">Low memory</string>
-    <string name="living_low_memory_message">Reading this wallpaper needs about %1$d MB more than is free. Android may close apps running in the background while it runs.</string>
-    <string name="living_low_memory_continue">Continue</string>
 </resources>

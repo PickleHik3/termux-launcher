@@ -121,6 +121,12 @@ Use this section for visible surfaces and colors:
   Darkness, Legibility, Blur, Key corners, or Soft wallpaper with Dim. Home, Terminal and Display
   wear the same look, so what you change here changes all three. **Undo** steps back and **Done**
   keeps your changes.
+  Appearance is one screen with four tabs: **Wallpaper**, **Look**, **Layout** and **Icon pack**.
+  **Done**, top right on every tab, puts everything you changed into effect and closes: the
+  wallpaper picked for Home goes on Home and the one picked for Lock goes on Lock (a Lock set to
+  **Same as Home** follows it), and the look and layout are saved. Icon pack choices apply as soon
+  as you tap them. Back or Home with a wallpaper not yet applied asks whether to keep editing,
+  discard or save.
   The keyboard's **BG opacity** applies to the keyboard docked under the terminal — a floating,
   split, or overlaying keyboard is a solid panel and ignores it — while its **Edges** apply to
   every keyboard.

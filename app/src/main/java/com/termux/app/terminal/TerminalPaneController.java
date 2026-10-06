@@ -31,10 +31,10 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
-import androidx.core.view.OneShotPreDrawListener;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.view.OneShotPreDrawListener;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
@@ -181,11 +181,6 @@ public class TerminalPaneController {
         default void onPanesRendered() {}
         /** A pane's corner controls — move, maximize, close — are now on screen. */
         default void onPaneControlsShown() {}
-        /**
-         * A pane opened (its settled rect) or closed (the rect it left), in SCREEN pixels. Only for
-         * panes actually on screen; a re-layout or a background close does not report.
-         */
-        default void onPaneGeometryMoment(boolean opened, @NonNull RectF screenRect) {}
         default void showHelpOverlay() {}
         /** Those controls are going away again, however the user asked for that. */
         default void onPaneControlsDismissed() {}
@@ -397,7 +392,10 @@ public class TerminalPaneController {
         if (!canAnimateView(view)) return false;
         TerminalEmulator emulator = view.mEmulator;
         if (emulator == null) return false;
-        int row = emulator.getCursorRow() - view.getTopRow();
+        // Scrolled back, kitty draws no cursor (collect_cursor_info) and scrolling never moves its
+        // trail's target; with no target here, a scroll can never smear a trail across the pane.
+        if (view.getTopRow() != 0) return false;
+        int row = emulator.getCursorRow();
         if (row < 0 || row >= emulator.mRows) return false;
         float cellWidth = view.getTerminalCellWidthPixels();
         float cellHeight = view.getTerminalCellHeightPixels();
@@ -452,6 +450,8 @@ public class TerminalPaneController {
         out.cellHeightPx = cellHeight;
         out.dectcemOn = emulator.isCursorEnabled();
         out.positionChangedAtMillis = emulator.getCursorPositionChangedAtMillis();
+        // Any stable non-zero identity will do: it only has to tell one pane from another.
+        out.ownerId = System.identityHashCode(view) | (1L << 32);
         out.color = cursorColorOf(view);
         return true;
     }
@@ -1371,7 +1371,6 @@ public class TerminalPaneController {
         reapplyLayoutPolicy(mActiveWindow);
         render();
         animateSplitReveal(revealSnapshot, revealOrigin, oldLeaf.session, newSession);
-        reportPaneGeometryMoment(true, newSession);
         // Splitting resizes the old pane (fewer cols/rows), which reflows its buffer and can
         // leave the view scrolled up (prompt jumps to the top). Once the resize settles, scroll
         // the old pane back to the bottom so its prompt stays where the shell repainted it.
@@ -1398,7 +1397,6 @@ public class TerminalPaneController {
         // Captured before any of the branches below detach the view: the ghost needs the bounds
         // the pane still has.
         if (owner == mActiveWindow) {
-            reportPaneGeometryMoment(false, session);
             ghostRemovedPane(session);
         }
 
@@ -2685,28 +2683,6 @@ public class TerminalPaneController {
         FrameLayout frame = mPaneFrames.get(session);
         if (frame == null) return null;
         return PaneSnapshot.capture(frame, paneRadiusPx(), mPaneViews.get(session));
-    }
-
-    /**
-     * Tell the host where a pane opened or closed, in screen pixels. A close reads the frame now,
-     * while its bounds are still valid; an open waits for the layout pass so the new pane has its
-     * settled rect. A pane nobody can see (stack, maximized) reports nothing.
-     */
-    private void reportPaneGeometryMoment(boolean opened, @Nullable TerminalSession session) {
-        if (session == null) return;
-        if (!opened) {
-            reportPaneRect(false, mPaneFrames.get(session));
-            return;
-        }
-        OneShotPreDrawListener.add(mHostView, () -> reportPaneRect(true, mPaneFrames.get(session)));
-    }
-
-    private void reportPaneRect(boolean opened, @Nullable View frame) {
-        if (!canAnimateView(frame)) return;
-        int[] location = new int[2];
-        frame.getLocationOnScreen(location);
-        mHost.onPaneGeometryMoment(opened, new RectF(location[0], location[1],
-            location[0] + frame.getWidth(), location[1] + frame.getHeight()));
     }
 
     /** A view's bounds in the pane host's coordinates, translations included. */

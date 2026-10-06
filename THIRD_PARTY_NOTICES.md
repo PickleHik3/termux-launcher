@@ -20,8 +20,10 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   Lippincott) and `app/.../terminal/CursorTrailParticles.java` ports `cursor-trail-particles.slang`
   (railgun, torpedo, pixiedust) to a CPU particle model; the graphics animation handling in
   `terminal-emulator/.../KittyImageStore.java` also follows kitty's `graphics.c`. These are
-  adaptations shipped inside the APK, separate from the external `kitten` tool below. The original
-  port commits did not record an exact upstream revision; the Java files document local changes.
+  adaptations shipped inside the APK, separate from the external `kitten` tool below. The cursor
+  trail files were ported from, and last checked against, kitty `master` at commit
+  `ce459fb1a44b72a2e40a223b74c7aa078d7df5f1` (`kitty/cursor_trail.c`, `kitty/shaders/trail.slang`
+  and `kitty/shaders/custom/cursor-trail-*`); the Java files document local changes.
 - **[herdr](https://github.com/herdrdev/herdr)** — Apache-2.0 — herdr contributors.
   `AgentTitleRules.java` and `AgentScreenRules.java` adapt the agent-detection manifests recorded
   on 2026-09-11 into ordered Java rules. The original work is credited here separately from the
@@ -170,27 +172,6 @@ on the phone in the app's own runtime process.
   nlohmann/json notice below with this copyright line.
 
 No GPL phonemizer (espeak-ng) is used or downloaded.
-
-## Wallpaper vision models (downloaded on request)
-
-Nothing below ships inside the APK. The files are downloaded from Hugging Face only when the user
-installs them in **Settings > TAI > Model centre > Vision**, and they run on the phone, one at a
-time, in the app's own runtime process when a wallpaper is analysed.
-
-- **[Depth Anything 3 Small](https://huggingface.co/litert-community/Depth-Anything-3-Small)**
-  (`da3_small_gpu_fp16.tflite`) — Apache-2.0 — Copyright ByteDance Seed (Depth Anything 3). The
-  LiteRT conversion is published by litert-community.
-- **[Depth Anything V2 Small](https://huggingface.co/litert-community/depth-anything-v2-small)**
-  (`tflite/depth_anything_v2_small_wi8_afp32.tflite`) — Apache-2.0 — Copyright the Depth Anything V2
-  authors (HKU, TikTok). The LiteRT conversion is published by litert-community.
-- **[U-2-Net](https://huggingface.co/litert-community/U-2-Net)** (`u2net_fp16.tflite`) —
-  Apache-2.0 — Copyright Xuebin Qin and the U-2-Net authors. The LiteRT conversion is published by
-  litert-community.
-- **[SegFormer-B0 fine-tuned on ADE20K](https://huggingface.co/sollaholla/segformer_b0_ade20k)**
-  (`segformer_b0_ade20k.tflite`) — **NVIDIA Source Code License (non-commercial)** — Copyright (c)
-  NVIDIA Corporation. This model may be used for research and evaluation only, **not commercially**,
-  so the launcher offers it for testing and it must not ship in a commercial build. The TensorFlow
-  Lite conversion is published by sollaholla.
 
 ## The Clear BSD License, for the OpenPhonemizer dictionary
 

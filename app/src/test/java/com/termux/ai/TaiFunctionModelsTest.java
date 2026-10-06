@@ -90,10 +90,8 @@ public class TaiFunctionModelsTest {
         assertEquals("tai_role_default_assistant", TaiFunction.ASSISTANT.modelKey);
         assertEquals("tai_stt_model_id", TaiFunction.VOICE_TYPING.modelKey);
         assertEquals("keyboard_voice_polish_model", TaiFunction.TIDY_DICTATION.modelKey);
-        assertEquals("wallpaper_depth_model", TaiFunction.WALLPAPER_DEPTH.modelKey);
         assertEquals("tai_fn_read_aloud_model", TaiFunction.READ_ALOUD.modelKey);
         assertEquals("tai_fn_app_categories_model", TaiFunction.APP_CATEGORIES.modelKey);
-        assertEquals("tai_fn_wallpaper_reader_model", TaiFunction.WALLPAPER_READER.modelKey);
         assertEquals("tai_fn_embeddings_model", TaiFunction.EMBEDDINGS.modelKey);
         assertEquals("tai_fn_assistant_accel", TaiFunction.ASSISTANT.accelKey);
     }
@@ -125,37 +123,29 @@ public class TaiFunctionModelsTest {
 
     @Test
     public void automaticThatIsMissingFallsToTheFirstInstalledLinkOfTheChain() {
-        // Tier 2 at 12 GB reads wallpapers with E4B; with only E2B installed the chain's E2B vision serves.
-        install(E2B, E2B_BYTES, TaiModelSpec.CAPABILITY_TEXT_CHAT, TaiModelSpec.CAPABILITY_IMAGE_INPUT);
-        Resolution resolution = pong().resolve(TaiFunction.WALLPAPER_READER);
-        assertEquals(E2B + "-vision", resolution.modelId);
+        // Tidy dictation is E2B on Tier 2; with only E4B installed the chain's E4B serves.
+        install(E4B, E4B_BYTES, TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        Resolution resolution = pong().resolve(TaiFunction.TIDY_DICTATION);
+        assertEquals(E4B, resolution.modelId);
         assertEquals(Source.FALLBACK, resolution.source);
         assertEquals(2, resolution.chain.size());
     }
 
     @Test
-    public void theReaderResolvesToTheVisionVariantOfTheInstalledFile() {
-        installGemma();
-        Resolution resolution = pong().resolve(TaiFunction.WALLPAPER_READER);
-        assertEquals(E4B + "-vision", resolution.modelId);
-        assertEquals(Source.AUTOMATIC, resolution.source);
-    }
-
-    @Test
-    public void aReaderPickIsStoredWithoutTheVisionSuffix() {
+    public void aPickIsStoredWithoutTheVisionSuffix() {
         installGemma();
         TaiFunctionModels models = pong();
-        models.set(TaiFunction.WALLPAPER_READER, E2B + "-vision");
-        assertEquals(E2B, prefs.get("tai_fn_wallpaper_reader_model"));
-        assertEquals(E2B + "-vision", models.resolve(TaiFunction.WALLPAPER_READER).modelId);
+        models.set(TaiFunction.ASSISTANT, E2B + "-vision");
+        assertEquals(E2B, prefs.get("tai_role_default_assistant"));
+        assertEquals(E2B, models.resolve(TaiFunction.ASSISTANT).modelId);
     }
 
     @Test
     public void nothingInstalledEndsInTheWithoutModelChoice() {
-        Resolution reader = pong().resolve(TaiFunction.WALLPAPER_READER);
-        assertNull(reader.modelId);
-        assertEquals(Source.FALLBACK, reader.source);
-        assertEquals(WithoutModel.RULES_ONLY, reader.without);
+        Resolution categories = pong().resolve(TaiFunction.APP_CATEGORIES);
+        assertNull(categories.modelId);
+        assertEquals(Source.FALLBACK, categories.source);
+        assertEquals(WithoutModel.OFF, categories.without);
         Resolution tidy = pong().resolve(TaiFunction.TIDY_DICTATION);
         assertEquals(WithoutModel.RAW_TEXT, tidy.without);
         Resolution assistant = pong().resolve(TaiFunction.ASSISTANT);
@@ -168,14 +158,14 @@ public class TaiFunctionModelsTest {
     public void tier1AutomaticIsTheWithoutModelChoiceEvenWithAnLlmInstalled() {
         installGemma();
         TaiFunctionModels tier1 = models(env(6, 34, GpuPath.YES));
-        Resolution reader = tier1.resolve(TaiFunction.WALLPAPER_READER);
-        assertNull(reader.modelId);
-        assertEquals(Source.AUTOMATIC, reader.source);
-        assertEquals(WithoutModel.RULES_ONLY, reader.without);
+        Resolution categories = tier1.resolve(TaiFunction.APP_CATEGORIES);
+        assertNull(categories.modelId);
+        assertEquals(Source.AUTOMATIC, categories.source);
+        assertEquals(WithoutModel.OFF, categories.without);
         // ...until the user picks the model they added.
-        tier1.set(TaiFunction.WALLPAPER_READER, E2B);
-        assertEquals(E2B + "-vision", tier1.resolve(TaiFunction.WALLPAPER_READER).modelId);
-        assertEquals(Source.PICK, tier1.resolve(TaiFunction.WALLPAPER_READER).source);
+        tier1.set(TaiFunction.APP_CATEGORIES, E2B);
+        assertEquals(E2B, tier1.resolve(TaiFunction.APP_CATEGORIES).modelId);
+        assertEquals(Source.PICK, tier1.resolve(TaiFunction.APP_CATEGORIES).source);
     }
 
     // ------------------------------------------------------------------------- off and remote
@@ -189,8 +179,6 @@ public class TaiFunctionModelsTest {
         assertNull(categories.modelId);
         assertEquals(Source.PICK, categories.source);
         assertEquals(WithoutModel.OFF, categories.without);
-        models.set(TaiFunction.WALLPAPER_READER, "off");
-        assertEquals(WithoutModel.RULES_ONLY, models.resolve(TaiFunction.WALLPAPER_READER).without);
         models.set(TaiFunction.TIDY_DICTATION, "off");
         assertEquals(WithoutModel.RAW_TEXT, models.resolve(TaiFunction.TIDY_DICTATION).without);
         models.set(TaiFunction.ASSISTANT, "off");
@@ -239,24 +227,9 @@ public class TaiFunctionModelsTest {
         assertFalse(TaiFunctionModels.remoteAllowed(TaiFunction.VOICE_TYPING, true));
         assertFalse(TaiFunctionModels.remoteAllowed(TaiFunction.READ_ALOUD, true));
         assertFalse(TaiFunctionModels.remoteAllowed(TaiFunction.EMBEDDINGS, true));
-        assertFalse(TaiFunctionModels.remoteAllowed(TaiFunction.WALLPAPER_DEPTH, true));
         assertTrue(TaiFunctionModels.remoteAllowed(TaiFunction.TIDY_DICTATION, false));
         assertFalse(TaiFunctionModels.isRemote(models.resolve(TaiFunction.READ_ALOUD).modelId));
         assertFalse(TaiFunctionModels.isRemote(models.resolve(TaiFunction.EMBEDDINGS).modelId));
-    }
-
-    @Test
-    public void theReaderUsesARemoteModelOnlyWhenItUnderstandsImages() {
-        installGemma();
-        remoteConfigured = true;
-        TaiFunctionModels models = pong();
-        models.set(TaiFunction.WALLPAPER_READER, "remote/gpt-x");
-        // Text-only remote model: the pick falls through to Automatic.
-        assertEquals(E4B + "-vision", models.resolve(TaiFunction.WALLPAPER_READER).modelId);
-        remoteImages = true;
-        Resolution resolution = models.resolve(TaiFunction.WALLPAPER_READER);
-        assertEquals("remote/gpt-x", resolution.modelId);
-        assertEquals(Source.PICK, resolution.source);
     }
 
     @Test
@@ -272,8 +245,7 @@ public class TaiFunctionModelsTest {
         // A local pick is the user's word and wins.
         models.set(TaiFunction.ASSISTANT, E4B);
         assertEquals(E4B, models.resolve(TaiFunction.ASSISTANT).modelId);
-        // The reader needs images; the audio functions stay local.
-        assertEquals(E4B + "-vision", models.resolve(TaiFunction.WALLPAPER_READER).modelId);
+        // The audio functions stay local.
         assertFalse(TaiFunctionModels.isRemote(models.resolve(TaiFunction.EMBEDDINGS).modelId));
         // Not configured: the preference means nothing.
         remoteConfigured = false;
@@ -292,19 +264,6 @@ public class TaiFunctionModelsTest {
     }
 
     // -------------------------------------------------------------------------------- platform
-
-    @Test
-    public void belowApi34TheWallpaperFunctionsResolveToNothing() {
-        installGemma();
-        install(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, 100L, TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION);
-        TaiFunctionModels old = models(env(12, 33, GpuPath.YES));
-        Resolution reader = old.resolve(TaiFunction.WALLPAPER_READER);
-        assertNull(reader.modelId);
-        assertEquals(Source.NONE, reader.source);
-        assertEquals(WithoutModel.NONE, reader.without);
-        assertNull(old.resolve(TaiFunction.WALLPAPER_DEPTH).modelId);
-        assertTrue(old.candidates(TaiFunction.WALLPAPER_DEPTH).isEmpty());
-    }
 
     @Test
     public void aGpuPickOnAPhoneWithNoGpuPathRunsOnTheCpu() {
@@ -335,8 +294,8 @@ public class TaiFunctionModelsTest {
         installGemma();
         TaiFunctionModels models = pong();
         List<TaiFunction> e4b = models.usedBy(E4B);
-        assertEquals(Collections.singletonList(TaiFunction.WALLPAPER_READER), e4b);
-        assertEquals(e4b, models.usedBy(E4B + "-vision"));
+        assertTrue(e4b.isEmpty());
+        assertEquals(models.usedBy(E2B), models.usedBy(E2B + "-vision"));
         assertEquals(Arrays.asList(TaiFunction.ASSISTANT, TaiFunction.TIDY_DICTATION, TaiFunction.APP_CATEGORIES),
             models.usedBy(E2B));
         models.set(TaiFunction.ASSISTANT, E4B);
@@ -351,7 +310,6 @@ public class TaiFunctionModelsTest {
         install("whisper-acft-small", 286L * 1024 * 1024, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
         install(TaiModelCatalog.KITTEN_TTS_NANO_ID, 94L * 1024 * 1024, TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH);
         install(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID, 183L * 1024 * 1024, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
-        install(TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID, 100L, TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION);
         install("some-diffusion", 1L, TaiModelSpec.CAPABILITY_IMAGE_GENERATION);
         install("text-only", 1L, TaiModelSpec.CAPABILITY_TEXT_CHAT);
         TaiFunctionModels models = pong();
@@ -359,9 +317,7 @@ public class TaiFunctionModelsTest {
         assertEquals(Arrays.asList("whisper-acft-small"), ids(models.candidates(TaiFunction.VOICE_TYPING)));
         assertEquals(Arrays.asList(TaiModelCatalog.KITTEN_TTS_NANO_ID), ids(models.candidates(TaiFunction.READ_ALOUD)));
         assertEquals(Arrays.asList(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID), ids(models.candidates(TaiFunction.EMBEDDINGS)));
-        assertEquals(Arrays.asList(TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID), ids(models.candidates(TaiFunction.WALLPAPER_DEPTH)));
-        // The reader takes vision variants only; the chat functions take every chat model, never an image model.
-        assertEquals(Arrays.asList(E2B + "-vision", E4B + "-vision"), ids(models.candidates(TaiFunction.WALLPAPER_READER)));
+        // The chat functions take every chat model, never an image model.
         assertEquals(Arrays.asList(E2B, E4B, "text-only"), ids(models.candidates(TaiFunction.ASSISTANT)));
         assertEquals(ids(models.candidates(TaiFunction.ASSISTANT)), ids(models.candidates(TaiFunction.APP_CATEGORIES)));
         assertEquals(ids(models.candidates(TaiFunction.ASSISTANT)), ids(models.candidates(TaiFunction.TIDY_DICTATION)));
@@ -419,19 +375,6 @@ public class TaiFunctionModelsTest {
     }
 
     @Test
-    public void aRemoteReaderNeedsAModelThatTakesImages() {
-        installGemma();
-        TaiFunctionModels models = withRemote(env(12, 34, GpuPath.YES), true, false);
-        models.set(TaiFunction.WALLPAPER_READER, "remote/text-only");
-        Resolution resolution = models.resolve(TaiFunction.WALLPAPER_READER);
-        assertFalse(resolution.isRemote());
-        assertEquals(E4B + "-vision", resolution.modelId);
-        TaiFunctionModels seeing = withRemote(env(12, 34, GpuPath.YES), true, true);
-        seeing.set(TaiFunction.WALLPAPER_READER, "remote/vision-1");
-        assertTrue(seeing.resolve(TaiFunction.WALLPAPER_READER).isRemote());
-    }
-
-    @Test
     public void aRemotePickWithNoProviderFallsToAutomatic() {
         installGemma();
         TaiFunctionModels models = withRemote(env(12, 34, GpuPath.YES), false, true);
@@ -461,12 +404,12 @@ public class TaiFunctionModelsTest {
     }
 
     @Test
-    public void rulesOnlyAndRawTextAreTheWithoutModelChoices() {
+    public void offAndRawTextAreTheWithoutModelChoices() {
         Env tier1 = env(4, 34, GpuPath.YES);
-        Resolution reader = models(tier1).resolve(TaiFunction.WALLPAPER_READER);
-        assertNull(reader.modelId);
-        assertFalse(reader.isRemote());
-        assertEquals(WithoutModel.RULES_ONLY, reader.without);
+        Resolution categories = models(tier1).resolve(TaiFunction.APP_CATEGORIES);
+        assertNull(categories.modelId);
+        assertFalse(categories.isRemote());
+        assertEquals(WithoutModel.OFF, categories.without);
         assertEquals(WithoutModel.RAW_TEXT, models(tier1).resolve(TaiFunction.TIDY_DICTATION).without);
     }
 
@@ -481,19 +424,14 @@ public class TaiFunctionModelsTest {
     }
 
     @Test
-    public void speechVoiceAndDepthResolveFromTheirPicksThenAutomatic() {
+    public void speechAndVoiceResolveFromTheirPicksThenAutomatic() {
         install("whisper-acft-small", 100L, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
         install("whisper-acft-base", 50L, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
         install(TaiModelCatalog.KITTEN_TTS_NANO_ID, 30L, TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH);
-        install(TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID, 30L, TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION);
-        install(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, 30L, TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION);
         TaiFunctionModels models = pong();
         assertEquals("whisper-acft-small", models.resolve(TaiFunction.VOICE_TYPING).modelId);
         models.set(TaiFunction.VOICE_TYPING, "whisper-acft-base");
         assertEquals("whisper-acft-base", models.resolve(TaiFunction.VOICE_TYPING).modelId);
         assertEquals(TaiModelCatalog.KITTEN_TTS_NANO_ID, models.resolve(TaiFunction.READ_ALOUD).modelId);
-        assertEquals(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, models.resolve(TaiFunction.WALLPAPER_DEPTH).modelId);
-        models.set(TaiFunction.WALLPAPER_DEPTH, TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID);
-        assertEquals(TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID, models.resolve(TaiFunction.WALLPAPER_DEPTH).modelId);
     }
 }

@@ -11,6 +11,7 @@ import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
+import com.termux.ai.TaiRemoteProvider;
 import com.termux.ai.TaiRuntimePresence;
 import com.termux.shared.logger.Logger;
 
@@ -28,8 +29,10 @@ import java.util.Map;
  * computes. Chat requests run on the runtime's serial chat lane and STT on its own, so the load
  * never holds up a transcription.
  *
- * <p><b>Model.</b> The TIDY_DICTATION function's pick, resolved by {@link TaiFunctionModels} (the
- * "Cleanup model" keyboard setting is its entry in the picker sheet): Automatic is Gemma 4 E2B on
+ * <p><b>Model.</b> Light uses the TIDY_DICTATION function's pick, resolved by {@link TaiFunctionModels}
+ * (the "Cleanup model" keyboard setting is its entry in the picker sheet). Polished uses the remote
+ * provider whenever one is set up, whatever the pick or the "Prefer remote" toggle says, and the
+ * same local pick as Light when none is (only an "off" pick stops it). Automatic is Gemma 4 E2B on
  * Tier 2 and 3 (the 2026-09-27 benchmark on pong: E2B cleans a 111 s dictation in ~10 s and keeps the
  * speaker's words, E4B is three times slower), and raw text on Tier 1. A {@code remote/<id>} pick
  * sends the request to the remote provider and never loads a model; a raw-text pick skips polishing.
@@ -86,13 +89,25 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
         }
     }
 
-    /** The pure mapping from the function's resolution to what a session does. */
+    /**
+     * The pure mapping from the function's resolution to what a session does. {@code remoteModel} is
+     * the configured provider's {@code remote/<id>}, or {@code null} with none; only Polished uses
+     * it over the resolution (and never over a raw-text pick).
+     */
     @NonNull
-    static Plan plan(@NonNull TaiFunctionModels.Resolution resolution) {
-        if (resolution.isRemote()) return new Plan(resolution.remoteModel, null, true, null);
-        if (resolution.modelId != null) return new Plan(resolution.modelId, resolution.accelerator, false, null);
+    static Plan plan(@NonNull TaiFunctionModels.Resolution resolution, @Nullable String level,
+                     @Nullable String remoteModel) {
         boolean raw = resolution.without == com.termux.ai.TaiTierPolicy.WithoutModel.RAW_TEXT
             || resolution.without == com.termux.ai.TaiTierPolicy.WithoutModel.OFF;
+        // An "off" pick (a pick with no model behind it) is the user turning cleanup's model off.
+        boolean pickedOff = resolution.source == TaiFunctionModels.Source.PICK
+            && resolution.modelId == null && !resolution.isRemote();
+        if (VoicePolishRules.LEVEL_POLISHED.equals(VoicePolishRules.normalizeLevel(level))
+            && remoteModel != null && !remoteModel.isEmpty() && !pickedOff) {
+            return new Plan(remoteModel, null, true, null);
+        }
+        if (resolution.isRemote()) return new Plan(resolution.remoteModel, null, true, null);
+        if (resolution.modelId != null) return new Plan(resolution.modelId, resolution.accelerator, false, null);
         return new Plan("", null, false, raw ? "raw_text" : "no_model");
     }
 
@@ -101,8 +116,10 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
      * settings: not for the main thread.
      */
     @NonNull
-    public static Plan resolvePlan(@NonNull Context context) {
-        return plan(TaiFunctionModels.forContext(context).resolve(TaiFunction.TIDY_DICTATION));
+    public static Plan resolvePlan(@NonNull Context context, @Nullable String level) {
+        TaiRemoteProvider provider = new TaiRemoteProvider(context);
+        String remoteModel = provider.isConfigured() ? provider.requestModelName() : null;
+        return plan(TaiFunctionModels.forContext(context).resolve(TaiFunction.TIDY_DICTATION), level, remoteModel);
     }
 
     /**
@@ -133,7 +150,7 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
     public void warm() {
         Plan plan;
         try {
-            plan = resolvePlan(appContext);
+            plan = resolvePlan(appContext, level);
         } catch (RuntimeException e) {
             plan = new Plan("", null, false, "no_model");
         }
@@ -204,7 +221,7 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
                 return Result.fallback(text, failure.code);
             }
             String content = VoicePolishRules.contentOf(response);
-            String accepted = VoicePolishRules.accept(text, content);
+            String accepted = VoicePolishRules.accept(text, content, level);
             if (accepted != null) return Result.polished(accepted);
             // Kept apart in the log: a refusal or an answer is the model misbehaving, not an empty reply.
             boolean guarded = content != null && !content.trim().isEmpty()
@@ -255,11 +272,14 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
         request.put("model", model);
         request.put("messages", messages);
         request.put("temperature", 0);
-        request.put("max_tokens", VoicePolishRules.maxTokens(text));
+        request.put("max_tokens", VoicePolishRules.maxTokens(text, level));
         request.put("stream", false);
-        request.put("thinking", false);
-        request.put("speculative_decoding", true);
-        if (accelerator != null && !TaiFunctionModels.isRemote(model)) request.put("accelerator", accelerator);
+        // The TAI-only keys stay off a request to an OpenAI-compatible provider.
+        if (!TaiFunctionModels.isRemote(model)) {
+            request.put("thinking", false);
+            request.put("speculative_decoding", true);
+            if (accelerator != null) request.put("accelerator", accelerator);
+        }
         return request;
     }
 }

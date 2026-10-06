@@ -56,4 +56,11 @@ public class LauncherCategorySortPlanTest {
         assertEquals(5, LauncherCategorySortPlan.of(local(E4B, "gpu", false)).estimatedMinutes(100));
         assertEquals(1, LauncherCategorySortPlan.of(local(E2B, "gpu", false)).estimatedMinutes(1));
     }
+
+    @Test
+    public void aCpuSortIsEstimatedSlowerThanTheMeasuredGpuFigure() {
+        LauncherCategorySortPlan plan = LauncherCategorySortPlan.of(local(E2B, "gpu", false));
+        assertEquals(4, plan.estimatedMinutes(100, "cpu"));
+        assertEquals(2, plan.estimatedMinutes(100, "gpu"));
+    }
 }

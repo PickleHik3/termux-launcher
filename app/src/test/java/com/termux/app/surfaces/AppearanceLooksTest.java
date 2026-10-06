@@ -82,15 +82,15 @@ public class AppearanceLooksTest {
     /** The Custom row's sets, legend order, per selection (appearance final pass, section 5). */
     @Test
     public void eachSelectionHasItsSliderSet() {
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.MARGIN,
-            Control.CORNER_RADIUS), AppearanceLooks.controls(null));
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
+        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
+            Control.MARGIN, Control.CORNER_RADIUS), AppearanceLooks.controls(null));
+        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
             Control.KEY_RADIUS, Control.KEY_SPACING), AppearanceLooks.controls(Target.KEYBOARD));
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
+        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
             Control.DOCK_SIZE, Control.APP_ICONS), AppearanceLooks.controls(Target.DOCK));
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY,
+        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
             Control.CONTRAST), AppearanceLooks.controls(Target.TERMINAL));
-        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY),
+        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT),
             AppearanceLooks.controls(Target.STATUS));
         for (Target target : Target.values()) {
             assertTrue(target.name(), AppearanceLooks.controls(target).size()

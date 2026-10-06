@@ -54,11 +54,12 @@ public class TaiCallerRequestsTest {
     }
 
     @Test
-    public void theCategoryBodyTurnsThinkingOffSpeculativeOnAndKeepsTheUserPromptOut() throws Exception {
+    public void theCategoryBodyTurnsThinkingOffSendsNoLoadSettingsAndKeepsTheUserPromptOut() throws Exception {
         JSONObject body = TaiCallerRequests.categoryBody("gemma-4-e2b-it-litert-lm", "gpu", "Assign this app", 24);
         assertEquals("gemma-4-e2b-it-litert-lm", body.getString("model"));
         assertFalse(body.getBoolean("thinking"));
-        assertTrue(body.getBoolean("speculative_decoding"));
+        assertFalse(body.has("speculative_decoding"));
+        assertFalse(body.has("context_window"));
         assertTrue(body.getBoolean(TaiCallerRequests.NO_SYSTEM_PROMPT));
         assertEquals("gpu", body.getString("accelerator"));
         assertEquals(24, body.getInt("max_tokens"));

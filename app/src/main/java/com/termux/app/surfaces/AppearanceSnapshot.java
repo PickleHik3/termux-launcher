@@ -13,8 +13,8 @@ import java.util.List;
 
 /**
  * Everything the Appearance editor can write, captured raw so it can be put back exactly: the
- * editor's Undo and Discard (back to the state at open) and the "Custom look replaced" notice's
- * Undo (back to the Custom values a Look just replaced) are both one of these.
+ * editor's Undo and Discard (back to the state at open) and the Custom values of the session
+ * (kept while a Look shows, so the Custom stop brings them back) are both one of these.
  *
  * <p>Raw values and the link shape rather than resolved numbers: a surface that was detached at
  * the same number as Base must come back detached, and a key cap radius that was the theme's

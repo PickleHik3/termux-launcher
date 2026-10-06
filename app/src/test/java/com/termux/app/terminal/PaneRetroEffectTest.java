@@ -19,8 +19,9 @@ import org.robolectric.annotation.Config;
 public class PaneRetroEffectTest {
 
     private static final String[] REQUIRED = {
-        "uniform shader content", "uniform float2 uSize", "uniform float uDensity", "uniform float uRadius",
-        "uniform half4 uTint", "half4 main(float2 "
+        "uniform shader content", "uniform float2 uSize", "uniform float2 uOrigin", "uniform float uDensity",
+        "uniform float4 uCard", "uniform float uRadius", "uniform half4 uTint", "uniform float uBend",
+        "uniform float uVignette", "half4 main(float2 "
     };
     private static final String[] FORBIDDEN = {"uint", "<<", ">>", "#define", "^", "fwidth", "dFdx"};
 
@@ -33,7 +34,9 @@ public class PaneRetroEffectTest {
 
     @Test public void belowApi33NothingIsAvailableAndNoEffectIsMade() {
         assertFalse(PaneRetroEffect.available());
-        assertNull(new PaneRetroEffect().effectFor(PaneRetroStyle.CRT, 100f, 100f, 2f, 8f));
+        RetroUniforms uniforms = new RetroUniforms().set(100f, 100f, 0f, 0f, 1f, 1f, 2f,
+            0f, 0f, 100f, 100f, 8f, PaneRetroEffect.CRT_BEND, PaneRetroEffect.PANE_VIGNETTE);
+        assertNull(new PaneRetroEffect().effectFor(PaneRetroStyle.CRT, uniforms));
     }
 
     @Test public void displayedPointInvertsTheCrtBendAndLeavesOtherStylesAlone() {
@@ -50,12 +53,26 @@ public class PaneRetroEffectTest {
         PaneRetroEffect.displayedPoint(PaneRetroStyle.TFT, w, h, 123f, 456f, out);
         assertEquals(123f, out[0], 0f);
         assertEquals(456f, out[1], 0f);
-        assertTrue("the shader carries the same bend", PaneRetroEffect.CRT_AGSL.contains("BEND = " + bend + ";"));
+        assertTrue("the shader bends by the uniform the pane sets to CRT_BEND",
+            PaneRetroEffect.CRT_AGSL.contains("c * (1.0 + uBend * dot(c, c)) / (1.0 + 2.0 * uBend)"));
+    }
+
+    @Test public void scanlinesAndCellsAreTheScreensRowsNotTheBentPicture() {
+        // Straight rows, as kitty draws them, offset by the view's place on the screen: the bend
+        // moves the picture and never the scanlines, which run on into the next surface.
+        assertTrue(PaneRetroEffect.CRT_AGSL.contains("cos(2.0 * PI * (p.y + uOrigin.y) / (3.0 * uDensity))"));
+        assertFalse(PaneRetroEffect.CRT_AGSL.contains("sp.y"));
+        assertTrue(PaneRetroEffect.TFT_AGSL.contains("fract((p + uOrigin) / (3.0 * uDensity))"));
+        assertEquals(3f, RetroUniforms.PERIOD_DP, 0f);
     }
 
     @Test public void setRetroStyleOnOldApiIsHarmless() {
         PaneContentFrame frame = new PaneContentFrame(RuntimeEnvironment.getApplication());
-        for (PaneRetroStyle s : PaneRetroStyle.values()) frame.setRetroStyle(s);
+        for (PaneRetroStyle s : PaneRetroStyle.values()) {
+            frame.setRetroStyle(s);
+            // Nothing is drawn below API 33, so nothing re-aims the cursor trail through a bend.
+            assertEquals(PaneRetroStyle.NONE, frame.retroStyle());
+        }
         frame.setRetroStyle(null);
         frame.measure(View.MeasureSpec.makeMeasureSpec(300, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(300, View.MeasureSpec.EXACTLY));

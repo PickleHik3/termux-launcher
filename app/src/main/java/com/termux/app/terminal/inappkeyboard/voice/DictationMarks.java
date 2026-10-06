@@ -18,8 +18,10 @@ import java.util.WeakHashMap;
  *   <li>{@code end}, or {@code end;reason=cancel} — the microphone has closed, or the dictation was
  *       discarded or failed.</li>
  * </ul>
- * A session without both modes gets exactly the bytes it got before marks existed: no mark, and
- * the text written as is, not bracketed. {@code replace} is never sent: the one cleanup pass
+ * A session with bracketed paste but not mode 7727 gets the text as one bracketed paste with no mark,
+ * so a program that takes pasted text keeps the line breaks of a structured cleanup. A session with
+ * neither gets the text written as typing, every line break joined to a space first, because a bare
+ * shell would run each line. {@code replace} is never sent: the one cleanup pass
  * lands in the panel before the text is used, so nothing is ever retyped in the terminal.
  *
  * <p>Main thread only. {@code S} is the terminal session; the {@link Io} reads its modes and writes
@@ -31,6 +33,9 @@ public final class DictationMarks<S> {
     public interface Io<S> {
         /** Whether {@code session} is running with both mode 7727 and bracketed paste set right now. */
         boolean acceptsMarks(@NonNull S session);
+
+        /** Whether {@code session} is running with bracketed paste (2004) set right now. */
+        boolean acceptsBracketedPaste(@NonNull S session);
 
         /** Writes {@code data} to {@code session}'s program, as typing would. */
         void write(@NonNull S session, @NonNull String data);
@@ -100,11 +105,16 @@ public final class DictationMarks<S> {
 
     /**
      * Types dictated {@code text} into {@code session}: marked as the session's next phrase and
-     * bracketed when it takes marks, written as is otherwise.
+     * bracketed when it takes marks; bracketed alone when it only takes bracketed paste; otherwise
+     * written as typing with every line break turned into a space.
      */
     public void type(@NonNull S session, @NonNull String text) {
         if (!io.acceptsMarks(session)) {
-            io.write(session, text);
+            if (io.acceptsBracketedPaste(session)) {
+                io.write(session, bracketed(text));
+            } else {
+                io.write(session, text.replaceAll("\\s*\\r?\\n\\s*", " "));
+            }
             return;
         }
         Integer last = lastIds.get(session);

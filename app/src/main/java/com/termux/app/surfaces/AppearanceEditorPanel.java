@@ -15,6 +15,7 @@ import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.ViewGroup;
+import android.view.animation.LinearInterpolator;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
@@ -24,6 +25,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.appcompat.widget.PopupMenu;
+import androidx.constraintlayout.widget.ConstraintHelper;
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.constraintlayout.widget.Group;
 import androidx.appcompat.widget.TooltipCompat;
@@ -54,8 +56,8 @@ import java.util.Map;
  *
  * <p>The layout is one ConstraintLayout: each
  * mode's rows are a {@link Group}, and a mode switch shows one and hides the other. Row B at
- * Appearance is the Custom row: a heading row with the selection's buttons over up to five
- * vertical {@link LegendSlider}s. It is GONE at a Look stop, so the sheet's height follows its
+ * Appearance is the Custom row: a heading row with the selection's buttons over up to six
+ * vertical {@link LegendSlider}s (for the terminal, two pills in the heading's place). It is GONE at a Look stop, so the sheet's height follows its
  * content: {@link #measureFor} is the height for what shows now, and {@link #measureTallest} the
  * height with Row B up, which the frame stands above. Row B is one height whatever is selected.</p>
  *
@@ -123,6 +125,8 @@ final class AppearanceEditorPanel {
 
     private final Group mAppearanceGroup;
     private final Group mLayoutGroup;
+    /** Icons mode's one row: the content the activity lends (setIconsContent). */
+    private final FrameLayout mIconsSlot;
 
     private final Slider mLook;
     private final FrameLayout mLookLabels;
@@ -131,6 +135,8 @@ final class AppearanceEditorPanel {
     private final Typeface[] mLookLabelBase = new Typeface[AppearanceLooks.STOP_COUNT];
 
     private final View mRow2;
+    /** Row B's heading row: the name and the selection's buttons, one height for every selection. */
+    private final View mRow2Head;
     private final TextView mRow2Name;
     private final LinearLayout mSliderRow;
     private final LegendSlider[] mSliders = new LegendSlider[AppearanceLooks.MAX_CONTROLS];
@@ -141,8 +147,11 @@ final class AppearanceEditorPanel {
     private final boolean[] mSliderEnabled = new boolean[AppearanceLooks.MAX_CONTROLS];
     private final MaterialButton mKeyboardTheme;
     private final MaterialButton mClock;
-    private final MaterialButton mTrail;
-    private final MaterialButton mEffect;
+    /** The terminal's Cursor trail and Terminal effect pills: a heading over the chosen option. */
+    private final View mTrail;
+    private final View mEffect;
+    private final TextView mTrailValue;
+    private final TextView mEffectValue;
 
     private final MaterialButtonToggleGroup mOrientation;
     private final MaterialButtonToggleGroup mStyle;
@@ -168,6 +177,8 @@ final class AppearanceEditorPanel {
 
     /** Whether Layout mode's rows are showing in place of Appearance's. */
     private boolean mLayoutMode;
+    /** The mode whose rows show. */
+    @NonNull private EditorMode mMode = EditorMode.LOOK;
     /** Whether Row B is up (an element is tapped at the Custom stop); kept across Layout mode. */
     private boolean mRow2Shown;
     @NonNull private String mTrailId = "default";
@@ -190,20 +201,24 @@ final class AppearanceEditorPanel {
         mBasePaddingEnd = root.getPaddingEnd();
         mAppearanceGroup = root.findViewById(R.id.appearance_editor_appearance_group);
         mLayoutGroup = root.findViewById(R.id.appearance_editor_layout_group);
+        mIconsSlot = root.findViewById(R.id.appearance_editor_icons_slot);
         mLook = root.findViewById(R.id.appearance_editor_look);
         mLookLabels = root.findViewById(R.id.appearance_editor_look_labels);
         mRow2 = root.findViewById(R.id.appearance_editor_row2);
+        mRow2Head = root.findViewById(R.id.appearance_editor_row2_head);
         mRow2Name = root.findViewById(R.id.appearance_editor_row2_name);
         mSliderRow = root.findViewById(R.id.appearance_editor_sliders);
         int[] sliderIds = {R.id.appearance_editor_slider_0, R.id.appearance_editor_slider_1,
             R.id.appearance_editor_slider_2, R.id.appearance_editor_slider_3,
-            R.id.appearance_editor_slider_4};
+            R.id.appearance_editor_slider_4, R.id.appearance_editor_slider_5};
         for (int i = 0; i < mSliders.length; i++)
             mSliders[i] = root.findViewById(sliderIds[i]);
         mKeyboardTheme = root.findViewById(R.id.appearance_editor_door_keyboard_theme);
         mClock = root.findViewById(R.id.appearance_editor_door_clock);
         mTrail = root.findViewById(R.id.appearance_editor_trail);
         mEffect = root.findViewById(R.id.appearance_editor_effect);
+        mTrailValue = root.findViewById(R.id.appearance_editor_trail_value);
+        mEffectValue = root.findViewById(R.id.appearance_editor_effect_value);
         mOrientation = root.findViewById(R.id.layout_editor_orientation);
         mStyle = root.findViewById(R.id.appearance_editor_style);
         mHidden = root.findViewById(R.id.layout_editor_hidden);
@@ -226,7 +241,7 @@ final class AppearanceEditorPanel {
             R.id.appearance_editor_look_labels});
         mLayoutGroup.setReferencedIds(new int[] {R.id.layout_editor_orientation,
             R.id.appearance_editor_style, R.id.layout_editor_hidden});
-        applyGroups(false);
+        applyGroups(EditorMode.LOOK);
         applyRow2(false);
         paintSheet();
         paintSelectedSegments(mOrientation);
@@ -301,9 +316,9 @@ final class AppearanceEditorPanel {
      * shows now: Appearance is Row A alone until an element is tapped, then Row A + Row B. The
      * mode showing is restored before returning.
      */
-    int measureFor(boolean layout, int widthPx) {
-        boolean shown = mLayoutMode;
-        applyGroups(layout);
+    int measureFor(@NonNull EditorMode mode, int widthPx) {
+        EditorMode shown = mMode;
+        applyGroups(mode);
         int height = measureNow(widthPx);
         applyGroups(shown);
         return height;
@@ -316,13 +331,20 @@ final class AppearanceEditorPanel {
      * stands above it: it never moves when Row B comes and goes. Layout mode's rows are the same
      * at every moment.
      */
-    int measureTallest(boolean layout, int widthPx) {
-        if (layout)
+    int measureTallest(@NonNull EditorMode mode, int widthPx) {
+        if (mode == EditorMode.LAYOUT)
             return measureLayoutTallest(widthPx);
-        boolean shown = mLayoutMode;
+        if (mode == EditorMode.ICONS) {
+            EditorMode shownMode = mMode;
+            applyGroups(EditorMode.ICONS);
+            int height = measureNow(widthPx);
+            applyGroups(shownMode);
+            return height;
+        }
+        EditorMode shown = mMode;
         boolean rowShown = mRow2Shown;
         mRow2Shown = true;
-        applyGroups(false);
+        applyGroups(EditorMode.LOOK);
         int height = measureNow(widthPx);
         mRow2Shown = rowShown;
         applyGroups(shown);
@@ -335,12 +357,12 @@ final class AppearanceEditorPanel {
      * selected. The state showing is restored before returning.
      */
     private int measureLayoutTallest(int widthPx) {
-        boolean shown = mLayoutMode;
+        EditorMode shown = mMode;
         boolean tools = mKeyboardToolsShown;
         boolean tiles = mHiddenTilesOpen;
         mHiddenTilesOpen = false;
         mKeyboardToolsShown = false;
-        applyGroups(true);
+        applyGroups(EditorMode.LAYOUT);
         int height = measureNow(widthPx);
         mKeyboardToolsShown = true;
         applyLayoutRow2();
@@ -352,6 +374,7 @@ final class AppearanceEditorPanel {
     }
 
     private int measureNow(int widthPx) {
+        reserveHeadingHeight(widthPx);
         int width = View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY);
         int height = View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED);
         // Relative compound icons contribute width after inherited direction is resolved.
@@ -359,6 +382,22 @@ final class AppearanceEditorPanel {
         reserveReadoutLines();
         mRoot.measure(width, height);
         return mRoot.getMeasuredHeight();
+    }
+
+    /**
+     * Row B's heading row stands as tall as the terminal's pills need (two lines, which large
+     * text makes taller than 48dp) for every selection, shown or not: Row B is then one height
+     * whatever is selected, so the frame never moves when the selection changes.
+     */
+    private void reserveHeadingHeight(int widthPx) {
+        int target = Math.round(dp(48));
+        int pillWidth = Math.max(1, (widthPx - mRoot.getPaddingStart() - mRoot.getPaddingEnd()
+            - Math.round(dp(8))) / 2);
+        mTrail.measure(View.MeasureSpec.makeMeasureSpec(pillWidth, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        int height = Math.max(target, mTrail.getMeasuredHeight());
+        if (mRow2Head.getMinimumHeight() != height)
+            mRow2Head.setMinimumHeight(height);
     }
 
     /**
@@ -685,7 +724,7 @@ final class AppearanceEditorPanel {
     private void restateTrail() {
         String label = optionLabel(R.array.settings_terminal_cursor_trail_style_entries,
             R.array.settings_terminal_cursor_trail_style_values, mTrailId);
-        mTrail.setText(mContext.getString(R.string.appearance_editor_trail_button, label));
+        mTrailValue.setText(label);
         mTrail.setContentDescription(
             mContext.getString(R.string.appearance_editor_trail_description, label));
     }
@@ -693,7 +732,7 @@ final class AppearanceEditorPanel {
     private void restateEffect() {
         String label = optionLabel(R.array.settings_terminal_retro_effect_entries,
             R.array.settings_terminal_retro_effect_values, mEffectId);
-        mEffect.setText(mContext.getString(R.string.appearance_editor_effect_button, label));
+        mEffectValue.setText(label);
         mEffect.setContentDescription(
             mContext.getString(R.string.appearance_editor_effect_description, label));
     }
@@ -701,27 +740,81 @@ final class AppearanceEditorPanel {
     // ------------------------------------------------------------------------------ the modes
 
     void showAppearanceMode() {
-        setMode(false);
+        setMode(EditorMode.LOOK);
     }
 
     void showLayoutMode() {
-        setMode(true);
+        setMode(EditorMode.LAYOUT);
+    }
+
+    void showIconsMode() {
+        setMode(EditorMode.ICONS);
     }
 
     /**
      * Shows one mode's rows (the pill is the page bar's, not the sheet's). Row B keeps its state
      * across a visit to Layout mode: it is Appearance's, so it goes and comes back with that group.
      */
-    void setMode(boolean layout) {
-        applyGroups(layout);
+    void setMode(@NonNull EditorMode mode) {
+        applyGroups(mode);
     }
 
-    private void applyGroups(boolean layout) {
+    private void applyGroups(@NonNull EditorMode mode) {
+        mMode = mode;
+        boolean layout = mode == EditorMode.LAYOUT;
+        boolean look = mode == EditorMode.LOOK;
         mLayoutMode = layout;
-        mAppearanceGroup.setVisibility(layout ? View.GONE : View.VISIBLE);
+        mAppearanceGroup.setVisibility(look ? View.VISIBLE : View.GONE);
         mLayoutGroup.setVisibility(layout ? View.VISIBLE : View.GONE);
-        mRow2.setVisibility(!layout && mRow2Shown ? View.VISIBLE : View.GONE);
+        mRow2.setVisibility(look && mRow2Shown ? View.VISIBLE : View.GONE);
+        mIconsSlot.setVisibility(mode == EditorMode.ICONS && mIconsSlot.getChildCount() > 0
+            ? View.VISIBLE : View.GONE);
         applyLayoutRow2();
+    }
+
+    /**
+     * The Icons mode's content (the pack tiles and the Pinned-only switch), built by the activity:
+     * the sheet shows exactly it in that mode and is as tall as it is.
+     */
+    void setIconsContent(@Nullable View content) {
+        mIconsSlot.removeAllViews();
+        if (content != null) {
+            if (content.getParent() instanceof ViewGroup)
+                ((ViewGroup) content.getParent()).removeView(content);
+            mIconsSlot.addView(content, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+        applyGroups(mMode);
+    }
+
+    @NonNull
+    EditorMode mode() {
+        return mMode;
+    }
+
+    /**
+     * The rows that show now fade in over the sheet's own surface, on linear time: what a switch
+     * into or out of Icons puts in the sheet arrives under one fade (the rows it replaced are
+     * already gone) instead of appearing in a single frame. Zero puts every row at full alpha at
+     * once, which is also how a fade cut short is settled.
+     */
+    void fadeInRows(long durationMs) {
+        if (!(mRoot instanceof ViewGroup))
+            return;
+        ViewGroup root = (ViewGroup) mRoot;
+        for (int i = 0; i < root.getChildCount(); i++) {
+            View child = root.getChildAt(i);
+            if (child instanceof ConstraintHelper)
+                continue;
+            child.animate().cancel();
+            if (durationMs <= 0L || child.getVisibility() != View.VISIBLE) {
+                child.setAlpha(1f);
+                continue;
+            }
+            child.setAlpha(0f);
+            child.animate().alpha(1f).setStartDelay(0L).setDuration(durationMs)
+                .setInterpolator(new LinearInterpolator()).start();
+        }
     }
 
     /**
@@ -883,9 +976,9 @@ final class AppearanceEditorPanel {
             : View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         for (int i = 0; i < mSliders.length; i++)
             mSliders[i].setEnabled(shown && mSliderEnabled[i]);
-        for (MaterialButton button : new MaterialButton[] {mKeyboardTheme, mClock, mTrail, mEffect})
+        for (View button : new View[] {mKeyboardTheme, mClock, mTrail, mEffect})
             button.setEnabled(shown);
-        mRow2.setVisibility(shown && !mLayoutMode ? View.VISIBLE : View.GONE);
+        mRow2.setVisibility(shown && mMode == EditorMode.LOOK ? View.VISIBLE : View.GONE);
     }
 
     /**
@@ -956,16 +1049,39 @@ final class AppearanceEditorPanel {
             restateSlider(slider, control, value);
     }
 
-    /** Shows exactly these buttons in the heading row, in the layout's order. */
+    /**
+     * Shows exactly these buttons in the heading row, in the layout's order. The terminal's
+     * pills (Cursor trail, Terminal effect) own the row: the name gives way and they share the
+     * width equally, or Cursor trail takes all of it where Terminal effect is not offered.
+     */
     void setDoors(@NonNull List<Door> doors) {
+        boolean pills = doors.contains(Door.TRAIL) || doors.contains(Door.EFFECT);
+        mRow2Name.setVisibility(pills ? View.GONE : View.VISIBLE);
         mKeyboardTheme.setVisibility(doors.contains(Door.KEYBOARD_THEME) ? View.VISIBLE : View.GONE);
         mClock.setVisibility(doors.contains(Door.CLOCK) ? View.VISIBLE : View.GONE);
         mTrail.setVisibility(doors.contains(Door.TRAIL) ? View.VISIBLE : View.GONE);
         View space = mRoot.findViewById(R.id.appearance_editor_row2_space);
         if (space != null)
-            space.setVisibility(doors.contains(Door.TRAIL) || doors.contains(Door.EFFECT)
-                ? View.GONE : View.VISIBLE);
+            space.setVisibility(pills ? View.GONE : View.VISIBLE);
         mEffect.setVisibility(doors.contains(Door.EFFECT) ? View.VISIBLE : View.GONE);
+        // Cursor trail leads the row when it is the first pill; Terminal effect alone does too.
+        setMarginStart(mEffect, doors.contains(Door.TRAIL) ? Math.round(dp(8)) : 0);
+    }
+
+    private static void setMarginStart(@NonNull View view, int marginPx) {
+        ViewGroup.LayoutParams raw = view.getLayoutParams();
+        if (!(raw instanceof ViewGroup.MarginLayoutParams))
+            return;
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) raw;
+        if (params.getMarginStart() == marginPx)
+            return;
+        params.setMarginStart(marginPx);
+        view.setLayoutParams(params);
+    }
+
+    /** Whether Row B's heading (the selection's name) shows; not for the terminal, whose pills own the row. */
+    boolean isRow2NameShown() {
+        return mRow2Name.getVisibility() == View.VISIBLE;
     }
 
     /** The Clock button, which the clock popup opens upward from. */

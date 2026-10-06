@@ -45,9 +45,6 @@ public class TaiWelcomeCardTest {
         SIZES.put(E2B, 2_780_000_000L);
         SIZES.put(E4B, 3_930_000_000L);
         SIZES.put(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID, 183L * MIB);
-        SIZES.put(TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID, 28L * MIB);
-        SIZES.put(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, 55L * MIB);
-        SIZES.put(TaiModelCatalog.U2NET_ID, 84L * MIB);
     }
 
     private static final TaiWelcomeCard.Sizes SIZE_TABLE = id -> {
@@ -84,34 +81,28 @@ public class TaiWelcomeCardTest {
     public void tierOneHasFourUntickedRowsAndTheModelCentreLine() {
         TaiTierPolicy.Env env = env(TaiDeviceTier.TIER_1, 6, 34);
         List<TaiWelcomeCard.Row> rows = rows(env);
-        assertEquals(Arrays.asList("voice_typing", "read_aloud", "dawn_notes", "wallpaper_creator"), ids(rows));
+        assertEquals(Arrays.asList("voice_typing", "read_aloud", "dawn_notes"), ids(rows));
         assertTrue(ticked(rows).isEmpty());
         assertTrue(TaiWelcomeCard.showsModelCentreLine(env));
         assertEquals("Whisper Base", row(rows, "voice_typing").modelNames);
     }
 
     @Test
-    public void tierTwoAtEightGbTicksEverythingAndKeepsE4bOutOfTheWallpaperRow() {
+    public void tierTwoAtEightGbTicksEverything() {
         TaiTierPolicy.Env env = env(TaiDeviceTier.TIER_2, 8, 34);
         List<TaiWelcomeCard.Row> rows = rows(env);
-        assertEquals(Arrays.asList("voice_typing", "read_aloud", "assistant", "dawn_notes", "wallpaper_creator"), ids(rows));
+        assertEquals(Arrays.asList("voice_typing", "read_aloud", "assistant", "dawn_notes"), ids(rows));
         assertEquals(new HashSet<>(ids(rows)), ticked(rows));
         assertFalse(TaiWelcomeCard.showsModelCentreLine(env));
         assertEquals("Gemma 4 E2B", row(rows, "assistant").modelNames);
-        assertEquals("Depth and cut-out", row(rows, "wallpaper_creator").modelNames);
-        assertEquals(R.string.tai_welcome_row_wallpaper_line, row(rows, "wallpaper_creator").lineRes);
     }
 
     @Test
-    public void tierTwoAtTenAndTwelveGbFoldsE4bIntoTheTickedWallpaperRow() {
+    public void tierTwoAtTenAndTwelveGbOffersNoE4b() {
         for (long ram : new long[] {10, 12}) {
             List<TaiWelcomeCard.Row> rows = rows(env(TaiDeviceTier.TIER_2, ram, 34));
-            assertEquals(Arrays.asList("voice_typing", "read_aloud", "assistant", "dawn_notes", "wallpaper_creator"), ids(rows));
-            TaiWelcomeCard.Row wallpaper = row(rows, "wallpaper_creator");
-            assertEquals("Depth, cut-out and Gemma 4 E4B", wallpaper.modelNames);
-            assertEquals(R.string.tai_welcome_row_wallpaper_reader_line, wallpaper.lineRes);
-            assertTrue(wallpaper.missingIds.contains(E4B));
-            assertTrue(wallpaper.ticked);
+            assertEquals(Arrays.asList("voice_typing", "read_aloud", "assistant", "dawn_notes"), ids(rows));
+            for (TaiWelcomeCard.Row row : rows) assertFalse(row.modelIds.contains(E4B));
             assertTrue(row(rows, "assistant").ticked);
         }
     }
@@ -119,12 +110,10 @@ public class TaiWelcomeCardTest {
     @Test
     public void tierThreeTicksTheE4bAssistantAndCallsTheE2bRowTidyDictation() {
         List<TaiWelcomeCard.Row> rows = rows(env(TaiDeviceTier.TIER_3, 16, 34));
-        assertEquals(Arrays.asList("voice_typing", "read_aloud", "e4b_assistant", "assistant", "dawn_notes",
-            "wallpaper_creator"), ids(rows));
+        assertEquals(Arrays.asList("voice_typing", "read_aloud", "e4b_assistant", "assistant", "dawn_notes"), ids(rows));
         assertTrue(row(rows, "e4b_assistant").ticked);
         assertEquals(R.string.tai_welcome_row_tidy_title, row(rows, "assistant").titleRes);
         assertEquals(R.string.tai_welcome_row_e4b_assistant_title, row(rows, "e4b_assistant").titleRes);
-        assertEquals("Depth and cut-out", row(rows, "wallpaper_creator").modelNames);
     }
 
     @Test
@@ -144,15 +133,6 @@ public class TaiWelcomeCardTest {
     }
 
     // ---------------------------------------------------------------------------------- platform
-
-    @Test
-    public void belowApi34HasNoWallpaperRow() {
-        for (TaiDeviceTier tier : TaiDeviceTier.values()) {
-            List<TaiWelcomeCard.Row> rows = rows(env(tier, tier == TaiDeviceTier.TIER_1 ? 6 : 12, 33));
-            assertNull(row(rows, "wallpaper_creator"));
-        }
-        assertNotNull(row(rows(env(TaiDeviceTier.TIER_2, 12, 34)), "wallpaper_creator"));
-    }
 
     @Test
     public void noLocalBackendMeansNoCard() {
@@ -194,16 +174,6 @@ public class TaiWelcomeCardTest {
     }
 
     @Test
-    public void aPartlyInstalledWallpaperRowDownloadsOnlyWhatIsMissing() {
-        TaiTierPolicy.Env env = env(TaiDeviceTier.TIER_3, 16, 34);
-        TaiWelcomeCard.Row wallpaper = row(rows(env, TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID), "wallpaper_creator");
-        assertFalse(wallpaper.installed);
-        assertEquals(Collections.singletonList(TaiModelCatalog.U2NET_ID), wallpaper.missingIds);
-        assertEquals(84L * MIB, wallpaper.downloadBytes);
-        assertTrue(wallpaper.ticked);
-    }
-
-    @Test
     public void installedRowsAreNotQueuedAgain() {
         TaiTierPolicy.Env env = env(TaiDeviceTier.TIER_2, 12, 34);
         List<TaiWelcomeCard.Row> rows = rows(env, "whisper-acft-small-en");
@@ -220,8 +190,8 @@ public class TaiWelcomeCardTest {
         for (int i = 1; i < order.size(); i++) {
             assertTrue(SIZE_TABLE.bytesOf(order.get(i - 1)) <= SIZE_TABLE.bytesOf(order.get(i)));
         }
-        // E4B rides in the ticked wallpaper row on 12 GB, so it is the largest and comes last.
-        assertEquals(E4B, order.get(order.size() - 1));
+        // E2B is the largest download on 12 GB, so it comes last.
+        assertEquals(E2B, order.get(order.size() - 1));
     }
 
     @Test
@@ -272,8 +242,7 @@ public class TaiWelcomeCardTest {
 
     @Test
     public void theBackgroundWarningFollowsTheQuarterOfRamRuleOnTheRowsLargestFile() {
-        // E4B (3.93 GB) on 12 GB is over a quarter; on 16 GB it is not.
-        assertTrue(row(rows(env(TaiDeviceTier.TIER_2, 12, 34)), "wallpaper_creator").warnsBackground);
+        // E4B (3.93 GB) is under a quarter of 16 GB.
         assertFalse(row(rows(env(TaiDeviceTier.TIER_3, 16, 34)), "e4b_assistant").warnsBackground);
         // E2B (2.78 GB) on 8 GB warns, on 12 GB it does not.
         assertTrue(row(rows(env(TaiDeviceTier.TIER_2, 8, 34)), "assistant").warnsBackground);

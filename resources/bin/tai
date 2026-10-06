@@ -27,6 +27,7 @@ Usage:
   tai benchmark --native [model] [--gpu|--cpu] [--prefill N] [--decode N] [--runs N] [--force]
   tai transcribe <file.wav> [--model id] [--language xx] [--prompt "words"]
   tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [text]
+  agent | tai speak [--whole|--stream]
   tai speak --stop
   tai image "prompt" [--model ID | --model-dir DIR] [--type sd15|taiyi|sana] [--out FILE.png] [--steps N]
              [--seed N] [--size WxH] [--cfg X] [--image IN.png] [--cpu] [--memory-mode 0|1|2]
@@ -73,6 +74,8 @@ tai speak reads text aloud on the phone with the voice model (Model centre > Spe
 output): the text from the command line or stdin, the voice and speed from the options or
 TAI settings. Speech starts after the first sentence; Ctrl-C or tai speak --stop stops it.
 --out file.wav saves the audio instead of playing it.
+agent | tai speak speaks piped text sentence by sentence as the lines arrive (colour codes and
+markdown marks are dropped); --whole collects everything first, --stream forces streaming.
 tai image makes a picture from a text prompt with an MNN diffusion model (Stable Diffusion 1.5, Taiyi,
 Sana), on the GPU through OpenCL unless --cpu. --model names an installed image model; --model-dir points at
 a model folder directly (it needs tokenizer.mtok for Stable Diffusion/Taiyi; Taiyi must be said with --type).
@@ -419,13 +422,17 @@ case "$cmd" in
     speed=""
     model=""
     out=""
-    usage_speak() { echo "usage: tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [text...]  (reads stdin when no text is given; tai speak --stop stops)" >&2; exit 2; }
+    stream=0
+    whole=0
+    usage_speak() { echo "usage: tai speak [--voice Bruno|Hugo|Jasper|Rosie] [--speed N] [--out file.wav] [--whole|--stream] [text...]  (reads stdin when no text is given and speaks piped lines as they arrive; tai speak --stop stops)" >&2; exit 2; }
     while [ "$#" -gt 0 ]; do
       case "$1" in
         --voice) shift; [ "$#" -gt 0 ] || usage_speak; voice="$1" ;;
         --speed) shift; [ "$#" -gt 0 ] || usage_speak; speed="$1" ;;
         --model) shift; [ "$#" -gt 0 ] || usage_speak; model="$1" ;;
         --out|-o) shift; [ "$#" -gt 0 ] || usage_speak; out="$1" ;;
+        --stream) stream=1 ;;
+        --whole) whole=1 ;;
         --stop) post_json /v1/ai/speak/stop '{}'; exit $? ;;
         --) shift; break ;;
         -*) usage_speak ;;
@@ -443,10 +450,55 @@ case "$cmd" in
     [ -z "$speed" ] || add_query "speed=$speed"
     [ -z "$model" ] || add_query "model=$model"
     [ -z "$out" ] || add_query "format=wav"
+    CURL_SPEAK="--fail-with-body -sS --connect-timeout 2 --max-time 3600"
+    # Piped input is spoken as it arrives; --whole collects it first, --out needs the whole text.
+    if [ "$stream" = "1" ]; then
+      { [ "$whole" = "0" ] && [ -z "$out" ] && [ "$#" -eq 0 ]; } || usage_speak
+    elif [ "$whole" = "0" ] && [ -z "$out" ] && [ "$#" -eq 0 ] && [ ! -t 0 ]; then
+      stream=1
+    fi
+    if [ "$stream" = "1" ]; then
+      # One line in, sentences out: drop colour codes and carriage returns, drop markdown marks that
+      # would be read aloud, collapse spaces, then break after . ! ? (and closing quotes or brackets).
+      speak_sed='s/\r//g
+s/\x1b\][^\x07]*(\x07|\x1b\\)//g
+s/\x1b\[[0-9;:?<>=! ]*[A-Za-z@]//g
+s/\x1b.//g
+s/\*\*//g
+s/__//g
+s/`//g
+s/[[:space:]]+/ /g
+s/^ //
+s/ $//
+s/^#+ +//
+s/^[-*+>] +//
+s/^([0-9]+)[.)] +/\1, /
+s/([.!?][]\x22\x27)]*) /\1\n/g'
+      trap 'post_json /v1/ai/speak/stop "{}" >/dev/null 2>&1; exit 130' INT TERM
+      if [ "$OUTPUT_MODE" = "text" ]; then set -- -H "X-TAI-Output: text"; else set --; fi
+      while IFS= read -r line || [ -n "$line" ]; do
+        parts=$(printf '%s\n' "$line" | sed -E -e "$speak_sed") || parts=""
+        while IFS= read -r sentence || [ -n "$sentence" ]; do
+          case "$sentence" in *[[:alnum:]]*) ;; *) continue ;; esac
+          # Each request returns once its sentence has been heard, which keeps the order.
+          if body=$(printf '%s' "$sentence" | curl $CURL_SPEAK -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: text/plain; charset=utf-8" "$@" --data-binary @- "$BASE/v1/ai/speak$query"); then
+            :
+          else
+            rc=$?
+            printf '%s\n' "$body" >&2
+            trap - INT TERM
+            exit "$rc"
+          fi
+        done <<SPEAK_EOF
+$parts
+SPEAK_EOF
+      done
+      trap - INT TERM
+      exit 0
+    fi
     tmp=$(mktemp "${TMPDIR:-$HOME}/tai-speak.XXXXXX") || exit 1
     if [ "$#" -gt 0 ]; then printf '%s' "$*" > "$tmp"; else cat > "$tmp"; fi
     [ -s "$tmp" ] || { rm -f "$tmp"; usage_speak; }
-    CURL_SPEAK="--fail-with-body -sS --connect-timeout 2 --max-time 3600"
     if [ -n "$out" ]; then
       if curl $CURL_SPEAK -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: text/plain; charset=utf-8" --data-binary "@$tmp" -o "$out.part" "$BASE/v1/ai/speak$query"; then
         mv -f "$out.part" "$out"

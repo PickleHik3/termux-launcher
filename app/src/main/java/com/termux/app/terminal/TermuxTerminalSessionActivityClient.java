@@ -437,7 +437,6 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mHost.noteShellAttention(session);
         if (!mHost.isVisible())
             return;
-        mHost.onBellForWallpaper(session);
         raiseAttentionNotice(session);
         switch(mHost.properties().getBellBehaviour()) {
             case TermuxPropertyConstants.IVALUE_BELL_BEHAVIOUR_VIBRATE:

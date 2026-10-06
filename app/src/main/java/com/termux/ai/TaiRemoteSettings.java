@@ -132,7 +132,7 @@ public final class TaiRemoteSettings {
         return ROUTING_LOCAL_FIRST.equals(routing) ? ROUTING_LOCAL_FIRST : ROUTING_PREFER_REMOTE;
     }
 
-    /** Whether the one-time "your photo is sent to …" dialog was shown (wallpaper creator, later). */
+    /** Whether the one-time "your photo is sent to …" dialog was shown. */
     public boolean consentShown() {
         return prefs.getBoolean(KEY_CONSENT_SHOWN, false);
     }

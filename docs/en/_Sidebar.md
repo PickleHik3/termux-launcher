@@ -25,7 +25,6 @@
 
 ## Look
 
-- [Living stills](Animated_Backgrounds.md)
 
 ## Voice
 

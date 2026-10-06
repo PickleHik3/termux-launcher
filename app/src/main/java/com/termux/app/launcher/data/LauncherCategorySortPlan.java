@@ -15,6 +15,7 @@ public final class LauncherCategorySortPlan {
     /** Measured on-device throughput, used only for the "takes about N minutes" estimate. */
     static final int SECONDS_PER_APP_E4B = 3;
     static final int SECONDS_PER_APP_E2B = 1;
+    static final int CPU_SLOWDOWN = 2;
 
     /** The local model id or {@code remote/<id>}; {@code null} when no model serves the function. */
     @Nullable public final String model;
@@ -43,10 +44,20 @@ public final class LauncherCategorySortPlan {
         return new LauncherCategorySortPlan(resolution.modelId, resolution.accelerator, false, resolution.warnBackground);
     }
 
-    /** Rounded up and never zero: "about 0 minutes" would read as instant. */
+    /** The estimate on the plan's own accelerator, as the tier policy would pick it. */
     public int estimatedMinutes(int appCount) {
+        return estimatedMinutes(appCount, accelerator);
+    }
+
+    /**
+     * Rounded up and never zero: "about 0 minutes" would read as instant. The per-app figures were
+     * measured on the GPU; the CPU is not measured and is assumed twice as slow, so a sort that will
+     * run on the CPU (no speed test yet) is not promised at GPU speed.
+     */
+    public int estimatedMinutes(int appCount, @Nullable String onAccelerator) {
         int secondsPerApp = model != null && model.startsWith(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT)
             ? SECONDS_PER_APP_E4B : SECONDS_PER_APP_E2B;
+        if ("cpu".equals(onAccelerator)) secondsPerApp *= CPU_SLOWDOWN;
         return Math.max(1, (int) Math.ceil(appCount * secondsPerApp / 60.0));
     }
 

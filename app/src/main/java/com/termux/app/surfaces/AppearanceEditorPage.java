@@ -22,9 +22,8 @@ import com.termux.R;
  * something to undo, Done) over a content region. Every page of the surface wears the same bar;
  * only the pill's selection and the end actions change between pages.
  *
- * <p>Three kinds: the Overview ({@link #overview}, the wallpaper page in the content region, the
- * pill on Wallpaper), the Icon pack page ({@link #icons}, the pill on Icon pack), and the
- * editor (Look and Layout, built by the surface). The editor's frame is not in this view: it is the
+ * <p>Two kinds: the Overview ({@link #overview}, the wallpaper page in the content region, the
+ * pill on Wallpaper) and the editor (Look, Layout and Icon pack, built by the surface). The editor's frame is not in this view: it is the
  * launcher's container, scaled underneath, standing in the region below the bar ({@link #BAR_DP}
  * plus the status inset is where {@link SurfaceEditorController} puts the frame's top), so the
  * editor kind is transparent and takes no touch outside the bar's own buttons.</p>
@@ -55,7 +54,7 @@ public final class AppearanceEditorPage {
         void onSegment(@NonNull Segment segment);
     }
 
-    private enum Kind { OVERVIEW, EDITOR, ICONS }
+    private enum Kind { OVERVIEW, EDITOR }
 
     @NonNull private final Kind mKind;
     @NonNull private final View mRoot;
@@ -93,14 +92,14 @@ public final class AppearanceEditorPage {
                                                 @NonNull View content) {
         return new AppearanceEditorPage(context, new Callbacks() {
             @Override public void onBack() {
-                navigator.close();
+                navigator.back();
             }
 
             @Override public void onUndo() {
             }
 
             @Override public void onDone() {
-                navigator.close();
+                navigator.done();
             }
 
             @Override public void onSegment(@NonNull Segment segment) {
@@ -112,35 +111,6 @@ public final class AppearanceEditorPage {
                     navigator.openLayout();
             }
         }, Kind.OVERVIEW, null, content);
-    }
-
-    /** The Icon pack page: back, the pill on Icon pack (no title), Done, over {@code content}. */
-    @NonNull
-    public static AppearanceEditorPage icons(@NonNull Context context,
-                                             @NonNull AppearanceSurfaceController.Navigator navigator,
-                                             @NonNull CharSequence title, @NonNull View content) {
-        return new AppearanceEditorPage(context, new Callbacks() {
-            @Override public void onBack() {
-                navigator.back();
-            }
-
-            @Override public void onUndo() {
-            }
-
-            @Override public void onDone() {
-                navigator.close();
-            }
-
-            @Override public void onSegment(@NonNull Segment segment) {
-                // Wallpaper is one page back; Look and Layout go through the Overview.
-                if (segment == Segment.WALLPAPER)
-                    navigator.back();
-                else if (segment == Segment.LOOK)
-                    navigator.openLook();
-                else if (segment == Segment.LAYOUT)
-                    navigator.openLayout();
-            }
-        }, Kind.ICONS, title, content);
     }
 
     private AppearanceEditorPage(@NonNull Context context, @NonNull Callbacks callbacks, @NonNull Kind kind,
@@ -168,7 +138,7 @@ public final class AppearanceEditorPage {
             mTitle.setText(title);
         mUndo.setVisibility(View.GONE);
         mDone.setVisibility(View.VISIBLE);
-        mCurrent = kind == Kind.OVERVIEW ? Segment.WALLPAPER : kind == Kind.ICONS ? Segment.ICON_PACK : Segment.LOOK;
+        mCurrent = kind == Kind.OVERVIEW ? Segment.WALLPAPER : Segment.LOOK;
 
         ViewGroup region = mRoot.findViewById(R.id.appearance_page_content);
         {
@@ -199,7 +169,7 @@ public final class AppearanceEditorPage {
             mRoot.setBackground(null);
             region.setClickable(false);
             region.setFocusable(false);
-            setLayoutMode(false);
+            setMode(EditorMode.LOOK);
         } else {
             if (content != null) {
                 region.addView(content, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -207,8 +177,6 @@ public final class AppearanceEditorPage {
             }
             if (kind == Kind.OVERVIEW)
                 select(Segment.WALLPAPER);
-            else if (kind == Kind.ICONS)
-                select(Segment.ICON_PACK);
         }
     }
 
@@ -217,7 +185,7 @@ public final class AppearanceEditorPage {
         return mRoot;
     }
 
-    /** The content region: what slides between the Overview and the Icon pack page while the bar stays put. */
+    /** The content region: the Overview's page under the bar. */
     @NonNull
     public View content() {
         return mRoot.findViewById(R.id.appearance_page_content);
@@ -248,10 +216,12 @@ public final class AppearanceEditorPage {
         return mBar.getVisibility() == View.VISIBLE;
     }
 
-    /** The editor's mode: the pill's Look or Layout, and the title text. */
-    void setLayoutMode(boolean layout) {
-        mTitle.setText(layout ? R.string.appearance_page_layout : R.string.appearance_page_look);
-        select(layout ? Segment.LAYOUT : Segment.LOOK);
+    /** The editor's mode: the pill's Look, Layout or Icon pack, and the title text. */
+    void setMode(@NonNull EditorMode mode) {
+        mTitle.setText(mode == EditorMode.LAYOUT ? R.string.appearance_page_layout
+            : mode == EditorMode.ICONS ? R.string.icon_pack_page_title : R.string.appearance_page_look);
+        select(mode == EditorMode.LAYOUT ? Segment.LAYOUT
+            : mode == EditorMode.ICONS ? Segment.ICON_PACK : Segment.LOOK);
     }
 
     /** The editor is on its way out to the Overview: the pill shows Wallpaper while it goes. */

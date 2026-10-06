@@ -49,7 +49,7 @@ import java.util.concurrent.Executors;
  * The one shared model picker (tai-device-tiers spec §4.3), a bottom sheet per function: Automatic
  * with the tier's choice named, the models on this phone with a fit line, Remote, the choice
  * without a model, and the catalogue downloads, then the fallback chain and the function's extras
- * (cleanup level, voice and speed, the voice-typing window, the wallpaper depth model).
+ * (cleanup level, voice and speed, the voice-typing window).
  *
  * <p>What the sheet lists and marks is decided by {@link TaiFunctionPickerModel}; this class draws it,
  * reads and writes the picks through {@link TaiFunctionModels} off the main thread, and tells the
@@ -97,7 +97,6 @@ public final class TaiFunctionPickerSheet {
     /** What one load reads: the sheet's models, and the values behind the extras. */
     private static final class Loaded {
         TaiFunctionPickerModel.Model main;
-        @Nullable TaiFunctionPickerModel.Model depth;
         TaiFunctionLabels labels;
         String tidyLevel = TERMUX_APP.IN_APP_KEYBOARD_VOICE_POLISH_LEVEL_POLISHED;
         String ttsVoice = TaiTtsVoices.DEFAULT_VOICE;
@@ -151,9 +150,6 @@ public final class TaiFunctionPickerSheet {
         // A download started here stays listed, marked Downloading; once it lands it moves to On this phone.
         Set<String> busy = new HashSet<>();
         loaded.main = TaiFunctionPickerModel.build(function, models, remote, catalogue, busy, loaded.labels);
-        if (function == TaiFunction.WALLPAPER_READER && TaiTierPolicy.functionAvailable(models.env(), TaiFunction.WALLPAPER_DEPTH)) {
-            loaded.depth = TaiFunctionPickerModel.build(TaiFunction.WALLPAPER_DEPTH, models, remote, catalogue, busy, loaded.labels);
-        }
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, true);
         if (prefs != null) loaded.tidyLevel = prefs.getInAppKeyboardVoicePolishLevel();
         TaiSettings settings = new TaiSettings(app);
@@ -263,9 +259,7 @@ public final class TaiFunctionPickerSheet {
     }
 
     /**
-     * One model's sections into {@code into}. The wallpaper creator's depth picker is a second model drawn
-     * under its own heading; it has no Remote or without-model section, so only Automatic, the installed
-     * depth models and downloads show.
+     * One model's sections into {@code into}.
      */
     private void renderModel(@NonNull LinearLayout into, @NonNull TaiFunctionPickerModel.Model model,
                              @NonNull Loaded loaded) {
@@ -436,13 +430,6 @@ public final class TaiFunctionPickerSheet {
                 if (loaded.windowSpec != null) {
                     addHeader(into, getString(R.string.tai_fn_section_extras));
                     addWindowRow(into, loaded);
-                }
-                break;
-            case WALLPAPER_READER:
-                if (loaded.depth != null) {
-                    addHeader(into, getString(R.string.tai_fn_section_depth));
-                    renderModel(into, loaded.depth, loaded);
-                    addNote(into, getString(R.string.tai_fn_cutout_line));
                 }
                 break;
             default:

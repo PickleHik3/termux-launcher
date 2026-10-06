@@ -5,6 +5,5 @@
     <string name="icon_pack_page_default_system">Default</string>
     <string name="icon_pack_page_default_global">Same as app icons</string>
     <string name="icon_pack_page_pinned_only">Pinned app icons only</string>
-    <string name="icon_pack_page_preview_description">Home screen preview with the pinned apps in the chosen icon pack</string>
     <string name="icon_pack_page_tile_selected">%1$s, selected</string>
 </resources>

@@ -751,6 +751,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override
+            public boolean acceptsBracketedPaste(@NonNull TerminalSession session) {
+                TerminalEmulator emulator = session.getEmulator();
+                return session.isRunning() && emulator != null && emulator.isBracketedPasteMode();
+            }
+
+            @Override
             public void write(@NonNull TerminalSession session, @NonNull String data) {
                 session.write(data);
             }
@@ -1107,6 +1113,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mLastLaunchWasLauncherEntry;
 
     /**
+     * Whether the first shell's styling broadcast still has something to apply: only after a
+     * bootstrap install, which ran its config installers after this activity styled itself in
+     * onCreate. Every other first shell is asked for by an activity that has just styled from the
+     * very files a reload would read again, and that reload (the whole extra keys, keyboard,
+     * place layout and chrome pass) was a quarter of a second of main thread right after the
+     * first frame of every cold start.
+     */
+    private boolean mFirstSessionRestyleWanted;
+
+    /**
      * If activity was restarted like due to call to {@link #recreate()} after receiving
      * {@link TERMUX_ACTIVITY#ACTION_RELOAD_STYLE}, system dark night mode was changed or activity
      * was killed by android.
@@ -1164,8 +1180,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private Bitmap mWallBehindFrame;
     /** The self-drawn wallpaper behind everything; see {@link WallpaperBackdropPolicy}. */
     @Nullable private WallpaperBackdropView mWallpaperBackdropView;
-    /** Plays the stored generated background; every call into it is a no-op below API 34. */
-    @Nullable private com.termux.app.chrome.wallpaper.GeneratedWallpaperHost mLiveWallpaperHost;
     /**
      * The wallpaper's live x-offset, shared by every glass surface; see
      * {@link com.termux.app.chrome.WallpaperParallax}. Written by {@link #syncWallpaperParallax}
@@ -1567,11 +1581,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mAppDrawerGeometryFreezePending;
     @Nullable private WallpaperManager.OnColorsChangedListener mWallpaperColorsChangedListener;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
+    /** A pause that a resume ends inside the same message: see {@link SameMessageMark}. */
+    private final SameMessageMark mPausedThisMessage =
+        new SameMessageMark(runnable -> mAccessoryRenderHandler.postAtFrontOfQueue(runnable));
+    /** An onCreate whose launch transaction is still running; its onResume follows in it. */
+    private final SameMessageMark mCreatedThisMessage =
+        new SameMessageMark(runnable -> mAccessoryRenderHandler.postAtFrontOfQueue(runnable));
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         Logger.logDebug(LOG_TAG, "onCreate");
         mIsOnResumeAfterOnCreate = true;
+        mCreatedThisMessage.mark();
         if (savedInstanceState != null) {
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
@@ -1707,23 +1728,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // app has been opened.
         TermuxUtils.sendTermuxOpenedBroadcast(this);
         registerPreferredHomeChangeReceiver();
-        mLiveWallpaperHost = new com.termux.app.chrome.wallpaper.GeneratedWallpaperHost(this,
-            new com.termux.app.chrome.wallpaper.GeneratedWallpaperHost.Environment() {
-                @Override public boolean fancierGlassActive() { return currentFancierGlassLook() != null; }
-                @Override public boolean managedPictureOnScreen() { return shouldUseManagedWallpaperBlurSource(); }
-                @Override public boolean selfDrawnBackdrop() {
-                    return wallpaperBackdropMode() == WallpaperBackdropPolicy.Mode.SELF_DRAWN;
-                }
-                @Override public boolean lazyMode() { return isLazyModeEnabled(); }
-                @Override public boolean reducedMotion() { return isReducedMotionEnabled(); }
-                @Override public boolean focus() { return isTerminalSheetOpen() || isImeVisible(); }
-                @Nullable @Override public WallpaperBackdropView backdrop() { return mWallpaperBackdropView; }
-                @NonNull @Override public Rect frameRect() { return getWallpaperCaptureFrameRect(); }
-                @Override public int blurRadiusDpOf(@Nullable Bitmap frame) {
-                    return mChrome.blurCache().radiusDpOf(frame);
-                }
-            });
-        mLiveWallpaperHost.onCreate();
         ensureAppNoticeHost();
         // The GPU path settles in the background so the welcome card knows it when it renders.
         com.termux.app.firstrun.TaiWelcomeCardHost.probeEarly(this);
@@ -2141,7 +2145,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Logger.logDebug(LOG_TAG, "onStart");
     
         if (mIsInvalidState) return;
-        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onStart();
+        // Clears what the removed live wallpaper left behind: a stored choice, a black lock screen.
+        com.termux.app.chrome.wallpaper.WallpaperSlots.dropRetiredLiveWallpapers(this);
 
         // The wallpaper can have been swapped while we were stopped.
         refreshWallpaperPictureOnArrival();
@@ -2236,92 +2241,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!mAzTabTouch && touchBeganOverTerminal(ev))
                 mKeybindHintPresenter.onTerminalTouch(ev);
             notifyKeybindHintPanelTouch(ev);
-            boolean handled = super.dispatchTouchEvent(ev);
-            trackWallpaperTap(ev, handled);
-            return handled;
+            return super.dispatchTouchEvent(ev);
         } finally {
             Trace.endSection();
         }
-    }
-
-    /** Classifies taps on bare wallpaper for the generated background's ripple (issue #41). */
-    @Nullable private com.termux.app.chrome.wallpaper.WallpaperTapClassifier mWallpaperTap;
-
-    /**
-     * A tap nothing took, on the Home place, is the generated wallpaper's touch moment. "Nothing
-     * took it" is two tests that must both hold at DOWN: the point is on the widget grid's empty
-     * space (a widget cell consumes its own DOWN) or the dispatch returned false, and the point is
-     * outside the chrome that can be non-consuming in its gaps (dock, keyboard, status bar,
-     * window bar, A-Z). The grid itself consumes DOWNs on empty space (it watches for a long
-     * press), so a true dispatch there is not a widget's and does not veto the ripple.
-     */
-    private void trackWallpaperTap(@NonNull MotionEvent ev, boolean handled) {
-        if (mLiveWallpaperHost == null) return;
-        com.termux.app.chrome.wallpaper.WallpaperTapClassifier tap = mWallpaperTap;
-        if (tap == null) {
-            tap = mWallpaperTap = new com.termux.app.chrome.wallpaper.WallpaperTapClassifier(
-                android.view.ViewConfiguration.get(this).getScaledTouchSlop(),
-                android.view.ViewConfiguration.getTapTimeout());
-        }
-        switch (ev.getActionMasked()) {
-            case MotionEvent.ACTION_DOWN:
-                tap.down(ev.getRawX(), ev.getRawY(), ev.getEventTime(),
-                    isBareWallpaperPoint(ev, handled));
-                break;
-            case MotionEvent.ACTION_MOVE:
-                tap.move(ev.getRawX(), ev.getRawY());
-                break;
-            case MotionEvent.ACTION_POINTER_DOWN:
-            case MotionEvent.ACTION_CANCEL:
-                tap.cancel();
-                break;
-            case MotionEvent.ACTION_UP:
-                if (tap.up(ev.getRawX(), ev.getRawY(), ev.getEventTime())) {
-                    float[] p = new float[4];
-                    wallpaperFrameRect(ev.getRawX(), ev.getRawY(), ev.getRawX(), ev.getRawY(), p);
-                    mLiveWallpaperHost.touch(p[0], p[1]);
-                }
-                break;
-            default:
-                break;
-        }
-    }
-
-    private boolean isBareWallpaperPoint(@NonNull MotionEvent ev, boolean handled) {
-        if (mPaneWallController == null
-            || mPaneWallController.currentPage() != com.termux.app.wall.PaneWallPage.WIDGETS
-            || mPaneWallController.wall().isMoving()) return false;
-        View grid = findViewById(R.id.widget_grid);
-        boolean onEmptyGrid = viewContainsScreenPoint(grid, ev)
-            && !widgetCellContainsScreenPoint((ViewGroup) grid, ev);
-        if (handled && !onEmptyGrid) return false;
-        final int[] chrome = {
-            R.id.inapp_keyboard_container, R.id.place_off_dock_plank_host,
-            R.id.place_az_bar_host, R.id.place_az_tab_layer, R.id.terminal_window_bar,
-            R.id.terminal_status_row, R.id.terminal_status_bar_background};
-        for (int id : chrome) {
-            if (viewContainsScreenPoint(findViewById(id), ev)) return false;
-        }
-        return true;
-    }
-
-    /**
-     * A screen-space rect in the shared frame the generated wallpaper's moments use: the blur
-     * cache's capture rect as origin, plus the live parallax offset on x (the same math the glass
-     * readers apply, see {@link com.termux.app.chrome.WallpaperParallax}).
-     */
-    private void wallpaperFrameRect(float left, float top, float right, float bottom,
-                                    @NonNull float[] out) {
-        Rect frame = getWallpaperCaptureFrameRect();
-        com.termux.app.chrome.wallpaper.SharedFrameSpace.rect(left, top, right, bottom,
-            frame.left, frame.top, mWallpaperParallax.offsetPx(), out);
-    }
-
-    @NonNull
-    private RectF wallpaperFrameRectF(@NonNull RectF screen) {
-        float[] r = new float[4];
-        wallpaperFrameRect(screen.left, screen.top, screen.right, screen.bottom, r);
-        return new RectF(r[0], r[1], r[2], r[3]);
     }
 
     /**
@@ -2336,14 +2259,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) return false;
         if (!viewContainsScreenPoint(findViewById(R.id.terminal_surface_host), ev)) return false;
         return !viewContainsScreenPoint(findViewById(R.id.inapp_keyboard_container), ev);
-    }
-
-    private static boolean widgetCellContainsScreenPoint(@NonNull ViewGroup grid,
-                                                         @NonNull MotionEvent ev) {
-        for (int i = 0; i < grid.getChildCount(); i++) {
-            if (viewContainsScreenPoint(grid.getChildAt(i), ev)) return true;
-        }
-        return false;
     }
 
     private static boolean viewContainsScreenPoint(@Nullable View view, @NonNull MotionEvent ev) {
@@ -2457,10 +2372,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         holdVoiceScreen();
         if (mIsInvalidState)
             return;
+        // A new intent to the resumed launcher (HOME while home; a second start racing a cold
+        // start) pauses and resumes it inside one message. Nothing can have changed in between,
+        // so the passes below that re-read preferences and re-dress the chrome "in case they
+        // changed while we were away" are skipped for it; everything that pairs with onPause,
+        // and the prefix checks a shell can change without a broadcast, still run. A Settings
+        // reload waiting for this resume always takes the full path.
+        boolean transientPause = mPausedThisMessage.isMarked()
+            && !sPendingStyleReloadOnNextResume && !sPendingAppDrawerReloadOnNextResume;
+        // The launch's own resume: the keyboard was built from the preferences moments ago in
+        // this same message, tap model and layout ring included, so re-reading them all (17 ms
+        // on a cold start, the tap model file a second time) has nothing to find.
+        boolean keyboardJustBuilt = mCreatedThisMessage.isMarked();
         // Also here, not only in onStart: a wallpaper picker shown over this activity never stops
         // it, so the arrival back from one is an onResume on its own.
         refreshWallpaperPictureOnArrival();
-        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onResume();
+        com.termux.app.chrome.wallpaper.WallpaperSlots.dropRetiredLiveWallpapers(this);
         redressChromeAfterFirstLayout();
         // A row whose button opened the system settings page comes back here, so the card reads
         // what was granted there rather than what it said before we left.
@@ -2486,10 +2413,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (contentView != null)
             androidx.core.view.ViewCompat.requestApplyInsets(contentView);
         // Preferences may have changed while the settings activity covered this one.
-        initializeInAppKeyboard(null);
+        if (!transientPause) initializeInAppKeyboard(null);
         syncDisplayKeyboardRoute();
         if (mInAppKeyboard != null) {
-            mInAppKeyboard.onPreferencesReloaded();
+            if (!transientPause && !keyboardJustBuilt) mInAppKeyboard.onPreferencesReloaded();
             mInAppKeyboard.onResume();
             if (mInAppKeyboard.isExternalTextInputActive())
                 onSystemImeRequested();
@@ -2519,24 +2446,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalViewClient.onResume();
         refreshLauncherIconsIfPreferencesChanged();
         maybeRecoverFromEmptySession("onResume");
-        // If compatibility mode was just enabled, drop any active split back to a single pane.
-        if (!isSplitPanesEnabled())
-            collapseAllSplits();
-        else if (mPaneController != null) {
-            mPaneController.refreshPaneSizes();
-            // Settings may have flipped the pane behaviour toggles while we were away.
-            applyPaneBehaviourPreferences();
-        }
-        refreshTerminalWindowBar();
+        if (!transientPause) {
+            // If compatibility mode was just enabled, drop any active split back to a single pane.
+            if (!isSplitPanesEnabled())
+                collapseAllSplits();
+            else if (mPaneController != null) {
+                mPaneController.refreshPaneSizes();
+                // Settings may have flipped the pane behaviour toggles while we were away.
+                applyPaneBehaviourPreferences();
+            }
+            refreshTerminalWindowBar();
 
-        updateWindowBackgroundForCurrentSession();
-        syncTerminalWallpaperRenderingMode();
-        applySeamlessStatusBackgroundModeIfNeeded();
-        applyTerminalSurfaceAppearance();
-        syncRecentsVisibilityPolicy();
-        applyWallpaperOffsetFixIfNeeded();
-        mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER
-            | ChromeRenderer.SCOPE_BLUR_HEALTH);
+            updateWindowBackgroundForCurrentSession();
+            syncTerminalWallpaperRenderingMode();
+            applySeamlessStatusBackgroundModeIfNeeded();
+            applyTerminalSurfaceAppearance();
+            syncRecentsVisibilityPolicy();
+            applyWallpaperOffsetFixIfNeeded();
+            mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_BLUR_HEALTH);
+        }
         refreshPrivilegedBackendIfNeeded();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.post(this::updateAzOverflowAffordance);
@@ -2838,6 +2767,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Same rule for the find strip: it holds the interceptor and paints over a pane, and both
         // must be handed back before this activity stops being the one on screen.
         if (mFindCoordinator != null) mFindCoordinator.cancel();
+        mPausedThisMessage.mark();
         super.onPause();
     }
 
@@ -3321,7 +3251,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // reset that runs just before leaves a transparent colour drawable and hides the view, and
         // taking that for the glass left the gutter bare from the second pass on.
         List<Object> key = Arrays.asList(frame, blurRadiusDp, mPreferences.getAppBarOpacity(),
-            mPreferences.getDockGlassGrain(), mFancierGlassLook);
+            mPreferences.getDockGlassGrain(), mFancierGlassLook, mPreferences.getDockTintStrength());
         if (mFrameGutterShown && mFrameGutterDrawable != null
                 && body.getBackground() == mFrameGutterDrawable && key.equals(mFrameGutterKey)) {
             body.setVisibility(View.VISIBLE);
@@ -3336,7 +3266,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.chrome.GlassAnchor.layout(body, () -> 0f));
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec.of(
             blurRadiusDp, mPreferences.getAppBarOpacity() / 100f,
-            mPreferences.getDockGlassGrain(), 0f, mFancierGlassLook).withRim(false);
+            mPreferences.getDockGlassGrain(), 0f, mFancierGlassLook).withRim(false)
+            .withTintStrength(mPreferences.getDockTintStrength());
         mFrameGutterDrawable =
             com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop);
         body.setBackground(mFrameGutterDrawable);
@@ -3517,7 +3448,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public int paneGlassTintColor() {
                 int tint = shouldShowTerminalOverlaySurface()
-                    ? mChrome.glass().look().flatTint(resolveTerminalSurfaceColor())
+                    ? mChrome.glass().look(mPreferences != null
+                        ? mPreferences.getTerminalTintStrength()
+                        : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
+                        .flatTint(resolveTerminalSurfaceColor())
                     : Color.TRANSPARENT;
                 // The Docked insert stands at least one tone step darker than the frame glass.
                 return isRoundedDockStyle() ? tint
@@ -3682,9 +3616,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mFancierGlassLook = look;
         mChrome.ledger().markAllBackdropsDirty();
         mAppliedPaneStyleKey = null;
-        // The switch is the one gate of a generated background; re-read it next message, not
-        // in the middle of the pass that is dressing the glass.
-        if (mLiveWallpaperHost != null) mAccessoryRenderHandler.post(mLiveWallpaperHost::refresh);
     }
 
     /**
@@ -3727,27 +3658,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWallpaperParallaxSparePx = Math.max(0, spanPx - frame.width());
         frame.right = frame.left + spanPx;
         return frame;
-    }
-
-    @Nullable private com.termux.app.wall.PaneWallPage mLastSettledWallPage;
-
-    /** One page-change moment per settled change; the direction is the page ordinal's sign. */
-    private void noteWallpaperPageMoment(@NonNull com.termux.app.wall.PaneWallPage page) {
-        com.termux.app.wall.PaneWallPage previous = mLastSettledWallPage;
-        mLastSettledWallPage = page;
-        if (previous == null || previous == page || mLiveWallpaperHost == null) return;
-        mLiveWallpaperHost.pageChanged(page.ordinal() > previous.ordinal() ? 1 : -1);
-    }
-
-    /** A bell rang in {@code session}'s pane (generated wallpaper's bell moment). */
-    void noteWallpaperBell(@NonNull TerminalSession session) {
-        if (mLiveWallpaperHost == null || mPaneController == null) return;
-        View pane = mPaneController.getViewForSession(session);
-        if (pane == null || !pane.isShown() || pane.getWidth() <= 0 || pane.getHeight() <= 0) return;
-        int[] at = new int[2];
-        pane.getLocationOnScreen(at);
-        mLiveWallpaperHost.bell(wallpaperFrameRectF(new RectF(at[0], at[1],
-            at[0] + pane.getWidth(), at[1] + pane.getHeight())));
     }
 
     /**
@@ -3826,7 +3736,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean crossfade = mChrome.blurCache().isCrossfadedRadius(0) && !ReducedMotion.isEnabled(this);
         Rect captureRect = getWallpaperCaptureFrameRect();
         backdrop.showFrame(frame, captureRect, wallGroundColor(), crossfade);
-        if (mLiveWallpaperHost != null) mLiveWallpaperHost.syncFrameSize(captureRect);
     }
 
     /**
@@ -4669,6 +4578,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     ? mPreferences.getDockGlassGrain()
                     : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN,
                 radiusPx, mFancierGlassLook)
+            .withTintStrength(mPreferences != null ? mPreferences.getDockTintStrength()
+                : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
             // A card under Floating, with its whole rim. Docked it joins the frame below the
             // keyboard: its top is a join and the rest is the screen's edge, so it draws none.
             .withRim(isRoundedDockStyle())
@@ -5495,7 +5406,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         WallpaperPicture picture = WallpaperPictureReader.read(this, mPreferences);
         if (picture == mWallpaperPicture) return false;
         mWallpaperPicture = picture;
-        if (mLiveWallpaperHost != null) mAccessoryRenderHandler.post(mLiveWallpaperHost::refresh);
         return true;
     }
 
@@ -5886,7 +5796,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // The keyboard's own grain, not the dock's — it may now have its own.
         Drawable strip = mChrome.glass().surface(inAppKeyboardGlassAlpha(state), foot, 1f, false,
-            getInAppKeyboardGrainPercent());
+            getInAppKeyboardGrainPercent(), getInAppKeyboardTintStrengthPercent());
         // Each layer's own alpha scaled, never replaced: a plain setAlpha on the stack put the
         // faint grain layer at full strength, several times coarser than the keyboard's.
         com.termux.app.chrome.GlassStack.applyStackAlpha(strip, stackAlpha);
@@ -6044,6 +5954,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The keyboard's own film-grain strength — the KEYBOARD slot's grain, which follows Base until
      * detached, so an untouched keyboard grains like the dock.
      */
+    private int getInAppKeyboardTintStrengthPercent() {
+        return mPreferences != null
+            ? mPreferences.getInAppKeyboardTintStrength()
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+    }
+
     private int getInAppKeyboardGrainPercent() {
         return mPreferences != null
             ? mPreferences.getInAppKeyboardGrain()
@@ -7926,7 +7842,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (statusSurface != null) {
             statusSurface.setBackground(mChrome.glass().dockSurface(opacity, 0f,
-                statusInsetSheetSliceStart(topEdgeStackLeadView()), false));
+                statusInsetSheetSliceStart(topEdgeStackLeadView()), false,
+                mChrome.glass().statusTintStrength()));
             statusSurface.setVisibility(View.VISIBLE);
         }
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
@@ -8212,7 +8129,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWidgetPaneController != null) mWidgetPaneController.onStop();
         if (mWidgetHostController != null) mWidgetHostController.onStop();
         mIsVisible = false;
-        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onStop();
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.STOP);
         if (mX11Display != null) mX11Display.detachView();
         // Leaving the app counts as leaving the place on screen: it comes back the way it was
@@ -8278,7 +8194,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // pressure, and the second only means the UI went away — an animation that is merely
         // hidden already costs nothing, because the visibility gate has stopped it.
         if (level >= TRIM_MEMORY_RUNNING_LOW) dropTerminalAnimationFrames();
-        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onTrimMemory(level);
         if (!ChromePolicy.trimReleasesBlurFrames(level)) {
             return;
         }
@@ -8315,7 +8230,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.TerminalKeyInspector.close();
         mChrome.onDestroy();
         unregisterPreferredHomeChangeReceiver();
-        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onDestroy();
         cancelVoiceInput();
         if (mIsInvalidState)
             return;
@@ -8415,7 +8329,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mCommandPalette != null)
             mCommandPalette.refreshAppearance();
         mChrome.onConfigurationChanged();
-        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onConfigurationChanged();
         // Layout mode's canvas defaults to the orientation the phone is in, so it turns with it.
         mSurfaceEditor.onPlaceOrientationChanged();
         scheduleOrientationGeometryPass();
@@ -8559,7 +8472,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void startBootstrapAndSession(@Nullable Intent intent) {
+        // A prefix already in place answers synchronously; anything later is an install (or its
+        // error dialog's way on), whose installers may have written what styling reads.
+        final boolean[] bootstrapReturned = {false};
         TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
+            if (bootstrapReturned[0]) mFirstSessionRestyleWanted = true;
             // Bootstrap setup may complete after app startup; re-attempt launcher CLI script install.
             LauncherCtlApiServer.getInstance().ensureCliScriptsInstalled();
             TermuxShellIntegrationInstaller.ensureInstalled(this);
@@ -8588,6 +8505,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mEmptySessionRecoveryInProgress = false;
             }
         });
+        bootstrapReturned[0] = true;
     }
 
     private void maybeRecoverFromEmptySession(@NonNull String source) {
@@ -8886,11 +8804,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override
             public void onDoubleTap() {
-                if (mLiveWallpaperHost != null) {
-                    mLiveWallpaperHost.requestLock(TermuxActivity.this::lockScreenFromAzDoubleTap);
-                } else {
-                    lockScreenFromAzDoubleTap();
-                }
+                lockScreenFromAzDoubleTap();
             }
         };
         if (mAzScrubRowView != null) {
@@ -11044,6 +10958,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void redressChrome() {
             TermuxActivity.this.redressChromeFromState();
+            // Icon packs were applied live while the surface was open (the dock followed, nothing
+            // else restyled): the one full restyle comes now, the container back at full size.
+            if (mIconPackAppliedLive) {
+                mIconPackAppliedLive = false;
+                requestTermuxActivityStylingOnNextResume(TermuxActivity.this, false);
+            }
+        }
+
+        /**
+         * Icons mode's sheet content: the pack tiles and "Pinned app icons only". A pack applies
+         * to the preference and the artwork at once (the real dock in the frame shows it); the
+         * activity's restyle waits for the end of the session.
+         */
+        @Nullable @Override public com.termux.app.surfaces.AppearanceSurfaceController.Page createIconsContent() {
+            // The editor's listener for a tile row that changed height, set after the page exists.
+            final Runnable[] contentChanged = {null};
+            final com.termux.app.chrome.appearance.IconPackPage page =
+                new com.termux.app.chrome.appearance.IconPackPage(TermuxActivity.this,
+                    new com.termux.app.chrome.appearance.IconPackPage.Host() {
+                        @Override public void onApplied() {
+                            mIconPackAppliedLive = true;
+                        }
+
+                        @Override public void onContentChanged() {
+                            Runnable changed = contentChanged[0];
+                            if (changed != null) changed.run();
+                        }
+                    });
+            return new com.termux.app.surfaces.AppearanceSurfaceController.Page() {
+                // The page loaded itself when it was built: the mode's first onShown is that.
+                private boolean mFirstShown = true;
+
+                @NonNull @Override public View root() { return page.root(); }
+                @NonNull @Override public CharSequence title() { return page.title(); }
+                @Override public void onShown() {
+                    if (mFirstShown) {
+                        mFirstShown = false;
+                        return;
+                    }
+                    page.onShown();
+                }
+                @Override public void onHidden() { page.onHidden(); }
+                @Override public void release() { page.release(); }
+                @Override public void setOnContentChanged(@Nullable Runnable changed) {
+                    contentChanged[0] = changed;
+                }
+                @Override public int scrollPosition() { return page.tileScrollX(); }
+                @Override public void restoreScrollPosition(int px) { page.restoreTileScrollX(px); }
+            };
         }
 
         @Override public void refreshTerminalWindowBar() {
@@ -16998,19 +16961,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return findViewById(android.R.id.content);
         }
 
-        @Override public void setCovered(boolean covered) {
-            // The surface hides the launcher's own backdrop: paused for the session, once.
-            if (mLiveWallpaperHost != null) mLiveWallpaperHost.setCovered(covered);
+        @Override public void createOverview(
+                @NonNull com.termux.app.surfaces.AppearanceSurfaceController.Navigator navigator,
+                @NonNull java.util.function.Consumer<com.termux.app.surfaces.AppearanceSurfaceController.OverviewPage> ready) {
+            createOverview(navigator, null, ready);
         }
 
         @Override public void createOverview(
                 @NonNull com.termux.app.surfaces.AppearanceSurfaceController.Navigator navigator,
+                @Nullable String centredSlot,
                 @NonNull java.util.function.Consumer<com.termux.app.surfaces.AppearanceSurfaceController.OverviewPage> ready) {
-            // On every API level. Without the animated backgrounds (below API 34, or Fancier Glass
-            // off) the page holds the recent photos, Photo… and the current pictures only.
-            final boolean animatedOffered = mPreferences != null
-                && com.termux.app.chrome.wallpaper.GeneratedWallpaperApplier.offeredFor(
-                    Build.VERSION.SDK_INT, mPreferences.isFancierGlassEnabled());
             final com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState restore = mOverviewRestore;
             mOverviewRestore = null;
             final com.termux.app.chrome.wallpaper.WallpaperPickerPage.Slots slots =
@@ -17018,24 +16978,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             final com.termux.app.chrome.wallpaper.WallpaperPickerPage.Io io =
                 com.termux.app.chrome.wallpaper.WallpaperPickerPage.Io.background();
             // Everything the page opens with is read here, off the main thread: the slots (binder
-            // calls), the recent photos, the manifest of each photo's living still (a SHA-256).
+            // calls) and the recent photos.
             io.run(() -> {
                 // A fresh page has no pending photo: any left were from a return that never came.
                 if (restore == null) {
                     com.termux.app.chrome.wallpaper.WallpaperSlots.clearPendingPhotos(TermuxActivity.this);
                 }
-                return com.termux.app.chrome.wallpaper.WallpaperPickerPage.load(slots,
-                    animatedOffered && Build.VERSION.SDK_INT >= 34, restore);
+                return com.termux.app.chrome.wallpaper.WallpaperPickerPage.load(slots);
             }, loaded -> {
                 if (loaded == null || isFinishing() || isDestroyed()) {
                     io.shutdown();
                     navigator.close();
                     return;
                 }
+                // A photo's return state wins; else the card the surface remembers, nothing pending.
+                com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState start = restore;
+                com.termux.app.chrome.wallpaper.WallpaperSlots.Slot remembered =
+                    wallpaperSlotNamed(centredSlot);
+                if (start == null && remembered != null) {
+                    start = com.termux.app.chrome.wallpaper.WallpaperPickerPage.ReturnState
+                        .centredOn(remembered, loaded);
+                }
                 final com.termux.app.chrome.wallpaper.WallpaperPickerPage picker =
                     new com.termux.app.chrome.wallpaper.WallpaperPickerPage(TermuxActivity.this,
-                        slots, overviewListener(), Build.VERSION.SDK_INT, animatedOffered, navigator::close,
-                        restore, new com.termux.app.chrome.wallpaper.WallpaperThumbs(), loaded, io);
+                        slots, overviewListener(), navigator::close,
+                        start, new com.termux.app.chrome.wallpaper.WallpaperThumbs(), loaded, io);
                 // The surface's one bar (back, the Wallpaper | Look | Layout pill, Done) around
                 // the page; the Wallpaper segment is this page.
                 final com.termux.app.surfaces.AppearanceEditorPage shell =
@@ -17056,48 +17023,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         picker.setBackgroundAlpha(alpha);
                     }
                     @Override public void setBarVisible(boolean visible) { shell.setBarVisible(visible); }
+                    @Nullable @Override public String centredSlotName() { return picker.centredSlot().name(); }
+                    @Override public void whenReady(@NonNull Runnable ready) { picker.whenReady(ready); }
+                    @Override public boolean hasPendingChanges() { return picker.hasPendingChanges(); }
+                    @Override public void commit(@NonNull Runnable done, @NonNull Runnable failed) {
+                        picker.commit(done, failed);
+                    }
                 });
             });
         }
 
-        @Nullable @Override public com.termux.app.surfaces.AppearanceSurfaceController.Page createIconsPage(
-                @NonNull com.termux.app.surfaces.AppearanceSurfaceController.Navigator navigator) {
-            // The Icon pack page: a home-screen preview with the dock's apps in the previewed pack,
-            // the row of packs and "Pinned app icons only". It applies a pack itself; its preview
-            // still is a small copy of the Home photo, decoded off the main thread, and the page
-            // re-reads once it lands.
-            final android.graphics.Bitmap[] still = new android.graphics.Bitmap[1];
-            final com.termux.app.chrome.appearance.IconPackPage page =
-                new com.termux.app.chrome.appearance.IconPackPage(TermuxActivity.this,
-                    new com.termux.app.chrome.appearance.IconPackPage.Host() {
-                        @Nullable @Override public android.graphics.Bitmap homeStill() {
-                            return still[0];
-                        }
-                    });
-            new Thread(() -> {
-                android.graphics.Bitmap decoded = decodeIconPreviewStill();
-                if (decoded == null) return;
-                runOnUiThread(() -> {
-                    still[0] = decoded;
-                    if (page.root().isShown()) page.onShown();
-                });
-            }, "appearance-icons-still").start();
-            // The page brings no bar of its own: the surface's shared bar (back, the title, Done).
-            final com.termux.app.surfaces.AppearanceEditorPage shell =
-                com.termux.app.surfaces.AppearanceEditorPage.icons(TermuxActivity.this, navigator,
-                    page.title(), page.root());
-            return new com.termux.app.surfaces.AppearanceSurfaceController.Page() {
-                @NonNull @Override public View root() { return shell.root(); }
-                @NonNull @Override public View slidingPart() { return shell.content(); }
-                @NonNull @Override public CharSequence title() { return page.title(); }
-                @Override public void onShown() { page.onShown(); }
-                @Override public void onHidden() { page.onHidden(); }
-                @Override public void release() { page.release(); }
-            };
-        }
-
         @Override public void onClosed() {
             mOverviewRestore = null;
+        }
+
+        /** In the default preferences, as Settings keeps its own place, so a killed launcher keeps it. */
+        @Nullable @Override public String readReturnState() {
+            try {
+                return appearanceReturnPreferences().getString(
+                    com.termux.app.surfaces.AppearanceReturnState.PREFS_KEY, null);
+            } catch (RuntimeException e) {
+                return null;
+            }
+        }
+
+        @Override public void writeReturnState(@NonNull String state) {
+            appearanceReturnPreferences().edit()
+                .putString(com.termux.app.surfaces.AppearanceReturnState.PREFS_KEY, state).apply();
+        }
+
+        @NonNull
+        private android.content.SharedPreferences appearanceReturnPreferences() {
+            return getApplicationContext().getSharedPreferences(
+                TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+                Context.MODE_PRIVATE);
+        }
+
+        @Nullable
+        private com.termux.app.chrome.wallpaper.WallpaperSlots.Slot wallpaperSlotNamed(
+                @Nullable String name) {
+            if (name == null) return null;
+            for (com.termux.app.chrome.wallpaper.WallpaperSlots.Slot slot
+                    : com.termux.app.chrome.wallpaper.WallpaperSlots.Slot.values()) {
+                if (slot.name().equals(name)) return slot;
+            }
+            return null;
         }
 
         @Override public void onClosedByUser() {
@@ -17109,25 +17079,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /**
-     * The Home photo at about the Icon pack preview's size (the managed exact copy, sampled down to
-     * a 540 px wide decode), or null when there is none. Call it off the main thread.
-     */
-    @Nullable
-    private android.graphics.Bitmap decodeIconPreviewStill() {
-        java.io.File file = com.termux.app.chrome.WallpaperPictureReader.managedWallpaperExactFile(this);
-        if (!file.isFile()) return null;
-        android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options();
-        bounds.inJustDecodeBounds = true;
-        android.graphics.BitmapFactory.decodeFile(file.getPath(), bounds);
-        if (bounds.outWidth <= 0) return null;
-        android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options();
-        options.inSampleSize = Math.max(1, Integer.highestOneBit(bounds.outWidth / 540));
-        return android.graphics.BitmapFactory.decodeFile(file.getPath(), options);
-    }
-
     /** The open surface came from Settings' Appearance row; a close by the person goes back there. */
     private boolean mAppearanceFromSettings;
+    /** An icon pack was applied live while the Appearance surface was open: a restyle is owed at its end. */
+    private boolean mIconPackAppliedLive;
 
     /** What the Overview asks of the activity. */
     @NonNull
@@ -17227,17 +17182,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTermuxTerminalViewClient.applyPaddingFillPolicy(getTerminalView());
     }
 
+    /** The terminal effect on the chrome; built the first time the effect is applied. */
+    @Nullable private com.termux.app.chrome.ChromeRetroEffect mChromeRetroEffect;
+
     /**
      * Push the cursor trail style and retro terminal effect preferences into the pane controller
-     * (kitty.conf {@code custom_shaders} still wins for the trail inside it). The retro effect is
-     * global and reaches terminal pane frames only, never wall widget pages. Called when the
-     * controller is created and from {@link #reloadActivityStyling}.
+     * (kitty.conf {@code custom_shaders} still wins for the trail inside it) and the effect onto
+     * the chrome. The retro effect is global: terminal pane frames (never wall widget pages), and
+     * the status bar, dock, bars and keyboard around them. Called when the controller is created,
+     * from the Appearance editor's live preview and from {@link #reloadActivityStyling}.
      */
     private void applyTrailStyleAndRetroEffect() {
-        if (mPaneController == null || mPreferences == null)
+        if (mPreferences == null)
+            return;
+        String retroEffect = mPreferences.getTerminalRetroEffect();
+        if (mChromeRetroEffect == null) {
+            View root = findViewById(R.id.activity_termux_root_view);
+            if (root != null) mChromeRetroEffect = new com.termux.app.chrome.ChromeRetroEffect(root);
+        }
+        if (mChromeRetroEffect != null)
+            mChromeRetroEffect.setStyle(com.termux.app.terminal.PaneRetroStyle.fromId(retroEffect));
+        if (mPaneController == null)
             return;
         mPaneController.setCursorTrailStylePreference(mPreferences.getTerminalCursorTrailStyle());
-        mPaneController.setRetroEffectPreference(mPreferences.getTerminalRetroEffect());
+        mPaneController.setRetroEffectPreference(retroEffect);
     }
 
     void openSurfaceEditor() {
@@ -18338,7 +18306,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // already travelled there with the slide; this is where what they showed
                     // becomes the layout.
                     settlePlaceChrome(page);
-                    noteWallpaperPageMoment(page);
                     noteTerminalPlaceMayBeVisible();
                     if (mWidgetPaneController != null) {
                         mWidgetPaneController.onWallPageShown(
@@ -20898,7 +20865,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : chromeRimEdges(com.termux.app.place.ChromeShape.PieceId.STATUS);
             background.setBackground(onPlank ? null
                 : joinsDock
-                    ? mChrome.glass().dockSurface(opacity, 0f, 1f, false)
+                    ? mChrome.glass().dockSurface(opacity, 0f, 1f, false,
+                        mChrome.glass().statusTintStrength())
                     : mChrome.glass().statusBarSurface(opacity,
                         capsuleStatusBar || isStatusBarVertical() || !stripContinues
                             ? 0f : terminalWindowGlassStatusFraction(host), 1f, barStroke,
@@ -21692,7 +21660,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (bar != null) bar.setLazyMode(lazy);
         com.termux.app.terminal.TerminalClockWidget clock = findViewById(R.id.terminal_clock_widget);
         if (clock != null) clock.setLazyMode(lazy);
-        if (mLiveWallpaperHost != null) mLiveWallpaperHost.refresh();
     }
 
     private com.termux.app.statusbar.SystemStatsController ensureStatsController() {
@@ -22685,12 +22652,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mFirstBootTour != null) mFirstBootTour.onPaneCornerMenuOpened();
         }
 
-        @Override public void onPaneGeometryMoment(boolean opened, @NonNull RectF screenRect) {
-            if (mLiveWallpaperHost == null) return;
-            RectF seam = wallpaperFrameRectF(screenRect);
-            if (opened) mLiveWallpaperHost.paneOpened(seam); else mLiveWallpaperHost.paneClosed(seam);
-        }
-
         @Override public void onPaneControlsDismissed() {
             if (mFirstBootTour != null) mFirstBootTour.onPaneControlsDismissed();
         }
@@ -23228,10 +23189,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void noteShellAttention(@NonNull TerminalSession session) {
             TermuxActivity.this.noteShellAttention(session);
-        }
-
-        @Override public void onBellForWallpaper(@NonNull TerminalSession session) {
-            TermuxActivity.this.noteWallpaperBell(session);
         }
 
         @Override public void clearShellAttention(int shellPid) {
@@ -24352,6 +24309,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(context, LOG_TAG);
                         return;
                     case TERMUX_ACTIVITY.ACTION_RELOAD_STYLE:
+                        if (intent.getBooleanExtra(TermuxService.EXTRA_FIRST_SESSION_RESTYLE, false)) {
+                            if (!mFirstSessionRestyleWanted) {
+                                Logger.logDebug(LOG_TAG, "First shell's styling already on screen; not reloading");
+                                return;
+                            }
+                            mFirstSessionRestyleWanted = false;
+                        }
                         Logger.logDebug(LOG_TAG, "Received intent to reload styling");
                         sPendingStyleReloadOnNextResume = false;
                         sPendingStyleReloadRecreateActivity = true;
@@ -24412,7 +24376,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyWallpaperRenderZoomIfChanged();
         mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS);
         // A Material palette follows the scheme: captured again here, never from the colours listener.
-        if (mLiveWallpaperHost != null) mLiveWallpaperHost.onStylingReloaded();
         applySeamlessStatusBackgroundModeIfNeeded();
         applyTerminalSurfaceAppearance();
         // After appearance: applyTerminalSurfaceAppearance() flat-colors the dock surfaces, so the

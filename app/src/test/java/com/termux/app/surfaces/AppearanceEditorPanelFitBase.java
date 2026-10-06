@@ -54,19 +54,19 @@ public abstract class AppearanceEditorPanelFitBase {
 
     /**
      * Every selection's Custom row at its widest legends: its sliders are whole columns inside the
-     * sheet, 12dp apart, one height, each wider than the 40dp track; each legend fits its track
+     * sheet, 12dp apart, one height, each wider than the 28dp track (36dp at the least); each legend fits its track
      * (or is cut to it); the buttons are 48dp touch targets inside the sheet.
      */
     @Test
     public void everySelectionsCustomRowFits() {
         for (AppearanceLooks.Target target : targets()) {
             showControls(target);
-            layOut(mPanel.measureFor(false, mWidthPx));
+            layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
             assertFits();
             List<AppearanceLooks.Control> expected = AppearanceLooks.controls(target);
             assertEquals(String.valueOf(target), expected, mPanel.shownControls());
             float density = mPanel.view().getResources().getDisplayMetrics().density;
-            int track = Math.round(40 * density);
+            int track = Math.round(36 * density);
             int gap = Math.round(12 * density);
             LegendSlider previous = null;
             for (AppearanceLooks.Control control : expected) {
@@ -86,27 +86,97 @@ public abstract class AppearanceEditorPanelFitBase {
                 assertLegendFits(slider, control);
             }
             for (AppearanceLooks.Door door : AppearanceLooks.doors(target)) {
-                MaterialButton button = doorView(door);
+                View button = doorView(door);
                 assertEquals(door.name(), View.VISIBLE, button.getVisibility());
                 assertTrue(door + " is a 48dp target: " + button.getHeight(),
                     button.getHeight() >= Math.round(48 * density));
-                if (door == AppearanceLooks.Door.KEYBOARD_THEME
-                    || door == AppearanceLooks.Door.CLOCK) {
-                    Layout layout = button.getLayout();
+                if (button instanceof MaterialButton) {
+                    Layout layout = ((MaterialButton) button).getLayout();
                     assertNotNull(layout);
-                    assertEquals("\"" + button.getText() + "\" is whole", 0,
+                    assertEquals("\"" + ((MaterialButton) button).getText() + "\" is whole", 0,
                         layout.getEllipsisCount(layout.getLineCount() - 1));
+                } else {
+                    assertPillLinesFit(door);
                 }
+            }
+            View name = mPanel.view().findViewById(R.id.appearance_editor_row2_name);
+            if (target == AppearanceLooks.Target.TERMINAL) {
+                assertEquals("the terminal's pills own the heading row: no name", View.GONE,
+                    name.getVisibility());
+                assertPillsShareTheRow();
+            } else {
+                assertEquals(String.valueOf(target) + " keeps its name", View.VISIBLE,
+                    name.getVisibility());
             }
         }
     }
 
-    /** A control with the global set's five columns shows five legends reading upward. */
+    /**
+     * Below API 33 the terminal has no Terminal effect: Cursor trail alone takes the whole row,
+     * still with no name, and its lines fit.
+     */
     @Test
-    public void theGlobalSetHasFiveColumnsAndNoButtons() {
+    public void theCursorTrailAloneTakesTheWholeRow() {
+        showControls(AppearanceLooks.Target.TERMINAL);
+        mPanel.setDoors(java.util.Collections.singletonList(AppearanceLooks.Door.TRAIL));
+        layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
+        assertFits();
+        View root = mPanel.view();
+        View head = root.findViewById(R.id.appearance_editor_row2_head);
+        View trail = root.findViewById(R.id.appearance_editor_trail);
+        assertEquals(View.GONE, root.findViewById(R.id.appearance_editor_effect).getVisibility());
+        assertEquals(View.GONE, root.findViewById(R.id.appearance_editor_row2_name).getVisibility());
+        assertEquals("from the content's start", 0, trail.getLeft());
+        assertEquals("to its end", head.getWidth(), trail.getRight(), 1);
+        assertPillLinesFit(AppearanceLooks.Door.TRAIL);
+    }
+
+    /** The terminal's two pills: one row, equal widths, the content's full width, 8dp apart. */
+    private void assertPillsShareTheRow() {
+        View root = mPanel.view();
+        View head = root.findViewById(R.id.appearance_editor_row2_head);
+        View trail = root.findViewById(R.id.appearance_editor_trail);
+        View effect = root.findViewById(R.id.appearance_editor_effect);
+        float density = root.getResources().getDisplayMetrics().density;
+        assertEquals("equal widths", trail.getWidth(), effect.getWidth(), 1);
+        assertEquals("one row", trail.getTop(), effect.getTop());
+        assertEquals("the row starts with Cursor trail", 0, trail.getLeft());
+        assertEquals("8dp between them", Math.round(8 * density), effect.getLeft() - trail.getRight(), 1);
+        assertEquals("the row ends with Terminal effect", head.getWidth(), effect.getRight(), 1);
+    }
+
+    /**
+     * A pill's heading is whole (never ellipsized) and each of its two lines is one line,
+     * inside the pill.
+     */
+    private void assertPillLinesFit(AppearanceLooks.Door door) {
+        View root = mPanel.view();
+        boolean trail = door == AppearanceLooks.Door.TRAIL;
+        View pill = doorView(door);
+        TextView title = root.findViewById(trail ? R.id.appearance_editor_trail_title
+            : R.id.appearance_editor_effect_title);
+        TextView value = root.findViewById(trail ? R.id.appearance_editor_trail_value
+            : R.id.appearance_editor_effect_value);
+        for (TextView line : new TextView[] {title, value}) {
+            Layout layout = line.getLayout();
+            assertNotNull(name(line), layout);
+            assertEquals(name(line) + " is one line", 1, layout.getLineCount());
+            assertTrue(name(line) + " fits its height", layout.getHeight()
+                + line.getTotalPaddingTop() + line.getTotalPaddingBottom() <= line.getHeight());
+        }
+        assertEquals("\"" + title.getText() + "\" is whole", 0, title.getLayout().getEllipsisCount(0));
+        assertTrue("the heading stands above the value",
+            ((View) value.getParent()).getTop() >= title.getBottom());
+        assertTrue(door + " is no taller than the heading row",
+            pill.getHeight() <= root.findViewById(R.id.appearance_editor_row2_head).getHeight());
+    }
+
+    /** The global set's six columns show six legends reading upward. */
+    @Test
+    public void theGlobalSetHasSixColumnsAndNoButtons() {
         showControls(null);
-        layOut(mPanel.measureFor(false, mWidthPx));
-        assertEquals(5, mPanel.shownControls().size());
+        layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
+        assertEquals(6, mPanel.shownControls().size());
         assertTrue(mPanel.shownDoors().isEmpty());
         assertFits();
     }
@@ -115,17 +185,20 @@ public abstract class AppearanceEditorPanelFitBase {
     @Test
     public void fewerColumnsShareTheWidthEqually() {
         showControls(AppearanceLooks.Target.STATUS);
-        layOut(mPanel.measureFor(false, mWidthPx));
+        layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
         LegendSlider a = mPanel.sliderFor(AppearanceLooks.Control.BLUR);
         LegendSlider b = mPanel.sliderFor(AppearanceLooks.Control.GRAIN);
         LegendSlider c = mPanel.sliderFor(AppearanceLooks.Control.OPACITY);
+        LegendSlider d = mPanel.sliderFor(AppearanceLooks.Control.TINT);
         assertNotNull(a);
         assertNotNull(b);
         assertNotNull(c);
+        assertNotNull(d);
         assertEquals(a.getWidth(), b.getWidth(), 1);
         assertEquals(b.getWidth(), c.getWidth(), 1);
+        assertEquals(c.getWidth(), d.getWidth(), 1);
         View row = mPanel.view().findViewById(R.id.appearance_editor_sliders);
-        assertEquals("the last column ends at the content edge", row.getWidth(), c.getRight(), 1);
+        assertEquals("the last column ends at the content edge", row.getWidth(), d.getRight(), 1);
     }
 
     /**
@@ -135,7 +208,7 @@ public abstract class AppearanceEditorPanelFitBase {
     @Test
     public void aLegendChangingMidDragMovesNothing() {
         showControls(null);
-        int height = mPanel.measureFor(false, mWidthPx);
+        int height = mPanel.measureFor(EditorMode.LOOK, mWidthPx);
         layOut(height);
         LegendSlider blur = mPanel.sliderFor(AppearanceLooks.Control.BLUR);
         int left = blur.getLeft();
@@ -144,7 +217,7 @@ public abstract class AppearanceEditorPanelFitBase {
         layOut(height);
         assertEquals(left, blur.getLeft());
         assertEquals(top, blur.getTop());
-        assertEquals("the sheet keeps its height", height, mPanel.measureFor(false, mWidthPx));
+        assertEquals("the sheet keeps its height", height, mPanel.measureFor(EditorMode.LOOK, mWidthPx));
         assertEquals(48f, blur.getValue(), 0f);
     }
 
@@ -154,7 +227,7 @@ public abstract class AppearanceEditorPanelFitBase {
         mPanel.showLayoutMode();
         mPanel.setCorners("Corner radius · 4 dp", 4, 40);
         mPanel.setMargin("Margin · 0 dp", 0, 48);
-        int height = mPanel.measureFor(true, mWidthPx);
+        int height = mPanel.measureFor(EditorMode.LAYOUT, mWidthPx);
         layOut(height);
         View corners = mPanel.view().findViewById(R.id.appearance_editor_corners);
         int top = corners.getTop();
@@ -163,7 +236,7 @@ public abstract class AppearanceEditorPanelFitBase {
         layOut(height);
         assertFits();
         assertEquals("the slider stays put", top, corners.getTop());
-        assertEquals("the sheet keeps its height", height, mPanel.measureFor(true, mWidthPx));
+        assertEquals("the sheet keeps its height", height, mPanel.measureFor(EditorMode.LAYOUT, mWidthPx));
     }
 
     /** Layout mode with the hidden tiles open: same height, nothing past the sheet's edge. */
@@ -172,10 +245,10 @@ public abstract class AppearanceEditorPanelFitBase {
         mPanel.showLayoutMode();
         mPanel.setCorners("Corner radius · 22 dp", 22, 40);
         mPanel.setMargin("Margin · 6 dp", 6, 48);
-        int closed = mPanel.measureFor(true, mWidthPx);
+        int closed = mPanel.measureFor(EditorMode.LAYOUT, mWidthPx);
         mPanel.setHiddenTilesOpen(true);
-        assertEquals(closed, mPanel.measureFor(true, mWidthPx));
-        layOut(mPanel.measureFor(true, mWidthPx));
+        assertEquals(closed, mPanel.measureFor(EditorMode.LAYOUT, mWidthPx));
+        layOut(mPanel.measureFor(EditorMode.LAYOUT, mWidthPx));
         assertFits();
         View eyeOff = mPanel.view().findViewById(R.id.layout_editor_hidden);
         View highlight = mPanel.view().findViewById(R.id.layout_editor_hidden_highlight);
@@ -196,15 +269,15 @@ public abstract class AppearanceEditorPanelFitBase {
         mPanel.showLayoutMode();
         mPanel.setCorners("Corner radius · 40 dp", 40, 40);
         mPanel.setMargin("Margin · 48 dp", 48, 48);
-        int closed = mPanel.measureFor(true, mWidthPx);
-        int tallest = mPanel.measureTallest(true, mWidthPx);
+        int closed = mPanel.measureFor(EditorMode.LAYOUT, mWidthPx);
+        int tallest = mPanel.measureTallest(EditorMode.LAYOUT, mWidthPx);
         assertEquals("the anchor is Row B as it is", closed, tallest);
         TextView label = mPanel.view().findViewById(R.id.layout_editor_key_radius_label);
         label.setText("Key radius · 24 dp");
         mPanel.setKeyboardToolsShown(true);
-        assertEquals("the sheet does not move", closed, mPanel.measureFor(true, mWidthPx));
-        assertEquals(tallest, mPanel.measureTallest(true, mWidthPx));
-        layOut(mPanel.measureFor(true, mWidthPx));
+        assertEquals("the sheet does not move", closed, mPanel.measureFor(EditorMode.LAYOUT, mWidthPx));
+        assertEquals(tallest, mPanel.measureTallest(EditorMode.LAYOUT, mWidthPx));
+        layOut(mPanel.measureFor(EditorMode.LAYOUT, mWidthPx));
         assertFits();
         View root = mPanel.view();
         View tools = root.findViewById(R.id.layout_editor_keyboard_tools);
@@ -236,7 +309,7 @@ public abstract class AppearanceEditorPanelFitBase {
         mPanel.setFloating(true);
         mPanel.setCorners("Corner radius · 22 dp", 22, 40);
         mPanel.setMargin("Margin · 6 dp", 6, 48);
-        layOut(mPanel.measureFor(true, mWidthPx));
+        layOut(mPanel.measureFor(EditorMode.LAYOUT, mWidthPx));
         assertFits();
     }
 
@@ -249,29 +322,29 @@ public abstract class AppearanceEditorPanelFitBase {
     @Test
     public void appearanceHeightFollowsContentAndTheFrameAnchorIsFixed() {
         mPanel.showAppearanceMode();
-        int lookStop = mPanel.measureFor(false, mWidthPx);
-        int tallest = mPanel.measureTallest(false, mWidthPx);
+        int lookStop = mPanel.measureFor(EditorMode.LOOK, mWidthPx);
+        int tallest = mPanel.measureTallest(EditorMode.LOOK, mWidthPx);
         assertTrue("look stop " + lookStop + " < tallest " + tallest, lookStop < tallest);
         assertEquals("the anchor does not depend on Row B's state",
-            tallest, mPanel.measureTallest(false, mWidthPx));
+            tallest, mPanel.measureTallest(EditorMode.LOOK, mWidthPx));
 
         for (AppearanceLooks.Target target : targets()) {
             showControls(target);
             assertEquals("every selection is one height: " + target, tallest,
-                mPanel.measureFor(false, mWidthPx));
-            assertEquals(tallest, mPanel.measureTallest(false, mWidthPx));
+                mPanel.measureFor(EditorMode.LOOK, mWidthPx));
+            assertEquals(tallest, mPanel.measureTallest(EditorMode.LOOK, mWidthPx));
         }
 
         mPanel.hideRow2();
         assertEquals("Row B down: back to Row A alone", lookStop,
-            mPanel.measureFor(false, mWidthPx));
+            mPanel.measureFor(EditorMode.LOOK, mWidthPx));
     }
 
     @Test
     public void sideInsetsKeepEveryControlInsideTheSheetAtThisWidth() {
         mPanel.showAppearanceMode();
         mPanel.setSideInsets(48, 24);
-        layOut(mPanel.measureFor(false, mWidthPx));
+        layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
         assertFits();
         View root = mPanel.view();
         assertTrue("content stands clear of the left inset", root.getPaddingLeft() >= 48);
@@ -282,7 +355,7 @@ public abstract class AppearanceEditorPanelFitBase {
     public void theChosenLookLabelIsSelectedAndKeepsItsFamily() {
         mPanel.showAppearanceMode();
         mPanel.setStop(2);
-        layOut(mPanel.measureFor(false, mWidthPx));
+        layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
         FrameLayout labels = mPanel.view().findViewById(R.id.appearance_editor_look_labels);
         int selected = 0;
         for (int i = 0; i < labels.getChildCount(); i++) {
@@ -314,6 +387,56 @@ public abstract class AppearanceEditorPanelFitBase {
         assertNotNull(hidden.getTooltipText());
     }
 
+    /**
+     * Icons mode: the sheet is the lent content and nothing else (the tile row and the switch
+     * card), as tall as that needs, shorter than Look's Custom row, with the other modes' rows
+     * gone, and the switch's words whole inside the sheet.
+     */
+    @Test
+    public void iconsModeShowsOnlyItsContentAtItsOwnHeight() {
+        android.content.Context context = mPanel.view().getContext();
+        View content = android.view.LayoutInflater.from(context)
+            .inflate(R.layout.icon_pack_page, null, false);
+        ViewGroup tiles = content.findViewById(R.id.icon_pack_tiles);
+        for (int i = 0; i < 5; i++) {
+            View tile = android.view.LayoutInflater.from(context)
+                .inflate(R.layout.icon_pack_tile, tiles, false);
+            ((TextView) tile.findViewById(R.id.icon_pack_tile_label))
+                .setText("A Pack With A Rather Long Name");
+            tiles.addView(tile);
+        }
+        mPanel.setIconsContent(content);
+        mPanel.showIconsMode();
+        assertEquals(EditorMode.ICONS, mPanel.mode());
+        int height = mPanel.measureFor(EditorMode.ICONS, mWidthPx);
+        assertEquals("one height", height, mPanel.measureTallest(EditorMode.ICONS, mWidthPx));
+        float density = context.getResources().getDisplayMetrics().density;
+        assertTrue("the tiles and the 64dp switch card at least: " + height,
+            height >= Math.round(128 * density));
+        assertTrue("shorter than Look's Custom row: " + height,
+            height < mPanel.measureTallest(EditorMode.LOOK, mWidthPx));
+        layOut(height);
+        View root = mPanel.view();
+        assertEquals(View.VISIBLE, root.findViewById(R.id.appearance_editor_icons_slot).getVisibility());
+        assertEquals(View.GONE, root.findViewById(R.id.appearance_editor_look).getVisibility());
+        assertEquals(View.GONE, root.findViewById(R.id.layout_editor_orientation).getVisibility());
+        View slot = root.findViewById(R.id.appearance_editor_icons_slot);
+        assertTrue("the slot is inside the sheet", slot.getRight() <= mWidthPx);
+        View scroll = content.findViewById(R.id.icon_pack_tiles_scroll);
+        assertTrue("the tile row stays inside the slot (it scrolls)", scroll.getRight() <= slot.getWidth());
+        TextView pinned = content.findViewById(R.id.icon_pack_pinned_only);
+        assertTrue("the switch is inside the slot", pinned.getRight() <= slot.getWidth());
+        Layout layout = pinned.getLayout();
+        assertNotNull(layout);
+        assertEquals("the switch's words are whole", 0,
+            layout.getEllipsisCount(layout.getLineCount() - 1));
+        assertTrue("nothing runs into the sheet's bottom padding",
+            slot.getBottom() <= root.getHeight() - root.getPaddingBottom());
+        // The mode leaves nothing behind.
+        mPanel.showAppearanceMode();
+        assertEquals(View.GONE, root.findViewById(R.id.appearance_editor_icons_slot).getVisibility());
+    }
+
     private static java.util.List<AppearanceLooks.Target> targets() {
         java.util.List<AppearanceLooks.Target> out = new java.util.ArrayList<>();
         out.add(null);
@@ -339,6 +462,7 @@ public abstract class AppearanceEditorPanelFitBase {
             case BLUR: return context.getString(R.string.appearance_editor_blur, 48);
             case GRAIN: return context.getString(R.string.appearance_editor_grain, 100);
             case OPACITY: return context.getString(R.string.appearance_editor_opacity, 100);
+            case TINT: return context.getString(R.string.appearance_editor_tint, 100);
             case MARGIN: return context.getString(R.string.appearance_editor_margin, 48);
             case CORNER_RADIUS: return context.getString(R.string.appearance_editor_corners, 40);
             case KEY_RADIUS: return context.getString(R.string.appearance_editor_key_corners, 24);
@@ -364,7 +488,7 @@ public abstract class AppearanceEditorPanelFitBase {
         mPanel.setTerminalLooks("default", "none");
     }
 
-    private MaterialButton doorView(AppearanceLooks.Door door) {
+    private View doorView(AppearanceLooks.Door door) {
         View root = mPanel.view();
         switch (door) {
             case KEYBOARD_THEME: return root.findViewById(R.id.appearance_editor_door_keyboard_theme);

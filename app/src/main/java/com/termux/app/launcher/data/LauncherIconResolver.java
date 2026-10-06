@@ -177,6 +177,14 @@ public final class LauncherIconResolver {
         iconPackRepository.clearCache();
     }
 
+    /**
+     * Parses {@code packageName} now if it is not parsed yet, so the first icon drawn from it
+     * finds it cached. Slow: call it off the main thread.
+     */
+    public void warmPack(@Nullable String packageName) {
+        iconPackRepository.loadIconPack(packageName);
+    }
+
     @Nullable
     public Drawable loadOverride(@Nullable PinnedIconOverride override) {
         if (override == null || !override.isValid()) return null;
@@ -187,11 +195,13 @@ public final class LauncherIconResolver {
     public Drawable loadDrawableFromPack(@Nullable String packageName, @Nullable String drawableName) {
         if (packageName == null || drawableName == null) return null;
         try {
-            Context iconPackContext = context.createPackageContext(packageName, Context.CONTEXT_IGNORE_SECURITY);
-            int id = iconPackContext.getResources().getIdentifier(drawableName, "drawable", packageName);
-            if (id == 0) id = iconPackContext.getResources().getIdentifier(drawableName, "mipmap", packageName);
+            // The pack's resources are loaded once per installed APK, not once per drawable.
+            android.content.res.Resources resources = iconPackRepository.packResources(packageName);
+            if (resources == null) return null;
+            int id = resources.getIdentifier(drawableName, "drawable", packageName);
+            if (id == 0) id = resources.getIdentifier(drawableName, "mipmap", packageName);
             if (id == 0) return null;
-            return iconPackContext.getResources().getDrawable(id);
+            return resources.getDrawable(id);
         } catch (Exception ignored) {
             return null;
         }

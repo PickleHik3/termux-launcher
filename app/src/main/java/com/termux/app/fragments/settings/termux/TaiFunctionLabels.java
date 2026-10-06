@@ -47,20 +47,16 @@ final class TaiFunctionLabels implements TaiFunctionRows.Labels {
             case REMOTE_SETUP: return R.string.tai_fn_remote_setup;
             case GPU: return R.string.tai_fn_gpu;
             case CPU: return R.string.tai_fn_cpu;
-            case READER_DEPTH: return R.string.tai_fn_reader_depth;
             case FIT_FITS: return R.string.tai_fn_fit_fits;
             case FIT_ROOM: return R.string.tai_fn_fit_room;
             case FIT_BIGGER: return R.string.tai_fn_fit_bigger;
             case USED_BY: return R.string.tai_fn_used_by;
             case FOR: return R.string.tai_fn_for;
-            case FOR_CUTOUT: return R.string.tai_fn_for_cutout;
             case CHAIN: return R.string.tai_fn_chain;
             case DELETE_IN_USE: return R.string.tai_fn_delete_in_use;
             case DELETE_LINE: return R.string.tai_fn_delete_line;
             case LEVEL_LIGHT: return R.string.tai_fn_level_light;
-            case LEVEL_POLISHED: return R.string.tai_fn_level_polished;
-            case CHOOSER_READER: return R.string.tai_fn_chooser_reader;
-            default: return R.string.tai_fn_chooser_depth;
+            default: return R.string.tai_fn_level_polished;
         }
     }
 
@@ -73,8 +69,7 @@ final class TaiFunctionLabels implements TaiFunctionRows.Labels {
             case TIDY_DICTATION: return context.getString(R.string.tai_fn_name_tidy_dictation);
             case READ_ALOUD: return context.getString(R.string.tai_fn_name_read_aloud);
             case APP_CATEGORIES: return context.getString(R.string.tai_fn_name_app_categories);
-            case EMBEDDINGS: return context.getString(R.string.tai_fn_name_embeddings);
-            default: return context.getString(R.string.tai_fn_name_wallpaper);
+            default: return context.getString(R.string.tai_fn_name_embeddings);
         }
     }
 

@@ -119,16 +119,24 @@ Rules:
   moves, so the segments are disabled and the label says it needs wallpaper colours (as the
   Settings row does).
 - Moving any control at a Look stop jumps the slider to Custom, seeded from that Look. Sliding
-  from Custom back to a Look applies the Look and discards the Custom values, with an Undo-able
-  notice.
-- Grain, rim style, tint, motion, chip radius, key spacing and glass depth live inside the Look.
+  from Custom back to a Look applies the Look; the Custom values of the session (saved or not)
+  are kept, so sliding back to Custom restores them. Undo and Discard clear them.
+- Rim style, tint colour, motion, chip radius, key spacing and glass depth live inside the Look.
   They have no control anywhere. Corners and margins are Layout's (§3.5).
+- **Tint** (amended 2026-10-06) is a Custom control: how much of the Material colour tint a
+  surface wears, 0-100%, 100 being the tint as shipped (pixel-identical to before). It sits after
+  Opacity on the global row and on every surface's own row (Keyboard, Dock, Terminal, Status
+  bar), a `SurfaceProperty.TINT` that follows Base until an element detaches it, exactly like Grain.
+  Every Look resets it to 100. The Material tint's blend and wash scale with it; the scheme and
+  Obsidian tints move toward their luminance-matched grey; the accent sheen scales too. The Custom
+  row has up to six vertical sliders (the global, Keyboard and Dock sets), 28dp tracks.
 - Custom is stored as today's `surface_custom_preset` JSON (format 2).
 
 #### Amended 2026-10-02: layout editor v2 (DECISIONS items 13–15)
 
-- **The global row.** At the Custom stop with nothing tapped, row 2 is **Blur · Opacity · Grain**
-  (heading "All surfaces"), writing the base `SurfaceProperty.BLUR / OPACITY / GRAIN`. Each write
+- **The global row.** At the Custom stop with nothing tapped, row 2 is **Blur · Grain · Opacity ·
+  Tint · Margin · Corner radius** (heading "All surfaces"), writing the base
+  `SurfaceProperty.BLUR / GRAIN / OPACITY / TINT`. Each write
   re-attaches every surface, terminal included, to the base, as Blur always did; the terminal's own
   Opacity (Darkness) then detaches it again for fine-tuning. Opacity and Grain run 0–100%, the
   stored values' own range, which covers every Look. There is no global row on the Look stops, and

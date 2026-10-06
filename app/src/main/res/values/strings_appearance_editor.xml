@@ -21,7 +21,6 @@
     <string name="appearance_editor_style_docked">Docked</string>
     <string name="appearance_editor_style_floating">Floating</string>
 
-    <string name="appearance_editor_custom_replaced">Your custom look was replaced</string>
 
     <!-- The elements a tap in the frame selects; row 2's heading and the targets' descriptions. -->
     <string name="appearance_editor_target_status">Status bar</string>
@@ -40,9 +39,9 @@
     <string name="appearance_editor_key_corners">Radius · %1$d dp</string>
     <string name="appearance_editor_legibility_normal">Contrast · Default</string>
     <string name="appearance_editor_legibility_high">Contrast · Harder</string>
-    <!-- The terminal's Trail and Effect menu buttons: the name and the chosen option. -->
-    <string name="appearance_editor_trail_button">Trail · %1$s</string>
-    <string name="appearance_editor_effect_button">Effect · %1$s</string>
+    <!-- The terminal's two menu pills: the heading over the chosen option. -->
+    <string name="appearance_editor_trail_title">Cursor trail</string>
+    <string name="appearance_editor_effect_title">Terminal effect</string>
     <!-- The status bar's button: opens the clock face and position popup. -->
     <string name="appearance_editor_clock">Clock</string>
     <!-- The Custom row's own legends; the number is the slider's read-out. -->
@@ -54,6 +53,8 @@
     <!-- The global row (layout editor v2): the base values every surface follows. -->
     <string name="appearance_editor_opacity">Opacity · %1$d%%</string>
     <string name="appearance_editor_grain">Grain · %1$d%%</string>
+    <string name="appearance_editor_tint">Tint · %1$d%%</string>
+    <string name="appearance_editor_tint_name">Tint</string>
     <!-- The keyboard's door to its theme page in Settings; also that page's title. -->
     <string name="appearance_editor_keyboard_theme">Keyboard theme</string>
 

@@ -1424,6 +1424,8 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_SURFACE_BASE_BLUR = "surface_base_blur";
         public static final String KEY_SURFACE_BASE_OPACITY = "surface_base_opacity";
         public static final String KEY_SURFACE_BASE_GRAIN = "surface_base_grain";
+        /** How much of the Material colour tint the glass wears, percent; 100 is the shipped tint. */
+        public static final String KEY_SURFACE_BASE_TINT = "surface_base_tint";
         public static final String KEY_SURFACE_BASE_CORNER_RADIUS = "surface_base_corner_radius";
         public static final String KEY_SURFACE_BASE_SIDE_GAP = "surface_base_side_gap";
 
@@ -1435,6 +1437,12 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_SURFACE_BASE_BLUR = 8;
         public static final int DEFAULT_SURFACE_BASE_OPACITY = 34;
         public static final int DEFAULT_SURFACE_BASE_GRAIN = 18;
+        public static final int DEFAULT_SURFACE_BASE_TINT = 100;
+        /** Each surface's own tint strength, consulted once it has detached from Base. */
+        public static final String KEY_DOCK_TINT_STRENGTH = "dock_tint_strength";
+        public static final String KEY_STATUS_BAR_TINT_STRENGTH = "status_bar_tint_strength";
+        public static final String KEY_TERMINAL_TINT_STRENGTH = "terminal_tint_strength";
+        public static final String KEY_IN_APP_KEYBOARD_TINT_STRENGTH = "in_app_keyboard_tint_strength";
         public static final int DEFAULT_SURFACE_BASE_CORNER_RADIUS = 24;
         public static final int DEFAULT_SURFACE_BASE_SIDE_GAP = 12;
 
@@ -1573,36 +1581,23 @@ public final class TermuxPreferenceConstants {
 
         public static final int DEFAULT_VALUE_MANAGED_WALLPAPER_SYSTEM_ID = -1;
 
-        /** Id of the living still ({@code living:<hash>}) the managed wallpaper came from; unset for a photo. */
-        public static final String KEY_MANAGED_WALLPAPER_ANIMATED = "managed_wallpaper_animated";
+        /**
+         * The system's lock wallpaper id right after the launcher's last wallpaper set, so a lock
+         * wallpaper set by another app is noticed. 0 or absent means no baseline yet.
+         */
+        public static final String KEY_MANAGED_WALLPAPER_LOCK_ID =
+            "managed_wallpaper_lock_id";
+
+        public static final int DEFAULT_VALUE_MANAGED_WALLPAPER_LOCK_ID = 0;
 
         /**
          * The Lock wallpaper slot: {@code same_as_home} (default, follows the Home slot),
-         * {@code animated:<id>} (a living still) or {@code photo}. The Home slot is
-         * {@link #KEY_MANAGED_WALLPAPER_ANIMATED} (an id, or unset for a photo).
+         * or {@code photo}.
          */
         public static final String KEY_WALLPAPER_LOCK_CHOICE = "wallpaper_lock_choice";
         public static final String VALUE_WALLPAPER_LOCK_SAME_AS_HOME = "same_as_home";
         public static final String VALUE_WALLPAPER_LOCK_PHOTO = "photo";
-        /** Prefix of an animated lock choice; the generated background id follows it. */
-        public static final String VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX = "animated:";
         public static final String DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE = VALUE_WALLPAPER_LOCK_SAME_AS_HOME;
-
-        /** The Lock slot's Motion toggle: an animated lock choice plays as a live wallpaper (API 34+). */
-        public static final String KEY_WALLPAPER_LOCK_MOTION = "wallpaper_lock_motion";
-        public static final boolean DEFAULT_VALUE_WALLPAPER_LOCK_MOTION = true;
-
-        /**
-         * The Home slot's Motion toggle, read only for a living still (a photo brought to life):
-         * on plays it in the launcher, off leaves its photo as a still. Generated backgrounds
-         * always play on Home.
-         */
-        public static final String KEY_WALLPAPER_HOME_MOTION = "wallpaper_home_motion";
-        public static final boolean DEFAULT_VALUE_WALLPAPER_HOME_MOTION = true;
-
-        /** Hidden kill switch: true stops generated backgrounds animating. Not in the settings UI. */
-        public static final String KEY_ANIMATED_WALLPAPER_DISABLED = "animated_wallpaper_disabled";
-        public static final boolean DEFAULT_VALUE_ANIMATED_WALLPAPER_DISABLED = false;
         
         /**
          * Defines the key for whether terminal colors should follow Material dynamic colors.

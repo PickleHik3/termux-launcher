@@ -340,9 +340,6 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** Marks a shell as wanting attention, e.g. after a bell. */
     void noteShellAttention(@NonNull TerminalSession session);
 
-    /** A bell rang in a visible launcher; the generated wallpaper pulses at the pane. */
-    default void onBellForWallpaper(@NonNull TerminalSession session) {}
-
     void clearShellAttention(int shellPid);
 
     /** The corner chip that reports a session switch, an exit, or a refused split. */
