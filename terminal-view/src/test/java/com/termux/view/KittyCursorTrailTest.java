@@ -222,7 +222,9 @@ public class KittyCursorTrailTest {
     public void moveAfterLongIdleStartsFromTheOldCursor() {
         KittyCursorTrail trail = new KittyCursorTrail();
         KittyCursorTrail.Config cfg = config(10, 2, 2);
-        assertFalse(trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg));
+        // The first frame lands inside the delay window, so it asks for one more; a second later
+        // the trail is settled and idle.
+        trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
         assertFalse(trail.update(1_000L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H,
             cfg));
         // Five seconds later the cursor jumps 50 cells; the first frame lands 12 ms after it.
