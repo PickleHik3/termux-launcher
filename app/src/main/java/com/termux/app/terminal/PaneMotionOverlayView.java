@@ -126,9 +126,8 @@ public final class PaneMotionOverlayView extends View {
         public long ownerId;
         public int color;
         /**
-         * The focused pane's card, in this overlay's pixels. Particles and the comet stay inside
-         * it, as kitty's stay inside its window; the trail itself is not clipped, so a flight
-         * between panes still crosses the gap.
+         * The focused pane's card, in this overlay's pixels. Particles stay inside it; the trail
+         * and the comet are not clipped, so a flight between panes still crosses the gap.
          */
         public boolean hasClip;
         public float clipLeft, clipTop, clipRight, clipBottom;
@@ -409,9 +408,8 @@ public final class PaneMotionOverlayView extends View {
                 mCursorTarget.right, mCursorTarget.bottom);
         }
         if (style == CursorTrailStyle.COMET) {
-            boolean clipped = clipToPane(canvas);
-            mComet.draw(canvas, color, opacity, mFrameMs, getResources().getDisplayMetrics().density);
-            if (clipped) canvas.restore();
+            // Like the quad it stands in for, the comet may cross the gap between two panes.
+            mComet.draw(canvas, color, opacity, mFrameMs);
         } else if (mCursorTargetValid && opacity > 0f && mCursorTrail.needsRender()) {
             // kitty draws its trail only while needs_render holds (shaders.c draw_cursor_trail
             // call; cursor_trail_color.a is zero for custom shaders otherwise): a settled trail
