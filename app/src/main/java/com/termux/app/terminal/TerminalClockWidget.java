@@ -80,6 +80,14 @@ public final class TerminalClockWidget extends View {
     private final Matrix mMatrix = new Matrix();
     private final Camera mCamera = new Camera();
     private final Rect mTextBounds = new Rect();
+    /** What {@link #spacedTextWidth} and the per-glyph faces measure, remembered per frame. */
+    private final TextWidths.Measurer mMeasure = text -> mPaint.measureText(text);
+    private final TextWidths mTextWidths = new TextWidths();
+    private final CharAdvances mTimeAdvances = new CharAdvances();
+    private final CharAdvances mSecondsAdvances = new CharAdvances();
+    /** {@link #timeText()}, built once per snapshot rather than once per frame. */
+    @Nullable private String mTimeText;
+    @Nullable private ClockSnapshot mTimeTextSnapshot;
     private final RectF mRect = new RectF();
     private final RectF mFlipMetaCell = new RectF();
     /**
@@ -566,7 +574,9 @@ public final class TerminalClockWidget extends View {
         mPaint.setTextSize(sp(textDp));
         float widest = 0f;
         for (char digit = '0'; digit <= '9'; digit++) {
-            widest = Math.max(widest, mPaint.measureText(String.valueOf(digit)));
+            // The seconds column draws with these advances too, so the two share one table.
+            widest = Math.max(widest, mSecondsAdvances.advance(digit, typeface,
+                mPaint.getTextSize(), 0f, mMeasure));
         }
         return widest * count;
     }
@@ -1479,10 +1489,17 @@ public final class TerminalClockWidget extends View {
     private float drawSevenDigit(Canvas canvas, int index, float x, float widthDp,
                                  float heightDp, float thickness, long now) {
         float alpha = lcdAlpha(progress(index, now, LCD_DURATION_MS));
-        drawSevenSegments(canvas, mDigits[index], new RectF(x, 0f, x + dp(widthDp), dp(heightDp)),
-            thickness, mPrimary, alpha);
+        mLcdCell.set(x, 0f, x + dp(widthDp), dp(heightDp));
+        drawSevenSegments(canvas, mDigits[index], mLcdCell, thickness, mPrimary, alpha);
         return x + dp(widthDp);
     }
+
+    /** The LCD's scratch: one digit's cell, its seven segments, and an on segment's glow. */
+    private final RectF mLcdCell = new RectF();
+    private final RectF[] mLcdSegments = {
+        new RectF(), new RectF(), new RectF(), new RectF(), new RectF(), new RectF(), new RectF()
+    };
+    private final RectF mLcdGlow = new RectF();
 
     private void drawLcdColon(Canvas canvas, float x, float y, float radiusDp, float offsetDp) {
         mFillPaint.setShader(null);
@@ -1493,26 +1510,27 @@ public final class TerminalClockWidget extends View {
 
     private void drawSevenSegments(Canvas canvas, char digit, RectF r, float thickness,
                                    int color, float alpha) {
-        boolean[] on = sevenSegments(digit);
+        int on = sevenSegments(digit);
         float half = thickness / 2f;
-        RectF[] segments = {
-            new RectF(r.left + thickness, r.top, r.right - thickness, r.top + thickness),
-            new RectF(r.right - thickness, r.top + thickness, r.right, r.centerY() - half),
-            new RectF(r.right - thickness, r.centerY() + half, r.right, r.bottom - thickness),
-            new RectF(r.left + thickness, r.bottom - thickness, r.right - thickness, r.bottom),
-            new RectF(r.left, r.centerY() + half, r.left + thickness, r.bottom - thickness),
-            new RectF(r.left, r.top + thickness, r.left + thickness, r.centerY() - half),
-            new RectF(r.left + thickness, r.centerY() - half, r.right - thickness, r.centerY() + half)
-        };
+        RectF[] segments = mLcdSegments;
+        segments[0].set(r.left + thickness, r.top, r.right - thickness, r.top + thickness);
+        segments[1].set(r.right - thickness, r.top + thickness, r.right, r.centerY() - half);
+        segments[2].set(r.right - thickness, r.centerY() + half, r.right, r.bottom - thickness);
+        segments[3].set(r.left + thickness, r.bottom - thickness, r.right - thickness, r.bottom);
+        segments[4].set(r.left, r.centerY() + half, r.left + thickness, r.bottom - thickness);
+        segments[5].set(r.left, r.top + thickness, r.left + thickness, r.centerY() - half);
+        segments[6].set(r.left + thickness, r.centerY() - half, r.right - thickness,
+            r.centerY() + half);
         mFillPaint.setShader(null);
         for (int i = 0; i < segments.length; i++) {
-            if (!on[i]) {
+            if ((on & (1 << i)) == 0) {
                 // Off segments give the panel a body instead of leaving holes in the glass.
                 mFillPaint.setColor(alpha(color, .08f));
                 canvas.drawRoundRect(segments[i], half, half, mFillPaint);
                 continue;
             }
-            RectF glow = new RectF(segments[i]);
+            RectF glow = mLcdGlow;
+            glow.set(segments[i]);
             glow.inset(-dp(1.4f), -dp(1.4f));
             mFillPaint.setColor(withAlpha(color, Math.round(80f * alpha)));
             canvas.drawRoundRect(glow, thickness, thickness, mFillPaint);
@@ -1521,7 +1539,8 @@ public final class TerminalClockWidget extends View {
         }
     }
 
-    private static boolean[] sevenSegments(char c) {
+    /** The segments lit for {@code c}: bit {@code i} is segment {@code i}, a to g. */
+    private static int sevenSegments(char c) {
         int bits;
         switch (c) {
             case '0': bits = 0x3F; break;
@@ -1536,9 +1555,7 @@ public final class TerminalClockWidget extends View {
             case '9': bits = 0x6F; break;
             default: bits = 0;
         }
-        boolean[] result = new boolean[7];
-        for (int i = 0; i < result.length; i++) result[i] = (bits & (1 << i)) != 0;
-        return result;
+        return bits;
     }
 
     private static float lcdAlpha(float progress) {
@@ -1824,9 +1841,10 @@ public final class TerminalClockWidget extends View {
             float eased = ease(secondsProgress(i, now, duration));
             mPaint.setColor(mSecondaryQuiet);
             mPaint.setAlpha(Math.round(Color.alpha(mSecondaryQuiet) * eased));
-            String c = String.valueOf(mSnapshot.ss.charAt(i));
-            canvas.drawText(c, cursor, baseline + dp(4f) * (1f - eased), mPaint);
-            cursor += mPaint.measureText(c);
+            char c = mSnapshot.ss.charAt(i);
+            canvas.drawText(CharAdvances.charString(c), cursor, baseline + dp(4f) * (1f - eased),
+                mPaint);
+            cursor += mSecondsAdvances.advance(c, secondsFace, mPaint.getTextSize(), 0f, mMeasure);
         }
         mPaint.setAlpha(255);
         if (mSnapshot.period.isEmpty()) return;
@@ -1902,8 +1920,9 @@ public final class TerminalClockWidget extends View {
             float eased = c == ':' ? 1f : ease(progress(digitIndex++, now, TEXT_DURATION_MS));
             mPaint.setColor(mOnSurface);
             mPaint.setAlpha(Math.round(255f * eased));
-            canvas.drawText(String.valueOf(c), x, baseline + dp(5f) * (1f - eased), mPaint);
-            x += mPaint.measureText(String.valueOf(c));
+            canvas.drawText(CharAdvances.charString(c), x, baseline + dp(5f) * (1f - eased),
+                mPaint);
+            x += mTimeAdvances.advance(c, typeface, mPaint.getTextSize(), letterSpacing, mMeasure);
         }
         mPaint.setAlpha(255);
         mPaint.setLetterSpacing(0f);
@@ -1958,13 +1977,21 @@ public final class TerminalClockWidget extends View {
         mPaint.setTypeface(typeface);
         mPaint.setLetterSpacing(letterSpacing);
         mPaint.setTextSize(sp(textDp));
-        float width = mPaint.measureText(text);
+        float width = mTextWidths.width(text, typeface, mPaint.getTextSize(), letterSpacing,
+            mMeasure);
         mPaint.setLetterSpacing(0f);
         return width;
     }
 
     private String timeText() {
-        return mSnapshot.hh + ":" + mSnapshot.mm;
+        ClockSnapshot snapshot = mSnapshot;
+        String text = mTimeText;
+        if (text == null || mTimeTextSnapshot != snapshot) {
+            text = snapshot.hh + ":" + snapshot.mm;
+            mTimeText = text;
+            mTimeTextSnapshot = snapshot;
+        }
+        return text;
     }
 
     private float minuteFraction() {
@@ -2249,6 +2276,88 @@ public final class TerminalClockWidget extends View {
 
     private static String twoDigits(int value) {
         return value < 10 ? "0" + value : Integer.toString(value);
+    }
+
+    /**
+     * Text widths the clock measures on every frame of a face's animation — the date row, the
+     * time run, the period — remembered by everything a width depends on: the text, the face,
+     * the text size in pixels and the letter spacing. Paint flags are fixed for the widget's life,
+     * so nothing else moves a width. A few entries, replaced in turn: the faces measure a handful
+     * of strings and they change once a second at most.
+     */
+    static final class TextWidths {
+
+        /** Measures {@code text} on a paint already set up for the key it is filed under. */
+        interface Measurer {
+            float measure(@NonNull String text);
+        }
+
+        static final int CAPACITY = 12;
+        private final String[] mTexts = new String[CAPACITY];
+        private final Object[] mFaces = new Object[CAPACITY];
+        private final float[] mSizes = new float[CAPACITY];
+        private final float[] mSpacings = new float[CAPACITY];
+        private final float[] mWidths = new float[CAPACITY];
+        private int mNext;
+
+        float width(@NonNull String text, @Nullable Object face, float size, float spacing,
+                    @NonNull Measurer measurer) {
+            for (int i = 0; i < CAPACITY; i++) {
+                if (mFaces[i] == face && mSizes[i] == size && mSpacings[i] == spacing
+                    && text.equals(mTexts[i])) return mWidths[i];
+            }
+            float width = measurer.measure(text);
+            int slot = mNext;
+            mNext = (slot + 1) % CAPACITY;
+            mTexts[slot] = text;
+            mFaces[slot] = face;
+            mSizes[slot] = size;
+            mSpacings[slot] = spacing;
+            mWidths[slot] = width;
+            return width;
+        }
+    }
+
+    /**
+     * One face's per-glyph advances, for the faces that draw the time a glyph at a time so each
+     * digit can rise on its own: measured once per glyph while the face, size and spacing hold,
+     * instead of once per glyph per frame.
+     */
+    static final class CharAdvances {
+
+        private static final String[] ASCII = new String[128];
+
+        static {
+            for (int c = 0; c < ASCII.length; c++) ASCII[c] = String.valueOf((char) c);
+        }
+
+        /** {@code String.valueOf(c)}, without a new string for the ASCII a clock draws. */
+        @NonNull
+        static String charString(char c) {
+            return c < ASCII.length ? ASCII[c] : String.valueOf(c);
+        }
+
+        private final float[] mAdvances = new float[ASCII.length];
+        @Nullable private Object mFace;
+        private float mSize = Float.NaN;
+        private float mSpacing = Float.NaN;
+
+        float advance(char c, @Nullable Object face, float size, float spacing,
+                      @NonNull TextWidths.Measurer measurer) {
+            if (c >= ASCII.length) return measurer.measure(String.valueOf(c));
+            if (face != mFace || size != mSize || spacing != mSpacing) {
+                mFace = face;
+                mSize = size;
+                mSpacing = spacing;
+                java.util.Arrays.fill(mAdvances, Float.NaN);
+            }
+            float advance = mAdvances[c];
+            if (Float.isNaN(advance)) {
+                advance = measurer.measure(ASCII[c]);
+                mAdvances[c] = advance;
+            }
+            return advance;
+        }
     }
 
     static final class ClockSnapshot {

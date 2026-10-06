@@ -74,6 +74,12 @@ public final class SharedFrameDrawable extends Drawable {
     /** The program the frame draws through while {@link #mLook} is set and the phone runs one. */
     @Nullable private GlassRefraction.Program mProgram;
     @Nullable private GlassRefraction.Program mPreviousProgram;
+    /**
+     * The retired frame's program once its fade has ended, kept for the next crossfade so a
+     * wallpaper change does not compile a RuntimeShader each time. One program per surface; every
+     * uniform it reads is written afresh before it draws again.
+     */
+    @Nullable private GlassRefraction.Program mSpareProgram;
 
     /**
      * @param frame     a resident frame of the blur cache, at whatever resolution it holds it
@@ -172,6 +178,7 @@ public final class SharedFrameDrawable extends Drawable {
         if (look == null || shader == null || !GlassRefraction.available()) {
             mProgram = null;
             mPreviousProgram = null;
+            mSpareProgram = null;
             mPaint.setShader(shader);
             return;
         }
@@ -192,12 +199,16 @@ public final class SharedFrameDrawable extends Drawable {
         syncRimRect();
         BitmapShader previousShader = mPreviousShader;
         if (previousShader == null) {
+            if (mPreviousProgram != null) mSpareProgram = mPreviousProgram;
             mPreviousProgram = null;
             return;
         }
         GlassRefraction.Program previous = mPreviousProgram;
         if (previous == null || previous.density() != mLookDensity) {
-            previous = GlassRefraction.Program.create(mLookDensity);
+            GlassRefraction.Program spare = mSpareProgram;
+            mSpareProgram = null;
+            previous = spare != null && spare.density() == mLookDensity
+                ? spare : GlassRefraction.Program.create(mLookDensity);
         }
         mPreviousProgram = previous;
         if (previous != null) {
@@ -307,6 +318,7 @@ public final class SharedFrameDrawable extends Drawable {
         } else {
             mPreviousFrame = null;
             mPreviousShader = null;
+            if (mPreviousProgram != null) mSpareProgram = mPreviousProgram;
             mPreviousProgram = null;
             mPaint.setAlpha(mAlpha);
             canvas.drawRect(bounds, mPaint);

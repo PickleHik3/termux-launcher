@@ -103,12 +103,17 @@ public final class StatusBarLensMetrics {
 
     /** A rectangle in the lens view's own coordinates. */
     public static final class Box {
-        public final float left;
-        public final float top;
-        public final float right;
-        public final float bottom;
+        public float left;
+        public float top;
+        public float right;
+        public float bottom;
 
         public Box(float left, float top, float right, float bottom) {
+            set(left, top, right, bottom);
+        }
+
+        /** Refilled by {@link #marks(Bar, List, PaneWallPage, float, int, boolean, MarkBuffer)}. */
+        void set(float left, float top, float right, float bottom) {
             this.left = left;
             this.top = top;
             this.right = right;
@@ -171,6 +176,23 @@ public final class StatusBarLensMetrics {
                 0, 0, -1f, -1f, -1f);
         }
 
+        /**
+         * Whether {@link #Bar(int, int, float, boolean, boolean, float, int, int, float, float, float)}
+         * would build this very bar from these arguments, so a view that redraws per frame can keep
+         * the one it has.
+         */
+        boolean sameAs(int widthPx, int heightPx, float density, boolean vertical, boolean bottom,
+                       float expansion, int alongStartPx, int alongEndPx, float homeCenterYPx,
+                       float homeSizePx, float chipRadiusPx) {
+            return this.widthPx == widthPx && this.heightPx == heightPx
+                && this.density == density && this.vertical == vertical && this.bottom == bottom
+                && this.expansion == Math.max(0f, Math.min(1f, expansion))
+                && this.alongStartPx == Math.max(0, alongStartPx)
+                && this.alongEndPx == Math.max(0, alongEndPx)
+                && this.homeCenterYPx == homeCenterYPx && this.homeSizePx == homeSizePx
+                && this.chipRadiusPx == chipRadiusPx;
+        }
+
         float dp(float value) { return value * density; }
     }
 
@@ -181,18 +203,18 @@ public final class StatusBarLensMetrics {
 
     /** One place's mark: where it is, how it is painted, and what a finger may land on. */
     public static final class Mark {
-        public final PaneWallPage page;
+        public PaneWallPage page;
         /** Bar widths from the place on screen: 0 at home, ±1 at the ends. */
-        public final float t;
+        public float t;
         /** How far from home the mark is, 0 at home and 1 at either end. */
-        public final float presence;
+        public float presence;
         /** Whether this is the place on screen. */
-        public final boolean home;
-        public final float centerX;
-        public final float centerY;
-        public final float sizePx;
-        public final float radiusPx;
-        public final float glyphSizePx;
+        public boolean home;
+        public float centerX;
+        public float centerY;
+        public float sizePx;
+        public float radiusPx;
+        public float glyphSizePx;
         /**
          * The strength the mark's glyph carries: full at home, faded to
          * {@link #UNFOCUSED_GLYPH_SHARE} as the mark reaches an end, the way the extra-keys row
@@ -200,26 +222,32 @@ public final class StatusBarLensMetrics {
          * {@link #ink}; the glyph is the mark's colour statement, so it is the one that follows the
          * row.
          */
-        public final float glyphInk;
+        public float glyphInk;
         /** The ink the mark is painted with, before the dissolve. */
-        public final float ink;
+        public float ink;
         /** The ink that reaches the glass where the glyph is drawn, dissolve included. */
-        public final float effectiveInk;
+        public float effectiveInk;
         /** How much of its ink the mark keeps at its outer edge; 1 when it does not dissolve. */
-        public final float fadeOuterAlpha;
+        public float fadeOuterAlpha;
         /** The glow the mark at home wears; 0 for a neighbour. */
-        public final float glow;
+        public float glow;
         /** The mark dissolves towards the end it peeks past, and which end that is. */
-        public final boolean fades;
-        public final boolean fadesFromNearEnd;
+        public boolean fades;
+        public boolean fadesFromNearEnd;
         public final Box tile;
         /** The patch of bar that reaches this place, at least the platform's minimum. */
         public final Box target;
 
-        Mark(PaneWallPage page, float t, float presence, boolean home, float centerX, float centerY,
-             float sizePx, float radiusPx, float glyphSizePx, float glyphInk, float ink,
-             float effectiveInk, float fadeOuterAlpha, float glow, boolean fades,
-             boolean fadesFromNearEnd, Box tile, Box target) {
+        /** The mark's two boxes, owned for its whole life and refilled with it. */
+        Mark() {
+            tile = new Box(0f, 0f, 0f, 0f);
+            target = new Box(0f, 0f, 0f, 0f);
+        }
+
+        void set(PaneWallPage page, float t, float presence, boolean home, float centerX,
+                 float centerY, float sizePx, float radiusPx, float glyphSizePx, float glyphInk,
+                 float ink, float effectiveInk, float fadeOuterAlpha, float glow, boolean fades,
+                 boolean fadesFromNearEnd) {
             this.page = page;
             this.t = t;
             this.presence = presence;
@@ -236,8 +264,38 @@ public final class StatusBarLensMetrics {
             this.glow = glow;
             this.fades = fades;
             this.fadesFromNearEnd = fadesFromNearEnd;
-            this.tile = tile;
-            this.target = target;
+        }
+    }
+
+    /**
+     * Where {@link #marks(Bar, List, PaneWallPage, float, int, boolean, MarkBuffer)} writes: the
+     * marks of the last call, refilled in place by the next one. The lens view holds one so a wall
+     * drag, which lays the marks out on every frame, allocates nothing doing it. A list read from
+     * it is good until the buffer's next use.
+     */
+    public static final class MarkBuffer {
+        private final ArrayList<Mark> mPool = new ArrayList<>();
+        private final ArrayList<Mark> mMarks = new ArrayList<>();
+        private final List<Mark> mView = Collections.unmodifiableList(mMarks);
+        final float[] mAlongSpan = new float[2];
+        final float[] mAcrossSpan = new float[2];
+
+        void clear() {
+            mMarks.clear();
+        }
+
+        @NonNull
+        Mark next() {
+            int index = mMarks.size();
+            if (index == mPool.size()) mPool.add(new Mark());
+            Mark mark = mPool.get(index);
+            mMarks.add(mark);
+            return mark;
+        }
+
+        @NonNull
+        List<Mark> marks() {
+            return mView;
         }
     }
 
@@ -251,8 +309,17 @@ public final class StatusBarLensMetrics {
     public static List<Mark> marks(@NonNull Bar bar, @NonNull List<PaneWallPage> pages,
                                    @NonNull PaneWallPage current, float offsetPx, int wallWidthPx,
                                    boolean displayRunning) {
+        return marks(bar, pages, current, offsetPx, wallWidthPx, displayRunning, new MarkBuffer());
+    }
+
+    /** {@link #marks(Bar, List, PaneWallPage, float, int, boolean)}, written into {@code buffer}. */
+    @NonNull
+    public static List<Mark> marks(@NonNull Bar bar, @NonNull List<PaneWallPage> pages,
+                                   @NonNull PaneWallPage current, float offsetPx, int wallWidthPx,
+                                   boolean displayRunning, @NonNull MarkBuffer buffer) {
+        buffer.clear();
         if (bar.widthPx <= 0 || bar.heightPx <= 0 || wallWidthPx <= 0 || pages.size() < 2) {
-            return Collections.emptyList();
+            return buffer.marks();
         }
         // The two axes the lens is laid out in: the places queue along the bar's length, and the
         // line they share runs across it. On a row that is x and y; on a column it is y and x.
@@ -260,7 +327,7 @@ public final class StatusBarLensMetrics {
         float along = (bar.vertical ? bar.heightPx : bar.widthPx) - alongStart
             - (bar.vertical ? bar.alongEndPx : 0f);
         float across = bar.vertical ? bar.widthPx : bar.heightPx;
-        if (along <= 0f) return Collections.emptyList();
+        if (along <= 0f) return buffer.marks();
 
         // In the expanded bar the home mark takes the clock's band and its line; its neighbours
         // share the line, smaller, half past the ends. The compact row is the place's own content
@@ -279,8 +346,8 @@ public final class StatusBarLensMetrics {
         float slop = bar.dp(TOUCH_SLOP_DP);
         float minTarget = bar.dp(TOUCH_TARGET_DP);
 
-        List<Mark> marks = new ArrayList<>(pages.size());
-        for (PaneWallPage page : pages) {
+        for (int index = 0; index < pages.size(); index++) {
+            PaneWallPage page = pages.get(index);
             float t = StatusBarLensPolicy.distance(pages, current, page, offsetPx, wallWidthPx);
             float presence = StatusBarLensPolicy.presence(t);
             // Whole at home only while the bar is expanded; in the compact row the mark at home is
@@ -309,20 +376,24 @@ public final class StatusBarLensMetrics {
                 ? Math.min(size / 2f, bar.chipRadiusPx * (size / bar.dp(COMPACT_ICON_DP)))
                 : size * FALLBACK_RADIUS_SHARE;
 
-            Box tile = new Box(centerX - size / 2f, centerY - size / 2f,
+            Mark mark = buffer.next();
+            mark.tile.set(centerX - size / 2f, centerY - size / 2f,
                 centerX + size / 2f, centerY + size / 2f);
             float[] alongSpan = span(travelled, size / 2f + slop, minTarget,
-                alongStart, alongStart + along);
-            float[] acrossSpan = span(line, size / 2f + slop, minTarget, 0f, across);
-            Box target = bar.vertical
-                ? new Box(acrossSpan[0], alongSpan[0], acrossSpan[1], alongSpan[1])
-                : new Box(alongSpan[0], acrossSpan[0], alongSpan[1], acrossSpan[1]);
+                alongStart, alongStart + along, buffer.mAlongSpan);
+            float[] acrossSpan = span(line, size / 2f + slop, minTarget, 0f, across,
+                buffer.mAcrossSpan);
+            if (bar.vertical) {
+                mark.target.set(acrossSpan[0], alongSpan[0], acrossSpan[1], alongSpan[1]);
+            } else {
+                mark.target.set(alongSpan[0], acrossSpan[0], alongSpan[1], acrossSpan[1]);
+            }
 
-            marks.add(new Mark(page, t, presence, page == current, centerX, centerY, size, radius,
+            mark.set(page, t, presence, page == current, centerX, centerY, size, radius,
                 size * GLYPH_SHARE, alpha * glyphInkFor(presence, stoppedDisplay), ink,
-                effectiveInk, fadeOuter, glow, fades, t < 0f, tile, target));
+                effectiveInk, fadeOuter, glow, fades, t < 0f);
         }
-        return marks;
+        return buffer.marks();
     }
 
     /**
@@ -359,16 +430,23 @@ public final class StatusBarLensMetrics {
      * at least {@code minLength} long. Growth goes the way there is room — inward from an end for
      * the two neighbours, whose outer halves are past the bar and cannot be touched at all.
      */
-    private static float[] span(float center, float half, float minLength, float lo, float hi) {
+    private static float[] span(float center, float half, float minLength, float lo, float hi,
+                                float[] out) {
         float low = Math.max(lo, center - half);
         float high = Math.min(hi, center + half);
         float need = Math.min(minLength, hi - lo);
-        if (high - low >= need) return new float[] {low, high};
-        if (low <= lo) return new float[] {lo, Math.min(hi, lo + need)};
-        if (high >= hi) return new float[] {Math.max(lo, hi - need), hi};
+        if (high - low >= need) return pair(out, low, high);
+        if (low <= lo) return pair(out, lo, Math.min(hi, lo + need));
+        if (high >= hi) return pair(out, Math.max(lo, hi - need), hi);
         float extra = (need - (high - low)) / 2f;
         float grown = Math.max(lo, low - extra);
-        return new float[] {grown, Math.min(hi, grown + need)};
+        return pair(out, grown, Math.min(hi, grown + need));
+    }
+
+    private static float[] pair(float[] out, float first, float second) {
+        out[0] = first;
+        out[1] = second;
+        return out;
     }
 
     /** What the row keeps clear at its start, from the bar's end: the home mark and its gap. */

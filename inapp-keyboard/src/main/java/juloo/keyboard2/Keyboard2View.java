@@ -367,28 +367,79 @@ public class Keyboard2View extends View
   /** 1 = hint colors at full strength, 0 = fully returned to the underlying colors. */
   private float _hintFade = 1f;
 
-  /** The hint override blended toward what the key would paint without it. */
-  private KeyColorOverride fadeHintOverride(KeyColorOverride hint, KeyColorOverride base,
-      Theme.Computed.Key tc)
+  /**
+   * One key's override colors for one draw, as primitives: a set flag and a color per slot. The
+   * per-key loop fills a single instance, so lit keys box no Integers and the hint fade-out
+   * allocates no override per key per frame.
+   */
+  private static final class OverrideSlots
   {
-    return new KeyColorOverride(
-        fadeHintColor(hint.keyBackground, base == null ? null : base.keyBackground,
-            tc.bg_paint.getColor()),
-        fadeHintColor(hint.primaryLabel, base == null ? null : base.primaryLabel, tc.labelColor),
-        fadeHintColor(hint.secondaryLabel, base == null ? null : base.secondaryLabel,
-            tc.subLabelColor),
-        fadeHintColor(hint.secondaryBottomLabel,
-            base == null ? null : base.secondaryBottomLabel, tc.subLabelColor),
-        fadeHintColor(hint.borderColor, base == null ? null : base.borderColor,
-            tc.border_left_paint.getColor()));
+    boolean hasBackground, hasPrimary, hasSecondary, hasSecondaryBottom, hasBorder;
+    int background, primary, secondary, secondaryBottom, border;
+
+    void clear()
+    {
+      hasBackground = hasPrimary = hasSecondary = hasSecondaryBottom = hasBorder = false;
+    }
+
+    /** The override's own colors, unchanged. */
+    void set(KeyColorOverride o)
+    {
+      hasBackground = o.keyBackground != null;
+      if (hasBackground) background = o.keyBackground;
+      hasPrimary = o.primaryLabel != null;
+      if (hasPrimary) primary = o.primaryLabel;
+      hasSecondary = o.secondaryLabel != null;
+      if (hasSecondary) secondary = o.secondaryLabel;
+      hasSecondaryBottom = o.secondaryBottomLabel != null;
+      if (hasSecondaryBottom) secondaryBottom = o.secondaryBottomLabel;
+      hasBorder = o.borderColor != null;
+      if (hasBorder) border = o.borderColor;
+    }
   }
 
-  private Integer fadeHintColor(Integer hintColor, Integer baseColor, int themeDefault)
+  private final OverrideSlots _overrideSlots = new OverrideSlots();
+
+  /** The hint override blended toward what the key would paint without it, into [out]. */
+  private void fadeHintOverride(KeyColorOverride hint, KeyColorOverride base,
+      Theme.Computed.Key tc, OverrideSlots out)
+  {
+    out.hasBackground = fadeHintColor(hint.keyBackground,
+        base == null ? null : base.keyBackground, tc.bg_paint.getColor());
+    out.background = _fadedColor;
+    out.hasPrimary = fadeHintColor(hint.primaryLabel, base == null ? null : base.primaryLabel,
+        tc.labelColor);
+    out.primary = _fadedColor;
+    out.hasSecondary = fadeHintColor(hint.secondaryLabel,
+        base == null ? null : base.secondaryLabel, tc.subLabelColor);
+    out.secondary = _fadedColor;
+    out.hasSecondaryBottom = fadeHintColor(hint.secondaryBottomLabel,
+        base == null ? null : base.secondaryBottomLabel, tc.subLabelColor);
+    out.secondaryBottom = _fadedColor;
+    out.hasBorder = fadeHintColor(hint.borderColor, base == null ? null : base.borderColor,
+        tc.border_left_paint.getColor());
+    out.border = _fadedColor;
+  }
+
+  /** [fadeHintColor]'s answer when it has one. */
+  private int _fadedColor;
+
+  /**
+   * Whether the slot is overridden at all; when it is, its color is left in [_fadedColor]: the
+   * hint's color faded toward the base override, or toward the theme default without one.
+   */
+  private boolean fadeHintColor(Integer hintColor, Integer baseColor, int themeDefault)
   {
     if (hintColor == null)
-      return baseColor;
+    {
+      if (baseColor == null)
+        return false;
+      _fadedColor = baseColor;
+      return true;
+    }
     int target = baseColor != null ? baseColor : themeDefault;
-    return lerpColor(target, hintColor, _hintFade);
+    _fadedColor = lerpColor(target, hintColor, _hintFade);
+    return true;
   }
 
   private static int lerpColor(int from, int to, float t)
@@ -1867,24 +1918,26 @@ public class Keyboard2View extends View
           tc_key = _tc.key_activated;
         else
           tc_key = paintFor(k);
-        if (hintOverride != null && _hintFadeAnimator != null)
+        // A key-down cap paints the theme's activated colors, whatever overrides it.
+        OverrideSlots slots = _overrideSlots;
+        slots.clear();
+        if (!isKeyDown && colorOverride != null)
         {
-          hintOverride = fadeHintOverride(hintOverride, schemeOverride, tc_key);
-          colorOverride = hintOverride;
+          if (hintOverride != null && _hintFadeAnimator != null)
+            fadeHintOverride(hintOverride, schemeOverride, tc_key, slots);
+          else
+            slots.set(colorOverride);
+          if (hintOverride != null)
+          {
+            // Only the hint lighting breathes; color-scheme overrides stay steady.
+            if (slots.hasBackground)
+              slots.background = hintBreathe(slots.background, keyIdValue);
+            if (slots.hasBorder)
+              slots.border = hintBreathe(slots.border, keyIdValue);
+          }
         }
-        Integer frameBackground =
-            isKeyDown || colorOverride == null ? null : colorOverride.keyBackground;
-        Integer frameBorder =
-            isKeyDown || colorOverride == null ? null : colorOverride.borderColor;
-        if (hintOverride != null)
-        {
-          // Only the hint lighting breathes; color-scheme overrides stay steady.
-          if (frameBackground != null)
-            frameBackground = hintBreathe(frameBackground, keyIdValue);
-          if (frameBorder != null)
-            frameBorder = hintBreathe(frameBorder, keyIdValue);
-        }
-        drawKeyFrame(canvas, x, y, keyW, keyH, tc_key, frameBackground, frameBorder);
+        drawKeyFrame(canvas, x, y, keyW, keyH, tc_key, slots.hasBackground, slots.background,
+            slots.hasBorder, slots.border);
         // The latched Ctrl/Alt/Shift caps are the hint popup's prefix indicator; trace them
         // while the hint lighting is up. Latched modifiers render as key-down.
         if (_hintColorOverrides.size() > 0 && _hintBreathAnimator != null && isKeyDown
@@ -1905,17 +1958,15 @@ public class Keyboard2View extends View
               fxStrength);
         if (k.keys[0] != null)
           drawLabel(canvas, k.keys[0], keyW / 2f + x, y, keyH, isKeyDown, tc_key,
-              isKeyDown || colorOverride == null ? null : colorOverride.primaryLabel);
+              slots.hasPrimary, slots.primary);
         for (int i = 1; i < 9; i++)
         {
           if (k.keys[i] != null)
           {
-            Integer labelOverride = null;
-            if (!isKeyDown && colorOverride != null)
-              labelOverride = (i == 3 || i == 4) && colorOverride.secondaryBottomLabel != null
-                  ? colorOverride.secondaryBottomLabel : colorOverride.secondaryLabel;
+            boolean bottom = (i == 3 || i == 4) && slots.hasSecondaryBottom;
             drawSubLabel(canvas, k.keys[i], x, y, keyW, keyH, i, isKeyDown, tc_key,
-                labelOverride);
+                bottom || slots.hasSecondary,
+                bottom ? slots.secondaryBottom : slots.secondary);
           }
         }
         drawIndication(canvas, k, x, y, keyW, keyH, _tc);
@@ -2091,14 +2142,15 @@ public class Keyboard2View extends View
 
   /** Draw borders and background of the key. */
   void drawKeyFrame(Canvas canvas, float x, float y, float keyW, float keyH,
-      Theme.Computed.Key tc, Integer backgroundOverride, Integer borderOverride)
+      Theme.Computed.Key tc, boolean hasBackgroundOverride, int backgroundOverride,
+      boolean hasBorderOverride, int borderOverride)
   {
     float r = tc.border_radius;
     float w = tc.border_width;
     float padding = w / 2.f;
     _tmpRect.set(x + padding, y + padding, x + keyW - padding, y + keyH - padding);
     tc.positionGradient(y, keyH);
-    if (backgroundOverride == null)
+    if (!hasBackgroundOverride)
       canvas.drawRoundRect(_tmpRect, r, r, tc.bg_paint);
     else
     {
@@ -2112,7 +2164,7 @@ public class Keyboard2View extends View
     }
     if (w > 0.f)
     {
-      if (borderOverride != null)
+      if (hasBorderOverride)
       {
         // One uniform stroke in the host-chosen color; overrides the theme's four
         // side colors regardless of whether they were uniform.
@@ -2195,21 +2247,22 @@ public class Keyboard2View extends View
   }
 
   private void drawLabel(Canvas canvas, KeyValue kv, float x, float y,
-      float keyH, boolean isKeyDown, Theme.Computed.Key tc, Integer colorOverride)
+      float keyH, boolean isKeyDown, Theme.Computed.Key tc, boolean hasColorOverride,
+      int colorOverride)
   {
     kv = modifyKey(kv, _mods);
     if (kv == null)
       return;
     kv = shiftedKeyeventLabel(kv);
     float textSize = scaleTextSize(kv, true);
-    int color = colorOverride == null ? labelColor(kv, isKeyDown, false, tc) : colorOverride;
+    int color = hasColorOverride ? colorOverride : labelColor(kv, isKeyDown, false, tc);
     Paint p = tc.label_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), color, textSize);
     canvas.drawText(kv.getString(), x, (keyH - p.ascent() - p.descent()) / 2f + y, p);
   }
 
   private void drawSubLabel(Canvas canvas, KeyValue kv, float x, float y,
       float keyW, float keyH, int sub_index, boolean isKeyDown,
-      Theme.Computed.Key tc, Integer colorOverride)
+      Theme.Computed.Key tc, boolean hasColorOverride, int colorOverride)
   {
     Paint.Align a = LABEL_POSITION_H[sub_index];
     Vertical v = LABEL_POSITION_V[sub_index];
@@ -2218,7 +2271,7 @@ public class Keyboard2View extends View
       return;
     kv = shiftedKeyeventLabel(kv);
     float textSize = scaleTextSize(kv, false);
-    int color = colorOverride == null ? labelColor(kv, isKeyDown, true, tc) : colorOverride;
+    int color = hasColorOverride ? colorOverride : labelColor(kv, isKeyDown, true, tc);
     Paint p = tc.sublabel_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), color, textSize, a);
     float subPadding = _config.keyPaddingPx;
     // Corner-anchored sublabels sit where a large corner radius cuts the key

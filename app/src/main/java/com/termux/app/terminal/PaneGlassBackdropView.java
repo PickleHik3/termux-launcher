@@ -102,6 +102,12 @@ public final class PaneGlassBackdropView extends View {
     /** The program the frame draws through while {@link #mLook} is set and the phone runs one. */
     @Nullable private GlassRefraction.Program mProgram;
     @Nullable private GlassRefraction.Program mPreviousProgram;
+    /**
+     * The retired frame's program once its fade has ended, kept for the next crossfade so a
+     * wallpaper change does not compile a RuntimeShader each time. One program per surface; every
+     * uniform it reads is written afresh before it draws again.
+     */
+    @Nullable private GlassRefraction.Program mSpareProgram;
     /** Answers this slab's veil; null for a slab nobody measures. See {@link #setVeilSource}. */
     @Nullable private PaneSurfaceStyle mVeilSource;
     /**
@@ -321,6 +327,7 @@ public final class PaneGlassBackdropView extends View {
         if (look == null || shader == null || mCornerMaskRadiusPx > 0f || !GlassRefraction.available()) {
             mProgram = null;
             mPreviousProgram = null;
+            mSpareProgram = null;
             mFramePaint.setShader(shader);
             return;
         }
@@ -341,12 +348,16 @@ public final class PaneGlassBackdropView extends View {
         program.applyTo(mFramePaint);
         BitmapShader previousShader = mPreviousFrameShader;
         if (previousShader == null) {
+            if (mPreviousProgram != null) mSpareProgram = mPreviousProgram;
             mPreviousProgram = null;
             return;
         }
         GlassRefraction.Program previous = mPreviousProgram;
         if (previous == null || previous.density() != density) {
-            previous = GlassRefraction.Program.create(density);
+            GlassRefraction.Program spare = mSpareProgram;
+            mSpareProgram = null;
+            previous = spare != null && spare.density() == density
+                ? spare : GlassRefraction.Program.create(density);
         }
         mPreviousProgram = previous;
         if (previous != null) {
@@ -475,6 +486,7 @@ public final class PaneGlassBackdropView extends View {
             } else {
                 mPreviousFrame = null;
                 mPreviousFrameShader = null;
+                if (mPreviousProgram != null) mSpareProgram = mPreviousProgram;
                 mPreviousProgram = null;
                 mFramePaint.setAlpha(255);
                 canvas.drawRect(0f, 0f, width, height, mFramePaint);
