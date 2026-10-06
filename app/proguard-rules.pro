@@ -31,3 +31,21 @@
 # process Shizuku starts from this APK as the shell uid; nothing in the app calls its
 # constructors, so without this the shrinker would drop them.
 -keep class com.termux.privileged.lane.PrivilegedLaneService { *; }
+
+# Release builds keep every class of this app and its vendored modules whole and unrenamed:
+# a lot of it is reached by name from outside the dex — app_process entry points (the X11
+# server's CmdEntryPoint, the am library), JNI, Shizuku user services, intents and prefs that
+# name classes — so R8 only trims the third-party libraries. The point of the release build
+# type here is a non-debuggable runtime (AOT code, no JDWP), not a smaller dex.
+-dontobfuscate
+-keep class com.termux.** { *; }
+-keep class juloo.keyboard2.** { *; }
+
+# Hidden platform classes the X11 server's CmdEntryPoint links against; present at runtime.
+-dontwarn android.app.ActivityThread
+-dontwarn android.app.ContextImpl
+-dontwarn android.app.IActivityManager
+-dontwarn android.content.IIntentReceiver$Stub
+-dontwarn android.content.IIntentReceiver
+-dontwarn android.content.IIntentSender
+-dontwarn android.content.pm.IPackageManager
