@@ -119,8 +119,8 @@ Rules:
   moves, so the segments are disabled and the label says it needs wallpaper colours (as the
   Settings row does).
 - Moving any control at a Look stop jumps the slider to Custom, seeded from that Look. Sliding
-  from Custom back to a Look applies the Look and discards the Custom values, with an Undo-able
-  notice.
+  from Custom back to a Look applies the Look; the Custom values of the session (saved or not)
+  are kept, so sliding back to Custom restores them. Undo and Discard clear them.
 - Grain, rim style, tint, motion, chip radius, key spacing and glass depth live inside the Look.
   They have no control anywhere. Corners and margins are Layout's (§3.5).
 - Custom is stored as today's `surface_custom_preset` JSON (format 2).

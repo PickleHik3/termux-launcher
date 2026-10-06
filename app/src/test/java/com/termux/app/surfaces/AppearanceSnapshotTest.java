@@ -164,4 +164,22 @@ public class AppearanceSnapshotTest {
 
         assertFalse(store.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE));
     }
+
+    @Test
+    public void unsavedCustomValuesComeBackAfterAVisitToALook() {
+        SurfacePresets.apply(preferences, SurfacePresets.presets().get(1));
+        SurfacePresets.saveCustom(preferences);
+        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 63);
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, 77);
+        // Leaving Custom keeps the session values, then a Look replaces them.
+        AppearanceSnapshot session = AppearanceSnapshot.capture(preferences);
+        SurfacePresets.apply(preferences, SurfacePresets.presets().get(3));
+        assertNotEquals(session.signature(), AppearanceSnapshot.signatureOf(preferences));
+
+        session.restore(preferences);
+
+        assertEquals(63, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
+        assertEquals(session.signature(), AppearanceSnapshot.signatureOf(preferences));
+    }
 }

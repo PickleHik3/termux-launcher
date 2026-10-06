@@ -21,7 +21,6 @@
     <string name="appearance_editor_style_docked">Docked</string>
     <string name="appearance_editor_style_floating">Floating</string>
 
-    <string name="appearance_editor_custom_replaced">Your custom look was replaced</string>
 
     <!-- The elements a tap in the frame selects; row 2's heading and the targets' descriptions. -->
     <string name="appearance_editor_target_status">Status bar</string>

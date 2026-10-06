@@ -34,7 +34,6 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.slider.LabelFormatter;
-import com.google.android.material.snackbar.Snackbar;
 
 import com.termux.R;
 import com.termux.app.ReducedMotion;
@@ -82,7 +81,7 @@ import java.util.Locale;
  * live. At Custom, row 2 is a row of vertical sliders: the global set with nothing tapped, or the
  * tapped element's own ({@link AppearanceLooks#controls}); a tap on a bare area of the frame
  * brings the global set back, and a tap at a Look stop moves the slider to Custom first, seeded
- * from the Look it left. While the Look page is showing the status bar is held expanded. Sliding from Custom back to a Look applies it with an Undo-able notice. Done
+ * from the Look it left. While the Look page is showing the status bar is held expanded. Sliding from Custom back to a Look applies it; the unsaved Custom values stay for the way back. Done
  * at Custom saves the Custom look, so its stop comes back.</p>
  *
  * <p>Layout mode's bottom area carries what no Look sets: the Style toggle and the global Corners
@@ -250,6 +249,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The state at open: what Undo and Discard return to, and what "unsaved" is measured against. */
     @Nullable private AppearanceSnapshot mEntry;
     @Nullable private String mEntrySignature;
+    /** The Custom values of this session, kept while a Look is showing; null when they are the saved Custom. */
+    @Nullable private AppearanceSnapshot mSessionCustom;
     private int mEntryStop = AppearanceLooks.CUSTOM_STOP;
     /** The Look slider's stop. */
     private int mStop = AppearanceLooks.CUSTOM_STOP;
@@ -440,6 +441,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mOpen = true;
         mEntry = AppearanceSnapshot.capture(prefs);
         mEntrySignature = mEntry.signature();
+        mSessionCustom = null;
         mStop = matchingStop();
         mEntryStop = mStop;
         mTarget = null;
@@ -1560,9 +1562,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     // ------------------------------------------------------------------------------ the slider
 
     /**
-     * The Look slider landed on a stop. A Look applies at once; leaving Custom for one offers the
-     * Custom values back. Custom brings back the saved Custom look, or, with none saved, keeps the
-     * Look it was reached from as its seed.
+     * The Look slider landed on a stop. A Look applies at once; leaving Custom keeps the Custom
+     * values of this session, so returning to Custom brings them back even when Done has not
+     * saved them. With none kept, Custom brings back the saved Custom look, or, with none saved,
+     * keeps the Look it was reached from as its seed.
      */
     private void moveToStop(int stop) {
         TermuxAppSharedPreferences prefs = prefs();
@@ -1572,41 +1575,26 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         SurfacePresets.Preset look = AppearanceLooks.presetForStop(SurfacePresets.presets(), stop);
         mTarget = null;
         if (look != null) {
-            final AppearanceSnapshot replaced = leavingCustom ? AppearanceSnapshot.capture(prefs)
-                : null;
+            if (leavingCustom) {
+                SurfacePresets.Preset saved = SurfacePresets.custom(prefs);
+                mSessionCustom = saved != null && SurfacePresets.matches(prefs, saved)
+                    ? null : AppearanceSnapshot.capture(prefs);
+            }
             SurfacePresets.apply(prefs, look);
             mStop = stop;
             syncAfterBulkWrite();
-            if (replaced != null && !replaced.signature().equals(
-                    AppearanceSnapshot.signatureOf(prefs)))
-                offerCustomBack(replaced);
             return;
         }
-        SurfacePresets.Preset custom = SurfacePresets.custom(prefs);
-        if (custom != null)
-            SurfacePresets.apply(prefs, custom);
+        AppearanceSnapshot session = mSessionCustom;
+        if (session != null) {
+            session.restore(prefs);
+        } else {
+            SurfacePresets.Preset custom = SurfacePresets.custom(prefs);
+            if (custom != null)
+                SurfacePresets.apply(prefs, custom);
+        }
         mStop = AppearanceLooks.CUSTOM_STOP;
         syncAfterBulkWrite();
-    }
-
-    /** "Custom look replaced", with Undo putting the Custom values and the Custom stop back. */
-    private void offerCustomBack(@NonNull AppearanceSnapshot replaced) {
-        AppearanceEditorPanel panel = mPanel;
-        if (panel == null)
-            return;
-        Snackbar snackbar = Snackbar.make(panel.view(), R.string.appearance_editor_custom_replaced,
-            Snackbar.LENGTH_LONG);
-        snackbar.setAnchorView(panel.view());
-        snackbar.setAction(R.string.appearance_editor_undo, view -> {
-            TermuxAppSharedPreferences prefs = prefs();
-            if (!mOpen || prefs == null)
-                return;
-            replaced.restore(prefs);
-            mStop = AppearanceLooks.CUSTOM_STOP;
-            mTarget = null;
-            syncAfterBulkWrite();
-        });
-        snackbar.show();
     }
 
     // ---------------------------------------------------------------------------- the controls
@@ -2530,6 +2518,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null || mEntry == null)
             return;
         mEntry.restore(prefs);
+        mSessionCustom = null;
         mStop = mEntryStop;
         mTarget = null;
         syncAfterBulkWrite();
