@@ -22,7 +22,7 @@ public class ThemeLabelFaceTest
   private static final String PALETTE_GLYPH = new String(Character.toChars(0xF13B1));
 
   @Test
-  public void iconLabelsUseTheSymbolsFontAndTextUsesThePickedFont()
+  public void iconLabelsUseTheSymbolsFontAndTextUsesThePickedFont() throws Exception
   {
     Typeface picked = Typeface.SERIF;
     Typeface symbols = Typeface.MONOSPACE;
@@ -37,14 +37,14 @@ public class ThemeLabelFaceTest
   }
 
   @Test
-  public void withoutASymbolsFontIconsFollowTheLabelFont()
+  public void withoutASymbolsFontIconsFollowTheLabelFont() throws Exception
   {
     Typeface picked = Typeface.SERIF;
     Theme.Computed.Key key = computedSpaceBar(picked, null);
     assertSame(picked, key.label_paint(false, PALETTE_GLYPH, Color.WHITE, 10f).getTypeface());
   }
 
-  private static Theme.Computed.Key computedSpaceBar(Typeface labelFont, Typeface symbolFont)
+  private static Theme.Computed.Key computedSpaceBar(Typeface labelFont, Typeface symbolFont) throws Exception
   {
     Context context = RuntimeEnvironment.getApplication();
     Config.Builder builder = new Config.Builder(context.getResources(), new NoOpHandler());
