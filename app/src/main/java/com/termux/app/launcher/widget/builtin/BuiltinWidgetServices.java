@@ -33,6 +33,11 @@ public final class BuiltinWidgetServices {
         boolean openCommandWindow(@NonNull List<String> command, @Nullable String title);
         /** The terminal's monospace face, when one is loaded. */
         @Nullable android.graphics.Typeface monoTypeface();
+        /**
+         * A dialog with a text field is about to show the system keyboard. The activity gates
+         * keyboard insets; it has to hear this first or the keyboard's insets are ignored.
+         */
+        default void onSystemImeRequested() { }
     }
 
     /** A once-a-minute heartbeat, aligned to the system's minute tick. */

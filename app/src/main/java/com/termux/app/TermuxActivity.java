@@ -729,6 +729,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int REQUEST_CODE_VOICE_INPUT_MICROPHONE = 4717;
     /** The built-in agenda and calendar widgets asking to read the calendar. */
     private static final int REQUEST_CODE_WIDGET_CALENDAR = 4718;
+    /** Whether this process has already asked for the calendar once; see the widget host. */
+    private boolean mWidgetCalendarAsked;
     @Nullable private TerminalSession mVoiceTypingTargetSession;
     /** The on-device voice input in progress, from the voice key to its end; null between. */
     @Nullable private VoiceInputSession mVoiceInput;
@@ -20221,9 +20223,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 public com.termux.app.launcher.widget.builtin.BuiltinWidgetServices.Host builtinWidgetHost() {
                     return new com.termux.app.launcher.widget.builtin.BuiltinWidgetServices.Host() {
                         @Override public void requestCalendarPermission() {
+                            String permission = android.Manifest.permission.READ_CALENDAR;
+                            // Asked before and refused for good: the system shows nothing for a
+                            // second request, so the app's own settings page is the way in.
+                            if (mWidgetCalendarAsked
+                                && !androidx.core.app.ActivityCompat
+                                    .shouldShowRequestPermissionRationale(TermuxActivity.this, permission)) {
+                                openAppSettingsPage();
+                                return;
+                            }
+                            mWidgetCalendarAsked = true;
                             androidx.core.app.ActivityCompat.requestPermissions(TermuxActivity.this,
-                                new String[] {android.Manifest.permission.READ_CALENDAR},
-                                REQUEST_CODE_WIDGET_CALENDAR);
+                                new String[] {permission}, REQUEST_CODE_WIDGET_CALENDAR);
+                        }
+                        @Override public void onSystemImeRequested() {
+                            TermuxActivity.this.onSystemImeRequested();
                         }
                         @Override public boolean openCommandWindow(@NonNull java.util.List<String> command,
                                                                    @Nullable String title) {

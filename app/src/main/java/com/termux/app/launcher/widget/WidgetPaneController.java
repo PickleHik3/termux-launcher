@@ -578,6 +578,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             CharSequence title = pane.getResources().getString(
                 R.string.builtin_widget_settings_title,
                 kind == null ? builtin.builtinKind : pane.getResources().getString(kind.label));
+            builtins.services().host().onSystemImeRequested();
             BuiltinWidgetConfigSheet.show(pane.getContext(), title, builtins.configFields(builtin),
                 builtin.sizeOptions(), config -> {
                     if (widgets.updateBuiltinConfig(appWidgetId, config)) render();

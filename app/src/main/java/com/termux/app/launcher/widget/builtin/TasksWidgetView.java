@@ -240,6 +240,7 @@ public class TasksWidgetView extends BuiltinWidgetView implements MarkdownFileSo
         FrameLayout holder = new FrameLayout(context);
         holder.setPadding(pad, pad / 3, pad, 0);
         holder.addView(box);
+        services.host().onSystemImeRequested();
         AlertDialog dialog = new MaterialAlertDialogBuilder(context)
             .setTitle(R.string.bw_files_tasks_new_title)
             .setView(holder)
