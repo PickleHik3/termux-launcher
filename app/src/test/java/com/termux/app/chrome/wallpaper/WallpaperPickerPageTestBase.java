@@ -227,6 +227,29 @@ public abstract class WallpaperPickerPageTestBase {
     }
 
     @Test
+    public void thePageIsReadyOnlyOnceTheCentredCardStandsAtItsSize() {
+        // Waydroid: the page faded in before its cards were sized, empty but for "LH" (the two
+        // labels' first letters, in 1x1 cards' cells) at its edge.
+        WallpaperPickerPage page = new WallpaperPickerPage(mThemed, mSlots, mListener, () -> {}, null);
+        mActivity.setContentView(page.root());
+        boolean[] ready = {false};
+        page.whenReady(() -> ready[0] = true);
+        assertFalse("nothing is laid out yet", ready[0]);
+        assertNull("no card to grow the editor's frame out of", page.sharedCard());
+        settle();
+        assertTrue("ready once the cards are sized", ready[0]);
+        WallpaperPreviewView card = page.card(WallpaperSlots.Slot.HOME);
+        assertTrue("the centred card at its size", card != null && card.getWidth() > dp(40));
+        assertEquals("and that card is the shared one", card, page.sharedCard());
+        View cell = (View) card.getParent();
+        assertEquals(View.VISIBLE, cell.getVisibility());
+
+        boolean[] again = {false};
+        page.whenReady(() -> again[0] = true);
+        assertTrue("already ready: at once", again[0]);
+    }
+
+    @Test
     public void sameAsHomeShowsOnlyForLock() {
         WallpaperPickerPage page = open();
         page.centre(WallpaperSlots.Slot.LOCK);

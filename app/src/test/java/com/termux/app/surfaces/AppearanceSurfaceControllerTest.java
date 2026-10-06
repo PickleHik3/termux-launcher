@@ -70,6 +70,7 @@ public class AppearanceSurfaceControllerTest {
         @Override public void present(@NonNull EditorMode mode, @Nullable PaneWallPage place, @Nullable String section,
                                       float fromScale, float fromTranslationY, @Nullable Runnable onSettled) {
             calls.add("present " + mode.name().toLowerCase(java.util.Locale.ROOT));
+            if (refuse) return;
             presented = true;
             this.mode = mode;
             settled = onSettled;
@@ -119,6 +120,16 @@ public class AppearanceSurfaceControllerTest {
         @Override public void onStopWhileOpen() { calls.add("stop"); }
 
         @Nullable AppearanceSurfaceController.PageListener pageListener;
+        /** The editor cannot be presented (no preferences, no container). */
+        boolean refuse;
+        /** The launcher's container is never laid out in time. */
+        boolean frameFails;
+
+        @Override public void awaitFrame(@NonNull Runnable ready, @NonNull Runnable failed) {
+            calls.add("frame?");
+            if (frameFails) failed.run();
+            else ready.run();
+        }
 
         @Override public void setPageListener(@Nullable AppearanceSurfaceController.PageListener listener) {
             pageListener = listener;
@@ -319,10 +330,49 @@ public class AppearanceSurfaceControllerTest {
         View host = content.findViewById(R.id.appearance_surface_host);
         assertNotNull("one host view in the activity's content", host);
         assertSame("the Overview is its page", mHost.overview.root(), ((ViewGroup) host).getChildAt(0));
+        View coverBar = ((ViewGroup) host).getChildAt(((ViewGroup) host).getChildCount() - 1);
+        assertEquals("the cover's bar gave way to the page's own", View.INVISIBLE, coverBar.getVisibility());
+        assertNull("the cover is lifted", host.getBackground());
         assertEquals(1, mEditor.count("begin"));
         assertEquals(1, mHost.overview.page.shown);
         assertEquals("the editor's Done is the surface's", true, mEditor.onDone != null);
         assertFalse("nothing is presented before a hop", mEditor.presented);
+    }
+
+    @Test
+    public void theCoverCarriesTheSharedBarWhileTheOverviewLoads() {
+        // Waydroid: between Settings and the Overview one frame was bare colorSurface, read as
+        // black. The bar is on the cover from its first frame; the page arrives under it.
+        java.util.concurrent.atomic.AtomicReference<Consumer<AppearanceSurfaceController.OverviewPage>> pending =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        FakeHost slow = new FakeHost(mActivity) {
+            @Override public void createOverview(@NonNull AppearanceSurfaceController.Navigator navigator,
+                                                 @NonNull Consumer<AppearanceSurfaceController.OverviewPage> ready) {
+                mNavigator = navigator;
+                pending.set(ready);
+            }
+        };
+        AppearanceSurfaceController surface = new AppearanceSurfaceController(slow, mEditor);
+        surface.open(PageId.OVERVIEW);
+        ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
+        assertNotNull("covered at once", host.getBackground());
+        View bar = host.getChildAt(host.getChildCount() - 1);
+        assertEquals(View.VISIBLE, bar.getVisibility());
+        com.google.android.material.button.MaterialButton wallpaper =
+            bar.findViewById(R.id.appearance_page_mode_wallpaper);
+        assertTrue("the pill on Wallpaper", wallpaper.isChecked());
+
+        bar.findViewById(R.id.appearance_page_mode_look).performClick();
+        idle();
+        assertEquals("Look waits for the Overview", 0, mEditor.count("present look"));
+        assertTrue("and the pill stays where the page is", wallpaper.isChecked());
+
+        FakeOverview overview = new FakeOverview(mActivity);
+        pending.get().accept(overview);
+        assertSame("the page goes under the bar", overview.root(), host.getChildAt(0));
+        assertEquals("then the ordinary hop", 1, mEditor.count("present look"));
+        mEditor.settle();
+        assertEquals(PageId.LOOK, surface.shownPage());
     }
 
     @Test
@@ -876,7 +926,7 @@ public class AppearanceSurfaceControllerTest {
     // ------------------------------------------------------------ where the person left it
 
     @Test
-    public void doneOnLookIsRememberedAndTheNextOpenComesBackThroughTheOverview() {
+    public void doneOnLookIsRememberedAndTheNextOpenLandsOnItWithTheOverviewBeneath() {
         toLook();
         mEditor.describedTarget = "TERMINAL";
         mEditor.describedCustom = true;
@@ -896,21 +946,115 @@ public class AppearanceSurfaceControllerTest {
         mHost.now += 60_000L;
         mSurface.open(PageId.OVERVIEW);
         idle();
-        assertNotNull("the Overview opens first", mHost.overview);
-        assertEquals("then the normal hop into the remembered page", 2, mEditor.count("present look"));
+        // Waydroid: the Overview showed empty, then the Look sheet slid up over its Home card.
+        assertEquals("the remembered page is presented once, after the frame is laid out",
+            Arrays.asList("frame?", "present look"),
+            mEditor.calls.subList(mEditor.calls.lastIndexOf("frame?"), mEditor.calls.size()));
         assertNotNull(mEditor.restored);
         assertEquals("TERMINAL", mEditor.restored.target);
-        mEditor.settle();
-        assertEquals(PageId.LOOK, mSurface.shownPage());
+        assertNotNull("the Overview is built beneath it", mHost.overview);
+        assertEquals("and never shown", 0, mHost.overview.page.shown);
+        assertEquals(View.INVISIBLE, mHost.overview.root().getVisibility());
         ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
+        assertNotNull("covered until the editor stands", host.getBackground());
+        ViewGroup content = mActivity.findViewById(android.R.id.content);
+        assertSame("the cover is over everything the editor added", host,
+            content.getChildAt(content.getChildCount() - 1));
+        assertTrue("Back waits under the cover", mSurface.onBack());
+        assertEquals(0, mEditor.count("leave?"));
+
+        mEditor.settle();
+        idle();
+        assertEquals(PageId.LOOK, mSurface.shownPage());
+        assertNull("the cover lifts off the editor", host.getBackground());
+        assertFalse("taps go through to the editor", host.isClickable());
         View bar = host.getChildAt(host.getChildCount() - 1);
+        assertSame("the Overview stays under the bar", mHost.overview.root(), host.getChildAt(0));
         assertEquals("not a direct open: Wallpaper is offered", View.VISIBLE,
             bar.findViewById(R.id.appearance_page_mode_wallpaper).getVisibility());
+        assertTrue(((com.google.android.material.button.MaterialButton)
+            bar.findViewById(R.id.appearance_page_mode_look)).isChecked());
         mSurface.onBack();
         mEditor.finishHide();
         idle();
         assertTrue("Back goes to the Overview, not out", mSurface.isOpen());
         assertEquals(PageId.OVERVIEW, mSurface.shownPage());
+        assertEquals(View.VISIBLE, mHost.overview.root().getVisibility());
+        assertEquals("the Overview's rows are back", 1f, mHost.overview.background, 0f);
+    }
+
+    @Test
+    public void anOverviewDoorOpensOnTheRememberedEditorPageOnly() {
+        assertEquals(PageId.OVERVIEW, AppearanceSurfaceController.openingPage(null));
+        long now = mHost.now;
+        assertEquals(PageId.OVERVIEW, AppearanceSurfaceController.openingPage(
+            new AppearanceReturnState.Builder(PageId.OVERVIEW).wallpaperSlot("LOCK").build(now)));
+        assertEquals(PageId.LOOK, AppearanceSurfaceController.openingPage(
+            new AppearanceReturnState.Builder(PageId.LOOK).build(now)));
+        assertEquals(PageId.LAYOUT, AppearanceSurfaceController.openingPage(
+            new AppearanceReturnState.Builder(PageId.LAYOUT).place("WIDGETS").build(now)));
+        assertEquals(PageId.ICONS, AppearanceSurfaceController.openingPage(
+            new AppearanceReturnState.Builder(PageId.ICONS).iconsScroll(40).build(now)));
+    }
+
+    private void rememberLayout() {
+        mHost.stored = new AppearanceReturnState.Builder(PageId.LAYOUT).place("WIDGETS")
+            .wallpaperSlot("HOME").build(mHost.now).serialize();
+        mHost.now += 60_000L;
+    }
+
+    @Test
+    public void anEditorThatCannotBePresentedGivesWayToTheOverview() {
+        rememberLayout();
+        mEditor.refuse = true;
+        mSurface.open(PageId.OVERVIEW);
+        idle();
+        assertEquals(1, mEditor.count("present layout"));
+        assertEquals("the Overview opens instead", PageId.OVERVIEW, mSurface.shownPage());
+        assertEquals(View.VISIBLE, mHost.overview.root().getVisibility());
+        assertEquals(1, mHost.overview.page.shown);
+        ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
+        assertNull("nothing left covered", host.getBackground());
+        assertTrue("the Overview takes its touches", host.isClickable());
+        assertNull("the memory is not handed to a later presentation", mEditor.restored);
+    }
+
+    @Test
+    public void aContainerNeverLaidOutGivesWayToTheOverview() {
+        rememberLayout();
+        mEditor.frameFails = true;
+        mSurface.open(PageId.OVERVIEW);
+        idle();
+        assertEquals("never presented from a zero-size frame", 0, mEditor.count("present layout"));
+        assertEquals(PageId.OVERVIEW, mSurface.shownPage());
+        assertEquals(View.VISIBLE, mHost.overview.root().getVisibility());
+        assertNull(((View) mActivity.findViewById(R.id.appearance_surface_host)).getBackground());
+    }
+
+    @Test
+    public void anEditorThatNeverSettlesIsUncoveredByTheBackstop() {
+        rememberLayout();
+        mSurface.open(PageId.OVERVIEW);
+        idle();
+        assertEquals(1, mEditor.count("present layout"));
+        ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
+        assertNotNull(host.getBackground());
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(
+            AppearanceSurfaceController.RESTORE_BACKSTOP_MS + 100L));
+        assertNull("the cover never stays up", host.getBackground());
+        assertEquals(PageId.LAYOUT, mSurface.shownPage());
+        mSurface.onBack();
+        assertEquals("Back works again", 1, mEditor.count("leave?"));
+    }
+
+    @Test
+    public void homeWhileTheRememberedPageOpensKeepsTheMemory() {
+        rememberLayout();
+        String stored = mHost.stored;
+        mSurface.open(PageId.OVERVIEW);
+        mSurface.requestExit();
+        assertFalse(mSurface.isOpen());
+        assertEquals("what is remembered stays as it was", stored, mHost.stored);
     }
 
     @Test

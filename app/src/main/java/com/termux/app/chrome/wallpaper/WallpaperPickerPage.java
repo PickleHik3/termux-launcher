@@ -12,6 +12,7 @@ import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -324,6 +325,14 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     /** Closed for Photo…: the host brings the page back, pending photos and all. */
     private boolean mHandedOff;
     private final WallpaperPreviewView[] mCards = new WallpaperPreviewView[2];
+    /**
+     * Per pager position: the card's picture has arrived, or there is none to wait for (no file,
+     * a decode that failed). A card that holds its placeholder glyph only while it loads.
+     */
+    private final boolean[] mPictureSettled = new boolean[2];
+    /** What {@link #whenReady} runs once the centred card can draw; null when nothing waits. */
+    @Nullable private Runnable mWhenReady;
+    @Nullable private ViewTreeObserver.OnGlobalLayoutListener mReadyListener;
     private int mCardW;
     private int mCardH;
     /** Strip thumbnail size: shrunk to fit the row once its width is known ({@link #fitStripThumbs}). */
@@ -463,13 +472,62 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mShown = false;
     }
 
+    /**
+     * The centred card once it stands at its real size. Before the cards are sized they are bound
+     * at 1x1 px, and a hop that grew the launcher's frame out of that rect started it at a
+     * thousandth of its size; null then, and the frame grows from full size instead.
+     */
     @Nullable
     @Override
     public View sharedCard() {
         WallpaperPreviewView card = mCards[mCentred == WallpaperSlots.Slot.LOCK ? POS_LOCK : POS_HOME];
         if (card == null) card = mCards[POS_HOME];
         if (card == null) card = mCards[POS_LOCK];
-        return card != null && card.getWidth() > 0 ? card : null;
+        return card != null && isSized(card) ? card : null;
+    }
+
+    private boolean isSized(@NonNull View card) {
+        return mCardW > 0 && card.getWidth() == mCardW && card.getHeight() == mCardH;
+    }
+
+    /**
+     * Runs {@code ready} once the centred card stands at its size with its picture (or with
+     * nothing to load): the first layout pass binds the cards before they are sized, and a page
+     * shown then is empty. Runs at once when it already can; the surface bounds the wait.
+     */
+    @Override
+    public void whenReady(@NonNull Runnable ready) {
+        if (mReleased) return;
+        mWhenReady = ready;
+        if (checkReady()) return;
+        if (mReadyListener == null) {
+            mReadyListener = this::checkReady;
+            mPager.getViewTreeObserver().addOnGlobalLayoutListener(mReadyListener);
+        }
+    }
+
+    /** Runs the waiting {@link #whenReady} when the centred card can draw. Never inside a layout pass's bind. */
+    private boolean checkReady() {
+        Runnable ready = mWhenReady;
+        if (mReleased || ready == null) {
+            dropReadyListener();
+            return false;
+        }
+        int pos = mCentred == WallpaperSlots.Slot.LOCK ? POS_LOCK : POS_HOME;
+        WallpaperPreviewView card = mCards[pos];
+        if (card == null || !isSized(card) || !mPictureSettled[pos]) return false;
+        mWhenReady = null;
+        dropReadyListener();
+        ready.run();
+        return true;
+    }
+
+    private void dropReadyListener() {
+        ViewTreeObserver.OnGlobalLayoutListener listener = mReadyListener;
+        mReadyListener = null;
+        if (listener == null) return;
+        ViewTreeObserver observer = mPager.getViewTreeObserver();
+        if (observer.isAlive()) observer.removeOnGlobalLayoutListener(listener);
     }
 
     @NonNull
@@ -708,6 +766,8 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         if (mReleased) return;
         mReleased = true;
         mShown = false;
+        mWhenReady = null;
+        dropReadyListener();
         for (WallpaperPreviewView card : mCards) {
             if (card == null) continue;
             card.show(null, false);
@@ -803,6 +863,10 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             int itemW = Math.max(1, mCardW + 2 * dp(CARD_GAP_DP / 2));
             holder.itemView.setLayoutParams(new RecyclerView.LayoutParams(itemW,
                 ViewGroup.LayoutParams.MATCH_PARENT));
+            // The first layout pass binds the cells before the pager's width is known: a 1x1 card
+            // under a 12dp-wide label, which showed as the labels' first letters ("LH") at the
+            // page's edge. Nothing shows until sizeCards binds the cells again at their size.
+            holder.itemView.setVisibility(mCardW > 0 ? View.VISIBLE : View.INVISIBLE);
             LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) holder.card.getLayoutParams();
             lp.width = Math.max(1, mCardW);
             lp.height = Math.max(1, mCardH);
@@ -853,6 +917,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         }
         // Nothing else a slot can hold has a picture here: an empty card.
         card.show(null, true);
+        mPictureSettled[position] = true;
     }
 
     /** A photo card: its picture centre-cropped, as the system shows it; the photo glyph while it loads. */
@@ -861,11 +926,15 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         final File file = c.photoFile;
         Bitmap still = file == null || mCardW <= 0 ? null : mThumbs.cachedPhoto(file, mCardW, mCardH);
         card.show(still, true);
+        mPictureSettled[position] = file == null || still != null;
         if (file == null || still != null || mCardW <= 0 || mCardH <= 0) return;
         mThumbs.requestPhoto(file, mCardW, mCardH, bmp -> {
             if (mReleased || mCards[position] != card) return;
             WallpaperSlots.Choice now = shown(slot);
             if (now.photo && now.photoFile != null && now.photoFile.equals(file)) card.setStill(bmp);
+            // Answered, with a picture or without one: the card draws what it will draw.
+            mPictureSettled[position] = true;
+            checkReady();
         });
     }
 

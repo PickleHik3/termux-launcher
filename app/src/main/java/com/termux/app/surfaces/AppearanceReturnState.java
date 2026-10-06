@@ -17,9 +17,9 @@ import org.json.JSONObject;
  *
  * <p>The surface writes it to preferences whenever the person leaves (Done, Back out of the
  * surface, Home) and reads it on the next Overview open. Within Settings' own window
- * ({@link SettingsBackStackState#RETAIN_WINDOW_MS}) the Overview opens on the remembered card
- * and the remembered page is queued behind it, so the surface arrives there through its normal
- * hop; after the window, or with nothing readable, it opens as it always has. Nothing transient
+ * ({@link SettingsBackStackState#RETAIN_WINDOW_MS}) the surface opens straight onto the
+ * remembered page, with the Overview built on the remembered card beneath it as its Back target;
+ * after the window, or with nothing readable, it opens as it always has. Nothing transient
  * is kept: no popup, dialog or unsaved edit, since every leave has committed or discarded them.
  * Preferences survive the launcher being killed, which a home screen is, often.</p>
  *
