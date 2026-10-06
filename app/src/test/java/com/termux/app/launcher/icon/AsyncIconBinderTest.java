@@ -350,6 +350,51 @@ public class AsyncIconBinderTest {
         assertEquals(AsyncIconBinder.MAX_PREFETCH, renderer.rendered.size());
     }
 
+    // ------------------------------------------------------------------ the owner going away
+
+    /**
+     * The owner's window went away: nothing it queued is rendered meanwhile. When it returns, the
+     * renders still wanted are queued again, so no cell is left showing a tile; the rest are
+     * forgotten.
+     */
+    @Test
+    public void cancelAll_parksQueuedRenders_andResumeAllRunsOnlyTheOnesStillWanted() {
+        Drawable a = icon();
+        renderer.renders.put(entry("a").appRef.stableId(), a);
+        renderer.renders.put(entry("b").appRef.stableId(), icon());
+        ImageView stillWaiting = detachedView();
+        ImageView releasedMeanwhile = detachedView();
+        binder.bind(stillWaiting, entry("a"), SIZE, null);
+        binder.bind(releasedMeanwhile, entry("b"), SIZE, null);
+
+        binder.cancelAll();
+        runWorkerThenMain();
+        assertTrue("a parked render must not run", renderer.rendered.isEmpty());
+        assertEquals(2, binder.pendingCount());
+
+        AsyncIconBinder.cancel(releasedMeanwhile);
+        binder.resumeAll();
+        runWorkerThenMain();
+
+        assertEquals(Arrays.asList(entry("a").appRef.stableId()), renderer.rendered);
+        assertSame(a, stillWaiting.getDrawable());
+        assertEquals(0, binder.pendingCount());
+    }
+
+    @Test
+    public void cancelAll_dropsPrefetches_andRefusesNewOnesUntilResumed() {
+        binder.prefetch(Arrays.asList(entry("a")), SIZE);
+        binder.cancelAll();
+        binder.prefetch(Arrays.asList(entry("b")), SIZE);
+        worker.drain();
+        assertTrue(renderer.rendered.isEmpty());
+
+        binder.resumeAll();
+        binder.prefetch(Arrays.asList(entry("c")), SIZE);
+        worker.drain();
+        assertEquals(Arrays.asList(entry("c").appRef.stableId()), renderer.rendered);
+    }
+
     // ------------------------------------------------------------------ the test seam
 
     /** What JVM tests of cells rely on: a miss renders inline and binds at once, no tile. */

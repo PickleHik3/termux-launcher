@@ -267,8 +267,10 @@ public final class SuggestionBarView extends GridLayout
         entry -> LauncherAppDataProvider.getInstance(getContext()).icons().artwork(entry));
     /**
      * Binds the dock's and the drawer's icons without rendering on the main thread: an icon the
-     * cache holds binds at once, a missing one is rendered on the catalogue's worker — into the
-     * same budgeted caches — and fades in over a quiet tile. See {@link AsyncIconBinder}.
+     * cache holds binds at once, a missing one is rendered on the icon thread — into the same
+     * budgeted caches — and fades in over a quiet tile. See {@link AsyncIconBinder}. Only this
+     * view holds the binder; what it queues reaches it, and through it this view and the cache,
+     * weakly.
      */
     private final AsyncIconBinder iconBinder = new AsyncIconBinder(
         new AsyncIconBinder.Renderer() {
@@ -282,7 +284,7 @@ public final class SuggestionBarView extends GridLayout
                 return iconCache.icon(entry, sizePx);
             }
         },
-        command -> LauncherAppDataProvider.getInstance(getContext()).worker().execute(command),
+        AsyncIconBinder.sharedWorker(),
         AsyncIconBinder.mainThreadExecutor(),
         this::iconTileColor);
     /** Visible alpha bounds per drawable; avoids rescanning custom/icon-pack artwork on every drag event. */
@@ -733,6 +735,8 @@ public final class SuggestionBarView extends GridLayout
             }
         }
         attachNotificationBadgeListener();
+        // Renders parked while the window was away, for cells still waiting on them.
+        iconBinder.resumeAll();
         if (configRepository != null) configRepository.addListener(configListener);
         LauncherAppDataProvider.getInstance(getContext()).addIconArtworkListener(iconArtworkListener);
         // A catalogue swap can land on a detached row; re-render on the way back in, since the
@@ -759,6 +763,8 @@ public final class SuggestionBarView extends GridLayout
         if (configRepository != null) configRepository.removeListener(configListener);
         LauncherAppDataProvider existing = LauncherAppDataProvider.peekInstance();
         if (existing != null) existing.removeIconArtworkListener(iconArtworkListener);
+        // Nothing is rendered, or kept queued, for a window that has gone.
+        iconBinder.cancelAll();
     }
 
     @Override

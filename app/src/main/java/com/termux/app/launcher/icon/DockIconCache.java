@@ -37,7 +37,7 @@ import com.termux.app.launcher.model.LauncherAppEntry;
  * <p>Hot path: {@link #icon} allocates nothing on a hit beyond the key string.
  *
  * <p>Threads: {@link #peek} is for the main thread, which binds what is already held and nothing
- * else; {@link #icon} may run on the launcher's worker, which is where a miss is rendered (see
+ * else; {@link #icon} may run on the icon thread, which is where a miss is rendered (see
  * {@link AsyncIconBinder}). The cache is an {@link LruCache} and synchronised on its own, and a
  * render that started before an invalidation or an icon-pack switch is dropped instead of stored,
  * so the worker can never put back what the main thread just threw away.
