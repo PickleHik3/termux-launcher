@@ -12,9 +12,11 @@ import org.json.JSONObject;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -82,12 +84,29 @@ public final class TaiSpeechModels {
      * The model voice input uses: the VOICE_TYPING function's resolution ({@link TaiFunctionModels}:
      * the pick, else the tier's Automatic, else its chain), and when none of those is installed the
      * first installed speech model, as {@link #chooseActive} has always done.
+     *
+     * <p>The voice key asks twice per tap, on the main thread, and an answer from scratch parses
+     * the download and model records, stats every model and validates MNN packages. So the last
+     * answer is kept with a {@link ResolveStamp} of everything it was derived from and reused
+     * while that stamp still matches.
      */
     @Nullable
     public static TaiModelSpec resolveActive(@NonNull Context context) {
         Context app = context.getApplicationContext();
+        Resolved last = sResolved;
+        // Taken before resolving, so a change made meanwhile shows as a mismatch next time.
+        ResolveStamp stamp = ResolveStamp.of(app);
+        if (last != null && last.stamp.equals(stamp) && last.models.equals(ModelFiles.of(last.installed)))
+            return last.spec;
         TaiModelStore store = new TaiModelStore(app);
         List<TaiModelSpec> installed = installed(store);
+        TaiModelSpec spec = resolveActive(app, installed);
+        sResolved = new Resolved(stamp, installed, ModelFiles.of(installed), spec);
+        return spec;
+    }
+
+    @Nullable
+    private static TaiModelSpec resolveActive(@NonNull Context app, @NonNull List<TaiModelSpec> installed) {
         String resolved = TaiFunctionModels.forContext(app).resolve(TaiFunction.VOICE_TYPING).modelId;
         if (resolved != null) {
             for (TaiModelSpec spec : installed) {
@@ -95,6 +114,118 @@ public final class TaiSpeechModels {
             }
         }
         return chooseActive(new TaiSettings(app).getSttModelId(), installed);
+    }
+
+    /** {@link #resolveActive(Context)}'s last answer and what it was derived from. */
+    @Nullable private static volatile Resolved sResolved;
+
+    private static final class Resolved {
+        final ResolveStamp stamp;
+        final List<TaiModelSpec> installed;
+        final ModelFiles models;
+        @Nullable final TaiModelSpec spec;
+
+        Resolved(ResolveStamp stamp, List<TaiModelSpec> installed, ModelFiles models, @Nullable TaiModelSpec spec) {
+            this.stamp = stamp;
+            this.installed = installed;
+            this.models = models;
+            this.spec = spec;
+        }
+    }
+
+    /**
+     * Everything the voice-typing answer depends on besides the model files themselves: both AI
+     * preference stores in full (the pick, the stored model, the tier override, the download and
+     * model records, capability overrides), the phone's language (it picks the English-only
+     * Whisper) and the models directory with each model folder in it. The preference snapshots
+     * are shallow copies whose unchanged values are the very same objects, so comparing them is
+     * a pass of identity checks; they are read from memory, so a write is seen the moment it is
+     * made, on any thread.
+     */
+    static final class ResolveStamp {
+        private final Map<String, ?> settings;
+        private final Map<String, ?> store;
+        private final String language;
+        private final Map<String, Long> modelDirectories;
+
+        ResolveStamp(Map<String, ?> settings, Map<String, ?> store, String language,
+                     Map<String, Long> modelDirectories) {
+            this.settings = settings;
+            this.store = store;
+            this.language = language;
+            this.modelDirectories = modelDirectories;
+        }
+
+        static ResolveStamp of(@NonNull Context app) {
+            return new ResolveStamp(
+                app.getSharedPreferences(TaiSettings.PREFS_NAME, Context.MODE_PRIVATE).getAll(),
+                app.getSharedPreferences(TaiModelStore.PREFS_NAME, Context.MODE_PRIVATE).getAll(),
+                Locale.getDefault().getLanguage(),
+                directoryStamps(new File(app.getFilesDir(), "tai/models")));
+        }
+
+        /** The directory's own time and each child's, so a model folder gaining or losing a file shows. */
+        static Map<String, Long> directoryStamps(@NonNull File directory) {
+            LinkedHashMap<String, Long> stamps = new LinkedHashMap<>();
+            stamps.put("", directory.lastModified());
+            File[] children = directory.listFiles();
+            if (children != null) {
+                for (File child : children) stamps.put(child.getName(), child.lastModified());
+            }
+            return stamps;
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            if (!(other instanceof ResolveStamp)) return false;
+            ResolveStamp that = (ResolveStamp) other;
+            return language.equals(that.language) && modelDirectories.equals(that.modelDirectories)
+                && settings.equals(that.settings) && store.equals(that.store);
+        }
+
+        @Override
+        public int hashCode() {
+            return language.hashCode() * 31 + modelDirectories.hashCode();
+        }
+    }
+
+    /**
+     * Each installed speech model's file and the folder it sits in, for models that live outside
+     * the models directory (imports) as well as inside it. A model whose file is deleted or
+     * replaced, or whose sidecars change, no longer matches.
+     */
+    static final class ModelFiles {
+        private final List<Long> stamps;
+
+        private ModelFiles(List<Long> stamps) {
+            this.stamps = stamps;
+        }
+
+        static ModelFiles of(@NonNull Collection<TaiModelSpec> installed) {
+            List<Long> stamps = new ArrayList<>();
+            for (TaiModelSpec spec : installed) {
+                File file = spec.localPath == null ? null : new File(spec.localPath);
+                if (file == null) {
+                    stamps.add(-1L);
+                    continue;
+                }
+                stamps.add(file.exists() ? file.lastModified() : -1L);
+                stamps.add(file.length());
+                File parent = file.getParentFile();
+                stamps.add(parent == null ? -1L : parent.lastModified());
+            }
+            return new ModelFiles(Collections.unmodifiableList(stamps));
+        }
+
+        @Override
+        public boolean equals(Object other) {
+            return other instanceof ModelFiles && stamps.equals(((ModelFiles) other).stamps);
+        }
+
+        @Override
+        public int hashCode() {
+            return stamps.hashCode();
+        }
     }
 
     /** {@link #resolveActive(Context)}'s id, or empty when no speech model is installed. */
