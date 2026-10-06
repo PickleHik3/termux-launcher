@@ -28,6 +28,8 @@ import java.io.File;
 public final class WallpaperPictureReader {
 
     private static final String LOG_TAG = "WallpaperPictureReader";
+    /** Not a wallpaper id Android issues: "ask for it". */
+    private static final int UNKNOWN_WALLPAPER_ID = Integer.MIN_VALUE;
 
     private WallpaperPictureReader() {
     }
@@ -40,6 +42,19 @@ public final class WallpaperPictureReader {
     @NonNull
     public static WallpaperPicture read(@NonNull Context context,
                                         @Nullable TermuxAppSharedPreferences preferences) {
+        return read(context, preferences, UNKNOWN_WALLPAPER_ID);
+    }
+
+    /**
+     * {@link #read(Context, TermuxAppSharedPreferences)} for a caller that has just read the system
+     * wallpaper id itself, so the same answer is not asked of Android twice in one breath.
+     *
+     * @param currentSystemWallpaperId the id as the caller read it, -1 when that read failed
+     */
+    @NonNull
+    public static WallpaperPicture read(@NonNull Context context,
+                                        @Nullable TermuxAppSharedPreferences preferences,
+                                        int currentSystemWallpaperId) {
         WallpaperManager manager;
         try {
             manager = WallpaperManager.getInstance(context);
@@ -49,7 +64,9 @@ public final class WallpaperPictureReader {
         }
         boolean serviceRunning = serviceRunning(manager);
         int storedId = preferences == null ? 0 : preferences.getManagedWallpaperSystemId();
-        boolean launcherSet = serviceRunning && storedId > 0 && storedId == currentWallpaperId(manager);
+        boolean launcherSet = serviceRunning && storedId > 0
+            && storedId == (currentSystemWallpaperId == UNKNOWN_WALLPAPER_ID
+                ? currentWallpaperId(manager) : currentSystemWallpaperId);
         boolean stillFileExists = serviceRunning && !launcherSet && stillFileExists(manager);
         return WallpaperPicturePolicy.resolve(serviceRunning, launcherSet, stillFileExists);
     }

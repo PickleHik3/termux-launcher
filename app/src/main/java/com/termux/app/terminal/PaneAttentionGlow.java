@@ -43,6 +43,12 @@ final class PaneAttentionGlow extends Drawable {
     private int mAlpha = 255;
     @Nullable private ValueAnimator mAnimator;
     private boolean mPulsing;
+    /**
+     * True while the page this pane is on is parked off screen. The wall keeps the Terminal page
+     * VISIBLE at alpha 0 there (PaneWallLayout), so {@link #setVisible} never hears it leave and an
+     * INFINITE pulse would run unseen for as long as another place rests in front.
+     */
+    private boolean mHeld;
 
     PaneAttentionGlow(float density, float radiusPx, int colour) {
         mRadiusPx = radiusPx;
@@ -60,8 +66,27 @@ final class PaneAttentionGlow extends Drawable {
         else stopPulse();
     }
 
+    /**
+     * Pause the pulse while the pane's page is off screen ({@code held}), and resume it when the
+     * page is back. Nothing shows either way: the page is at alpha 0 while held.
+     */
+    void setHeld(boolean held) {
+        if (mHeld == held) return;
+        mHeld = held;
+        if (!mPulsing) return;
+        if (held) cancelPulseAnimator();
+        else if (isVisible()) startPulse();
+    }
+
+    private void cancelPulseAnimator() {
+        if (mAnimator != null) {
+            mAnimator.cancel();
+            mAnimator = null;
+        }
+    }
+
     private void startPulse() {
-        if (mAnimator != null) return;
+        if (mAnimator != null || mHeld) return;
         ValueAnimator a = ValueAnimator.ofFloat(DIM, 1f);
         a.setDuration(PULSE_PERIOD_MS / 2L);
         a.setInterpolator(new AccelerateDecelerateInterpolator());
@@ -90,10 +115,7 @@ final class PaneAttentionGlow extends Drawable {
         boolean changed = super.setVisible(visible, restart);
         if (mPulsing) {
             if (visible) startPulse();
-            else if (mAnimator != null) {
-                mAnimator.cancel();
-                mAnimator = null;
-            }
+            else cancelPulseAnimator();
         }
         return changed;
     }

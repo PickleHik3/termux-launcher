@@ -309,6 +309,11 @@ public class TerminalPaneController {
     private final List<Window> mWindows = new ArrayList<>();
     /** Cached pane frames + terminal views, keyed by shell session (reused across re-renders). */
     private final Map<TerminalSession, PaneContentFrame> mPaneFrames = new HashMap<>();
+    /**
+     * Each frame's glass view, kept beside {@link #mPaneFrames} (and with the same keys) so the
+     * per-frame re-aim of a slide does not look it up in every pane.
+     */
+    private final Map<TerminalSession, PaneGlassBackdropView> mPaneGlassViews = new HashMap<>();
     private final Map<TerminalSession, TerminalView> mPaneViews = new HashMap<>();
     /** Live border drawable + focus state per pane, so a focus flip can crossfade and a
      *  redundant re-render can leave a mid-flight crossfade untouched instead of snapping it. */
@@ -3089,8 +3094,7 @@ public class TerminalPaneController {
      * nothing but invalidate, so a slide costs no allocation here.
      */
     public void invalidatePaneGlassPositions() {
-        for (FrameLayout frame : mPaneFrames.values()) {
-            PaneGlassBackdropView backdrop = frame.findViewById(R.id.terminal_pane_glass);
+        for (PaneGlassBackdropView backdrop : mPaneGlassViews.values()) {
             if (backdrop != null && backdrop.getVisibility() == View.VISIBLE)
                 backdrop.invalidateGlassPosition();
         }
@@ -3246,8 +3250,10 @@ public class TerminalPaneController {
             mHost.configureAttachedPaneView(view, session);
             mPaneFrames.put(session, frame);
             mPaneViews.put(session, view);
+            PaneGlassBackdropView glass = frame.findViewById(R.id.terminal_pane_glass);
+            if (glass != null) mPaneGlassViews.put(session, glass);
             (view).setTouchMouseMode(mTouchMouseMode);
-            PaneGlass.followLayout(frame.findViewById(R.id.terminal_pane_glass));
+            PaneGlass.followLayout(glass);
             applyPaneGlass();
         } else {
             // A cached frame may still carry a half-finished entry animation's alpha/scale.
@@ -3301,6 +3307,7 @@ public class TerminalPaneController {
     private void detachPaneView(TerminalSession session) {
         PaneRim rim = mBorderStates.remove(session);
         FrameLayout frame = mPaneFrames.remove(session);
+        mPaneGlassViews.remove(session);
         if (rim != null && frame != null) rim.clear(frame);
         else if (rim != null) rim.cancel();
         releasePanePlank(frame);
@@ -3378,6 +3385,8 @@ public class TerminalPaneController {
             }
         }
         applyCursorOwnership();
+        // A glow made while the page is parked off screen starts held, not pulsing unseen.
+        applyAttentionHold();
         // The float handle pill dims with focus like the pane borders do.
         for (FloatingPaneContainer container : mFloatContainers.values()) container.invalidate();
     }
@@ -3400,9 +3409,43 @@ public class TerminalPaneController {
         mPaneAttention.retain(livePaneIds);
     }
 
+    /** Whether the terminal's page is parked off screen; see {@link #setTerminalOffScreen}. */
+    private boolean mTerminalOffScreen;
+
+    /**
+     * The wall parked the terminal's page off screen, or brought it back. The page stays VISIBLE at
+     * alpha 0 while parked, so an attention glow's pulse would keep running unseen: it is held
+     * until the page is back.
+     */
+    public void setTerminalOffScreen(boolean offScreen) {
+        if (mTerminalOffScreen == offScreen) return;
+        mTerminalOffScreen = offScreen;
+        applyAttentionHold();
+    }
+
+    private void applyAttentionHold() {
+        for (PaneContentFrame frame : mPaneFrames.values()) {
+            android.graphics.drawable.Drawable foreground = frame.getForeground();
+            if (foreground instanceof PaneAttentionGlow)
+                ((PaneAttentionGlow) foreground).setHeld(mTerminalOffScreen);
+        }
+    }
+
     /** The terminal place came back into view: a pane that asked while it was away is now focused. */
     public void onTerminalPlaceShown() {
         updateActiveBorders();
+    }
+
+    /**
+     * The per-frame half of {@link #onTerminalPlaceShown}, for a wall in motion: the focused pane's
+     * request is acknowledged under the same rule {@link #updateActiveBorders} applies, and the
+     * attention listener re-dresses the borders when that drops one. Nothing is allocated and no
+     * border is touched while nothing was asked.
+     */
+    public void acknowledgeActivePaneAttention() {
+        TerminalSession activeSession = getActiveSession();
+        if (activeSession != null && mHost.isTerminalPlaceOnScreen())
+            mPaneAttention.clear(activeSession.getPid());
     }
 
     private void repaintAttentionBorders() {
