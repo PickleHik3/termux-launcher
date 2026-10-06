@@ -247,6 +247,21 @@ public final class ChromeRenderer {
     private final Runnable mCommitRunnable = this::commit;
     private final ViewTreeObserver.OnPreDrawListener mCommitPreDrawListener = this::commitBeforeDraw;
 
+    /**
+     * The root view until its first frame draws; null before the first request found it and
+     * after that frame. While it is set, top-pane frost passes after the first are held for that
+     * frame's pre-draw — see {@link #holdFrostForFirstFrame()}.
+     */
+    @Nullable private View mFirstFrameGate;
+    /** True once the root has drawn a frame (or was already attached when first seen). */
+    private boolean mFirstFrameDrawn;
+    /** Whether a top-pane frost pass has run yet. */
+    private boolean mFrostRanOnce;
+    /** A top-pane frost pass was asked for before the first frame and waits for its pre-draw. */
+    private boolean mFrostHeld;
+    private final ViewTreeObserver.OnPreDrawListener mFirstFramePreDrawListener =
+        this::onFirstFramePreDraw;
+
     private final Runnable mRenderSyncRunnable;
     private final Runnable mBlurHeartbeatRunnable;
     private final Runnable mBlurRecoveryRunnable;
@@ -436,6 +451,7 @@ public final class ChromeRenderer {
     }
 
     private void sync(int scopes) {
+        armFirstFrameGate();
         noteChromeShade();
         if ((scopes & SCOPE_WALLPAPER_BLUR_CACHE) != 0) {
             mBlurCache.clear();
@@ -452,13 +468,8 @@ public final class ChromeRenderer {
         if ((scopes & SCOPE_APPLY_THIS_FRAME) != 0) {
             scheduleCommit();
         }
-        if ((scopes & SCOPE_TOP_PANE_FROST) != 0) {
-            Trace.beginSection("Frost.updateTopPane");
-            try {
-                mFrost.updateTopPane();
-            } finally {
-                Trace.endSection();
-            }
+        if ((scopes & SCOPE_TOP_PANE_FROST) != 0 && !holdFrostForFirstFrame()) {
+            runTopPaneFrost();
         }
         if ((scopes & SCOPE_ACCESSORY_RENDER) != 0) {
             if (mRenderSyncRunning) {
@@ -501,6 +512,94 @@ public final class ChromeRenderer {
             }
         }
         ChromeShade.note(measured ? mInk.polarity() : ChromeShade.polarityOf(base), base);
+    }
+
+    private void runTopPaneFrost() {
+        mFrostRanOnce = true;
+        Trace.beginSection("Frost.updateTopPane");
+        try {
+            mFrost.updateTopPane();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    // ------------------------------------------------------- first-frame frost hold
+
+    /**
+     * Watches the root for its first frame, from the first request onwards. A root already
+     * attached when first seen may have drawn already, so nothing is held for it.
+     */
+    private void armFirstFrameGate() {
+        if (mFirstFrameDrawn || mFirstFrameGate != null) return;
+        View gate = mSurfaces.findChromeView(R.id.activity_termux_root_view);
+        if (gate == null) return;
+        if (gate.isAttachedToWindow()) {
+            mFirstFrameDrawn = true;
+            return;
+        }
+        // A detached view hands out its floating observer, which the window adopts on attach.
+        gate.getViewTreeObserver().addOnPreDrawListener(mFirstFramePreDrawListener);
+        mFirstFrameGate = gate;
+    }
+
+    /**
+     * Whether this top-pane frost pass waits for the first frame's pre-draw instead of running now.
+     *
+     * <p>A cold start asked for the pass from onCreate, onStart, both onResumes and every apply
+     * before anything was drawn — 6 to 19 ms each on Pong, nine of them ahead of the first frame,
+     * and every one before the first layout cut its frost against views that had no size yet.
+     * Nobody sees any of them until that frame draws, so the passes after the first are folded into
+     * one, run in that frame's pre-draw against settled layout. The first still runs at once: it is
+     * what asks the blur worker for the frames the backdrop, the gutter and the panes need, and
+     * those take long enough that asking late would show later.</p>
+     */
+    private boolean holdFrostForFirstFrame() {
+        if (mFirstFrameDrawn || mFirstFrameGate == null || !mFrostRanOnce) return false;
+        mFrostHeld = true;
+        return true;
+    }
+
+    /**
+     * The first frame's pre-draw: the commit this frame owes runs first (as its own gate would),
+     * then the held frost, cut against what that apply laid out. If either moved a view the draw
+     * is cancelled for one more layout, as {@link #commitBeforeDraw()} does, and the gate stays
+     * up for the frame that does draw.
+     */
+    private boolean onFirstFramePreDraw() {
+        View gate = mFirstFrameGate;
+        if (mDestroyed || gate == null) {
+            releaseFirstFrameGate();
+            return true;
+        }
+        boolean ran = mCommitPending || mFrostHeld;
+        if (mCommitPending) commit();
+        if (mFrostHeld) {
+            mFrostHeld = false;
+            runTopPaneFrost();
+        }
+        // Only a layout this callback caused cancels the draw; anyone else's is theirs to judge.
+        if (ran && gate.isLayoutRequested()) return false;
+        releaseFirstFrameGate();
+        return true;
+    }
+
+    private void releaseFirstFrameGate() {
+        mFirstFrameDrawn = true;
+        View gate = mFirstFrameGate;
+        mFirstFrameGate = null;
+        if (gate == null) return;
+        ViewTreeObserver observer = gate.getViewTreeObserver();
+        if (observer.isAlive()) observer.removeOnPreDrawListener(mFirstFramePreDrawListener);
+        // Nothing may be left held once the gate is gone; a torn-down renderer just drops it.
+        boolean held = mFrostHeld;
+        mFrostHeld = false;
+        if (held && !mDestroyed) runTopPaneFrost();
+    }
+
+    /** True while a top-pane frost pass waits for the first frame. */
+    boolean isFrostHeldForFirstFrame() {
+        return mFrostHeld;
     }
 
     /** True while a coalesced accessory render is waiting for its main-loop turn. */
@@ -660,6 +759,7 @@ public final class ChromeRenderer {
 
     public void onDestroy() {
         mDestroyed = true;
+        releaseFirstFrameGate();
         if (mBlurWorker instanceof ExecutorService) ((ExecutorService) mBlurWorker).shutdownNow();
         unscheduleCommit();
         mHandler.removeCallbacks(mBlurHeartbeatRunnable);
