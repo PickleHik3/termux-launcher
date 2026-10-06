@@ -23,6 +23,7 @@ import com.termux.R;
 import com.termux.app.ReducedMotion;
 import com.termux.app.terminal.Motion;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.logger.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -67,6 +68,7 @@ import java.util.function.Consumer;
  * Overview covers it again. With animations off every step lands at once.</p>
  */
 public final class AppearanceSurfaceController {
+    private static final String LOG_TAG = "AppearanceSurface";
 
     /** The surface's pages. */
     public enum PageId { OVERVIEW, LOOK, LAYOUT, ICONS }
@@ -320,6 +322,10 @@ public final class AppearanceSurfaceController {
     private boolean mTransitioning;
     /** Done or a Save is applying the Overview's pending changes: Done, Back and the pill wait. */
     private boolean mCommitting;
+    /** Counts commits, so a backstop of an older one does nothing. */
+    private int mCommitSeq;
+    /** How long Done or Save may hold the surface before Done and Back work again. */
+    private static final long COMMIT_BACKSTOP_MS = 20_000L;
     /** Done on the Icon pack page with a pending wallpaper: the slide back to the Overview ends in the commit. */
     private boolean mDoneAfterSlide;
     /** Which page is showing: Overview, an editor (Look or Layout by the editor's mode) or Icons. */
@@ -786,6 +792,17 @@ public final class AppearanceSurfaceController {
         }
         mCommitting = true;
         final int token = mToken;
+        final int commit = ++mCommitSeq;
+        // A wallpaper set that never answers must not hold the surface: Done and Back work again.
+        FrameLayout view = mView;
+        if (view != null) {
+            view.postDelayed(() -> {
+                if (mCommitting && commit == mCommitSeq && mOpen && token == mToken) {
+                    Logger.logWarn(LOG_TAG, "Applying the pending wallpaper did not answer; the surface is usable again");
+                    mCommitting = false;
+                }
+            }, COMMIT_BACKSTOP_MS);
+        }
         overview.commit(() -> {
             if (!mOpen || token != mToken)
                 return;
