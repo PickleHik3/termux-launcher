@@ -32,4 +32,28 @@ public class BuiltinWidgetSpanTest {
         assertEquals(null, BuiltinWidgetKind.fromId("no.such.widget"));
         assertEquals(null, BuiltinWidgetKind.fromId(null));
     }
+
+    @Test public void roomPicksTheLargestDesignThatFits() {
+        assertEquals(BuiltinWidgetSpan.ONE_BY_ONE, BuiltinWidgetSpan.forSize(88, 92));
+        assertEquals(BuiltinWidgetSpan.ONE_BY_ONE, BuiltinWidgetSpan.forSize(40, 40));
+        assertEquals(BuiltinWidgetSpan.TWO_BY_ONE, BuiltinWidgetSpan.forSize(184, 92));
+        assertEquals(BuiltinWidgetSpan.TWO_BY_ONE, BuiltinWidgetSpan.forSize(300, 150));
+        assertEquals(BuiltinWidgetSpan.TWO_BY_TWO, BuiltinWidgetSpan.forSize(184, 192));
+        assertEquals(BuiltinWidgetSpan.FOUR_BY_ONE, BuiltinWidgetSpan.forSize(376, 92));
+        assertEquals(BuiltinWidgetSpan.FOUR_BY_TWO, BuiltinWidgetSpan.forSize(376, 192));
+        assertEquals(BuiltinWidgetSpan.FOUR_BY_TWO, BuiltinWidgetSpan.forSize(1000, 1000));
+    }
+
+    @Test public void aLittleUnderTheDesignStillCountsAsFitting() {
+        // Four cells of an 8-column grid come to a few dp under the two-cell design.
+        assertEquals(BuiltinWidgetSpan.TWO_BY_ONE, BuiltinWidgetSpan.forSize(176, 90));
+        assertEquals(BuiltinWidgetSpan.ONE_BY_ONE, BuiltinWidgetSpan.forSize(150, 90));
+    }
+
+    @Test public void designedSizesFollowTheReferenceGrid() {
+        assertEquals(88, BuiltinWidgetSpan.ONE_BY_ONE.widthDp);
+        assertEquals(184, BuiltinWidgetSpan.TWO_BY_ONE.widthDp);
+        assertEquals(192, BuiltinWidgetSpan.TWO_BY_TWO.heightDp);
+        assertEquals(376, BuiltinWidgetSpan.FOUR_BY_TWO.widthDp);
+    }
 }

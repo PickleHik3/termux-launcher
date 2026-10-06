@@ -72,14 +72,38 @@ public abstract class BuiltinWidgetView extends FrameLayout {
 
     // ----- binding --------------------------------------------------------------------------
 
-    /** Brings the view level with its record: a changed span or settings rebuild the content. */
-    public final void bind(int columns, int rows, @Nullable Bundle config) {
-        BuiltinWidgetSpan next = BuiltinWidgetSpan.forCells(columns, rows);
+    /**
+     * Brings the view level with its record's settings. The span is not the record's cell count
+     * but the room those cells give on this grid, so it is chosen in {@link #onMeasure} from the
+     * size the cell hands down; until the first measure the content is built for the smallest.
+     */
+    public final void bind(@Nullable Bundle config) {
         Bundle nextConfig = config == null ? new Bundle() : new Bundle(config);
-        boolean changed = !built || next != span || !sameConfig(this.config, nextConfig);
-        span = next;
+        boolean changed = !built || !sameConfig(this.config, nextConfig);
         this.config = nextConfig;
         if (changed) rebuild();
+    }
+
+    /** The bucket this view would draw at {@code widthPx}×{@code heightPx}. */
+    @NonNull private BuiltinWidgetSpan spanForPixels(int widthPx, int heightPx) {
+        float density = getResources().getDisplayMetrics().density;
+        return BuiltinWidgetSpan.forSize(widthPx / density, heightPx / density);
+    }
+
+    @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        // The cell measures its content exactly, so the room is known here, before the content
+        // is measured: a bucket change rebuilds the content in the same pass, with no frame in
+        // between where the old layout shows in the new size.
+        if (MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED
+            && MeasureSpec.getMode(heightMeasureSpec) != MeasureSpec.UNSPECIFIED) {
+            BuiltinWidgetSpan next = spanForPixels(MeasureSpec.getSize(widthMeasureSpec),
+                MeasureSpec.getSize(heightMeasureSpec));
+            if (next != span || !built) {
+                span = next;
+                rebuild();
+            }
+        }
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
     }
 
     /** The look changed under the widget: a theme, a Look, the direction setting. */

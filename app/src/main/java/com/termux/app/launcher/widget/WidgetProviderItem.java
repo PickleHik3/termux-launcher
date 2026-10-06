@@ -48,15 +48,17 @@ public final class WidgetProviderItem {
         this.fits = fits;
     }
 
-    /** A row for one of the launcher's own widgets, offered at its default span. */
+    /**
+     * A row for one of the launcher's own widgets, offered at the span its design takes on this
+     * grid, and resizable down to the span its smallest design takes.
+     */
     @NonNull
     public static WidgetProviderItem builtin(long profileSerial, @NonNull String kind,
                                              @NonNull String label, int columnSpan, int rowSpan,
+                                             int minimumColumnSpan, int minimumRowSpan,
                                              boolean fits) {
-        // The minimum equals the offered span so the card names one size; edit mode decides
-        // how small a built-in may really go.
         return new WidgetProviderItem(profileSerial, null, kind, label, columnSpan, rowSpan,
-            columnSpan, rowSpan, fits);
+            Math.min(minimumColumnSpan, columnSpan), Math.min(minimumRowSpan, rowSpan), fits);
     }
 
     public boolean isBuiltin() { return builtinKind != null; }

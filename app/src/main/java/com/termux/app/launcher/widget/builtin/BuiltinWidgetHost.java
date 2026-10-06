@@ -80,12 +80,18 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
             view = BuiltinWidgetFactory.create(context, kind, services, style());
             views.put(record.appWidgetId, view);
         }
-        view.bind(record.cell.columnSpan(), record.cell.rowSpan(), record.sizeOptions());
+        view.bind(record.sizeOptions());
         return view;
     }
 
     @Override public void release(int appWidgetId) {
-        views.remove(appWidgetId);
+        // Kept: the cell left this page, not the wall. The view comes back with its data when
+        // the page does, instead of being drawn again from nothing. retainOnly prunes removals.
+    }
+
+    /** Drops the views of widgets that are no longer anywhere on the wall. */
+    public void retainOnly(@NonNull java.util.Set<Integer> appWidgetIds) {
+        views.keySet().retainAll(appWidgetIds);
     }
 
     /** The live view for {@code appWidgetId}, when it is on the page now. */
@@ -115,12 +121,21 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
 
     @Override @NonNull public WidgetAppGroup group(@NonNull WidgetGridMetrics metrics) {
         List<WidgetProviderItem> items = new ArrayList<>();
-        int columns = metrics.definition().columns, rows = metrics.definition().rows;
+        float density = context.getResources().getDisplayMetrics().density;
+        // Spans are asked of the grid in pixels, as an app widget's minWidth is: on a dense grid
+        // a widget designed for two 88 dp cells takes however many of its cells make 184 dp.
+        BuiltinWidgetSpan smallest = BuiltinWidgetSpan.ONE_BY_ONE;
+        WidgetGridMetrics.Span minimum = metrics.spanForPixels(
+            Math.round(smallest.widthDp * density), Math.round(smallest.heightDp * density));
         for (BuiltinWidgetKind kind : BuiltinWidgetKind.values()) {
-            boolean fits = kind.defaultColumns <= columns && kind.defaultRows <= rows;
+            BuiltinWidgetSpan designed = defaultSpan(kind);
+            WidgetGridMetrics.Span span = metrics.spanForPixels(
+                Math.round(designed.widthDp * density), Math.round(designed.heightDp * density));
+            int columns = Math.max(1, span.columns), rows = Math.max(1, span.rows);
+            boolean fits = span.fits && columns <= metrics.definition().columns
+                && rows <= metrics.definition().rows;
             items.add(WidgetProviderItem.builtin(0L, kind.id, context.getString(kind.label),
-                Math.min(kind.defaultColumns, Math.max(1, columns)),
-                Math.min(kind.defaultRows, Math.max(1, rows)), fits));
+                columns, rows, Math.max(1, minimum.columns), Math.max(1, minimum.rows), fits));
         }
         Drawable icon = null;
         try { icon = context.getPackageManager().getApplicationIcon(context.getPackageName()); }
@@ -133,23 +148,28 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
                                                            int extentPx) {
         BuiltinWidgetKind kind = BuiltinWidgetKind.fromId(item.builtinKind);
         if (kind == null) return null;
-        Drawable drawn = renderPreview(kind, item.columnSpan, item.rowSpan, extentPx);
+        Drawable drawn = renderPreview(kind, defaultSpan(kind), extentPx);
         return drawn == null ? null : WidgetPreviewArtwork.image(drawn);
     }
 
+    /** The bucket a kind is offered at: its default cell span on the design's reference grid. */
+    @NonNull public static BuiltinWidgetSpan defaultSpan(@NonNull BuiltinWidgetKind kind) {
+        return BuiltinWidgetSpan.forCells(kind.defaultColumns, kind.defaultRows);
+    }
+
     /**
-     * Draws {@code kind} at the real size of its default cell span — 88×92dp cells, 8dp gaps —
-     * and shrinks the picture to the card. Sample data stands in for whatever is not live.
+     * Draws {@code kind} at its bucket's designed size and shrinks the picture to the card.
+     * Sample data stands in for whatever is not live.
      */
-    @Nullable private Drawable renderPreview(@NonNull BuiltinWidgetKind kind, int columns, int rows,
-                                             int extentPx) {
+    @Nullable private Drawable renderPreview(@NonNull BuiltinWidgetKind kind,
+                                             @NonNull BuiltinWidgetSpan span, int extentPx) {
         float density = context.getResources().getDisplayMetrics().density;
-        int width = Math.round((columns * 88 + (columns - 1) * 8) * density);
-        int height = Math.round((rows * 92 + (rows - 1) * 8) * density);
+        int width = Math.round(span.widthDp * density);
+        int height = Math.round(span.heightDp * density);
         try {
             BuiltinWidgetView view = BuiltinWidgetFactory.create(context, kind, services, style());
             view.setPreview(true);
-            view.bind(columns, rows, null);
+            view.bind(null);
             view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                 View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
             view.layout(0, 0, width, height);
