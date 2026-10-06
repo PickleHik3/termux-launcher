@@ -9,10 +9,6 @@
     <string name="wallpaper_picker_slot_lock">Lock screen</string>
     <string name="wallpaper_picker_slot_home">Home screen</string>
     <string name="wallpaper_picker_back">Back</string>
-    <string name="wallpaper_picker_apply">Apply</string>
-    <string name="wallpaper_picker_apply_more">More ways to apply</string>
-    <string name="wallpaper_picker_apply_home_only">Home screen only</string>
-    <string name="wallpaper_picker_apply_lock_only">Lock screen only</string>
     <string name="wallpaper_picker_look">Surface style</string>
     <string name="wallpaper_picker_icon_pack">Icon pack</string>
     <string name="wallpaper_picker_layout">Layout</string>

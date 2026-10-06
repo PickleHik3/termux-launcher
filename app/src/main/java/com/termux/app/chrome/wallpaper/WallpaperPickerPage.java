@@ -10,7 +10,6 @@ import android.os.Looper;
 import android.view.LayoutInflater;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
-import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
@@ -23,7 +22,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.annotation.WorkerThread;
-import androidx.appcompat.widget.PopupMenu;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.PagerSnapHelper;
 import androidx.recyclerview.widget.RecyclerView;
@@ -52,14 +50,14 @@ import java.util.function.Supplier;
 
 /**
  * The Appearance surface's Overview (it began as the wallpaper picker page): the fixed heading
- * Appearance, two slot previews (Lock, then Home, each under a small label) in a snap pager, and
- * one row of the Apply split button over the thumbnail strip.
+ * Appearance, two slot previews (Lock, then Home, each under a small label) in a snap pager over
+ * the thumbnail strip.
  *
  * <p>The page reads and writes the slots only through {@link Slots}, which in the app wraps
  * {@link WallpaperSlots}; it never names WallpaperManager or a slot preference. Tapping a
- * thumbnail sets the centred slot's pending choice and previews it there. Apply puts the
- * centred card's background on Home and points Lock at it (Same as Home); its menu applies to one
- * slot only. Swiping keeps each slot's pending choice. Back closes without applying.</p>
+ * thumbnail sets the centred slot's pending choice and previews it there. Swiping keeps each
+ * slot's pending choice. The surface's Done applies each card's own pending choice to its own slot
+ * ({@link #commit}); Back and HOME ask first when one is pending.</p>
  *
  * <p>It is a page of the surface ({@link AppearanceSurfaceController.OverviewPage}), not a
  * window: built once per session, hidden (not destroyed) while Look, Layout or Icons shows, and
@@ -68,7 +66,7 @@ import java.util.function.Supplier;
  * the surface through {@link Listener}; Photo… closes the surface and hands the host a
  * {@link ReturnState}, with which the host opens it again when the photo pick and the crop end. A
  * cropped photo comes back as the centred slot's pending choice ({@link ReturnState#withPhoto}),
- * previewed in its card and set only by Apply. Back without Apply discards a pending photo's
+ * previewed in its card and set only by Done. Leaving without Done discards a pending photo's
  * file.</p>
  *
  * <p>Photos are first-class on every API level: a slot holding a photo shows it in its card, and
@@ -284,10 +282,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     static final int POS_LOCK = 0;
     static final int POS_HOME = 1;
 
-    /** The Apply menu's item ids. */
-    private static final int MENU_HOME_ONLY = 1;
-    private static final int MENU_LOCK_ONLY = 2;
-
     private final Context mContext;
     private final Slots mSlots;
     private final Listener mListener;
@@ -299,9 +293,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private final WallpaperThumbs mThumbs;
 
     private final View mRoot;
-    private final MaterialButton mApply;
-    private final View mApplyRow;
-    private final MaterialButton mApplyMore;
     private final LinearProgressIndicator mProgress;
     private final RecyclerView mPager;
     private final LinearLayoutManager mPagerLayout;
@@ -314,7 +305,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     @NonNull private WallpaperSlots.State mStored;
     /** Pending choices by {@link WallpaperSlots.Slot#ordinal()}. */
     private final WallpaperSlots.Choice[] mPending = new WallpaperSlots.Choice[2];
-    /** The page opens on Home: what the user does first goes to the home screen (and Apply's both). */
+    /** The page opens on Home: what the user does first goes to the home screen. */
     @NonNull private WallpaperSlots.Slot mCentred = WallpaperSlots.Slot.HOME;
     private boolean mBusy;
     /** The surface closed: nothing here may touch a view or a callback any more. */
@@ -394,18 +385,13 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
 
         mRoot = LayoutInflater.from(context).inflate(R.layout.wallpaper_picker_page, null, false);
         mStripCard = mRoot.findViewById(R.id.wallpaper_picker_strip_card);
-        mApply = mRoot.findViewById(R.id.wallpaper_picker_apply);
-        mApplyRow = mRoot.findViewById(R.id.wallpaper_picker_apply_row);
-        mApplyMore = mRoot.findViewById(R.id.wallpaper_picker_apply_more);
         mProgress = mRoot.findViewById(R.id.wallpaper_picker_progress);
         mPager = mRoot.findViewById(R.id.wallpaper_picker_pager);
         mStrip = mRoot.findViewById(R.id.wallpaper_picker_strip);
         mPhoto = mRoot.findViewById(R.id.wallpaper_picker_photo);
 
         // The bar (back, the Wallpaper | Look | Layout pill, Done) is the surface's shared frame:
-        // the page holds Apply under the cards and nothing above them.
-        mApply.setOnClickListener(v -> applyBoth());
-        mApplyMore.setOnClickListener(v -> showApplyMenu());
+        // Done applies what the cards hold; the page has nothing above or under them but the strip.
         mPhoto.setOnClickListener(v -> {
             if (mBusy || mReleased) return;
             WallpaperSlots.Slot slot = mCentred;
@@ -480,7 +466,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     @NonNull
     @Override
     public List<View> leavingViews() {
-        return Arrays.asList(mApplyRow, mStripCard);
+        return Collections.singletonList(mStripCard);
     }
 
     @NonNull
@@ -546,7 +532,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         refreshCards();
         refreshSameAsHomeThumb();
         refreshSelection();
-        refreshApply();
     }
 
     // --- state ---
@@ -598,90 +583,85 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
                 WallpaperPickerLogic.showsSameAsHome(mCentred) ? View.VISIBLE : View.GONE);
         }
         refreshSelection();
-        refreshApply();
-    }
-
-    private void refreshApply() {
-        mApply.setEnabled(WallpaperPickerLogic.applyBothEnabled(primaryChoice(), mStored.home,
-            mStored.lock, mBusy));
-        mApplyMore.setEnabled(slotOnlyEnabled(WallpaperSlots.Slot.HOME)
-            || slotOnlyEnabled(WallpaperSlots.Slot.LOCK));
-    }
-
-    /** The centred card's background: what Apply puts on Home. */
-    @NonNull
-    private WallpaperSlots.Choice primaryChoice() {
-        return WallpaperPickerLogic.primaryChoice(mCentred, mPending[WallpaperSlots.Slot.HOME.ordinal()],
-            mPending[WallpaperSlots.Slot.LOCK.ordinal()]);
-    }
-
-    /** What "Home screen only" or "Lock screen only" puts on {@code target}. */
-    @NonNull
-    private WallpaperSlots.Choice slotOnlyChoice(@NonNull WallpaperSlots.Slot target) {
-        return WallpaperPickerLogic.slotOnlyChoice(target, mCentred,
-            mPending[WallpaperSlots.Slot.HOME.ordinal()], mPending[WallpaperSlots.Slot.LOCK.ordinal()]);
-    }
-
-    @VisibleForTesting
-    boolean slotOnlyEnabled(@NonNull WallpaperSlots.Slot target) {
-        return WallpaperPickerLogic.applyOneEnabled(target, slotOnlyChoice(target), stored(target), mBusy);
     }
 
     private void setBusy(boolean busy) {
         mBusy = busy;
         mProgress.setVisibility(busy ? View.VISIBLE : View.INVISIBLE);
         mStrip.setAlpha(busy ? 0.5f : 1f);
-        refreshApply();
     }
 
     // --- apply, photo, shortcuts ---
 
-    /**
-     * Apply: the centred card's background on Home, then Lock pointed at Home (Same as Home).
-     */
-    @VisibleForTesting
-    void applyBoth() {
-        if (mBusy || mReleased) return;
-        final WallpaperSlots.Choice choice = primaryChoice();
-        if (!WallpaperPickerLogic.applyBothEnabled(choice, mStored.home, mStored.lock, false)) return;
-        setBusy(true);
-        final Runnable lockFollows = () -> runApply(WallpaperSlots.Slot.LOCK,
-            WallpaperSlots.Choice.sameAsHome(), () -> {
-                // A photo is stored as the slot's own kept copy, not the pending file.
-                mPending[WallpaperSlots.Slot.HOME.ordinal()] = choice.photo ? mStored.home : choice;
-                mPending[WallpaperSlots.Slot.LOCK.ordinal()] = WallpaperSlots.Choice.sameAsHome();
-                onApplyFinished();
-            });
-        if (WallpaperPickerLogic.homeChanges(choice, mStored.home)) {
-            runApply(WallpaperSlots.Slot.HOME, choice, lockFollows);
-        } else {
-            lockFollows.run();
-        }
+    /** Whether either card holds a choice that is not what the slots store: what Done would apply. */
+    @Override
+    public boolean hasPendingChanges() {
+        return !mReleased
+            && (WallpaperPickerLogic.pendingApplies(WallpaperSlots.Slot.HOME,
+                    mPending[WallpaperSlots.Slot.HOME.ordinal()], mStored.home)
+                || WallpaperPickerLogic.pendingApplies(WallpaperSlots.Slot.LOCK,
+                    mPending[WallpaperSlots.Slot.LOCK.ordinal()], mStored.lock));
     }
 
-    /** A one-slot menu item: {@code target} only. */
+    /**
+     * Done: each card's own pending choice goes to its own slot, Home first (Lock's Same as Home
+     * copies Home's picture, and a Home set already covers a Lock that follows it). Runs
+     * {@code onDone} when every slot is set and {@code onFailed} when one is not (after the error
+     * toast), with the page usable again either way. Nothing pending runs {@code onDone} at once.
+     */
+    @Override
+    public void commit(@NonNull Runnable onDone, @NonNull Runnable onFailed) {
+        commitPending(onDone, onFailed);
+    }
+
     @VisibleForTesting
-    void applySlotOnly(@NonNull WallpaperSlots.Slot target) {
-        if (mBusy || mReleased) return;
-        final WallpaperSlots.Choice choice = slotOnlyChoice(target);
-        if (!WallpaperPickerLogic.applyOneEnabled(target, choice, stored(target), false)) return;
+    void commitPending(@NonNull Runnable onDone, @NonNull Runnable onFailed) {
+        if (mReleased || mBusy) {
+            onFailed.run();
+            return;
+        }
+        if (!hasPendingChanges()) {
+            onDone.run();
+            return;
+        }
         setBusy(true);
-        runApply(target, choice, () -> {
-            mPending[target.ordinal()] = choice.photo ? stored(target) : choice;
-            onApplyFinished();
-        });
+        applyPending(WallpaperSlots.Slot.HOME, () -> applyPending(WallpaperSlots.Slot.LOCK, () -> {
+            if (mReleased) return;
+            setBusy(false);
+            refreshCards();
+            refreshSameAsHomeThumb();
+            refreshSelection();
+            onDone.run();
+        }, onFailed), onFailed);
+    }
+
+    /** Applies {@code slot}'s pending choice when it differs from what is stored, then {@code next}. */
+    private void applyPending(@NonNull WallpaperSlots.Slot slot, @NonNull Runnable next,
+                              @NonNull Runnable failed) {
+        final WallpaperSlots.Choice choice = mPending[slot.ordinal()];
+        if (!WallpaperPickerLogic.pendingApplies(slot, choice, stored(slot))) {
+            next.run();
+            return;
+        }
+        runApply(slot, choice, () -> {
+            // A photo is stored as the slot's own kept copy, not the pending file.
+            mPending[slot.ordinal()] = choice.photo ? stored(slot) : choice;
+            next.run();
+        }, failed);
     }
 
     /** Applies one slot; {@code next} runs on success, and a failure ends the run with an error. */
     private void runApply(@NonNull WallpaperSlots.Slot slot, @NonNull WallpaperSlots.Choice choice,
-                          @NonNull Runnable next) {
+                          @NonNull Runnable next, @NonNull Runnable failed) {
         WallpaperSlots.Callback done = (ok, error) -> {
             if (!ok) {
                 Logger.logError(LOG_TAG, "Applying to " + slot + " failed: " + error);
-                if (mReleased) return;
-                setBusy(false);
-                reloadStored(this::refreshApply);
-                showError(R.string.wallpaper_picker_apply_failed);
+                if (!mReleased) {
+                    setBusy(false);
+                    reloadStored(() -> { });
+                    showError(R.string.wallpaper_picker_apply_failed);
+                }
+                failed.run();
                 return;
             }
             mListener.onApplied(slot, choice);
@@ -693,38 +673,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             Logger.logStackTraceWithMessage(LOG_TAG, "Applying to " + slot + " failed", e);
             done.onDone(false, e.getMessage());
         }
-    }
-
-    /** Every slot in the run applied: the page shows what is stored now. */
-    private void onApplyFinished() {
-        if (mReleased) return;
-        setBusy(false);
-        refreshCards();
-        refreshSameAsHomeThumb();
-        refreshSelection();
-        refreshApply();
-    }
-
-    /** The split button's trailing half: Home screen only / Lock screen only. */
-    private void showApplyMenu() {
-        if (mBusy || mReleased) {
-            mApplyMore.setChecked(false);
-            return;
-        }
-        mApplyMore.setChecked(true);
-        PopupMenu menu = new PopupMenu(mContext, mApplyMore);
-        Menu items = menu.getMenu();
-        items.add(Menu.NONE, MENU_HOME_ONLY, 0, R.string.wallpaper_picker_apply_home_only)
-            .setEnabled(slotOnlyEnabled(WallpaperSlots.Slot.HOME));
-        items.add(Menu.NONE, MENU_LOCK_ONLY, 1, R.string.wallpaper_picker_apply_lock_only)
-            .setEnabled(slotOnlyEnabled(WallpaperSlots.Slot.LOCK));
-        menu.setOnMenuItemClickListener(item -> {
-            applySlotOnly(item.getItemId() == MENU_HOME_ONLY
-                ? WallpaperSlots.Slot.HOME : WallpaperSlots.Slot.LOCK);
-            return true;
-        });
-        menu.setOnDismissListener(m -> mApplyMore.setChecked(false));
-        menu.show();
     }
 
     /**

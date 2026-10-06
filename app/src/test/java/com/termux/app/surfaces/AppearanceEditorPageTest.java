@@ -48,6 +48,7 @@ public class AppearanceEditorPageTest {
         @Override public void openIcons() { calls.add("icons"); }
         @Override public void close() { calls.add("close"); }
         @Override public void back() { calls.add("back"); }
+        @Override public void done() { calls.add("done"); }
     }
 
     @Before
@@ -159,6 +160,9 @@ public class AppearanceEditorPageTest {
             assertEquals(s + ": segments are 40dp", (int) (40 * density),
                 root.findViewById(R.id.appearance_page_mode_look).getHeight());
             assertTrue(done.getWidth() > 0);
+            assertEquals(s + ": Done is the filled 40dp button", (int) (40 * density), done.getHeight());
+            assertTrue(s + ": Done is inside the bar, on one line", done.getRight() <= bar.getWidth()
+                && ((android.widget.TextView) done).getLineCount() <= 1);
         }
         assertTrue(mPage.isUndoShown());
         assertTrue(mPage.isDoneShown());
@@ -212,7 +216,7 @@ public class AppearanceEditorPageTest {
         root.findViewById(R.id.appearance_page_mode_layout).performClick();
         root.findViewById(R.id.appearance_page_back).performClick();
         root.findViewById(R.id.appearance_page_done).performClick();
-        assertEquals(Arrays.asList("look", "layout", "close", "close"), navigator.calls);
+        assertEquals(Arrays.asList("look", "layout", "back", "done"), navigator.calls);
     }
 
     @Test
@@ -235,7 +239,7 @@ public class AppearanceEditorPageTest {
         idle();
         root.findViewById(R.id.appearance_page_back).performClick();
         root.findViewById(R.id.appearance_page_done).performClick();
-        assertEquals(Arrays.asList("back", "look", "layout", "back", "close"), navigator.calls);
+        assertEquals(Arrays.asList("back", "look", "layout", "back", "done"), navigator.calls);
     }
 
     @Test

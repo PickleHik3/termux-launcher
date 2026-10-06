@@ -122,6 +122,20 @@ public final class AppearanceSurfaceController {
          * again once the editor has left. Nothing by default.
          */
         default void setBarVisible(boolean visible) {}
+
+        /** Whether the page holds a choice nothing has applied yet: what Done would set. */
+        default boolean hasPendingChanges() {
+            return false;
+        }
+
+        /**
+         * Applies every pending choice off the main thread and runs exactly one of the callbacks on
+         * the main thread: {@code done} when all of it is set, {@code failed} when something is not
+         * (the page has told the person). Nothing pending runs {@code done} at once.
+         */
+        default void commit(@NonNull Runnable done, @NonNull Runnable failed) {
+            done.run();
+        }
     }
 
     /** What a page asks of the surface. */
@@ -132,8 +146,16 @@ public final class AppearanceSurfaceController {
 
         void openIcons();
 
-        /** Closes the surface (the Overview's own back arrow). */
+        /** Closes the surface at once, applying nothing. */
         void close();
+
+        /**
+         * Done: every page's pending changes are applied, then the surface closes. Nothing pending
+         * is a close.
+         */
+        default void done() {
+            close();
+        }
 
         /** One page back: Icons to the Overview. Spent as a Back press is. */
         void back();
@@ -183,6 +205,16 @@ public final class AppearanceSurfaceController {
          * lose, and runs {@code proceed} when the answer lets it go; never when it keeps editing.
          */
         void requestLeave(@NonNull Runnable proceed);
+
+        /**
+         * Leaving with something besides the editor unsaved (the Overview's pending wallpaper):
+         * always asks, once, whether or not the editor itself is dirty. Keep editing runs nothing;
+         * Discard puts the editor back to how it was at open and runs {@code onDiscard}; Save keeps
+         * the look and runs {@code onSave}.
+         */
+        default void confirmLeave(@NonNull Runnable onSave, @NonNull Runnable onDiscard) {
+            requestLeave(onDiscard);
+        }
 
         /**
          * Takes the editor off screen, keeping the session. The frame goes to the given scale and
@@ -269,6 +301,10 @@ public final class AppearanceSurfaceController {
             closeAnimated();
         }
 
+        @Override public void done() {
+            onDonePressed();
+        }
+
         @Override public void back() {
             onBack();
         }
@@ -282,6 +318,10 @@ public final class AppearanceSurfaceController {
     /** Done on Look or Layout: the editor goes back to the Overview, which then closes the surface. */
     private boolean mCloseAfterHop;
     private boolean mTransitioning;
+    /** Done or a Save is applying the Overview's pending changes: Done, Back and the pill wait. */
+    private boolean mCommitting;
+    /** Done on the Icon pack page with a pending wallpaper: the slide back to the Overview ends in the commit. */
+    private boolean mDoneAfterSlide;
     /** Which page is showing: Overview, an editor (Look or Layout by the editor's mode) or Icons. */
     @Nullable private PageId mShown;
     @Nullable private FrameLayout mView;
@@ -539,17 +579,16 @@ public final class AppearanceSurfaceController {
                 }
 
                 @Override public void onUndo() {
-                    if (!mTransitioning)
+                    if (!mTransitioning && !mCommitting)
                         mEditor.undo();
                 }
 
                 @Override public void onDone() {
-                    if (!mTransitioning)
-                        mEditor.done();
+                    onDonePressed();
                 }
 
                 @Override public void onSegment(@NonNull AppearanceEditorPage.Segment segment) {
-                    if (mTransitioning)
+                    if (mTransitioning || mCommitting)
                         return;
                     if (segment == AppearanceEditorPage.Segment.ICON_PACK) {
                         if (!mDirect) {
@@ -653,7 +692,7 @@ public final class AppearanceSurfaceController {
 
     /** Goes to {@code target}; while a hop plays or the Overview is still loading it waits its turn. */
     private void go(@NonNull PageId target) {
-        if (!mOpen)
+        if (!mOpen || mCommitting)
             return;
         if (mTransitioning || (mOverview == null && !mDirect && mShown == PageId.OVERVIEW)) {
             mQueued = target;
@@ -687,11 +726,11 @@ public final class AppearanceSurfaceController {
     public boolean onBack() {
         if (!mOpen)
             return false;
-        if (mTransitioning)
+        if (mTransitioning || mCommitting)
             return true;
         PageId page = shownPage();
         if (page == null || page == PageId.OVERVIEW) {
-            closeAnimated();
+            leaveOverview(this::closeAnimated);
         } else if (page == PageId.ICONS) {
             go(PageId.OVERVIEW);
         } else {
@@ -704,11 +743,85 @@ public final class AppearanceSurfaceController {
     public void requestExit() {
         if (!mOpen)
             return;
+        if (mCommitting)
+            return;
         PageId page = shownPage();
-        if (page == PageId.LOOK || page == PageId.LAYOUT)
-            mEditor.requestLeave(this::closeNow);
-        else
-            closeNow();
+        if (page == PageId.LOOK || page == PageId.LAYOUT) {
+            if (hasPendingWallpaper())
+                mEditor.confirmLeave(() -> commitThen(this::closeNow), this::closeNow);
+            else
+                mEditor.requestLeave(this::closeNow);
+        } else {
+            leaveOverview(this::closeNow);
+        }
+    }
+
+    private boolean hasPendingWallpaper() {
+        OverviewPage overview = mOverview;
+        return overview != null && overview.hasPendingChanges();
+    }
+
+    /**
+     * Leaves the Overview or the Icon pack page for good ({@code leave}): at once when nothing is
+     * pending, else after the one question (Keep editing / Discard / Save), where Discard drops
+     * the pending choices (the page's release does) and Save applies them first.
+     */
+    private void leaveOverview(@NonNull Runnable leave) {
+        if (!hasPendingWallpaper()) {
+            leave.run();
+            return;
+        }
+        mEditor.confirmLeave(() -> commitThen(leave), leave);
+    }
+
+    /**
+     * Applies the Overview's pending changes, then runs {@code then}. The surface waits while it
+     * runs; a failure leaves everything as it was, the page having told the person.
+     */
+    private void commitThen(@NonNull Runnable then) {
+        final OverviewPage overview = mOverview;
+        if (!mOpen || overview == null || !overview.hasPendingChanges()) {
+            then.run();
+            return;
+        }
+        mCommitting = true;
+        final int token = mToken;
+        overview.commit(() -> {
+            if (!mOpen || token != mToken)
+                return;
+            mCommitting = false;
+            then.run();
+        }, () -> {
+            if (!mOpen || token != mToken)
+                return;
+            mCommitting = false;
+        });
+    }
+
+    /**
+     * Done, from any page: the editor saves its look first; then the Overview's pending changes
+     * are applied with the Overview showing (its progress is where the wait is seen), and the
+     * surface closes. A failure stays on the Overview.
+     */
+    private void onDonePressed() {
+        if (!mOpen || mTransitioning || mCommitting)
+            return;
+        PageId page = shownPage();
+        if (page == PageId.LOOK || page == PageId.LAYOUT) {
+            mEditor.done();
+        } else if (page == PageId.ICONS && hasPendingWallpaper()) {
+            mDoneAfterSlide = true;
+            go(PageId.OVERVIEW);
+            if (!mTransitioning)
+                mDoneAfterSlide = false;
+        } else {
+            finishFromOverview();
+        }
+    }
+
+    /** On the Overview: applies what is pending, then closes. */
+    private void finishFromOverview() {
+        commitThen(this::closeAnimated);
     }
 
     /** The activity stopped: the surface survives it, the status pane's borrowed shape goes back. */
@@ -813,7 +926,7 @@ public final class AppearanceSurfaceController {
                 if (then != null && mOpen && token == mToken && !closeAfter)
                     go(then);
                 if (closeAfter && mOpen && token == mToken)
-                    closeAnimated();
+                    finishFromOverview();
             };
             if (view != null)
                 view.postOnAnimation(restore);
@@ -929,9 +1042,15 @@ public final class AppearanceSurfaceController {
         slide(icons, overview, false, () -> {
             mShown = PageId.OVERVIEW;
             View view = mView;
-            if (then != null && view != null)
+            final boolean done = mDoneAfterSlide;
+            mDoneAfterSlide = false;
+            if ((then != null || done) && view != null)
                 view.post(() -> {
-                    if (mOpen && token == mToken)
+                    if (!mOpen || token != mToken)
+                        return;
+                    if (done)
+                        finishFromOverview();
+                    else
                         go(then);
                 });
         });
@@ -1036,6 +1155,8 @@ public final class AppearanceSurfaceController {
         mShown = null;
         mDirect = false;
         mCloseAfterHop = false;
+        mCommitting = false;
+        mDoneAfterSlide = false;
         mEditor.setOnDone(null);
         mEditor.endSession();
         boolean byUser = mClosingByUser;
