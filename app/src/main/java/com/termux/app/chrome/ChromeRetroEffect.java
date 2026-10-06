@@ -16,7 +16,6 @@ import com.termux.app.terminal.inappkeyboard.FloatingKeyboardFrame;
 import com.termux.app.terminal.inappkeyboard.KeyPopupOverlayView;
 
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
 /**
@@ -119,11 +118,11 @@ public final class ChromeRetroEffect {
      * a handful of child reads, and nothing allocated unless a surface arrived.
      */
     private void adoptTransientSurfaces() {
-        for (Iterator<RetroEffectBinder> it = mAdopted.iterator(); it.hasNext(); ) {
-            RetroEffectBinder binder = it.next();
+        for (int i = mAdopted.size() - 1; i >= 0; i--) {
+            RetroEffectBinder binder = mAdopted.get(i);
             if (mStyle != PaneRetroStyle.NONE && binder.view().isAttachedToWindow()) continue;
             binder.release();
-            it.remove();
+            mAdopted.remove(i);
         }
         if (mStyle == PaneRetroStyle.NONE) return;
         adoptChildren(mFloatingKeyboardHost, FloatingKeyboardFrame.class);
