@@ -501,9 +501,9 @@ public final class SurfacePresets {
     /**
      * A {@link SharedPreferences} that reads through to a store but holds every write until
      * {@link #applyToStore}: reads see the held writes, so a setter that reads what an earlier one
-     * wrote behaves exactly as it would against the store. Only {@link #apply} uses it.
+     * wrote behaves exactly as it would against the store. {@link #apply} lands a Look through one;
+     * the editor's Look slider holds a drag's stops in one until the finger lifts.
      */
-    @VisibleForTesting
     static final class Batch implements SharedPreferences {
         /** Marks a held removal. */
         private static final Object REMOVED = new Object();
