@@ -23,6 +23,7 @@ import com.termux.app.launcher.widget.builtin.BuiltinWidgetConfigSheet;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetHost;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetKind;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetServices;
+import com.termux.app.launcher.widget.builtin.BuiltinWidgetSpan;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle;
 
 /** Production coordinator from the real picker through placement into the A-1 transaction. */
@@ -540,8 +541,18 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         int minColumns = 1, minRows = 1;
         boolean horizontal = false, vertical = false;
         if (record.isBuiltin()) {
-            // Designed at five spans and drawn at the nearest: any size the grid allows.
+            // Designed at five sizes and drawn at the largest that fits: any size the grid
+            // allows down to the smallest design, measured in pixels like an app widget's
+            // minimum, so a dense grid cannot squeeze one into a cell its text will not fit.
             horizontal = true; vertical = true;
+            float density = pane.getResources().getDisplayMetrics().density;
+            WidgetGridMetrics.Span minSpan = metrics.spanForPixels(
+                Math.round(BuiltinWidgetSpan.ONE_BY_ONE.widthDp * density),
+                Math.round(BuiltinWidgetSpan.ONE_BY_ONE.heightDp * density));
+            minColumns = minSpan.columns > 0
+                ? Math.min(minSpan.columns, record.cell.columnSpan()) : record.cell.columnSpan();
+            minRows = minSpan.rows > 0
+                ? Math.min(minSpan.rows, record.cell.rowSpan()) : record.cell.rowSpan();
         } else if (info != null && record.state == LauncherWidgetRecord.State.ACTIVE) {
             horizontal = (info.resizeMode
                 & AppWidgetProviderInfo.RESIZE_HORIZONTAL) != 0;
@@ -1217,6 +1228,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         currentPage = Math.max(0, Math.min(widgets.repository().pageCount() - 1, currentPage));
         pane.setReducedMotion(host.reducedMotion());
         pane.render(widgets.repository(), widgets.capability(), currentPage);
+        // Built-in views outlive their page so a return draws them as they were; only a widget
+        // gone from the whole wall lets its view go.
+        java.util.Set<Integer> live = new java.util.HashSet<>();
+        for (LauncherWidgetRecord record : widgets.repository().records()) live.add(record.appWidgetId);
+        builtins.retainOnly(live);
         // A render hides the edit chrome. While a session is open and its widget is still on the
         // page - after a commit, a grid resize from the page's own tab, another widget arriving -
         // the chrome comes straight back at the widget's new bounds, and the host never hears the
