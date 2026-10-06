@@ -490,8 +490,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         setOverlayVisible(true);
         registerLayoutListener(content);
         mFramed = false;
-        if (fromScale > 0f)
+        if (fromScale > 0f) {
+            pushDisplayInsets(content);
             mFrame.prime(fromScale, fromTranslationY);
+        }
         content.post(() -> {
             if (!mOpen || token != mPresentToken)
                 return;
@@ -1041,6 +1043,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         float scale = AppearanceEditorFrame.fitScale(root.getHeight(), frameTop, frameBottom,
             AppearanceEditorFrame.MAX_SCALE);
         float ty = frameTop - containerTop;
+        pushDisplayInsets(content);
         frame.show(scale, ty, animate);
         mTargetScale = scale;
         mTargetTy = ty;
@@ -1050,6 +1053,38 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mEditorWallpaper != null)
             showEditorWallpaper(mEditorWallpaper);
     }
+
+    /**
+     * Tells the frame where the display's edges stand around the container, from the window's own
+     * geometry: the container's rect in the decor against the decor's size, so the status bar
+     * above it, the navigation bar below it and any side bar are all counted. The clip's arc is
+     * then the display's, not the container's. Unknown geometry leaves the insets at 0.
+     */
+    private void pushDisplayInsets(@NonNull ViewGroup content) {
+        AppearanceEditorFrame frame = mFrame;
+        if (frame == null)
+            return;
+        View root = frame.root();
+        int[] parentOffset = new int[2];
+        if (root.getWidth() <= 0 || !(root.getParent() instanceof View)
+            || !AppearanceEditorFrame.offsetIn((View) root.getParent(), content, parentOffset)) {
+            frame.setDisplayInsets(0, 0, 0, 0);
+            return;
+        }
+        int[] contentInWindow = new int[2];
+        content.getLocationInWindow(contentInWindow);
+        View decor = content.getRootView();
+        int left = contentInWindow[0] + parentOffset[0] + root.getLeft();
+        int top = contentInWindow[1] + parentOffset[1] + root.getTop();
+        mDisplayInsetLeftPx = Math.max(0, left);
+        mDisplayInsetTopPx = Math.max(0, top);
+        frame.setDisplayInsets(left, top, decor.getWidth() - (left + root.getWidth()),
+            decor.getHeight() - (top + root.getHeight()));
+    }
+
+    /** The display's left and top edges' distance from the container, for the ring. */
+    private int mDisplayInsetLeftPx;
+    private int mDisplayInsetTopPx;
 
     // ---- the frame follows the sheet -------------------------------------------------------------
 
@@ -1082,7 +1117,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mFrameRectInContent = new int[] {(int) Math.floor(scaledLeft), mFrameTopPx,
             (int) Math.ceil(scaledLeft + root.getWidth() * scale),
             (int) Math.ceil(mFrameTopPx + root.getHeight() * scale)};
-        mFrameCornerPx = AppearanceEditorFrame.deviceCornerRadiusPx(root) * scale;
+        mFrameCornerPx = AppearanceEditorFrame.visibleCornerRadiusPx(
+            AppearanceEditorFrame.deviceCornerRadiusPx(root), mDisplayInsetLeftPx,
+            mDisplayInsetTopPx) * scale;
     }
 
     /**
