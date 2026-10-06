@@ -9,6 +9,7 @@ import androidx.annotation.NonNull;
 import com.termux.app.terminal.GeometryScheduler.Reason;
 import com.termux.app.terminal.GeometryScheduler.ResizePolicy;
 
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -29,6 +30,51 @@ public class GeometrySchedulerTest {
     public void setUp() {
         mHost = new FakeHost();
         mScheduler = new GeometryScheduler(mHost);
+    }
+
+    @After
+    public void tearDown() {
+        mScheduler.dispose();
+    }
+
+    @Test
+    public void disposeWithdrawsEverythingItPostedAndIgnoresLaterRequests() {
+        mScheduler.request(Reason.INSETS, ResizePolicy.NOW);
+        GeometryScheduler.Transition fold = mScheduler.begin(Reason.STATUS_FOLD, true, true);
+        mScheduler.requestNow(Reason.KEYBOARD, ResizePolicy.NOW);
+        assertFalse(mHost.frames.isEmpty() && mHost.afterLayout.isEmpty()
+            && mHost.delayed.isEmpty());
+
+        mScheduler.dispose();
+
+        assertTrue("no frame left on the looper", mHost.frames.isEmpty());
+        assertTrue("no after-layout check left", mHost.afterLayout.isEmpty());
+        assertTrue("the hold's fail-safe withdrawn", mHost.delayed.isEmpty());
+        int passes = mHost.passes.size();
+        mScheduler.request(Reason.KEYBOARD, ResizePolicy.NOW);
+        mScheduler.requestNow(Reason.KEYBOARD, ResizePolicy.NOW);
+        mScheduler.settle(fold, true);
+        mScheduler.resizeGridAfterLayout();
+        mScheduler.begin(Reason.DIVIDER, false, false);
+        assertEquals(passes, mHost.passes.size());
+        assertTrue(mHost.frames.isEmpty());
+        assertTrue(mHost.afterLayout.isEmpty());
+        assertTrue(mHost.delayed.isEmpty());
+        assertFalse(mScheduler.isGridHeld());
+    }
+
+    @Test
+    public void aPassThatKeepsAskingForAnotherIsCutOff() {
+        mHost.onPass = () -> mScheduler.requestNow(Reason.KEYBOARD, ResizePolicy.NOW);
+        mScheduler.requestNow(Reason.STYLING, ResizePolicy.NONE);
+        for (int i = 0; i < 20 && !mHost.frames.isEmpty(); i++) mHost.frame();
+
+        assertTrue(mHost.frames.isEmpty());
+        assertEquals("the first pass and the chained ones allowed",
+            1 + GeometryScheduler.MAX_CHAINED_PASSES, mHost.passes.size());
+        mHost.onPass = null;
+        mHost.layout();
+        assertFalse("the grid is let go", mScheduler.isGridHeld());
     }
 
     @Test
