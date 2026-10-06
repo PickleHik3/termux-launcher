@@ -349,4 +349,24 @@ public class AsyncIconBinderTest {
 
         assertEquals(AsyncIconBinder.MAX_PREFETCH, renderer.rendered.size());
     }
+
+    // ------------------------------------------------------------------ the test seam
+
+    /** What JVM tests of cells rely on: a miss renders inline and binds at once, no tile. */
+    @Test
+    public void theSynchronousSeam_rendersAMissInlineAndPrefetchesNothing() {
+        Drawable rendered = icon();
+        renderer.renders.put(entry("a").appRef.stableId(), rendered);
+        ImageView view = attachedView();
+        AsyncIconBinder.setSynchronousForTesting(true);
+        try {
+            assertTrue(binder.bind(view, entry("a"), SIZE, null));
+            assertSame(rendered, view.getDrawable());
+            binder.prefetch(Arrays.asList(entry("b")), SIZE);
+        } finally {
+            AsyncIconBinder.setSynchronousForTesting(false);
+        }
+        assertTrue(worker.queue.isEmpty());
+        assertEquals(Arrays.asList(entry("a").appRef.stableId()), renderer.rendered);
+    }
 }

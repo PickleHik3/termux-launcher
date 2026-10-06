@@ -17,9 +17,12 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import com.termux.app.SuggestionBarView;
+import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
+import org.junit.After;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -35,6 +38,18 @@ import java.util.List;
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class AppDrawerCategoryTileViewTest {
+
+    /**
+     * Cells here are asserted on right after they bind, so icons render inline as they did before
+     * binding moved to the worker. {@code AsyncIconBinderTest} covers the asynchronous path.
+     */
+    @Before public void renderIconsSynchronously() {
+        AsyncIconBinder.setSynchronousForTesting(true);
+    }
+
+    @After public void restoreAsynchronousIcons() {
+        AsyncIconBinder.setSynchronousForTesting(false);
+    }
 
     @Test public void exactSquareHeadingAndSevenIconRectanglesFollowMetrics() {
         AppDrawerCategoryGridMetrics m = metrics();

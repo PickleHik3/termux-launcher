@@ -75,6 +75,8 @@ public final class AsyncIconBinder {
 
     private static final Interpolator EASE_OUT = new DecelerateInterpolator(1.5f);
     @Nullable private static Handler sMainHandler;
+    /** See {@link #setSynchronousForTesting}. Never set in production. */
+    private static volatile boolean sSynchronousForTesting;
 
     @NonNull private final Renderer renderer;
     @NonNull private final Executor worker;
@@ -89,6 +91,17 @@ public final class AsyncIconBinder {
         this.worker = worker;
         this.main = main;
         this.tileColor = tileColor;
+    }
+
+    /**
+     * Makes every bind render a miss inline and set it at once, and every prefetch do nothing:
+     * the synchronous behaviour from before rendering moved to the worker. For JVM tests, which
+     * assert on a cell's drawable right after binding it and have no worker worth waiting for;
+     * a test that sets it resets it after itself.
+     */
+    @VisibleForTesting
+    public static void setSynchronousForTesting(boolean synchronous) {
+        sSynchronousForTesting = synchronous;
     }
 
     /** Posts to the main looper; the handler is made on first use, not at class load. */
@@ -128,6 +141,11 @@ public final class AsyncIconBinder {
             return true;
         }
         release(slot);
+        if (sSynchronousForTesting) {
+            Drawable rendered = renderQuietly(entry, sizePx);
+            view.setImageDrawable(rendered != null ? rendered : fallback);
+            return true;
+        }
         int token = slot.generation;
         IconArrivalDrawable tile = new IconArrivalDrawable(sizePx, tileColor.tileColor());
         slot.tile = tile;
@@ -148,7 +166,7 @@ public final class AsyncIconBinder {
      * what an older one has not reached yet. Main thread.
      */
     public void prefetch(@NonNull List<LauncherAppEntry> entries, int sizePx) {
-        if (sizePx <= 0 || entries.isEmpty()) return;
+        if (sizePx <= 0 || entries.isEmpty() || sSynchronousForTesting) return;
         List<LauncherAppEntry> wanted = new ArrayList<>();
         for (LauncherAppEntry entry : entries) {
             if (wanted.size() >= MAX_PREFETCH) break;
