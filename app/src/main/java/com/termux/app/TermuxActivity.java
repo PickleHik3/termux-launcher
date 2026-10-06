@@ -17138,17 +17138,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTermuxTerminalViewClient.applyPaddingFillPolicy(getTerminalView());
     }
 
+    /** The terminal effect on the chrome; built the first time the effect is applied. */
+    @Nullable private com.termux.app.chrome.ChromeRetroEffect mChromeRetroEffect;
+
     /**
      * Push the cursor trail style and retro terminal effect preferences into the pane controller
-     * (kitty.conf {@code custom_shaders} still wins for the trail inside it). The retro effect is
-     * global and reaches terminal pane frames only, never wall widget pages. Called when the
-     * controller is created and from {@link #reloadActivityStyling}.
+     * (kitty.conf {@code custom_shaders} still wins for the trail inside it) and the effect onto
+     * the chrome. The retro effect is global: terminal pane frames (never wall widget pages), and
+     * the status bar, dock, bars and keyboard around them. Called when the controller is created,
+     * from the Appearance editor's live preview and from {@link #reloadActivityStyling}.
      */
     private void applyTrailStyleAndRetroEffect() {
-        if (mPaneController == null || mPreferences == null)
+        if (mPreferences == null)
+            return;
+        String retroEffect = mPreferences.getTerminalRetroEffect();
+        if (mChromeRetroEffect == null) {
+            View root = findViewById(R.id.activity_termux_root_view);
+            if (root != null) mChromeRetroEffect = new com.termux.app.chrome.ChromeRetroEffect(root);
+        }
+        if (mChromeRetroEffect != null)
+            mChromeRetroEffect.setStyle(com.termux.app.terminal.PaneRetroStyle.fromId(retroEffect));
+        if (mPaneController == null)
             return;
         mPaneController.setCursorTrailStylePreference(mPreferences.getTerminalCursorTrailStyle());
-        mPaneController.setRetroEffectPreference(mPreferences.getTerminalRetroEffect());
+        mPaneController.setRetroEffectPreference(retroEffect);
     }
 
     void openSurfaceEditor() {
