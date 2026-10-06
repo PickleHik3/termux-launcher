@@ -22,6 +22,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
+import juloo.keyboard2.LabelFace;
+
 /**
  * The single glyph shown just above the key under the user's finger.
  *
@@ -90,6 +92,7 @@ public final class KeyPopupOverlayView extends View {
     private KeyPopupPalette mPalette;
     @Nullable private Typeface mLabelFont;
     @Nullable private Typeface mKeyFont;
+    @Nullable private Typeface mSymbolFont;
     private boolean mReducedMotion;
 
     private final Rect mInvalidateRect = new Rect();
@@ -119,9 +122,11 @@ public final class KeyPopupOverlayView extends View {
     }
 
     /** The faces the keyboard draws its own caps in, so a popup's glyph matches its key. */
-    public void setTypefaces(@Nullable Typeface labelFont, @Nullable Typeface keyFont) {
+    public void setTypefaces(@Nullable Typeface labelFont, @Nullable Typeface keyFont,
+                             @Nullable Typeface symbolFont) {
         mLabelFont = labelFont;
         mKeyFont = keyFont;
+        mSymbolFont = symbolFont;
         mFaces.clear();
     }
 
@@ -280,7 +285,7 @@ public final class KeyPopupOverlayView extends View {
                            float alpha, float dy, float density) {
         if (alpha <= 0f) return;
         Paint paint = mGlyphPaint;
-        paint.setTypeface(faceFor(labelKeyFont, metrics.monospace && !usesLabelFont(label),
+        paint.setTypeface(faceFor(labelKeyFont, usesLabelFont(label), metrics.monospace,
             metrics.weight));
         paint.setTextSize(metrics.glyphSizePx);
         float baseline = popup.anchorY + dy - (paint.ascent() + paint.descent()) / 2f;
@@ -302,32 +307,31 @@ public final class KeyPopupOverlayView extends View {
     }
 
     /**
-     * Whether a label has to be drawn with the keyboard's own label font rather than the plain
-     * monospace face. Launcher tool slots (the space bar's window and session swipes, the palette)
-     * are Nerd Font glyphs in the private-use planes; the caps draw them with the label font, and
-     * monospace has no such glyphs, so they would come out as boxes.
+     * Whether a label has to be drawn with the keyboard's symbols face rather than the plain
+     * monospace face or a picked label font. Launcher tool slots (the space bar's window and
+     * session swipes, the palette) are Nerd Font glyphs in the private-use planes; the caps draw
+     * them with the symbols face ({@link LabelFace#SYMBOL}), and neither monospace nor a typical
+     * picked font has such glyphs, so they would come out as boxes or nothing.
      */
     static boolean usesLabelFont(@Nullable String label) {
-        if (label == null) return false;
-        for (int i = 0; i < label.length(); ) {
-            int cp = label.codePointAt(i);
-            if ((cp >= 0xE000 && cp <= 0xF8FF) || cp >= 0xF0000) return true;
-            i += Character.charCount(cp);
-        }
-        return false;
+        return LabelFace.hasIconGlyph(label);
     }
 
     /**
-     * The face one glyph is drawn in. Cached: at most six combinations exist, and resolving a
+     * The face one glyph is drawn in. Cached: only a handful of combinations exist, and resolving a
      * weighted face on every frame of a crossfade is allocation the draw path does not need.
      */
-    private Typeface faceFor(boolean keyFont, boolean monospace, int weight) {
-        int cacheKey = (keyFont ? 1024 : 0) | (monospace ? 2048 : 0) | weight;
+    private Typeface faceFor(boolean keyFont, boolean iconGlyph, boolean monospace, int weight) {
+        // An icon glyph is never monospace; the symbols face is the only one that has it.
+        if (iconGlyph) monospace = false;
+        int cacheKey = (keyFont ? 1024 : 0) | (monospace ? 2048 : 0)
+            | (iconGlyph && !keyFont ? 4096 : 0) | weight;
         Typeface cached = mFaces.get(cacheKey);
         if (cached != null) return cached;
         // The keyboard's own label face as the caps draw it, never a synthesized weight or a
         // substitute family: a custom font from Settings must look identical on the popup.
-        Typeface base = keyFont ? mKeyFont : mLabelFont;
+        Typeface base = keyFont ? mKeyFont : iconGlyph ? mSymbolFont : mLabelFont;
+        if (base == null && iconGlyph && !keyFont) base = mLabelFont;
         if (base == null) base = Typeface.DEFAULT;
         Typeface face = base;
         mFaces.put(cacheKey, face);
@@ -337,8 +341,8 @@ public final class KeyPopupOverlayView extends View {
     /** Half the width the label actually paints, so the clamp is measured, not guessed. */
     private float halfWidthPx(@NonNull String label, boolean labelKeyFont,
                               @NonNull KeyPopupGeometry.Metrics metrics) {
-        mMeasurePaint.setTypeface(faceFor(labelKeyFont,
-            metrics.monospace && !usesLabelFont(label), metrics.weight));
+        mMeasurePaint.setTypeface(faceFor(labelKeyFont, usesLabelFont(label), metrics.monospace,
+            metrics.weight));
         mMeasurePaint.setTextSize(metrics.glyphSizePx);
         return mMeasurePaint.measureText(label) / 2f;
     }

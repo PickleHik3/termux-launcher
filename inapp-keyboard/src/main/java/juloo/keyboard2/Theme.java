@@ -372,6 +372,9 @@ public final class Theme
       final Paint _special_label_paint;
       final Paint _sublabel_paint;
       final Paint _special_sublabel_paint;
+      /** Labels with Nerd Font icons, which a user label font lacks; see [LabelFace]. */
+      final Paint _symbol_label_paint;
+      final Paint _symbol_sublabel_paint;
       final int _label_alpha_bits;
       /** This role's resolved fill (with translucency) and keycap gradient overlays,
           retained so a host color override can tint the glass instead of replacing it. */
@@ -510,6 +513,9 @@ public final class Theme
         _special_label_paint = init_label_paint(_key_font);
         _sublabel_paint = init_label_paint(config.labelFont);
         _special_sublabel_paint = init_label_paint(_key_font);
+        Typeface symbolFont = config.symbolFont != null ? config.symbolFont : config.labelFont;
+        _symbol_label_paint = init_label_paint(symbolFont);
+        _symbol_sublabel_paint = init_label_paint(symbolFont);
         _label_alpha_bits = (config.labelBrightness & 0xFF) << 24;
       }
 
@@ -552,18 +558,31 @@ public final class Theme
           paint.setShader(null);
       }
 
-      public Paint label_paint(boolean special_font, int color, float text_size)
+      public Paint label_paint(boolean special_font, CharSequence label, int color,
+          float text_size)
       {
-        Paint p = special_font ? _special_label_paint : _label_paint;
+        Paint p = pick(LabelFace.of(special_font, label), _special_label_paint,
+            _symbol_label_paint, _label_paint);
         p.setColor((color & 0x00FFFFFF) | _label_alpha_bits);
         p.setTextSize(text_size);
         return p;
       }
 
-      public Paint sublabel_paint(boolean special_font, int color,
+      private static Paint pick(LabelFace face, Paint key, Paint symbol, Paint text)
+      {
+        switch (face)
+        {
+          case KEY: return key;
+          case SYMBOL: return symbol;
+          default: return text;
+        }
+      }
+
+      public Paint sublabel_paint(boolean special_font, CharSequence label, int color,
           float text_size, Paint.Align align)
       {
-        Paint p = special_font ? _special_sublabel_paint : _sublabel_paint;
+        Paint p = pick(LabelFace.of(special_font, label), _special_sublabel_paint,
+            _symbol_sublabel_paint, _sublabel_paint);
         p.setColor((color & 0x00FFFFFF) | _label_alpha_bits);
         p.setTextSize(text_size);
         p.setTextAlign(align);

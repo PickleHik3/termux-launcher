@@ -1008,6 +1008,12 @@ public class Keyboard2View extends View
     return _config.labelFont;
   }
 
+  /** The face labels with icon glyphs are drawn in ([LabelFace.SYMBOL]). */
+  public android.graphics.Typeface symbolFont()
+  {
+    return _config.symbolFont != null ? _config.symbolFont : _config.labelFont;
+  }
+
   /** What a host needs to draw the popup for one pressed key. Immutable. */
   public static final class KeyPopupInfo
   {
@@ -1227,7 +1233,7 @@ public class Keyboard2View extends View
     Vertical v = LABEL_POSITION_V[sub_index];
     Theme.Computed.Key tc_key = themeKeyFor(k.role);
     float textSize = scaleTextSize(kv, false);
-    Paint p = tc_key.sublabel_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT),
+    Paint p = tc_key.sublabel_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), kv.getString(),
         tc_key.subLabelColor, textSize, a);
     float subPadding = _config.keyPaddingPx;
     if (a != Paint.Align.CENTER && v != Vertical.CENTER)
@@ -2256,7 +2262,8 @@ public class Keyboard2View extends View
     kv = shiftedKeyeventLabel(kv);
     float textSize = scaleTextSize(kv, true);
     int color = hasColorOverride ? colorOverride : labelColor(kv, isKeyDown, false, tc);
-    Paint p = tc.label_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), color, textSize);
+    Paint p = tc.label_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), kv.getString(), color,
+        textSize);
     canvas.drawText(kv.getString(), x, (keyH - p.ascent() - p.descent()) / 2f + y, p);
   }
 
@@ -2272,7 +2279,8 @@ public class Keyboard2View extends View
     kv = shiftedKeyeventLabel(kv);
     float textSize = scaleTextSize(kv, false);
     int color = hasColorOverride ? colorOverride : labelColor(kv, isKeyDown, true, tc);
-    Paint p = tc.sublabel_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), color, textSize, a);
+    Paint p = tc.sublabel_paint(kv.hasFlagsAny(KeyValue.FLAG_KEY_FONT), kv.getString(), color,
+        textSize, a);
     float subPadding = _config.keyPaddingPx;
     // Corner-anchored sublabels sit where a large corner radius cuts the key
     // fill away; pull them inward with the radius so they stay on the cap.

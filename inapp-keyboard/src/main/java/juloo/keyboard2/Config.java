@@ -53,6 +53,9 @@ public final class Config
   /** Typeface for text labels, or null for the system default. Key glyphs
       always use the bundled special font. */
   public final Typeface labelFont;
+  /** Typeface for labels holding private-use icon glyphs (see [LabelFace]), or null to draw
+      them in [labelFont] too. Lets a user label font keep the Nerd Font icons it lacks. */
+  public final Typeface symbolFont;
 
   public final boolean addBottomRow;
   public final boolean addNumberRow;
@@ -94,6 +97,7 @@ public final class Config
     hapticAmplitude = builder.hapticAmplitude;
     keySoundEnabled = builder.keySoundEnabled;
     labelFont = builder.labelFont;
+    symbolFont = builder.symbolFont;
     if (hapticAmplitude < -1 || hapticAmplitude == 0 || hapticAmplitude > 255)
       throw new IllegalArgumentException("hapticAmplitude must be -1 or in [1, 255]");
     addBottomRow = builder.addBottomRow;
@@ -180,6 +184,7 @@ public final class Config
     public int hapticAmplitude = -1;
     public boolean keySoundEnabled = false;
     public Typeface labelFont = null;
+    public Typeface symbolFont = null;
     public boolean addBottomRow = true;
     public boolean addNumberRow = false;
     public boolean numberRowSymbols = true;

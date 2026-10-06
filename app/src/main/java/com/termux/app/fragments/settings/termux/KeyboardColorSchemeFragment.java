@@ -265,6 +265,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         config.hapticEnabled = false;
         config.keySoundEnabled = false;
         config.labelFont = previewLabelFont(context, mPreferences.getInAppKeyboardFontPath());
+        config.symbolFont = com.termux.shared.termux.font.NerdFontSpans.typeface(context);
         mKeyboard = new Keyboard2View(context, config.build(), buildPreviewPalette(context));
         KeyboardData previewLayout = KeyboardData.load(getResources(),
             juloo.keyboard2.R.xml.termux_launcher_qwerty);
