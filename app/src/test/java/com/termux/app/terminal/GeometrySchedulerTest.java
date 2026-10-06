@@ -1,0 +1,313 @@
+package com.termux.app.terminal;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import androidx.annotation.NonNull;
+
+import com.termux.app.terminal.GeometryScheduler.Reason;
+import com.termux.app.terminal.GeometryScheduler.ResizePolicy;
+
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * The counting {@link GeometryScheduler} promises: one pass per frame however many triggers, one
+ * grid resize per transition, nothing per fold frame. The host is a fake window with a fake clock:
+ * {@link FakeHost#frame} is "the dispatch ended", {@link FakeHost#layout} is "the traversal ran".
+ */
+public class GeometrySchedulerTest {
+
+    private FakeHost mHost;
+    private GeometryScheduler mScheduler;
+
+    @Before
+    public void setUp() {
+        mHost = new FakeHost();
+        mScheduler = new GeometryScheduler(mHost);
+    }
+
+    @Test
+    public void requestsInOneFrameShareOnePass() {
+        mScheduler.request(Reason.KEYBOARD, ResizePolicy.NONE);
+        mScheduler.request(Reason.INSETS, ResizePolicy.NOW);
+        mScheduler.request(Reason.LAYOUT, ResizePolicy.NONE);
+        mScheduler.request(Reason.METRICS, ResizePolicy.NONE);
+        mScheduler.request(Reason.KEYBOARD, ResizePolicy.NOW);
+
+        assertEquals("one frame booked for all of them", 1, mHost.frames.size());
+        assertEquals(0, mHost.passes.size());
+
+        mHost.frame();
+
+        assertEquals(1, mHost.passes.size());
+        assertEquals("the first real trigger names the pass", Reason.KEYBOARD, mHost.passes.get(0));
+    }
+
+    @Test
+    public void keyboardShowRunsOnePassAndReflowsOnce() {
+        mScheduler.requestNow(Reason.KEYBOARD, ResizePolicy.NOW);
+
+        assertEquals("the reveal gate's traversal must see the new stack", 1, mHost.passes.size());
+        assertEquals(1, mHost.holdsBegun);
+        assertTrue(mScheduler.isGridHeld());
+
+        // The traversal the pass booked: the pane host shrinks and says so. Nothing the pass reads
+        // moved, so it is the pass's own echo.
+        mScheduler.request(Reason.LAYOUT, ResizePolicy.NONE);
+        mHost.layout();
+
+        assertEquals(1, mHost.passes.size());
+        assertEquals("the grid resizes once, after the pass's layout", 1, mHost.holdsFinished);
+        assertFalse(mScheduler.isGridHeld());
+
+        // The reflow it released reports its new rows: the same facts again.
+        mScheduler.request(Reason.METRICS, ResizePolicy.NONE);
+        mHost.layout();
+
+        assertEquals(1, mHost.passes.size());
+        assertEquals(1, mHost.holdsBegun);
+        assertEquals(1, mHost.holdsFinished);
+    }
+
+    @Test
+    public void anEchoWhoseFactsMovedRunsAPass() {
+        mScheduler.requestNow(Reason.INSETS, ResizePolicy.NOW);
+        mHost.key = 42L;
+
+        mScheduler.request(Reason.LAYOUT, ResizePolicy.NONE);
+        mHost.layout();
+
+        assertEquals(2, mHost.passes.size());
+        assertEquals(Reason.LAYOUT, mHost.passes.get(1));
+        assertEquals("still one resize: the echo's pass ran under the same hold", 1,
+            mHost.holdsFinished);
+    }
+
+    @Test
+    public void foldFramesRunNoPassUntilSettleAndOneAtSettle() {
+        mScheduler.requestNow(Reason.STYLING, ResizePolicy.NONE);
+        int before = mHost.passes.size();
+
+        GeometryScheduler.Transition fold = mScheduler.begin(Reason.STATUS_FOLD, true, true);
+        assertEquals(1, mHost.displayBegun);
+        for (int tick = 0; tick < 12; tick++) {
+            // Each frame of the fold moves the terminal's top and relayouts the pane host.
+            mHost.key++;
+            mScheduler.request(Reason.LAYOUT, ResizePolicy.NONE);
+            mScheduler.request(Reason.METRICS, ResizePolicy.NONE);
+            mHost.layout();
+            mHost.advance(16);
+        }
+
+        assertEquals("no pass while the fold runs", before, mHost.passes.size());
+        assertEquals(0, mHost.holdsFinished);
+
+        mScheduler.settle(fold, true);
+        mHost.frame();
+
+        assertEquals("one pass at settle", before + 1, mHost.passes.size());
+        assertEquals(Reason.STATUS_FOLD, mHost.passes.get(before));
+        assertEquals("the grid waits for the settle pass's layout", 0, mHost.holdsFinished);
+
+        mHost.layout();
+
+        assertEquals(1, mHost.holdsFinished);
+        assertEquals(1, mHost.displayFinished);
+    }
+
+    @Test
+    public void aBatchRunsItsRequestsAsOnePassAtItsEnd() {
+        mScheduler.beginBatch();
+        mScheduler.requestNow(Reason.KEYBOARD, ResizePolicy.NOW);
+        mScheduler.requestNow(Reason.KEYBOARD, ResizePolicy.NOW);
+        mScheduler.requestNow(Reason.PLACE_SETTLE, ResizePolicy.NOW);
+        assertEquals(0, mHost.passes.size());
+
+        mScheduler.endBatch();
+
+        assertEquals("ran before endBatch returned", 1, mHost.passes.size());
+        mHost.layout();
+        assertEquals(1, mHost.holdsFinished);
+    }
+
+    @Test
+    public void aSlideHoldsTheGridThroughItsPassesUntilSettle() {
+        GeometryScheduler.Transition slide = mScheduler.begin(Reason.PLACE_TRAVEL, false, false);
+        mScheduler.requestNow(Reason.PLACE_TRAVEL, ResizePolicy.AT_SETTLE);
+        mHost.layout();
+        // A keyboard pre-rolled mid-slide: a pass of its own, and still no resize.
+        mScheduler.requestNow(Reason.KEYBOARD, ResizePolicy.NOW);
+        mHost.layout();
+
+        assertEquals(2, mHost.passes.size());
+        assertEquals(0, mHost.holdsFinished);
+
+        mScheduler.beginBatch();
+        mScheduler.requestNow(Reason.PLACE_SETTLE, ResizePolicy.NOW);
+        mScheduler.endBatch();
+        mScheduler.settle(slide, false);
+
+        assertEquals(3, mHost.passes.size());
+        assertEquals(0, mHost.holdsFinished);
+        mHost.layout();
+        assertEquals("one resize for the whole slide", 1, mHost.holdsFinished);
+        assertEquals(1, mHost.holdsBegun);
+    }
+
+    @Test
+    public void aDividerReleaseResizesAfterLayoutWithoutAPass() {
+        GeometryScheduler.Transition drag = mScheduler.begin(Reason.DIVIDER, false, false);
+        mHost.layout();
+        mHost.layout();
+        assertEquals(0, mHost.holdsFinished);
+
+        mScheduler.settle(drag, false);
+        mScheduler.settle(drag, false);
+        assertEquals("not before the release's own layout", 0, mHost.holdsFinished);
+
+        mHost.layout();
+
+        assertEquals(0, mHost.passes.size());
+        assertEquals(1, mHost.holdsFinished);
+    }
+
+    @Test
+    public void aCheckPostedBeforeAPassWaitsForThatPassesLayout() {
+        GeometryScheduler.Transition fold = mScheduler.begin(Reason.STATUS_FOLD, true, false);
+        mScheduler.settle(fold, true);
+        // The settle's pass is booked, so no check may be queued ahead of it.
+        assertTrue(mHost.afterLayout.isEmpty());
+
+        mHost.frame();
+        assertEquals(1, mHost.passes.size());
+        assertEquals(1, mHost.afterLayout.size());
+    }
+
+    @Test
+    public void aHoldWhosePassNeverGetsAFrameIsReleasedByTheBackstop() {
+        mScheduler.request(Reason.INSETS, ResizePolicy.NOW);
+        assertTrue(mScheduler.isGridHeld());
+
+        // The window stopped drawing: neither the frame nor any layout comes.
+        mHost.advance(GeometryScheduler.HOLD_BACKSTOP_MS - 1);
+        assertTrue(mScheduler.isGridHeld());
+        mHost.advance(1);
+
+        assertFalse(mScheduler.isGridHeld());
+        assertEquals("the booked pass still ran", 1, mHost.passes.size());
+        assertEquals(1, mHost.holdsFinished);
+    }
+
+    @Test
+    public void aRequestDuringAPassFollowsItInsteadOfRecursing() {
+        mHost.onPass = () -> mScheduler.requestNow(Reason.KEYBOARD, ResizePolicy.NOW);
+        mScheduler.requestNow(Reason.STYLING, ResizePolicy.NONE);
+        mHost.onPass = null;
+
+        assertEquals(1, mHost.passes.size());
+        assertEquals(1, mHost.frames.size());
+        mHost.frame();
+        assertEquals(2, mHost.passes.size());
+    }
+
+    // ------------------------------------------------------------------ fake window
+
+    private static final class FakeHost implements GeometryScheduler.Host {
+
+        private static final class Delayed {
+            final long at;
+            final Runnable runnable;
+
+            Delayed(long at, Runnable runnable) {
+                this.at = at;
+                this.runnable = runnable;
+            }
+        }
+
+        long now;
+        long key = 7L;
+        boolean alive = true;
+        Runnable onPass;
+        final List<Runnable> frames = new ArrayList<>();
+        final List<Runnable> afterLayout = new ArrayList<>();
+        final List<Delayed> delayed = new ArrayList<>();
+        final List<Reason> passes = new ArrayList<>();
+        int holdsBegun;
+        int holdsFinished;
+        int displayBegun;
+        int displayFinished;
+
+        @Override public void postFrame(@NonNull Runnable frame) {
+            frames.add(frame);
+        }
+
+        @Override public void postAfterLayout(@NonNull Runnable runnable) {
+            afterLayout.add(runnable);
+        }
+
+        @Override public void postDelayed(@NonNull Runnable runnable, long delayMs) {
+            delayed.add(new Delayed(now + delayMs, runnable));
+        }
+
+        @Override public void removeCallbacks(@NonNull Runnable runnable) {
+            frames.removeIf(r -> r == runnable);
+            afterLayout.removeIf(r -> r == runnable);
+            delayed.removeIf(d -> d.runnable == runnable);
+        }
+
+        @Override public void runPass(@NonNull Reason reason) {
+            passes.add(reason);
+            if (onPass != null) onPass.run();
+        }
+
+        @Override public void beginGridHold() {
+            holdsBegun++;
+        }
+
+        @Override public void finishGridHold() {
+            holdsFinished++;
+        }
+
+        @Override public void beginDisplayHold() {
+            displayBegun++;
+        }
+
+        @Override public void finishDisplayHold() {
+            displayFinished++;
+        }
+
+        @Override public long layoutInputsKey() {
+            return key;
+        }
+
+        @Override public boolean isAlive() {
+            return alive;
+        }
+
+        /** The current dispatch ends: what was booked for it runs. */
+        void frame() {
+            while (!frames.isEmpty()) frames.remove(0).run();
+        }
+
+        /** The frame's traversal runs, then whatever waited behind it. */
+        void layout() {
+            frame();
+            List<Runnable> ready = new ArrayList<>(afterLayout);
+            afterLayout.clear();
+            for (Runnable runnable : ready) runnable.run();
+        }
+
+        void advance(long ms) {
+            now += ms;
+            List<Delayed> due = new ArrayList<>();
+            for (Delayed d : delayed) if (d.at <= now) due.add(d);
+            delayed.removeAll(due);
+            for (Delayed d : due) d.runnable.run();
+        }
+    }
+}
