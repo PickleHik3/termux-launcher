@@ -53,7 +53,7 @@ public final class LauncherIconStore {
 
     /**
      * Produces an app's raw artwork when it is not held. Runs on whichever thread asked — for the
-     * drawer and the dock that is the launcher's worker ({@link AsyncIconBinder}), so a load costs
+     * drawer and the dock that is the icon thread ({@link AsyncIconBinder}), so a load costs
      * the main thread nothing.
      */
     public interface ArtworkLoader {
