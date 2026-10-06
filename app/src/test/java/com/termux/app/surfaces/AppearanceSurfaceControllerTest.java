@@ -38,9 +38,8 @@ import java.util.function.Consumer;
 
 /**
  * The Appearance surface's navigation, with a scripted editor and a fake Overview and Icons page:
- * which page Back goes to, that Look, Layout and the Overview share one session, that the
- * backdrop is covered once and uncovered once, and that the swap back to the Overview waits for
- * the end of the editor's hide. Animations are off (the animator scale is zero), so every hop the
+ * which page Back goes to, that Look, Layout and the Overview share one session, and that the
+ * swap back to the Overview waits for the end of the editor's hide. Animations are off (the animator scale is zero), so every hop the
  * surface itself plays lands at once; the editor's own steps are completed by the test.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -174,7 +173,6 @@ public class AppearanceSurfaceControllerTest {
 
     private static class FakeHost implements AppearanceSurfaceController.Host {
         final Activity activity;
-        final List<Boolean> covered = new ArrayList<>();
         FakeOverview overview;
         FakePage icons;
         int closed;
@@ -187,8 +185,6 @@ public class AppearanceSurfaceControllerTest {
         @NonNull @Override public Context context() { return activity; }
 
         @Nullable @Override public ViewGroup content() { return activity.findViewById(android.R.id.content); }
-
-        @Override public void setCovered(boolean isCovered) { covered.add(isCovered); }
 
         @Override public void createOverview(@NonNull AppearanceSurfaceController.Navigator navigator,
                                              @NonNull Consumer<AppearanceSurfaceController.OverviewPage> ready) {
@@ -327,7 +323,6 @@ public class AppearanceSurfaceControllerTest {
         assertNotNull(host);
         assertNotNull(host.findViewById(R.id.appearance_page_back));
         assertFalse("the host lets taps through to the frame", host.isClickable());
-        assertEquals("the backdrop is not covered for a direct open", 0, mHost.covered.size());
         assertSame(mSurface.scrim(), content.getChildAt(0));
     }
 
@@ -502,7 +497,7 @@ public class AppearanceSurfaceControllerTest {
     }
 
     @Test
-    public void theBackdropIsCoveredOnceAndUncoveredOnceForTheWholeSession() {
+    public void oneSessionSpansEveryPageAndClosesOnce() {
         toLook();
         mSurface.onBack();
         mEditor.finishHide();
@@ -514,9 +509,7 @@ public class AppearanceSurfaceControllerTest {
         idle();
         mNavigator.openIcons();
         mSurface.onBack();
-        assertEquals("covered once, however many pages", Arrays.asList(true), mHost.covered);
         mSurface.onBack();
-        assertEquals("and uncovered once, at the close", Arrays.asList(true, false), mHost.covered);
         assertEquals(1, mHost.closed);
     }
 
@@ -525,7 +518,6 @@ public class AppearanceSurfaceControllerTest {
         mSurface.open(PageId.LAYOUT, null, PaneWallPage.WIDGETS);
         assertEquals(PageId.LAYOUT, mSurface.shownPage());
         assertNull("no Overview was built", mHost.overview);
-        assertTrue("and the backdrop was never covered", mHost.covered.isEmpty());
         assertEquals(1, mEditor.count("begin"));
         mEditor.onDone.run();
         assertFalse(mSurface.isOpen());
@@ -542,7 +534,6 @@ public class AppearanceSurfaceControllerTest {
         mEditor.pendingLeave.run();
         assertFalse(mSurface.isOpen());
         assertEquals(1, mEditor.count("end"));
-        assertEquals(Arrays.asList(true, false), mHost.covered);
     }
 
     @Test

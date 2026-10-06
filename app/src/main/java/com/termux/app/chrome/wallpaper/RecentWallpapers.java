@@ -27,8 +27,8 @@ import java.util.Set;
  * wide picture. Newest first, deduplicated by content (SHA-256), trimmed to {@link #MAX}.
  *
  * <p>Plain Java over {@link File}, no Android, so it is a unit test. The order lives in a small
- * index file ({@code index}, one {@code <file name> <hash> [living]} line per entry, newest first; the optional third
- * token marks a photo that was applied as a living still); an entry
+ * index file ({@code index}, one {@code <file name> <hash>} line per entry, newest first; an older index may carry a
+ * third token, which is read past); an entry
  * whose file has gone is skipped when listing and dropped on the next write. Blocking file work:
  * call it off the main thread, except {@link #list}, which reads only the index.</p>
  */
@@ -70,12 +70,6 @@ public final class RecentWallpapers {
      */
     @NonNull
     public synchronized File add(@NonNull File source, long nowMs) throws IOException {
-        return add(source, nowMs, false);
-    }
-
-    /** As {@link #add(File, long)}; {@code living} marks the photo as applied as a living still (never cleared by a later plain apply). */
-    @NonNull
-    public synchronized File add(@NonNull File source, long nowMs, boolean living) throws IOException {
         if (!source.isFile()) throw new IOException("No such file: " + source);
         String hash = sha256(source);
         List<Entry> entries = live(readIndex());
@@ -88,14 +82,13 @@ public final class RecentWallpapers {
         }
         if (keep != null) {
             entries.remove(keep);
-            if (living && !keep.living) keep = new Entry(keep.name, keep.hash, true);
         } else {
             if (!mDir.isDirectory() && !mDir.mkdirs()) throw new IOException("Cannot create " + mDir);
             long stamp = nowMs;
             File target = new File(mDir, stamp + ".png");
             while (target.exists()) target = new File(mDir, (++stamp) + ".png");
             copy(source, target);
-            keep = new Entry(target.getName(), hash, living);
+            keep = new Entry(target.getName(), hash);
         }
         entries.add(0, keep);
         while (entries.size() > MAX) {
@@ -110,31 +103,21 @@ public final class RecentWallpapers {
 
     // --- internals ---
 
-    /** One kept photo: its file name, content hash and whether it was applied as a living still. */
+    /** One kept photo: its file name and content hash. */
     public static final class Entry {
         @NonNull public final String name;
         @NonNull public final String hash;
-        public final boolean living;
 
-        Entry(@NonNull String name, @NonNull String hash, boolean living) {
+        Entry(@NonNull String name, @NonNull String hash) {
             this.name = name;
             this.hash = hash;
-            this.living = living;
         }
     }
 
-    /** The kept photos with their hash and living flag, newest first; missing files are skipped. */
+    /** The kept photos with their hash, newest first; missing files are skipped. */
     @NonNull
     public synchronized List<Entry> entries() {
         return live(readIndex());
-    }
-
-    /** Whether the kept photo {@code file} (by name) was applied as a living still. */
-    public synchronized boolean isLiving(@NonNull File file) {
-        for (Entry e : readIndex()) {
-            if (e.name.equals(file.getName())) return e.living;
-        }
-        return false;
     }
 
     @NonNull
@@ -176,14 +159,14 @@ public final class RecentWallpapers {
         if (name.contains("/") || name.contains("\\") || name.startsWith(".") || name.equals(INDEX)) return null;
         String[] rest = t.substring(space + 1).trim().split("\\s+");
         if (rest.length == 0 || rest[0].isEmpty()) return null;
-        return new Entry(name, rest[0], rest.length > 1 && "living".equals(rest[1]));
+        return new Entry(name, rest[0]);
     }
 
     private void writeIndex(@NonNull List<Entry> entries) throws IOException {
         File index = new File(mDir, INDEX);
         File tmp = new File(mDir, INDEX + ".tmp");
         try (Writer w = new OutputStreamWriter(new FileOutputStream(tmp, false), StandardCharsets.UTF_8)) {
-            for (Entry e : entries) w.write(e.name + " " + e.hash + (e.living ? " living" : "") + "\n");
+            for (Entry e : entries) w.write(e.name + " " + e.hash + "\n");
         }
         if (!tmp.renameTo(index)) {
             //noinspection ResultOfMethodCallIgnored

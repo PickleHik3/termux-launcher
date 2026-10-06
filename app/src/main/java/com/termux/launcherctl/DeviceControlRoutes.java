@@ -18,8 +18,6 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxActivity;
 import com.termux.app.chrome.ManagedWallpaper;
-import com.termux.app.chrome.wallpaper.AnimatedWallpaperStatus;
-import com.termux.app.chrome.wallpaper.GeneratedWallpaperApplier;
 import com.termux.app.chrome.wallpaper.WallpaperSlots;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.notice.AppNotice;
@@ -419,23 +417,10 @@ final class DeviceControlRoutes {
         }
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, false);
         int storedId = preferences == null ? -1 : preferences.getManagedWallpaperSystemId();
-        String animatedId = preferences == null ? null : preferences.getManagedWallpaperAnimatedId();
-        AnimatedWallpaperStatus status = GeneratedWallpaperApplier.statusProvider();
-        boolean playing = status != null && status.playing();
-        String reason = playing ? null : status == null ? "inactive" : status.reason();
-        if (!playing && reason == null) reason = "inactive";
         WallpaperSlots.State slots = WallpaperSlots.read(app);
         return ok().put("home_id", homeId).put("lock_id", lockId).put("live", live)
             .put("managed", storedId > 0 && storedId == homeId)
-            .put("animated", animatedId == null ? JSONObject.NULL : animatedId)
-            .put("palette", animatedId == null ? JSONObject.NULL : "own")
-            .put("playing", playing)
-            .put("reason", reason == null ? JSONObject.NULL : reason)
-            .put("tier", status == null ? 0 : status.tier())
-            .put("kills", status == null ? 0 : status.kills())
             .put("lock_slot", WallpaperSlots.lockSlotName(slots.lock))
-            .put("lock_motion", slots.lockMotion)
-            .put("lock_live", slots.lockLiveActive)
             .put("desired_width", manager.getDesiredMinimumWidth())
             .put("desired_height", manager.getDesiredMinimumHeight());
     }

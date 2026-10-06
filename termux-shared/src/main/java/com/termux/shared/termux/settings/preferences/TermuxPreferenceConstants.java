@@ -1568,36 +1568,14 @@ public final class TermuxPreferenceConstants {
 
         public static final int DEFAULT_VALUE_MANAGED_WALLPAPER_SYSTEM_ID = -1;
 
-        /** Id of the living still ({@code living:<hash>}) the managed wallpaper came from; unset for a photo. */
-        public static final String KEY_MANAGED_WALLPAPER_ANIMATED = "managed_wallpaper_animated";
-
         /**
          * The Lock wallpaper slot: {@code same_as_home} (default, follows the Home slot),
-         * {@code animated:<id>} (a living still) or {@code photo}. The Home slot is
-         * {@link #KEY_MANAGED_WALLPAPER_ANIMATED} (an id, or unset for a photo).
+         * or {@code photo}.
          */
         public static final String KEY_WALLPAPER_LOCK_CHOICE = "wallpaper_lock_choice";
         public static final String VALUE_WALLPAPER_LOCK_SAME_AS_HOME = "same_as_home";
         public static final String VALUE_WALLPAPER_LOCK_PHOTO = "photo";
-        /** Prefix of an animated lock choice; the generated background id follows it. */
-        public static final String VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX = "animated:";
         public static final String DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE = VALUE_WALLPAPER_LOCK_SAME_AS_HOME;
-
-        /** The Lock slot's Motion toggle: an animated lock choice plays as a live wallpaper (API 34+). */
-        public static final String KEY_WALLPAPER_LOCK_MOTION = "wallpaper_lock_motion";
-        public static final boolean DEFAULT_VALUE_WALLPAPER_LOCK_MOTION = true;
-
-        /**
-         * The Home slot's Motion toggle, read only for a living still (a photo brought to life):
-         * on plays it in the launcher, off leaves its photo as a still. Generated backgrounds
-         * always play on Home.
-         */
-        public static final String KEY_WALLPAPER_HOME_MOTION = "wallpaper_home_motion";
-        public static final boolean DEFAULT_VALUE_WALLPAPER_HOME_MOTION = true;
-
-        /** Hidden kill switch: true stops generated backgrounds animating. Not in the settings UI. */
-        public static final String KEY_ANIMATED_WALLPAPER_DISABLED = "animated_wallpaper_disabled";
-        public static final boolean DEFAULT_VALUE_ANIMATED_WALLPAPER_DISABLED = false;
         
         /**
          * Defines the key for whether terminal colors should follow Material dynamic colors.

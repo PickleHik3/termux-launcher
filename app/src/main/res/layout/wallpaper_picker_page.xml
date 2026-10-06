@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- The Appearance surface's Overview (appearance-round-2026-10-04.md; it was the wallpaper picker
-     page of lock-live-wallpaper.md, "The picker page"), modelled on
+     page), modelled on
      project-docs/reference/lock-wallpaper/reference-nothing-picker.png. WallpaperPickerPage fills
      it; the surface adds it to the activity's content and sets the system bar insets as padding.
 
@@ -11,12 +11,7 @@
        the pager (the rest of the height): Lock then Home, each a small label ("Lock screen",
          "Home screen") over a card at the 360x800 aspect of the lock cutout, the neighbour peeking
          (WallpaperPickerPage sizes the cards, less the label, and the padding);
-       the pager (the rest of the height): Lock then Home, cards at the 360x800 aspect, the
-         height-driven size filling the room between the bar and the row below;
-       one row: Apply (40) and its more icon (40) at the start, Motion at the end: the switch
-         with the AI-star Read again, or (a photo with no living still) the Bring to life button,
-         or the determinate bar with the stage and a cancel while it runs; INVISIBLE switch on Home
-         so the row never jumps, the Motion cell GONE below API 34;
+       one row: Apply (40) and its more icon (40) at the start, at least 60 tall with its padding;
        the thumbnail strip card: Same as Home (Lock only) then up to five photos last applied
          (six tiles), in equal cells across the row (no heading, no pre-made backgrounds); each
          thumbnail is at most 112 tall and shrinks, aspect kept, so six fit the row's width
@@ -57,6 +52,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center_vertical"
+        android:minHeight="60dp"
         android:orientation="horizontal"
         android:paddingStart="16dp"
         android:paddingTop="8dp"
@@ -90,112 +86,6 @@
             android:tooltipText="@string/wallpaper_picker_apply_more"
             app:icon="@drawable/m3_split_button_chevron_avd"
             app:iconSize="24dp" />
-
-        <!-- Motion: at the row's end, beside Apply. Its states (the switch with the sparkle,
-             Bring to life, the working bar) fill this cell, end-aligned. -->
-        <FrameLayout
-            android:id="@+id/wallpaper_picker_motion_row"
-            android:layout_width="0dp"
-            android:layout_height="48dp"
-            android:layout_marginStart="8dp"
-            android:layout_weight="1">
-
-        <!-- The Motion switch with, for a living still, the small "Read again" beside it. -->
-        <LinearLayout
-            android:id="@+id/wallpaper_picker_motion_group"
-            android:layout_width="wrap_content"
-            android:layout_height="48dp"
-            android:layout_gravity="end|center_vertical"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/wallpaper_picker_motion"
-                android:layout_width="wrap_content"
-                android:layout_height="48dp"
-                android:switchPadding="12dp"
-                android:text="@string/wallpaper_picker_motion"
-                android:textAppearance="?attr/textAppearanceLabelLarge"
-                android:textColor="?attr/colorOnSurface" />
-
-            <!-- Read again: the same analysis over the living still's own copy. An icon button
-                 with the AI star, not a text one: the switch says what it is beside. -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/wallpaper_picker_living_again"
-                style="?attr/materialIconButtonStyle"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:layout_marginStart="8dp"
-                android:contentDescription="@string/living_read_again"
-                android:tooltipText="@string/living_read_again"
-                android:visibility="gone"
-                app:icon="@drawable/ic_symbol_ai_star"
-                app:iconSize="24dp"
-                app:iconTint="?attr/colorOnSurface" />
-        </LinearLayout>
-
-        <!-- A photo with no living still yet: the Bring to life button (API 34+). -->
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/wallpaper_picker_living_offer"
-            style="@style/Widget.Material3.Button.TonalButton.Icon"
-            android:layout_width="wrap_content"
-            android:layout_height="40dp"
-            android:layout_gravity="end|center_vertical"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:text="@string/living_bring_to_life"
-            android:visibility="gone"
-            app:icon="@drawable/ic_symbol_bring_to_life"
-            app:iconSize="24dp" />
-
-        <!-- While the analysis runs: the stage, a determinate bar and a cancel. -->
-        <LinearLayout
-            android:id="@+id/wallpaper_picker_living_working"
-            android:layout_width="match_parent"
-            android:layout_height="48dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="8dp"
-            android:paddingEnd="0dp"
-            android:visibility="gone">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/wallpaper_picker_living_stage"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginBottom="6dp"
-                    android:ellipsize="end"
-                    android:maxLines="1"
-                    android:textAppearance="?attr/textAppearanceLabelMedium"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
-
-                <com.google.android.material.progressindicator.LinearProgressIndicator
-                    android:id="@+id/wallpaper_picker_living_progress"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:indeterminate="false"
-                    android:max="100"
-                    android:progress="0" />
-            </LinearLayout>
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/wallpaper_picker_living_cancel"
-                style="?attr/materialIconButtonStyle"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:contentDescription="@string/living_cancel"
-                android:tooltipText="@string/living_cancel"
-                app:icon="@drawable/ic_symbol_close"
-                app:iconSize="24dp"
-                app:iconTint="?attr/colorOnSurface" />
-        </LinearLayout>
-        </FrameLayout>
     </LinearLayout>
 
     <com.google.android.material.card.MaterialCardView
