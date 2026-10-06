@@ -86,6 +86,21 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     private final Runnable mForegroundTerminalRefreshRunnable;
 
     /**
+     * Lazy mode as last read, or null to read it again. Asked for on every posted redraw, so it is
+     * kept here and dropped whenever the preference changes, and on every start in case another
+     * process wrote it.
+     */
+    @Nullable private Boolean mLazyModeEnabled;
+    /** The store {@link #mLazyModeListener} is registered on, while started. */
+    @Nullable private android.content.SharedPreferences mLazyModeStore;
+    /** Held here: the store keeps its listeners weakly. */
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener mLazyModeListener =
+        (store, key) -> {
+            if (key == null || com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                .TERMUX_APP.KEY_LAZY_MODE.equals(key)) mLazyModeEnabled = null;
+        };
+
+    /**
      * Notifications, the progress ring and the clipboard: the escape callbacks below hand these
      * straight to it, and {@link TerminalActionDispatcher} reaches the same object for the local
      * API's routes, so each signal has exactly one implementation.
@@ -125,6 +140,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      * Should be called when onStart() is called
      */
     public void onStart() {
+        mLazyModeEnabled = null;
+        watchLazyMode();
         // The service has connected, but data may have changed since we were last in the foreground.
         // Get the session stored in shared preferences stored by {@link #onStop} if its valid,
         // otherwise get the last session currently running.
@@ -166,6 +183,33 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mDeferredScreenUpdateSessions.clear();
         mForegroundRefreshPending = false;
         mUiHandler.removeCallbacks(mForegroundTerminalRefreshRunnable);
+        unwatchLazyMode();
+    }
+
+    private void watchLazyMode() {
+        unwatchLazyMode();
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences = mHost.preferences();
+        android.content.SharedPreferences store = preferences == null ? null : preferences.getSharedPreferences();
+        if (store == null) return;
+        store.registerOnSharedPreferenceChangeListener(mLazyModeListener);
+        mLazyModeStore = store;
+    }
+
+    private void unwatchLazyMode() {
+        if (mLazyModeStore != null) mLazyModeStore.unregisterOnSharedPreferenceChangeListener(mLazyModeListener);
+        mLazyModeStore = null;
+        mLazyModeEnabled = null;
+    }
+
+    private boolean isLazyModeEnabled() {
+        Boolean cached = mLazyModeEnabled;
+        if (cached != null) return cached;
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences = mHost.preferences();
+        boolean enabled = preferences != null && preferences.isLazyModeEnabled();
+        // Only a value something will tell us about is kept; otherwise it is read each time, as before.
+        if (mLazyModeStore != null && preferences != null
+            && preferences.getSharedPreferences() == mLazyModeStore) mLazyModeEnabled = enabled;
+        return enabled;
     }
 
     public void onImeVisibilityChanged(boolean visible) {
@@ -235,8 +279,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         //     (median 7ms, 3% janky): it competes with an already-ticking frame source.
         //
         // So: the frame clock exactly when nothing else is driving frames.
-        boolean pumpFrames = mHost.preferences() != null
-            && mHost.preferences().isLazyModeEnabled();
+        boolean pumpFrames = isLazyModeEnabled();
         if (pumpFrames) {
             changedView.postOnAnimation(redraw);
         } else {
