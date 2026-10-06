@@ -1577,6 +1577,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mAppDrawerGeometryFreezePending;
     @Nullable private WallpaperManager.OnColorsChangedListener mWallpaperColorsChangedListener;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
+    /** A pause that a resume ends inside the same message: see {@link TransientPauseTracker}. */
+    private final TransientPauseTracker mTransientPause =
+        new TransientPauseTracker(runnable -> mAccessoryRenderHandler.postAtFrontOfQueue(runnable));
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -2361,6 +2364,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         holdVoiceScreen();
         if (mIsInvalidState)
             return;
+        // A new intent to the resumed launcher (HOME while home; a second start racing a cold
+        // start) pauses and resumes it inside one message. Nothing can have changed in between,
+        // so the passes below that re-read preferences and re-dress the chrome "in case they
+        // changed while we were away" are skipped for it; everything that pairs with onPause,
+        // and the prefix checks a shell can change without a broadcast, still run. A Settings
+        // reload waiting for this resume always takes the full path.
+        boolean transientPause = mTransientPause.resumesTransientPause()
+            && !sPendingStyleReloadOnNextResume && !sPendingAppDrawerReloadOnNextResume;
         // Also here, not only in onStart: a wallpaper picker shown over this activity never stops
         // it, so the arrival back from one is an onResume on its own.
         refreshWallpaperPictureOnArrival();
@@ -2390,10 +2401,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (contentView != null)
             androidx.core.view.ViewCompat.requestApplyInsets(contentView);
         // Preferences may have changed while the settings activity covered this one.
-        initializeInAppKeyboard(null);
+        if (!transientPause) initializeInAppKeyboard(null);
         syncDisplayKeyboardRoute();
         if (mInAppKeyboard != null) {
-            mInAppKeyboard.onPreferencesReloaded();
+            if (!transientPause) mInAppKeyboard.onPreferencesReloaded();
             mInAppKeyboard.onResume();
             if (mInAppKeyboard.isExternalTextInputActive())
                 onSystemImeRequested();
@@ -2423,24 +2434,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalViewClient.onResume();
         refreshLauncherIconsIfPreferencesChanged();
         maybeRecoverFromEmptySession("onResume");
-        // If compatibility mode was just enabled, drop any active split back to a single pane.
-        if (!isSplitPanesEnabled())
-            collapseAllSplits();
-        else if (mPaneController != null) {
-            mPaneController.refreshPaneSizes();
-            // Settings may have flipped the pane behaviour toggles while we were away.
-            applyPaneBehaviourPreferences();
-        }
-        refreshTerminalWindowBar();
+        if (!transientPause) {
+            // If compatibility mode was just enabled, drop any active split back to a single pane.
+            if (!isSplitPanesEnabled())
+                collapseAllSplits();
+            else if (mPaneController != null) {
+                mPaneController.refreshPaneSizes();
+                // Settings may have flipped the pane behaviour toggles while we were away.
+                applyPaneBehaviourPreferences();
+            }
+            refreshTerminalWindowBar();
 
-        updateWindowBackgroundForCurrentSession();
-        syncTerminalWallpaperRenderingMode();
-        applySeamlessStatusBackgroundModeIfNeeded();
-        applyTerminalSurfaceAppearance();
-        syncRecentsVisibilityPolicy();
-        applyWallpaperOffsetFixIfNeeded();
-        mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER
-            | ChromeRenderer.SCOPE_BLUR_HEALTH);
+            updateWindowBackgroundForCurrentSession();
+            syncTerminalWallpaperRenderingMode();
+            applySeamlessStatusBackgroundModeIfNeeded();
+            applyTerminalSurfaceAppearance();
+            syncRecentsVisibilityPolicy();
+            applyWallpaperOffsetFixIfNeeded();
+            mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_BLUR_HEALTH);
+        }
         refreshPrivilegedBackendIfNeeded();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.post(this::updateAzOverflowAffordance);
@@ -2742,6 +2755,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Same rule for the find strip: it holds the interceptor and paints over a pane, and both
         // must be handed back before this activity stops being the one on screen.
         if (mFindCoordinator != null) mFindCoordinator.cancel();
+        mTransientPause.onPause();
         super.onPause();
     }
 
