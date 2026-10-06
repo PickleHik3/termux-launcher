@@ -58,6 +58,11 @@ final class AppearanceEditorFrame {
     private boolean mClipped;
     @Nullable private ViewOutlineProvider mSavedProvider;
     private boolean mSavedClipToOutline;
+    /** How far the display reaches past the container on each side, px; 0 where unknown. */
+    private int mInsetLeft;
+    private int mInsetTop;
+    private int mInsetRight;
+    private int mInsetBottom;
 
     AppearanceEditorFrame(@NonNull View root) {
         mRoot = root;
@@ -112,6 +117,47 @@ final class AppearanceEditorFrame {
         if (corner == null || corner.getRadius() <= 0)
             return fallback;
         return corner.getRadius();
+    }
+
+    /**
+     * The display's rect in the container's own coordinates, {left, top, right, bottom}: the
+     * container sits below the status bar and above the navigation bar, but the device's corners
+     * are the display's, so the clip's round rect is extended by the insets. An inset of 0 gives
+     * the container's own rect.
+     */
+    @NonNull
+    static float[] outlineRect(int width, int height, int insetLeft, int insetTop, int insetRight,
+                               int insetBottom) {
+        return new float[] {-Math.max(0, insetLeft), -Math.max(0, insetTop),
+            width + Math.max(0, insetRight), height + Math.max(0, insetBottom)};
+    }
+
+    /**
+     * The rounding the container's own corner shows when the display's arc of {@code radiusPx}
+     * is clipped at a corner standing {@code insetX} and {@code insetY} inside the display's: 0
+     * where that corner lies within the arc (nothing is cut), else the radius less the larger
+     * inset. The layout canvas's ring follows this, so it matches what the clip leaves.
+     */
+    static float visibleCornerRadiusPx(float radiusPx, int insetX, int insetY) {
+        float x = Math.max(0, insetX);
+        float y = Math.max(0, insetY);
+        if (x >= radiusPx || y >= radiusPx)
+            return 0f;
+        float dx = radiusPx - x;
+        float dy = radiusPx - y;
+        if (dx * dx + dy * dy <= radiusPx * radiusPx)
+            return 0f;
+        return Math.max(0f, radiusPx - Math.max(x, y));
+    }
+
+    /** Where the display's edges stand around the container; see {@link #outlineRect}. */
+    void setDisplayInsets(int left, int top, int right, int bottom) {
+        mInsetLeft = Math.max(0, left);
+        mInsetTop = Math.max(0, top);
+        mInsetRight = Math.max(0, right);
+        mInsetBottom = Math.max(0, bottom);
+        if (mClipped)
+            mRoot.invalidateOutline();
     }
 
     /**
@@ -177,7 +223,12 @@ final class AppearanceEditorFrame {
                 @Override public void getOutline(View view, Outline outline) {
                     // In the view's own coordinates: the scale shrinks the arc with the frame, so
                     // the frame reads as a small copy of the phone rather than a card.
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), mCornerRadiusPx);
+                    // The display's rect, not the container's: the container starts below the
+                    // status bar, and the corners belong to the glass.
+                    float[] rect = outlineRect(view.getWidth(), view.getHeight(), mInsetLeft,
+                        mInsetTop, mInsetRight, mInsetBottom);
+                    outline.setRoundRect(Math.round(rect[0]), Math.round(rect[1]),
+                        Math.round(rect[2]), Math.round(rect[3]), mCornerRadiusPx);
                 }
             });
             mRoot.setClipToOutline(true);

@@ -15,12 +15,12 @@
     </style>
 
     <!--
-      The Look editor's Custom row (M3 sliders spec, "M" size, vertical): a 40dp track with full
+      The Look editor's Custom row (M3 sliders spec, "M" size, vertical): a 28dp track with full
       outer corners and 2dp inside corners, a 4 x 44dp handle 6dp clear of the track, a stop
       indicator, and no value label: LegendSlider draws the legend inside the track instead. The
       track colours are the stock ones.
     -->
-    <dimen name="appearance_editor_slider_track">40dp</dimen>
+    <dimen name="appearance_editor_slider_track">28dp</dimen>
     <!-- Half the track again and more: a corner this large rounds the whole short side. -->
     <dimen name="appearance_editor_slider_track_corner">40dp</dimen>
     <dimen name="appearance_editor_slider_inside_corner">2dp</dimen>

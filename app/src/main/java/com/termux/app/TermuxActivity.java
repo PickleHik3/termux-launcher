@@ -3215,7 +3215,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // reset that runs just before leaves a transparent colour drawable and hides the view, and
         // taking that for the glass left the gutter bare from the second pass on.
         List<Object> key = Arrays.asList(frame, blurRadiusDp, mPreferences.getAppBarOpacity(),
-            mPreferences.getDockGlassGrain(), mFancierGlassLook);
+            mPreferences.getDockGlassGrain(), mFancierGlassLook, mPreferences.getDockTintStrength());
         if (mFrameGutterShown && mFrameGutterDrawable != null
                 && body.getBackground() == mFrameGutterDrawable && key.equals(mFrameGutterKey)) {
             body.setVisibility(View.VISIBLE);
@@ -3230,7 +3230,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.chrome.GlassAnchor.layout(body, () -> 0f));
         com.termux.app.chrome.GlassStack.Spec spec = com.termux.app.chrome.GlassStack.Spec.of(
             blurRadiusDp, mPreferences.getAppBarOpacity() / 100f,
-            mPreferences.getDockGlassGrain(), 0f, mFancierGlassLook).withRim(false);
+            mPreferences.getDockGlassGrain(), 0f, mFancierGlassLook).withRim(false)
+            .withTintStrength(mPreferences.getDockTintStrength());
         mFrameGutterDrawable =
             com.termux.app.chrome.GlassStack.build(mChrome.glass(), spec, density, backdrop);
         body.setBackground(mFrameGutterDrawable);
@@ -3411,7 +3412,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
             @Override public int paneGlassTintColor() {
                 int tint = shouldShowTerminalOverlaySurface()
-                    ? mChrome.glass().look().flatTint(resolveTerminalSurfaceColor())
+                    ? mChrome.glass().look(mPreferences != null
+                        ? mPreferences.getTerminalTintStrength()
+                        : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
+                        .flatTint(resolveTerminalSurfaceColor())
                     : Color.TRANSPARENT;
                 // The Docked insert stands at least one tone step darker than the frame glass.
                 return isRoundedDockStyle() ? tint
@@ -4538,6 +4542,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     ? mPreferences.getDockGlassGrain()
                     : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN,
                 radiusPx, mFancierGlassLook)
+            .withTintStrength(mPreferences != null ? mPreferences.getDockTintStrength()
+                : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT)
             // A card under Floating, with its whole rim. Docked it joins the frame below the
             // keyboard: its top is a join and the rest is the screen's edge, so it draws none.
             .withRim(isRoundedDockStyle())
@@ -5754,7 +5760,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // The keyboard's own grain, not the dock's — it may now have its own.
         Drawable strip = mChrome.glass().surface(inAppKeyboardGlassAlpha(state), foot, 1f, false,
-            getInAppKeyboardGrainPercent());
+            getInAppKeyboardGrainPercent(), getInAppKeyboardTintStrengthPercent());
         // Each layer's own alpha scaled, never replaced: a plain setAlpha on the stack put the
         // faint grain layer at full strength, several times coarser than the keyboard's.
         com.termux.app.chrome.GlassStack.applyStackAlpha(strip, stackAlpha);
@@ -5912,6 +5918,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The keyboard's own film-grain strength — the KEYBOARD slot's grain, which follows Base until
      * detached, so an untouched keyboard grains like the dock.
      */
+    private int getInAppKeyboardTintStrengthPercent() {
+        return mPreferences != null
+            ? mPreferences.getInAppKeyboardTintStrength()
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+    }
+
     private int getInAppKeyboardGrainPercent() {
         return mPreferences != null
             ? mPreferences.getInAppKeyboardGrain()
@@ -7794,7 +7806,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (statusSurface != null) {
             statusSurface.setBackground(mChrome.glass().dockSurface(opacity, 0f,
-                statusInsetSheetSliceStart(topEdgeStackLeadView()), false));
+                statusInsetSheetSliceStart(topEdgeStackLeadView()), false,
+                mChrome.glass().statusTintStrength()));
             statusSurface.setVisibility(View.VISIBLE);
         }
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
@@ -20680,7 +20693,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : chromeRimEdges(com.termux.app.place.ChromeShape.PieceId.STATUS);
             background.setBackground(onPlank ? null
                 : joinsDock
-                    ? mChrome.glass().dockSurface(opacity, 0f, 1f, false)
+                    ? mChrome.glass().dockSurface(opacity, 0f, 1f, false,
+                        mChrome.glass().statusTintStrength())
                     : mChrome.glass().statusBarSurface(opacity,
                         capsuleStatusBar || isStatusBarVertical() || !stripContinues
                             ? 0f : terminalWindowGlassStatusFraction(host), 1f, barStroke,

@@ -274,6 +274,14 @@
                 android:layout_weight="1"
                 android:contentDescription="@string/appearance_editor_control_description"
                 android:visibility="gone" />
+
+            <com.termux.app.surfaces.LegendSlider
+                android:id="@+id/appearance_editor_slider_5"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:contentDescription="@string/appearance_editor_control_description"
+                android:visibility="gone" />
         </LinearLayout>
     </LinearLayout>
 

@@ -34,7 +34,6 @@ import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.slider.LabelFormatter;
-import com.google.android.material.snackbar.Snackbar;
 
 import com.termux.R;
 import com.termux.app.ReducedMotion;
@@ -82,7 +81,7 @@ import java.util.Locale;
  * live. At Custom, row 2 is a row of vertical sliders: the global set with nothing tapped, or the
  * tapped element's own ({@link AppearanceLooks#controls}); a tap on a bare area of the frame
  * brings the global set back, and a tap at a Look stop moves the slider to Custom first, seeded
- * from the Look it left. While the Look page is showing the status bar is held expanded. Sliding from Custom back to a Look applies it with an Undo-able notice. Done
+ * from the Look it left. While the Look page is showing the status bar is held expanded. Sliding from Custom back to a Look applies it; the unsaved Custom values stay for the way back. Done
  * at Custom saves the Custom look, so its stop comes back.</p>
  *
  * <p>Layout mode's bottom area carries what no Look sets: the Style toggle and the global Corners
@@ -258,6 +257,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The state at open: what Undo and Discard return to, and what "unsaved" is measured against. */
     @Nullable private AppearanceSnapshot mEntry;
     @Nullable private String mEntrySignature;
+    /** The Custom values of this session, kept while a Look is showing; null when they are the saved Custom. */
+    @Nullable private AppearanceSnapshot mSessionCustom;
     private int mEntryStop = AppearanceLooks.CUSTOM_STOP;
     /** The Look slider's stop. */
     private int mStop = AppearanceLooks.CUSTOM_STOP;
@@ -457,6 +458,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mOpen = true;
         mEntry = AppearanceSnapshot.capture(prefs);
         mEntrySignature = mEntry.signature();
+        mSessionCustom = null;
         mStop = matchingStop();
         mEntryStop = mStop;
         mTarget = null;
@@ -509,8 +511,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         setOverlayVisible(true);
         registerLayoutListener(content);
         mFramed = false;
-        if (fromScale > 0f)
+        if (fromScale > 0f) {
+            pushDisplayInsets(content);
             mFrame.prime(fromScale, fromTranslationY);
+        }
         content.post(() -> {
             if (!mOpen || token != mPresentToken)
                 return;
@@ -1099,6 +1103,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         float scale = AppearanceEditorFrame.fitScale(root.getHeight(), frameTop, frameBottom,
             AppearanceEditorFrame.MAX_SCALE);
         float ty = frameTop - containerTop;
+        pushDisplayInsets(content);
         frame.show(scale, ty, animate);
         mTargetScale = scale;
         mTargetTy = ty;
@@ -1108,6 +1113,38 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (mEditorWallpaper != null)
             showEditorWallpaper(mEditorWallpaper);
     }
+
+    /**
+     * Tells the frame where the display's edges stand around the container, from the window's own
+     * geometry: the container's rect in the decor against the decor's size, so the status bar
+     * above it, the navigation bar below it and any side bar are all counted. The clip's arc is
+     * then the display's, not the container's. Unknown geometry leaves the insets at 0.
+     */
+    private void pushDisplayInsets(@NonNull ViewGroup content) {
+        AppearanceEditorFrame frame = mFrame;
+        if (frame == null)
+            return;
+        View root = frame.root();
+        int[] parentOffset = new int[2];
+        if (root.getWidth() <= 0 || !(root.getParent() instanceof View)
+            || !AppearanceEditorFrame.offsetIn((View) root.getParent(), content, parentOffset)) {
+            frame.setDisplayInsets(0, 0, 0, 0);
+            return;
+        }
+        int[] contentInWindow = new int[2];
+        content.getLocationInWindow(contentInWindow);
+        View decor = content.getRootView();
+        int left = contentInWindow[0] + parentOffset[0] + root.getLeft();
+        int top = contentInWindow[1] + parentOffset[1] + root.getTop();
+        mDisplayInsetLeftPx = Math.max(0, left);
+        mDisplayInsetTopPx = Math.max(0, top);
+        frame.setDisplayInsets(left, top, decor.getWidth() - (left + root.getWidth()),
+            decor.getHeight() - (top + root.getHeight()));
+    }
+
+    /** The display's left and top edges' distance from the container, for the ring. */
+    private int mDisplayInsetLeftPx;
+    private int mDisplayInsetTopPx;
 
     // ---- the frame follows the sheet -------------------------------------------------------------
 
@@ -1140,7 +1177,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mFrameRectInContent = new int[] {(int) Math.floor(scaledLeft), mFrameTopPx,
             (int) Math.ceil(scaledLeft + root.getWidth() * scale),
             (int) Math.ceil(mFrameTopPx + root.getHeight() * scale)};
-        mFrameCornerPx = AppearanceEditorFrame.deviceCornerRadiusPx(root) * scale;
+        mFrameCornerPx = AppearanceEditorFrame.visibleCornerRadiusPx(
+            AppearanceEditorFrame.deviceCornerRadiusPx(root), mDisplayInsetLeftPx,
+            mDisplayInsetTopPx) * scale;
     }
 
     /**
@@ -1396,6 +1435,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 return AppearanceLooks.opacityPercent(mTarget == null
                     ? prefs.getSurfaceBaseValue(SurfaceProperty.OPACITY)
                     : opacityOf(prefs, mTarget));
+            case TINT:
+                return AppearanceLooks.tintPercent(mTarget == null
+                    ? prefs.getSurfaceBaseValue(SurfaceProperty.TINT)
+                    : tintOf(prefs, mTarget.slot));
             case MARGIN:
                 return AppearanceLooks.marginValueFor(mHost.isFloatingDock(),
                     prefs.getSurfaceBaseValue(SurfaceProperty.SIDE_GAP),
@@ -1437,6 +1480,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case BLUR: return getString(R.string.appearance_editor_blur, value);
             case GRAIN: return getString(R.string.appearance_editor_grain, value);
             case OPACITY: return getString(R.string.appearance_editor_opacity, value);
+            case TINT: return getString(R.string.appearance_editor_tint, value);
             case MARGIN: return getString(R.string.appearance_editor_margin, value);
             case CORNER_RADIUS: return getString(R.string.appearance_editor_corners, value);
             case KEY_RADIUS: return getString(R.string.appearance_editor_key_corners, value);
@@ -1606,6 +1650,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (mTarget == null) writeGlobal(SurfaceProperty.OPACITY, value);
                 else writeElement(mTarget, SurfaceProperty.OPACITY, value);
                 break;
+            case TINT:
+                if (mTarget == null) writeGlobal(SurfaceProperty.TINT, value);
+                else writeElement(mTarget, SurfaceProperty.TINT, value);
+                break;
             case MARGIN: writeMargin(value); break;
             case CORNER_RADIUS: writeCorners(value); break;
             case KEY_RADIUS: writeKeyCorners(value); break;
@@ -1620,9 +1668,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     // ------------------------------------------------------------------------------ the slider
 
     /**
-     * The Look slider landed on a stop. A Look applies at once; leaving Custom for one offers the
-     * Custom values back. Custom brings back the saved Custom look, or, with none saved, keeps the
-     * Look it was reached from as its seed.
+     * The Look slider landed on a stop. A Look applies at once; leaving Custom keeps the Custom
+     * values of this session, so returning to Custom brings them back even when Done has not
+     * saved them. With none kept, Custom brings back the saved Custom look, or, with none saved,
+     * keeps the Look it was reached from as its seed.
      */
     private void moveToStop(int stop) {
         TermuxAppSharedPreferences prefs = prefs();
@@ -1632,41 +1681,26 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         SurfacePresets.Preset look = AppearanceLooks.presetForStop(SurfacePresets.presets(), stop);
         mTarget = null;
         if (look != null) {
-            final AppearanceSnapshot replaced = leavingCustom ? AppearanceSnapshot.capture(prefs)
-                : null;
+            if (leavingCustom) {
+                SurfacePresets.Preset saved = SurfacePresets.custom(prefs);
+                mSessionCustom = saved != null && SurfacePresets.matches(prefs, saved)
+                    ? null : AppearanceSnapshot.capture(prefs);
+            }
             SurfacePresets.apply(prefs, look);
             mStop = stop;
             syncAfterBulkWrite();
-            if (replaced != null && !replaced.signature().equals(
-                    AppearanceSnapshot.signatureOf(prefs)))
-                offerCustomBack(replaced);
             return;
         }
-        SurfacePresets.Preset custom = SurfacePresets.custom(prefs);
-        if (custom != null)
-            SurfacePresets.apply(prefs, custom);
+        AppearanceSnapshot session = mSessionCustom;
+        if (session != null) {
+            session.restore(prefs);
+        } else {
+            SurfacePresets.Preset custom = SurfacePresets.custom(prefs);
+            if (custom != null)
+                SurfacePresets.apply(prefs, custom);
+        }
         mStop = AppearanceLooks.CUSTOM_STOP;
         syncAfterBulkWrite();
-    }
-
-    /** "Custom look replaced", with Undo putting the Custom values and the Custom stop back. */
-    private void offerCustomBack(@NonNull AppearanceSnapshot replaced) {
-        AppearanceEditorPanel panel = mPanel;
-        if (panel == null)
-            return;
-        Snackbar snackbar = Snackbar.make(panel.view(), R.string.appearance_editor_custom_replaced,
-            Snackbar.LENGTH_LONG);
-        snackbar.setAnchorView(panel.view());
-        snackbar.setAction(R.string.appearance_editor_undo, view -> {
-            TermuxAppSharedPreferences prefs = prefs();
-            if (!mOpen || prefs == null)
-                return;
-            replaced.restore(prefs);
-            mStop = AppearanceLooks.CUSTOM_STOP;
-            mTarget = null;
-            syncAfterBulkWrite();
-        });
-        snackbar.show();
     }
 
     // ---------------------------------------------------------------------------- the controls
@@ -1681,6 +1715,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case KEYBOARD: return AppearanceLooks.grainPercent(prefs.getInAppKeyboardGrain());
             case DOCK: return AppearanceLooks.grainPercent(prefs.getDockGlassGrain());
             default: return 0;
+        }
+    }
+
+    /** The tint strength a surface draws with now, in percent. */
+    private static int tintOf(@NonNull TermuxAppSharedPreferences prefs, @Nullable SurfaceSlot slot) {
+        if (slot == null)
+            return AppearanceLooks.TINT_MAX;
+        switch (slot) {
+            case STATUS: return AppearanceLooks.tintPercent(prefs.getStatusBarTintStrength());
+            case CANVAS: return AppearanceLooks.tintPercent(prefs.getTerminalTintStrength());
+            case KEYBOARD: return AppearanceLooks.tintPercent(prefs.getInAppKeyboardTintStrength());
+            case DOCK: return AppearanceLooks.tintPercent(prefs.getDockTintStrength());
+            default: return AppearanceLooks.TINT_MAX;
         }
     }
 
@@ -1727,6 +1774,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             case GRAIN:
                 written = AppearanceLooks.grainPercent(value);
+                break;
+            case TINT:
+                written = AppearanceLooks.tintPercent(value);
                 break;
             default:
                 written = AppearanceLooks.opacityPercent(value);
@@ -2439,6 +2489,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 popup.dismiss();
             }
         });
+        popup.setBackgroundDrawable(EditorM3.surface(anchor,
+            com.google.android.material.R.attr.shapeAppearanceCornerMedium,
+            com.google.android.material.R.attr.colorSurfaceContainerHigh));
         mClockDropdown = popup;
         popup.show();
     }
@@ -2470,6 +2523,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setMinimumHeight(dp(48));
+        row.setPaddingRelative(dp(16), 0, dp(16), 0);
         boolean selected = style.equals(current);
 
         TextView name = new TextView(context);
@@ -2557,7 +2611,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 pickClockAlignment(alignment);
         });
         FrameLayout holder = new FrameLayout(context);
-        holder.setPadding(dp(12), dp(4), dp(12), dp(4));
+        holder.setPadding(dp(16), dp(4), dp(16), dp(4));
         holder.addView(group, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return holder;
@@ -2599,6 +2653,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null || mEntry == null)
             return;
         mEntry.restore(prefs);
+        mSessionCustom = null;
         mStop = mEntryStop;
         mTarget = null;
         syncAfterBulkWrite();

@@ -94,4 +94,20 @@ public class GlobalGlassTest {
     public void cornersAndMarginAreNotGlass() {
         GlobalGlass.write(preferences, SurfaceProperty.SIDE_GAP, 4);
     }
+
+    @Test
+    public void globalTintReattachesEverySurface() {
+        preferences.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.TINT, 30);
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT, 50);
+
+        assertEquals(40, GlobalGlass.write(preferences, SurfaceProperty.TINT, 40));
+        assertEquals(100, GlobalGlass.write(preferences, SurfaceProperty.TINT, 400));
+        assertEquals(40, GlobalGlass.write(preferences, SurfaceProperty.TINT, 40));
+
+        for (SurfaceSlot slot : SurfaceSlot.values())
+            assertTrue(slot.key, preferences.isSurfaceInheriting(slot, SurfaceProperty.TINT));
+        assertEquals(40, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(40, preferences.getTerminalTintStrength());
+        assertEquals(40, preferences.getDockTintStrength());
+    }
 }

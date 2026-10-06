@@ -1419,6 +1419,8 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_SURFACE_BASE_BLUR = "surface_base_blur";
         public static final String KEY_SURFACE_BASE_OPACITY = "surface_base_opacity";
         public static final String KEY_SURFACE_BASE_GRAIN = "surface_base_grain";
+        /** How much of the Material colour tint the glass wears, percent; 100 is the shipped tint. */
+        public static final String KEY_SURFACE_BASE_TINT = "surface_base_tint";
         public static final String KEY_SURFACE_BASE_CORNER_RADIUS = "surface_base_corner_radius";
         public static final String KEY_SURFACE_BASE_SIDE_GAP = "surface_base_side_gap";
 
@@ -1430,6 +1432,12 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_SURFACE_BASE_BLUR = 8;
         public static final int DEFAULT_SURFACE_BASE_OPACITY = 34;
         public static final int DEFAULT_SURFACE_BASE_GRAIN = 18;
+        public static final int DEFAULT_SURFACE_BASE_TINT = 100;
+        /** Each surface's own tint strength, consulted once it has detached from Base. */
+        public static final String KEY_DOCK_TINT_STRENGTH = "dock_tint_strength";
+        public static final String KEY_STATUS_BAR_TINT_STRENGTH = "status_bar_tint_strength";
+        public static final String KEY_TERMINAL_TINT_STRENGTH = "terminal_tint_strength";
+        public static final String KEY_IN_APP_KEYBOARD_TINT_STRENGTH = "in_app_keyboard_tint_strength";
         public static final int DEFAULT_SURFACE_BASE_CORNER_RADIUS = 24;
         public static final int DEFAULT_SURFACE_BASE_SIDE_GAP = 12;
 
