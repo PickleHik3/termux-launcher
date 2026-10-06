@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Icon pack: two app icons stacked, the front one marked with a sparkle. Drawn by Codex in the Material Symbols Rounded style the other ic_symbol_* glyphs use. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="960" android:viewportHeight="960">
+    <group android:translateY="960">
+        <path android:fillColor="?attr/termuxColorPrimary" android:pathData="M230,-820 L570,-820 Q660,-820 660,-730 L660,-660 L580,-660 L580,-730 Q580,-740 570,-740 L230,-740 Q220,-740 220,-730 L220,-390 Q220,-380 230,-380 L300,-380 L300,-300 L230,-300 Q140,-300 140,-390 L140,-730 Q140,-820 230,-820 Z M450,-600 L730,-600 Q820,-600 820,-510 L820,-230 Q820,-140 730,-140 L450,-140 Q360,-140 360,-230 L360,-510 Q360,-600 450,-600 Z M450,-520 Q440,-520 440,-510 L440,-230 Q440,-220 450,-220 L730,-220 Q740,-220 740,-230 L740,-510 Q740,-520 730,-520 L450,-520 Z M660,-490 Q666,-490 668,-482 Q678,-438 722,-428 Q730,-426 730,-420 Q730,-414 722,-412 Q678,-402 668,-358 Q666,-350 660,-350 Q654,-350 652,-358 Q642,-402 598,-412 Q590,-414 590,-420 Q590,-426 598,-428 Q642,-438 652,-482 Q654,-490 660,-490 Z M660,-445 Q653,-427 635,-420 Q653,-413 660,-395 Q667,-413 685,-420 Q667,-427 660,-445 Z" />
+    </group>
+</vector>
