@@ -227,6 +227,14 @@ fails when the catalogue has gone stale.
   `KeyPopupGeometry`, `KeyPopupPalette`, `KeyPopupController`); the module draws
   none of it.
 - Logging, utilities, and haptics are reduced to the retained embedded needs.
+- Per-key color overrides (local addition: `KeyColorOverride`, the host's color-scheme
+  overrides and the keybind hint lighting with its breath and fade-out) reach the draw path as
+  primitives. `onDraw` resolves a key's overrides into one reused `OverrideSlots` (a set flag
+  and an `int` per slot) instead of passing boxed `Integer`s, and the hint fade-out blends into
+  that same instance instead of allocating a `KeyColorOverride` per lit key per frame. So
+  `drawKeyFrame`, `drawLabel` and `drawSubLabel` take `(boolean has…, int color)` pairs where
+  upstream's `drawKeyFrame` takes no override and the labels take none. Upstream draws no
+  overrides, so a refresh keeps upstream's drawing and re-applies these parameters.
 
 ## Refresh procedure
 
