@@ -629,7 +629,8 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         TopPaneFeed.setMedia(new TopPaneMediaState(controller.getPackageName(), title, artist,
             appLabel(controller.getPackageName()), art,
             state == null ? 0L : state.getPosition(), duration,
-            value == PlaybackState.STATE_PLAYING));
+            value == PlaybackState.STATE_PLAYING,
+            state == null ? 0L : state.getLastPositionUpdateTime()));
     }
 
     @Nullable

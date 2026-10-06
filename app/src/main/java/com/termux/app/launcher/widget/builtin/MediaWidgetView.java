@@ -147,10 +147,14 @@ public class MediaWidgetView extends BuiltinWidgetView {
                 reportedPositionMs, next.packageName, next.title, next.positionMs)) {
                 anchorPositionMs = MediaWidgetFormats.positionAt(anchorPositionMs, anchorAtMs, now,
                     anchorPlaying, anchorDurationMs);
+                anchorAtMs = now;
             } else {
+                // The session says when its position was true; count from there, not from
+                // when this widget first heard of it.
                 anchorPositionMs = next.positionMs;
+                anchorAtMs = next.positionUpdatedAtElapsedMs > 0
+                    && next.positionUpdatedAtElapsedMs <= now ? next.positionUpdatedAtElapsedMs : now;
             }
-            anchorAtMs = now;
             anchored = true;
             anchorPackage = next.packageName;
             anchorTitle = next.title;

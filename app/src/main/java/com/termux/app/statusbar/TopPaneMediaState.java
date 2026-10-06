@@ -16,11 +16,24 @@ public final class TopPaneMediaState {
     public final long positionMs;
     public final long durationMs;
     public final boolean playing;
+    /**
+     * When {@link #positionMs} was true, on the {@code SystemClock.elapsedRealtime()} clock, or
+     * 0 when unknown — so a reader that comes along later can count forward from it.
+     */
+    public final long positionUpdatedAtElapsedMs;
 
     public TopPaneMediaState(@NonNull String packageName, @Nullable String title,
                              @Nullable String artist, @Nullable String appLabel,
                              @Nullable Bitmap art, long positionMs, long durationMs,
                              boolean playing) {
+        this(packageName, title, artist, appLabel, art, positionMs, durationMs, playing, 0L);
+    }
+
+    public TopPaneMediaState(@NonNull String packageName, @Nullable String title,
+                             @Nullable String artist, @Nullable String appLabel,
+                             @Nullable Bitmap art, long positionMs, long durationMs,
+                             boolean playing, long positionUpdatedAtElapsedMs) {
+        this.positionUpdatedAtElapsedMs = Math.max(0L, positionUpdatedAtElapsedMs);
         this.packageName = packageName;
         this.title = title == null ? "" : title;
         this.artist = artist == null ? "" : artist;
@@ -55,6 +68,6 @@ public final class TopPaneMediaState {
     @NonNull
     public TopPaneMediaState withPlaying(boolean nowPlaying) {
         return new TopPaneMediaState(packageName, title, artist, appLabel, art, positionMs,
-            durationMs, nowPlaying);
+            durationMs, nowPlaying, positionUpdatedAtElapsedMs);
     }
 }
