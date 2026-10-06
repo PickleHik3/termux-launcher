@@ -4,7 +4,9 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
+import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.util.AttributeSet;
@@ -66,6 +68,18 @@ public final class StatusBarLensView extends View {
     private final RectF mTile = new RectF();
     private final RectF mGlow = new RectF();
     private final RectF[] mHitRects = new RectF[PaneWallPage.values().length];
+    /**
+     * Each place's glow and dissolve, built once in unit space for the colours they carry and
+     * aimed at the mark with {@link #mShaderMatrix}; rebuilt only when those colours change.
+     */
+    private final RadialGradient[] mGlowShaders = new RadialGradient[PaneWallPage.values().length];
+    private final int[] mGlowInner = new int[PaneWallPage.values().length];
+    private final int[] mGlowMiddle = new int[PaneWallPage.values().length];
+    private final LinearGradient[] mFadeShaders = new LinearGradient[PaneWallPage.values().length];
+    private final int[] mFadeOuter = new int[PaneWallPage.values().length];
+    private final boolean[] mFadeVertical = new boolean[PaneWallPage.values().length];
+    private final Matrix mShaderMatrix = new Matrix();
+    private static final float[] GLOW_STOPS = {0.45f, 0.7f, 1f};
     private final int mTouchSlop;
 
     /**
@@ -354,12 +368,10 @@ public final class StatusBarLensView extends View {
                 float reach = mark.sizePx * StatusBarLensMetrics.GLOW_REACH;
                 mGlow.set(mTile.left - reach, mTile.top - reach, mTile.right + reach,
                     mTile.bottom + reach);
-                mGlowPaint.setShader(new android.graphics.RadialGradient(mark.centerX, mark.centerY,
-                    mark.sizePx / 2f + reach,
-                    new int[] {ColorUtils.setAlphaComponent(accent, Math.round(64 * mark.glow)),
-                        ColorUtils.setAlphaComponent(accent, Math.round(22 * mark.glow)),
-                        Color.TRANSPARENT},
-                    new float[] {0.45f, 0.7f, 1f}, Shader.TileMode.CLAMP));
+                mGlowPaint.setShader(glowShader(mark.page,
+                    ColorUtils.setAlphaComponent(accent, Math.round(64 * mark.glow)),
+                    ColorUtils.setAlphaComponent(accent, Math.round(22 * mark.glow)),
+                    mark.centerX, mark.centerY, mark.sizePx / 2f + reach));
                 canvas.drawRoundRect(mGlow, mGlow.width() / 2f, mGlow.height() / 2f, mGlowPaint);
             }
             // Light: a tint and a thin line, so the icon marks the place without weighing on the
@@ -403,16 +415,73 @@ public final class StatusBarLensView extends View {
                     : (fromNear ? mTile.right : mTile.left);
                 int outerColor = ColorUtils.setAlphaComponent(GlassTokens.HIGHLIGHT,
                     Math.round(255 * mark.fadeOuterAlpha));
-                mFadePaint.setShader(mVertical
-                    ? new LinearGradient(0f, outer, 0f, inner, outerColor, GlassTokens.HIGHLIGHT,
-                        Shader.TileMode.CLAMP)
-                    : new LinearGradient(outer, 0f, inner, 0f, outerColor, GlassTokens.HIGHLIGHT,
-                        Shader.TileMode.CLAMP));
+                mFadePaint.setShader(fadeShader(mark.page, mVertical, outerColor, outer, inner));
                 canvas.drawRect(mTile.left - 1f, mTile.top - 1f, mTile.right + 1f,
                     mTile.bottom + 1f, mFadePaint);
                 canvas.restoreToCount(layer);
             }
         }
+    }
+
+    /**
+     * The glow under the mark at home: a unit-radius gradient for these two colours, scaled to
+     * {@code radius} and moved to the mark's centre. A drag moves the centre every frame and the
+     * colours only as often as their rounded alphas step.
+     */
+    @NonNull
+    private Shader glowShader(@NonNull PaneWallPage page, int inner, int middle, float centerX,
+                              float centerY, float radius) {
+        int i = page.ordinal();
+        RadialGradient shader = mGlowShaders[i];
+        if (shader == null || mGlowInner[i] != inner || mGlowMiddle[i] != middle) {
+            shader = new RadialGradient(0f, 0f, 1f, new int[] {inner, middle, Color.TRANSPARENT},
+                GLOW_STOPS, Shader.TileMode.CLAMP);
+            mGlowShaders[i] = shader;
+            mGlowInner[i] = inner;
+            mGlowMiddle[i] = middle;
+        }
+        mShaderMatrix.setScale(radius, radius);
+        mShaderMatrix.postTranslate(centerX, centerY);
+        shader.setLocalMatrix(mShaderMatrix);
+        return shader;
+    }
+
+    /**
+     * A neighbour's dissolve from {@code outer} to {@code inner} along the bar's length: a unit
+     * gradient from 0 to 1 on that axis, stretched and moved onto the span. A span of no length
+     * has no unit to stretch, so it is built in place as it always was.
+     */
+    @NonNull
+    private Shader fadeShader(@NonNull PaneWallPage page, boolean vertical, int outerColor,
+                              float outer, float inner) {
+        if (inner == outer) {
+            return vertical
+                ? new LinearGradient(0f, outer, 0f, inner, outerColor, GlassTokens.HIGHLIGHT,
+                    Shader.TileMode.CLAMP)
+                : new LinearGradient(outer, 0f, inner, 0f, outerColor, GlassTokens.HIGHLIGHT,
+                    Shader.TileMode.CLAMP);
+        }
+        int i = page.ordinal();
+        LinearGradient shader = mFadeShaders[i];
+        if (shader == null || mFadeOuter[i] != outerColor || mFadeVertical[i] != vertical) {
+            shader = vertical
+                ? new LinearGradient(0f, 0f, 0f, 1f, outerColor, GlassTokens.HIGHLIGHT,
+                    Shader.TileMode.CLAMP)
+                : new LinearGradient(0f, 0f, 1f, 0f, outerColor, GlassTokens.HIGHLIGHT,
+                    Shader.TileMode.CLAMP);
+            mFadeShaders[i] = shader;
+            mFadeOuter[i] = outerColor;
+            mFadeVertical[i] = vertical;
+        }
+        if (vertical) {
+            mShaderMatrix.setScale(1f, inner - outer);
+            mShaderMatrix.postTranslate(0f, outer);
+        } else {
+            mShaderMatrix.setScale(inner - outer, 1f);
+            mShaderMatrix.postTranslate(outer, 0f);
+        }
+        shader.setLocalMatrix(mShaderMatrix);
+        return shader;
     }
 
     @Override
