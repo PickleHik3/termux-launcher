@@ -12,6 +12,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Installs the app-managed OSC 133 integration scripts without changing user shell rc files. */
 final class TermuxShellIntegrationInstaller {
@@ -23,15 +24,30 @@ final class TermuxShellIntegrationInstaller {
         "termux-launcher.zsh"
     };
 
+    /** Set once an install has succeeded in this process; later calls have nothing to do. */
+    private static final AtomicBoolean sInstalled = new AtomicBoolean();
+
     private TermuxShellIntegrationInstaller() {}
 
+    /**
+     * Installs the scripts once per process, on the installer thread. The application and the
+     * activity's bootstrap callback both ask; whichever runs second finds the work done. Nothing on
+     * the main thread reads these files: shells source them, and every write is a rename, so a
+     * shell starting mid-install reads either the old script or the new one, never half of one.
+     */
     static void ensureInstalled(Context context) {
-        File destination = new File(TermuxConstants.TERMUX_DATA_HOME_DIR_PATH, "shell-integration");
-        try {
-            install(context, destination);
-        } catch (IOException e) {
-            Logger.logErrorExtended(LOG_TAG, "Failed to install shell integration scripts: " + e.getMessage());
-        }
+        if (sInstalled.get()) return;
+        Context appContext = context.getApplicationContext();
+        TermuxApplication.installerExecutor().execute(() -> {
+            if (sInstalled.get()) return;
+            File destination = new File(TermuxConstants.TERMUX_DATA_HOME_DIR_PATH, "shell-integration");
+            try {
+                install(appContext, destination);
+                sInstalled.set(true);
+            } catch (IOException e) {
+                Logger.logErrorExtended(LOG_TAG, "Failed to install shell integration scripts: " + e.getMessage());
+            }
+        });
     }
 
     /** Visible to tests so installation can be exercised outside the fixed Termux home path. */
@@ -53,14 +69,24 @@ final class TermuxShellIntegrationInstaller {
 
             File script = new File(destination, scriptName);
             if (!hasContent(script, content)) {
-                try (FileOutputStream output = new FileOutputStream(script, false)) {
-                    output.write(content);
-                }
+                writeAtomically(script, content);
                 updated++;
             }
             restrictFileToOwner(script);
         }
         return updated;
+    }
+
+    /** Writes beside the target and renames over it, so a reader never sees a partial script. */
+    private static void writeAtomically(File file, byte[] content) throws IOException {
+        File temporary = new File(file.getParentFile(), "." + file.getName() + ".tmp");
+        try (FileOutputStream output = new FileOutputStream(temporary, false)) {
+            output.write(content);
+        }
+        if (!temporary.renameTo(file)) {
+            temporary.delete();
+            throw new IOException("Failed to replace shell integration script: " + file);
+        }
     }
 
     private static boolean hasContent(File file, byte[] expected) throws IOException {
