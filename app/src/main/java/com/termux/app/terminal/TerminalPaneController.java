@@ -34,6 +34,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.view.OneShotPreDrawListener;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;

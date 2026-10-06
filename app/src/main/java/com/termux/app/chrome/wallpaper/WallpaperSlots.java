@@ -306,6 +306,9 @@ public final class WallpaperSlots {
     private static final String RETIRED_LOCK_MOTION_KEY = "wallpaper_lock_motion";
     private static final String RETIRED_HOME_MOTION_KEY = "wallpaper_home_motion";
     private static final String RETIRED_ANIMATED_DISABLED_KEY = "animated_wallpaper_disabled";
+    private static final String[] RETIRED_HOME_ANIMATED_EXTRA_KEYS = {
+        "managed_wallpaper_animated_palette", "managed_wallpaper_animated_target", "managed_wallpaper_animated_colors",
+    };
     private static final String RETIRED_LOCK_ANIMATED_PREFIX = "animated:";
     private static final String RETIRED_HOME_LIVING_PREFIX = "living:";
     private static final String RETIRED_LOCK_SERVICE = "com.termux.app.chrome.wallpaper.LockLiveWallpaperService";
@@ -417,6 +420,7 @@ public final class WallpaperSlots {
         boolean leftovers = livingDir.exists() || analysisDir.exists()
             || sp.contains(RETIRED_LOCK_MOTION_KEY) || sp.contains(RETIRED_HOME_MOTION_KEY)
             || sp.contains(RETIRED_ANIMATED_DISABLED_KEY);
+        for (String key : RETIRED_HOME_ANIMATED_EXTRA_KEYS) leftovers |= sp.contains(key);
         boolean homeRetired = homeId != null && !homeId.trim().isEmpty();
         boolean serviceHeld = retiredLockServiceHeld(app);
         if (!homeRetired && !isRetiredAnimatedLock(lockRaw) && !serviceHeld && !leftovers) return;
@@ -477,7 +481,9 @@ public final class WallpaperSlots {
             Logger.logInfo(LOG_TAG, "Retired live wallpaper: Home id " + homeId + " forgotten; its picture stays as a photo");
         }
         editor.remove(RETIRED_HOME_ANIMATED_KEY).remove(RETIRED_LOCK_MOTION_KEY)
-            .remove(RETIRED_HOME_MOTION_KEY).remove(RETIRED_ANIMATED_DISABLED_KEY).apply();
+            .remove(RETIRED_HOME_MOTION_KEY).remove(RETIRED_ANIMATED_DISABLED_KEY);
+        for (String key : RETIRED_HOME_ANIMATED_EXTRA_KEYS) editor.remove(key);
+        editor.apply();
         if (deleteTree(livingDir) | deleteTree(analysisDir)) {
             Logger.logInfo(LOG_TAG, "Retired live wallpaper: living still files deleted");
         }
