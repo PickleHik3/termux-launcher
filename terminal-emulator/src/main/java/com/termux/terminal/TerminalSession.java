@@ -52,11 +52,13 @@ public final class TerminalSession extends TerminalOutput {
 
     TerminalEmulator mEmulator;
 
+    static final int PROCESS_OUTPUT_QUEUE_BYTES = 64 * 1024;
+
     /**
      * A queue written to from a separate thread when the process outputs, and read by main thread to process by
      * terminal emulator.
      */
-    final ByteQueue mProcessToTerminalIOQueue = new ByteQueue(64 * 1024);
+    final ByteQueue mProcessToTerminalIOQueue = new ByteQueue(PROCESS_OUTPUT_QUEUE_BYTES);
     /**
      * A queue written to from the main thread due to user interaction, and read by another thread which forwards by
      * writing to the {@link #mTerminalFileDescriptor}.
@@ -571,27 +573,55 @@ public final class TerminalSession extends TerminalOutput {
         return result;
     }
 
+    /**
+     * How much shell output one main-thread message hands the emulator. A burst is parsed in slices
+     * this size, each its own message, so the frame clock gets a turn between them instead of
+     * waiting behind a whole 64 KB queue.
+     */
+    static final int DRAIN_SLICE_BYTES = 16 * 1024;
+
+    private final byte[] mReceiveBuffer = new byte[DRAIN_SLICE_BYTES];
+
+    /**
+     * Move at most one slice of waiting shell output into the emulator. Main thread only.
+     *
+     * @return whether the slice came back full, so more output may still be waiting
+     */
+    boolean drainProcessOutputSlice() {
+        int bytesRead = mProcessToTerminalIOQueue.read(mReceiveBuffer, false);
+        if (bytesRead <= 0) return false;
+        // Named in system traces so the parsing's share of the UI thread can be read next to
+        // Terminal.render and the frame clock: this is the emulator's only entry point for shell
+        // output, and it runs on the main thread by design.
+        Trace.beginSection("Terminal.append");
+        try {
+            mEmulator.append(mReceiveBuffer, bytesRead);
+        } finally {
+            Trace.endSection();
+        }
+        notifyScreenUpdate();
+        return bytesRead == mReceiveBuffer.length;
+    }
+
+    /**
+     * Move everything the shell wrote before it exited into the emulator, so the exit line lands
+     * after the last byte. A slice may have re-posted the rest of a burst behind the exit message;
+     * this takes it here instead. Bounded by one queue's worth, which is everything that can have
+     * been waiting when the exit was handled, so a stray process still writing to the pty cannot
+     * hold the main thread.
+     */
+    void drainProcessOutputBeforeExit() {
+        int budget = PROCESS_OUTPUT_QUEUE_BYTES;
+        while (budget > 0 && drainProcessOutputSlice()) budget -= DRAIN_SLICE_BYTES;
+    }
+
     @SuppressLint("HandlerLeak")
     class MainThreadHandler extends Handler {
 
-        final byte[] mReceiveBuffer = new byte[64 * 1024];
-
         @Override
         public void handleMessage(Message msg) {
-            int bytesRead = mProcessToTerminalIOQueue.read(mReceiveBuffer, false);
-            if (bytesRead > 0) {
-                // Named in system traces so the parsing's share of the UI thread can be read next
-                // to Terminal.render and the frame clock: this is the emulator's only entry point
-                // for shell output, and it runs on the main thread by design.
-                Trace.beginSection("Terminal.append");
-                try {
-                    mEmulator.append(mReceiveBuffer, bytesRead);
-                } finally {
-                    Trace.endSection();
-                }
-                notifyScreenUpdate();
-            }
             if (msg.what == MSG_PROCESS_EXITED) {
+                drainProcessOutputBeforeExit();
                 int exitCode = (Integer) msg.obj;
                 cleanupResources(exitCode);
                 String exitDescription = "\r\n[Process completed";
@@ -607,6 +637,9 @@ public final class TerminalSession extends TerminalOutput {
                 mEmulator.append(bytesToWrite, bytesToWrite.length);
                 notifyScreenUpdate();
                 mClient.onSessionFinished(TerminalSession.this);
+            } else if (drainProcessOutputSlice() && !hasMessages(MSG_NEW_INPUT)) {
+                // More of the burst is waiting: let the frame clock run before the next slice.
+                sendEmptyMessage(MSG_NEW_INPUT);
             }
         }
     }
