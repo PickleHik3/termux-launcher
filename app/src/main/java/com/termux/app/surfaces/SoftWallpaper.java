@@ -7,6 +7,7 @@ import android.view.View;
 
 import androidx.annotation.Nullable;
 
+import com.termux.shared.settings.preferences.SharedPreferenceUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
@@ -29,11 +30,9 @@ public final class SoftWallpaper {
     public static boolean isOn(@Nullable TermuxAppSharedPreferences prefs) {
         if (prefs == null || prefs.getSharedPreferences() == null)
             return false;
-        try {
-            return prefs.getSharedPreferences().getBoolean(KEY_WALLPAPER_SOFT, false);
-        } catch (ClassCastException e) {
-            return false;
-        }
+        // Through the utilities, as every getter reads: a Look the editor previews is seen here too.
+        return SharedPreferenceUtils.getBoolean(prefs.getSharedPreferences(), KEY_WALLPAPER_SOFT,
+            false);
     }
 
     public static void set(@Nullable TermuxAppSharedPreferences prefs, boolean on) {

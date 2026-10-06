@@ -1,5 +1,6 @@
 package com.termux.app.surfaces;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Typeface;
@@ -13,6 +14,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.Menu;
+import android.view.MotionEvent;
 import android.view.MenuItem;
 import android.view.ViewGroup;
 import android.view.animation.LinearInterpolator;
@@ -73,8 +75,12 @@ final class AppearanceEditorPanel {
 
     /** What the user did in the bottom area. */
     interface Listener {
-        /** The Look slider settled on a stop (a drag reports each stop it crosses). */
-        void onLookStop(int stop);
+        /**
+         * The Look slider is on {@code stop}. A drag reports each stop it crosses with
+         * {@code dragging} set and ends with {@link #onSliderReleased}; a tap, a label or an
+         * accessibility step reports the one stop with it clear.
+         */
+        void onLookStop(int stop, boolean dragging);
         /** Layout mode's Style toggle. */
         void onStyle(boolean floating);
         /** Layout mode's Corners slider, in dp. */
@@ -195,6 +201,8 @@ final class AppearanceEditorPanel {
     @Nullable private Listener mListener;
     private boolean mRestating;
     private boolean mCornersDragging;
+    /** A finger is down on the Look slider; set on its first touch, before any value moves. */
+    private boolean mLookDragging;
     private boolean mMarginDragging;
 
     private AppearanceEditorPanel(@NonNull Context context, @NonNull View root) {
@@ -356,6 +364,24 @@ final class AppearanceEditorPanel {
     }
 
     /**
+     * The sheet's height on {@code mode}'s page at rest: Look at a stop (Row A alone), Layout at
+     * its tallest, Icon pack as its content stands. The tallest of the three is the reserve every
+     * page's sheet is held to (AppearancePreviewArea), so the preview is one size on every page.
+     */
+    int measureResting(@NonNull EditorMode mode, int widthPx) {
+        if (mode != EditorMode.LOOK)
+            return measureTallest(mode, widthPx);
+        EditorMode shown = mMode;
+        boolean rowShown = mRow2Shown;
+        mRow2Shown = false;
+        applyGroups(EditorMode.LOOK);
+        int height = measureNow(widthPx);
+        mRow2Shown = rowShown;
+        applyGroups(shown);
+        return height;
+    }
+
+    /**
      * Layout mode's height: Row B as Corner radius and Margin, and as the keyboard's tools in
      * their place, whichever stands taller, so the sheet does not move when the keyboard is
      * selected. The state showing is restored before returning.
@@ -499,7 +525,7 @@ final class AppearanceEditorPanel {
                 if (AppearanceLooks.stopForSliderValue(mLook.getValue()) == stop)
                     return;
                 mLook.setValue(AppearanceLooks.sliderValueForStop(stop));
-                if (mListener != null) mListener.onLookStop(stop);
+                if (mListener != null) mListener.onLookStop(stop, false);
             });
             // Absolute LEFT: placeLookLabels translates each label from the strip's left edge,
             // which a START label in a right-to-left strip would not be standing on.
@@ -604,13 +630,50 @@ final class AppearanceEditorPanel {
 
     // ---------------------------------------------------------------------------------- wiring
 
+    // The Look slider's touch listener only watches (it returns false): the slider still handles,
+    // and announces, every touch itself.
+    @SuppressLint("ClickableViewAccessibility")
     private void bind() {
         mLook.addOnChangeListener((slider, value, fromUser) -> {
             int stop = AppearanceLooks.stopForSliderValue(value);
             styleLookLabels(stop);
             if (mRestating || !fromUser || mListener == null)
                 return;
-            mListener.onLookStop(stop);
+            mListener.onLookStop(stop, mLookDragging);
+        });
+        // The finger's span on the Look slider: down before the slider moves a value, released
+        // after it has handled the lift (its own stop callback, or the lift's posted backstop
+        // when a cancel or a parent takes the gesture), and on a detach mid-drag.
+        mLook.setOnTouchListener((view, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    mLookDragging = true;
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    view.post(this::releaseLook);
+                    break;
+                default:
+                    break;
+            }
+            return false;
+        });
+        mLook.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
+            @Override public void onStartTrackingTouch(@NonNull Slider slider) {
+                mLookDragging = true;
+            }
+
+            @Override public void onStopTrackingTouch(@NonNull Slider slider) {
+                releaseLook();
+            }
+        });
+        mLook.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(@NonNull View view) {
+            }
+
+            @Override public void onViewDetachedFromWindow(@NonNull View view) {
+                releaseLook();
+            }
         });
         mStyle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (mRestating || !isChecked || mListener == null)
@@ -931,6 +994,14 @@ final class AppearanceEditorPanel {
 
     @NonNull Slider keyRadius() {
         return mKeyRadius;
+    }
+
+    /** The Look drag is over: the controller stores the stop it ended on. Once per drag. */
+    private void releaseLook() {
+        if (!mLookDragging)
+            return;
+        mLookDragging = false;
+        if (mListener != null) mListener.onSliderReleased();
     }
 
     // ------------------------------------------------------------------------- restatements

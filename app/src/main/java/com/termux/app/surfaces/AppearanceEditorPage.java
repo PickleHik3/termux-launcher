@@ -24,9 +24,10 @@ import com.termux.R;
  *
  * <p>Two kinds: the Overview ({@link #overview}, the wallpaper page in the content region, the
  * pill on Wallpaper) and the editor (Look, Layout and Icon pack, built by the surface). The editor's frame is not in this view: it is the
- * launcher's container, scaled underneath, standing in the region below the bar ({@link #BAR_DP}
- * plus the status inset is where {@link SurfaceEditorController} puts the frame's top), so the
- * editor kind is transparent and takes no touch outside the bar's own buttons.</p>
+ * launcher's container, scaled underneath, standing in the region below the bar (the frame's
+ * visible top is {@link AppearancePreviewArea}'s line, the page inset plus {@link #BAR_DP} plus its
+ * gap, on Look, Layout and Icon pack alike), so the editor kind is transparent and takes no touch
+ * outside the bar's own buttons.</p>
  *
  * <p>The pill's labels show on the selected segment only, so four segments and Undo fit the
  * 64dp bar at 360dp; each unselected segment keeps its glyph, and its name as its content
@@ -36,8 +37,8 @@ import com.termux.R;
  */
 public final class AppearanceEditorPage {
 
-    /** The bar's height, dp: the frame stands below it. */
-    static final int BAR_DP = 64;
+    /** The bar's height, dp: the frame stands below it (AppearancePreviewArea's contract). */
+    static final int BAR_DP = AppearancePreviewArea.BAR_DP;
 
     /** The pill's segments, one per page of the surface. */
     public enum Segment { WALLPAPER, LOOK, LAYOUT, ICON_PACK }

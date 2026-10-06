@@ -4,6 +4,7 @@ import android.content.SharedPreferences;
 
 import androidx.annotation.NonNull;
 
+import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -214,7 +215,8 @@ final class AppearanceSnapshot {
 
     /** The stored float, or NaN when the key is absent (or not a float). */
     private static float rawFloat(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key) {
-        SharedPreferences store = prefs.getSharedPreferences();
+        // What the getters read: a Look previewed over the store, while one is.
+        SharedPreferences store = SharedPreferencesPreview.readsFor(prefs.getSharedPreferences());
         if (store == null || !store.contains(key))
             return Float.NaN;
         try {

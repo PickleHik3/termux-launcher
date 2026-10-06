@@ -330,9 +330,16 @@ public final class SurfacePresets {
             return;
         }
         Batch batch = new Batch(store);
-        applyEach(new TermuxAppSharedPreferences(prefs.getContext(), batch,
-            prefs.getMultiProcessSharedPreferences()), preset);
+        applyEach(writingInto(prefs, batch), preset);
         batch.applyToStore();
+    }
+
+    /** {@code prefs}' setters and getters over {@code batch}: what they write, it holds. */
+    @NonNull
+    static TermuxAppSharedPreferences writingInto(@NonNull TermuxAppSharedPreferences prefs,
+                                                  @NonNull Batch batch) {
+        return new TermuxAppSharedPreferences(prefs.getContext(), batch,
+            prefs.getMultiProcessSharedPreferences());
     }
 
     /** {@link #apply}, one setter and one {@code apply()} at a time: the reference it must match. */
@@ -494,9 +501,9 @@ public final class SurfacePresets {
     /**
      * A {@link SharedPreferences} that reads through to a store but holds every write until
      * {@link #applyToStore}: reads see the held writes, so a setter that reads what an earlier one
-     * wrote behaves exactly as it would against the store. Only {@link #apply} uses it.
+     * wrote behaves exactly as it would against the store. {@link #apply} lands a Look through one;
+     * the editor's Look slider holds a drag's stops in one until the finger lifts.
      */
-    @VisibleForTesting
     static final class Batch implements SharedPreferences {
         /** Marks a held removal. */
         private static final Object REMOVED = new Object();
@@ -508,6 +515,24 @@ public final class SurfacePresets {
 
         Batch(@NonNull SharedPreferences store) {
             mStore = store;
+        }
+
+        /** Whether anything is held: a write, a removal or a clear. */
+        boolean isEmpty() {
+            return !mCleared && mPending.isEmpty();
+        }
+
+        /**
+         * A copy of what is held now, over the same store, that nothing writes to again: what a
+         * {@link com.termux.shared.settings.preferences.SharedPreferencesPreview} may be shown
+         * with while this batch goes on collecting.
+         */
+        @NonNull
+        Batch frozen() {
+            Batch copy = new Batch(mStore);
+            copy.mPending.putAll(mPending);
+            copy.mCleared = mCleared;
+            return copy;
         }
 
         /** Writes everything held to the store as one editor, then forgets it. */
