@@ -1569,6 +1569,15 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_VALUE_MANAGED_WALLPAPER_SYSTEM_ID = -1;
 
         /**
+         * The system's lock wallpaper id right after the launcher's last wallpaper set, so a lock
+         * wallpaper set by another app is noticed. 0 or absent means no baseline yet.
+         */
+        public static final String KEY_MANAGED_WALLPAPER_LOCK_ID =
+            "managed_wallpaper_lock_id";
+
+        public static final int DEFAULT_VALUE_MANAGED_WALLPAPER_LOCK_ID = 0;
+
+        /**
          * The Lock wallpaper slot: {@code same_as_home} (default, follows the Home slot),
          * or {@code photo}.
          */

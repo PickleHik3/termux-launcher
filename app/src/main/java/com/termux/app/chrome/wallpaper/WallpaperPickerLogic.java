@@ -112,27 +112,6 @@ public final class WallpaperPickerLogic {
     }
 
     /**
-     * The lock preview's clock as the glyphs to draw: "9:05" in 12-hour time (no leading zero,
-     * 12 for noon and midnight), "09:05" or "21:05" in 24-hour time. Only digits and ':'.
-     */
-    @NonNull
-    public static String composedTime(int hourOfDay, int minute, boolean is24Hour) {
-        int h = ((hourOfDay % 24) + 24) % 24;
-        int m = ((minute % 60) + 60) % 60;
-        String mm = (m < 10 ? "0" : "") + m;
-        if (is24Hour) return (h < 10 ? "0" : "") + h + ":" + mm;
-        int h12 = h % 12;
-        if (h12 == 0) h12 = 12;
-        return h12 + ":" + mm;
-    }
-
-    /** Milliseconds from {@code nowMs} to the start of the next minute, at least 1. */
-    public static long millisToNextMinute(long nowMs) {
-        long rem = 60_000L - (((nowMs % 60_000L) + 60_000L) % 60_000L);
-        return Math.max(1L, rem);
-    }
-
-    /**
      * A preview card's size in a pager {@code pagerW} x {@code pagerH}: the pager's height less the
      * card's own vertical padding (twice) and the label standing over it ({@code labelBlockPx},
      * label and gap), at the overlay's aspect, narrowed to {@code maxWidthFraction} of the pager

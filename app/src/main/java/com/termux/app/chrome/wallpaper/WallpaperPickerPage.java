@@ -8,7 +8,6 @@ import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.LayoutInflater;
-import android.text.format.DateFormat;
 import android.util.DisplayMetrics;
 import android.view.Gravity;
 import android.view.Menu;
@@ -43,7 +42,6 @@ import com.termux.shared.logger.Logger;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
@@ -321,7 +319,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private boolean mBusy;
     /** The surface closed: nothing here may touch a view or a callback any more. */
     private boolean mReleased;
-    /** On screen: the clock ticks. False while another page shows. */
+    /** On screen. False while another page shows. */
     private boolean mShown = true;
     /** Closed for Photo…: the host brings the page back, pending photos and all. */
     private boolean mHandedOff;
@@ -338,13 +336,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private final List<Tile> mTiles = new ArrayList<>();
     @Nullable private Tile mSameAsHomeTile;
     private int mRecentTiles;
-
-    private final Runnable mClockTick = new Runnable() {
-        @Override public void run() {
-            updateClock();
-            mMain.postDelayed(this, WallpaperPickerLogic.millisToNextMinute(System.currentTimeMillis()));
-        }
-    };
 
     private static final class Tile {
         @NonNull final WallpaperSlots.Choice choice;
@@ -452,17 +443,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
 
         buildStrip(loaded.recents);
         mStrip.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> fitStripThumbs(r - l));
-        mRoot.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
-            @Override public void onViewAttachedToWindow(@NonNull View v) {
-                mMain.removeCallbacks(mClockTick);
-                if (mShown && !mReleased) mClockTick.run();
-            }
-
-            @Override public void onViewDetachedFromWindow(@NonNull View v) {
-                mMain.removeCallbacks(mClockTick);
-            }
-        });
-        updateClock();
         applyCentred();
     }
 
@@ -474,21 +454,18 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         return mContext.getString(R.string.wallpaper_picker_title);
     }
 
-    /** On screen again (or for the first time): the clock ticks. */
+    /** On screen again (or for the first time). */
     @Override
     public void onShown() {
         if (mReleased) return;
         mShown = true;
-        mMain.removeCallbacks(mClockTick);
-        if (mRoot.isAttachedToWindow()) mClockTick.run();
     }
 
-    /** Another page is showing: the clock stops, nothing is released. */
+    /** Another page is showing; nothing is released. */
     @Override
     public void onHidden() {
         if (mReleased) return;
         mShown = false;
-        mMain.removeCallbacks(mClockTick);
     }
 
     @Nullable
@@ -767,7 +744,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         if (mReleased) return;
         mReleased = true;
         mShown = false;
-        mMain.removeCallbacks(mClockTick);
         for (WallpaperPreviewView card : mCards) {
             if (card == null) continue;
             card.show(null, false);
@@ -879,7 +855,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
                 if (mCentred != slot) centre(slot);
             });
             bindCard(position);
-            holder.card.setClock(mClock);
         }
 
         @Override
@@ -928,18 +903,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             WallpaperSlots.Choice now = shown(slot);
             if (now.photo && now.photoFile != null && now.photoFile.equals(file)) card.setStill(bmp);
         });
-    }
-
-    // --- clock ---
-
-    @NonNull private String mClock = "";
-
-    private void updateClock() {
-        Calendar now = Calendar.getInstance();
-        mClock = WallpaperPickerLogic.composedTime(now.get(Calendar.HOUR_OF_DAY), now.get(Calendar.MINUTE),
-            DateFormat.is24HourFormat(mContext));
-        WallpaperPreviewView lock = mCards[POS_LOCK];
-        if (lock != null) lock.setClock(mClock);
     }
 
     // --- strip ---

@@ -34,6 +34,11 @@ import java.util.List;
  * {@code photo}); the Home slot is always a photo. What each call does is decided by
  * {@link WallpaperSlotPlan}.</p>
  *
+ * <p>The Lock slot also notices a lock wallpaper set by another app: {@code managed_wallpaper_lock_id}
+ * is the system's lock id after the launcher's last set; when the system reports another one, the
+ * Lock slot shows the system's picture ({@code wallpaper/slots/lock-system.png}) and Home applies
+ * leave the lock screen alone. The stored choice changes only when the user applies a Lock choice.</p>
+ *
  * <p>Photos, all under the app's private files: a cropped photo waits in
  * {@code wallpaper/pending/<timestamp>.png} until the picker page closes; the Home slot's picture
  * is the managed exact copy ({@code managed-wallpaper/system-wallpaper-exact.png}); the Lock
@@ -80,10 +85,17 @@ public final class WallpaperSlots {
     public static final class State {
         @NonNull public final Choice home;
         @NonNull public final Choice lock;
+        /** Another app set the lock screen's wallpaper; {@link #lock} then shows the system's picture. */
+        public final boolean lockElsewhere;
 
         public State(@NonNull Choice home, @NonNull Choice lock) {
+            this(home, lock, false);
+        }
+
+        public State(@NonNull Choice home, @NonNull Choice lock, boolean lockElsewhere) {
             this.home = home;
             this.lock = lock;
+            this.lockElsewhere = lockElsewhere;
         }
     }
 
@@ -92,7 +104,8 @@ public final class WallpaperSlots {
         void onDone(boolean ok, @Nullable String error);
     }
 
-    /** Both slots as stored and as the system has them now. */
+    /** Both slots as stored and as the system has them now. The lock screen is checked for an outside change only off the main thread (system calls, a file copy). */
+    @WorkerThread
     @NonNull
     public static State read(@NonNull Context ctx) {
         Context app = ctx.getApplicationContext();
@@ -109,7 +122,63 @@ public final class WallpaperSlots {
             }
         }
         File lockCopy = lockPhotoFile(app);
-        return stateFrom(lock, homePhoto, lockCopy.isFile() ? lockCopy : null);
+        State state = stateFrom(lock, homePhoto, lockCopy.isFile() ? lockCopy : null);
+        // A caller on the main thread gets the stored Lock slot only: no lock query or file copy on a frame.
+        if (prefs == null || android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) return state;
+        int storedLockId = prefs.getManagedWallpaperLockId();
+        int currentLockId = ManagedWallpaper.currentLockWallpaperId(app);
+        if (isLockElsewhere(storedLockId, currentLockId)) {
+            File outside = systemLockPicture(app);
+            Logger.logInfo(LOG_TAG, "Lock screen wallpaper was set elsewhere"
+                + (outside == null ? "; its picture could not be read" : ""));
+            return new State(state.home, outside != null ? Choice.photo(outside) : Choice.photo(), true);
+        }
+        if (needsLockBaseline(storedLockId, currentLockId)) prefs.setManagedWallpaperLockId(currentLockId);
+        return state;
+    }
+
+    /**
+     * Whether the system's lock wallpaper is not the one the launcher last saw: a baseline was
+     * stored, the current id is readable, and they differ. No baseline (an upgrade) is not
+     * elsewhere.
+     */
+    static boolean isLockElsewhere(int storedId, int currentId) {
+        return storedId != 0 && currentId != 0 && storedId != currentId;
+    }
+
+    /** Whether the current lock id should be stored as the first baseline. */
+    static boolean needsLockBaseline(int storedId, int currentId) {
+        return storedId == 0 && currentId != 0;
+    }
+
+    /**
+     * Copies the system's lock picture (Home's when the lock shares it) to
+     * {@code wallpaper/slots/lock-system.png}, or null when Android gives no readable file.
+     */
+    @WorkerThread
+    @Nullable
+    private static File systemLockPicture(@NonNull Context app) {
+        File target = new File(lockPhotoFile(app).getParentFile(), "lock-system.png");
+        File staged = new File(target.getParentFile(), target.getName() + ".tmp");
+        WallpaperManager wm = WallpaperManager.getInstance(app);
+        for (int which : new int[] {WallpaperManager.FLAG_LOCK, WallpaperManager.FLAG_SYSTEM}) {
+            try (android.os.ParcelFileDescriptor fd = wm.getWallpaperFile(which)) {
+                if (fd == null) continue;
+                try (java.io.InputStream in = new java.io.FileInputStream(fd.getFileDescriptor());
+                     java.io.FileOutputStream out = new java.io.FileOutputStream(staged, false)) {
+                    byte[] buffer = new byte[8192];
+                    int n;
+                    while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
+                    out.flush();
+                }
+                if (staged.length() > 0 && staged.renameTo(target)) return target;
+            } catch (IOException | RuntimeException e) {
+                Logger.logWarn(LOG_TAG, "Reading the system lock picture failed: " + e.getMessage());
+            }
+        }
+        //noinspection ResultOfMethodCallIgnored
+        staged.delete();
+        return null;
     }
 
     /**
@@ -120,7 +189,19 @@ public final class WallpaperSlots {
      */
     public static void apply(@NonNull Activity activity, @NonNull Slot slot, @NonNull Choice choice,
                              @Nullable Callback cb) {
-        execute(activity, WallpaperSlotPlan.forApply(slot, choice, inputs(activity)), cb);
+        Context app = activity.getApplicationContext();
+        // The plan needs the Lock slot as the system has it now, which is read off the main thread.
+        GeneratedWallpaperApplier.onWorker(() -> {
+            WallpaperSlotPlan plan;
+            try {
+                plan = WallpaperSlotPlan.forApply(slot, choice, inputs(app));
+            } catch (RuntimeException e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Planning the wallpaper apply failed", e);
+                GeneratedWallpaperApplier.post(cb == null ? null : cb::onDone, false, "wallpaper_failed");
+                return;
+            }
+            execute(app, plan, cb);
+        });
     }
 
     // --- package-private helpers ---
@@ -540,8 +621,7 @@ public final class WallpaperSlots {
         return new WallpaperSlotPlan.Inputs(read(ctx).lock);
     }
 
-    private static void execute(@NonNull Activity activity, @NonNull WallpaperSlotPlan plan, @Nullable Callback cb) {
-        Context app = activity.getApplicationContext();
+    private static void execute(@NonNull Context app, @NonNull WallpaperSlotPlan plan, @Nullable Callback cb) {
         GeneratedWallpaperApplier.Callback done = cb == null ? null : cb::onDone;
         switch (plan.kind) {
             case RECORD_ONLY:

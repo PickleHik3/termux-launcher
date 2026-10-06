@@ -3215,6 +3215,23 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             false
         );
     }
+
+    public int getManagedWallpaperLockId() {
+        return SharedPreferenceUtils.getInt(
+            mSharedPreferences,
+            TERMUX_APP.KEY_MANAGED_WALLPAPER_LOCK_ID,
+            TERMUX_APP.DEFAULT_VALUE_MANAGED_WALLPAPER_LOCK_ID
+        );
+    }
+
+    public void setManagedWallpaperLockId(int value) {
+        SharedPreferenceUtils.setInt(
+            mSharedPreferences,
+            TERMUX_APP.KEY_MANAGED_WALLPAPER_LOCK_ID,
+            value,
+            false
+        );
+    }
     
     /**
      * The Lock wallpaper slot, normalised: {@code same_as_home} (default, and for anything

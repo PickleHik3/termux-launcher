@@ -22,22 +22,16 @@ import com.termux.app.chrome.ShapeTokens;
 /**
  * One slot's preview card on the wallpaper picker page: the photo at the card's size. The Lock
  * card also carries the generic lock-screen cutout ({@code lock_preview_overlay}, a 360x800
- * viewport) and the time composed from the {@code lock_digit_*} glyphs in its clock area.
+ * viewport): the status bar and the home indicator.
  *
  * <p>The card's content never mirrors in RTL: it is a picture of a phone screen. Its corners are
  * the theme's Large shape.</p>
  */
 public final class WallpaperPreviewView extends View {
 
-    /** The overlay's viewport, and where its clock sits in it (lock-wallpaper README). */
+    /** The overlay's viewport: the card's aspect. */
     static final float OVERLAY_W = 360f;
     static final float OVERLAY_H = 800f;
-    static final float CLOCK_X = 28f;
-    static final float CLOCK_TOP = 132f;
-    static final float DIGIT_W = 56f;
-    static final float COLON_W = 20f;
-    static final float GLYPH_H = 96f;
-    static final float GLYPH_GAP = 2f;
 
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Rect mSrc = new Rect();
@@ -49,11 +43,8 @@ public final class WallpaperPreviewView extends View {
     @Nullable private Bitmap mStill;
     private boolean mPhoto;
     private boolean mLock;
-    @NonNull private String mClock = "";
 
     @Nullable private Drawable mOverlay;
-    @Nullable private Drawable[] mDigits;
-    @Nullable private Drawable mColon;
     @Nullable private Drawable mPhotoGlyph;
 
     public WallpaperPreviewView(@NonNull Context context) {
@@ -98,7 +89,7 @@ public final class WallpaperPreviewView extends View {
         return mPhoto;
     }
 
-    /** The Lock card: the cutout and the composed clock over the background. */
+    /** The Lock card: the cutout over the background. */
     public void setLock(boolean lock) {
         if (mLock == lock) return;
         mLock = lock;
@@ -107,18 +98,6 @@ public final class WallpaperPreviewView extends View {
 
     public boolean isLock() {
         return mLock;
-    }
-
-    /** The clock's glyphs, from {@link WallpaperPickerLogic#composedTime}. */
-    public void setClock(@NonNull String clock) {
-        if (clock.equals(mClock)) return;
-        mClock = clock;
-        if (mLock) invalidate();
-    }
-
-    @NonNull
-    public String clock() {
-        return mClock;
     }
 
     @Override
@@ -162,52 +141,15 @@ public final class WallpaperPreviewView extends View {
     }
 
     private void drawLockCutout(@NonNull Canvas canvas, int w, int h) {
-        loadLockGlyphs();
-        if (mOverlay != null) {
-            mOverlay.setBounds(0, 0, w, h);
-            mOverlay.draw(canvas);
+        if (mOverlay == null) {
+            mOverlay = glyph(getContext(), R.drawable.lock_preview_overlay);
+            if (mOverlay == null) mOverlay = new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT);
         }
-        float sx = w / OVERLAY_W;
-        float sy = h / OVERLAY_H;
-        float x = CLOCK_X;
-        int top = Math.round(CLOCK_TOP * sy);
-        int bottom = Math.round((CLOCK_TOP + GLYPH_H) * sy);
-        for (int i = 0; i < mClock.length(); i++) {
-            char c = mClock.charAt(i);
-            Drawable glyph;
-            float gw;
-            if (c == ':') {
-                glyph = mColon;
-                gw = COLON_W;
-            } else if (c >= '0' && c <= '9' && mDigits != null) {
-                glyph = mDigits[c - '0'];
-                gw = DIGIT_W;
-            } else {
-                continue;
-            }
-            if (glyph != null) {
-                glyph.setBounds(Math.round(x * sx), top, Math.round((x + gw) * sx), bottom);
-                glyph.draw(canvas);
-            }
-            x += gw + GLYPH_GAP;
-        }
+        mOverlay.setBounds(0, 0, w, h);
+        mOverlay.draw(canvas);
     }
 
-    private void loadLockGlyphs() {
-        if (mOverlay != null) return;
-        Context ctx = getContext();
-        mOverlay = glyph(ctx, R.drawable.lock_preview_overlay);
-        if (mOverlay == null) mOverlay = new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT);
-        mColon = glyph(ctx, R.drawable.lock_digit_colon);
-        int[] ids = {R.drawable.lock_digit_0, R.drawable.lock_digit_1, R.drawable.lock_digit_2,
-            R.drawable.lock_digit_3, R.drawable.lock_digit_4, R.drawable.lock_digit_5,
-            R.drawable.lock_digit_6, R.drawable.lock_digit_7, R.drawable.lock_digit_8,
-            R.drawable.lock_digit_9};
-        mDigits = new Drawable[ids.length];
-        for (int i = 0; i < ids.length; i++) mDigits[i] = glyph(ctx, ids[i]);
-    }
-
-    /** A cutout glyph, or null: a glyph that will not inflate costs the clock a digit, not the app. */
+    /** A cutout glyph, or null: a glyph that will not inflate costs the cutout, not the app. */
     @Nullable
     private static Drawable glyph(@NonNull Context ctx, int id) {
         try {

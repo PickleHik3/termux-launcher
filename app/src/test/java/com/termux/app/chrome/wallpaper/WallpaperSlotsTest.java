@@ -88,6 +88,30 @@ public class WallpaperSlotsTest {
     }
 
     @Test
+    public void lockIsElsewhereOnlyWhenABaselineDiffersFromAReadableId() {
+        assertFalse("same id", WallpaperSlots.isLockElsewhere(7, 7));
+        assertTrue("another id", WallpaperSlots.isLockElsewhere(7, 9));
+        assertFalse("no baseline after an upgrade", WallpaperSlots.isLockElsewhere(0, 9));
+        assertFalse("unreadable now", WallpaperSlots.isLockElsewhere(7, 0));
+        assertTrue("a shared lock then its own wallpaper", WallpaperSlots.isLockElsewhere(-1, 9));
+        assertFalse("a shared lock stays shared", WallpaperSlots.isLockElsewhere(-1, -1));
+    }
+
+    @Test
+    public void theFirstReadableLockIdBecomesTheBaseline() {
+        assertTrue(WallpaperSlots.needsLockBaseline(0, 9));
+        assertFalse(WallpaperSlots.needsLockBaseline(0, 0));
+        assertFalse(WallpaperSlots.needsLockBaseline(7, 9));
+    }
+
+    @Test
+    public void lockIdRoundTrips() {
+        assertEquals(0, preferences.getManagedWallpaperLockId());
+        preferences.setManagedWallpaperLockId(12);
+        assertEquals(12, preferences.getManagedWallpaperLockId());
+    }
+
+    @Test
     public void lockSlotNamesForTheStatusRoute() {
         assertEquals("same_as_home", WallpaperSlots.lockSlotName(WallpaperSlots.Choice.sameAsHome()));
         assertEquals("photo", WallpaperSlots.lockSlotName(WallpaperSlots.Choice.photo()));

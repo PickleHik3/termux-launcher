@@ -93,4 +93,29 @@ public class WallpaperSlotPlanTest {
         assertFalse("Home untouched", p.recordHome);
         assertEquals("photo", p.recordLock);
     }
+
+    @Test public void lockSetElsewhereKeepsItWhenHomeIsApplied() {
+        // The Lock slot then shows the system's own picture, a photo with a file.
+        Inputs outside = in(Choice.photo(new java.io.File("/files/wallpaper/slots/lock-system.png")));
+        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.HOME, Choice.photo(PICTURE), outside);
+        assertEquals(Kind.SET_PHOTO, p.kind);
+        assertEquals("no FLAG_LOCK", SYSTEM, p.flags);
+        assertNull(p.recordLock);
+    }
+
+    @Test public void lockSetElsewhereThenSameAsHomeCopiesHome() {
+        Inputs outside = in(Choice.photo(new java.io.File("/files/wallpaper/slots/lock-system.png")));
+        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.sameAsHome(), outside);
+        assertEquals(Kind.COPY_HOME_PHOTO_TO_LOCK, p.kind);
+        assertEquals(LOCK, p.flags);
+        assertEquals("same_as_home", p.recordLock);
+    }
+
+    @Test public void lockSetElsewhereThenAPhotoSetsIt() {
+        Inputs outside = in(Choice.photo());
+        WallpaperSlotPlan p = WallpaperSlotPlan.forApply(Slot.LOCK, Choice.photo(PICTURE), outside);
+        assertEquals(Kind.SET_PHOTO, p.kind);
+        assertEquals(LOCK, p.flags);
+        assertEquals("photo", p.recordLock);
+    }
 }

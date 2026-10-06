@@ -73,7 +73,9 @@ public final class ManagedWallpaper {
 
     /**
      * The file and system half of a wallpaper pick; runs off the main thread, touches no view.
-     * {@code preferences} may be null, in which case the stored id is not updated.
+     * {@code preferences} may be null, in which case the stored home id is not updated. The lock
+     * id is stored after every successful set, so a lock wallpaper set by another app later is
+     * told apart from ours.
      */
     public static boolean apply(@NonNull Context context, @NonNull WallpaperManager wallpaperManager,
                                 @NonNull Uri source, int wallpaperFlags, int portraitWidth,
@@ -94,6 +96,7 @@ public final class ManagedWallpaper {
                     preferences.setManagedWallpaperSystemId(wallpaperId);
                 }
             }
+            recordLockId(context, preferences);
             return true;
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Failed to apply managed wallpaper", e);
@@ -301,6 +304,24 @@ public final class ManagedWallpaper {
         }
         if (!tempFile.renameTo(exactFile)) {
             Logger.logError(LOG_TAG, "Failed to promote managed wallpaper temp file");
+        }
+    }
+
+    /** Stores what the system reports for the lock screen now, as the baseline for {@link #currentLockWallpaperId}. */
+    private static void recordLockId(@NonNull Context context, @Nullable TermuxAppSharedPreferences preferences) {
+        TermuxAppSharedPreferences target = preferences != null ? preferences
+            : TermuxAppSharedPreferences.build(context, false);
+        int id = currentLockWallpaperId(context);
+        if (target != null && id != 0) target.setManagedWallpaperLockId(id);
+    }
+
+    /** The system's lock wallpaper id (whatever Android uses for a lock that shares Home's picture); 0 when unreadable. */
+    public static int currentLockWallpaperId(@NonNull Context context) {
+        try {
+            return WallpaperManager.getInstance(context).getWallpaperId(WallpaperManager.FLAG_LOCK);
+        } catch (Exception e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Failed to resolve current lock wallpaper id", e);
+            return 0;
         }
     }
 
