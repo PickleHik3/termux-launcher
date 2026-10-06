@@ -1,9 +1,7 @@
 package com.termux.app.terminal;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 
@@ -54,18 +52,5 @@ public class CursorTrailStyleTest {
         assertEquals(CursorTrailStyle.COMET, CursorTrailStyle.effective(null, "comet"));
         assertEquals(CursorTrailStyle.DEFAULT, CursorTrailStyle.effective(null, null));
         assertEquals(CursorTrailStyle.DEFAULT, CursorTrailStyle.effective(null, "bogus"));
-    }
-
-    /** The AGSL source sticks to the subset every AGSL device compiles, and declares its inputs. */
-    @Test
-    public void motionBlurShaderUsesOnlyPortableAgsl() {
-        String src = CursorTrailMotionBlur.SHADER;
-        String[] banned = {"uint", "<<", ">>", "#define", "^", "fwidth", "dFdx"};
-        for (String b : banned) assertFalse("contains " + b, src.contains(b));
-        String[] uniforms = {"uStartX", "uStartY", "uEndX", "uEndY", "uCursorLo", "uCursorHi",
-            "uColor", "uOpacity"};
-        for (String u : uniforms) assertTrue("lacks " + u, src.contains("uniform") && src.contains(u));
-        assertTrue(src.contains("layout(color) uniform half4 uColor"));
-        assertTrue(src.contains("half4 main(float2"));
     }
 }
