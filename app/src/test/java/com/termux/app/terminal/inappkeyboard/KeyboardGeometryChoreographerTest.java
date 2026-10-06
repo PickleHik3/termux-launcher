@@ -402,7 +402,7 @@ public class KeyboardGeometryChoreographerTest {
     }
 
     @Test
-    public void geometrySyncDropsTheMeasuredHeightAndRelayoutsTheAccessoryStackTwice() {
+    public void geometrySyncDropsTheMeasuredHeightAndRelayoutsTheAccessoryStackOnce() {
         mSurface.keyboardContainer.measuredHeight = 420;
         mChoreographer.measureHeightPx();
 
@@ -410,9 +410,10 @@ public class KeyboardGeometryChoreographerTest {
 
         assertEquals(0, mChoreographer.desiredHeightPx());
         assertEquals(List.of("inapp-keyboard"), mSurface.geometryReasons);
-        // The second pass runs once the container has actually laid out at the new height.
+        // No second pass after the container's layout: the height was measured independently of
+        // the stack, and a disagreeing layout is the container listener's to report.
         mSurface.keyboardContainer.drainPosted();
-        assertEquals(List.of("inapp-keyboard", "inapp-keyboard:layout"), mSurface.geometryReasons);
+        assertEquals(List.of("inapp-keyboard"), mSurface.geometryReasons);
     }
 
     @Test

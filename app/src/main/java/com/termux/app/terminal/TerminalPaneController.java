@@ -326,6 +326,7 @@ public class TerminalPaneController {
     private final Map<Split, LinearLayout> mSplitLayouts = new HashMap<>();
     /** The split a keybind resize burst is adjusting, while the finish is still debounced. */
     @Nullable private Split mPendingKeyResizeSplit;
+    @Nullable private GridHold mPendingKeyResizeHold;
     @Nullable private Runnable mFinishKeyResizeRunnable;
     /** Floating chrome containers of the rendered window, rebuilt on every render. */
     private final Map<Leaf, FloatingPaneContainer> mFloatContainers = new HashMap<>();
@@ -335,6 +336,12 @@ public class TerminalPaneController {
 
     /** Nested controller-wide lease covering every source of transient host geometry. */
     private int mHostSurfaceResizeDepth;
+    /**
+     * Owns the grid's pause through the transitions this controller drives (focus growth, a
+     * resize-key burst, a divider or float drag), so they share one resize with whatever else is
+     * moving the host. Null in tests and before the activity wires it: the pause is then direct.
+     */
+    @Nullable private GeometryScheduler mGeometry;
 
     @Nullable private Window mActiveWindow;
     @Nullable private Leaf mMaximizedLeaf;
@@ -671,7 +678,7 @@ public class TerminalPaneController {
             }
             return;
         }
-        beginHostSurfaceResize();
+        GridHold hold = new GridHold();
         ValueAnimator animator = ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(PANE_MOVE_MS);
         animator.setInterpolator(PaneMotionOverlayView.standardInterpolator());
@@ -689,7 +696,7 @@ public class TerminalPaneController {
                     applyWeightsToRenderedLayout(splits.get(i));
                 }
                 if (mFocusGrowAnimator == animation) mFocusGrowAnimator = null;
-                finishHostSurfaceResizeKeepingBottom();
+                hold.release();
                 mHost.onTreesChanged();
             }
         });
@@ -1154,6 +1161,35 @@ public class TerminalPaneController {
             v.post(v::updateSize);
     }
 
+    /** Hands the grid's pause to {@code geometry} for the transitions this controller drives. */
+    public void setGeometryScheduler(@Nullable GeometryScheduler geometry) {
+        mGeometry = geometry;
+    }
+
+    /**
+     * The grid's pause over one transition this controller drives, released once: through the
+     * scheduler, so it resizes with anything else moving the host, or directly without one.
+     */
+    private final class GridHold {
+        @Nullable private final GeometryScheduler mOwner = mGeometry;
+        @Nullable private final GeometryScheduler.Transition mTransition;
+        private boolean mReleased;
+
+        GridHold() {
+            mTransition = mOwner == null ? null
+                : mOwner.begin(GeometryScheduler.Reason.DIVIDER, false, false);
+            if (mTransition == null) beginHostSurfaceResize();
+        }
+
+        /** Ends the transition; the panes resize once its layout lands. */
+        void release() {
+            if (mReleased) return;
+            mReleased = true;
+            if (mOwner != null) mOwner.settle(mTransition, false);
+            else finishHostSurfaceResizeKeepingBottom();
+        }
+    }
+
     /** Coalesce a host-surface animation into one final PTY resize. */
     public void beginHostSurfaceResize() {
         mHostSurfaceResizeDepth++;
@@ -1537,7 +1573,7 @@ public class TerminalPaneController {
         // resize into one commit after the burst — same debounce shape as the drag's up-event.
         if (mPendingKeyResizeSplit != target) {
             finishPendingKeyResize();
-            beginHostSurfaceResize();
+            mPendingKeyResizeHold = new GridHold();
             mPendingKeyResizeSplit = target;
         } else if (mFinishKeyResizeRunnable != null) {
             mHostView.removeCallbacks(mFinishKeyResizeRunnable);
@@ -1574,7 +1610,8 @@ public class TerminalPaneController {
         }
         if (mPendingKeyResizeSplit != null) {
             mPendingKeyResizeSplit = null;
-            finishHostSurfaceResizeKeepingBottom();
+            if (mPendingKeyResizeHold != null) mPendingKeyResizeHold.release();
+            mPendingKeyResizeHold = null;
             mHost.onTreesChanged();
         }
     }
@@ -3633,6 +3670,8 @@ public class TerminalPaneController {
         private float mYWeightA;
         private float mYWeightB;
         private boolean mDraggingDivider;
+        /** The grid's pause for the divider drag under way, released at the finger's lift. */
+        @Nullable private GridHold mDividerHold;
         /** A finger went down in a divider's gap: the gesture is the divider's, not a corner's. */
         private boolean mGapGesture;
         /** The splits whose gap held that finger, until its first movement says which it drags. */
@@ -3977,7 +4016,7 @@ public class TerminalPaneController {
                             Window window = windowOf(focused == null ? null : focused.session);
                             learnFocusShare(window, first, focused);
                             learnFocusShare(window, second, focused);
-                            finishHostSurfaceResizeKeepingBottom();
+                            releaseDividerHold();
                             Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
                         }
                         resetTouchState();
@@ -4020,7 +4059,7 @@ public class TerminalPaneController {
 
                 case MotionEvent.ACTION_CANCEL:
                     if (mHold.forwardsToTerminal()) forwardToTerminal(event);
-                    if (mDraggingDivider) finishHostSurfaceResizeKeepingBottom();
+                    if (mDraggingDivider) releaseDividerHold();
                     resetTouchState();
                     invalidate();
                     return true;
@@ -4213,7 +4252,14 @@ public class TerminalPaneController {
             mYWeightA = split.weightA;
             mYWeightB = split.weightB;
             mDraggingDivider = true;
-            beginHostSurfaceResize();
+            releaseDividerHold();
+            mDividerHold = new GridHold();
+        }
+
+        private void releaseDividerHold() {
+            GridHold hold = mDividerHold;
+            mDividerHold = null;
+            if (hold != null) hold.release();
         }
 
         private void applySplitDrag(@Nullable Split split, float delta,
@@ -4879,10 +4925,14 @@ public class TerminalPaneController {
             invalidate();
         }
 
+        /** The grid's pause for the resize drag under way. */
+        @Nullable private GridHold mResizeHold;
+
         /** Coalesce the resize drag into one final PTY resize, like divider drags do. */
         private void setSizeUpdatesPaused(boolean paused) {
-            if (paused) beginHostSurfaceResize();
-            else finishHostSurfaceResizeKeepingBottom();
+            GridHold previous = mResizeHold;
+            mResizeHold = paused ? new GridHold() : null;
+            if (previous != null) previous.release();
         }
 
         /**

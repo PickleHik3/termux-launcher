@@ -137,6 +137,7 @@ import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.app.terminal.ClipboardText;
+import com.termux.app.terminal.GeometryScheduler;
 import com.termux.app.terminal.PaneShape;
 import com.termux.app.terminal.TerminalFrameMetricsMonitor;
 import com.termux.app.terminal.TermuxActivityRootView;
@@ -599,8 +600,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean mStatusBarFoldDragging;
     private int mStatusBarFoldDragStartHeight;
-    private int mStatusBarFoldDragResizeGeneration;
-    private int mStatusBarTerminalResizeGeneration;
+    @Nullable private GeometryScheduler.Transition mStatusBarFoldDragTransition;
     /**
      * Whether the pane's top border has a bar to fold (syncBorderStatusSwipe): the bar shown,
      * along the top, where it can unfold. Kept as a field because the wall reads it on every
@@ -667,6 +667,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@link #finishTravelContentResizeAfterLayout}.
      */
     private boolean mTravelContentPreRolled;
+    /** The grid's hold over a pre-rolled slide, ended by finishTravelContentResizeAfterLayout. */
+    @Nullable private GeometryScheduler.Transition mTravelGridHold;
     /** The place {@link #mTravelRoomChangePx} was worked out for, so a frame costs one lookup. */
     @Nullable private com.termux.app.wall.PaneWallPage mTravelRoomArriving;
     private int mTravelRoomChangePx;
@@ -1385,7 +1387,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private Bundle mHelpScreenNavigation;
     private final int[] mTmpParentLocation = new int[2];
     private final int[] mTmpViewLocation = new int[2];
-    private long mLastAccessoryGeometryApplyUptimeMs;
+    /**
+     * The root's IME margin the root view asked for, written by the next geometry pass rather than
+     * from inside its measure or a layout callback; null when nothing is waiting.
+     */
+    @Nullable private Integer mPendingRootBottomMarginPx;
+    /** The system keyboard's bottom inset as last dispatched, 0 while it is down. */
+    private int mLastDispatchedImeBottomPx;
     private int mAppliedTerminalFlushPaddingPx;
     /** The dock's rows and the bottom status band as the last geometry pass laid them out. */
     private int mAppliedDockContentHeightPx;
@@ -1597,18 +1605,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mChrome;
     }
 
-    /**
-     * What a throttled accessory geometry pass still has to ask for. The pass itself moved
-     * nothing, so there is nothing for a render pass to re-cut — unless the reason is that the
-     * wallpaper, the style or the blur changed, which invalidates the crops whether or not the
-     * geometry settled. It used to ask for a render pass unconditionally, so a geometry pass that
-     * skipped its own work still cost a full apply of the chrome.
-     */
-    private static int accessorySkipScopes(@NonNull String reason) {
-        return reason.contains("wallpaper") || reason.contains("style") || reason.contains("blur")
-            ? ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER : 0;
-    }
-
     /** The rotation geometry pass waiting for the new layout, or null when none is pending. */
     @Nullable private OneShotPreDrawListener mPendingOrientationGeometryPass;
 
@@ -1688,6 +1684,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setSuggestionBarView();
         mTermuxActivityRootView = findViewById(R.id.activity_termux_root_view);
         mTermuxActivityRootView.setActivity(this);
+        mTermuxActivityRootView.setBottomMarginWriter(this::requestRootBottomMargin);
         mWallpaperBackdropView = findViewById(R.id.wallpaper_backdrop);
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.setParallax(mWallpaperParallax);
         mTermuxActivityBottomSpaceView = findViewById(R.id.activity_termux_bottom_space_view);
@@ -1714,6 +1711,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (insetsSignature != mLastAppliedInsetsSignature) {
                 mLastAppliedInsetsSignature = insetsSignature;
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+            }
+            int imeBottomPx = insetsCompat.isVisible(Type.ime())
+                ? insetsCompat.getInsets(Type.ime()).bottom : 0;
+            if (imeBottomPx != mLastDispatchedImeBottomPx) {
+                mLastDispatchedImeBottomPx = imeBottomPx;
+                // Dispatched ahead of this traversal's measure: the grid is held from here, so
+                // the window resizing for a system keyboard reflows nothing until the geometry
+                // pass this books has laid the chrome out around it — one resize, not two.
+                mGeometry.request(GeometryScheduler.Reason.INSETS,
+                    GeometryScheduler.ResizePolicy.NOW);
             }
             return insetsCompat.toWindowInsets();
         });
@@ -2167,7 +2174,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mSuggestionBarView != null) {
                 mSuggestionBarView.resetTransientVisualState();
             }
-            applyAccessoryGeometryIfNeeded(false, "onNewIntent:home");
+            mGeometry.request(GeometryScheduler.Reason.HOME, GeometryScheduler.ResizePolicy.NONE);
             mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
             // HOME while already home never stops the activity, so onStart does not fire for it.
             playWeatherArrivalAnimation();
@@ -7657,6 +7664,78 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateAzOverflowAffordance();
     }
 
+    /** Where the scheduler posts: the main looper, its frame work ahead of booked traversals. */
+    private final Handler mGeometryHandler = new Handler(Looper.getMainLooper());
+
+    /**
+     * The one owner of when the chrome geometry pass runs and of the panes' grid pause around it.
+     * Keyboard, insets, layout echoes, font metrics, slides, divider drags and the status fold all
+     * ask here; see {@link GeometryScheduler}.
+     */
+    private final GeometryScheduler mGeometry = new GeometryScheduler(new GeometryScheduler.Host() {
+
+        /** The pane controller whose grid this scheduler paused, so the resume reaches it. */
+        @Nullable private com.termux.app.terminal.TerminalPaneController mHeldPanes;
+        @Nullable private com.termux.app.x11.X11PaneFrame mHeldDisplay;
+
+        @Override public void postFrame(@NonNull Runnable frame) {
+            // Asynchronous, so a traversal already booked does not hold it back behind its barrier:
+            // the pass's writes then reach that traversal instead of booking the next one.
+            android.os.Message message = android.os.Message.obtain(mGeometryHandler, frame);
+            message.setAsynchronous(true);
+            mGeometryHandler.sendMessage(message);
+        }
+
+        @Override public void postAfterLayout(@NonNull Runnable afterLayout) {
+            // Ordinary: a booked traversal's barrier holds it until that layout has run.
+            mGeometryHandler.post(afterLayout);
+        }
+
+        @Override public void postDelayed(@NonNull Runnable runnable, long delayMs) {
+            mGeometryHandler.postDelayed(runnable, delayMs);
+        }
+
+        @Override public void removeCallbacks(@NonNull Runnable runnable) {
+            mGeometryHandler.removeCallbacks(runnable);
+        }
+
+        @Override public void runPass(@NonNull GeometryScheduler.Reason reason) {
+            runAccessoryGeometryPass(reason);
+        }
+
+        @Override public void beginGridHold() {
+            mHeldPanes = mPaneController;
+            if (mHeldPanes != null) mHeldPanes.beginHostSurfaceResize();
+        }
+
+        @Override public void finishGridHold() {
+            com.termux.app.terminal.TerminalPaneController panes = mHeldPanes;
+            mHeldPanes = null;
+            if (panes != null) panes.finishHostSurfaceResizeKeepingBottom();
+        }
+
+        @Override public void beginDisplayHold() {
+            // The display page shares the wall's height: without this every frame of a fold would
+            // resize the X screen, and the bar's motion would judder along with it.
+            mHeldDisplay = mPaneWallController == null ? null : mPaneWallController.displayPage();
+            if (mHeldDisplay != null) mHeldDisplay.beginHostResize();
+        }
+
+        @Override public void finishDisplayHold() {
+            com.termux.app.x11.X11PaneFrame display = mHeldDisplay;
+            mHeldDisplay = null;
+            if (display != null) display.finishHostResize();
+        }
+
+        @Override public long layoutInputsKey() {
+            return geometryInputsKey();
+        }
+
+        @Override public boolean isAlive() {
+            return !isFinishing() && !isDestroyed();
+        }
+    });
+
     /**
      * The in-app keyboard's geometry and its flash-free reveal choreography: the measurement memo,
      * the pending-reveal/pending-close protocol, the two pre-draw gates and the system-IME inset
@@ -7702,7 +7781,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public void applyAccessoryGeometry(@NonNull String reason) {
-                applyAccessoryGeometryIfNeeded(true, reason);
+                // Now, not at the end of the dispatch: the reveal gate armed by this show applies
+                // against the very next traversal, which must already have the stack's new height.
+                mGeometry.requestNow(GeometryScheduler.Reason.KEYBOARD,
+                    GeometryScheduler.ResizePolicy.NOW);
             }
 
             @Override public boolean keyboardGlassSurface() {
@@ -8324,6 +8406,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mTermuxActivityRootView.setLayoutParams(marginLayoutParams);
             }
         }
+        mPendingRootBottomMarginPx = null;
         mTermuxActivityRootView.marginBottom = 0;
         mTermuxActivityRootView.lastMarginBottom = null;
         mTermuxActivityRootView.lastMarginBottomTime = 0L;
@@ -9673,28 +9756,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return isDefaultHomeApp() && isLauncherHomeIntent(getIntent());
     }
 
-    private void applyAccessoryGeometryIfNeeded(boolean force, @NonNull String reason) {
-        Trace.beginSection("Accessory.geometry");
+    /**
+     * The chrome geometry pass: the root's IME margin, the dock's height, the accessory stack and
+     * the content's room, in one go. Only {@link #mGeometry} runs it — every trigger asks there,
+     * with a reason, and the scheduler folds a dispatch's worth of them into one pass and owns the
+     * grid's pause around it ({@link GeometryScheduler}).
+     */
+    private void runAccessoryGeometryPass(@NonNull GeometryScheduler.Reason reason) {
+        // Named by its reason, so a trace counts the passes a transition cost and says why.
+        Trace.beginSection("Accessory.geometry." + reason.name());
         try {
-            doApplyAccessoryGeometryIfNeeded(force, reason);
+            doRunAccessoryGeometryPass();
         } finally {
             Trace.endSection();
         }
     }
 
-    private void doApplyAccessoryGeometryIfNeeded(boolean force, @NonNull String reason) {
+    private void doRunAccessoryGeometryPass() {
+        // First, and whatever owns the stack: the margin is the window's answer to the system
+        // keyboard, which the drawer's freeze has no say over.
+        applyPendingRootBottomMargin();
         // Same freeze as setTerminalToolbarHeight: while the drawer plane owns the stack every
         // band moves by translation/clip only, and a relayout here would fight it. Replayed on close.
         if (isAppDrawerEngaged()) {
             mAppDrawerGeometryFreezePending = true;
             return;
         }
-        long now = SystemClock.uptimeMillis();
-        if (!force && (now - mLastAccessoryGeometryApplyUptimeMs) < 120L) {
-            mChrome.requestSync(accessorySkipScopes(reason));
-            return;
-        }
-        mLastAccessoryGeometryApplyUptimeMs = now;
         // Only a pass that moved something needs the frame's apply. The layout listeners that
         // drive this pass fire on every band resize during a page slide, and each one used to book
         // an apply whether or not the dock and the stack came out where they already were.
@@ -9702,6 +9789,85 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean stackMoved = setTerminalToolbarHeight(true);
         if (dockMoved || stackMoved)
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+    }
+
+    /**
+     * The root view's IME margin ({@link TermuxActivityRootView}): kept until the next geometry
+     * pass writes it, so the margin and the stack it moves land in one layout and the panes, held
+     * from this request on, resize once for both.
+     */
+    private void requestRootBottomMargin(int marginPx) {
+        mPendingRootBottomMarginPx = Math.max(0, marginPx);
+        mGeometry.request(GeometryScheduler.Reason.INSETS, GeometryScheduler.ResizePolicy.NOW);
+    }
+
+    private void applyPendingRootBottomMargin() {
+        Integer margin = mPendingRootBottomMarginPx;
+        mPendingRootBottomMarginPx = null;
+        if (margin != null && mTermuxActivityRootView != null)
+            mTermuxActivityRootView.applyBottomMargin(margin);
+    }
+
+    /**
+     * The content root's height as the next layout will leave it: its laid-out height plus any
+     * root margin written since and not yet laid out. What the geometry pass measures the terminal
+     * against, so a pass that moves the margin reads the room it is about to give.
+     */
+    private int rootRelativeLayoutHeightPx(@NonNull View root) {
+        int height = root.getHeight();
+        if (height <= 0 || mTermuxActivityRootView == null) return height;
+        return Math.max(0, height + mTermuxActivityRootView.unlaidBottomMarginGivebackPx());
+    }
+
+    /**
+     * A digest of every layout fact the geometry pass reads, so the scheduler can tell a pass's own
+     * layout coming back from a change it has not seen: the content root's size and top, the top
+     * status bar's height, the terminal's top and line metrics while it alone stands on the dock,
+     * how many panes share the host, the system keyboard, the place, a floating keyboard's frame.
+     */
+    private long geometryInputsKey() {
+        long key = 17L;
+        View root = findViewById(R.id.activity_termux_root_relative_layout);
+        if (root != null) {
+            root.getLocationInWindow(mTmpViewLocation);
+            key = mixKey(key, root.getWidth());
+            key = mixKey(key, rootRelativeLayoutHeightPx(root));
+            key = mixKey(key, mTmpViewLocation[1]);
+        }
+        View bar = findViewById(R.id.terminal_window_bar_host);
+        boolean barShown = bar != null && bar.getVisibility() == View.VISIBLE;
+        key = mixKey(key, barShown ? bar.getHeight() : -1);
+        int panes = visiblePaneCount();
+        boolean floating = mPaneController != null && mPaneController.isActivePaneFloating();
+        key = mixKey(key, panes);
+        key = mixKey(key, floating ? 1 : 0);
+        key = mixKey(key, isImeVisible() ? 1 : 0);
+        key = mixKey(key, mLastWallPage == null ? -1 : mLastWallPage.ordinal());
+        TerminalView terminal = mTerminalView;
+        if (terminal != null) {
+            key = mixKey(key, System.identityHashCode(terminal));
+            if (panes <= 1 && !floating) {
+                // The dock lands on the lone terminal's whole rows, measured from its top.
+                terminal.getLocationInWindow(mTmpViewLocation);
+                key = mixKey(key, mTmpViewLocation[1]);
+                key = mixKey(key, terminal.getWidth() > 0 && terminal.getHeight() > 0 ? 1 : 0);
+            }
+            if (terminal.mRenderer != null) {
+                key = mixKey(key, terminal.mRenderer.getFontLineSpacing());
+                key = mixKey(key, terminal.mRenderer.getFontLineSpacingAndAscent());
+            }
+        }
+        KeyboardGeometryChoreographer.HostReference floatingKeyboard =
+            mFloatingKeyboard == null ? null : mFloatingKeyboard.reference();
+        if (floatingKeyboard != null) {
+            key = mixKey(key, floatingKeyboard.widthPx);
+            key = mixKey(key, floatingKeyboard.availableHeightPx);
+        }
+        return key;
+    }
+
+    private static long mixKey(long key, long value) {
+        return key * 1_000_003L + value;
     }
 
     static int calculateSuggestionBarMaxButtons(DisplayMetrics displayMetrics) {
@@ -10831,6 +10997,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.widget.FrameLayout paneHost = findViewById(R.id.terminal_pane_host);
         mPaneController = new com.termux.app.terminal.TerminalPaneController(
             new PaneHost(), paneHost, getLayoutInflater());
+        mPaneController.setGeometryScheduler(mGeometry);
         mAppliedPaneStyleKey = null;
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
         applyTrailStyleAndRetroEffect();
@@ -13222,8 +13389,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (layout.slot(Element.STATUS).hidden) {
             if (host.getVisibility() != View.GONE) {
                 cancelTopStatusBarAnimator();
-                int dragLease = endTopStatusBarDrag();
-                if (dragLease >= 0) finishStatusBarTerminalResizeAfterLayout(host, dragLease);
+                finishStatusBarTerminalResize(endTopStatusBarDrag(), true);
                 host.setVisibility(View.GONE);
                 applyTerminalWindowBarBackdropInsets();
                 if (mTermuxActivityRootView != null) ViewCompat.requestApplyInsets(mTermuxActivityRootView);
@@ -13249,8 +13415,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A fold under way on the old edge — animated or under a finger — is dropped; the new
             // edge is laid out at rest below. The drag's lease is returned with it.
             cancelTopStatusBarAnimator();
-            int dragLease = endTopStatusBarDrag();
-            if (dragLease >= 0 && host != null) finishStatusBarTerminalResizeAfterLayout(host, dragLease);
+            finishStatusBarTerminalResize(endTopStatusBarDrag(), true);
         }
         mStatusBarEdge = edge;
         boolean first = !mStatusBarEdgeApplied;
@@ -13324,7 +13489,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The root relative layout already sits below the status-bar inset, so only the window bar
         // and the reserved terminal slice come out of its height.
         View root = findViewById(R.id.activity_termux_root_relative_layout);
-        int rootHeightPx = root != null ? root.getHeight() : 0;
+        int rootHeightPx = root != null ? rootRelativeLayoutHeightPx(root) : 0;
         if (rootHeightPx <= 0)
             return Integer.MAX_VALUE;
         // A bar standing in a column takes no height from the stack at all; only a row does — and
@@ -13525,11 +13690,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // must not strand a prompt that a shell placed against the bottom edge — growing the
             // pane with a plain resize pads the screen with blank rows below the cursor whenever
             // the transcript cannot fill them (fish's clear wipes it via ESC[3J).
-            if (mPaneController != null) mPaneController.beginHostSurfaceResize();
+            // The posted update finds the grid held and is kept as pending; the scheduler resumes
+            // it once, behind this pass's layout — or at the settle of a transition still open.
             mTerminalView.post(mTerminalView::updateSize);
-            accessoryStackContainer.post(() -> {
-                if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
-            });
+            mGeometry.resizeGridAfterLayout();
         }
         // The post-layout render pass re-cuts the crops for geometry this pass moved. Nothing
         // moved, nothing to re-cut: a page slide fires this pass on every band resize, and asking
@@ -13538,6 +13702,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || accessoryHeightChanged || accessoryMarginChanged || contentReservationChanged
             || keyboardShownChanged;
         if (moved) mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        // Whoever ran it, the layout this pass books comes back as an echo of these facts.
+        mGeometry.notePassInputs();
         return moved;
     }
 
@@ -13621,14 +13787,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (fontLineSpacingPx <= 0)
             return mAppliedTerminalFlushPaddingPx;
         View rootRelativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
-        if (rootRelativeLayout == null || rootRelativeLayout.getHeight() <= 0)
+        int rootHeightPx = rootRelativeLayout == null ? 0
+            : rootRelativeLayoutHeightPx(rootRelativeLayout);
+        if (rootHeightPx <= 0)
             return mAppliedTerminalFlushPaddingPx;
         // Structural base: the height the terminal will settle at once all accessory content
         // (without any flush padding) is laid out. Deliberately NOT derived from the terminal's current
         // height — mid-relayout passes (e.g. multi-row extra keys toggling with the IME) would
         // feed the previously applied padding back in and make the result oscillate.
         rootRelativeLayout.getLocationInWindow(mTmpViewLocation);
-        int accessoryBottomWindowY = mTmpViewLocation[1] + rootRelativeLayout.getHeight() - accessoryBottomMarginPx;
+        int accessoryBottomWindowY = mTmpViewLocation[1] + rootHeightPx - accessoryBottomMarginPx;
         mTerminalView.getLocationInWindow(mTmpViewLocation);
         int terminalTopWindowY = mTmpViewLocation[1];
         int baseTerminalHeightPx = accessoryBottomWindowY - accessoryContentHeightPx - terminalTopWindowY;
@@ -13639,13 +13807,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return availableTerminalHeightPx % fontLineSpacingPx;
     }
 
+    /**
+     * The terminal's font or rows changed. The dock lands on whole rows, so line metrics are a
+     * geometry fact; rows alone are not, and a reflow a geometry pass released reports back here
+     * with nothing the pass reads having moved — the scheduler recognises that echo and runs
+     * nothing for it.
+     */
     void requestTerminalFlushDockGeometryUpdate() {
         if (mTerminalView == null)
             return;
-        mTerminalView.post(() -> {
-            if (!isFinishing() && !isDestroyed())
-                applyAccessoryGeometryIfNeeded(true, "terminal:metrics");
-        });
+        mGeometry.request(GeometryScheduler.Reason.METRICS, GeometryScheduler.ResizePolicy.NONE);
     }
 
     private boolean updateAccessoryStackContainerHeight(View view, int height) {
@@ -14722,7 +14893,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         mAppDrawerGeometryFreezePending = false;
-        applyAccessoryGeometryIfNeeded(true, "appDrawer:flush");
+        mGeometry.requestNow(GeometryScheduler.Reason.DRAWER, GeometryScheduler.ResizePolicy.NOW);
     }
 
     /** Row-level haptic ticks, shared by the dock rows and the palette's focus movement. */
@@ -17988,8 +18159,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             beginTravelHold();
             mTravelContentPreRolled = true;
             mTravelHeldReservationPx = Math.max(0, mTravelHeldReservationPx - roomGivenBackPx);
-            if (mPaneController != null) mPaneController.beginHostSurfaceResize();
-            applyAccessoryGeometryIfNeeded(true, "wall:preroll-content");
+            if (mTravelGridHold == null) {
+                mTravelGridHold = mGeometry.begin(GeometryScheduler.Reason.PLACE_TRAVEL,
+                    false, false);
+            }
+            // In this frame: the slide's first frame is drawn with the content's new room.
+            mGeometry.requestNow(GeometryScheduler.Reason.PLACE_TRAVEL,
+                GeometryScheduler.ResizePolicy.AT_SETTLE);
         } finally {
             Trace.endSection();
         }
@@ -17997,16 +18173,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The settle's counterpart: after the settle's layout the paused panes each send the PTY
-     * their one size, anchored at the bottom the way the status bar's fold does. Posted, so it
-     * runs after the traversal that applies the settle's geometry.
+     * their one size, anchored at the bottom the way the status bar's fold does. The scheduler
+     * resumes them behind the traversal that applies the settle's geometry.
      */
     private void finishTravelContentResizeAfterLayout() {
-        View stack = findViewById(R.id.accessory_stack_container);
-        Runnable finish = () -> {
-            if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
-        };
-        if (stack != null) stack.post(finish);
-        else finish.run();
+        GeometryScheduler.Transition hold = mTravelGridHold;
+        mTravelGridHold = null;
+        mGeometry.settle(hold, false);
     }
 
     /**
@@ -18133,57 +18306,69 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void doSettlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page) {
-        // A keyboard swipe still landing lands first: it owns the same travel state.
-        settleKeyboardSwipeTravelNow();
-        boolean leavingKeyboardUp = committedKeyboardVisible();
-        boolean keyboardPreRolled = mTravelKeyboardPreRolled;
-        boolean contentPreRolled = mTravelContentPreRolled;
-        boolean held = mTravelHoldsContent;
-        boolean moved = mChromeTravelMoved;
-        com.termux.app.wall.PaneWallPage left = mLastWallPage;
-        mTravelHoldsContent = false;
-        mTravelKeyboardPreRolled = false;
-        mTravelKeyboardPlace = null;
-        mTravelContentPreRolled = false;
-        mTravelRoomArriving = null;
-        mChromeTravelMoved = false;
-        mDockTravelTranslationPx = 0f;
-        mKeyboardTravelSharePx = 0f;
-        mTravelHeldOverlapPx = 0;
-        // The material blend, if one ran, has landed on the arriving place's material; the pass
-        // below paints that material plainly, and the blend's layers go with it.
-        mKeyboardTravelSolidness = KeyboardMaterialPolicy.NO_TRAVEL;
-        mKeyboardTravelSolidFill = null;
-        applyAccessoryStackTranslation();
-        applyChromeTravelAlpha(1f, 1f);
-        // The panes' clip comes off with the hold: the geometry pass below lays them out at the
-        // size the clip was standing in for, in the same traversal.
-        if (held && mPaneController != null) mPaneController.setTravelBottomCoverPx(0);
-        // A keyboard pre-rolled for a place the wall did not stay on goes away quietly, as it came:
-        // the place under it never had it up. One the arriving place wants is already where it
-        // belongs, and the place's own sync below finds nothing to do.
-        if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()
-            && (page == left || !wantsKeyboardOnEnter(page))) {
-            mQuietKeyboardChange = true;
-            try {
-                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                    .HideReason.WALL_PAGE);
-            } finally {
-                mQuietKeyboardChange = false;
+        // Everything the settle shows, hides and lays out asks for its geometry inside one batch:
+        // a keyboard going away, the place's own keyboard coming up and the content's room are
+        // one pass, run in this frame at the batch's end.
+        boolean held = false;
+        boolean contentPreRolled = false;
+        boolean moved = false;
+        mGeometry.beginBatch();
+        try {
+            // A keyboard swipe still landing lands first: it owns the same travel state.
+            settleKeyboardSwipeTravelNow();
+            boolean leavingKeyboardUp = committedKeyboardVisible();
+            boolean keyboardPreRolled = mTravelKeyboardPreRolled;
+            contentPreRolled = mTravelContentPreRolled;
+            held = mTravelHoldsContent;
+            moved = mChromeTravelMoved;
+            com.termux.app.wall.PaneWallPage left = mLastWallPage;
+            mTravelHoldsContent = false;
+            mTravelKeyboardPreRolled = false;
+            mTravelKeyboardPlace = null;
+            mTravelContentPreRolled = false;
+            mTravelRoomArriving = null;
+            mChromeTravelMoved = false;
+            mDockTravelTranslationPx = 0f;
+            mKeyboardTravelSharePx = 0f;
+            mTravelHeldOverlapPx = 0;
+            // The material blend, if one ran, has landed on the arriving place's material; the
+            // pass below paints that material plainly, and the blend's layers go with it.
+            mKeyboardTravelSolidness = KeyboardMaterialPolicy.NO_TRAVEL;
+            mKeyboardTravelSolidFill = null;
+            applyAccessoryStackTranslation();
+            applyChromeTravelAlpha(1f, 1f);
+            // The panes' clip comes off with the hold: the geometry pass below lays them out at
+            // the size the clip was standing in for, in the same traversal.
+            if (held && mPaneController != null) mPaneController.setTravelBottomCoverPx(0);
+            // A keyboard pre-rolled for a place the wall did not stay on goes away quietly, as it
+            // came: the place under it never had it up. One the arriving place wants is already
+            // where it belongs, and the place's own sync below finds nothing to do.
+            if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()
+                && (page == left || !wantsKeyboardOnEnter(page))) {
+                mQuietKeyboardChange = true;
+                try {
+                    mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                        .HideReason.WALL_PAGE);
+                } finally {
+                    mQuietKeyboardChange = false;
+                }
+            } else if (keyboardPreRolled && page != left
+                && page == com.termux.app.wall.PaneWallPage.DISPLAY && mX11Display != null
+                && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+                // The display hears the keyboard come up as the place's own, which is what the
+                // settle-time show the pre-roll stood in for would have told it.
+                mX11Display.onUserKeyboardIntent(true);
             }
-        } else if (keyboardPreRolled && page != left
-            && page == com.termux.app.wall.PaneWallPage.DISPLAY && mX11Display != null
-            && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
-            // The display hears the keyboard come up as the place's own, which is what the
-            // settle-time show the pre-roll stood in for would have told it.
-            mX11Display.onUserKeyboardIntent(true);
+            syncPlaceState(page, leavingKeyboardUp);
+            // The hold is over: one geometry pass gives the content the room the place it landed
+            // on leaves it, which is the terminal's one resize for the whole slide. A slide that
+            // gave the room back in its first frame finds it already right, and only the grid's
+            // resize is left; the rows are drawn where it lands until it does.
+            if (held) mGeometry.requestNow(GeometryScheduler.Reason.PLACE_SETTLE,
+                GeometryScheduler.ResizePolicy.NOW);
+        } finally {
+            mGeometry.endBatch();
         }
-        syncPlaceState(page, leavingKeyboardUp);
-        // The hold is over: one geometry pass gives the content the room the place it landed on
-        // leaves it, which is the terminal's one resize for the whole slide. A slide that gave
-        // the room back in its first frame finds it already right, and only the grid's resize
-        // is left; the rows are drawn where it lands until it does.
-        if (held) applyAccessoryGeometryIfNeeded(true, "wall:settle");
         if (contentPreRolled) finishTravelContentResizeAfterLayout();
         if (held) settleTerminalTravelDisplacement();
         // The crops were cut where the stack was laid out; one pass re-cuts any a frame of the
@@ -18508,22 +18693,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTravelHeldOverlapPx = 0;
         applyAccessoryStackTranslation();
         if (held && mPaneController != null) mPaneController.setTravelBottomCoverPx(0);
-        if (open != mKeyboardSwipeFromOpen) {
-            // The pre-rolled keyboard, up already, becomes the one the person asked for; the
-            // display's policy hears it here, since the keyboard itself saw no change to report.
-            applyBorderKeyboardSwipe(open);
-            if (open && mX11Display != null && !mRaisingDisplayFrameKeyboard)
-                mX11Display.onUserKeyboardIntent(true);
-        } else if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
-            mQuietKeyboardChange = true;
-            try {
-                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                    .HideReason.WALL_PAGE);
-            } finally {
-                mQuietKeyboardChange = false;
+        // The keyboard's own show or hide and the content's room are one pass, at the batch's end.
+        mGeometry.beginBatch();
+        try {
+            if (open != mKeyboardSwipeFromOpen) {
+                // The pre-rolled keyboard, up already, becomes the one the person asked for; the
+                // display's policy hears it here, since the keyboard itself saw no change to
+                // report.
+                applyBorderKeyboardSwipe(open);
+                if (open && mX11Display != null && !mRaisingDisplayFrameKeyboard)
+                    mX11Display.onUserKeyboardIntent(true);
+            } else if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+                mQuietKeyboardChange = true;
+                try {
+                    mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                        .HideReason.WALL_PAGE);
+                } finally {
+                    mQuietKeyboardChange = false;
+                }
             }
+            if (held) mGeometry.requestNow(GeometryScheduler.Reason.PLACE_SETTLE,
+                GeometryScheduler.ResizePolicy.NOW);
+        } finally {
+            mGeometry.endBatch();
         }
-        if (held) applyAccessoryGeometryIfNeeded(true, "keyboard-swipe:settle");
         if (contentPreRolled) finishTravelContentResizeAfterLayout();
         if (held) settleTerminalTravelDisplacement();
         mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
@@ -20772,14 +20965,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean vertical = isStatusBarVertical();
         ViewGroup.LayoutParams params = host.getLayoutParams();
         if (vertical ? params.width != height : params.height != height) {
+            int bandBeforePx = bottomStatusBandPx();
             if (vertical) params.width = height;
             else params.height = height;
             host.setLayoutParams(params);
             // A bar along the bottom is a band of the accessory stack, whose height is arithmetic
-            // rather than wrap_content — so the stack has to be re-added up as the bar grows, or
-            // the fold would open into a container that never made room for it. Without the
-            // terminal resize: that is a SIGWINCH per frame, and the settle at the end owns it.
-            if (mStatusBarEdge == PlaceLayout.Edge.BOTTOM) setTerminalToolbarHeight(false);
+            // rather than wrap_content — so the stack has to grow with the bar, or the fold would
+            // open into a container that never made room for it. By the band's change alone: the
+            // whole geometry pass per frame was a full chrome apply per frame, and the fold's
+            // settle runs the one pass that lays everything else out
+            // (beginStatusBarTerminalResize).
+            if (mStatusBarEdge == PlaceLayout.Edge.BOTTOM)
+                growAccessoryStackBy(bottomStatusBandPx() - bandBeforePx);
         }
         int collapsedHeight = targetStatusBarHeightPx(capsule, true);
         int expandedHeight = targetStatusBarHeightPx(capsule, false);
@@ -20889,6 +21086,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return geometry;
     }
 
+    /**
+     * Grows the accessory stack's explicit height by a band's change, without the pass that
+     * computes it: one height write for a frame of a bottom bar's fold. The stack is the sum of its
+     * bands ({@link #computeAccessoryStackHeight}), so this is exact until the stack meets its
+     * ceiling, where the settle's pass sheds the dock's rows as it always has.
+     */
+    private void growAccessoryStackBy(int deltaPx) {
+        if (deltaPx == 0) return;
+        View stack = findViewById(R.id.accessory_stack_container);
+        ViewGroup.LayoutParams params = stack == null ? null : stack.getLayoutParams();
+        if (params == null || params.height < 0) return;
+        params.height = Math.max(0, params.height + deltaPx);
+        stack.setLayoutParams(params);
+    }
+
     /** The bar's thickness across its own axis right now, whichever axis that is. */
     private int currentTopStatusBarHeight(View host) {
         ViewGroup.LayoutParams params = host.getLayoutParams();
@@ -20898,26 +21110,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return params != null && params.height > 0 ? params.height : host.getHeight();
     }
 
-    private int beginStatusBarTerminalResize() {
-        int generation = ++mStatusBarTerminalResizeGeneration;
-        if (mPaneController != null) mPaneController.beginHostSurfaceResize();
-        // The display page shares the wall's height: without this every animation frame would
-        // resize the X screen, and the bar's motion would judder along with it.
-        com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
-            ? null : mPaneWallController.displayPage();
-        if (display != null) display.beginHostResize();
-        return generation;
+    /**
+     * Opens the fold's transition: the panes' grid and the display's screen are held, and the
+     * layout the fold moves every frame books no geometry pass, until
+     * {@link #finishStatusBarTerminalResize}. Each pane then sends one final row/column update
+     * instead of a SIGWINCH for every frame.
+     */
+    @NonNull
+    private GeometryScheduler.Transition beginStatusBarTerminalResize() {
+        return mGeometry.begin(GeometryScheduler.Reason.STATUS_FOLD, true, true);
     }
 
-    private void finishStatusBarTerminalResizeAfterLayout(View host, int generation) {
-        // The posted resume runs after the requested terminal-surface layout. Each pane then sends
-        // exactly one final row/column update instead of a SIGWINCH for every animation frame.
-        host.post(() -> {
-            if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
-            com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
-                ? null : mPaneWallController.displayPage();
-            if (display != null) display.finishHostResize();
-        });
+    /**
+     * Ends a fold's transition. A landing ({@code settle}) books the one geometry pass for the
+     * bar's new height; a fold taken over by another hands what it moved to the one taking over,
+     * which opened its own transition first. Either way the grid resumes behind that pass's layout.
+     */
+    private void finishStatusBarTerminalResize(@Nullable GeometryScheduler.Transition fold,
+                                               boolean settle) {
+        mGeometry.settle(fold, settle);
     }
 
     private void setTopStatusBarCollapsed(boolean requestedCollapsed, boolean animate) {
@@ -20957,7 +21168,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void setTopStatusBarCollapsed(boolean requestedCollapsed, boolean animate,
                                           float towardOpenVelocityPxPerSec) {
         if (mPreferences == null) return;
-        int dragLease = endTopStatusBarDrag();
+        GeometryScheduler.Transition dragLease = endTopStatusBarDrag();
         // A bar down a side never rests expanded; isStatusBarCompact() already reflects that, so
         // this coercion never lands on a preference write below — it only refuses the request.
         boolean collapsed = requestedCollapsed
@@ -20985,24 +21196,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // opened would end the keyboard's or an animation's early and let panes settle on a
             // size they never reported.
             refreshTerminalWindowBar();
-            if (host != null && dragLease >= 0) finishStatusBarTerminalResizeAfterLayout(host, dragLease);
+            finishStatusBarTerminalResize(dragLease, true);
             return;
         }
         if (preferenceChanged) setStatusBarCompact(collapsed);
         if (mFirstBootTour != null) mFirstBootTour.onStatusBarCollapsedSettled(collapsed);
         if (host == null) {
             refreshTerminalWindowBar();
+            finishStatusBarTerminalResize(dragLease, true);
             return;
         }
         if (!animate || isReducedMotionEnabled()) {
-            int resizeGeneration = dragLease >= 0 ? dragLease : beginStatusBarTerminalResize();
+            GeometryScheduler.Transition snap = dragLease != null ? dragLease
+                : beginStatusBarTerminalResize();
             refreshTerminalWindowBar();
-            finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
+            finishStatusBarTerminalResize(snap, true);
             return;
         }
 
+        // Opened before the landing still running is cancelled, so what that one moved is this
+        // one's to settle rather than a pass of its own.
+        final GeometryScheduler.Transition foldTransition = dragLease != null ? dragLease
+            : beginStatusBarTerminalResize();
         cancelTopStatusBarAnimator();
-        final int resizeGeneration = dragLease >= 0 ? dragLease : beginStatusBarTerminalResize();
         int startHeight = currentTopStatusBarHeight(host);
         if (startHeight <= 0) startHeight = targetStatusBarHeightPx(capsule, !collapsed);
         applyTopStatusBarInteractiveHeight(host, topWidgets, startHeight, capsule);
@@ -21033,7 +21249,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // Taken over — by a finger, another landing, or a new edge — from wherever the
                     // bar stands: whoever took over owns its geometry now, and only the lease
                     // this landing held is returned.
-                    finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
+                    finishStatusBarTerminalResize(foldTransition, false);
                     return;
                 }
                 if (topWidgets != null) {
@@ -21044,7 +21260,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         ? View.GONE : View.VISIBLE);
                 }
                 refreshTerminalWindowBar();
-                finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
+                finishStatusBarTerminalResize(foldTransition, true);
             }
         });
         mStatusBarCollapseAnimator = fold;
@@ -21064,11 +21280,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         fold.cancel();
     }
 
-    /** Ends a finger's fold, returning the resize lease it held, or -1 when none was under way. */
-    private int endTopStatusBarDrag() {
-        if (!mStatusBarFoldDragging) return -1;
+    /** Ends a finger's fold, returning the transition it held, or null when none was under way. */
+    @Nullable
+    private GeometryScheduler.Transition endTopStatusBarDrag() {
+        if (!mStatusBarFoldDragging) return null;
         mStatusBarFoldDragging = false;
-        return mStatusBarFoldDragResizeGeneration;
+        GeometryScheduler.Transition drag = mStatusBarFoldDragTransition;
+        mStatusBarFoldDragTransition = null;
+        return drag;
     }
 
     /**
@@ -21088,10 +21307,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View topWidgets = findViewById(R.id.terminal_top_widget_area);
         boolean capsule = isRoundedDockStyle();
         if (!mStatusBarFoldDragging) {
+            // The drag's transition first: a landing it takes over hands it what that one moved.
+            GeometryScheduler.Transition drag = beginStatusBarTerminalResize();
             cancelTopStatusBarAnimator();
             mStatusBarFoldDragging = true;
             mStatusBarFoldDragStartHeight = currentTopStatusBarHeight(host);
-            mStatusBarFoldDragResizeGeneration = beginStatusBarTerminalResize();
+            mStatusBarFoldDragTransition = drag;
         }
         int height = com.termux.app.statusbar.StatusBarFoldMotion.heightForDrag(
             mStatusBarFoldDragStartHeight, towardOpenPx, targetStatusBarHeightPx(capsule, true),
@@ -24387,11 +24608,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return;
             }
             if (v.getId() == R.id.terminal_pane_host) {
-                // Never mutate accessory layout params from inside this layout pass.
-                v.post(() -> {
-                    if (!isFinishing() && !isDestroyed())
-                        applyAccessoryGeometryIfNeeded(true, "terminal:layout");
-                });
+                // Booked, never run inside this layout pass. Usually the layout a pass booked
+                // coming back, which the scheduler recognises and runs nothing for.
+                mGeometry.request(GeometryScheduler.Reason.LAYOUT,
+                    GeometryScheduler.ResizePolicy.NONE);
                 return;
             }
             if (v.getId() == R.id.inapp_keyboard_container) {
@@ -24403,7 +24623,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         if (!isFinishing() && !isDestroyed()
                             && v.getHeight() != mKeyboardGeometry.desiredHeightPx()) {
                             mKeyboardGeometry.discardMeasuredHeight();
-                            applyAccessoryGeometryIfNeeded(true, "inapp-keyboard:height");
+                            mGeometry.request(GeometryScheduler.Reason.KEYBOARD,
+                                GeometryScheduler.ResizePolicy.NOW);
                         }
                     });
                 } else {
@@ -24474,7 +24695,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxTerminalSessionActivityClient != null) {
             mTermuxTerminalSessionActivityClient.onImeVisibilityChanged(visible);
         }
-        applyAccessoryGeometryIfNeeded(true, visible ? "ime:open" : "ime:close");
+        // At the end of this layout dispatch, together with the root's margin the same probe may
+        // have asked for: one pass, and the grid held since the insets moved resizes once after it.
+        mGeometry.request(GeometryScheduler.Reason.INSETS, GeometryScheduler.ResizePolicy.NOW);
         mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_BLUR_HEALTH);
     }
 
@@ -24833,7 +25056,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // is asked for here rather than left to the geometry pass, which only books one when it
         // moved something: a styling reload can change every surface's material without moving a
         // single band, and that is exactly the case that needs re-glazing.
-        applyAccessoryGeometryIfNeeded(true, "reloadActivityStyling");
+        mGeometry.requestNow(GeometryScheduler.Reason.STYLING, GeometryScheduler.ResizePolicy.NOW);
         mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
             | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         syncTerminalWallpaperRenderingMode();
