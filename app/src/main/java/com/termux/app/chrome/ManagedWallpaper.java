@@ -74,14 +74,19 @@ public final class ManagedWallpaper {
     /**
      * The file and system half of a wallpaper pick; runs off the main thread, touches no view.
      * {@code preferences} may be null, in which case the stored home id is not updated. The lock
-     * id is stored after every successful set, so a lock wallpaper set by another app later is
-     * told apart from ours.
+     * id is stored after a set that touched the lock screen, and after a Home-only set while the
+     * lock screen was still ours, so a lock wallpaper set by another app is told apart from ours
+     * and stays told apart until a Lock choice is applied.
      */
     public static boolean apply(@NonNull Context context, @NonNull WallpaperManager wallpaperManager,
                                 @NonNull Uri source, int wallpaperFlags, int portraitWidth,
                                 int portraitHeight, @Nullable TermuxAppSharedPreferences preferences) {
         Rect fullImage = fullImageBounds(context, source);
         Rect centre = systemCentre(fullImage, portraitWidth, portraitHeight);
+        TermuxAppSharedPreferences lockPrefs = preferences != null ? preferences
+            : TermuxAppSharedPreferences.build(context, false);
+        boolean lockWasOurs = lockPrefs == null
+            || lockIdUnchanged(lockPrefs.getManagedWallpaperLockId(), currentLockWallpaperId(context));
         try {
             if (!setCentre(context, wallpaperManager, source, fullImage, centre, wallpaperFlags)) {
                 return false;
@@ -96,7 +101,9 @@ public final class ManagedWallpaper {
                     preferences.setManagedWallpaperSystemId(wallpaperId);
                 }
             }
-            recordLockId(context, preferences);
+            if ((wallpaperFlags & WallpaperManager.FLAG_LOCK) != 0 || lockWasOurs) {
+                recordLockId(context, lockPrefs);
+            }
             return true;
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Failed to apply managed wallpaper", e);
@@ -305,6 +312,14 @@ public final class ManagedWallpaper {
         if (!tempFile.renameTo(exactFile)) {
             Logger.logError(LOG_TAG, "Failed to promote managed wallpaper temp file");
         }
+    }
+
+    /**
+     * Whether the lock screen is still the one the launcher last recorded (or none was recorded
+     * yet): only then may a Home-only set move the baseline, which a shared lock id can follow.
+     */
+    static boolean lockIdUnchanged(int storedId, int currentId) {
+        return storedId == 0 || currentId == 0 || storedId == currentId;
     }
 
     /** Stores what the system reports for the lock screen now, as the baseline for {@link #currentLockWallpaperId}. */
