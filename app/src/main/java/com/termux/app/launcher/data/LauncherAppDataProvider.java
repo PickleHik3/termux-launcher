@@ -161,6 +161,16 @@ public final class LauncherAppDataProvider {
     }
 
     /**
+     * The provider's one background thread, for work that belongs beside the catalogue's: the
+     * icons the drawer and the dock render off the main thread run here, after any load already
+     * queued, so they never race the catalogue for the icon resolver or the store.
+     */
+    @NonNull
+    public java.util.concurrent.Executor worker() {
+        return executor;
+    }
+
+    /**
      * The icon-pack configuration now in force, as a token that changes whenever the treatment
      * does. Every cache of treated artwork keys on it — the store here, and the rendered-icon
      * caches that live with their surfaces — so a pack switch cannot serve a render made under the

@@ -107,6 +107,7 @@ import com.termux.app.launcher.popup.MenuRow;
 import com.termux.app.launcher.popup.MenuRowFactory;
 import com.termux.app.launcher.popup.MenuRowWidths;
 import com.termux.app.launcher.popup.MenuSpec;
+import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.app.launcher.icon.DockIconCache;
 import com.termux.app.launcher.icon.RenderedIconDrawable;
 import com.termux.app.launcher.data.IconPack;
@@ -264,6 +265,26 @@ public final class SuggestionBarView extends GridLayout
         DockIconCache.memoryClassMb(getContext()),
         () -> getContext().getPackageManager().getDefaultActivityIcon(),
         entry -> LauncherAppDataProvider.getInstance(getContext()).icons().artwork(entry));
+    /**
+     * Binds the dock's and the drawer's icons without rendering on the main thread: an icon the
+     * cache holds binds at once, a missing one is rendered on the catalogue's worker — into the
+     * same budgeted caches — and fades in over a quiet tile. See {@link AsyncIconBinder}.
+     */
+    private final AsyncIconBinder iconBinder = new AsyncIconBinder(
+        new AsyncIconBinder.Renderer() {
+            @Override
+            public Drawable peek(@NonNull LauncherAppEntry entry, int sizePx) {
+                return iconCache.peek(entry, sizePx);
+            }
+
+            @Override
+            public Drawable render(@NonNull LauncherAppEntry entry, int sizePx) {
+                return iconCache.icon(entry, sizePx);
+            }
+        },
+        command -> LauncherAppDataProvider.getInstance(getContext()).worker().execute(command),
+        AsyncIconBinder.mainThreadExecutor(),
+        this::iconTileColor);
     /** Visible alpha bounds per drawable; avoids rescanning custom/icon-pack artwork on every drag event. */
     private final Map<Drawable, RectF> drawableVisibleBoundsCache = new WeakHashMap<>();
     private final Map<Drawable, FocusOutlineRenderer.Visual> focusOutlineVisualCache = new WeakHashMap<>();
@@ -3496,6 +3517,40 @@ public final class SuggestionBarView extends GridLayout
         return iconForDisplay(entry, sizePx);
     }
 
+    /**
+     * Shows {@code entry}'s rendered icon in {@code view} without rendering on the main thread: at
+     * once when the cache holds it, otherwise as a quiet tile the icon fades in over once the
+     * worker has rendered it. The drawer's cells and the dock's buttons bind through here;
+     * {@link #getRenderedIcon} stays for callers that need the drawable in hand, such as a drag.
+     *
+     * @return true when the icon was bound now
+     */
+    public boolean bindRenderedIcon(@NonNull ImageView view, @NonNull LauncherAppEntry entry,
+                                    int sizePx) {
+        if (sizePx <= 0) {
+            AsyncIconBinder.cancel(view);
+            view.setImageDrawable(iconForDisplay(entry, sizePx));
+            return true;
+        }
+        return iconBinder.bind(view, entry, sizePx, entry.icon);
+    }
+
+    /**
+     * Renders {@code entries} at {@code sizePx} on the worker ahead of their cells, so a page
+     * about to be shown binds from the cache. Capped at {@link AsyncIconBinder#MAX_PREFETCH}.
+     */
+    public void prefetchRenderedIcons(@NonNull List<LauncherAppEntry> entries, int sizePx) {
+        iconBinder.prefetch(entries, sizePx);
+    }
+
+    /**
+     * The tile an icon shows while it is rendered: the launcher's own on-surface tone, which the
+     * scheme chrome already drives, at a low alpha so it reads as a quiet stand-in on any glass.
+     */
+    private int iconTileColor() {
+        return withAlphaComponent(getLauncherTextColor(), 0x1F);
+    }
+
     /** Read-only budget shared by dock and drawer rendered icons. */
     public int getRenderedIconCacheBudgetBytes() {
         return iconCache.budgetBytes();
@@ -3510,8 +3565,7 @@ public final class SuggestionBarView extends GridLayout
 
         ImageButton imageButton = new ImageButton(getContext());
         int size = iconSizePx();
-        Drawable icon = iconForDisplay(entry, size);
-        imageButton.setImageDrawable(icon);
+        bindRenderedIcon(imageButton, entry, size);
         imageButton.setScaleType(ImageButton.ScaleType.CENTER_INSIDE);
         imageButton.setAdjustViewBounds(true);
         imageButton.setPadding(0, 0, 0, 0);
@@ -4253,7 +4307,7 @@ public final class SuggestionBarView extends GridLayout
             LauncherAppEntry e = resolvePinnedApp(folderApp);
             if (artworkOrNull(e) == null) continue;
             ImageView mini = new ImageView(getContext());
-            mini.setImageDrawable(getRenderedIcon(e, miniSize));
+            bindRenderedIcon(mini, e, miniSize);
             mini.setScaleType(ImageView.ScaleType.FIT_CENTER);
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = miniSize;
@@ -7586,8 +7640,7 @@ public final class SuggestionBarView extends GridLayout
     private View createPopupEntryButton(@NonNull LauncherAppEntry entry, int sizePx,
                                         @NonNull String sourceFolderId) {
         ImageButton button = new ImageButton(getContext());
-        Drawable icon = iconForDisplay(entry, sizePx);
-        button.setImageDrawable(icon);
+        bindRenderedIcon(button, entry, sizePx);
         button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         button.setAdjustViewBounds(true);
         button.setPadding(0, 0, 0, 0);
