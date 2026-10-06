@@ -186,7 +186,8 @@ public final class LauncherCategorySortService extends Service {
         super.onDestroy();
     }
 
-    private void runSort(@Nullable String modelId, @Nullable String accelerator) throws Exception {
+    private void runSort(@Nullable String modelId, @Nullable String tierAccelerator) throws Exception {
+        String accelerator = tierAccelerator;
         LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(this);
         // Excludes x11:linux (every Linux app's shared package) as well as work/private twins; see
         // LauncherCategoryCatalogue for why the categoriser must never see that one as an "app".
@@ -233,7 +234,21 @@ public final class LauncherCategorySortService extends Service {
         // phase the user can see.
         update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_LOADING_MODEL));
         updateProgressNotification(true);
-        String loadFailure = loadModel(manager, modelId, accelerator, residentBefore);
+        // What the load needs depends on the prompts it will serve and on the user's speed test (if any);
+        // an already-resident model is used as it is, so none of this applies to it.
+        CategorySortLoadPolicy.Decision load = null;
+        if (modelId != null && !modelId.trim().isEmpty() && !TaiCallerRequests.isRemoteModel(modelId)
+                && TaiCallerRequests.needsLoad(residentBefore, modelId)) {
+            int longestPrompt = 0;
+            for (String packageName : pending) {
+                String label = labelByPackage.get(packageName);
+                longestPrompt = Math.max(longestPrompt, LauncherCategorySortPrompt.singleAppPrompt(
+                    label == null ? packageName : label, packageName).length());
+            }
+            load = CategorySortLoadPolicy.forContext(this, modelId, accelerator, longestPrompt);
+            accelerator = load.accelerator;
+        }
+        String loadFailure = loadModel(manager, modelId, load, residentBefore);
         if (loadFailure != null) {
             // Every app would retry the same load on its own and fail the same way; under memory
             // pressure that is a reload per app. One clear stop instead.
@@ -297,22 +312,27 @@ public final class LauncherCategorySortService extends Service {
      * seconds and a second memory peak) or the model is the remote provider's (nothing to load, and
      * the runtime process stays asleep).
      *
+     * <p>The load carries only the window the sort needs and the accelerator and speculative decoding
+     * the {@link CategorySortLoadPolicy} chose; with no speed test that is CPU, off, 1024.
+     *
      * @return null when it loaded, otherwise the runtime's own sentence for why it did not. An
      *     explicit load only fails on something the per-app requests would hit too (not enough free
      *     memory, a missing file), so a failure here ends the run.
      */
     @Nullable
-    private String loadModel(@NonNull TaiManager manager, @Nullable String modelId, @Nullable String accelerator,
-                             @Nullable String residentBefore) {
+    private String loadModel(@NonNull TaiManager manager, @Nullable String modelId,
+                             @Nullable CategorySortLoadPolicy.Decision load, @Nullable String residentBefore) {
         if (modelId == null || modelId.trim().isEmpty()) return null;
         if (TaiCallerRequests.isRemoteModel(modelId)) return null;
-        if (!TaiCallerRequests.needsLoad(residentBefore, modelId)) return null;
+        if (!TaiCallerRequests.needsLoad(residentBefore, modelId) || load == null) return null;
         try {
             JSONObject request = new JSONObject();
             request.put("model", modelId);
-            if (accelerator != null) request.put("accelerator", accelerator);
-            // Applies because this call loads the model (pong benchmark 2026-10-05: sorting 1.9x faster).
-            request.put("speculative_decoding", true);
+            request.put("accelerator", load.accelerator);
+            request.put("context_window", load.contextWindow);
+            // One-word answers gain nothing from speculative decoding (pong benchmark 2026-10-05), so it
+            // is on only when the user's own speed test measured it winning here.
+            request.put("speculative_decoding", load.speculative);
             JSONObject result = manager.loadModel(request.toString());
             if (result.optBoolean("ok", false)) return null;
             String message = result.optString("message", "").trim();
@@ -346,7 +366,7 @@ public final class LauncherCategorySortService extends Service {
     private String classify(@NonNull TaiManager manager, @Nullable String modelId, @Nullable String accelerator,
                             @NonNull String label, @NonNull String packageName) {
         try {
-            // Thinking off, speculative decoding on, no user system prompt, Automatic window: see categoryBody.
+            // Thinking off, no user system prompt; the model is already loaded, so no load options: see categoryBody.
             JSONObject request = TaiCallerRequests.categoryBody(modelId, accelerator,
                 LauncherCategorySortPrompt.singleAppPrompt(label, packageName), MAX_TOKENS);
 
