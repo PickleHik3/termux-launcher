@@ -2,6 +2,7 @@ package com.termux.app.terminal.inappkeyboard;
 
 import android.content.Context;
 import android.os.Handler;
+import android.os.Looper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -15,11 +16,18 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Objects;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Host side of the keyboard's tap correction: owns the {@link TapModelStore}, knows which layout
  * is on screen and whether the feature is on, and is the {@link Keyboard2View.TapResolver} the
- * view consults. Everything here runs on the main thread except the file write.
+ * view consults. Everything here runs on the main thread except the file read and write.
+ *
+ * <p>The file is read on the I/O executor and swapped in on the main thread. Until it arrives the
+ * controller passes presses through and learns nothing, exactly as if the feature were off, so a
+ * tap in those few milliseconds is never corrected by, or recorded into, a model about to be
+ * replaced.
  *
  * <p>Off means off: with the feature disabled the view's presses pass through untouched and
  * nothing is recorded.
@@ -36,10 +44,16 @@ public final class TapCorrectionController implements Keyboard2View.TapResolver 
     private final Handler mMainHandler;
     private final Runnable mSaveRunnable = this::flush;
 
-    private TapModelStore mStore;
+    private TapModelStore mStore = new TapModelStore();
     private boolean mEnabled;
     private String mLayoutId = "";
     private boolean mSaveScheduled;
+    /** True from asking for the file until its contents are swapped in. */
+    private boolean mLoading;
+    /** Bumped by every load and reset, so a load overtaken by either is dropped on arrival. */
+    private int mLoadGeneration;
+    /** Saves handed to the executor and not finished yet. Touched from both threads. */
+    private final AtomicInteger mSavesInFlight = new AtomicInteger();
 
     /** The file the learned model lives in, shared with the settings screen. */
     @NonNull
@@ -52,7 +66,7 @@ public final class TapCorrectionController implements Keyboard2View.TapResolver 
         mFile = Objects.requireNonNull(file, "file");
         mIoExecutor = Objects.requireNonNull(ioExecutor, "ioExecutor");
         mMainHandler = Objects.requireNonNull(mainHandler, "mainHandler");
-        mStore = TapModelStore.load(file);
+        load();
     }
 
     public boolean isEnabled() {
@@ -76,16 +90,25 @@ public final class TapCorrectionController implements Keyboard2View.TapResolver 
     /**
      * Re-reads the file so a reset made in Settings, or a store written by another instance,
      * takes effect. Anything unsaved here is written first so it is not lost.
+     *
+     * <p>While a save of ours is still on its way to the file, the file is about to hold exactly
+     * what is in memory, so memory is kept rather than reading a file that has not caught up:
+     * reading it then would drop the taps that save carries.
      */
     public void reload() {
         flush();
-        mStore = TapModelStore.load(mFile);
+        if (mSavesInFlight.get() > 0 && !mLoading)
+            return;
+        load();
     }
 
     /** Forgets everything learned and removes the file. */
     public void reset() {
         mMainHandler.removeCallbacks(mSaveRunnable);
         mSaveScheduled = false;
+        // A load still on its way would bring back what this forgets.
+        mLoadGeneration++;
+        mLoading = false;
         mStore.clear();
         mStore.toJson();
         File file = mFile;
@@ -105,18 +128,45 @@ public final class TapCorrectionController implements Keyboard2View.TapResolver 
             return;
         String json = mStore.toJson();
         File file = mFile;
+        mSavesInFlight.incrementAndGet();
+        try {
+            mIoExecutor.execute(() -> {
+                try {
+                    TapModelStore.write(file, json);
+                } catch (IOException e) {
+                    Logger.logStackTraceWithMessage(LOG_TAG, "Failed to save the tap model", e);
+                } finally {
+                    mSavesInFlight.decrementAndGet();
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            mSavesInFlight.decrementAndGet();
+            throw e;
+        }
+    }
+
+    /** Reads the file on the I/O executor and swaps it in on the main thread. */
+    private void load() {
+        mLoading = true;
+        final int generation = ++mLoadGeneration;
+        File file = mFile;
         mIoExecutor.execute(() -> {
-            try {
-                TapModelStore.write(file, json);
-            } catch (IOException e) {
-                Logger.logStackTraceWithMessage(LOG_TAG, "Failed to save the tap model", e);
-            }
+            TapModelStore loaded = TapModelStore.load(file);
+            Runnable swap = () -> {
+                if (generation != mLoadGeneration)
+                    return;
+                mStore = loaded;
+                mLoading = false;
+            };
+            // An executor that ran this on the main thread (a direct one) swaps at once.
+            if (Looper.myLooper() == mMainHandler.getLooper()) swap.run();
+            else mMainHandler.post(swap);
         });
     }
 
     @Override
     public int resolveTap(TapGeometry geometry, int rawIndex, float x, float y) {
-        if (!mEnabled)
+        if (!mEnabled || mLoading)
             return rawIndex;
         return model(geometry).resolve(geometry, rawIndex, x, y);
     }
@@ -124,7 +174,7 @@ public final class TapCorrectionController implements Keyboard2View.TapResolver 
     @Override
     public void observeTap(TapGeometry geometry, int rawIndex, float x, float y,
                            boolean swiped) {
-        if (!mEnabled || swiped)
+        if (!mEnabled || swiped || mLoading)
             return;
         TapModel model = model(geometry);
         model.observe(geometry, rawIndex, x, y, false);
