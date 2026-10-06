@@ -407,6 +407,65 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private static final long WALLPAPER_WAIT_MS = 600L;
 
+    /**
+     * Runs {@code ready} once the launcher's container and the content view are laid out with
+     * nothing pending, so the frame is measured from real sizes; {@code failed} when there is no
+     * container, or it is still not laid out {@link #FRAME_WAIT_MS} from now. A cold start
+     * delivers the Appearance door before the first layout pass, and a frame placed then is
+     * placed from a zero-size container.
+     */
+    @Override
+    public void awaitFrame(@NonNull Runnable ready, @NonNull Runnable failed) {
+        final View root = mHost.findView(R.id.terminal_root_container);
+        final ViewGroup content = mHost.findView(android.R.id.content);
+        if (root == null || content == null) {
+            failed.run();
+            return;
+        }
+        if (isLaidOut(root) && isLaidOut(content)) {
+            ready.run();
+            return;
+        }
+        final boolean[] answered = {false};
+        final ViewTreeObserver.OnGlobalLayoutListener[] listener = {null};
+        final Runnable stopListening = () -> {
+            ViewTreeObserver observer = content.getViewTreeObserver();
+            if (listener[0] != null && observer.isAlive())
+                observer.removeOnGlobalLayoutListener(listener[0]);
+            listener[0] = null;
+        };
+        listener[0] = () -> {
+            if (answered[0] || !isLaidOut(root) || !isLaidOut(content))
+                return;
+            answered[0] = true;
+            stopListening.run();
+            ready.run();
+        };
+        content.getViewTreeObserver().addOnGlobalLayoutListener(listener[0]);
+        content.postDelayed(() -> {
+            if (answered[0])
+                return;
+            answered[0] = true;
+            stopListening.run();
+            // A pass may be pending again by now (a clock's text, say): sizes are what count.
+            if (hasSize(root) && hasSize(content))
+                ready.run();
+            else
+                failed.run();
+        }, FRAME_WAIT_MS);
+    }
+
+    private static final long FRAME_WAIT_MS = 1000L;
+
+    /** Laid out at a real size, with no pass pending (the host the surface just added, say). */
+    private static boolean isLaidOut(@NonNull View view) {
+        return hasSize(view) && !view.isLayoutRequested();
+    }
+
+    private static boolean hasSize(@NonNull View view) {
+        return view.isLaidOut() && view.getWidth() > 0 && view.getHeight() > 0;
+    }
+
     private void wallpaperSettled() {
         mWallpaperSettled = true;
         Runnable waiter = mWallpaperWaiter;

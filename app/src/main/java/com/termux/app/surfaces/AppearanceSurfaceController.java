@@ -5,6 +5,7 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.Interpolator;
@@ -69,10 +70,12 @@ import java.util.function.Consumer;
  *
  * <p><b>Where it was left.</b> Every way out (Done, Back out of the surface, Home, a close nobody
  * announced) writes down the page and what it comes back to ({@link AppearanceReturnState}) with
- * the time. An Overview open within Settings' 30-minute window opens on the remembered card and
- * queues the remembered editor page behind it, reached by the ordinary hop, with the editor told
- * where to stand ({@link Editor#restoreNext}); after the window it opens as before. A door that
- * names a page opens that page and ignores the memory.</p>
+ * the time. An Overview open within Settings' 30-minute window lands on the remembered page: an
+ * editor page is presented first, under the cover and with the editor told where to stand
+ * ({@link Editor#restoreNext}), while the Overview is built on the remembered card beneath it,
+ * hidden, as its Back target; the cover lifts once both stand, and an editor that cannot come up
+ * gives way to the Overview. After the window it opens as before. A door that names a page opens
+ * that page and ignores the memory.</p>
  */
 public final class AppearanceSurfaceController {
     private static final String LOG_TAG = "AppearanceSurface";
@@ -230,6 +233,15 @@ public final class AppearanceSurfaceController {
         void awaitWallpaper(@NonNull Runnable ready);
 
         /**
+         * Runs {@code ready} once the launcher's container and the content view are laid out, so
+         * a presentation measures a real frame; {@code failed} when they are not within a bounded
+         * time, or there is no container. At once by default.
+         */
+        default void awaitFrame(@NonNull Runnable ready, @NonNull Runnable failed) {
+            ready.run();
+        }
+
+        /**
          * Shows the editor. With {@code fromScale} above zero the frame starts at that scale and
          * vertical offset (the Home card) and settles into place; {@code onSettled} runs when it
          * has.
@@ -357,6 +369,12 @@ public final class AppearanceSurfaceController {
     static final long FADE_MS = 180L;
     /** The longest the cover waits for the Overview's cards before the page fades in anyway. */
     static final long OVERVIEW_READY_MS = 500L;
+    /**
+     * The longest a remembered editor page may take to stand under the cover (the wallpaper's
+     * 600 ms and the layout's 1 s waits included): past it the cover lifts on the editor as it is,
+     * or the Overview opens when the editor never came up.
+     */
+    static final long RESTORE_BACKSTOP_MS = 2000L;
     /** How far the rows travel down as they fade. */
     private static final float AWAY_DP = 72f;
     /** The pager's cards fade out this much faster than the page's background. */
@@ -439,6 +457,14 @@ public final class AppearanceSurfaceController {
      * editor's frame.
      */
     private boolean mOverviewStanding;
+    /**
+     * Opening straight onto the remembered editor page: it is presented under the cover, which
+     * lifts once the editor has settled and the Overview is built beneath it. Back, Done and the
+     * pill wait until then.
+     */
+    private boolean mRestoring;
+    private boolean mRestoreSettled;
+    private boolean mRestoreOverviewBuilt;
     private final List<Animator> mRunning = new ArrayList<>();
 
     public AppearanceSurfaceController(@NonNull Host host, @NonNull Editor editor) {
@@ -504,7 +530,7 @@ public final class AppearanceSurfaceController {
     public void open(@NonNull PageId page, @Nullable String section, @Nullable PaneWallPage place) {
         boolean editorPage = isEditorPage(page);
         if (mOpen) {
-            if (editorPage && mEditor.isPresented() && !mTransitioning)
+            if (editorPage && mEditor.isPresented() && !mTransitioning && !mRestoring)
                 mEditor.present(modeOf(page), place, section, 0f, 0f, null);
             else
                 go(page);
@@ -538,34 +564,33 @@ public final class AppearanceSurfaceController {
         mDirect = false;
         mShown = PageId.OVERVIEW;
         // Within the window since the person last left, the surface comes back where they were:
-        // the Overview opens on the card it had centred, and an editor page they were on is
-        // queued behind it, reached by the normal hop once the Overview stands (never a direct
-        // open, which would hide the Wallpaper segment and make Done and Back close).
+        // the Overview is built on the card it had centred, and an editor page they were on is
+        // the first thing shown, presented under the cover with the Overview hidden beneath it
+        // as its Back target (never a direct open, which would hide the Wallpaper segment and
+        // make Done and Back close).
         final AppearanceReturnState back =
             AppearanceReturnState.freshFrom(mHost.readReturnState(), mHost.now());
-        mEditor.restoreNext(null);
-        if (back != null && isEditorPage(back.page)) {
-            mQueued = back.page;
-            mEditor.restoreNext(back);
-        }
-        // Every Overview open covers at once (2026-10-05, pong): the page fades in over the cover.
-        final boolean cover = true;
+        final PageId opening = openingPage(back);
+        mEditor.restoreNext(isEditorPage(opening) ? back : null);
+        // Every Overview open covers at once (2026-10-05, pong): the opaque host hides the
+        // launcher until the first page stands, and that page fades in over it.
         mCoverNextOpen = false;
-        if (cover) {
-            view.setBackgroundColor(MaterialColors.getColor(mHost.context(),
-                com.google.android.material.R.attr.colorSurface, Color.BLACK));
-            view.setAlpha(1f);
-            if (mScrim != null) mScrim.setAlpha(1f);
-            // The shared bar stands on the cover from its first frame, exactly where the
-            // Overview's own will: a bare colorSurface screen while the page loads read as a
-            // black frame between Settings and the page.
-            AppearanceEditorPage bar = ensureEditorPage();
+        view.setBackgroundColor(MaterialColors.getColor(mHost.context(),
+            com.google.android.material.R.attr.colorSurface, Color.BLACK));
+        view.setAlpha(1f);
+        if (mScrim != null) mScrim.setAlpha(1f);
+        // The shared bar stands on the cover from its first frame, exactly where the opening
+        // page's own will: a bare colorSurface screen while the page loads read as a black frame
+        // between Settings and the page.
+        AppearanceEditorPage bar = ensureEditorPage();
+        if (isEditorPage(opening))
+            bar.setMode(modeOf(opening));
+        else
             bar.showWallpaper();
-            bar.root().setVisibility(View.VISIBLE);
-            applyEditorPage(1f, 1f);
-        } else {
-            view.setAlpha(0f);
-        }
+        bar.root().setVisibility(View.VISIBLE);
+        applyEditorPage(1f, 1f);
+        if (isEditorPage(opening))
+            beginRestore(opening, token);
         mHost.createOverview(mNavigator, back == null ? null : back.wallpaperSlot, overview -> {
             if (!mOpen || token != mToken || mView != view) {
                 overview.release();
@@ -574,37 +599,187 @@ public final class AppearanceSurfaceController {
             mOverview = overview;
             // Under the editor's bar, which stands over the Overview's through every hop.
             addPage(overview.root(), 0);
-            overview.onShown();
-            Runnable settled = () -> {
-                // The page carries its own colorSurface; the host goes clear again so the
-                // editor pages' frame can show through it later.
-                view.setBackground(null);
-                // The page's own bar takes the cover's place, as at the end of a hop back.
-                AppearanceEditorPage bar = mEditorPage;
-                if (bar != null && mShown == PageId.OVERVIEW)
-                    bar.root().setVisibility(View.INVISIBLE);
-                overview.setBarVisible(true);
-                mOverviewStanding = true;
-                if (mQueued != null) {
-                    PageId queued = mQueued;
-                    mQueued = null;
-                    go(queued);
-                }
-            };
-            if (cover) {
-                // Laid out but not drawn until its cards can draw: the first layout pass binds
-                // them before they are sized, and fading in then showed an empty page.
-                final View page = overview.root();
-                page.setVisibility(View.INVISIBLE);
-                overview.setBarVisible(false);
-                whenOverviewReady(overview, token, () -> {
-                    page.setVisibility(View.VISIBLE);
-                    fadePageIn(page, settled);
-                });
-            } else {
-                fadeHost(1f, settled);
+            if (mRestoring || isEditorPage(mShown)) {
+                hideUnderEditor(overview);
+                mRestoreOverviewBuilt = true;
+                if (mRestoring)
+                    maybeFinishRestore();
+                return;
             }
+            revealOverview(overview, token);
         });
+    }
+
+    /**
+     * Shows the Overview over the cover: laid out but not drawn until its cards can draw (the
+     * first layout pass binds them before they are sized, and fading in then showed an empty
+     * page), then faded in under the cover's bar, whose place the page's own bar takes at the end.
+     */
+    private void revealOverview(@NonNull OverviewPage overview, int token) {
+        final FrameLayout view = mView;
+        final View page = overview.root();
+        applyAway(overview, 0f, 0f);
+        overview.onShown();
+        page.setVisibility(View.INVISIBLE);
+        overview.setBarVisible(false);
+        Runnable settled = () -> {
+            // The page carries its own colorSurface; the host goes clear again so the editor
+            // pages' frame can show through it later.
+            if (view != null)
+                view.setBackground(null);
+            // The page's own bar takes the cover's place, as at the end of a hop back.
+            AppearanceEditorPage bar = mEditorPage;
+            if (bar != null && mShown == PageId.OVERVIEW)
+                bar.root().setVisibility(View.INVISIBLE);
+            overview.setBarVisible(true);
+            mOverviewStanding = true;
+            if (mQueued != null) {
+                PageId queued = mQueued;
+                mQueued = null;
+                go(queued);
+            }
+        };
+        whenOverviewReady(overview, token, () -> {
+            page.setVisibility(View.VISIBLE);
+            fadePageIn(page, settled);
+        });
+    }
+
+    /**
+     * The Overview built under an editor page that opened first: laid out but not drawn, at the
+     * pose a hop into the editor leaves it in, so Back hops to it as from any editor page.
+     */
+    private void hideUnderEditor(@NonNull OverviewPage overview) {
+        overview.root().setVisibility(View.INVISIBLE);
+        overview.setBarVisible(false);
+        applyAway(overview, 1f, 1f);
+        overview.onHidden();
+    }
+
+    // ------------------------------------------------------- reopening on a remembered editor page
+
+    /**
+     * The page an Overview door opens on: the remembered editor page (Look, Layout or Icon pack)
+     * while {@code back} is fresh, else the Overview.
+     */
+    @NonNull
+    static PageId openingPage(@Nullable AppearanceReturnState back) {
+        return back != null && isEditorPage(back.page) ? back.page : PageId.OVERVIEW;
+    }
+
+    /**
+     * Presents the remembered editor page under the cover, once the editor's wallpaper is in and
+     * the launcher's container is laid out (a frame measured before that started from a
+     * zero-size rect). The cover lifts when the editor has settled and the Overview is built
+     * beneath it. Bounded by {@link #RESTORE_BACKSTOP_MS}: an editor that is up by then is shown
+     * as it stands, one that is not gives way to the Overview.
+     */
+    private void beginRestore(@NonNull PageId page, int token) {
+        mRestoring = true;
+        mRestoreSettled = false;
+        mRestoreOverviewBuilt = false;
+        FrameLayout view = mView;
+        if (view != null) {
+            view.postDelayed(() -> {
+                if (!mRestoring || !mOpen || token != mToken)
+                    return;
+                Logger.logWarn(LOG_TAG, "The remembered page did not stand in time");
+                if (mEditor.isPresented())
+                    finishRestore();
+                else
+                    fallBackToOverview();
+            }, RESTORE_BACKSTOP_MS);
+        }
+        mEditor.awaitWallpaper(() -> {
+            if (!mRestoring || !mOpen || token != mToken)
+                return;
+            mEditor.awaitFrame(() -> presentRestored(page, token), () -> {
+                if (mRestoring && mOpen && token == mToken)
+                    fallBackToOverview();
+            });
+        });
+    }
+
+    private void presentRestored(@NonNull PageId page, int token) {
+        if (!mRestoring || !mOpen || token != mToken)
+            return;
+        mShown = page;
+        // From full size, not a card: the frame settles under the cover.
+        mEditor.present(modeOf(page), null, null, 0f, 0f, () -> {
+            if (!mRestoring || !mOpen || token != mToken)
+                return;
+            mRestoreSettled = true;
+            maybeFinishRestore();
+        });
+        if (!mEditor.isPresented()) {
+            // No preferences, no container: the Overview instead.
+            mShown = PageId.OVERVIEW;
+            fallBackToOverview();
+            return;
+        }
+        // The editor added its sheet and the layout canvas to the content view over the host:
+        // the cover goes back over them until the page stands. The host lets every touch below
+        // its bar through, so it may stay on top.
+        FrameLayout view = mView;
+        if (view != null)
+            view.bringToFront();
+    }
+
+    private void maybeFinishRestore() {
+        if (mRestoring && mRestoreSettled && mRestoreOverviewBuilt)
+            finishRestore();
+    }
+
+    /** The remembered page stands: the cover lifts off it and the host lets taps through. */
+    private void finishRestore() {
+        mRestoring = false;
+        setTakesTouches(false);
+        liftCover();
+        if (mQueued != null) {
+            PageId queued = mQueued;
+            mQueued = null;
+            go(queued);
+        }
+    }
+
+    /**
+     * The remembered page could not be presented: the surface opens on the Overview as it did
+     * before there was a memory, now if it is built, else when it arrives.
+     */
+    private void fallBackToOverview() {
+        Logger.logWarn(LOG_TAG, "The remembered page could not open; opening on the Overview");
+        mRestoring = false;
+        mEditor.restoreNext(null);
+        mShown = PageId.OVERVIEW;
+        setTakesTouches(true);
+        AppearanceEditorPage bar = mEditorPage;
+        if (bar != null)
+            bar.showWallpaper();
+        OverviewPage overview = mOverview;
+        if (overview != null)
+            revealOverview(overview, mToken);
+    }
+
+    /** The cover (the host's own colorSurface) fades off what stands under it. */
+    private void liftCover() {
+        final FrameLayout view = mView;
+        Drawable cover = view == null ? null : view.getBackground();
+        if (cover == null)
+            return;
+        if (ReducedMotion.isEnabled(mHost.context())) {
+            view.setBackground(null);
+            return;
+        }
+        final Drawable fading = cover.mutate();
+        ValueAnimator animator = ValueAnimator.ofFloat(1f, 0f);
+        animator.setDuration(FADE_MS);
+        animator.setInterpolator(new LinearInterpolator());
+        animator.addUpdateListener(a -> fading.setAlpha(Math.round(255f * (Float) a.getAnimatedValue())));
+        track(animator, () -> {
+            if (view.getBackground() == fading)
+                view.setBackground(null);
+        });
+        animator.start();
     }
 
     /**
@@ -741,7 +916,7 @@ public final class AppearanceSurfaceController {
                 }
 
                 @Override public void onUndo() {
-                    if (!mTransitioning && !mCommitting)
+                    if (!mTransitioning && !mCommitting && !mRestoring)
                         mEditor.undo();
                 }
 
@@ -750,7 +925,7 @@ public final class AppearanceSurfaceController {
                 }
 
                 @Override public void onSegment(@NonNull AppearanceEditorPage.Segment segment) {
-                    if (mTransitioning || mCommitting)
+                    if (mTransitioning || mCommitting || mRestoring)
                         return;
                     if (segment == AppearanceEditorPage.Segment.WALLPAPER) {
                         // Leaving for the Overview asks the unsaved-changes question; the pill is
@@ -866,7 +1041,8 @@ public final class AppearanceSurfaceController {
     private void go(@NonNull PageId target) {
         if (!mOpen || mCommitting)
             return;
-        if (mTransitioning || (!mOverviewStanding && !mDirect && mShown == PageId.OVERVIEW)) {
+        if (mTransitioning || mRestoring
+            || (!mOverviewStanding && !mDirect && mShown == PageId.OVERVIEW)) {
             mQueued = target;
             return;
         }
@@ -893,7 +1069,7 @@ public final class AppearanceSurfaceController {
     public boolean onBack() {
         if (!mOpen)
             return false;
-        if (mTransitioning || mCommitting)
+        if (mTransitioning || mCommitting || mRestoring)
             return true;
         PageId page = shownPage();
         if (page == null || page == PageId.OVERVIEW) {
@@ -913,6 +1089,12 @@ public final class AppearanceSurfaceController {
             return;
         if (mCommitting)
             return;
+        if (mRestoring) {
+            // Nothing was done on the page yet: what is remembered stays as it is.
+            mLeaveRemembered = true;
+            closeNow();
+            return;
+        }
         rememberWhere();
         PageId page = shownPage();
         if (isEditorPage(page)) {
@@ -984,7 +1166,7 @@ public final class AppearanceSurfaceController {
      * surface closes. A failure stays on the Overview.
      */
     private void onDonePressed() {
-        if (!mOpen || mTransitioning || mCommitting)
+        if (!mOpen || mTransitioning || mCommitting || mRestoring)
             return;
         PageId page = shownPage();
         if (isEditorPage(page)) {
@@ -1008,7 +1190,7 @@ public final class AppearanceSurfaceController {
 
     /** Done in the editor: the look is saved already; the surface closes, over the Overview for an opened-through one. */
     private void onEditorDone() {
-        if (!mOpen || mTransitioning)
+        if (!mOpen || mTransitioning || mRestoring)
             return;
         // The editor page is where they were, though the close runs from the Overview.
         rememberWhere();
@@ -1029,6 +1211,11 @@ public final class AppearanceSurfaceController {
         PageId page = shownPage();
         if (!mOpen || page == null)
             return;
+        if (mRestoring) {
+            // The remembered page is still opening: the memory already says where they are.
+            mLeaveRemembered = true;
+            return;
+        }
         AppearanceReturnState.Builder where = new AppearanceReturnState.Builder(page);
         OverviewPage overview = mOverview;
         if (overview != null)
@@ -1216,6 +1403,12 @@ public final class AppearanceSurfaceController {
     private void closeAnimated() {
         if (!mOpen || mTransitioning)
             return;
+        if (mRestoring) {
+            // Under the cover nothing is worth a fade (the Overview failed to load, say).
+            mClosingByUser = true;
+            closeNow();
+            return;
+        }
         mClosingByUser = true;
         FrameLayout view = mView;
         if (view == null || mShown != PageId.OVERVIEW || ReducedMotion.isEnabled(mHost.context())) {
@@ -1242,6 +1435,9 @@ public final class AppearanceSurfaceController {
         mTransitioning = false;
         mQueued = null;
         mOverviewStanding = false;
+        mRestoring = false;
+        mRestoreSettled = false;
+        mRestoreOverviewBuilt = false;
         for (Animator a : new ArrayList<>(mRunning))
             a.cancel();
         mRunning.clear();
