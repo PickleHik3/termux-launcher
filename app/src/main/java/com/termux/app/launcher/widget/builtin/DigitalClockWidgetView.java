@@ -297,7 +297,7 @@ public class DigitalClockWidgetView extends BuiltinWidgetView {
 
     private void onWeather(@NonNull WeatherController.Weather value) {
         if (!isStarted()) return;
-        WeatherController.Weather held = weather;
+        WeatherController held = weather;
         lastWeather = value.valid ? value : held != null ? held.cache() : null;
         applySun(is24);
     }
