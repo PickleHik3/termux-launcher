@@ -86,6 +86,16 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
     private static final long MARGIN_RESET_SETTLE_MS = 40L;
 
     private long mLastMarginCommitTimeMs;
+    /** The bottom margin this view was last laid out with. */
+    private int mLaidOutBottomMargin;
+
+    /** Who writes this view's bottom margin: the activity's geometry pass. */
+    public interface BottomMarginWriter {
+        /** Writes {@code bottomMarginPx} with the next geometry pass, holding the grid till then. */
+        void requestBottomMargin(int bottomMarginPx);
+    }
+
+    @Nullable private BottomMarginWriter mBottomMarginWriter;
 
     public TermuxActivityRootView(Context context) {
         super(context);
@@ -103,6 +113,11 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
         mActivity = activity;
     }
 
+    /** Routes margin changes through {@code writer}; null writes them directly, posted. */
+    public void setBottomMarginWriter(@Nullable BottomMarginWriter writer) {
+        mBottomMarginWriter = writer;
+    }
+
     /**
      * Sets whether root view logging is enabled or not.
      *
@@ -112,21 +127,68 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
         ROOT_VIEW_LOGGING_ENABLED = value;
     }
 
+    /**
+     * A margin noted for "the next measure" is asked for here rather than written: a layout write
+     * from inside measure books a second traversal outside any pause of the panes' grid, so the
+     * terminal could reflow once for it and again for the chrome. The activity's next geometry
+     * pass writes it, with the grid held from the request on.
+     */
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
         if (marginBottom != null) {
             int targetBottomMargin = clampBottomMargin(marginBottom);
+            marginBottom = null;
             if (ROOT_VIEW_LOGGING_ENABLED)
-                Logger.logVerbose(LOG_TAG, "onMeasure: Setting bottom margin to " + targetBottomMargin);
+                Logger.logVerbose(LOG_TAG, "onMeasure: Asking for bottom margin "
+                    + targetBottomMargin);
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) getLayoutParams();
             if (params.bottomMargin != targetBottomMargin) {
-                params.setMargins(0, 0, 0, targetBottomMargin);
-                setLayoutParams(params);
+                requestBottomMargin(targetBottomMargin);
                 mLastMarginCommitTimeMs = SystemClock.uptimeMillis();
             }
-            marginBottom = null;
+        }
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        ViewGroup.LayoutParams params = getLayoutParams();
+        mLaidOutBottomMargin = params instanceof ViewGroup.MarginLayoutParams
+            ? ((ViewGroup.MarginLayoutParams) params).bottomMargin : 0;
+    }
+
+    /**
+     * How much taller the next layout leaves this root than the last one did: the bottom margin
+     * written since and not yet laid out, given back. 0 once the layout has caught up.
+     */
+    public int unlaidBottomMarginGivebackPx() {
+        ViewGroup.LayoutParams params = getLayoutParams();
+        int written = params instanceof ViewGroup.MarginLayoutParams
+            ? ((ViewGroup.MarginLayoutParams) params).bottomMargin : 0;
+        return mLaidOutBottomMargin - written;
+    }
+
+    /**
+     * Writes the bottom margin. Called by the activity's geometry pass, outside measure and
+     * layout, with the stack it moves laid out in the same traversal.
+     */
+    public void applyBottomMargin(int bottomMargin) {
+        if (!(getLayoutParams() instanceof ViewGroup.MarginLayoutParams)) return;
+        int target = clampBottomMargin(bottomMargin);
+        ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) getLayoutParams();
+        if (params.bottomMargin == target) return;
+        params.setMargins(0, 0, 0, target);
+        setLayoutParams(params);
+    }
+
+    /** Hands a margin to the activity's next geometry pass; posted directly only without one. */
+    private void requestBottomMargin(int bottomMargin) {
+        if (mBottomMarginWriter != null) {
+            mBottomMarginWriter.requestBottomMargin(bottomMargin);
+        } else {
+            post(() -> applyBottomMargin(bottomMargin));
         }
     }
 
@@ -389,6 +451,11 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
         return Math.max(0, Math.min(value, max));
     }
 
+    /**
+     * Asks for the margin {@code requestedBottomMargin} — written by the activity's next geometry
+     * pass, not here inside a layout callback, so it lands in the same traversal as the chrome it
+     * moves and the terminal resizes once for both.
+     */
     private void commitBottomMargin(@NonNull FrameLayout.LayoutParams params, int requestedBottomMargin) {
         int targetBottomMargin = clampBottomMargin(requestedBottomMargin);
         if (params.bottomMargin == targetBottomMargin) return;
@@ -396,8 +463,7 @@ public class TermuxActivityRootView extends LinearLayout implements ViewTreeObse
         int delta = Math.abs(params.bottomMargin - targetBottomMargin);
         if (delta <= BOTTOM_MARGIN_NOISE_PX
             && (now - mLastMarginCommitTimeMs) < MIN_MARGIN_UPDATE_INTERVAL_MS) return;
-        params.setMargins(0, 0, 0, targetBottomMargin);
-        setLayoutParams(params);
+        requestBottomMargin(targetBottomMargin);
         mLastMarginCommitTimeMs = now;
     }
 

@@ -1388,6 +1388,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private Bundle mHelpScreenNavigation;
     private final int[] mTmpParentLocation = new int[2];
     private final int[] mTmpViewLocation = new int[2];
+    /**
+     * The root's IME margin the root view asked for, written by the next geometry pass rather than
+     * from inside its measure or a layout callback; null when nothing is waiting.
+     */
+    @Nullable private Integer mPendingRootBottomMarginPx;
     private int mAppliedTerminalFlushPaddingPx;
     /** The dock's rows and the bottom status band as the last geometry pass laid them out. */
     private int mAppliedDockContentHeightPx;
@@ -1678,6 +1683,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setSuggestionBarView();
         mTermuxActivityRootView = findViewById(R.id.activity_termux_root_view);
         mTermuxActivityRootView.setActivity(this);
+        mTermuxActivityRootView.setBottomMarginWriter(this::requestRootBottomMargin);
         mWallpaperBackdropView = findViewById(R.id.wallpaper_backdrop);
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.setParallax(mWallpaperParallax);
         mTermuxActivityBottomSpaceView = findViewById(R.id.activity_termux_bottom_space_view);
@@ -8394,6 +8400,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mTermuxActivityRootView.setLayoutParams(marginLayoutParams);
             }
         }
+        mPendingRootBottomMarginPx = null;
         mTermuxActivityRootView.marginBottom = 0;
         mTermuxActivityRootView.lastMarginBottom = null;
         mTermuxActivityRootView.lastMarginBottomTime = 0L;
@@ -9760,6 +9767,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void doRunAccessoryGeometryPass() {
+        // First, and whatever owns the stack: the margin is the window's answer to the system
+        // keyboard, which the drawer's freeze has no say over.
+        applyPendingRootBottomMargin();
         // Same freeze as setTerminalToolbarHeight: while the drawer plane owns the stack every
         // band moves by translation/clip only, and a relayout here would fight it. Replayed on close.
         if (isAppDrawerEngaged()) {
@@ -9776,6 +9786,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The root view's IME margin ({@link TermuxActivityRootView}): kept until the next geometry
+     * pass writes it, so the margin and the stack it moves land in one layout and the panes, held
+     * from this request on, resize once for both.
+     */
+    private void requestRootBottomMargin(int marginPx) {
+        mPendingRootBottomMarginPx = Math.max(0, marginPx);
+        mGeometry.request(GeometryScheduler.Reason.INSETS, GeometryScheduler.ResizePolicy.NOW);
+    }
+
+    private void applyPendingRootBottomMargin() {
+        Integer margin = mPendingRootBottomMarginPx;
+        mPendingRootBottomMarginPx = null;
+        if (margin != null && mTermuxActivityRootView != null)
+            mTermuxActivityRootView.applyBottomMargin(margin);
+    }
+
+    /**
+     * The content root's height as the next layout will leave it: its laid-out height plus any
+     * root margin written since and not yet laid out. What the geometry pass measures the terminal
+     * against, so a pass that moves the margin reads the room it is about to give.
+     */
+    private int rootRelativeLayoutHeightPx(@NonNull View root) {
+        int height = root.getHeight();
+        if (height <= 0 || mTermuxActivityRootView == null) return height;
+        return Math.max(0, height + mTermuxActivityRootView.unlaidBottomMarginGivebackPx());
+    }
+
+    /**
      * A digest of every layout fact the geometry pass reads, so the scheduler can tell a pass's own
      * layout coming back from a change it has not seen: the content root's size and top, the top
      * status bar's height, the terminal's top and line metrics while it alone stands on the dock,
@@ -9787,7 +9825,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (root != null) {
             root.getLocationInWindow(mTmpViewLocation);
             key = mixKey(key, root.getWidth());
-            key = mixKey(key, root.getHeight());
+            key = mixKey(key, rootRelativeLayoutHeightPx(root));
             key = mixKey(key, mTmpViewLocation[1]);
         }
         View bar = findViewById(R.id.terminal_window_bar_host);
@@ -13447,7 +13485,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The root relative layout already sits below the status-bar inset, so only the window bar
         // and the reserved terminal slice come out of its height.
         View root = findViewById(R.id.activity_termux_root_relative_layout);
-        int rootHeightPx = root != null ? root.getHeight() : 0;
+        int rootHeightPx = root != null ? rootRelativeLayoutHeightPx(root) : 0;
         if (rootHeightPx <= 0)
             return Integer.MAX_VALUE;
         // A bar standing in a column takes no height from the stack at all; only a row does — and
@@ -13745,14 +13783,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (fontLineSpacingPx <= 0)
             return mAppliedTerminalFlushPaddingPx;
         View rootRelativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
-        if (rootRelativeLayout == null || rootRelativeLayout.getHeight() <= 0)
+        int rootHeightPx = rootRelativeLayout == null ? 0
+            : rootRelativeLayoutHeightPx(rootRelativeLayout);
+        if (rootHeightPx <= 0)
             return mAppliedTerminalFlushPaddingPx;
         // Structural base: the height the terminal will settle at once all accessory content
         // (without any flush padding) is laid out. Deliberately NOT derived from the terminal's current
         // height — mid-relayout passes (e.g. multi-row extra keys toggling with the IME) would
         // feed the previously applied padding back in and make the result oscillate.
         rootRelativeLayout.getLocationInWindow(mTmpViewLocation);
-        int accessoryBottomWindowY = mTmpViewLocation[1] + rootRelativeLayout.getHeight() - accessoryBottomMarginPx;
+        int accessoryBottomWindowY = mTmpViewLocation[1] + rootHeightPx - accessoryBottomMarginPx;
         mTerminalView.getLocationInWindow(mTmpViewLocation);
         int terminalTopWindowY = mTmpViewLocation[1];
         int baseTerminalHeightPx = accessoryBottomWindowY - accessoryContentHeightPx - terminalTopWindowY;
