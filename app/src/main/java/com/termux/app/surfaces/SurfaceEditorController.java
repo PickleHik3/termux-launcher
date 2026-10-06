@@ -1323,9 +1323,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * Tells the frame where its clip stands around the container, from the window's own
-     * geometry: the container's rect in the decor against the decor's size, so the status bar
-     * above it, the navigation bar below it and any side bar are counted, and the clip's arc is
-     * the display's, not the container's. Unknown geometry leaves every inset at 0.
+     * geometry: the container's rect in the decor against the decor's size, so the navigation bar
+     * below it and any side bar are counted, and the clip's arc is the display's, not the
+     * container's. Above the container it shows only as much of the status-bar band as wraps the
+     * element at the top of the screen ({@link AppearancePreviewArea#topRevealPx}). Unknown
+     * geometry leaves every inset at 0.
      */
     private void pushDisplayInsets(@NonNull ViewGroup content) {
         AppearanceEditorFrame frame = mFrame;
@@ -1352,9 +1354,33 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mDisplayInsetTopPx = Math.max(0, top);
         mDisplayInsetRightPx = Math.max(0, decor.getWidth() - (left + root.getWidth()));
         mDisplayInsetBottomPx = Math.max(0, decor.getHeight() - (top + root.getHeight()));
-        mRevealTopPx = mDisplayInsetTopPx;
+        mRevealTopPx = measureTopReveal(root);
         frame.setDisplayInsets(mDisplayInsetLeftPx, mRevealTopPx, mDisplayInsetRightPx,
             mDisplayInsetBottomPx);
+    }
+
+    /**
+     * The status-bar band the frame shows above the container: enough to wrap the element at the
+     * top of the screen with the air it has beside it, from the element as it is laid out now.
+     */
+    private int measureTopReveal(@NonNull View root) {
+        int[] element = null;
+        float elementRadius = 0f;
+        View status = mHost.findView(R.id.terminal_window_bar_host);
+        if (status != null && status.getVisibility() == View.VISIBLE && status.getWidth() > 0
+            && AppearanceEditorFrame.offsetIn(status, root, mTmpOffset)) {
+            element = new int[] {mTmpOffset[0], mTmpOffset[1], mTmpOffset[0] + status.getWidth()};
+            elementRadius = outlineRadiusPx(Target.STATUS);
+        }
+        int[] terminal = mHost.terminalFrameRectInRoot();
+        if (terminal != null && terminal[2] > terminal[0]
+            && (element == null || terminal[1] < element[1])) {
+            element = new int[] {terminal[0], terminal[1], terminal[2]};
+            elementRadius = mHost.terminalFrameCornerRadiusPx();
+        }
+        return AppearancePreviewArea.topRevealPx(root.getWidth(), mDisplayInsetLeftPx,
+            mDisplayInsetTopPx, mDisplayInsetRightPx,
+            AppearanceEditorFrame.deviceCornerRadiusPx(root), element, elementRadius);
     }
 
     /** The display's edges' distance from the container, for the clip and the ring. */
@@ -1362,8 +1388,24 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mDisplayInsetTopPx;
     private int mDisplayInsetRightPx;
     private int mDisplayInsetBottomPx;
-    /** How much of the band above the container the frame shows. */
+    /** How much of the band above the container the frame shows; see {@link #measureTopReveal}. */
     private int mRevealTopPx;
+
+    /**
+     * The status bar or the terminal moved under the frame (a Style, Margin or arrangement change
+     * landed): the band above is measured again and, when it changed, the frame takes its new
+     * pose on the sheet's clock. Never mid-drag; the release's layout pass comes back here.
+     */
+    private void refitTopReveal() {
+        AppearanceEditorFrame frame = mFrame;
+        ViewGroup content = mHost.findView(android.R.id.content);
+        if (frame == null || content == null || !mFrameCtxValid || mSliderDragActive)
+            return;
+        if (measureTopReveal(frame.root()) == mRevealTopPx)
+            return;
+        pushDisplayInsets(content);
+        applyPanelHeight(true);
+    }
 
     /** The reserve every page's sheet is held to: the tallest resting sheet of the three. */
     private int measureSheetReserve(@NonNull AppearanceEditorPanel panel) {
@@ -2617,6 +2659,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             // frame's own size moved: a rotation or a window resize.
             if (mFramed && frameSizeChanged())
                 layoutFrame(false);
+            else if (mFramed)
+                refitTopReveal();
             // A rotation or a place change can take the selected element off the screen.
             if (mTarget != null && !scene().offersSurface(mTarget.slot)) {
                 mTarget = null;
