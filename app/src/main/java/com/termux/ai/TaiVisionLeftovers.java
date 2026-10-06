@@ -2,12 +2,14 @@ package com.termux.ai;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.util.Log;
 
 import androidx.annotation.NonNull;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -23,6 +25,7 @@ import java.util.Set;
  * that named the removed wallpaper functions. Reads and deletes files: never on the main thread.
  */
 final class TaiVisionLeftovers {
+    private static final String TAG = "TaiVisionLeftovers";
     /** The four catalogue ids that shipped, for a download whose record carries no capabilities. */
     private static final Set<String> LEGACY_IDS = Collections.unmodifiableSet(new LinkedHashSet<>(Arrays.asList(
         "depth-anything-3-small", "depth-anything-v2-small", "segformer-b0-ade20k", "u2net")));
@@ -65,12 +68,18 @@ final class TaiVisionLeftovers {
                 JSONObject item = downloads.optJSONObject(i);
                 if (item != null) recordIds.add(item.optString("modelId", ""));
             }
-            for (String id : idsToDelete(specs.values(), recordIds)) store.deleteUserModel(id);
+            Set<String> ids = idsToDelete(specs.values(), recordIds);
+            // A folder put there by hand has no record; its id still names it.
+            for (String id : LEGACY_IDS) {
+                if (new File(store.getModelsDirectory(), id).exists()) ids.add(id);
+            }
+            for (String id : ids) store.deleteUserModel(id);
+            Log.i(TAG, "Wallpaper vision models deleted: " + (ids.isEmpty() ? "none" : ids));
             SharedPreferences.Editor edit = prefs.edit();
             for (String key : LEGACY_KEYS) edit.remove(key);
             edit.putBoolean(KEY_DONE, true).apply();
-        } catch (RuntimeException ignored) {
-            // Retried on the next start.
+        } catch (RuntimeException e) {
+            Log.w(TAG, "Deleting the wallpaper vision models failed; retried on the next start", e);
         }
     }
 }
