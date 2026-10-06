@@ -27,13 +27,14 @@ final class AccessibilityTextUpdates {
     private boolean mActive;
     private boolean mPending;
 
-    private final Runnable mSend = () -> {
-        mPending = false;
-        if (mActive) mHost.sendTextChanged();
-    };
+    private final Runnable mSend;
 
     AccessibilityTextUpdates(Host host) {
         mHost = host;
+        mSend = () -> {
+            mPending = false;
+            if (mActive) mHost.sendTextChanged();
+        };
     }
 
     /** Whether a service in this state reads the terminal's text. */
