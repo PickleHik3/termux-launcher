@@ -17,7 +17,6 @@ import android.widget.Space;
 import android.widget.TextView;
 
 import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -113,7 +112,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         mFontPickerLauncher = registerForActivityResult(
-            new ActivityResultContracts.OpenDocument(), this::onFontPicked);
+            new OpenFontDocument(), this::onFontPicked);
     }
 
     @Nullable
@@ -376,13 +375,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
     }
 
     private void launchFontPicker() {
-        // SAF mime coverage for ttf/otf across providers; octet-stream catches
-        // file managers that don't map font extensions.
-        mFontPickerLauncher.launch(new String[]{
-            "font/ttf", "font/otf", "font/*",
-            "application/x-font-ttf", "application/x-font-otf",
-            "application/octet-stream"
-        });
+        mFontPickerLauncher.launch(OpenFontDocument.mimeTypes());
     }
 
     private void onFontPicked(@Nullable Uri uri) {
