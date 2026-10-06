@@ -1206,6 +1206,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The frost views that follow the parallax, looked up once; see {@link #syncWallpaperParallax}. */
     @Nullable private View[] mParallaxFrostViews;
     /**
+     * Views the per-frame and per-touch paths reach for by id, kept after their first lookup; see
+     * {@link #hotView}. A walk of the whole tree per view per frame of a slide added up.
+     */
+    @NonNull private final android.util.SparseArray<View> mHotViews = new android.util.SparseArray<>();
+
+    /**
+     * {@link #findViewById} for the paths that run per frame or per touch: the view found last time,
+     * as long as it still hangs in this window's tree, else a fresh lookup. A view that was taken
+     * out (or never there yet) is looked up again, so the answer is always the one findViewById
+     * would give for this layout's one-view-per-id ids.
+     */
+    @Nullable
+    @SuppressWarnings("unchecked")
+    private <T extends View> T hotView(int id) {
+        View view = mHotViews.get(id);
+        if (view != null && getWindow() != null && view.getRootView() == getWindow().peekDecorView()) {
+            return (T) view;
+        }
+        view = findViewById(id);
+        if (view != null) mHotViews.put(id, view);
+        else mHotViews.remove(id);
+        return (T) view;
+    }
+    /**
      * The screen rect {@link #mInAppKeyboardBackdropBitmap} was captured for, so a frame held
      * across a cache clear is kept only while it still describes the screen.
      */
@@ -3685,6 +3709,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * one number written, and invalidates.
      */
     private void syncWallpaperParallax() {
+        syncWallpaperParallax(false);
+    }
+
+    /**
+     * @param pagesReaimed true from the wall's own offset tick, which re-aims the panes' slabs and
+     *                     the Widgets and Display pages itself on every frame: they are not aimed
+     *                     a second time here
+     */
+    private void syncWallpaperParallax(boolean pagesReaimed) {
         float offsetPx = 0f;
         int sparePx = mWallpaperParallaxSparePx;
         if (sparePx > 0 && mPaneWallController != null) {
@@ -3694,8 +3727,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!mWallpaperParallax.setOffsetPx(offsetPx)) return;
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.invalidate();
-        if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
-        if (mPaneWallController != null) {
+        if (!pagesReaimed && mPaneController != null) mPaneController.invalidatePaneGlassPositions();
+        if (!pagesReaimed && mPaneWallController != null) {
             if (mPaneWallController.widgetsPage() != null) mPaneWallController.widgetsPage().onWallMoved();
             if (mPaneWallController.displayPage() != null) mPaneWallController.displayPage().onWallMoved();
         }
@@ -7965,7 +7998,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * and a keyboard sliding off would otherwise draw across the navigation bar on its way out.
      */
     private void applyAccessoryStackTranslation() {
-        View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        View accessoryContainer = hotView(R.id.accessory_stack_container);
         if (accessoryContainer == null) {
             return;
         }
@@ -7976,11 +8009,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             accessoryContainer.setTranslationY(translationY);
             // The dock's and the keyboard's glass sample the wallpaper through this translation
             // (mAccessoryStackLift); a transform alone redraws nothing, so they are re-aimed here.
-            View backdrop = findViewById(R.id.accessory_blur_backdrop);
+            View backdrop = hotView(R.id.accessory_blur_backdrop);
             if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
-            View keyboardHost = findViewById(R.id.inapp_keyboard_view_host);
+            View keyboardHost = hotView(R.id.inapp_keyboard_view_host);
             if (keyboardHost != null && keyboardHost.getBackground() != null) keyboardHost.invalidate();
-            View under = findViewById(R.id.accessory_under_keyboard_stack);
+            View under = hotView(R.id.accessory_under_keyboard_stack);
             if (under != null && under.getBackground() != null) under.invalidate();
         }
         applyUnderKeyboardTravel();
@@ -8016,11 +8049,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * nothing left behind, while no band stands there or the keyboard is not in the column.
      */
     private void applyUnderKeyboardTravel() {
-        View under = findViewById(R.id.accessory_under_keyboard_stack);
-        View keyboard = findViewById(R.id.inapp_keyboard_container);
+        View under = hotView(R.id.accessory_under_keyboard_stack);
+        View keyboard = hotView(R.id.inapp_keyboard_container);
         boolean holds = under != null && under.getVisibility() == View.VISIBLE
             && keyboard != null && keyboard.getVisibility() != View.GONE
-            && keyboard.getParent() == findViewById(R.id.accessory_keyboard_column);
+            && keyboard.getParent() == hotView(R.id.accessory_keyboard_column);
         float share = holds ? Math.max(0f, mKeyboardTravelSharePx) : 0f;
         if (under != null && under.getTranslationY() != -share) {
             under.setTranslationY(-share);
@@ -17574,7 +17607,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // half of the way (PlaceChromeTravel.KEYBOARD_HIDE_END) while a rising one lands with the page.
         com.termux.app.place.PlaceChromeTravel.Frame frame =
             com.termux.app.place.PlaceChromeTravel.at(pages, mPaneWallController.currentPage(),
-                offsetPx, wall.getWidth(), this::chromeRestOf, mLastWallPage);
+                offsetPx, wall.getWidth(), mChromeRestStates, mLastWallPage);
         // The dock rows are always laid out by the layout on screen, the minimal one included
         // (chromeRestOf), so only the keyboard is ever pre-rolled.
         if (!mTravelKeyboardPreRolled
@@ -17627,12 +17660,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.place.PlaceChromeTravel.Rest chromeRestOf(
             @NonNull com.termux.app.wall.PaneWallPage place) {
-        if (place == mLastWallPage) {
-            return new com.termux.app.place.PlaceChromeTravel.Rest(committedKeyboardVisible(),
-                false);
-        }
-        return new com.termux.app.place.PlaceChromeTravel.Rest(wantsKeyboardOnEnter(place), false);
+        boolean keyboardUp = place == mLastWallPage ? committedKeyboardVisible()
+            : wantsKeyboardOnEnter(place);
+        return keyboardUp ? REST_KEYBOARD_UP : REST_KEYBOARD_DOWN;
     }
+
+    /** The two rests a place can have (the Rest is immutable), so a slide frame allocates neither. */
+    private static final com.termux.app.place.PlaceChromeTravel.Rest REST_KEYBOARD_UP =
+        new com.termux.app.place.PlaceChromeTravel.Rest(true, false);
+    private static final com.termux.app.place.PlaceChromeTravel.Rest REST_KEYBOARD_DOWN =
+        new com.termux.app.place.PlaceChromeTravel.Rest(false, false);
+    /** {@link #chromeRestOf} as the travel asks it, bound once rather than per frame. */
+    private final com.termux.app.place.PlaceChromeTravel.States mChromeRestStates = this::chromeRestOf;
 
     /**
      * Whether the keyboard can be brought up below the screen for a slide. A floating keyboard is
@@ -17824,7 +17863,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * container.
      */
     private int travelDockLaidOutPx(int keyboardPx) {
-        View stack = findViewById(R.id.accessory_stack_container);
+        View stack = hotView(R.id.accessory_stack_container);
         if (stack == null) return 0;
         ViewGroup.LayoutParams params = stack.getLayoutParams();
         int height = params != null && params.height > 0 ? params.height : 0;
@@ -17857,7 +17896,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mTravelSideAlpha = 1f;
 
     private void setTravelAlpha(int viewId, float alpha) {
-        View view = findViewById(viewId);
+        View view = hotView(viewId);
         if (view == null) return;
         float clamped = Math.max(0f, Math.min(1f, alpha));
         if (view.getAlpha() != clamped) view.setAlpha(clamped);
@@ -18067,6 +18106,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void noteTerminalPlaceMayBeVisible() {
         if (mPaneController != null) mPaneController.onTerminalPlaceShown();
+        if (mTermuxTerminalSessionActivityClient != null)
+            mTermuxTerminalSessionActivityClient.onTerminalPlaceMayBeVisible();
+    }
+
+    /**
+     * {@link #noteTerminalPlaceMayBeVisible} for one frame of a slide: the focused pane's request
+     * is acknowledged as the full pass would (a pane that changes repaints its border through the
+     * attention listener), without re-dressing every pane's border per frame.
+     */
+    private void noteTerminalPlaceMayBeVisibleWhileMoving() {
+        if (mPaneController != null) mPaneController.acknowledgeActivePaneAttention();
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onTerminalPlaceMayBeVisible();
     }
@@ -18351,7 +18401,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // are the pane host's less the stroke's air on every side, so the two share
                     // a centre and one scale about it keeps the line where it frames the page.
                     if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
-                    View borderView = findViewById(R.id.terminal_border_overlay);
+                    View borderView = hotView(R.id.terminal_border_overlay);
                     if (borderView == null) return;
                     borderView.setPivotX(borderView.getWidth() / 2f);
                     borderView.setPivotY(borderView.getHeight() / 2f);
@@ -18420,13 +18470,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     syncChromeTravel(offsetPx);
                     // The wallpaper pans with the wall, and every glass surface follows it; the
                     // terminal's slabs re-aim whether or not it panned, since the page they sit
-                    // on moved over a wallpaper that did not go with it.
-                    syncWallpaperParallax();
+                    // on moved over a wallpaper that did not go with it. Aimed once: the wall's
+                    // controller has re-aimed the other pages already, and the slabs are here.
+                    syncWallpaperParallax(true);
                     if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
                     // The wall moved at all, so the terminal may be sliding back into the frame:
                     // any pane whose screen changed while it was away is drawn now, before the
-                    // first frame of the slide, rather than one stale frame later.
-                    noteTerminalPlaceMayBeVisible();
+                    // first frame of the slide, rather than one stale frame later. The panes'
+                    // borders are re-dressed when the page comes on screen
+                    // (onTerminalOffScreenChanged), not per frame; per frame only the
+                    // acknowledgement is taken, which repaints them itself when it lands.
+                    noteTerminalPlaceMayBeVisibleWhileMoving();
                 }
                 @Override public void onTerminalOffScreenChanged(boolean offScreen) {
                     // Every pane the terminal place holds, tiled and floating alike, has to hear
@@ -18437,6 +18491,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     for (com.termux.view.TerminalView view : mPaneController.getVisiblePaneViews()) {
                         view.setWallPageOffScreen(offScreen);
                     }
+                    // The one frame of a slide the borders are re-dressed in: the page's first
+                    // frame back on screen.
+                    if (!offScreen) mPaneController.onTerminalPlaceShown();
                 }
                 @Override public void onWallOutlineAlphaChanged(float alpha) {
                     // The terminal page's outline is its panes' rims; they fade with the other
@@ -18518,8 +18575,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncTerminalFrameLineTravel() {
         if (mPaneWallController == null) return;
-        View borderView = findViewById(R.id.terminal_border_overlay);
-        View paneHost = findViewById(R.id.terminal_pane_host);
+        View borderView = hotView(R.id.terminal_border_overlay);
+        View paneHost = hotView(R.id.terminal_pane_host);
         if (borderView == null || paneHost == null) return;
         float alpha = com.termux.app.wall.PaneWallPolicy.pageOutlineAlpha(
             paneHost.getTranslationX(), mPaneWallController.wall().getWidth());
@@ -18805,7 +18862,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the wall commits to the next place and the content becomes that place's.
         float travel = width <= 0 ? 0f : Math.min(1f, Math.abs(offsetPx) / (width * 0.5f));
         float alpha = 1f - travel;
-        View strip = findViewById(R.id.terminal_status_place_content);
+        View strip = hotView(R.id.terminal_status_place_content);
         if (strip != null) {
             // The place's content leaves the way the wall does: sideways past a row's ends,
             // up and down past a column's.
@@ -18829,7 +18886,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneWallController == null) return;
         java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
         com.termux.app.wall.PaneWallPage current = mPaneWallController.currentPage();
-        com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
+        com.termux.app.statusbar.StatusBarLensView lens = hotView(R.id.terminal_status_lens);
         if (lens != null) lens.setWallState(pages, current, offsetPx, width);
     }
 
