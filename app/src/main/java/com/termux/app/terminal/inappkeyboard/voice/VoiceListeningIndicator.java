@@ -439,7 +439,7 @@ public final class VoiceListeningIndicator {
         CharSequence text = "";
         if (listening) {
             if (warming) text = activity.getString(R.string.voice_input_meta_warming_up);
-        } else if (statusRes == R.string.voice_input_cleaned_up || statusRes == R.string.voice_input_formatted_command) {
+        } else if (statusRes == R.string.voice_input_cleaned_up) {
             if (edits > 0) text = activity.getResources().getQuantityString(R.plurals.voice_input_meta_edits, edits, edits);
         } else if (statusRes == R.string.voice_input_as_heard) {
             text = activity.getString(R.string.voice_input_meta_undone);
@@ -498,8 +498,8 @@ public final class VoiceListeningIndicator {
 
     /**
      * The cleanup has landed and waits with its changes marked; see
-     * {@link VoiceTranscriptPanel#showCleaned}. {@code status} says which: "Cleaned up", or
-     * "Formatted as a command".
+     * {@link VoiceTranscriptPanel#showCleaned}. {@code status} is what the strip says for it:
+     * "Cleaned up", for the model's pass and the command formatter's alike.
      */
     public void showCleaned(@NonNull String cleaned, @StringRes int status) {
         cleaningUp = false;

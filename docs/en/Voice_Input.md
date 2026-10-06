@@ -49,7 +49,7 @@ text, then one row of controls.
 The strip holds, from the left:
 
 - the state: **Listening…**, **Transcribing…**, **Cleaning up…**, then what became of the text
-  (**Ready**, **Cleaned up**, **Formatted as a command** or **Kept as heard**). It is in the accent
+  (**Ready**, **Cleaned up** or **Kept as heard**). It is in the accent
   colour only while the microphone is open. A small ring turns beside it while something is loading
   or running, and a few words of detail follow it: **· warming up** while the speech model or the
   cleanup model is still loading (recording has already started, so keep talking), **· 5 edits**
@@ -162,8 +162,8 @@ The text is **Kept as heard** when:
 ## Spoken commands
 
 A dictation that starts with a command name is written as a command, with fixed rules and no model.
-This happens whether cleanup is on or off and however long the dictation is. The pill says
-**Formatted as a command**, and undo takes it back.
+This happens whether cleanup is on or off and however long the dictation is. The strip says
+**Cleaned up**, as for any cleanup, and undo takes it back.
 
 | You say | You get |
 | --- | --- |

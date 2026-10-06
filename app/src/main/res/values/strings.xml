@@ -2329,7 +2329,6 @@
     <string name="voice_input_cleanup_copied">Copied</string>
     <string name="voice_input_cleanup_clip_label">Dictation</string>
     <string name="voice_input_ready">Ready</string>
-    <string name="voice_input_formatted_command">Formatted as a command</string>
     <string name="voice_input_as_heard">As heard</string>
     <string name="voice_input_undo">Undo the cleanup</string>
     <string name="voice_input_move_handle">Move the dictation panel. Double-tap to put it back in the corner</string>
