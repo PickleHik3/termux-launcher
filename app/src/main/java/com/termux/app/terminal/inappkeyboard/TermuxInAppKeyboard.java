@@ -1377,6 +1377,9 @@ public final class TermuxInAppKeyboard {
             && mPreferences.isAppHapticsEnabled();
         configBuilder.keySoundEnabled = mPreferences.isInAppKeyboardKeySoundEnabled();
         configBuilder.labelFont = loadCustomLabelFont();
+        // Nerd Font icons (the space bar's swipe glyphs, tool keys) stay in the bundled symbols
+        // font whatever face the user picked for labels; a picked font rarely has them.
+        configBuilder.symbolFont = bundledSymbolsLabelFont();
         mAppliedConfigSignature = configPreferenceSignature();
         mKeyboardView = new Keyboard2View(requireContainer().getContext(),
             configBuilder.build(), createPalette());
