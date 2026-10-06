@@ -126,6 +126,9 @@ public final class StatusBarLensView extends View {
     @NonNull private String mDisplayGlyph = "";
     @Nullable private Listener mListener;
     @Nullable private PaneWallPage mPressed;
+    /** The last bar the marks were laid out in, and where they are written, kept across draws. */
+    @Nullable private StatusBarLensMetrics.Bar mBar;
+    private final StatusBarLensMetrics.MarkBuffer mMarks = new StatusBarLensMetrics.MarkBuffer();
     private float mDownX;
     private float mDownY;
 
@@ -336,9 +339,16 @@ public final class StatusBarLensView extends View {
     /** The bar as the metrics see it: its size, how it stands, and what the clock has said. */
     @NonNull
     private StatusBarLensMetrics.Bar bar(int width, int height) {
-        return new StatusBarLensMetrics.Bar(width, height,
-            getResources().getDisplayMetrics().density, mVertical, mBottom, mExpansion,
-            mAlongStartPx, mAlongEndPx, mHomeCenterYPx, mHomeSizePx, mChipRadiusPx);
+        float density = getResources().getDisplayMetrics().density;
+        StatusBarLensMetrics.Bar bar = mBar;
+        if (bar == null || !bar.sameAs(width, height, density, mVertical, mBottom, mExpansion,
+            mAlongStartPx, mAlongEndPx, mHomeCenterYPx, mHomeSizePx, mChipRadiusPx)) {
+            bar = new StatusBarLensMetrics.Bar(width, height, density, mVertical, mBottom,
+                mExpansion, mAlongStartPx, mAlongEndPx, mHomeCenterYPx, mHomeSizePx,
+                mChipRadiusPx);
+            mBar = bar;
+        }
+        return bar;
     }
 
     @Override
@@ -351,8 +361,9 @@ public final class StatusBarLensView extends View {
         if (mWallWidthPx <= 0 || mPages.isEmpty()) return;
 
         List<StatusBarLensMetrics.Mark> marks = StatusBarLensMetrics.marks(bar(width, height),
-            mPages, mCurrent, mOffsetPx, mWallWidthPx, mDisplayRunning);
-        for (StatusBarLensMetrics.Mark mark : marks) {
+            mPages, mCurrent, mOffsetPx, mWallWidthPx, mDisplayRunning, mMarks);
+        for (int index = 0; index < marks.size(); index++) {
+            StatusBarLensMetrics.Mark mark = marks.get(index);
             mTile.set(mark.tile.left, mark.tile.top, mark.tile.right, mark.tile.bottom);
             if (!mark.home) {
                 mHitRects[mark.page.ordinal()].set(mark.target.left, mark.target.top,
