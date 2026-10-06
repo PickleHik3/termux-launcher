@@ -84,6 +84,7 @@ public final class PaneMotionOverlayView extends View {
     private final CursorTrailParticles mParticles = new CursorTrailParticles();
     private final CursorTrailMotionBlur mMotionBlur = new CursorTrailMotionBlur();
     private final CursorTrailRailgun mRailgun = new CursorTrailRailgun();
+    private final CursorTrailTorpedo mTorpedo = new CursorTrailTorpedo();
     private final CursorTrailComet mComet = new CursorTrailComet();
     private final float[] mParticleBuf = new float[CursorTrailParticles.OUT_SIZE];
     private boolean mParticlesWereAlive;
@@ -128,7 +129,8 @@ public final class PaneMotionOverlayView extends View {
         public int color;
         /**
          * The focused pane's card, in this overlay's pixels. Particles stay inside it; the trail
-         * and the comet are not clipped, so a flight between panes still crosses the gap.
+         * and the styles' own effects are not clipped, so a flight between panes still crosses
+         * the gap.
          */
         public boolean hasClip;
         public float clipLeft, clipTop, clipRight, clipBottom;
@@ -197,7 +199,7 @@ public final class PaneMotionOverlayView extends View {
         mCursorTrailConfig = config;
     }
 
-    /** Picks how the trail looks; resets any particles or comet in flight. */
+    /** Picks how the trail looks; resets any particles or effect in flight. */
     public void setCursorTrailStyle(@NonNull CursorTrailStyle style) {
         if (mCursorTrailStyle == style) return;
         mCursorTrailStyle = style;
@@ -209,6 +211,7 @@ public final class PaneMotionOverlayView extends View {
         mParticles.reset();
         mMotionBlur.reset();
         mRailgun.reset();
+        mTorpedo.reset();
         mComet.reset();
         mParticlesWereAlive = false;
         mEffectWasAlive = false;
@@ -364,13 +367,14 @@ public final class PaneMotionOverlayView extends View {
         switch (style) {
             case MOTION_BLUR: return mMotionBlur;
             case RAILGUN: return mRailgun;
+            case TORPEDO: return mTorpedo;
             case COMET: return mComet;
             default: return null;
         }
     }
 
     private static boolean isParticleStyle(@NonNull CursorTrailStyle style) {
-        return style == CursorTrailStyle.TORPEDO || style == CursorTrailStyle.PIXIEDUST;
+        return style == CursorTrailStyle.PIXIEDUST;
     }
 
     /** Drop everything in flight, for a re-render that invalidates the coordinates we captured. */
@@ -454,14 +458,9 @@ public final class PaneMotionOverlayView extends View {
             // The particle shader runs after cursor-trail-default and masks nothing, so particles
             // pass over the cursor too; they stay inside the focused pane's card.
             boolean clipped = clipToPane(canvas);
-            drawParticles(canvas, particleMode(style), color, baseAlpha);
+            drawParticles(canvas, color, baseAlpha);
             if (clipped) canvas.restore();
         }
-    }
-
-    private static int particleMode(@NonNull CursorTrailStyle style) {
-        if (style == CursorTrailStyle.TORPEDO) return CursorTrailParticles.MODE_TORPEDO;
-        return CursorTrailParticles.MODE_PIXIEDUST;
     }
 
     /** Saves and clips to the focused pane's card; false (nothing saved) when there is none. */
@@ -491,8 +490,8 @@ public final class PaneMotionOverlayView extends View {
      * trail's opacity does not enter into it, so particles finish their flight whatever the
      * cursor does next.
      */
-    private void drawParticles(@NonNull Canvas canvas, int mode, int color, int baseAlpha) {
-        int count = mParticles.collect(mFrameMs, mode, mParticleBuf);
+    private void drawParticles(@NonNull Canvas canvas, int color, int baseAlpha) {
+        int count = mParticles.collect(mFrameMs, mParticleBuf);
         mPaint.setStyle(Paint.Style.FILL);
         mPaint.setColor(color);
         for (int i = 0; i < count; i++) {

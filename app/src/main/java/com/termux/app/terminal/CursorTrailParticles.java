@@ -5,14 +5,14 @@
  * SPDX-License-Identifier: GPL-3.0-only
  * Modified for Termux Launcher: run on the CPU, one result per particle instead of one coverage
  * value per pixel, fed and returning y-down pixels, and a per-move sequence number mixed into the
- * seed. See the repository LICENSE and THIRD_PARTY_NOTICES.md.
+ * seed; only the pixiedust mode is kept, as Railgun and Torpedo are drawn by their own classes.
+ * See the repository LICENSE and THIRD_PARTY_NOTICES.md.
  */
 package com.termux.app.terminal;
 
 /**
- * The torpedo and pixiedust particle trails. kitty evaluates every particle for every
- * pixel in a fragment shader; here each particle is computed once and the overlay draws it as a
- * circle. Pure JVM, no Android types, so it is unit tested directly.
+ * The Pixie dust particle trail. kitty evaluates every particle for every pixel in a fragment
+ * shader; here each particle is computed once and the overlay draws it as a circle. Pure JVM, no Android types, so it is unit tested directly.
  *
  * <p>Like kitty's {@code cursor_trail_history_*} uniforms, the moves are remembered newest first
  * with the time each was made, and a particle's age is simply now minus that time: a move keeps
@@ -21,9 +21,6 @@ package com.termux.app.terminal;
  * out) so that every particle flies and falls the way kitty's do.
  */
 public final class CursorTrailParticles {
-
-    public static final int MODE_TORPEDO = 1;
-    public static final int MODE_PIXIEDUST = 2;
 
     /** How many recent moves are remembered, newest first: kitty's CURSOR_TRAIL_HISTORY_SIZE. */
     public static final int MAX_MOVES = 8;
@@ -39,7 +36,6 @@ public final class CursorTrailParticles {
     static final float SPEED = 20.0f;
     static final float DRAG = 2.5f;
     static final float GRAVITY = 8.0f;
-    static final float TORPEDO_SPREAD = 1.0f;
     static final float OPACITY = 1.0f;
     static final float TAU = 6.28318530718f;
     /** How long after its move a particle can still be alive, in milliseconds. */
@@ -109,7 +105,7 @@ public final class CursorTrailParticles {
      *
      * @return how many particles were written
      */
-    public int collect(long nowMs, int mode, float[] out) {
+    public int collect(long nowMs, float[] out) {
         int floats = 0;
         for (int m = 0; m < mCount; m++) {
             float age = (nowMs - mAt[m]) / 1000f;
@@ -119,19 +115,19 @@ public final class CursorTrailParticles {
             float fx = mMoves[o], fy = mMoves[o + 1], tx = mMoves[o + 2], ty = mMoves[o + 3];
             float scale = mMoves[o + 4];
             float lines = length(tx - fx, ty - fy) / scale;
-            floats = moveParticles(fx, fy, tx, ty, scale, lines, age, mMoves[o + 5], mode,
-                out, floats);
+            floats = moveParticles(fx, fy, tx, ty, scale, lines, age, mMoves[o + 5], out,
+                floats);
         }
         return floats / 4;
     }
 
-    /** kitty's {@code move_particles}, one particle at a time. @return the new write index. */
+    /**
+     * kitty's {@code move_particles} in its pixiedust mode, one particle at a time.
+     *
+     * @return the new write index
+     */
     private int moveParticles(float fx, float fy, float tx, float ty, float scale, float lines,
-                              float age, float seed, int mode, float[] out, int written) {
-        float pathX = tx - fx, pathY = ty - fy;
-        float pathLen = length(pathX, pathY);
-        float dirX = pathLen > 0f ? pathX / pathLen : 1f;
-        float dirY = pathLen > 0f ? pathY / pathLen : 0f;
+                              float age, float seed, float[] out, int written) {
         float speed = SPEED * scale;
         float radius = Math.max(PARTICLE_SIZE * scale, 0.75f);
         int count = (int) Math.ceil(lines * PARTICLE_DENSITY);
@@ -146,21 +142,13 @@ public final class CursorTrailParticles {
             if (t < 0f || t >= life) continue;
             float startX = lerp(fx, tx, u) + (mR2[0] - 0.5f) * scale * 0.5f;
             float startY = lerp(fy, ty, u) + (mR2[1] - 0.5f) * scale * 0.5f;
-            float velX, velY, fallY = 0f, brightness = 1f;
-            if (mode == MODE_TORPEDO) {
-                float angle = (mR[2] * 2f - 1f) * TORPEDO_SPREAD;
-                float k = lerp(0.4f, 1.0f, mR[3]);
-                velX = rotX(-dirX, -dirY, angle) * k;
-                velY = rotY(-dirX, -dirY, angle) * k;
-            } else {
-                float angle = mR[2] * TAU;
-                float k = lerp(0.2f, 1.0f, mR[3]);
-                velX = rotX(0.4f, 0f, angle) * k;
-                velY = rotY(0.4f, 0f, angle) * k;
-                fallY = -0.5f * GRAVITY * scale * t * t;
-                // Glitter
-                brightness = 0.55f + 0.45f * (float) Math.sin(t * 40.0f + mR2[2] * TAU);
-            }
+            float angle = mR[2] * TAU;
+            float k = lerp(0.2f, 1.0f, mR[3]);
+            float velX = rotX(0.4f, 0f, angle) * k;
+            float velY = rotY(0.4f, 0f, angle) * k;
+            float fallY = -0.5f * GRAVITY * scale * t * t;
+            // Glitter
+            float brightness = 0.55f + 0.45f * (float) Math.sin(t * 40.0f + mR2[2] * TAU);
             float dist = speed * dragDistance(t);
             float fade = 1f - t / life;
             out[written] = startX + velX * dist;

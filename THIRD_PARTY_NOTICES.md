@@ -17,7 +17,7 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   and kitty contributors. `terminal-view/.../KittyCursorTrail.java` adapts
   `kitty/cursor_trail.c` to Java and Android pane geometry, and
   `app/.../terminal/CursorTrailParticles.java` ports `cursor-trail-particles.slang`
-  (railgun, torpedo, pixiedust) to a CPU particle model; the graphics animation handling in
+  (its pixiedust mode) to a CPU particle model; the graphics animation handling in
   `terminal-emulator/.../KittyImageStore.java` also follows kitty's `graphics.c`. These are
   adaptations shipped inside the APK, separate from the external `kitten` tool below. The cursor
   trail files were ported from, and last checked against, kitty `master` at commit
