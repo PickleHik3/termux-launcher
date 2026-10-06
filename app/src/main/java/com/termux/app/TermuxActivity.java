@@ -8380,6 +8380,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(terminalHost());
         mTerminalFrameMetricsMonitor.stop();
         mManagedWallpaperSource.clear();
+        if (mPackageQueryExecutor != null) mPackageQueryExecutor.shutdown();
         // The inspector holds this Activity strongly for the life of its overlay, so it has to go
         // with the Activity rather than outlive it.
         com.termux.app.terminal.TerminalKeyInspector.close();
@@ -24107,7 +24108,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // and blanked both surfaces for the whole rebuild.
             mSuggestionBarView.pruneInvalidIconOverrides();
             mSuggestionBarView.refreshAllApps(drainPendingChangedPackages());
-            mLastLauncherCatalogSignature = computeLauncherCatalogSignature();
+            computeLauncherCatalogSignatureOffMain(
+                signature -> mLastLauncherCatalogSignature = signature);
             syncAzScrubLettersAndTint();
         }
         // The drawer's catalogue is not the dock's: it must refresh even with the suggestion bar
@@ -24305,7 +24307,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!isLauncherCatalogEnabled() || mSuggestionBarView == null) {
             return;
         }
-        int signature = computeLauncherCatalogSignature();
+        // The package manager is asked on the worker; the comparison and what follows from it run
+        // here on main, in the order the questions were asked.
+        computeLauncherCatalogSignatureOffMain(this::onLauncherCatalogSignatureRead);
+    }
+
+    private void onLauncherCatalogSignatureRead(int signature) {
+        if (!isLauncherCatalogEnabled() || mSuggestionBarView == null) {
+            return;
+        }
         if (mLastLauncherCatalogSignature == Integer.MIN_VALUE) {
             mLastLauncherCatalogSignature = signature;
             return;
@@ -24330,6 +24340,50 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // yesterday's rendering, so the refresh must rebuild every entry.
         requestFullCatalogRebuild();
         scheduleSuggestionBarPackageRefresh(true, true);
+    }
+
+    /**
+     * {@link #computeLauncherCatalogSignature} on the package-query thread, its answer handed to
+     * {@code onRead} on main — unless the activity is gone by then. Answers come back in the order
+     * the questions were asked (one thread, one queue). Asked inline when the thread is gone.
+     */
+    private void computeLauncherCatalogSignatureOffMain(@NonNull java.util.function.IntConsumer onRead) {
+        boolean queued = runPackageQuery(() -> {
+            int signature = computeLauncherCatalogSignature();
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                onRead.accept(signature);
+            });
+        });
+        if (!queued && !isDestroyed()) onRead.accept(computeLauncherCatalogSignature());
+    }
+
+    /**
+     * One background thread for the package-manager questions the main thread used to ask itself
+     * on the way to the front (the catalogue signature, a Linux app's entry). Made on first use and
+     * shut down with the activity.
+     */
+    @Nullable private java.util.concurrent.ExecutorService mPackageQueryExecutor;
+
+    /** Runs {@code job} on the package-query thread; false when it cannot (the activity is gone). */
+    private boolean runPackageQuery(@NonNull Runnable job) {
+        if (isDestroyed()) return false;
+        java.util.concurrent.ExecutorService executor = mPackageQueryExecutor;
+        if (executor == null) {
+            executor = java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "launcher-package-query");
+                thread.setPriority(Thread.NORM_PRIORITY - 1);
+                thread.setDaemon(true);
+                return thread;
+            });
+            mPackageQueryExecutor = executor;
+        }
+        try {
+            executor.execute(job);
+            return true;
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            return false;
+        }
     }
 
     private int computeLauncherCatalogSignature() {
