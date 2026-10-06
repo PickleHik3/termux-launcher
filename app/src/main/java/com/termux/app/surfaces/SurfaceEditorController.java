@@ -2113,12 +2113,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /**
      * Dock size: the dock height scale Layout mode's dock handle writes, through the layout
-     * session, so its Undo and dirty state cover it. Applied live as the handle's drag is.
+     * session, so its Undo and dirty state cover it. Mid-drag the dock follows on the geometry
+     * preview and the place is re-laid (and the terminal resized) once, on the release.
      */
     private void writeDockSize(int percent) {
         float scale = AppearanceLooks.dockScaleFor(percent);
         LayoutEditorController layout = mHost.layoutEditor();
-        if (layout != null) {
+        if (layout != null && mSliderDragActive) {
+            layout.holdDockHeightScale(scale);
+            mDockSizeHeld = true;
+            requestGeometryPreview();
+        } else if (layout != null) {
             layout.setDockHeightScale(scale);
         } else if (prefs() != null) {
             prefs().setAppLauncherBarHeightScale(scale);
@@ -3196,6 +3201,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private boolean mDragTouchedKeyboard;
     /** A Corners or Margin drag moved the shape; the release resizes the terminal once. */
     private boolean mDragTouchedGeometry;
+    /** A Dock size drag wrote through the layout session; the release re-lays the place once. */
+    private boolean mDockSizeHeld;
     private boolean mDirtyDeferred;
 
     private void beginDrag(boolean dragging) {
@@ -3213,6 +3220,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void endDrag() {
         mSliderDragActive = false;
         settleLookDrag();
+        if (mDockSizeHeld) {
+            mDockSizeHeld = false;
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout != null)
+                layout.relayHeldWrites();
+        }
         if (mDragTouchedGeometry) {
             mDragTouchedGeometry = false;
             requestPreview(SurfaceEditorProperties.PREVIEW_GEOMETRY
