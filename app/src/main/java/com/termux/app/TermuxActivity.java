@@ -2990,13 +2990,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private ViewOutlineProvider paneHostContainmentOutlineProvider() {
         final int slackPx = Math.round(dpToPx(
             com.termux.app.terminal.TerminalPaneController.PANE_PRESS_SLACK_DP));
-        return new ViewOutlineProvider() {
+        ViewOutlineProvider held = mPaneHostContainmentOutline;
+        if (held != null && slackPx == mPaneHostContainmentSlackPx) return held;
+        mPaneHostContainmentSlackPx = slackPx;
+        mPaneHostContainmentOutline = new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, android.graphics.Outline outline) {
                 outline.setRect(-slackPx, -slackPx,
                     view.getWidth() + slackPx, view.getHeight() + slackPx);
             }
         };
+        return mPaneHostContainmentOutline;
+    }
+
+    /** The containment outline and the slack it was made for; one per slack, not per pass. */
+    @Nullable private ViewOutlineProvider mPaneHostContainmentOutline;
+    private int mPaneHostContainmentSlackPx = -1;
+    /** The pane host's rounded outline and the radius it was made for; see {@link #setOutlineIfChanged}. */
+    @Nullable private ViewOutlineProvider mPaneHostRoundedOutline;
+    private float mPaneHostRoundedRadiusPx = Float.NaN;
+
+    /** {@link #roundedOutlineProvider} for the pane host, kept while the radius holds. */
+    @NonNull
+    private ViewOutlineProvider paneHostRoundedOutlineProvider(float radiusPx) {
+        ViewOutlineProvider held = mPaneHostRoundedOutline;
+        if (held != null && Float.compare(radiusPx, mPaneHostRoundedRadiusPx) == 0) return held;
+        held = roundedOutlineProvider(radiusPx);
+        mPaneHostRoundedOutline = held;
+        mPaneHostRoundedRadiusPx = radiusPx;
+        return held;
     }
 
     @NonNull
@@ -3159,8 +3181,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // under Floating and the insert under Docked.
             applyPaneHostCornerPadding(paneHost, 0);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                paneHost.setOutlineProvider(paneHostContainmentOutlineProvider());
-                paneHost.setClipToOutline(glass);
+                setOutlineIfChanged(paneHost, paneHostContainmentOutlineProvider(), glass);
             }
             setupTerminalPlankFx(glass);
             updateTerminalGlassFrost();
@@ -3170,7 +3191,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The lone pane's frame is the shared rim, the same border the status bar, dock and
         // keyboard wear (the dock's gradient, under every look). The Material active colour belongs to
         // the focused pane of a split only (PaneBorderStyle).
-        borderView.setBackground(mChrome.glass().rimDrawable(cornerRadiusPx));
+        borderView.setBackground(terminalBorderRim(borderView, cornerRadiusPx));
         if (borderView instanceof TerminalGlassFrameView) {
             ((TerminalGlassFrameView) borderView).setRim(false, 0f);
         }
@@ -3189,10 +3210,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyPaneHostCornerPadding(paneHost, PaneShape.contentInsetPx(innerRadiusPx));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            paneHost.setOutlineProvider(innerRadiusPx > 0f
-                ? roundedOutlineProvider(innerRadiusPx) : ViewOutlineProvider.BOUNDS);
-            paneHost.setClipToOutline(true);
+            setOutlineIfChanged(paneHost, innerRadiusPx > 0f
+                ? paneHostRoundedOutlineProvider(innerRadiusPx) : ViewOutlineProvider.BOUNDS, true);
         }
+    }
+
+    /**
+     * Puts {@code provider} on {@code view} unless it is already there. A provider's outline is a
+     * function of its own key and the view's size, and the view rebuilds it itself on a resize,
+     * so handing it the same provider again (as every inset dispatch did, with a new one each
+     * time) only re-ran the outline and damaged the parent for nothing.
+     */
+    private static void setOutlineIfChanged(@NonNull View view, @NonNull ViewOutlineProvider provider,
+                                            boolean clip) {
+        if (view.getOutlineProvider() != provider) view.setOutlineProvider(provider);
+        if (view.getClipToOutline() != clip) view.setClipToOutline(clip);
+    }
+
+    /** The lone pane's frame line, kept while its radius and stroke hold; see {@link #terminalBorderRim}. */
+    @Nullable private Drawable mTerminalBorderRim;
+    private float mTerminalBorderRimRadiusPx = Float.NaN;
+    private int mTerminalBorderRimStrokePx = -1;
+
+    /**
+     * The rim the lone pane's frame line wears: the drawable it already has while the radius and
+     * the stroke it was made for still hold — it is drawn from those alone — else a new one.
+     */
+    @NonNull
+    private Drawable terminalBorderRim(@NonNull View borderView, float cornerRadiusPx) {
+        int strokePx = Math.max(1, Math.round(dpToPx(1)));
+        Drawable rim = mTerminalBorderRim;
+        if (rim != null && borderView.getBackground() == rim
+            && Float.compare(cornerRadiusPx, mTerminalBorderRimRadiusPx) == 0
+            && strokePx == mTerminalBorderRimStrokePx) {
+            return rim;
+        }
+        rim = mChrome.glass().rimDrawable(cornerRadiusPx);
+        mTerminalBorderRim = rim;
+        mTerminalBorderRimRadiusPx = cornerRadiusPx;
+        mTerminalBorderRimStrokePx = strokePx;
+        return rim;
     }
 
     /**
