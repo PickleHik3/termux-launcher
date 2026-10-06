@@ -725,9 +725,6 @@ public class KeyboardColorSchemeFragment extends Fragment {
         chip.setChipIconVisible(true);
         chip.setCheckedIconVisible(false);
         chip.setCheckable(true);
-        // The stock 32dp chip, not padded out to 48dp: three padded lines would push the page
-        // past one screen.
-        chip.setEnsureMinTouchTargetSize(false);
         chip.setContentDescription(getString(ROLE_LABELS[index]));
         chip.setOnClickListener(view -> selectRole(index));
         mRoleChips[index] = chip;
