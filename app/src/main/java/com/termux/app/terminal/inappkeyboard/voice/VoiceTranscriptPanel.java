@@ -330,12 +330,6 @@ final class VoiceTranscriptPanel extends LinearLayout {
         wave.setResting(resting);
     }
 
-    /** What the cleanup changed, in edits (see {@link VoiceEditCount}); 0 without a cleanup. */
-    int editCount() {
-        List<VoiceWordDiff.Op> current = ops;
-        return current == null ? 0 : VoiceEditCount.count(current);
-    }
-
     /** Pause (while {@code listening}) or Resume; Resume waits, dimmed, until {@code enabled}. */
     void setToggle(boolean listening, boolean enabled) {
         toggleListening = listening;

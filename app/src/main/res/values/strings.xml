@@ -2348,10 +2348,6 @@
     <string name="voice_input_meta_undone">· cleanup undone</string>
     <string name="voice_input_meta_inserted">· at the cursor</string>
     <string name="voice_input_meta_copied">· to the clipboard</string>
-    <plurals name="voice_input_meta_edits">
-        <item quantity="one">· %d edit</item>
-        <item quantity="other">· %d edits</item>
-    </plurals>
     <string name="voice_input_no_model">No speech model installed — using the Android recognizer</string>
     <string name="voice_input_fallback">%1$s — using the Android recognizer</string>
     <string name="voice_input_stopped">Voice input stopped: %1$s</string>

@@ -52,8 +52,8 @@ The strip holds, from the left:
   (**Ready**, **Cleaned up** or **Kept as heard**). It is in the accent
   colour only while the microphone is open. A small ring turns beside it while something is loading
   or running, and a few words of detail follow it: **· warming up** while the speech model or the
-  cleanup model is still loading (recording has already started, so keep talking), **· 5 edits**
-  after a cleanup, **· cleanup undone**, **· at the cursor**, **· to the clipboard**;
+  cleanup model is still loading (recording has already started, so keep talking), **· cleanup
+  undone**, **· at the cursor**, **· to the clipboard**;
 - a short handle in the middle, which is also where you grab the card;
 - **×** on the right, which discards: it stops listening if need be, throws the text away and
   closes the card. Swiping the card sideways does the same. × never means stop; use pause for that.

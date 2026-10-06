@@ -45,7 +45,7 @@ import com.termux.app.terminal.inappkeyboard.FloatingKeyboardGeometry;
  * <p>The card is whole from the moment it shows: a header strip, the text, the controls. The
  * strip says what is happening on the left ("Listening…", "Transcribing…", "Cleaning up…", then
  * what became of the text, with a small ring while something is loading or running and a few
- * words of meta such as "· 5 edits"), carries a small handle in the middle and the × on the
+ * words of meta such as "· at the cursor"), carries a small handle in the middle and the × on the
  * right. The text and the controls are {@link VoiceTranscriptPanel}: Pause (with the scrolling
  * waveform inside it) or Resume, undo, Copy and Insert.
  *
@@ -137,8 +137,6 @@ public final class VoiceListeningIndicator {
     /** What the header's state says now, and for the cleaned text, for redo to put back. */
     @StringRes private int statusRes = R.string.voice_input_listening;
     @StringRes private int cleanedStatus = R.string.voice_input_cleaned_up;
-    /** What the cleanup changed, for "· 5 edits". */
-    private int edits;
     private int accent;
     private int onSurfaceVariant;
 
@@ -324,7 +322,6 @@ public final class VoiceListeningIndicator {
         pending = 0;
         cleaningUp = false;
         warming = false;
-        edits = 0;
         cleanedStatus = R.string.voice_input_cleaned_up;
         statusRes = R.string.voice_input_listening;
         setToggle(true, true);
@@ -439,8 +436,6 @@ public final class VoiceListeningIndicator {
         CharSequence text = "";
         if (listening) {
             if (warming) text = activity.getString(R.string.voice_input_meta_warming_up);
-        } else if (statusRes == R.string.voice_input_cleaned_up) {
-            if (edits > 0) text = activity.getResources().getQuantityString(R.plurals.voice_input_meta_edits, edits, edits);
         } else if (statusRes == R.string.voice_input_as_heard) {
             text = activity.getString(R.string.voice_input_meta_undone);
         } else if (statusRes == R.string.voice_input_inserted) {
@@ -507,10 +502,7 @@ public final class VoiceListeningIndicator {
         updateGhost();
         cleanedStatus = status;
         VoiceTranscriptPanel view = panel;
-        if (view != null) {
-            view.showCleaned(cleaned);
-            edits = view.editCount();
-        }
+        if (view != null) view.showCleaned(cleaned);
         setStatus(status);
     }
 
