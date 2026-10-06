@@ -22,7 +22,6 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
-import androidx.core.view.ViewCompat;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.fragment.app.Fragment;
 
@@ -81,6 +80,13 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private boolean mPaintingBackground;
     private boolean mEditingSwatches;
     private static final int SWATCH_GRID_COLUMNS = 8;
+    private static final int SWATCH_DP = 32;
+    /** The page's one gap between blocks, in dp. */
+    private static final int GAP_DP = 8;
+    /** The smallest share of its natural size the preview shrinks to before the page scrolls. */
+    private static final float PREVIEW_MIN_SCALE = 0.4f;
+    static final String TAG_SWATCH_GRID = "keyboard_theme_swatch_grid";
+    static final String TAG_PALETTE_CARD = "keyboard_theme_palette_card";
     /**
      * Material role behind every slot, mirroring
      * {@link InAppKeyboardPaletteFactory#defaultEditorSwatches}. These stay untranslated on
@@ -121,9 +127,9 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mScheme = InAppKeyboardColorScheme.fromJson(context,
             mPreferences.getInAppKeyboardColorScheme());
 
-        LinearLayout root = new LinearLayout(context);
+        FitRoot root = new FitRoot(context);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(12), dp(16), dp(12));
+        root.setPadding(dp(16), dp(8), dp(16), dp(8));
 
         syncThemePreference();
 
@@ -137,7 +143,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         // as the card's buttons.
         TextView instructions = new TextView(context);
         instructions.setTextAppearance(
-            com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
+            com.google.android.material.R.style.TextAppearance_Material3_BodySmall);
         int instructionColor = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY);
         instructions.setTextColor(instructionColor);
@@ -147,46 +153,105 @@ public class KeyboardColorSchemeFragment extends Fragment {
             inlineGlyph(context, R.drawable.ic_symbol_restart, instructionColor, instructions)));
         LinearLayout.LayoutParams instructionParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        instructionParams.topMargin = dp(8);
+        instructionParams.topMargin = dp(GAP_DP);
         root.addView(instructions, instructionParams);
 
-        // 3. The role rows; each chip picks the part the swatches below paint.
+        // 3. The role chips, one wrapping group; each picks the part the swatches below paint.
+        // Hints, keyboard and labels need no row titles of their own: the chip names say it.
         mRoleChips = new Chip[ROLE_ORDER.length];
-        addRoleRow(context, root, R.string.keyboard_theme_row_hints, 3, 4);
-        addRoleRow(context, root, R.string.keyboard_theme_row_keyboard, 5, 0, 1);
-        addRoleRow(context, root, R.string.keyboard_theme_row_labels, 2);
+        addRoleChips(context, root);
 
         // 4. The 24 swatches: the colour choices for the selected role.
         mSwatchGrid = new LinearLayout(context);
         mSwatchGrid.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        gridParams.topMargin = dp(12);
+        gridParams.topMargin = dp(GAP_DP);
+        mSwatchGrid.setTag(TAG_SWATCH_GRID);
         root.addView(mSwatchGrid, gridParams);
 
         // 5. The card: the editing capsule, then the Font chooser.
-        root.addView(buildPaletteCard(context), new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        // The card carries its own params, so the gap above it is not thrown away.
+        View card = buildPaletteCard(context);
+        root.addView(card, card.getLayoutParams());
         selectRole(KEY_FILL_INDEX);
         createSwatches();
 
-        android.widget.ScrollView scroll = new android.widget.ScrollView(context);
+        android.widget.ScrollView scroll = new android.widget.ScrollView(context) {
+            @Override
+            protected void onMeasure(int widthSpec, int heightSpec) {
+                // The viewport is the preview's budget: what the controls leave of it.
+                root.mViewportPx = MeasureSpec.getMode(heightSpec) == MeasureSpec.UNSPECIFIED
+                    ? 0 : MeasureSpec.getSize(heightSpec);
+                super.onMeasure(widthSpec, heightSpec);
+            }
+        };
         scroll.setFillViewport(true);
         scroll.addView(root, new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return scroll;
     }
 
-    /** Row title: LabelLarge, at the start of its chip row. */
-    @NonNull
-    private TextView rowTitle(@NonNull android.content.Context context, int title) {
-        TextView header = new TextView(context);
-        header.setTextAppearance(
-            com.google.android.material.R.style.TextAppearance_Material3_LabelLarge);
-        header.setTextColor(MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnSurface, Color.GRAY));
-        header.setText(title);
-        return header;
+    /**
+     * The page column. It sizes the preview last: every other block is measured first, and the
+     * keyboard takes the height that is left, scaled down as a whole (width and height by the same
+     * factor, so the keys keep their shape) rather than squeezed, floored at
+     * {@link #PREVIEW_MIN_SCALE} so a huge font scale scrolls instead of erasing it.
+     */
+    private final class FitRoot extends LinearLayout {
+        /** Height the page may fill, 0 while unknown (the preview then keeps its own size). */
+        int mViewportPx;
+
+        FitRoot(@NonNull android.content.Context context) { super(context); }
+
+        @Override
+        protected void onMeasure(int widthSpec, int heightSpec) {
+            if (mPreviewHolder != null && mKeyboard != null
+                    && mKeyboard.getParent() == mPreviewHolder
+                    && MeasureSpec.getMode(widthSpec) != MeasureSpec.UNSPECIFIED)
+                sizePreview(MeasureSpec.getSize(widthSpec));
+            super.onMeasure(widthSpec, heightSpec);
+        }
+
+        private void sizePreview(int rootWidth) {
+            int contentWidth = rootWidth - getPaddingLeft() - getPaddingRight();
+            if (contentWidth <= 0) return;
+            int others = 0;
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child == mPreviewHolder || child.getVisibility() == GONE) continue;
+                LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) child.getLayoutParams();
+                child.measure(
+                    MeasureSpec.makeMeasureSpec(
+                        Math.max(0, contentWidth - lp.leftMargin - lp.rightMargin),
+                        MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+                others += child.getMeasuredHeight() + lp.topMargin + lp.bottomMargin;
+            }
+            // The keyboard's own height at full width, with nothing capping it.
+            mKeyboard.measure(MeasureSpec.makeMeasureSpec(contentWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(dp(2000), MeasureSpec.AT_MOST));
+            int natural = mKeyboard.getMeasuredHeight();
+            if (natural <= 0) return;
+            float scale = 1f;
+            if (mViewportPx > 0) {
+                int budget = mViewportPx - getPaddingTop() - getPaddingBottom() - others;
+                scale = Math.max(PREVIEW_MIN_SCALE, Math.min(1f, budget / (float) natural));
+            }
+            int width = Math.round(contentWidth * scale);
+            int height = Math.round(natural * scale);
+            ViewGroup.LayoutParams holderParams = mPreviewHolder.getLayoutParams();
+            if (holderParams.height != height) {
+                holderParams.height = height;
+                mPreviewHolder.setLayoutParams(holderParams);
+            }
+            ViewGroup.LayoutParams keyboardParams = mKeyboard.getLayoutParams();
+            if (keyboardParams.width != width || keyboardParams.height != height) {
+                keyboardParams.width = width;
+                keyboardParams.height = height;
+                mKeyboard.setLayoutParams(keyboardParams);
+            }
+        }
     }
 
     /** (Re)creates the preview keyboard; Config is immutable, so a new typeface needs a new view. */
@@ -226,8 +291,10 @@ public class KeyboardColorSchemeFragment extends Fragment {
             persistAndRender();
         });
         mPreviewHolder.removeAllViews();
+        // FitRoot gives the keyboard its real size at measure time; until then it is natural.
         mPreviewHolder.addView(mKeyboard, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER_HORIZONTAL));
     }
 
     /** The face the keyboard itself would use: the picked file, else the bundled symbols font. */
@@ -418,8 +485,9 @@ public class KeyboardColorSchemeFragment extends Fragment {
                 com.google.android.material.R.attr.colorSurface, Color.DKGRAY)));
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        cardParams.topMargin = dp(12);
+        cardParams.topMargin = dp(GAP_DP);
         card.setLayoutParams(cardParams);
+        card.setTag(TAG_PALETTE_CARD);
 
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -631,27 +699,18 @@ public class KeyboardColorSchemeFragment extends Fragment {
         R.drawable.ic_keyboard_color_role_background
     };
 
-    /** A LabelLarge title at the start, then that row's role chips (wrapping when narrow). */
-    private void addRoleRow(@NonNull android.content.Context context, @NonNull LinearLayout root,
-                            int title, int... roleIndices) {
-        LinearLayout row = new LinearLayout(context);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        TextView label = rowTitle(context, title);
-        ViewCompat.setAccessibilityHeading(label, true);
-        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        labelParams.setMarginEnd(dp(12));
-        row.addView(label, labelParams);
+    /** All six role chips in one group, wrapping to as many lines as the width needs. */
+    private void addRoleChips(@NonNull android.content.Context context,
+                              @NonNull LinearLayout root) {
         ChipGroup chips = new ChipGroup(context);
-        for (int index : roleIndices)
+        chips.setChipSpacingHorizontal(dp(GAP_DP));
+        chips.setChipSpacingVertical(dp(4));
+        for (int index = 0; index < ROLE_ORDER.length; index++)
             chips.addView(createRoleChip(context, index));
-        row.addView(chips, new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        rowParams.topMargin = dp(8);
-        root.addView(row, rowParams);
+        params.topMargin = dp(GAP_DP);
+        root.addView(chips, params);
     }
 
     /** One role chip: the role glyph and name; checked = secondaryContainer (stock filter chip). */
@@ -666,6 +725,9 @@ public class KeyboardColorSchemeFragment extends Fragment {
         chip.setChipIconVisible(true);
         chip.setCheckedIconVisible(false);
         chip.setCheckable(true);
+        // The stock 32dp chip, not padded out to 48dp: three padded lines would push the page
+        // past one screen.
+        chip.setEnsureMinTouchTargetSize(false);
         chip.setContentDescription(getString(ROLE_LABELS[index]));
         chip.setOnClickListener(view -> selectRole(index));
         mRoleChips[index] = chip;
@@ -708,7 +770,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
                 row.setOrientation(LinearLayout.HORIZONTAL);
                 LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                if (i > 0) rowParams.topMargin = dp(6);
+                if (i > 0) rowParams.topMargin = dp(4);
                 mSwatchGrid.addView(row, rowParams);
             }
 
@@ -718,13 +780,13 @@ public class KeyboardColorSchemeFragment extends Fragment {
             cell.setOnClickListener(view -> onSwatchTapped(index));
             FrameLayout well = new FrameLayout(context);
             View swatch = new View(context);
-            well.addView(swatch, new FrameLayout.LayoutParams(dp(36), dp(36)));
+            well.addView(swatch, new FrameLayout.LayoutParams(dp(SWATCH_DP), dp(SWATCH_DP)));
             View badge = new View(context);
             badge.setBackground(pinnedBadge(context));
             FrameLayout.LayoutParams badgeParams = new FrameLayout.LayoutParams(dp(11), dp(11));
             badgeParams.gravity = Gravity.TOP | Gravity.END;
             well.addView(badge, badgeParams);
-            FrameLayout.LayoutParams wellParams = new FrameLayout.LayoutParams(dp(36), dp(36));
+            FrameLayout.LayoutParams wellParams = new FrameLayout.LayoutParams(dp(SWATCH_DP), dp(SWATCH_DP));
             wellParams.gravity = Gravity.CENTER;
             cell.addView(well, wellParams);
 
