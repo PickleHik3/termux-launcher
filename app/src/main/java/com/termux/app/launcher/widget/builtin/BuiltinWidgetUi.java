@@ -47,6 +47,18 @@ public final class BuiltinWidgetUi {
             : text(text, 11f, style.sansBold, style.onSurfaceVariant);
     }
 
+    /**
+     * The design's two caption forms in one call: Tonal shows {@code tonalText} as a sans caption;
+     * Pane shows a Nerd {@code paneGlyph} in primary followed by {@code paneText} in mono, the way
+     * a pane names its path.
+     */
+    @NonNull public View caption(@NonNull CharSequence tonalText, @NonNull String paneGlyph,
+                                 @NonNull CharSequence paneText) {
+        if (!style.isPane()) return caption(tonalText);
+        TextView label = text(paneText, 10.5f, style.monoMedium, style.onSurfaceVariant);
+        return row(5, glyph(paneGlyph, 10.5f, style.primary), flex(label));
+    }
+
     /** A mono label in the variant colour, the design's secondary line. */
     @NonNull public TextView mono(@NonNull CharSequence text, float sp) {
         return text(text, sp, style.monoMedium, style.onSurfaceVariant);
