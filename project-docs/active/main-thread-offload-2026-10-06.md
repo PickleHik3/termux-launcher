@@ -91,5 +91,9 @@ and one `Terminal.updateSize` per keyboard hide and show (perfetto); four distin
 previews clear of the pill; space-bar icons present under a custom serif font; drawer opens with
 warm icons and no tiles.
 
-Test suite: the app suite sits at the 2 GB test-JVM ceiling; runs beside another suite die late
-with "Java heap space" on every branch, the base included. Verify with single runs only.
+Test suite: the first round's per-caller package-context cache in `TermuxAppSharedPreferences.build`
+kept every Robolectric test's application alive (a package context reaches its application through
+its LoadedApk), so the app suite retained one asset manager and its themes per test class and died
+of Java heap space after about 575 classes. Found with a heap dump and Eclipse MAT; fixed by keying
+the cache on the application (e41ea876a). After the fix: 8,325 app tests, no full collections, only
+the known lazy-mode flake; every module suite green.
