@@ -147,6 +147,19 @@ as you drag. The same two numbers are sliders in the Layout editor for Home. The
 keyboard goes away while you are on Widgets — nothing there takes typing — and comes back with the
 terminal.
 
+The launcher brings twelve widgets of its own, listed first in the add sheet under Termux Launcher:
+an analog and a digital clock, an agenda and a month calendar, weather, battery, system stats,
+media controls, notifications, a task list, a scratchpad and a command that runs on a timer. They
+are drawn in the launcher's own colours and follow the theme, the wallpaper palette and the panes'
+glass. Each one resizes to any size from one cell up to four across and two down, and redraws
+for the room it has. The widgets that read your calendar, your notifications or what is playing
+ask for that access on the card itself. The task list and the scratchpad are plain markdown
+files in `~/notes` — `tasks.md` and `scratch.md` — so the shell sees exactly what the card
+shows, and a tap on the scratchpad opens the file in your editor. The clocks, the command and the
+two files take settings from the cog that appears while you are editing: time zones, the command
+and its interval, the file path. **Built-in widget style** in Settings › Apps picks between Tonal
+cards and squared, rimmed cards that look like terminal panes.
+
 The Display place shows the Linux display. Its keyboard, hardware or on-screen, is the display's
 entirely: every key and every chord reaches the Linux program, and the launcher's shortcuts stay
 out of the way. Leave it by holding its border and dragging, tapping a place icon or pressing

@@ -106,6 +106,8 @@ final class ClockNumeralView extends View {
 
     @Override public int getBaseline() { return baseline; }
 
+    // RIGHT is compared after getAbsoluteGravity resolved END for the layout direction.
+    @android.annotation.SuppressLint("RtlHardcoded")
     @Override protected void onDraw(@NonNull Canvas canvas) {
         if (main.isEmpty() && tail.isEmpty()) return;
         float mainWidth = mainPaint.measureText(main);

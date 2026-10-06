@@ -52,6 +52,8 @@ public final class BatterySource {
 
     public interface Listener { void onBatteryChanged(@NonNull State state); }
 
+    // The application context, never an activity's: nothing here outlives the process.
+    @android.annotation.SuppressLint("StaticFieldLeak")
     @Nullable private static BatterySource instance;
 
     /** The process's one source. */

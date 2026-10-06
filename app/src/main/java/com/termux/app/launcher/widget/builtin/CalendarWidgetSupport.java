@@ -225,7 +225,8 @@ final class CalendarWidgetSupport {
         try {
             if (view.getContext().getTheme().resolveAttribute(
                     android.R.attr.selectableItemBackground, value, true) && value.resourceId != 0) {
-                Drawable ripple = view.getContext().getDrawable(value.resourceId);
+                Drawable ripple = androidx.appcompat.content.res.AppCompatResources.getDrawable(
+                    view.getContext(), value.resourceId);
                 view.setForeground(ripple);
             }
         } catch (RuntimeException ignored) {
