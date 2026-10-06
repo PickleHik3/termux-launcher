@@ -1109,6 +1109,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mLastLaunchWasLauncherEntry;
 
     /**
+     * Whether the first shell's styling broadcast still has something to apply: only after a
+     * bootstrap install, which ran its config installers after this activity styled itself in
+     * onCreate. Every other first shell is asked for by an activity that has just styled from the
+     * very files a reload would read again, and that reload (the whole extra keys, keyboard,
+     * place layout and chrome pass) was a quarter of a second of main thread right after the
+     * first frame of every cold start.
+     */
+    private boolean mFirstSessionRestyleWanted;
+
+    /**
      * If activity was restarted like due to call to {@link #recreate()} after receiving
      * {@link TERMUX_ACTIVITY#ACTION_RELOAD_STYLE}, system dark night mode was changed or activity
      * was killed by android.
@@ -1567,11 +1577,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mAppDrawerGeometryFreezePending;
     @Nullable private WallpaperManager.OnColorsChangedListener mWallpaperColorsChangedListener;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
+    /** A pause that a resume ends inside the same message: see {@link SameMessageMark}. */
+    private final SameMessageMark mPausedThisMessage =
+        new SameMessageMark(runnable -> mAccessoryRenderHandler.postAtFrontOfQueue(runnable));
+    /** An onCreate whose launch transaction is still running; its onResume follows in it. */
+    private final SameMessageMark mCreatedThisMessage =
+        new SameMessageMark(runnable -> mAccessoryRenderHandler.postAtFrontOfQueue(runnable));
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         Logger.logDebug(LOG_TAG, "onCreate");
         mIsOnResumeAfterOnCreate = true;
+        mCreatedThisMessage.mark();
         if (savedInstanceState != null) {
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
@@ -2351,6 +2368,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         holdVoiceScreen();
         if (mIsInvalidState)
             return;
+        // A new intent to the resumed launcher (HOME while home; a second start racing a cold
+        // start) pauses and resumes it inside one message. Nothing can have changed in between,
+        // so the passes below that re-read preferences and re-dress the chrome "in case they
+        // changed while we were away" are skipped for it; everything that pairs with onPause,
+        // and the prefix checks a shell can change without a broadcast, still run. A Settings
+        // reload waiting for this resume always takes the full path.
+        boolean transientPause = mPausedThisMessage.isMarked()
+            && !sPendingStyleReloadOnNextResume && !sPendingAppDrawerReloadOnNextResume;
+        // The launch's own resume: the keyboard was built from the preferences moments ago in
+        // this same message, tap model and layout ring included, so re-reading them all (17 ms
+        // on a cold start, the tap model file a second time) has nothing to find.
+        boolean keyboardJustBuilt = mCreatedThisMessage.isMarked();
         // Also here, not only in onStart: a wallpaper picker shown over this activity never stops
         // it, so the arrival back from one is an onResume on its own.
         refreshWallpaperPictureOnArrival();
@@ -2380,10 +2409,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (contentView != null)
             androidx.core.view.ViewCompat.requestApplyInsets(contentView);
         // Preferences may have changed while the settings activity covered this one.
-        initializeInAppKeyboard(null);
+        if (!transientPause) initializeInAppKeyboard(null);
         syncDisplayKeyboardRoute();
         if (mInAppKeyboard != null) {
-            mInAppKeyboard.onPreferencesReloaded();
+            if (!transientPause && !keyboardJustBuilt) mInAppKeyboard.onPreferencesReloaded();
             mInAppKeyboard.onResume();
             if (mInAppKeyboard.isExternalTextInputActive())
                 onSystemImeRequested();
@@ -2413,24 +2442,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mTermuxTerminalViewClient.onResume();
         refreshLauncherIconsIfPreferencesChanged();
         maybeRecoverFromEmptySession("onResume");
-        // If compatibility mode was just enabled, drop any active split back to a single pane.
-        if (!isSplitPanesEnabled())
-            collapseAllSplits();
-        else if (mPaneController != null) {
-            mPaneController.refreshPaneSizes();
-            // Settings may have flipped the pane behaviour toggles while we were away.
-            applyPaneBehaviourPreferences();
-        }
-        refreshTerminalWindowBar();
+        if (!transientPause) {
+            // If compatibility mode was just enabled, drop any active split back to a single pane.
+            if (!isSplitPanesEnabled())
+                collapseAllSplits();
+            else if (mPaneController != null) {
+                mPaneController.refreshPaneSizes();
+                // Settings may have flipped the pane behaviour toggles while we were away.
+                applyPaneBehaviourPreferences();
+            }
+            refreshTerminalWindowBar();
 
-        updateWindowBackgroundForCurrentSession();
-        syncTerminalWallpaperRenderingMode();
-        applySeamlessStatusBackgroundModeIfNeeded();
-        applyTerminalSurfaceAppearance();
-        syncRecentsVisibilityPolicy();
-        applyWallpaperOffsetFixIfNeeded();
-        mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER
-            | ChromeRenderer.SCOPE_BLUR_HEALTH);
+            updateWindowBackgroundForCurrentSession();
+            syncTerminalWallpaperRenderingMode();
+            applySeamlessStatusBackgroundModeIfNeeded();
+            applyTerminalSurfaceAppearance();
+            syncRecentsVisibilityPolicy();
+            applyWallpaperOffsetFixIfNeeded();
+            mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS
+                | ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_BLUR_HEALTH);
+        }
         refreshPrivilegedBackendIfNeeded();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.post(this::updateAzOverflowAffordance);
@@ -2732,6 +2763,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Same rule for the find strip: it holds the interceptor and paints over a pane, and both
         // must be handed back before this activity stops being the one on screen.
         if (mFindCoordinator != null) mFindCoordinator.cancel();
+        mPausedThisMessage.mark();
         super.onPause();
     }
 
@@ -8436,7 +8468,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void startBootstrapAndSession(@Nullable Intent intent) {
+        // A prefix already in place answers synchronously; anything later is an install (or its
+        // error dialog's way on), whose installers may have written what styling reads.
+        final boolean[] bootstrapReturned = {false};
         TermuxInstaller.setupBootstrapIfNeeded(TermuxActivity.this, () -> {
+            if (bootstrapReturned[0]) mFirstSessionRestyleWanted = true;
             // Bootstrap setup may complete after app startup; re-attempt launcher CLI script install.
             LauncherCtlApiServer.getInstance().ensureCliScriptsInstalled();
             TermuxShellIntegrationInstaller.ensureInstalled(this);
@@ -8465,6 +8501,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mEmptySessionRecoveryInProgress = false;
             }
         });
+        bootstrapReturned[0] = true;
     }
 
     private void maybeRecoverFromEmptySession(@NonNull String source) {
@@ -24212,6 +24249,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         TermuxCrashUtils.notifyAppCrashFromCrashLogFile(context, LOG_TAG);
                         return;
                     case TERMUX_ACTIVITY.ACTION_RELOAD_STYLE:
+                        if (intent.getBooleanExtra(TermuxService.EXTRA_FIRST_SESSION_RESTYLE, false)) {
+                            if (!mFirstSessionRestyleWanted) {
+                                Logger.logDebug(LOG_TAG, "First shell's styling already on screen; not reloading");
+                                return;
+                            }
+                            mFirstSessionRestyleWanted = false;
+                        }
                         Logger.logDebug(LOG_TAG, "Received intent to reload styling");
                         sPendingStyleReloadOnNextResume = false;
                         sPendingStyleReloadRecreateActivity = true;
