@@ -9,6 +9,8 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.Process;
 import android.os.UserHandle;
 import android.text.TextUtils;
@@ -20,11 +22,51 @@ import com.termux.app.launcher.model.LauncherAppEntry;
 
 import java.lang.reflect.Method;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 public final class LauncherAppLauncher {
 
     private LauncherAppLauncher() {
+    }
+
+    /** Where a profile launch reports back; always called on the main thread. */
+    public interface ProfileLaunchResult {
+        /**
+         * @param launched whether the app was started
+         * @param later    true when the answer came after {@code am} ran in the background, so the
+         *                 caller's view may have gone meanwhile
+         */
+        void onProfileLaunchResult(boolean launched, boolean later);
+    }
+
+    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    /**
+     * Runs the {@code am start --user} fallback, which waits up to 5 s for a process: never on
+     * main. One thread, gone when idle; a launch is one tap, so nothing queues behind it for long.
+     */
+    private static final ExecutorService AM_EXECUTOR = newAmExecutor();
+    /** {@code UserHandle.of(int)}, looked up once; it is hidden API reached by reflection. */
+    @Nullable private static volatile Method userHandleOf;
+
+    @NonNull
+    private static ExecutorService newAmExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(0, 1, 15L, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(), runnable -> new Thread(runnable, "ProfileLaunchAm"));
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
+    }
+
+    /** How {@link #startProfileWithLauncherApps} ended. */
+    private enum ProfileStart {
+        /** Started. */
+        LAUNCHED,
+        /** Not a profile launch this can attempt (no user, no activity, no LauncherApps). */
+        NOT_ATTEMPTED,
+        /** LauncherApps refused it; {@code am start --user} is the remaining way. */
+        NEEDS_AM
     }
 
     /** Runs a Linux app entry on the display; installed by the activity that owns the display. */
@@ -96,10 +138,38 @@ public final class LauncherAppLauncher {
             LinuxAppRunner runner = linuxAppRunner;
             return runner != null && runner.run(entry);
         }
-        if (entry.appRef.clonedProfile && tryStartProfileMainActivity(context, entry, null)) {
-            return true;
+        if (entry.appRef.clonedProfile) {
+            ProfileStart start = startProfileWithLauncherApps(context, entry, null);
+            if (start == ProfileStart.LAUNCHED) return true;
+            if (start == ProfileStart.NEEDS_AM) {
+                // The am fallback blocks for a process, so it runs off main; if it fails, the
+                // current-profile launch runs then, as it did straight after it before.
+                final Context appContext = context.getApplicationContext();
+                final int userId = entry.appRef.userId;
+                final String packageName = entry.appRef.packageName;
+                final String activityName = profileActivityName(entry);
+                AM_EXECUTOR.execute(() -> {
+                    if (tryStartProfileWithAm(userId, packageName, activityName)) return;
+                    MAIN.post(() -> launchInCurrentProfile(liveContext(context, appContext), entry));
+                });
+                return true;
+            }
         }
+        return launchInCurrentProfile(context, entry);
+    }
 
+    /** {@code context} while it is a live activity (or not an activity), else the application. */
+    @NonNull
+    private static Context liveContext(@NonNull Context context, @NonNull Context appContext) {
+        if (context instanceof Activity) {
+            Activity activity = (Activity) context;
+            if (activity.isFinishing() || activity.isDestroyed()) return appContext;
+        }
+        return context;
+    }
+
+    private static boolean launchInCurrentProfile(@NonNull Context context,
+                                                  @NonNull LauncherAppEntry entry) {
         PackageManager packageManager = context.getPackageManager();
         String activityName = entry.appRef.activityName;
         if (!TextUtils.isEmpty(activityName) && activityName.startsWith(".")) {
@@ -117,18 +187,14 @@ public final class LauncherAppLauncher {
             explicitNoCategory.setComponent(new ComponentName(entry.appRef.packageName, activityName));
         }
 
-        Intent packageDefault = packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
-        ComponentName packageDefaultComponent = packageDefault != null ? packageDefault.getComponent() : null;
-        ComponentName explicitComponent = explicit != null ? explicit.getComponent() : null;
-        boolean explicitIsPackageDefault = sameComponent(explicitComponent, packageDefaultComponent);
-
-        if (explicitIsPackageDefault && tryStartActivity(context, packageDefault)) {
-            return true;
-        }
+        // The catalogue already names the component: start it as it is and ask the package
+        // manager for the package's own launch intent only when that fails, rather than resolving
+        // it on every tap. A Launcher3-style launch intent is exactly this explicit one.
         if (tryStartActivity(context, explicit)) {
             return true;
         }
-        if (!explicitIsPackageDefault && tryStartActivity(context, packageDefault)) {
+        Intent packageDefault = packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
+        if (tryStartActivity(context, packageDefault)) {
             return true;
         }
 
@@ -177,23 +243,54 @@ public final class LauncherAppLauncher {
         return false;
     }
 
-    public static boolean tryStartProfileMainActivity(@NonNull Context context,
-                                                      @NonNull LauncherAppEntry entry,
-                                                      @Nullable Bundle options) {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP || entry.appRef.userId < 0) {
-            return false;
+    /**
+     * Starts a cloned or work-profile entry in its own profile. LauncherApps is tried on the
+     * calling (main) thread and answers at once; when it refuses, {@code am start --user} runs on
+     * a background thread and the answer is posted to main ({@code later} set).
+     */
+    public static void startProfileMainActivity(@NonNull Context context,
+                                                @NonNull LauncherAppEntry entry,
+                                                @Nullable Bundle options,
+                                                @NonNull ProfileLaunchResult result) {
+        ProfileStart start = startProfileWithLauncherApps(context, entry, options);
+        if (start != ProfileStart.NEEDS_AM) {
+            result.onProfileLaunchResult(start == ProfileStart.LAUNCHED, false);
+            return;
         }
+        final int userId = entry.appRef.userId;
+        final String packageName = entry.appRef.packageName;
+        final String activityName = profileActivityName(entry);
+        AM_EXECUTOR.execute(() -> {
+            boolean launched = tryStartProfileWithAm(userId, packageName, activityName);
+            MAIN.post(() -> result.onProfileLaunchResult(launched, true));
+        });
+    }
+
+    /** The entry's activity with a leading-dot name expanded, or "" when it has none. */
+    @NonNull
+    private static String profileActivityName(@NonNull LauncherAppEntry entry) {
         String activityName = entry.appRef.activityName;
         if (!TextUtils.isEmpty(activityName) && activityName.startsWith(".")) {
             activityName = entry.appRef.packageName + activityName;
         }
+        return activityName == null ? "" : activityName;
+    }
+
+    @NonNull
+    private static ProfileStart startProfileWithLauncherApps(@NonNull Context context,
+                                                             @NonNull LauncherAppEntry entry,
+                                                             @Nullable Bundle options) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP || entry.appRef.userId < 0) {
+            return ProfileStart.NOT_ATTEMPTED;
+        }
+        String activityName = profileActivityName(entry);
         if (TextUtils.isEmpty(activityName)) {
-            return false;
+            return ProfileStart.NOT_ATTEMPTED;
         }
         try {
             LauncherApps launcherApps = (LauncherApps) context.getSystemService(Context.LAUNCHER_APPS_SERVICE);
             if (launcherApps == null) {
-                return false;
+                return ProfileStart.NOT_ATTEMPTED;
             }
             launcherApps.startMainActivity(
                 new ComponentName(entry.appRef.packageName, activityName),
@@ -201,16 +298,20 @@ public final class LauncherAppLauncher {
                 null,
                 options
             );
-            return true;
+            return ProfileStart.LAUNCHED;
         } catch (Throwable ignored) {
-            return tryStartProfileWithAm(entry.appRef.userId, entry.appRef.packageName, activityName);
+            return ProfileStart.NEEDS_AM;
         }
     }
 
     @NonNull
     private static UserHandle userHandleFor(int userId) throws Exception {
-        Method method = UserHandle.class.getDeclaredMethod("of", int.class);
-        method.setAccessible(true);
+        Method method = userHandleOf;
+        if (method == null) {
+            method = UserHandle.class.getDeclaredMethod("of", int.class);
+            method.setAccessible(true);
+            userHandleOf = method;
+        }
         Object value = method.invoke(null, userId);
         if (value instanceof UserHandle) {
             return (UserHandle) value;
@@ -233,10 +334,6 @@ public final class LauncherAppLauncher {
         } catch (Throwable ignored) {
             return false;
         }
-    }
-
-    private static boolean sameComponent(@Nullable ComponentName first, @Nullable ComponentName second) {
-        return first != null && second != null && first.equals(second);
     }
 
     private static boolean tryStartMainActivity(@NonNull Context context, @Nullable ComponentName componentName) {

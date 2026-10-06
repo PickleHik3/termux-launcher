@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.launcher.model.PinnedFolderItem;
+import com.termux.app.launcher.model.PinnedIconOverride;
 import com.termux.app.launcher.model.PinnedItem;
 
 import java.util.ArrayList;
@@ -18,14 +19,30 @@ public final class LauncherConfigSnapshot {
     @NonNull public final List<PinnedItem> dockItems;
     @NonNull public final Map<String, PinnedFolderItem> folders;
     @NonNull public final String appIconOverridesJson;
+    /**
+     * {@link #appIconOverridesJson} parsed, by {@code AppRef.stableId()}: the first entry for an
+     * app wins, and maps to null when that entry's override is unusable. Built once per distinct
+     * JSON; a catalogue build looks every app up here instead of re-parsing the array per app.
+     */
+    @NonNull final Map<String, PinnedIconOverride> appIconOverrides;
 
     LauncherConfigSnapshot(long revision, @NonNull List<PinnedItem> dockItems,
                            @NonNull Map<String, PinnedFolderItem> folders,
                            @NonNull String appIconOverridesJson) {
+        this(revision, dockItems, folders, appIconOverridesJson,
+            LauncherConfigRepository.parseAppIconOverrides(appIconOverridesJson));
+    }
+
+    /** With the overrides already parsed from {@code appIconOverridesJson}, to reuse them. */
+    LauncherConfigSnapshot(long revision, @NonNull List<PinnedItem> dockItems,
+                           @NonNull Map<String, PinnedFolderItem> folders,
+                           @NonNull String appIconOverridesJson,
+                           @NonNull Map<String, PinnedIconOverride> appIconOverrides) {
         this.revision = revision;
         this.dockItems = Collections.unmodifiableList(new ArrayList<>(dockItems));
         this.folders = Collections.unmodifiableMap(new LinkedHashMap<>(folders));
         this.appIconOverridesJson = appIconOverridesJson;
+        this.appIconOverrides = appIconOverrides;
     }
 
     @Nullable

@@ -60,4 +60,33 @@ public class TopPaneModelsTest {
         assertEquals(playing.title, paused.title);
         assertEquals(playing.positionMs, paused.positionMs);
     }
+
+    @Test
+    public void mediaStatesReadingTheSameAreEqual() {
+        TopPaneMediaState a = new TopPaneMediaState("com.music", "Weightless",
+            "Marconi Union", "YouTube Music", null, 30L, 100L, true, 5L);
+        TopPaneMediaState b = new TopPaneMediaState("com.music", "Weightless",
+            "Marconi Union", "YouTube Music", null, 30L, 100L, true, 5L);
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
+        // Missing text normalises to empty, so null and "" are the same reading.
+        assertEquals(new TopPaneMediaState("p", null, null, null, null, 0L, 0L, false),
+            new TopPaneMediaState("p", "", "", "", null, 0L, 0L, false));
+    }
+
+    @Test
+    public void anyPlaybackChangeMakesMediaStatesDiffer() {
+        TopPaneMediaState base = new TopPaneMediaState("com.music", "Weightless",
+            "Marconi Union", "YouTube Music", null, 30L, 100L, true, 5L);
+        assertFalse(base.equals(base.withPlaying(false)));
+        assertFalse(base.equals(new TopPaneMediaState("com.music", "Weightless",
+            "Marconi Union", "YouTube Music", null, 31L, 100L, true, 5L)));
+        assertFalse(base.equals(new TopPaneMediaState("com.music", "Weightless",
+            "Marconi Union", "YouTube Music", null, 30L, 100L, true, 6L)));
+        assertFalse(base.equals(new TopPaneMediaState("com.music", "Other",
+            "Marconi Union", "YouTube Music", null, 30L, 100L, true, 5L)));
+        assertFalse(base.equals(new TopPaneMediaState("com.other", "Weightless",
+            "Marconi Union", "YouTube Music", null, 30L, 100L, true, 5L)));
+        assertFalse(base.equals(null));
+    }
 }
