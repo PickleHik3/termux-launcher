@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Notifications widget. -->
+    <string name="bw_signals_notifications_caption">Notifications</string>
+    <string name="bw_signals_notifications_pane_short">notifs</string>
+    <string name="bw_signals_notifications_pane">notifications</string>
+    <string name="bw_signals_notifications_allow">Allow notification access</string>
+    <string name="bw_signals_notifications_allow_short">Allow access</string>
+    <string name="bw_signals_notifications_allow_hint">See your notifications here</string>
+    <string name="bw_signals_notifications_empty">No new notifications</string>
+    <string name="bw_signals_notifications_empty_short">All clear</string>
+    <string name="bw_signals_notifications_clear_all">Clear all</string>
+    <string name="bw_signals_notifications_clear_all_description">Clear all notifications</string>
+    <string name="bw_signals_notifications_app_time">%1$s · %2$s</string>
+    <string name="bw_signals_notifications_open_app">Open %1$s</string>
+    <plurals name="bw_signals_notifications_apps">
+        <item quantity="one">%d app</item>
+        <item quantity="other">%d apps</item>
+    </plurals>
+    <plurals name="bw_signals_notifications_count_spoken">
+        <item quantity="one">%d notification</item>
+        <item quantity="other">%d notifications</item>
+    </plurals>
+    <!-- "7 notifications from 4 apps, newest from Ahmed on WhatsApp" -->
+    <string name="bw_signals_notifications_description">%1$s from %2$s, newest from %3$s on %4$s</string>
+    <string name="bw_signals_notifications_description_empty">Notifications, nothing new</string>
+    <string name="bw_signals_notifications_description_denied">Notifications. Allow notification access to see them here</string>
+
+    <!-- Command widget. -->
+    <string name="bw_signals_shell_field_command">Command</string>
+    <string name="bw_signals_shell_field_interval">Minutes between runs (0 runs it only when you tap)</string>
+    <string name="bw_signals_shell_field_title">Label (optional)</string>
+    <string name="bw_signals_shell_run">Run now</string>
+    <string name="bw_signals_shell_exit">exit %1$d</string>
+    <string name="bw_signals_shell_timed_out">timed out</string>
+    <string name="bw_signals_shell_failed">couldn\'t start</string>
+    <string name="bw_signals_shell_not_run">not run yet</string>
+    <string name="bw_signals_shell_running">running…</string>
+    <string name="bw_signals_shell_manual">on tap</string>
+    <string name="bw_signals_shell_status_duration">%1$s · %2$s</string>
+    <string name="bw_signals_shell_ago_every">%1$s · %2$s</string>
+    <!-- "Command uptime, exit 0, run 4 minutes ago" -->
+    <string name="bw_signals_shell_description">Command %1$s, %2$s, run %3$s</string>
+    <string name="bw_signals_shell_description_running">Command %1$s, running</string>
+    <string name="bw_signals_shell_description_none">Command %1$s, not run yet</string>
+</resources>
