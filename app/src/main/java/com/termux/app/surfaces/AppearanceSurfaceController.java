@@ -158,6 +158,15 @@ public final class AppearanceSurfaceController {
             return null;
         }
 
+        /**
+         * Runs {@code ready} once the page can draw what it opens on (its cards sized, the
+         * centred one's picture in), so it is never revealed empty. At once by default. The
+         * surface reveals it after {@link #OVERVIEW_READY_MS} whether or not it has run.
+         */
+        default void whenReady(@NonNull Runnable ready) {
+            ready.run();
+        }
+
         /** Whether the page holds a choice nothing has applied yet: what Done would set. */
         default boolean hasPendingChanges() {
             return false;
@@ -346,6 +355,8 @@ public final class AppearanceSurfaceController {
     static final long PAGE_MS = 260L;
     /** The host fading in on open and out on close. */
     static final long FADE_MS = 180L;
+    /** The longest the cover waits for the Overview's cards before the page fades in anyway. */
+    static final long OVERVIEW_READY_MS = 500L;
     /** How far the rows travel down as they fade. */
     private static final float AWAY_DP = 72f;
     /** The pager's cards fade out this much faster than the page's background. */
@@ -421,6 +432,13 @@ public final class AppearanceSurfaceController {
      */
     private boolean mLeaveRemembered;
     @Nullable private PageId mQueued;
+    /**
+     * The Overview has stood on screen at least once this session (its reveal ended, or a hop
+     * came back to it). Until then it is still loading or waiting for its cards, and a page
+     * change waits its turn: a hop from a page that never showed would leave the cover over the
+     * editor's frame.
+     */
+    private boolean mOverviewStanding;
     private final List<Animator> mRunning = new ArrayList<>();
 
     public AppearanceSurfaceController(@NonNull Host host, @NonNull Editor editor) {
@@ -553,17 +571,45 @@ public final class AppearanceSurfaceController {
                 // The page carries its own colorSurface; the host goes clear again so the
                 // editor pages' frame can show through it later.
                 view.setBackground(null);
+                mOverviewStanding = true;
                 if (mQueued != null) {
                     PageId queued = mQueued;
                     mQueued = null;
                     go(queued);
                 }
             };
-            if (cover)
-                fadePageIn(overview.root(), settled);
-            else
+            if (cover) {
+                // Laid out but not drawn until its cards can draw: the first layout pass binds
+                // them before they are sized, and fading in then showed an empty page.
+                final View page = overview.root();
+                page.setVisibility(View.INVISIBLE);
+                whenOverviewReady(overview, token, () -> {
+                    page.setVisibility(View.VISIBLE);
+                    fadePageIn(page, settled);
+                });
+            } else {
                 fadeHost(1f, settled);
+            }
         });
+    }
+
+    /**
+     * Runs {@code reveal} once {@code overview} can draw, or after {@link #OVERVIEW_READY_MS}
+     * whatever it says: a page that never answers is shown as it is, never held off screen.
+     */
+    private void whenOverviewReady(@NonNull OverviewPage overview, int token,
+                                   @NonNull Runnable reveal) {
+        final boolean[] ran = {false};
+        Runnable once = () -> {
+            if (ran[0] || !mOpen || token != mToken)
+                return;
+            ran[0] = true;
+            reveal.run();
+        };
+        FrameLayout view = mView;
+        if (view != null)
+            view.postDelayed(once, OVERVIEW_READY_MS);
+        overview.whenReady(once);
     }
 
     @NonNull
@@ -794,7 +840,7 @@ public final class AppearanceSurfaceController {
     private void go(@NonNull PageId target) {
         if (!mOpen || mCommitting)
             return;
-        if (mTransitioning || (mOverview == null && !mDirect && mShown == PageId.OVERVIEW)) {
+        if (mTransitioning || (!mOverviewStanding && !mDirect && mShown == PageId.OVERVIEW)) {
             mQueued = target;
             return;
         }
@@ -1035,6 +1081,7 @@ public final class AppearanceSurfaceController {
             if (--pending[0] > 0 || !mOpen || token != mToken)
                 return;
             mShown = PageId.OVERVIEW;
+            mOverviewStanding = true;
             mTransitioning = false;
             AppearanceEditorPage bar = mEditorPage;
             if (bar != null)
@@ -1168,6 +1215,7 @@ public final class AppearanceSurfaceController {
         mToken++;
         mTransitioning = false;
         mQueued = null;
+        mOverviewStanding = false;
         for (Animator a : new ArrayList<>(mRunning))
             a.cancel();
         mRunning.clear();

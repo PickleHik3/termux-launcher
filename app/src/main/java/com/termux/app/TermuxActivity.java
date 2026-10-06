@@ -16981,6 +16981,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     }
                     @Override public void setBarVisible(boolean visible) { shell.setBarVisible(visible); }
                     @Nullable @Override public String centredSlotName() { return picker.centredSlot().name(); }
+                    @Override public void whenReady(@NonNull Runnable ready) { picker.whenReady(ready); }
                     @Override public boolean hasPendingChanges() { return picker.hasPendingChanges(); }
                     @Override public void commit(@NonNull Runnable done, @NonNull Runnable failed) {
                         picker.commit(done, failed);
