@@ -13,6 +13,8 @@ public class CursorTrailParticlesTest {
 
     private static final float CELL_W = 10f;
     private static final float CELL_H = 20f;
+    private static final int[] MODES = {
+        CursorTrailParticles.MODE_TORPEDO, CursorTrailParticles.MODE_PIXIEDUST};
 
     /** A long horizontal move, a hundred cells over: lots of particles. */
     private static void recordLongMove(CursorTrailParticles p, long atMs) {
@@ -26,7 +28,7 @@ public class CursorTrailParticlesTest {
     @Test
     public void nothingBeforeAnyMove() {
         CursorTrailParticles p = new CursorTrailParticles();
-        assertEquals(0, p.collect(5_000L, CursorTrailParticles.MODE_RAILGUN, buf()));
+        assertEquals(0, p.collect(5_000L, CursorTrailParticles.MODE_PIXIEDUST, buf()));
         assertFalse(p.alive(5_000L));
     }
 
@@ -35,7 +37,7 @@ public class CursorTrailParticlesTest {
         CursorTrailParticles p = new CursorTrailParticles();
         recordLongMove(p, 2_000L);
         assertTrue(p.alive(2_100L));
-        for (int mode = 0; mode < 3; mode++) {
+        for (int mode : MODES) {
             int n = p.collect(2_100L, mode, buf());
             assertTrue("mode " + mode, n > 0);
             assertTrue(n <= CursorTrailParticles.MAX_PARTICLES);
@@ -74,7 +76,7 @@ public class CursorTrailParticlesTest {
         float[] out = buf();
         for (long now = 2_000L + CursorTrailParticles.MAX_AGE_MS; now < 60_000L; now += 530L) {
             assertFalse("alive at " + now, p.alive(now));
-            for (int mode = 0; mode < 3; mode++) assertEquals(0, p.collect(now, mode, out));
+            for (int mode : MODES) assertEquals(0, p.collect(now, mode, out));
         }
     }
 
@@ -99,7 +101,7 @@ public class CursorTrailParticlesTest {
         CursorTrailParticles p = new CursorTrailParticles();
         for (int i = 0; i < 12; i++) recordLongMove(p, 2_000L + i * 10L);
         assertEquals(CursorTrailParticles.MAX_MOVES, p.moveCount());
-        int n = p.collect(2_150L, CursorTrailParticles.MODE_RAILGUN, buf());
+        int n = p.collect(2_150L, CursorTrailParticles.MODE_PIXIEDUST, buf());
         assertTrue(n <= CursorTrailParticles.MAX_MOVES * CursorTrailParticles.MAX_PARTICLES);
         assertTrue(n > CursorTrailParticles.MAX_PARTICLES);
     }
@@ -117,25 +119,6 @@ public class CursorTrailParticlesTest {
         float mean = sum / n;
         float midpoint = (CELL_W / 2f + 1000f + CELL_W / 2f) / 2f;
         assertTrue("mean x " + mean + " should be left of " + midpoint, mean < midpoint);
-    }
-
-    /**
-     * Railgun fires sideways off the path. In kitty's y-up space the first particles of a
-     * rightward move leave along +perp, which is up the screen; the port must not mirror that.
-     */
-    @Test
-    public void railgunFiresItsFirstParticlesUpForARightwardMove() {
-        CursorTrailParticles p = new CursorTrailParticles();
-        // One line height long, so the spiral turns at most 1.5 rad along it.
-        p.record(0f, 100f, CELL_W, 100f + CELL_H, 2 * CELL_W, 100f, 3 * CELL_W, 100f + CELL_H,
-            2_000L);
-        float[] out = buf();
-        int n = p.collect(2_120L, CursorTrailParticles.MODE_RAILGUN, out);
-        assertTrue(n > 0);
-        float pathY = 100f + CELL_H / 2f;
-        int above = 0;
-        for (int i = 0; i < n; i++) if (out[i * 4 + 1] < pathY) above++;
-        assertTrue(above + " of " + n + " above the path", above * 2 > n);
     }
 
     /** Pixiedust falls, and y is down: the average y grows as the dust ages. */
@@ -164,8 +147,8 @@ public class CursorTrailParticlesTest {
         recordLongMove(a, 3_250L);
         recordLongMove(b, 3_250L);
         float[] oa = buf(), ob = buf();
-        int na = a.collect(3_400L, CursorTrailParticles.MODE_RAILGUN, oa);
-        int nb = b.collect(3_400L, CursorTrailParticles.MODE_RAILGUN, ob);
+        int na = a.collect(3_400L, CursorTrailParticles.MODE_PIXIEDUST, oa);
+        int nb = b.collect(3_400L, CursorTrailParticles.MODE_PIXIEDUST, ob);
         assertEquals(na, nb);
         assertArrayEquals(oa, ob, 0f);
     }

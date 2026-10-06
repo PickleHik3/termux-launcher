@@ -83,6 +83,7 @@ public final class PaneMotionOverlayView extends View {
     private CursorTrailStyle mCursorTrailStyle = CursorTrailStyle.DEFAULT;
     private final CursorTrailParticles mParticles = new CursorTrailParticles();
     private final CursorTrailMotionBlur mMotionBlur = new CursorTrailMotionBlur();
+    private final CursorTrailRailgun mRailgun = new CursorTrailRailgun();
     private final CursorTrailComet mComet = new CursorTrailComet();
     private final float[] mParticleBuf = new float[CursorTrailParticles.OUT_SIZE];
     private boolean mParticlesWereAlive;
@@ -207,6 +208,7 @@ public final class PaneMotionOverlayView extends View {
     private void resetStyleState() {
         mParticles.reset();
         mMotionBlur.reset();
+        mRailgun.reset();
         mComet.reset();
         mParticlesWereAlive = false;
         mEffectWasAlive = false;
@@ -361,14 +363,14 @@ public final class PaneMotionOverlayView extends View {
     private CursorTrailEffect effectFor(@NonNull CursorTrailStyle style) {
         switch (style) {
             case MOTION_BLUR: return mMotionBlur;
+            case RAILGUN: return mRailgun;
             case COMET: return mComet;
             default: return null;
         }
     }
 
     private static boolean isParticleStyle(@NonNull CursorTrailStyle style) {
-        return style == CursorTrailStyle.RAILGUN || style == CursorTrailStyle.TORPEDO
-            || style == CursorTrailStyle.PIXIEDUST;
+        return style == CursorTrailStyle.TORPEDO || style == CursorTrailStyle.PIXIEDUST;
     }
 
     /** Drop everything in flight, for a re-render that invalidates the coordinates we captured. */
@@ -459,8 +461,7 @@ public final class PaneMotionOverlayView extends View {
 
     private static int particleMode(@NonNull CursorTrailStyle style) {
         if (style == CursorTrailStyle.TORPEDO) return CursorTrailParticles.MODE_TORPEDO;
-        if (style == CursorTrailStyle.PIXIEDUST) return CursorTrailParticles.MODE_PIXIEDUST;
-        return CursorTrailParticles.MODE_RAILGUN;
+        return CursorTrailParticles.MODE_PIXIEDUST;
     }
 
     /** Saves and clips to the focused pane's card; false (nothing saved) when there is none. */

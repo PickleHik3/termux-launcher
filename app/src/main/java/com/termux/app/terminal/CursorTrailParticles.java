@@ -10,7 +10,7 @@
 package com.termux.app.terminal;
 
 /**
- * The railgun, torpedo and pixiedust particle trails. kitty evaluates every particle for every
+ * The torpedo and pixiedust particle trails. kitty evaluates every particle for every
  * pixel in a fragment shader; here each particle is computed once and the overlay draws it as a
  * circle. Pure JVM, no Android types, so it is unit tested directly.
  *
@@ -18,11 +18,10 @@ package com.termux.app.terminal;
  * with the time each was made, and a particle's age is simply now minus that time: a move keeps
  * its own age however long the overlay sleeps between frames, and an old move can only ever get
  * older, so nothing replays. The maths runs in kitty's y-up space (y is negated on the way in and
- * out) so that railgun's spiral turns the way kitty's does.
+ * out) so that every particle flies and falls the way kitty's do.
  */
 public final class CursorTrailParticles {
 
-    public static final int MODE_RAILGUN = 0;
     public static final int MODE_TORPEDO = 1;
     public static final int MODE_PIXIEDUST = 2;
 
@@ -40,7 +39,6 @@ public final class CursorTrailParticles {
     static final float SPEED = 20.0f;
     static final float DRAG = 2.5f;
     static final float GRAVITY = 8.0f;
-    static final float RAILGUN_PHASE = 1.5f;
     static final float TORPEDO_SPREAD = 1.0f;
     static final float OPACITY = 1.0f;
     static final float TAU = 6.28318530718f;
@@ -134,7 +132,6 @@ public final class CursorTrailParticles {
         float pathLen = length(pathX, pathY);
         float dirX = pathLen > 0f ? pathX / pathLen : 1f;
         float dirY = pathLen > 0f ? pathY / pathLen : 0f;
-        float perpX = -dirY, perpY = dirX;
         float speed = SPEED * scale;
         float radius = Math.max(PARTICLE_SIZE * scale, 0.75f);
         int count = (int) Math.ceil(lines * PARTICLE_DENSITY);
@@ -155,7 +152,7 @@ public final class CursorTrailParticles {
                 float k = lerp(0.4f, 1.0f, mR[3]);
                 velX = rotX(-dirX, -dirY, angle) * k;
                 velY = rotY(-dirX, -dirY, angle) * k;
-            } else if (mode == MODE_PIXIEDUST) {
+            } else {
                 float angle = mR[2] * TAU;
                 float k = lerp(0.2f, 1.0f, mR[3]);
                 velX = rotX(0.4f, 0f, angle) * k;
@@ -163,11 +160,6 @@ public final class CursorTrailParticles {
                 fallY = -0.5f * GRAVITY * scale * t * t;
                 // Glitter
                 brightness = 0.55f + 0.45f * (float) Math.sin(t * 40.0f + mR2[2] * TAU);
-            } else {
-                float angle = u * lines * RAILGUN_PHASE;
-                float k = lerp(0.7f, 1.0f, mR[3]);
-                velX = rotX(perpX, perpY, angle) * k;
-                velY = rotY(perpX, perpY, angle) * k;
             }
             float dist = speed * dragDistance(t);
             float fade = 1f - t / life;
