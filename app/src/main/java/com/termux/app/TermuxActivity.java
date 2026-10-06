@@ -1577,14 +1577,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mAppDrawerGeometryFreezePending;
     @Nullable private WallpaperManager.OnColorsChangedListener mWallpaperColorsChangedListener;
     private final Handler mAccessoryRenderHandler = new Handler(Looper.getMainLooper());
-    /** A pause that a resume ends inside the same message: see {@link TransientPauseTracker}. */
-    private final TransientPauseTracker mTransientPause =
-        new TransientPauseTracker(runnable -> mAccessoryRenderHandler.postAtFrontOfQueue(runnable));
+    /** A pause that a resume ends inside the same message: see {@link SameMessageMark}. */
+    private final SameMessageMark mPausedThisMessage =
+        new SameMessageMark(runnable -> mAccessoryRenderHandler.postAtFrontOfQueue(runnable));
+    /** An onCreate whose launch transaction is still running; its onResume follows in it. */
+    private final SameMessageMark mCreatedThisMessage =
+        new SameMessageMark(runnable -> mAccessoryRenderHandler.postAtFrontOfQueue(runnable));
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         Logger.logDebug(LOG_TAG, "onCreate");
         mIsOnResumeAfterOnCreate = true;
+        mCreatedThisMessage.mark();
         if (savedInstanceState != null) {
             mIsActivityRecreated = savedInstanceState.getBoolean(ARG_ACTIVITY_RECREATED, false);
             mPendingPaneLayoutState = savedInstanceState.getBundle(ARG_PANE_LAYOUT);
@@ -2370,8 +2374,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // changed while we were away" are skipped for it; everything that pairs with onPause,
         // and the prefix checks a shell can change without a broadcast, still run. A Settings
         // reload waiting for this resume always takes the full path.
-        boolean transientPause = mTransientPause.resumesTransientPause()
+        boolean transientPause = mPausedThisMessage.isMarked()
             && !sPendingStyleReloadOnNextResume && !sPendingAppDrawerReloadOnNextResume;
+        // The launch's own resume: the keyboard was built from the preferences moments ago in
+        // this same message, tap model and layout ring included, so re-reading them all (17 ms
+        // on a cold start, the tap model file a second time) has nothing to find.
+        boolean keyboardJustBuilt = mCreatedThisMessage.isMarked();
         // Also here, not only in onStart: a wallpaper picker shown over this activity never stops
         // it, so the arrival back from one is an onResume on its own.
         refreshWallpaperPictureOnArrival();
@@ -2404,7 +2412,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!transientPause) initializeInAppKeyboard(null);
         syncDisplayKeyboardRoute();
         if (mInAppKeyboard != null) {
-            if (!transientPause) mInAppKeyboard.onPreferencesReloaded();
+            if (!transientPause && !keyboardJustBuilt) mInAppKeyboard.onPreferencesReloaded();
             mInAppKeyboard.onResume();
             if (mInAppKeyboard.isExternalTextInputActive())
                 onSystemImeRequested();
@@ -2755,7 +2763,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Same rule for the find strip: it holds the interceptor and paints over a pane, and both
         // must be handed back before this activity stops being the one on screen.
         if (mFindCoordinator != null) mFindCoordinator.cancel();
-        mTransientPause.onPause();
+        mPausedThisMessage.mark();
         super.onPause();
     }
 
