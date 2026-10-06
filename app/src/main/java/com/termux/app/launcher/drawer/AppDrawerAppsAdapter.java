@@ -9,6 +9,7 @@ import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.app.SuggestionBarView;
+import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
 import java.util.ArrayList;
@@ -18,9 +19,9 @@ import java.util.List;
  * The drawer grid's cells: an icon over a single-line label, bound to one {@link LauncherAppEntry}.
  *
  * <p>Every visual and behavioural decision is delegated to the dock rather than reproduced here.
- * The artwork comes from {@link SuggestionBarView#getRenderedIcon} — the same rendered, byte-budgeted
+ * The artwork comes from {@link SuggestionBarView#bindRenderedIcon} — the same rendered, byte-budgeted
  * cache the dock draws from, so a drawer cell and a dock icon of the same pixel size are literally
- * one drawable — the tint from {@link SuggestionBarView#applyIconColorFilter}, the label colour from
+ * one drawable, rendered on the worker and faded in when it is not held yet — the tint from {@link SuggestionBarView#applyIconColorFilter}, the label colour from
  * {@link SuggestionBarView#getLauncherTextColor()}, the tap from
  * {@link SuggestionBarView#launchEntryFromDrawer} and the long press from
  * {@link SuggestionBarView#bindDrawerAppContextLongPress}. A cell that owned any of those would be
@@ -78,6 +79,7 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
 
     public void setDock(@Nullable SuggestionBarView dock) {
         mDock = dock;
+        prefetchLeadingIcons();
         notifyDataSetChanged();
     }
 
@@ -108,6 +110,7 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
         mEntries = new ArrayList<>(entries);
         mItems = AppDrawerItemComposer.appsOnly(entries);
         mPositionLetters = index == null ? NO_LETTERS : index.copyPositionLetters();
+        prefetchLeadingIcons();
         notifyDataSetChanged();
     }
 
@@ -121,6 +124,7 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
         mEntries = new ArrayList<>();
         for (AppDrawerItem item : items) if (item.app != null) mEntries.add(item.app);
         mPositionLetters = index == null ? NO_LETTERS : index.copyPositionLetters();
+        prefetchLeadingIcons();
         notifyDataSetChanged();
     }
 
@@ -157,7 +161,21 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
      */
     public void setMetrics(@Nullable AppDrawerGridMetrics metrics) {
         mMetrics = metrics;
+        prefetchLeadingIcons();
         notifyDataSetChanged();
+    }
+
+    /**
+     * Renders the first screens' icons on the worker ahead of their binds, so the drawer's warm-up
+     * and a fresh list leave them in the cache and the cells bind them at once, without a tile.
+     */
+    private void prefetchLeadingIcons() {
+        SuggestionBarView dock = mDock;
+        AppDrawerGridMetrics metrics = mMetrics;
+        if (dock == null || metrics == null || metrics.iconPx <= 0f || mEntries.isEmpty()) return;
+        dock.prefetchRenderedIcons(
+            mEntries.subList(0, Math.min(mEntries.size(), AsyncIconBinder.MAX_PREFETCH)),
+            Math.max(1, Math.round(metrics.iconPx)));
     }
 
     @Nullable
