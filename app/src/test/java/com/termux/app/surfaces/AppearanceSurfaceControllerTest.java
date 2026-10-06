@@ -82,6 +82,8 @@ public class AppearanceSurfaceControllerTest {
         @Override public void setMode(@NonNull EditorMode mode) {
             calls.add("mode " + mode.name().toLowerCase(java.util.Locale.ROOT));
             this.mode = mode;
+            // As the real editor does: the bar's pill follows the mode.
+            if (pageListener != null) pageListener.onModeChanged(mode);
         }
 
         @Override public void requestLeave(@NonNull Runnable proceed) {
