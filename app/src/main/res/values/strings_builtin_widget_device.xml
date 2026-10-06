@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Battery widget. -->
+    <string name="bw_device_battery_caption">Battery</string>
+    <string name="bw_device_battery_path">battery</string>
+    <string name="bw_device_charging">Charging</string>
+    <string name="bw_device_charged">Charged</string>
+    <string name="bw_device_plugged">Plugged in</string>
+    <string name="bw_device_discharging">Discharging</string>
+    <string name="bw_device_low">Low battery</string>
+    <string name="bw_device_no_battery">No battery reading</string>
+    <!-- %1$s is a remaining time such as "42 min". -->
+    <string name="bw_device_full_in">full in %1$s</string>
+    <!-- Joins two short readings: "Charging · 42 min", "31.4°C · 18 W". -->
+    <string name="bw_device_join">%1$s · %2$s</string>
+    <string name="bw_device_temp">Temp</string>
+    <string name="bw_device_power">Power</string>
+    <string name="bw_device_phone">Phone</string>
+    <string name="bw_device_temperature">Temperature</string>
+    <string name="bw_device_last_day">last 24 h</string>
+    <string name="bw_device_now">now</string>
+    <string name="bw_device_desc_battery">Battery %1$d percent</string>
+    <string name="bw_device_desc_battery_unknown">Battery level unavailable</string>
+    <string name="bw_device_desc_charging">charging</string>
+    <string name="bw_device_desc_charged">fully charged</string>
+    <string name="bw_device_desc_plugged">plugged in</string>
+    <string name="bw_device_desc_discharging">on battery</string>
+    <plurals name="bw_device_desc_full_in">
+        <item quantity="one">full in %d minute</item>
+        <item quantity="other">full in %d minutes</item>
+    </plurals>
+    <!-- Separates the parts of a spoken widget description. -->
+    <string name="bw_device_desc_separator">, </string>
+
+    <!-- System widget. -->
+    <string name="bw_device_system_caption">System</string>
+    <string name="bw_device_system_path">system</string>
+    <string name="bw_device_cpu_short">cpu</string>
+    <string name="bw_device_ram_short">ram</string>
+    <string name="bw_device_temp_short">temp</string>
+    <string name="bw_device_disk_short">disk</string>
+    <string name="bw_device_cpu">CPU</string>
+    <string name="bw_device_ram">RAM</string>
+    <string name="bw_device_storage">Storage</string>
+    <string name="bw_device_disk">Disk</string>
+    <!-- %1$s is how long the phone has been on, such as "3d 4h". -->
+    <string name="bw_device_up">up %1$s</string>
+    <plurals name="bw_device_cores">
+        <item quantity="one">%d core</item>
+        <item quantity="other">%d cores</item>
+    </plurals>
+    <string name="bw_device_desc_cpu">CPU %1$d percent</string>
+    <string name="bw_device_desc_cpu_unknown">CPU unavailable</string>
+    <string name="bw_device_desc_memory">memory %1$d percent</string>
+    <string name="bw_device_desc_degrees">%1$d degrees</string>
+</resources>
