@@ -556,6 +556,13 @@ public final class AppearanceSurfaceController {
                 com.google.android.material.R.attr.colorSurface, Color.BLACK));
             view.setAlpha(1f);
             if (mScrim != null) mScrim.setAlpha(1f);
+            // The shared bar stands on the cover from its first frame, exactly where the
+            // Overview's own will: a bare colorSurface screen while the page loads read as a
+            // black frame between Settings and the page.
+            AppearanceEditorPage bar = ensureEditorPage();
+            bar.showWallpaper();
+            bar.root().setVisibility(View.VISIBLE);
+            applyEditorPage(1f, 1f);
         } else {
             view.setAlpha(0f);
         }
@@ -565,12 +572,18 @@ public final class AppearanceSurfaceController {
                 return;
             }
             mOverview = overview;
-            addPage(overview.root());
+            // Under the editor's bar, which stands over the Overview's through every hop.
+            addPage(overview.root(), 0);
             overview.onShown();
             Runnable settled = () -> {
                 // The page carries its own colorSurface; the host goes clear again so the
                 // editor pages' frame can show through it later.
                 view.setBackground(null);
+                // The page's own bar takes the cover's place, as at the end of a hop back.
+                AppearanceEditorPage bar = mEditorPage;
+                if (bar != null && mShown == PageId.OVERVIEW)
+                    bar.root().setVisibility(View.INVISIBLE);
+                overview.setBarVisible(true);
                 mOverviewStanding = true;
                 if (mQueued != null) {
                     PageId queued = mQueued;
@@ -583,6 +596,7 @@ public final class AppearanceSurfaceController {
                 // them before they are sized, and fading in then showed an empty page.
                 final View page = overview.root();
                 page.setVisibility(View.INVISIBLE);
+                overview.setBarVisible(false);
                 whenOverviewReady(overview, token, () -> {
                     page.setVisibility(View.VISIBLE);
                     fadePageIn(page, settled);
@@ -744,10 +758,17 @@ public final class AppearanceSurfaceController {
                         if (!mDirect)
                             go(PageId.OVERVIEW);
                     } else {
-                        mLeaveRemembered = false;
-                        mEditor.setMode(segment == AppearanceEditorPage.Segment.LAYOUT ? EditorMode.LAYOUT
+                        EditorMode mode = segment == AppearanceEditorPage.Segment.LAYOUT ? EditorMode.LAYOUT
                             : segment == AppearanceEditorPage.Segment.ICON_PACK ? EditorMode.ICONS
-                            : EditorMode.LOOK);
+                            : EditorMode.LOOK;
+                        if (!isEditorPage(shownPage())) {
+                            // The bar on the cover, before the Overview stands: the page waits
+                            // its turn and is reached by the hop, as from the Overview's pill.
+                            go(pageOf(mode));
+                            return;
+                        }
+                        mLeaveRemembered = false;
+                        mEditor.setMode(mode);
                     }
                 }
             });
@@ -806,11 +827,16 @@ public final class AppearanceSurfaceController {
     }
 
     private void addPage(@NonNull View root) {
+        addPage(root, -1);
+    }
+
+    /** Adds {@code root} to the host at {@code index} (-1 on top). */
+    private void addPage(@NonNull View root, int index) {
         FrameLayout view = mView;
         if (view == null)
             return;
         if (root.getParent() != view)
-            view.addView(root, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            view.addView(root, index, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT));
         ViewCompat.requestApplyInsets(view);
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(view);

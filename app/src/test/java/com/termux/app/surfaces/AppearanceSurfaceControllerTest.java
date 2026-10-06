@@ -319,10 +319,49 @@ public class AppearanceSurfaceControllerTest {
         View host = content.findViewById(R.id.appearance_surface_host);
         assertNotNull("one host view in the activity's content", host);
         assertSame("the Overview is its page", mHost.overview.root(), ((ViewGroup) host).getChildAt(0));
+        View coverBar = ((ViewGroup) host).getChildAt(((ViewGroup) host).getChildCount() - 1);
+        assertEquals("the cover's bar gave way to the page's own", View.INVISIBLE, coverBar.getVisibility());
+        assertNull("the cover is lifted", host.getBackground());
         assertEquals(1, mEditor.count("begin"));
         assertEquals(1, mHost.overview.page.shown);
         assertEquals("the editor's Done is the surface's", true, mEditor.onDone != null);
         assertFalse("nothing is presented before a hop", mEditor.presented);
+    }
+
+    @Test
+    public void theCoverCarriesTheSharedBarWhileTheOverviewLoads() {
+        // Waydroid: between Settings and the Overview one frame was bare colorSurface, read as
+        // black. The bar is on the cover from its first frame; the page arrives under it.
+        java.util.concurrent.atomic.AtomicReference<Consumer<AppearanceSurfaceController.OverviewPage>> pending =
+            new java.util.concurrent.atomic.AtomicReference<>();
+        FakeHost slow = new FakeHost(mActivity) {
+            @Override public void createOverview(@NonNull AppearanceSurfaceController.Navigator navigator,
+                                                 @NonNull Consumer<AppearanceSurfaceController.OverviewPage> ready) {
+                mNavigator = navigator;
+                pending.set(ready);
+            }
+        };
+        AppearanceSurfaceController surface = new AppearanceSurfaceController(slow, mEditor);
+        surface.open(PageId.OVERVIEW);
+        ViewGroup host = mActivity.findViewById(R.id.appearance_surface_host);
+        assertNotNull("covered at once", host.getBackground());
+        View bar = host.getChildAt(host.getChildCount() - 1);
+        assertEquals(View.VISIBLE, bar.getVisibility());
+        com.google.android.material.button.MaterialButton wallpaper =
+            bar.findViewById(R.id.appearance_page_mode_wallpaper);
+        assertTrue("the pill on Wallpaper", wallpaper.isChecked());
+
+        bar.findViewById(R.id.appearance_page_mode_look).performClick();
+        idle();
+        assertEquals("Look waits for the Overview", 0, mEditor.count("present look"));
+        assertTrue("and the pill stays where the page is", wallpaper.isChecked());
+
+        FakeOverview overview = new FakeOverview(mActivity);
+        pending.get().accept(overview);
+        assertSame("the page goes under the bar", overview.root(), host.getChildAt(0));
+        assertEquals("then the ordinary hop", 1, mEditor.count("present look"));
+        mEditor.settle();
+        assertEquals(PageId.LOOK, surface.shownPage());
     }
 
     @Test
