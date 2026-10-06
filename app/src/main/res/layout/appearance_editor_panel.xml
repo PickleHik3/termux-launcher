@@ -237,6 +237,7 @@
                         android:maxLines="1"
                         android:text="@string/appearance_editor_trail_title"
                         android:textAppearance="?attr/textAppearanceTitleSmall"
+                        android:textStyle="bold"
                         android:textColor="?attr/colorOnSurface" />
 
                     <LinearLayout
@@ -301,6 +302,7 @@
                         android:maxLines="1"
                         android:text="@string/appearance_editor_effect_title"
                         android:textAppearance="?attr/textAppearanceTitleSmall"
+                        android:textStyle="bold"
                         android:textColor="?attr/colorOnSurface" />
 
                     <LinearLayout
