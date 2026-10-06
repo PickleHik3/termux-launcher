@@ -36,14 +36,14 @@ public class TermuxAppSharedPreferencesBuildTest {
     }
 
     @Test
-    public void anotherCallerGetsItsOwnPackageContextOverTheSameStore() {
+    public void anotherCallerOfTheSameApplicationSharesThePackageContext() {
         Context app = ApplicationProvider.getApplicationContext();
         Context other = new ContextWrapper(app);
         TermuxAppSharedPreferences mine = TermuxAppSharedPreferences.build(app);
         TermuxAppSharedPreferences theirs = TermuxAppSharedPreferences.build(other);
         assertNotNull(mine);
         assertNotNull(theirs);
-        assertNotSame(mine.getContext(), theirs.getContext());
+        assertSame(mine.getContext(), theirs.getContext());
         assertSame(mine.getSharedPreferences(), theirs.getSharedPreferences());
     }
 

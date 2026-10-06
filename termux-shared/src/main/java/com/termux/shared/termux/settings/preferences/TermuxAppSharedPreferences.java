@@ -17,8 +17,6 @@ import com.termux.shared.data.DataUtils;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
-import java.util.WeakHashMap;
-
 public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     private int MIN_FONTSIZE;
@@ -43,29 +41,37 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     /**
-     * The {@link TermuxConstants#TERMUX_PACKAGE_NAME} package context made for each caller, so a
-     * {@link #build} does not create one per call: the dock, the chrome and every pane build a
-     * handle on each pass. Keyed by the caller, since a package context carries its caller's
-     * activity token and display, and weakly, so a finished activity is not kept alive by it. The
-     * preference lookups themselves still run on every build, so {@code MODE_MULTI_PROCESS} keeps
-     * re-checking the file exactly as before.
+     * The {@link TermuxConstants#TERMUX_PACKAGE_NAME} package context, made once from the
+     * application context and kept while that application is the one running, so a {@link #build}
+     * does not create one per call: the dock, the chrome and every pane build a handle on each
+     * pass. A handle only ever reads and writes preferences, so it needs neither the caller's
+     * activity token nor its display. It is keyed on the application, never on the caller: a
+     * package context reaches its application through its LoadedApk, so a per-caller
+     * {@code WeakHashMap} kept every caller alive through its own value, and the Robolectric suite,
+     * which starts a fresh application per test, retained one asset manager and its themes per
+     * test class until the heap ran out. The preference lookups themselves still run on every
+     * build, so {@code MODE_MULTI_PROCESS} keeps re-checking the file exactly as before.
      */
-    private static final WeakHashMap<Context, Context> sPackageContexts = new WeakHashMap<>();
+    @Nullable private static Context sPackageContextApp;
+    @Nullable private static Context sPackageContext;
 
-    /** The cached package context for {@code caller}, or null when it has none yet. */
+    @NonNull
+    private static Context applicationOf(@NonNull Context caller) {
+        Context app = caller.getApplicationContext();
+        return app != null ? app : caller;
+    }
+
+    /** The cached package context for {@code caller}'s application, or null when it has none yet. */
     @Nullable
-    private static Context cachedPackageContext(@NonNull Context caller) {
-        synchronized (sPackageContexts) {
-            return sPackageContexts.get(caller);
-        }
+    private static synchronized Context cachedPackageContext(@NonNull Context caller) {
+        return sPackageContextApp == applicationOf(caller) ? sPackageContext : null;
     }
 
     @Nullable
-    private static Context rememberPackageContext(@NonNull Context caller, @Nullable Context packageContext) {
+    private static synchronized Context rememberPackageContext(@NonNull Context caller, @Nullable Context packageContext) {
         if (packageContext == null) return null;
-        synchronized (sPackageContexts) {
-            sPackageContexts.put(caller, packageContext);
-        }
+        sPackageContextApp = applicationOf(caller);
+        sPackageContext = packageContext;
         return packageContext;
     }
 
@@ -81,7 +87,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         Context termuxPackageContext = cachedPackageContext(context);
         if (termuxPackageContext == null)
             termuxPackageContext = rememberPackageContext(context,
-                PackageUtils.getContextForPackage(context, TermuxConstants.TERMUX_PACKAGE_NAME));
+                PackageUtils.getContextForPackage(applicationOf(context), TermuxConstants.TERMUX_PACKAGE_NAME));
         if (termuxPackageContext == null)
             return null;
         else
@@ -101,7 +107,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         Context termuxPackageContext = cachedPackageContext(context);
         if (termuxPackageContext == null)
             termuxPackageContext = rememberPackageContext(context,
-                TermuxUtils.getContextForPackageOrExitApp(context, TermuxConstants.TERMUX_PACKAGE_NAME, exitAppOnError));
+                TermuxUtils.getContextForPackageOrExitApp(applicationOf(context), TermuxConstants.TERMUX_PACKAGE_NAME, exitAppOnError));
         if (termuxPackageContext == null)
             return null;
         else
