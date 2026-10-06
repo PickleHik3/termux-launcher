@@ -1392,6 +1392,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * from inside its measure or a layout callback; null when nothing is waiting.
      */
     @Nullable private Integer mPendingRootBottomMarginPx;
+    /** The system keyboard's bottom inset as last dispatched, 0 while it is down. */
+    private int mLastDispatchedImeBottomPx;
     private int mAppliedTerminalFlushPaddingPx;
     /** The dock's rows and the bottom status band as the last geometry pass laid them out. */
     private int mAppliedDockContentHeightPx;
@@ -1709,6 +1711,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (insetsSignature != mLastAppliedInsetsSignature) {
                 mLastAppliedInsetsSignature = insetsSignature;
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+            }
+            int imeBottomPx = insetsCompat.isVisible(Type.ime())
+                ? insetsCompat.getInsets(Type.ime()).bottom : 0;
+            if (imeBottomPx != mLastDispatchedImeBottomPx) {
+                mLastDispatchedImeBottomPx = imeBottomPx;
                 // Dispatched ahead of this traversal's measure: the grid is held from here, so
                 // the window resizing for a system keyboard reflows nothing until the geometry
                 // pass this books has laid the chrome out around it — one resize, not two.
