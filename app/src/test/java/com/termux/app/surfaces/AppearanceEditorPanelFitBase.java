@@ -86,19 +86,89 @@ public abstract class AppearanceEditorPanelFitBase {
                 assertLegendFits(slider, control);
             }
             for (AppearanceLooks.Door door : AppearanceLooks.doors(target)) {
-                MaterialButton button = doorView(door);
+                View button = doorView(door);
                 assertEquals(door.name(), View.VISIBLE, button.getVisibility());
                 assertTrue(door + " is a 48dp target: " + button.getHeight(),
                     button.getHeight() >= Math.round(48 * density));
-                if (door == AppearanceLooks.Door.KEYBOARD_THEME
-                    || door == AppearanceLooks.Door.CLOCK) {
-                    Layout layout = button.getLayout();
+                if (button instanceof MaterialButton) {
+                    Layout layout = ((MaterialButton) button).getLayout();
                     assertNotNull(layout);
-                    assertEquals("\"" + button.getText() + "\" is whole", 0,
+                    assertEquals("\"" + ((MaterialButton) button).getText() + "\" is whole", 0,
                         layout.getEllipsisCount(layout.getLineCount() - 1));
+                } else {
+                    assertPillLinesFit(door);
                 }
             }
+            View name = mPanel.view().findViewById(R.id.appearance_editor_row2_name);
+            if (target == AppearanceLooks.Target.TERMINAL) {
+                assertEquals("the terminal's pills own the heading row: no name", View.GONE,
+                    name.getVisibility());
+                assertPillsShareTheRow();
+            } else {
+                assertEquals(String.valueOf(target) + " keeps its name", View.VISIBLE,
+                    name.getVisibility());
+            }
         }
+    }
+
+    /**
+     * Below API 33 the terminal has no Terminal effect: Cursor trail alone takes the whole row,
+     * still with no name, and its lines fit.
+     */
+    @Test
+    public void theCursorTrailAloneTakesTheWholeRow() {
+        showControls(AppearanceLooks.Target.TERMINAL);
+        mPanel.setDoors(java.util.Collections.singletonList(AppearanceLooks.Door.TRAIL));
+        layOut(mPanel.measureFor(EditorMode.LOOK, mWidthPx));
+        assertFits();
+        View root = mPanel.view();
+        View head = root.findViewById(R.id.appearance_editor_row2_head);
+        View trail = root.findViewById(R.id.appearance_editor_trail);
+        assertEquals(View.GONE, root.findViewById(R.id.appearance_editor_effect).getVisibility());
+        assertEquals(View.GONE, root.findViewById(R.id.appearance_editor_row2_name).getVisibility());
+        assertEquals("from the content's start", 0, trail.getLeft());
+        assertEquals("to its end", head.getWidth(), trail.getRight(), 1);
+        assertPillLinesFit(AppearanceLooks.Door.TRAIL);
+    }
+
+    /** The terminal's two pills: one row, equal widths, the content's full width, 8dp apart. */
+    private void assertPillsShareTheRow() {
+        View root = mPanel.view();
+        View head = root.findViewById(R.id.appearance_editor_row2_head);
+        View trail = root.findViewById(R.id.appearance_editor_trail);
+        View effect = root.findViewById(R.id.appearance_editor_effect);
+        float density = root.getResources().getDisplayMetrics().density;
+        assertEquals("equal widths", trail.getWidth(), effect.getWidth(), 1);
+        assertEquals("one row", trail.getTop(), effect.getTop());
+        assertEquals("the row starts with Cursor trail", 0, trail.getLeft());
+        assertEquals("8dp between them", Math.round(8 * density), effect.getLeft() - trail.getRight(), 1);
+        assertEquals("the row ends with Terminal effect", head.getWidth(), effect.getRight(), 1);
+    }
+
+    /**
+     * A pill's heading is whole (never ellipsized) and each of its two lines is one line,
+     * inside the pill.
+     */
+    private void assertPillLinesFit(AppearanceLooks.Door door) {
+        View root = mPanel.view();
+        boolean trail = door == AppearanceLooks.Door.TRAIL;
+        View pill = doorView(door);
+        TextView title = root.findViewById(trail ? R.id.appearance_editor_trail_title
+            : R.id.appearance_editor_effect_title);
+        TextView value = root.findViewById(trail ? R.id.appearance_editor_trail_value
+            : R.id.appearance_editor_effect_value);
+        for (TextView line : new TextView[] {title, value}) {
+            Layout layout = line.getLayout();
+            assertNotNull(name(line), layout);
+            assertEquals(name(line) + " is one line", 1, layout.getLineCount());
+            assertTrue(name(line) + " fits its height", layout.getHeight()
+                + line.getTotalPaddingTop() + line.getTotalPaddingBottom() <= line.getHeight());
+        }
+        assertEquals("\"" + title.getText() + "\" is whole", 0, title.getLayout().getEllipsisCount(0));
+        assertTrue("the heading stands above the value",
+            ((View) value.getParent()).getTop() >= title.getBottom());
+        assertTrue(door + " is no taller than the heading row",
+            pill.getHeight() <= root.findViewById(R.id.appearance_editor_row2_head).getHeight());
     }
 
     /** The global set's six columns show six legends reading upward. */
@@ -418,7 +488,7 @@ public abstract class AppearanceEditorPanelFitBase {
         mPanel.setTerminalLooks("default", "none");
     }
 
-    private MaterialButton doorView(AppearanceLooks.Door door) {
+    private View doorView(AppearanceLooks.Door door) {
         View root = mPanel.view();
         switch (door) {
             case KEYBOARD_THEME: return root.findViewById(R.id.appearance_editor_door_keyboard_theme);
