@@ -24163,6 +24163,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (intent == null || !ACTION_PREFERRED_ACTIVITY_CHANGED.equals(intent.getAction()))
                     return;
                 mDefaultHomeApp = null;
+                if (mLauncherTransitionController != null) mLauncherTransitionController.invalidateDefaultHome();
                 syncRecentsVisibilityPolicy();
             }
         };
