@@ -79,6 +79,21 @@
     android:paddingBottom="16dp"
     app:layout_optimizationLevel="none">
 
+    <!-- ============================================================ Icons mode -->
+
+    <!-- Icons mode's one row: the pack tiles and "Pinned app icons only", lent by the activity
+         (AppearanceEditorPanel.setIconsContent). GONE in the other modes; the sheet is as tall
+         as this content (plus the bottom padding and the navigation inset). -->
+    <FrameLayout
+        android:id="@+id/appearance_editor_icons_slot"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:paddingTop="8dp"
+        android:visibility="gone"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
     <!-- ============================================================ Appearance mode -->
 
     <com.google.android.material.slider.Slider

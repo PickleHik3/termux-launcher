@@ -75,9 +75,9 @@ public class AppearanceEditorPageTest {
     public void titleFollowsTheMode() {
         TextView title = mPage.root().findViewById(R.id.appearance_page_title);
         assertEquals("Look", title.getText().toString());
-        mPage.setLayoutMode(true);
+        mPage.setMode(EditorMode.LAYOUT);
         assertEquals("Layout", title.getText().toString());
-        mPage.setLayoutMode(false);
+        mPage.setMode(EditorMode.LOOK);
         assertEquals("Look", mPage.title().toString());
     }
 
@@ -98,7 +98,7 @@ public class AppearanceEditorPageTest {
         idle();
         assertEquals(AppearanceEditorPage.Segment.WALLPAPER, mSegments.get(1));
         assertTrue("a tap the surface did not follow puts the pill back", checked(look));
-        mPage.setLayoutMode(true);
+        mPage.setMode(EditorMode.LAYOUT);
         assertTrue(checked(layout));
         assertEquals(2, mSegments.size());
     }
@@ -108,7 +108,7 @@ public class AppearanceEditorPageTest {
         View wallpaper = mPage.root().findViewById(R.id.appearance_page_mode_wallpaper);
         mPage.showWallpaper();
         assertTrue(checked(wallpaper));
-        mPage.setLayoutMode(false);
+        mPage.setMode(EditorMode.LOOK);
         assertTrue(checked(mPage.root().findViewById(R.id.appearance_page_mode_look)));
     }
 
@@ -144,7 +144,7 @@ public class AppearanceEditorPageTest {
             View.MeasureSpec.makeMeasureSpec(2000, View.MeasureSpec.AT_MOST));
         root.layout(0, 0, root.getMeasuredWidth(), root.getMeasuredHeight());
         for (AppearanceEditorPage.Segment s : AppearanceEditorPage.Segment.values()) {
-            mPage.setLayoutMode(s == AppearanceEditorPage.Segment.LAYOUT);
+            mPage.setMode(s == AppearanceEditorPage.Segment.LAYOUT ? EditorMode.LAYOUT : s == AppearanceEditorPage.Segment.ICON_PACK ? EditorMode.ICONS : EditorMode.LOOK);
             if (s == AppearanceEditorPage.Segment.WALLPAPER)
                 mPage.showWallpaper();
             root.measure(View.MeasureSpec.makeMeasureSpec((int) (360 * density), View.MeasureSpec.EXACTLY),
@@ -220,26 +220,33 @@ public class AppearanceEditorPageTest {
     }
 
     @Test
-    public void theIconPackPageWearsThePillOnIconPackWithBackAndDoneAndGoesWhereTheSegmentsSay() {
-        RecordingNavigator navigator = new RecordingNavigator();
-        AppearanceEditorPage icons = AppearanceEditorPage.icons(mThemed, navigator, "Icon pack",
-            new FrameLayout(mThemed));
-        View root = icons.root();
-        assertTrue(icons.isModeShown());
-        assertFalse("the pill replaces the title", icons.isTitleShown());
-        assertFalse("no Undo", icons.isUndoShown());
-        assertTrue(icons.isDoneShown());
-        assertTrue(checked(root.findViewById(R.id.appearance_page_mode_icon_pack)));
-        assertEquals("Icon pack", ((TextView) root.findViewById(R.id.appearance_page_mode_icon_pack)).getText().toString());
-        root.findViewById(R.id.appearance_page_mode_wallpaper).performClick();
+    public void theEditorsIconsModeSelectsTheIconPackSegmentAndAsksTheSurfaceForTheOthers() {
+        View iconPack = mPage.root().findViewById(R.id.appearance_page_mode_icon_pack);
+        mPage.setMode(EditorMode.ICONS);
+        assertTrue(mPage.isModeShown());
+        assertFalse("the pill replaces the title", mPage.isTitleShown());
+        assertTrue(mPage.isDoneShown());
+        assertTrue(checked(iconPack));
+        assertEquals("Icon pack", ((TextView) iconPack).getText().toString());
+        assertEquals(AppearanceEditorPage.Segment.ICON_PACK, mPage.selected());
+        mPage.root().findViewById(R.id.appearance_page_mode_look).performClick();
         idle();
-        root.findViewById(R.id.appearance_page_mode_look).performClick();
+        mPage.root().findViewById(R.id.appearance_page_mode_layout).performClick();
         idle();
-        root.findViewById(R.id.appearance_page_mode_layout).performClick();
+        mPage.root().findViewById(R.id.appearance_page_mode_wallpaper).performClick();
         idle();
-        root.findViewById(R.id.appearance_page_back).performClick();
-        root.findViewById(R.id.appearance_page_done).performClick();
-        assertEquals(Arrays.asList("back", "look", "layout", "back", "done"), navigator.calls);
+        assertEquals(Arrays.asList(AppearanceEditorPage.Segment.LOOK, AppearanceEditorPage.Segment.LAYOUT,
+            AppearanceEditorPage.Segment.WALLPAPER), mSegments);
+        assertTrue("a tap the surface did not follow puts the pill back", checked(iconPack));
+    }
+
+    @Test
+    public void tappingIconPackFromLookAsksTheSurfaceForIcons() {
+        mPage.root().findViewById(R.id.appearance_page_mode_icon_pack).performClick();
+        idle();
+        assertEquals(Arrays.asList(AppearanceEditorPage.Segment.ICON_PACK), mSegments);
+        assertTrue("the pill waits for the mode to move",
+            checked(mPage.root().findViewById(R.id.appearance_page_mode_look)));
     }
 
     @Test

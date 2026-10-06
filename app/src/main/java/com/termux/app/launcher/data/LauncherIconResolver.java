@@ -177,6 +177,14 @@ public final class LauncherIconResolver {
         iconPackRepository.clearCache();
     }
 
+    /**
+     * Parses {@code packageName} now if it is not parsed yet, so the first icon drawn from it
+     * finds it cached. Slow: call it off the main thread.
+     */
+    public void warmPack(@Nullable String packageName) {
+        iconPackRepository.loadIconPack(packageName);
+    }
+
     @Nullable
     public Drawable loadOverride(@Nullable PinnedIconOverride override) {
         if (override == null || !override.isValid()) return null;

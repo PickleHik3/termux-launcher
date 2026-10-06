@@ -49,7 +49,20 @@ public final class IconPackRepository {
 
     private final Context context;
     private final PackageManager packageManager;
-    private final Map<String, IconPack> parsedPacks = new LinkedHashMap<>();
+    /** Parsed packs kept: the global one and the pinned one, no more (a parse is names, not pixels). */
+    private static final int MAX_PARSED_PACKS = 2;
+    /**
+     * Guards both maps below. A pack is parsed on whichever thread asks first (the icon store's,
+     * the main thread's, or the Icons mode's warm-up), so the maps are shared; the parse itself
+     * runs outside the lock.
+     */
+    private final Object lock = new Object();
+    private final Map<String, IconPack> parsedPacks = new LinkedHashMap<String, IconPack>(4, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<String, IconPack> eldest) {
+            return size() > MAX_PARSED_PACKS;
+        }
+    };
     private final Map<String, Long> lastVersionChecks = new LinkedHashMap<>();
 
     public IconPackRepository(@NonNull Context context) {
@@ -101,20 +114,26 @@ public final class IconPackRepository {
     @Nullable
     public IconPack loadIconPack(@Nullable String packageName) {
         if (packageName == null || packageName.trim().isEmpty()) return null;
-        IconPack cached = parsedPacks.get(packageName);
+        IconPack cached;
+        Long checkedAt;
+        synchronized (lock) {
+            cached = parsedPacks.get(packageName);
+            checkedAt = lastVersionChecks.get(packageName);
+        }
         long now = SystemClock.elapsedRealtime();
-        Long checkedAt = lastVersionChecks.get(packageName);
         if (checkedAt != null && now - checkedAt < CACHE_VERSION_RECHECK_MS) {
             return cached;
         }
         IconPackInfo info = buildInfo(packageName, isThemedPackage(packageName));
-        lastVersionChecks.put(packageName, now);
-        if (info == null) {
+        synchronized (lock) {
+            lastVersionChecks.put(packageName, now);
+            if (info == null) {
+                parsedPacks.remove(packageName);
+                return null;
+            }
+            if (cached != null && cached.info.versionCode == info.versionCode) return cached;
             parsedPacks.remove(packageName);
-            return null;
         }
-        if (cached != null && cached.info.versionCode == info.versionCode) return cached;
-        parsedPacks.remove(packageName);
 
         XmlResourceParser appfilterRes = null;
         XmlResourceParser drawableRes = null;
@@ -156,7 +175,9 @@ public final class IconPackRepository {
             }
 
             IconPack pack = IconPackXmlParser.parse(info, appfilter, drawable);
-            parsedPacks.put(packageName, pack);
+            synchronized (lock) {
+                parsedPacks.put(packageName, pack);
+            }
             return pack;
         } catch (Exception ignored) {
             return null;
@@ -169,8 +190,10 @@ public final class IconPackRepository {
     }
 
     public void clearCache() {
-        parsedPacks.clear();
-        lastVersionChecks.clear();
+        synchronized (lock) {
+            parsedPacks.clear();
+            lastVersionChecks.clear();
+        }
     }
 
     @Nullable
