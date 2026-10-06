@@ -3385,6 +3385,8 @@ public class TerminalPaneController {
             }
         }
         applyCursorOwnership();
+        // A glow made while the page is parked off screen starts held, not pulsing unseen.
+        applyAttentionHold();
         // The float handle pill dims with focus like the pane borders do.
         for (FloatingPaneContainer container : mFloatContainers.values()) container.invalidate();
     }
@@ -3405,6 +3407,28 @@ public class TerminalPaneController {
     /** Forget attention for panes that no longer exist. */
     public void retainPaneAttention(@NonNull java.util.Set<Integer> livePaneIds) {
         mPaneAttention.retain(livePaneIds);
+    }
+
+    /** Whether the terminal's page is parked off screen; see {@link #setTerminalOffScreen}. */
+    private boolean mTerminalOffScreen;
+
+    /**
+     * The wall parked the terminal's page off screen, or brought it back. The page stays VISIBLE at
+     * alpha 0 while parked, so an attention glow's pulse would keep running unseen: it is held
+     * until the page is back.
+     */
+    public void setTerminalOffScreen(boolean offScreen) {
+        if (mTerminalOffScreen == offScreen) return;
+        mTerminalOffScreen = offScreen;
+        applyAttentionHold();
+    }
+
+    private void applyAttentionHold() {
+        for (PaneContentFrame frame : mPaneFrames.values()) {
+            android.graphics.drawable.Drawable foreground = frame.getForeground();
+            if (foreground instanceof PaneAttentionGlow)
+                ((PaneAttentionGlow) foreground).setHeld(mTerminalOffScreen);
+        }
     }
 
     /** The terminal place came back into view: a pane that asked while it was away is now focused. */

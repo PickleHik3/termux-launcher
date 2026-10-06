@@ -18631,6 +18631,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // 707920f7 and the alpha-based fix after it), so each one is told by hand to
                     // pause what INVISIBLE used to pause for free.
                     if (mPaneController == null) return;
+                    // The attention glow's endless pulse is one of those: held while away.
+                    mPaneController.setTerminalOffScreen(offScreen);
                     for (com.termux.view.TerminalView view : mPaneController.getVisiblePaneViews()) {
                         view.setWallPageOffScreen(offScreen);
                     }
