@@ -142,7 +142,7 @@ final class TaiPressureWatch {
             case IMAGE:
                 return IMAGE_IDLE_MS;
             case VISION:
-                // A wallpaper-analysis graph lives for one stage and closes itself; nothing idles.
+                // A one-shot vision graph lives for one stage and closes itself; nothing idles.
                 return 0L;
             default:
                 return 0L;

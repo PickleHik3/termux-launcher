@@ -171,27 +171,6 @@ on the phone in the app's own runtime process.
 
 No GPL phonemizer (espeak-ng) is used or downloaded.
 
-## Wallpaper vision models (downloaded on request)
-
-Nothing below ships inside the APK. The files are downloaded from Hugging Face only when the user
-installs them in **Settings > TAI > Model centre > Vision**, and they run on the phone, one at a
-time, in the app's own runtime process when a wallpaper is analysed.
-
-- **[Depth Anything 3 Small](https://huggingface.co/litert-community/Depth-Anything-3-Small)**
-  (`da3_small_gpu_fp16.tflite`) — Apache-2.0 — Copyright ByteDance Seed (Depth Anything 3). The
-  LiteRT conversion is published by litert-community.
-- **[Depth Anything V2 Small](https://huggingface.co/litert-community/depth-anything-v2-small)**
-  (`tflite/depth_anything_v2_small_wi8_afp32.tflite`) — Apache-2.0 — Copyright the Depth Anything V2
-  authors (HKU, TikTok). The LiteRT conversion is published by litert-community.
-- **[U-2-Net](https://huggingface.co/litert-community/U-2-Net)** (`u2net_fp16.tflite`) —
-  Apache-2.0 — Copyright Xuebin Qin and the U-2-Net authors. The LiteRT conversion is published by
-  litert-community.
-- **[SegFormer-B0 fine-tuned on ADE20K](https://huggingface.co/sollaholla/segformer_b0_ade20k)**
-  (`segformer_b0_ade20k.tflite`) — **NVIDIA Source Code License (non-commercial)** — Copyright (c)
-  NVIDIA Corporation. This model may be used for research and evaluation only, **not commercially**,
-  so the launcher offers it for testing and it must not ship in a commercial build. The TensorFlow
-  Lite conversion is published by sollaholla.
-
 ## The Clear BSD License, for the OpenPhonemizer dictionary
 
 Copyright (c) 2024 mrfakename, NeuralVox, OpenPhonemizer Contributors
