@@ -42,7 +42,10 @@ public final class LauncherAppLauncher {
         void onProfileLaunchResult(boolean launched, boolean later);
     }
 
-    private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    /** The main-thread handler, made on first use so loading the class needs no looper (plain JUnit). */
+    private static final class Main {
+        static final Handler HANDLER = new Handler(Looper.getMainLooper());
+    }
     /**
      * Runs the {@code am start --user} fallback, which waits up to 5 s for a process: never on
      * main. One thread, gone when idle; a launch is one tap, so nothing queues behind it for long.
@@ -150,7 +153,7 @@ public final class LauncherAppLauncher {
                 final String activityName = profileActivityName(entry);
                 AM_EXECUTOR.execute(() -> {
                     if (tryStartProfileWithAm(userId, packageName, activityName)) return;
-                    MAIN.post(() -> launchInCurrentProfile(liveContext(context, appContext), entry));
+                    Main.HANDLER.post(() -> launchInCurrentProfile(liveContext(context, appContext), entry));
                 });
                 return true;
             }
@@ -262,7 +265,7 @@ public final class LauncherAppLauncher {
         final String activityName = profileActivityName(entry);
         AM_EXECUTOR.execute(() -> {
             boolean launched = tryStartProfileWithAm(userId, packageName, activityName);
-            MAIN.post(() -> result.onProfileLaunchResult(launched, true));
+            Main.HANDLER.post(() -> result.onProfileLaunchResult(launched, true));
         });
     }
 
