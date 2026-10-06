@@ -170,13 +170,14 @@ public class WidgetPickerCarryToCellTest {
     private static View openCard(WidgetPickerProductionSelectionTest.Fixture fixture) {
         fixture.controller.openPicker();
         fixture.idleAndLayout();
+        // Row 0 is the launcher's own widgets; the app row follows it.
         RecyclerView.ViewHolder app = fixture.pane.picker().list()
-            .findViewHolderForAdapterPosition(0);
+            .findViewHolderForAdapterPosition(1);
         assertNotNull("app row must be attached", app);
         app.itemView.performClick();
         fixture.idleAndLayout();
         RecyclerView.ViewHolder card = fixture.pane.picker().list()
-            .findViewHolderForAdapterPosition(1);
+            .findViewHolderForAdapterPosition(2);
         assertNotNull("provider card must be attached", card);
         return card.itemView;
     }

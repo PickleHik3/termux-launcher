@@ -171,6 +171,11 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_APP_LAUNCHER_WIDGET_PANE_ENABLED = true;
 
+        /** How the launcher's own widgets are drawn: {@code tonal} or {@code pane}. */
+        public static final String KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE =
+            "app_launcher_builtin_widget_style";
+        public static final String DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE = "tonal";
+
         /** The widget pane's grid: how many columns across and rows down a page has. */
         public static final String KEY_APP_LAUNCHER_WIDGET_GRID_COLUMNS = "app_launcher_widget_grid_columns";
 

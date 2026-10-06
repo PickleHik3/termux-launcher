@@ -38,6 +38,13 @@ public final class LauncherWidgetRepository {
     }
 
     private static final int SCHEMA_VERSION = 4;
+    /**
+     * Written instead of {@link #SCHEMA_VERSION} while the wall holds a built-in widget: the same
+     * payload with {@code builtin} records in it, which a build without built-ins would reject
+     * record by record. Naming it a newer version makes that build go read-only as a whole, so a
+     * downgrade keeps the wall rather than half of it.
+     */
+    private static final int BUILTIN_VERSION = 5;
     /** v3 is read as v4 with no orientation named and no shelf: identical bytes, nothing moves. */
     private static final int LEGACY_PAGED_VERSION = 3;
     private static final String PREFS = "launcher_widget_repository";
@@ -85,6 +92,19 @@ public final class LauncherWidgetRepository {
     @Nullable public synchronized LauncherWidgetRecord get(int appWidgetId) {
         return records.get(appWidgetId);
     }
+    /**
+     * The next free key for a built-in widget: negative, below every built-in the wall holds on
+     * any page or in any shelved orientation, so a key is never reused while a layout still
+     * names it.
+     */
+    public synchronized int allocateBuiltinId() {
+        int lowest = 0;
+        for (int id : records.keySet()) lowest = Math.min(lowest, id);
+        for (OrientationLayout layout : layouts.values()) {
+            for (int id : layout.cells.keySet()) lowest = Math.min(lowest, id);
+        }
+        return lowest - 1;
+    }
     @Nullable public synchronized WidgetAddTransaction pending() { return pending; }
     @NonNull public synchronized WidgetGridDefinition gridDefinition() { return grid; }
     public synchronized long revision() { return revision; }
@@ -111,7 +131,8 @@ public final class LauncherWidgetRepository {
                                            int page) {
         return pending == null && expectedRevision == revision
             && page >= 0 && page < pageCount
-            && WidgetGridPlacementPolicy.canPlace(grid, recordsOnPage(page), cell, -1);
+            && WidgetGridPlacementPolicy.canPlace(grid, recordsOnPage(page), cell,
+                WidgetGridPlacementPolicy.IGNORE_NONE);
     }
 
     /**
@@ -149,7 +170,8 @@ public final class LauncherWidgetRepository {
             WidgetCellRect kept = new WidgetCellRect(left, top, left + columnSpan, top + rowSpan);
             int page = record.page;
             List<LauncherWidgetRecord> onPage = recordsOnPage(relaid, page);
-            if (WidgetGridPlacementPolicy.canPlace(next, onPage, kept, -1)) {
+            if (WidgetGridPlacementPolicy.canPlace(next, onPage, kept,
+                WidgetGridPlacementPolicy.IGNORE_NONE)) {
                 relaid.put(record.appWidgetId, record.withCell(kept));
                 continue;
             }
@@ -425,7 +447,8 @@ public final class LauncherWidgetRepository {
             throw new IllegalArgumentException("pending ID is already active");
         }
         if (pending == null && !WidgetGridPlacementPolicy.canPlace(grid,
-            recordsOnPage(transaction.page), transaction.cell, -1)) {
+            recordsOnPage(transaction.page), transaction.cell,
+            WidgetGridPlacementPolicy.IGNORE_NONE)) {
             WidgetGridPlacementPolicy.Result fallback = WidgetGridPlacementPolicy.findPlacement(
                 grid, recordsOnPage(transaction.page), transaction.cell.columnSpan(),
                 transaction.cell.rowSpan());
@@ -442,7 +465,7 @@ public final class LauncherWidgetRepository {
             || transaction.gridRevision != expectedRevision) return false;
         if (transaction.page >= pageCount) return false;
         if (!WidgetGridPlacementPolicy.canPlace(grid, recordsOnPage(transaction.page),
-            transaction.cell, -1)) return false;
+            transaction.cell, WidgetGridPlacementPolicy.IGNORE_NONE)) return false;
         return commitValidated(records, transaction, grid, pageCount, revision + 1);
     }
 
@@ -624,7 +647,8 @@ public final class LauncherWidgetRepository {
             // v3 and v4 decode the same way; a v3 payload simply names no orientation and
             // shelves no layout, so it is adopted as it stands and rewritten as v4 on the next
             // commit. Nothing moves for a user who never turns the screen.
-            if (version != SCHEMA_VERSION && version != LEGACY_PAGED_VERSION) {
+            if (version != SCHEMA_VERSION && version != LEGACY_PAGED_VERSION
+                && version != BUILTIN_VERSION) {
                 readOnlyUnknownVersion = true;
                 return;
             }
@@ -633,7 +657,12 @@ public final class LauncherWidgetRepository {
             LinkedHashMap<Integer, LauncherWidgetRecord> loaded = decodeRecords(root, true);
             WidgetAddTransaction loadedPending = root.has("pending")
                 ? decodeTransaction(root.getJSONObject("pending"), true, 0, 0) : null;
-            if (!validatePaged(loadedGrid, loaded, loadedPending, loadedPages)) return;
+            if (!validatePaged(loadedGrid, loaded, loadedPending, loadedPages)) {
+                // Refused silently once, and the wall simply looked empty: say so.
+                android.util.Log.e("LauncherWidgets", "stored wall refused: " + loaded.size()
+                    + " records on " + loadedPages + " page(s), grid " + loadedGrid);
+                return;
+            }
             records = loaded;
             pending = loadedPending;
             grid = loadedGrid;
@@ -646,7 +675,8 @@ public final class LauncherWidgetRepository {
                 ? null : loadedOrientation;
             layouts = decodeLayouts(root.optJSONObject("layouts"), orientation);
             revision = Math.max(0, root.optLong("revision", 0));
-        } catch (JSONException | IllegalArgumentException ignored) {
+        } catch (JSONException | IllegalArgumentException exception) {
+            android.util.Log.e("LauncherWidgets", "stored wall unreadable", exception);
             // Preserve an empty in-memory recovery target; never overwrite an unknown/corrupt value.
         }
     }
@@ -730,7 +760,7 @@ public final class LauncherWidgetRepository {
                                  @NonNull Map<String, OrientationLayout> layouts, long revision) {
         try {
             JSONObject root = new JSONObject();
-            root.put("version", SCHEMA_VERSION);
+            root.put("version", holdsBuiltin(values.values()) ? BUILTIN_VERSION : SCHEMA_VERSION);
             root.put("revision", revision);
             root.put("grid", encodeGrid(definition));
             root.put("pages", Math.max(1, pages));
@@ -826,10 +856,16 @@ public final class LauncherWidgetRepository {
             value.getInt("right"), value.getInt("bottom"));
     }
 
+    private static boolean holdsBuiltin(@NonNull Collection<LauncherWidgetRecord> values) {
+        for (LauncherWidgetRecord record : values) if (record.isBuiltin()) return true;
+        return false;
+    }
+
     private static JSONObject encodeRecord(LauncherWidgetRecord record) throws JSONException {
         JSONObject value = new JSONObject();
         value.put("id", record.appWidgetId);
         value.put("provider", record.provider.flattenToString());
+        if (record.builtinKind != null) value.put("builtin", record.builtinKind);
         value.put("profile", record.profileSerial);
         value.put("state", record.state.name());
         value.put("cell", encodeCell(record.cell));
@@ -846,6 +882,11 @@ public final class LauncherWidgetRepository {
         if (provider == null) throw new JSONException("invalid provider");
         WidgetCellRect cell = hasCell ? decodeCell(value.getJSONObject("cell"))
             : new WidgetCellRect(legacyColumn, legacyRow, legacyColumn + 1, legacyRow + 1);
+        String builtin = value.optString("builtin", null);
+        if (builtin != null && !builtin.isEmpty()) {
+            return LauncherWidgetRecord.builtin(value.getInt("id"), builtin, cell,
+                Math.max(0, value.optInt("page", 0)), decodeBundle(value.optJSONObject("options")));
+        }
         return new LauncherWidgetRecord(value.getInt("id"), provider, value.getLong("profile"),
             LauncherWidgetRecord.State.valueOf(value.getString("state")), cell,
             Math.max(0, value.optInt("page", 0)),

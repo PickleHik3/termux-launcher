@@ -727,6 +727,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final int REQUEST_CODE_WIDGET_CONFIGURE = 4715;
     private static final int REQUEST_CODE_WIDGET_RECONFIGURE = 4716;
     private static final int REQUEST_CODE_VOICE_INPUT_MICROPHONE = 4717;
+    /** The built-in agenda and calendar widgets asking to read the calendar. */
+    private static final int REQUEST_CODE_WIDGET_CALENDAR = 4718;
+    /** Whether this process has already asked for the calendar once; see the widget host. */
+    private boolean mWidgetCalendarAsked;
     @Nullable private TerminalSession mVoiceTypingTargetSession;
     /** The on-device voice input in progress, from the voice key to its end; null between. */
     @Nullable private VoiceInputSession mVoiceInput;
@@ -16075,6 +16079,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mChrome.onWallpaperChanged();
             }
             refreshFirstRunPermissionsCard();
+        } else if (requestCode == REQUEST_CODE_WIDGET_CALENDAR) {
+            if (mWidgetPaneController != null) mWidgetPaneController.onCalendarPermissionChanged();
         } else if (requestCode == REQUEST_CODE_VOICE_INPUT_MICROPHONE) {
             if (grantResults.length > 0
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -20206,6 +20212,60 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void onWidgetEditorClosed() {
                     if (mInAppKeyboard != null) mInAppKeyboard.endExternalTextInput();
                 }
+                @Override @NonNull
+                public com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle.Direction builtinWidgetDirection() {
+                    return com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle.Direction.fromKey(
+                        mPreferences == null ? null : mPreferences.getAppLauncherBuiltinWidgetStyle());
+                }
+                // The widgets page is a pane: glass when the terminal panes are glass.
+                @Override public boolean isWidgetSurfaceGlass() { return isTerminalPaneGlassActive(); }
+                @Override @NonNull
+                public com.termux.app.launcher.widget.builtin.BuiltinWidgetServices.Host builtinWidgetHost() {
+                    return new com.termux.app.launcher.widget.builtin.BuiltinWidgetServices.Host() {
+                        @Override public void requestCalendarPermission() {
+                            String permission = android.Manifest.permission.READ_CALENDAR;
+                            // Asked before and refused for good: the system shows nothing for a
+                            // second request, so the app's own settings page is the way in.
+                            if (mWidgetCalendarAsked
+                                && !androidx.core.app.ActivityCompat
+                                    .shouldShowRequestPermissionRationale(TermuxActivity.this, permission)) {
+                                openAppSettingsPage();
+                                return;
+                            }
+                            mWidgetCalendarAsked = true;
+                            androidx.core.app.ActivityCompat.requestPermissions(TermuxActivity.this,
+                                new String[] {permission}, REQUEST_CODE_WIDGET_CALENDAR);
+                        }
+                        @Override public void onSystemImeRequested() {
+                            if (mInAppKeyboard != null && mInAppKeyboard.isEnabled()) {
+                                mInAppKeyboard.beginExternalTextInput();
+                            }
+                            TermuxActivity.this.onSystemImeRequested();
+                        }
+                        @Override public void onSystemImeReleased() {
+                            View focus = getCurrentFocus();
+                            KeyboardUtils.hideSoftKeyboard(TermuxActivity.this,
+                                focus != null ? focus : getWindow().getDecorView());
+                            if (mInAppKeyboard != null) mInAppKeyboard.endExternalTextInput();
+                        }
+                        @Override public boolean openCommandWindow(@NonNull java.util.List<String> command,
+                                                                   @Nullable String title) {
+                            if (TermuxActivity.this.openCommandWindow(command, null, title, true) == null) {
+                                return false;
+                            }
+                            // The window is the point: the wall turns to the terminal to show it.
+                            if (mPaneWallController != null) {
+                                mPaneWallController.goTo(com.termux.app.wall.PaneWallPage.TERMINAL,
+                                    isVisible());
+                            }
+                            return true;
+                        }
+                        @Override @Nullable public android.graphics.Typeface monoTypeface() {
+                            TerminalView view = getTerminalView();
+                            return view == null ? null : view.getTerminalTypeface();
+                        }
+                    };
+                }
             });
     }
 
@@ -24335,6 +24395,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateAppLauncherBarHeight();
         applyPaddingFillPolicyToVisiblePanes();
         applyTrailStyleAndRetroEffect();
+        if (mWidgetPaneController != null) mWidgetPaneController.onLookChanged();
         applySuggestionBarPreferences();
         if (mSuggestionBarView != null) {
             mSuggestionBarView.resetTransientVisualState();

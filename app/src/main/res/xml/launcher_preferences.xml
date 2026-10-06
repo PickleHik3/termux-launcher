@@ -21,6 +21,14 @@
             app:title="@string/settings_widget_pane_enabled_title"
             app:summary="@string/settings_widget_pane_enabled_summary"
             android:defaultValue="true" />
+        <ListPreference
+            app:key="app_launcher_builtin_widget_style"
+            app:title="@string/settings_builtin_widget_style_title"
+            app:summary="@string/settings_builtin_widget_style_summary"
+            app:entries="@array/settings_builtin_widget_style_entries"
+            app:entryValues="@array/settings_builtin_widget_style_values"
+            app:useSimpleSummaryProvider="true"
+            android:defaultValue="tonal" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_apps_customize_header">

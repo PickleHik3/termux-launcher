@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -174,7 +175,17 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
      */
     @NonNull
     public AddResult removeWidget(int appWidgetId) {
-        if (repository.get(appWidgetId) == null) return AddResult.IGNORED;
+        LauncherWidgetRecord record = repository.get(appWidgetId);
+        if (record == null) return AddResult.IGNORED;
+        if (record.isBuiltin()) {
+            // No platform ID to give back: the record is the whole of it.
+            if (!repository.removeRecord(appWidgetId)) {
+                notifyChanged(AddResult.REMOVE_FAILED);
+                return AddResult.REMOVE_FAILED;
+            }
+            notifyChanged(AddResult.REMOVED);
+            return AddResult.REMOVED;
+        }
         if (!repository.beginRecordDeletion(appWidgetId)) {
             notifyChanged(AddResult.REMOVE_FAILED);
             return AddResult.REMOVE_FAILED;
@@ -302,6 +313,8 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     public boolean canReconfigure(int appWidgetId) {
         LauncherWidgetRecord record = repository.get(appWidgetId);
         if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return false;
+        // A built-in widget's settings are the launcher's own sheet; the pane opens it itself.
+        if (record.isBuiltin()) return false;
         try {
             AppWidgetProviderInfo info = platform.getInfo(appWidgetId);
             if (info == null || !providerMatches(record, info)) return false;
@@ -469,10 +482,36 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
         }
     }
 
+    /**
+     * Places one of the launcher's own widgets. There is nothing to allocate, bind or configure,
+     * so this is a single durable write: the widget is {@link AddResult#READY} the moment it
+     * returns, or {@link AddResult#NO_SPACE} / {@link AddResult#STORAGE_FAILURE} and nothing has
+     * changed. {@code config} is the widget's own settings, kept in the record's options bundle.
+     */
+    @NonNull
+    public AddResult addBuiltin(@NonNull String kind, @NonNull WidgetCellRect cell, int page,
+                                long expectedRevision, @Nullable Bundle config) {
+        if (!repository.canReserve(expectedRevision, cell, page)) return AddResult.NO_SPACE;
+        LauncherWidgetRecord record = LauncherWidgetRecord.builtin(
+            repository.allocateBuiltinId(), kind, cell, page, config);
+        if (!repository.putRecord(record)) return AddResult.STORAGE_FAILURE;
+        notifyChanged(AddResult.READY);
+        return AddResult.READY;
+    }
+
+    /** Replaces a built-in widget's own settings; a no-op for anything else. */
+    public boolean updateBuiltinConfig(int appWidgetId, @NonNull Bundle config) {
+        LauncherWidgetRecord record = repository.get(appWidgetId);
+        if (record == null || !record.isBuiltin()) return false;
+        return repository.putRecord(record.withSizeOptions(config));
+    }
+
     @Nullable
     private AppWidgetHostView doCreateHostView(int appWidgetId) {
         LauncherWidgetRecord record = repository.get(appWidgetId);
         if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return null;
+        // A built-in widget is the grid's own view, never a host view.
+        if (record.isBuiltin()) return null;
         // Every host view is asked for through here, so this is the one place a stale one can be
         // caught whatever brought the render about.
         discardHostViewsBuiltInAnotherMode();
@@ -492,6 +531,9 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
     public boolean onHostSizeCommitted(int appWidgetId, int widthPx, int heightPx, int orientation) {
         LauncherWidgetRecord record = repository.get(appWidgetId);
         if (record == null || record.state != LauncherWidgetRecord.State.ACTIVE) return false;
+        // A built-in widget reads its own size; its options bundle is its settings, not a
+        // size report, and there is no provider process to wake.
+        if (record.isBuiltin()) return false;
         WidgetSizeOptionsPolicy.Result result = WidgetSizeOptionsPolicy.calculate(record.sizeOptions(),
             widthPx, heightPx, activity.getResources().getDisplayMetrics().density,
             orientation, Build.VERSION.SDK_INT);
@@ -528,6 +570,15 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
 
     public void reconcileProviders() { reconcileProviders(-1); }
 
+    /** The records that are bound to another app's provider: every one but the built-ins. */
+    @NonNull private List<LauncherWidgetRecord> appWidgetRecords() {
+        List<LauncherWidgetRecord> out = new ArrayList<>();
+        for (LauncherWidgetRecord record : repository.records()) {
+            if (!record.isBuiltin()) out.add(record);
+        }
+        return out;
+    }
+
     private void reconcileProviders(int changedId) {
         if (capability == Capability.UNSUPPORTED) return;
         Set<Integer> owned = new HashSet<>();
@@ -537,11 +588,13 @@ public final class LauncherWidgetHostController implements LauncherAppWidgetHost
             // Without the host allocation snapshot, absence cannot safely mean uninstall.
             return;
         }
-        if (WidgetProviderReconcilePolicy.isWallLost(repository.records(), owned,
+        if (WidgetProviderReconcilePolicy.isWallLost(appWidgetRecords(), owned,
             repository.pending() != null) && clearLostWall()) {
             return;
         }
         for (LauncherWidgetRecord record : repository.records()) {
+            // Built-in widgets have no provider to lose and no host ID to reconcile.
+            if (record.isBuiltin()) continue;
             AppWidgetProviderInfo info;
             try {
                 info = platform.getInfo(record.appWidgetId);

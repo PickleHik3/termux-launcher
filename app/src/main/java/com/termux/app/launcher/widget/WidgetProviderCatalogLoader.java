@@ -65,6 +65,16 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
     public interface PreviewCallback {
         void onPreview(@NonNull WidgetProviderItem item, @Nullable WidgetPreviewArtwork artwork);
     }
+    /**
+     * Where the launcher's own widgets come from. They are one more app in the sheet — the first
+     * one — and their cards are drawn by the launcher rather than fetched from a provider.
+     */
+    public interface BuiltinSource {
+        /** The built-in widgets as one app group, sized against {@code metrics}. */
+        @NonNull WidgetAppGroup group(@NonNull WidgetGridMetrics metrics);
+        /** The card artwork for one built-in, at most {@code extentPx} on its longer edge. */
+        @Nullable WidgetPreviewArtwork preview(@NonNull WidgetProviderItem item, int extentPx);
+    }
     interface Boundary {
         @NonNull List<UserHandle> profiles();
         long serial(@NonNull UserHandle profile);
@@ -110,6 +120,7 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
     // Providers whose live preview would not inflate: asked for a bitmap from here on.
     private final Set<String> demoted = new HashSet<>();
     private long generation;
+    @Nullable private BuiltinSource builtins;
     // Session-lifetime catalog cache: reopening the picker must not re-query AppWidgetManager.
     // All cache state is main-thread only; packageGeneration keeps a build that raced an
     // invalidation from repopulating the cache with pre-change providers.
@@ -161,10 +172,14 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
             return token;
         }
         final long packageToken = packageGeneration;
+        final WidgetAppGroup own = builtins == null ? null : builtins.group(metrics);
         worker.execute(() -> {
-            List<WidgetAppGroup> groups = build(metrics, sections -> main.post(() -> {
-                if (token == generation) callback.onCatalogSections(token, sections);
-            }));
+            List<WidgetAppGroup> groups = withBuiltins(own, build(metrics, sections ->
+                main.post(() -> {
+                    if (token == generation) {
+                        callback.onCatalogSections(token, withBuiltins(own, sections));
+                    }
+                })));
             main.post(() -> {
                 if (packageToken == packageGeneration) {
                     cachedGroups = groups; cachedMetrics = metrics; cachedRevision = metricsRevision;
@@ -173,6 +188,21 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
             });
         });
         return token;
+    }
+
+    /** The launcher's own widgets, listed ahead of every app's; null lists apps only. */
+    public void setBuiltinSource(@Nullable BuiltinSource source) {
+        builtins = source;
+        packageGeneration++;
+    }
+
+    @NonNull private static List<WidgetAppGroup> withBuiltins(@Nullable WidgetAppGroup own,
+                                                             @NonNull List<WidgetAppGroup> apps) {
+        if (own == null) return apps;
+        ArrayList<WidgetAppGroup> out = new ArrayList<>(apps.size() + 1);
+        out.add(own);
+        out.addAll(apps);
+        return out;
     }
 
     /** Drops the cached catalog and its previews; the next load re-queries AppWidgetManager. */
@@ -198,11 +228,24 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
         String key = item.previewKey();
         WidgetPreviewArtwork held = previews.get(key);
         if (held != null) { callback.onPreview(item, held.isEmpty() ? null : held); return; }
+        if (item.isBuiltin()) {
+            // Drawn by the launcher on this thread: a View needs the main looper, and the dozen
+            // cards are small.
+            int extent = WidgetPickerCardTemplate.forSpan(item.columnSpan, item.rowSpan)
+                .extentPx(resources.getDisplayMetrics().density);
+            WidgetPreviewArtwork drawn = builtins == null ? null : builtins.preview(item, extent);
+            WidgetPreviewArtwork stored = drawn == null ? WidgetPreviewArtwork.NONE : drawn;
+            previews.put(key, stored);
+            callback.onPreview(item, stored.isEmpty() ? null : stored);
+            return;
+        }
         final boolean flatOnly = demoted.contains(key);
         final int extentPx = WidgetPickerCardTemplate.forSpan(item.columnSpan, item.rowSpan)
             .extentPx(resources.getDisplayMetrics().density);
         worker.execute(() -> {
-            WidgetPreviewArtwork artwork = resolveArtwork(item.info, flatOnly, extentPx);
+            AppWidgetProviderInfo info = item.info;
+            WidgetPreviewArtwork artwork = info == null ? WidgetPreviewArtwork.NONE
+                : resolveArtwork(info, flatOnly, extentPx);
             main.post(() -> {
                 previews.put(key, artwork);
                 callback.onPreview(item, artwork.isEmpty() ? null : artwork);
@@ -356,7 +399,7 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
             group.items.sort((a, b) -> {
                 int label = collator.compare(a.label, b.label);
                 return label != 0 ? label
-                    : a.info.provider.flattenToString().compareTo(b.info.provider.flattenToString());
+                    : a.identity().compareTo(b.identity());
             });
             out.add(new WidgetAppGroup(group.serial, group.packageName, group.label,
                 group.icon, group.items));

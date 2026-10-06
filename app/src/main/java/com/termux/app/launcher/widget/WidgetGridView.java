@@ -39,6 +39,7 @@ public final class WidgetGridView extends ViewGroup {
     @Nullable private LauncherWidgetHostController controller;
     @Nullable private Listener listener;
     @NonNull private WidgetGridDefinition definition = WidgetGridDefinition.DEFAULT;
+    @Nullable private BuiltinFactory builtinFactory;
     @NonNull private List<LauncherWidgetRecord> records = Collections.emptyList();
     private final Map<Integer, WidgetCellView> cells = new HashMap<>();
     private final Map<Integer, Long> committedSizes = new HashMap<>();
@@ -141,7 +142,11 @@ public final class WidgetGridView extends ViewGroup {
                 }
             });
             View content = null;
-            if (record.state == LauncherWidgetRecord.State.ACTIVE && controller != null) {
+            if (record.isBuiltin()) {
+                // The launcher's own view, asked for on every render so a resize or a settings
+                // change reaches the one already on screen.
+                content = builtinFactory == null ? null : builtinFactory.viewFor(record);
+            } else if (record.state == LauncherWidgetRecord.State.ACTIVE && controller != null) {
                 content = controller.createHostView(record.appWidgetId);
             }
             if (content == null || record.state == LauncherWidgetRecord.State.PROVIDER_MISSING) {
@@ -162,7 +167,10 @@ public final class WidgetGridView extends ViewGroup {
                 removeView(entry.getValue()); stale.add(entry.getKey());
             }
         }
-        for (int id : stale) { cells.remove(id); committedSizes.remove(id); deliveredSizes.remove(id); }
+        for (int id : stale) {
+            cells.remove(id); committedSizes.remove(id); deliveredSizes.remove(id);
+            if (id < 0 && builtinFactory != null) builtinFactory.release(id);
+        }
         requestLayout();
     }
 
@@ -219,6 +227,16 @@ public final class WidgetGridView extends ViewGroup {
     }
 
     @Nullable public WidgetCellView cellForId(int id) { return cells.get(id); }
+
+    /** Supplies the views of the launcher's own widgets; the grid never builds one itself. */
+    public interface BuiltinFactory {
+        /** The live view for {@code record}, brought up to date with its span and settings. */
+        @Nullable View viewFor(@NonNull LauncherWidgetRecord record);
+        /** The cell for {@code appWidgetId} left this page; its view may be dropped. */
+        default void release(int appWidgetId) { }
+    }
+
+    public void setBuiltinFactory(@Nullable BuiltinFactory value) { builtinFactory = value; }
 
     @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         int width = MeasureSpec.getSize(widthMeasureSpec);

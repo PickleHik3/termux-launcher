@@ -24,10 +24,11 @@ public class WidgetPickerFullGridIntegrationTest {
         for (LauncherWidgetRecord record : fixture.repository.records()) before.add(record.cell);
         fixture.controller.openPicker(); fixture.idleAndLayout();
         // Nothing this app offers fits, and its row still opens: it is the only way to the cards.
-        RecyclerView.ViewHolder app = fixture.pane.picker().list().findViewHolderForAdapterPosition(0);
+        // Row 0 is the launcher's own widgets; the app row follows it.
+        RecyclerView.ViewHolder app = fixture.pane.picker().list().findViewHolderForAdapterPosition(1);
         assertNotNull(app); assertTrue(app.itemView.isEnabled());
         assertTrue(app.itemView.performClick()); fixture.idleAndLayout();
-        RecyclerView.ViewHolder card = fixture.pane.picker().list().findViewHolderForAdapterPosition(1);
+        RecyclerView.ViewHolder card = fixture.pane.picker().list().findViewHolderForAdapterPosition(2);
         assertNotNull(card); assertFalse(card.itemView.isEnabled()); assertFalse(card.itemView.performClick());
         assertTrue(fixture.pane.picker().isOpen()); assertEquals(0, fixture.platform.allocations);
         java.util.List<WidgetCellRect> after = new java.util.ArrayList<>();

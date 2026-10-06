@@ -595,6 +595,10 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherDrawerViewType(value);
                 scheduleAppDrawerSync();
                 break;
+            case "app_launcher_builtin_widget_style":
+                mPreferences.setAppLauncherBuiltinWidgetStyle(value);
+                scheduleTermuxActivityStylingSync(false);
+                break;
             case "app_launcher_default_buttons":
                 mPreferences.setAppLauncherDefaultButtons(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -642,6 +646,8 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return com.termux.app.launcher.LauncherUseCaseMode.currentMode(mPreferences);
             case "app_launcher_drawer_view_type":
                 return mPreferences.getAppLauncherDrawerViewType();
+            case "app_launcher_builtin_widget_style":
+                return mPreferences.getAppLauncherBuiltinWidgetStyle();
             case "app_launcher_default_buttons":
                 return mPreferences.getAppLauncherDefaultButtons();
             case "app_launcher_icon_pack_package":
