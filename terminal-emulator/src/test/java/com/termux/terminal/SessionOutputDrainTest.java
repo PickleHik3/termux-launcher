@@ -18,8 +18,10 @@ public class SessionOutputDrainTest {
 
     private static final int LINES = TerminalSession.PROCESS_OUTPUT_QUEUE_BYTES / 8;
 
-    private static final TerminalSessionClient SILENT_CLIENT = new TerminalSessionClient() {
-        @Override public void onTextChanged(TerminalSession changedSession) {}
+    private int mTextChanges;
+
+    private final TerminalSessionClient mClient = new TerminalSessionClient() {
+        @Override public void onTextChanged(TerminalSession changedSession) { mTextChanges++; }
         @Override public void onTitleChanged(TerminalSession changedSession) {}
         @Override public void onSessionFinished(TerminalSession finishedSession) {}
         @Override public void onCopyTextToClipboard(TerminalSession session, String text) {}
@@ -38,8 +40,8 @@ public class SessionOutputDrainTest {
         @Override public Integer getTerminalCursorStyle() { return null; }
     };
 
-    private static TerminalSession sessionWithEmulator() {
-        TerminalSession session = new TerminalSession("/bin/sh", null, new String[0], new String[0], null, SILENT_CLIENT);
+    private TerminalSession sessionWithEmulator() {
+        TerminalSession session = new TerminalSession("/bin/sh", null, new String[0], new String[0], null, mClient);
         session.mEmulator = new TerminalEmulator(session, false, 10, 4,
             TerminalTestCase.INITIAL_CELL_WIDTH_PIXELS, TerminalTestCase.INITIAL_CELL_HEIGHT_PIXELS,
             LINES + 100, null);
@@ -94,5 +96,41 @@ public class SessionOutputDrainTest {
         TerminalSession session = sessionWithEmulator();
         assertFalse(session.drainProcessOutputSlice());
         session.drainProcessOutputBeforeExit();
+    }
+
+    private static void queue(TerminalSession session, String text) {
+        byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
+        assertTrue(session.mProcessToTerminalIOQueue.write(bytes, 0, bytes.length));
+    }
+
+    @Test
+    public void severalSynchronizedFramesInOneSliceCostOneUpdate() {
+        TerminalSession session = sessionWithEmulator();
+        queue(session, "\033[?2026ha\033[?2026l\033[?2026hb\033[?2026l\033[?2026hc\033[?2026l");
+
+        session.drainProcessOutputSlice();
+
+        assertEquals(1, mTextChanges);
+        assertTrue(session.mEmulator.getScreen().getTranscriptText().contains("abc"));
+    }
+
+    @Test
+    public void aSliceThatEndsInsideAHoldWaitsForTheHoldToEnd() {
+        TerminalSession session = sessionWithEmulator();
+        queue(session, "\033[?2026hone\033[?2026l\033[?2026htw");
+
+        session.drainProcessOutputSlice();
+        assertEquals("The half-drawn second frame is not shown", 0, mTextChanges);
+
+        queue(session, "o\033[?2026l");
+        session.drainProcessOutputSlice();
+        assertEquals(1, mTextChanges);
+    }
+
+    @Test
+    public void aScreenChangeOutsideASliceIsDeliveredAtOnce() {
+        TerminalSession session = sessionWithEmulator();
+        session.onScreenChanged();
+        assertEquals(1, mTextChanges);
     }
 }

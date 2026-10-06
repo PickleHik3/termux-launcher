@@ -495,8 +495,15 @@ public final class TerminalSession extends TerminalOutput {
 
     @Override
     public void onScreenChanged() {
+        // Inside a drained slice the slice itself notifies once when the emulator is done with it,
+        // so a chunk holding several synchronized frames costs the client one update, not one per
+        // frame. The screen is drawn once per vsync, after the whole slice, either way.
+        if (mAppendingProcessOutput) return;
         notifyScreenUpdate();
     }
+
+    /** Set while a drained slice is inside {@link TerminalEmulator#append}; main thread only. */
+    private boolean mAppendingProcessOutput;
 
     @Override
     public void postTerminalUpdateDelayed(Runnable update, long delayMillis) {
@@ -594,9 +601,11 @@ public final class TerminalSession extends TerminalOutput {
         // Terminal.render and the frame clock: this is the emulator's only entry point for shell
         // output, and it runs on the main thread by design.
         Trace.beginSection("Terminal.append");
+        mAppendingProcessOutput = true;
         try {
             mEmulator.append(mReceiveBuffer, bytesRead);
         } finally {
+            mAppendingProcessOutput = false;
             Trace.endSection();
         }
         notifyScreenUpdate();
