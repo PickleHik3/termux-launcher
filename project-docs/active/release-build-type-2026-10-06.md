@@ -23,6 +23,13 @@ What that costs users:
   debuggable apps allow `run-as`. Anyone with adb access to a user's phone can copy out `$HOME`,
   `$PREFIX`, keys and shell history.
 
+More from the same trace: `base.apk` is dexopted with `filter=verify` (interpreter + JIT only),
+`EnableDebugFeatures` suspends threads for 27 ms at process start, and CheckJNI is on. A
+non-debuggable build with a baseline profile (androidx.profileinstaller) commonly cuts this kind of
+startup by 30–50% — an estimate, not a measurement. A cheap way to see the AOT share on a test
+phone without a release build: `adb shell cmd package compile -m speed -f <pkg>`, then a
+cold-start trace (a debuggable app may still ignore it; compare).
+
 ## The experiment
 
 Branch `exp/release-buildtype` (worktree `.claude/worktrees/exp-release`), commit `065dbc3e8`, off
