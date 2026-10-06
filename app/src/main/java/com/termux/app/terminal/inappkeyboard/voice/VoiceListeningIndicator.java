@@ -4,9 +4,9 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.app.Activity;
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.graphics.PorterDuff;
 import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.SystemClock;
 import android.text.TextUtils;
@@ -33,34 +33,33 @@ import com.termux.app.chrome.GrabHandle;
 import com.termux.app.terminal.inappkeyboard.FloatingKeyboardGeometry;
 
 /**
- * The dictation pill (agreed design, 2026-09-27): by default top right, under the status bar,
- * 36 dp tall with 6 dp above and below its contents, and a panel that grows down from it, toward
- * the thumb, over the pane's right side. It lives in the window's content frame rather than the
- * accessory stack, so it never takes part in the keyboard's geometry passes; the room it may sit
- * in is re-read from the place viewport ({@code terminal_surface_host}, the frame the pane wall
- * slides inside, so the same room on Home, Terminal and Display — ADR 0003, and above the
- * keyboard and under the status bar and the top bars) on every level update, which is cheap and
- * follows bars that move.
+ * The dictation card (agreed design 1b, "Single control bar"): by default top right, under the
+ * status bar, as wide as the room allows up to {@link #MAX_WIDTH_DP}, growing down from there,
+ * toward the thumb, over the pane's right side. It lives in the window's content frame rather
+ * than the accessory stack, so it never takes part in the keyboard's geometry passes; the room it
+ * may sit in is re-read from the place viewport ({@code terminal_surface_host}, the frame the
+ * pane wall slides inside, so the same room on Home, Terminal and Display - ADR 0003, and above
+ * the keyboard and under the status bar and the top bars) on every level update, which is cheap
+ * and follows bars that move.
  *
- * <p>The pill row hugs its contents: the scrolling waveform ({@link VoiceWaveformView}) and the
- * state ("Listening…", "Transcribing…", "Cleaning up…", then what became of the text), a small gap,
- * then a "Warming up" chip with a ring while the speech model, the voiced decision or the cleanup
- * model is still loading — recording has already started — and pause/resume and the ×. The panel
- * ({@link VoiceTranscriptPanel}) holds the whole dictation's text and its undo, Copy and ✓, and is
- * as wide as the room allows up to {@link #MAX_WIDTH_DP}; with it up, the pill row keeps to the
- * side the card hangs from.
+ * <p>The card is whole from the moment it shows: a header strip, the text, the controls. The
+ * strip says what is happening on the left ("Listening…", "Transcribing…", "Cleaning up…", then
+ * what became of the text, with a small ring while something is loading or running and a few
+ * words of meta such as "· 5 edits"), carries a small handle in the middle and the × on the
+ * right. The text and the controls are {@link VoiceTranscriptPanel}: Pause (with the scrolling
+ * waveform inside it) or Resume, undo, Copy and Insert.
  *
- * <p>Under the panel sits the floating keyboard's grab handle ({@link GrabHandle}): dragged, it
- * moves the card anywhere in the room above; double-tapped, it puts the card back in the top right
+ * <p>The whole strip is the drag surface, as the floating keyboard's grab handle is: dragged, it
+ * moves the card anywhere in the room; double-tapped, it puts the card back in the top right
  * corner. Where the card was left is a pair of fractions of the travel, as the floating keyboard's
- * is ({@link FloatingKeyboardGeometry}) — 0 against the left or top edge, 1 against the right or
- * bottom — kept per orientation by the host ({@link PositionMemory}) and read again on the next
+ * is ({@link FloatingKeyboardGeometry}) - 0 against the left or top edge, 1 against the right or
+ * bottom - kept per orientation by the host ({@link PositionMemory}) and read again on the next
  * dictation. A fraction also decides which way the card grows: from the top it grows down, from
- * the bottom up, from the middle both ways, so a card left low keeps its handle where it was left
- * and the panel never runs off the screen; the panel's lines shrink to what the room holds.
+ * the bottom up, from the middle both ways, so a card left low keeps its strip where it was left
+ * and the text never runs off the screen; its lines shrink to what the room holds.
  *
  * <p>Pause stops listening: every phrase still transcribing arrives and the automatic cleanup
- * runs; the button then turns into resume, which carries on the same text (it waits, disabled,
+ * runs; the button then turns into resume, which carries on the same text (it waits, dimmed,
  * while phrases are still transcribing). The × only ever discards: it stops listening if need
  * be, throws the text away and closes, and a sideways swipe of the card is the same. The waveform
  * rests while the microphone is closed. All of them are the host's to act on through
@@ -110,14 +109,11 @@ public final class VoiceListeningIndicator {
     static final float DEFAULT_X_FRACTION = 1f;
     static final float DEFAULT_Y_FRACTION = 0f;
 
-    private static final int PILL_HEIGHT_DP = 36;
+    /** The header strip: 4 dp above, then 32 dp of content. */
+    private static final int HEADER_DP = 36;
     private static final int MAX_WIDTH_DP = 300;
     private static final int GAP_DP = 8;
-    /** Between the waveform-and-state group and the chip-and-buttons group. */
-    private static final int GROUP_GAP_DP = 4;
-    /** The row's padding, the waveform and the two 36 dp buttons: all of the row but the state. */
-    private static final int ROW_FIXED_DP = 12 + 56 + 10 + GROUP_GAP_DP + PILL_HEIGHT_DP + 4;
-    /** How far a finger may wander on the handle and still be a tap. */
+    /** How far a finger may wander on the strip and still be a tap. */
     private static final int HANDLE_SLOP_DP = 6;
 
     private final Activity activity;
@@ -125,20 +121,24 @@ public final class VoiceListeningIndicator {
     private final View anchor;
     @NonNull private final PositionMemory memory;
     @Nullable private SwipeCard card;
-    @Nullable private LinearLayout row;
+    @Nullable private View ring;
     @Nullable private TextView status;
-    @Nullable private View chip;
-    /** Pause while listening, resume once the microphone has closed; gone once the text is used. */
-    @Nullable private VoiceWaveformView wave;
+    @Nullable private TextView meta;
     @Nullable private VoiceTranscriptPanel panel;
-    @Nullable private View handle;
-    /** The panel's width for this session, from the room at show time; the state's widest from it. */
+    /** The panel's width for this session, from the room at show time. */
     private int panelWidth;
-    /** Captured segments still transcribing; the shimmer line shows while any are. */
+    /** Captured segments still transcribing; the ghost bar shows while any are. */
     private int pending;
     private boolean cleaningUp;
-    /** What the state says for the cleaned text, for redo to put back. */
+    /** A model or the voiced decision is still loading while the microphone is open. */
+    private boolean warming;
+    /** What the header's state says now, and for the cleaned text, for redo to put back. */
+    @StringRes private int statusRes = R.string.voice_input_listening;
     @StringRes private int cleanedStatus = R.string.voice_input_cleaned_up;
+    /** What the cleanup changed, for "· 5 edits". */
+    private int edits;
+    private int accent;
+    private int onSurfaceVariant;
 
     /** Where the card is, as fractions of its travel in {@link #room}. */
     private float xFraction = DEFAULT_X_FRACTION;
@@ -147,7 +147,6 @@ public final class VoiceListeningIndicator {
     private int fractionsOrientation;
     /** The room the card may sit in, in the content frame's coordinates; refreshed on every placement. */
     private final Rect room = new Rect();
-    private int rowGravity = Gravity.END;
 
     private final GrabHandle.Drag drag = new GrabHandle.Drag();
     private boolean dragMoved;
@@ -188,8 +187,9 @@ public final class VoiceListeningIndicator {
         if (content == null) return;
         Context context = activity;
         int onSurface = themeColor(context, com.termux.shared.R.attr.termuxColorOnSurface);
-        int onSurfaceVariant = themeColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant);
-        int accent = themeColor(context, com.termux.shared.R.attr.termuxColorPrimary);
+        onSurfaceVariant = themeColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant);
+        accent = themeColor(context, com.termux.shared.R.attr.termuxColorPrimary);
+        int onAccent = themeColor(context, com.termux.shared.R.attr.termuxColorOnPrimary);
         int surface = themeColor(context, com.termux.shared.R.attr.termuxColorSurfaceBase);
         int raised = themeColor(context, com.termux.shared.R.attr.termuxColorSurfacePanelHigh);
         readRoom(content);
@@ -200,56 +200,78 @@ public final class VoiceListeningIndicator {
         view.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable background = new GradientDrawable();
         background.setColor(surface);
-        background.setCornerRadius(dp(PILL_HEIGHT_DP / 2));
+        background.setCornerRadius(dp(24));
         view.setBackground(background);
-        view.setElevation(com.termux.app.chrome.ShapeTokens.elevationPx(context, 2));
+        view.setElevation(com.termux.app.chrome.ShapeTokens.elevationPx(context, 3));
         view.setClipToOutline(true);
 
-        // The pill row wraps its contents: no stretch between the state and the buttons, so the
-        // pill is as long as what it says and no longer.
-        LinearLayout pillRow = new LinearLayout(context);
-        pillRow.setOrientation(LinearLayout.HORIZONTAL);
-        pillRow.setGravity(Gravity.CENTER_VERTICAL);
+        // The header strip: what is happening and what became of it on the left, the handle in
+        // the middle (the two sides share the room equally), the x on the right. The whole strip
+        // is the drag surface; the x is a child with its own click, so its taps still land.
+        LinearLayout header = new LinearLayout(context);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPaddingRelative(dp(16), dp(4), dp(4), 0);
+        header.setContentDescription(context.getString(R.string.voice_input_move_handle));
+        header.setOnTouchListener((v, event) -> onHandleTouch(v, event));
 
-        VoiceWaveformView levels = new VoiceWaveformView(context, accent, onSurface);
-        LinearLayout.LayoutParams waveParams = new LinearLayout.LayoutParams(dp(56), dp(16));
-        waveParams.setMarginEnd(dp(10));
-        pillRow.addView(levels, waveParams);
+        LinearLayout left = new LinearLayout(context);
+        left.setOrientation(LinearLayout.HORIZONTAL);
+        left.setGravity(Gravity.CENTER_VERTICAL);
+        com.google.android.material.progressindicator.CircularProgressIndicator busy =
+            new com.google.android.material.progressindicator.CircularProgressIndicator(context);
+        busy.setIndeterminate(true);
+        busy.setIndicatorSize(dp(8));
+        busy.setIndicatorInset(0);
+        busy.setTrackThickness(dp(2));
+        busy.setIndicatorColor(accent);
+        busy.setVisibility(View.GONE);
+        LinearLayout.LayoutParams busyParams = new LinearLayout.LayoutParams(dp(8), dp(8));
+        busyParams.setMarginEnd(dp(6));
+        left.addView(busy, busyParams);
 
         TextView label = new TextView(context);
-        label.setTextColor(onSurface);
-        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        label.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        label.setLetterSpacing(0.02f);
         label.setSingleLine();
         label.setEllipsize(TextUtils.TruncateAt.END);
+        label.setTextColor(accent);
         label.setText(R.string.voice_input_listening);
-        label.setMaxWidth(Math.max(dp(48), panelWidth - dp(ROW_FIXED_DP)));
-        LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        labelParams.setMarginEnd(dp(GROUP_GAP_DP));
-        pillRow.addView(label, labelParams);
+        left.addView(label, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        View warming = warmingChip(context, onSurface, accent);
-        warming.setVisibility(View.GONE);
-        LinearLayout.LayoutParams chipParams = new LinearLayout.LayoutParams(
+        TextView note = new TextView(context);
+        note.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+        note.setTextColor(onSurfaceVariant);
+        note.setSingleLine();
+        note.setEllipsize(TextUtils.TruncateAt.END);
+        note.setVisibility(View.GONE);
+        LinearLayout.LayoutParams noteParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        chipParams.setMarginStart(dp(2));
-        pillRow.addView(warming, chipParams);
+        noteParams.setMarginStart(dp(6));
+        left.addView(note, noteParams);
+        header.addView(left, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
-        // The ×, the pill's full height as the tap target around an 18 dp glyph. It stays for the
-        // pill's whole life, and only ever discards. Pause/resume lives in the panel's action pill.
-        ImageView closeButton = pillButton(context, R.drawable.ic_symbol_close, onSurface, R.string.voice_input_close);
+        View grip = new View(context);
+        GradientDrawable gripShape = new GradientDrawable();
+        gripShape.setColor((onSurfaceVariant & 0x00FFFFFF) | 0x8C000000);
+        gripShape.setCornerRadius(dp(1.5f));
+        grip.setBackground(gripShape);
+        header.addView(grip, new LinearLayout.LayoutParams(dp(28), dp(3)));
+
+        // The x: 32 dp around a 16 dp glyph. It stays for the card's whole life, and only ever discards.
+        LinearLayout right = new LinearLayout(context);
+        right.setOrientation(LinearLayout.HORIZONTAL);
+        right.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        ImageView closeButton = closeButton(context, onSurfaceVariant);
         closeButton.setOnClickListener(v -> callbacks.onClose());
-        pillRow.addView(closeButton, new LinearLayout.LayoutParams(dp(PILL_HEIGHT_DP), dp(PILL_HEIGHT_DP)));
-        pillRow.setPaddingRelative(dp(12), 0, dp(4), 0);
-
-        rowGravity = rowGravityFor(xFraction);
-        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, dp(PILL_HEIGHT_DP));
-        rowParams.gravity = rowGravity;
-        view.addView(pillRow, rowParams);
+        right.addView(closeButton, new LinearLayout.LayoutParams(dp(32), dp(32)));
+        header.addView(right, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        view.addView(header, new LinearLayout.LayoutParams(panelWidth, dp(HEADER_DP)));
 
         VoiceTranscriptPanel transcript = new VoiceTranscriptPanel(context, onSurface, onSurfaceVariant,
-            accent, raised, new VoiceTranscriptPanel.Actions() {
+            accent, onAccent, raised, new VoiceTranscriptPanel.Actions() {
                 @Override
                 public void onUndo() {
                     callbacks.onUndo();
@@ -277,19 +299,7 @@ public final class VoiceListeningIndicator {
             });
         transcript.setDimRaw(dimRaw);
         if (!base.isEmpty()) transcript.resetTo(base);
-        transcript.setPaddingRelative(dp(12), 0, dp(12), dp(2));
-        transcript.setVisibility(View.GONE);
         view.addView(transcript, new LinearLayout.LayoutParams(panelWidth, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        // The floating keyboard's handle, under the panel: drag to move the card, double-tap for
-        // the corner. It comes and goes with the panel, so the bare pill stays 36 dp.
-        FrameLayout grab = new FrameLayout(context);
-        grab.setContentDescription(context.getString(R.string.voice_input_move_handle));
-        grab.addView(GrabHandle.newPill(context), GrabHandle.pillParams(context));
-        grab.setOnTouchListener((v, event) -> onHandleTouch(v, event));
-        grab.setVisibility(View.GONE);
-        view.addView(grab, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            Math.round(dp(GrabHandle.ROW_DP))));
 
         // Placed by translation from the frame's top left, so the frame measures it at its own
         // size wherever it sits; seen from its first layout, once it is in its place.
@@ -300,33 +310,34 @@ public final class VoiceListeningIndicator {
         content.addView(view, params);
         anchor.addOnLayoutChangeListener(anchorMoved);
         card = view;
-        row = pillRow;
+        ring = busy;
         status = label;
-        chip = warming;
-        wave = levels;
+        meta = note;
         panel = transcript;
-        handle = grab;
         pending = 0;
         cleaningUp = false;
+        warming = false;
+        edits = 0;
         cleanedStatus = R.string.voice_input_cleaned_up;
+        statusRes = R.string.voice_input_listening;
         setToggle(true, true);
-        updatePanelVisibility();
+        refreshHeader();
         fitPanel();
     }
 
-    /** The pill was up with its text waiting, and a new dictation carries on from it. */
+    /** The card was up with its text waiting, and a new dictation carries on from it. */
     private void resume(boolean dimRaw, @NonNull String base) {
         pending = 0;
         cleaningUp = false;
-        setStatus(R.string.voice_input_listening);
         setToggle(true, true);
-        if (wave != null) wave.setResting(false);
         VoiceTranscriptPanel view = panel;
         if (view != null) {
+            view.setWaveResting(false);
             view.setDimRaw(dimRaw);
             view.resetTo(base);
         }
-        updateShimmer();
+        setStatus(R.string.voice_input_listening);
+        updateGhost();
     }
 
     public void hide() {
@@ -334,12 +345,10 @@ public final class VoiceListeningIndicator {
         SwipeCard view = card;
         if (panel != null) panel.release();
         card = null;
-        row = null;
+        ring = null;
         status = null;
-        chip = null;
-        wave = null;
+        meta = null;
         panel = null;
-        handle = null;
         pending = 0;
         cleaningUp = false;
         drag.end();
@@ -356,29 +365,19 @@ public final class VoiceListeningIndicator {
         return card != null;
     }
 
-    /** A level sample with the VAD's noise floor at that moment; also keeps the pill in place as bars move. */
+    /** A level sample with the VAD's noise floor at that moment; also keeps the card in place as bars move. */
     public void setLevel(float rms, boolean voiced, float noiseFloor) {
-        VoiceWaveformView levels = wave;
-        if (levels == null) return;
-        levels.push(rms, voiced, noiseFloor);
+        VoiceTranscriptPanel view = panel;
+        if (view == null) return;
+        view.pushLevel(rms, voiced, noiseFloor);
         reposition();
     }
 
-    /** The "Warming up" chip, with its ring, while a model or the voiced decision is still loading. */
-    public void setWarmingUp(boolean warming) {
-        View view = chip;
-        TextView label = status;
-        if (view == null || label == null) return;
-        int visibility = warming ? View.VISIBLE : View.GONE;
-        if (view.getVisibility() == visibility) return;
-        view.setVisibility(visibility);
-        // The chip comes out of the state's room, so the pill never grows past the panel's width.
-        int chipWidth = 0;
-        if (warming) {
-            view.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED);
-            chipWidth = view.getMeasuredWidth() + dp(2);
-        }
-        label.setMaxWidth(Math.max(dp(48), panelWidth - dp(ROW_FIXED_DP) - chipWidth));
+    /** The ring and "· warming up" beside "Listening…" while a model or the voiced decision is still loading. */
+    public void setWarmingUp(boolean warmingNow) {
+        if (warming == warmingNow) return;
+        warming = warmingNow;
+        refreshHeader();
     }
 
     public void setListening() {
@@ -400,8 +399,8 @@ public final class VoiceListeningIndicator {
      */
     private void onMicrophoneClosed(boolean canResume) {
         setToggle(false, canResume);
-        VoiceWaveformView levels = wave;
-        if (levels != null) levels.setResting(true);
+        VoiceTranscriptPanel view = panel;
+        if (view != null) view.setWaveResting(true);
     }
 
     private void setToggle(boolean listening, boolean enabled) {
@@ -410,20 +409,52 @@ public final class VoiceListeningIndicator {
     }
 
     public void setStatus(@StringRes int text) {
-        TextView view = status;
-        if (view != null) view.setText(text);
+        statusRes = text;
+        refreshHeader();
     }
 
-    /** The VAD has closed a segment: a shimmer line stands in for it until it transcribes. */
+    /**
+     * The header from what is known: the state's words, accent only while the microphone is open,
+     * the ring while something loads or runs, and the meta that goes with the state.
+     */
+    private void refreshHeader() {
+        TextView label = status;
+        TextView note = meta;
+        View busy = ring;
+        if (label == null || note == null || busy == null) return;
+        boolean listening = statusRes == R.string.voice_input_listening;
+        label.setText(statusRes);
+        label.setTextColor(listening ? accent : onSurfaceVariant);
+        boolean running = statusRes == R.string.voice_input_transcribing
+            || statusRes == R.string.voice_input_cleaning_up;
+        int busyVisibility = running || (listening && warming) ? View.VISIBLE : View.GONE;
+        if (busy.getVisibility() != busyVisibility) busy.setVisibility(busyVisibility);
+        CharSequence text = "";
+        if (listening) {
+            if (warming) text = activity.getString(R.string.voice_input_meta_warming_up);
+        } else if (statusRes == R.string.voice_input_cleaned_up || statusRes == R.string.voice_input_formatted_command) {
+            if (edits > 0) text = activity.getResources().getQuantityString(R.plurals.voice_input_meta_edits, edits, edits);
+        } else if (statusRes == R.string.voice_input_as_heard) {
+            text = activity.getString(R.string.voice_input_meta_undone);
+        } else if (statusRes == R.string.voice_input_inserted) {
+            text = activity.getString(R.string.voice_input_meta_inserted);
+        } else if (statusRes == R.string.voice_input_cleanup_copied) {
+            text = activity.getString(R.string.voice_input_meta_copied);
+        }
+        note.setText(text);
+        note.setVisibility(text.length() > 0 ? View.VISIBLE : View.GONE);
+    }
+
+    /** The VAD has closed a segment: a ghost bar stands in for it until it transcribes. */
     public void onSegmentCaptured() {
         pending++;
-        updateShimmer();
+        updateGhost();
     }
 
     /** A captured segment has come back, with text or without. */
     public void onSegmentSettled() {
         pending = Math.max(0, pending - 1);
-        updateShimmer();
+        updateGhost();
     }
 
     /** One phrase, as it joins on, into the panel. */
@@ -431,16 +462,15 @@ public final class VoiceListeningIndicator {
         VoiceTranscriptPanel view = panel;
         if (view == null) return;
         view.append(typed);
-        updatePanelVisibility();
     }
 
     /** The session has ended and the one cleanup pass is running. */
     public void setCleaningUp() {
         cleaningUp = true;
+        warming = false;
         onMicrophoneClosed(true);
-        setWarmingUp(false);
         setStatus(R.string.voice_input_cleaning_up);
-        updateShimmer();
+        updateGhost();
     }
 
     /**
@@ -451,12 +481,14 @@ public final class VoiceListeningIndicator {
     public void showCleaned(@NonNull String cleaned, @StringRes int status) {
         cleaningUp = false;
         onMicrophoneClosed(true);
-        updateShimmer();
+        updateGhost();
         cleanedStatus = status;
-        setStatus(status);
         VoiceTranscriptPanel view = panel;
-        if (view != null) view.showCleaned(cleaned);
-        updatePanelVisibility();
+        if (view != null) {
+            view.showCleaned(cleaned);
+            edits = view.editCount();
+        }
+        setStatus(status);
     }
 
     /**
@@ -466,7 +498,7 @@ public final class VoiceListeningIndicator {
     public void showAsHeard(@StringRes int text) {
         cleaningUp = false;
         onMicrophoneClosed(true);
-        updateShimmer();
+        updateGhost();
         setStatus(text);
         VoiceTranscriptPanel view = panel;
         if (view != null) view.showFinalRaw();
@@ -479,33 +511,23 @@ public final class VoiceListeningIndicator {
         setStatus(undone ? R.string.voice_input_as_heard : cleanedStatus);
     }
 
-    /** ✓ or Copy has used the text: the buttons go (resume too) and the state says what happened. */
+    /** Insert or Copy has used the text: the controls go (resume too) and the header says what happened. */
     public void onActionDone(@StringRes int text) {
         VoiceTranscriptPanel view = panel;
         if (view != null) view.hideActions();
         setStatus(text);
     }
 
-    private void updateShimmer() {
+    /** The ghost bar stands in after the text while a phrase is still transcribing. */
+    private void updateGhost() {
         VoiceTranscriptPanel view = panel;
         if (view == null) return;
-        view.setShimmering(pending > 0 || cleaningUp);
-        updatePanelVisibility();
-    }
-
-    /** The panel, and the handle under it, show once there is text or a phrase on its way. */
-    private void updatePanelVisibility() {
-        VoiceTranscriptPanel view = panel;
-        if (view == null) return;
-        int visibility = view.hasContent() ? View.VISIBLE : View.GONE;
-        if (view.getVisibility() != visibility) view.setVisibility(visibility);
-        View grab = handle;
-        if (grab != null && grab.getVisibility() != visibility) grab.setVisibility(visibility);
+        view.setPending(pending > 0);
     }
 
     /**
      * Seven lines where they fit; where the room is short (landscape, the keyboard up) the panel
-     * keeps as many as fit in it with the pill and the handle, and the top truncates.
+     * keeps as many as fit in it with the header and the controls, and the top truncates.
      */
     private void fitPanel() {
         VoiceTranscriptPanel view = panel;
@@ -515,7 +537,7 @@ public final class VoiceListeningIndicator {
             view.setMaxVisibleLines(VoiceTranscriptPanel.VISIBLE_LINES);
             return;
         }
-        int space = room.height() - dp(PILL_HEIGHT_DP) - view.chromeHeightPx() - Math.round(dp(GrabHandle.ROW_DP));
+        int space = room.height() - dp(HEADER_DP) - view.chromeHeightPx();
         view.setMaxVisibleLines(space / line);
     }
 
@@ -545,19 +567,6 @@ public final class VoiceListeningIndicator {
         int y = room.top + FloatingKeyboardGeometry.positionPx(yFraction,
             FloatingKeyboardGeometry.travelPx(room.height(), height));
         view.setRest(x, y);
-        int gravity = rowGravityFor(xFraction);
-        LinearLayout pillRow = row;
-        if (gravity != rowGravity && pillRow != null) {
-            rowGravity = gravity;
-            LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) pillRow.getLayoutParams();
-            params.gravity = gravity;
-            pillRow.setLayoutParams(params);
-        }
-    }
-
-    /** With the panel up, the pill row keeps to the side the card is nearer: the × stays put as it grows. */
-    private static int rowGravityFor(float xFraction) {
-        return xFraction >= 0.5f ? Gravity.END : Gravity.START;
     }
 
     /**
@@ -673,50 +682,20 @@ public final class VoiceListeningIndicator {
 
     // ------------------------------------------------------------------ pieces
 
+    /** The x: a 16 dp glyph centred in its 32 dp, tinted {@code tint}, with a borderless ripple. */
     @NonNull
-    private ImageView pillButton(@NonNull Context context, int icon, int tint, @StringRes int description) {
+    private ImageView closeButton(@NonNull Context context, int tint) {
         ImageView button = new ImageView(context);
-        button.setImageResource(icon);
+        button.setImageResource(R.drawable.ic_symbol_close);
         button.setColorFilter(tint, PorterDuff.Mode.SRC_IN);
         button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        button.setContentDescription(context.getString(description));
-        button.setPadding(dp(9), dp(9), dp(9), dp(9));
+        button.setContentDescription(context.getString(R.string.voice_input_close));
+        button.setPadding(dp(8), dp(8), dp(8), dp(8));
         TypedValue ripple = new TypedValue();
         if (context.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true)) {
             button.setBackgroundResource(ripple.resourceId);
         }
         return button;
-    }
-
-    @NonNull
-    private View warmingChip(@NonNull Context context, int onSurface, int accent) {
-        LinearLayout chipView = new LinearLayout(context);
-        chipView.setOrientation(LinearLayout.HORIZONTAL);
-        chipView.setGravity(Gravity.CENTER_VERTICAL);
-        chipView.setPaddingRelative(dp(6), dp(2), dp(8), dp(2));
-        GradientDrawable background = new GradientDrawable();
-        background.setColor((onSurface & 0x00FFFFFF) | 0x1A000000);
-        background.setCornerRadius(dp(10));
-        chipView.setBackground(background);
-
-        com.google.android.material.progressindicator.CircularProgressIndicator ring =
-            new com.google.android.material.progressindicator.CircularProgressIndicator(context);
-        ring.setIndeterminate(true);
-        ring.setIndicatorSize(dp(12));
-        ring.setTrackThickness(dp(2));
-        ring.setIndicatorColor(accent);
-        LinearLayout.LayoutParams ringParams = new LinearLayout.LayoutParams(dp(12), dp(12));
-        ringParams.setMarginEnd(dp(4));
-        chipView.addView(ring, ringParams);
-
-        TextView text = new TextView(context);
-        text.setTextColor(onSurface);
-        text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11);
-        text.setSingleLine();
-        text.setText(R.string.voice_input_warming_up);
-        chipView.addView(text, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT));
-        return chipView;
     }
 
     private int dp(int value) {
