@@ -2,9 +2,12 @@
 <!-- The Appearance / Layout editor's bottom area (appearance-layout-editor SPEC §3.1–3.6): a
      non-modal M3 sheet docked at the foot of android.R.id.content. AppearanceEditorPanel paints
      its fill (colorSurfaceContainer) and its top corners (shapeAppearanceCornerExtraLarge);
-     SurfaceEditorController adds the navigation inset to the bottom padding and sets the height,
-     which is AppearanceEditorPanel.measureFor(mode): one fixed height per mode, measured from the
-     rows that mode shows. Nothing in it scrolls, and nothing in it is weighted.
+     SurfaceEditorController adds the navigation inset to the bottom padding and sets the height:
+     AppearanceEditorPanel.measureFor(mode), measured from the rows that mode shows, held to the
+     tallest resting sheet of the three pages (AppearancePreviewArea), so the sheet's top edge and
+     the preview above it stand still when the page changes. The rows hang from the top; a page
+     whose rows are shorter than that shows plain sheet under them. Nothing in it scrolls, and
+     nothing in it is weighted.
 
      One ConstraintLayout. Each mode's rows are a Group
      (appearance_editor_appearance_group / appearance_editor_layout_group), and a mode switch

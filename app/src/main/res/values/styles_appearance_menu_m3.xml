@@ -30,4 +30,7 @@
     <dimen name="appearance_editor_slider_stop">4dp</dimen>
     <!-- The sliders' length: the sheet's one fixed Appearance height is the rows above plus this. -->
     <dimen name="appearance_editor_slider_length">120dp</dimen>
+    <!-- The page bar every Appearance page wears. The editor's preview is measured from it
+      (AppearancePreviewArea.BAR_DP, which a test holds to this). -->
+    <dimen name="appearance_page_bar_height">64dp</dimen>
 </resources>

@@ -171,6 +171,39 @@ public abstract class AppearanceEditorPanelFitBase {
             pill.getHeight() <= root.findViewById(R.id.appearance_editor_row2_head).getHeight());
     }
 
+    /**
+     * The shared preview contract on this phone: the three pages' resting sheets are held to one
+     * reserve, so Look (at a stop), Layout and Icon pack stand the preview on the same rect, 8dp
+     * under the page bar (whose height is the contract's) and 8dp over the sheet, at a scale that
+     * stays readable.
+     */
+    @Test
+    public void everyPageSharesOnePreviewArea() {
+        android.content.res.Resources res = mPanel.view().getResources();
+        float density = res.getDisplayMetrics().density;
+        assertEquals(Math.round(AppearancePreviewArea.BAR_DP * density),
+            res.getDimensionPixelSize(R.dimen.appearance_page_bar_height));
+        int window = Math.round(res.getConfiguration().screenHeightDp * density);
+        int status = Math.round(24 * density);
+        int container = window - status;
+        int reserve = 0;
+        for (EditorMode page : EditorMode.values())
+            reserve = Math.max(reserve, mPanel.measureResting(page, mWidthPx));
+        int top = AppearancePreviewArea.topPx(status, density);
+        float shared = -1f;
+        for (EditorMode page : EditorMode.values()) {
+            int sheet = AppearancePreviewArea.sheetPx(reserve, mPanel.measureResting(page, mWidthPx));
+            assertEquals(page + " rests on the reserve", reserve, sheet);
+            float scale = AppearancePreviewArea.scale(container, 0, 0, top,
+                AppearancePreviewArea.bottomPx(window, sheet, density));
+            if (shared < 0f) shared = scale;
+            assertEquals(page + " shares the preview", shared, scale, 0f);
+            assertTrue(page + " stays readable: " + scale, scale > AppearanceEditorFrame.MIN_SCALE);
+        }
+        // The Custom row is the one sheet that stands taller than the reserve.
+        assertTrue(mPanel.measureTallest(EditorMode.LOOK, mWidthPx) > reserve);
+    }
+
     /** The global set's six columns show six legends reading upward. */
     @Test
     public void theGlobalSetHasSixColumnsAndNoButtons() {

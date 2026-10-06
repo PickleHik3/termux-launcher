@@ -292,14 +292,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mAppearanceHeightPx;
     private int mLayoutHeightPx;
     private int mRestHeightPx;
+    /**
+     * The tallest resting sheet of the three pages (Look at a stop, Layout, Icon pack): every
+     * page's sheet is at least this tall, so the preview above it is one size on every page.
+     */
+    private int mSheetReservePx;
     private int mNavInsetPx;
     /** The content width the panel was last measured at, and its running height animation. */
     private int mPanelWidthPx;
     @Nullable private android.animation.ValueAnimator mPanelAnimator;
     private int mPanelTargetPx;
 
-    /** The gap between the frame and the status inset above it, and the bottom area below it. */
-    private static final int FRAME_GAP_DP = 8;
+    /** The air round the preview, which the clock popup keeps from the bar too. */
+    private static final int FRAME_GAP_DP = AppearancePreviewArea.GAP_DP;
     /** The selection outline's stroke. */
     private static final int OUTLINE_STROKE_DP = 2;
     private static final long PANEL_MS = 240L;
@@ -948,7 +953,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * frame follows on the sheet's clock. Another mode measures it on the way in.
      */
     private void onIconsContentChanged() {
-        if (mOpen && mIconsMode && mFramed)
+        AppearanceEditorPanel panel = mPanel;
+        if (panel != null && mPanelWidthPx > 0) {
+            // The pack listing is part of the reserve every page is held to.
+            mSheetReservePx = measureSheetReserve(panel);
+            mRestHeightPx = Math.max(mRestHeightPx, mSheetReservePx);
+        }
+        if (mOpen && mFramed)
             applyPanelHeight(true);
     }
 
@@ -1225,8 +1236,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     // ------------------------------------------------------------------------------- the frame
 
     /**
-     * Places the frame and sizes the bottom area: the bottom area at the height its rows need in
-     * each mode, the frame scaled to fit between the status inset and the taller of the two.
+     * Places the frame and sizes the bottom area by the shared preview contract
+     * ({@link AppearancePreviewArea}): the frame's visible top {@code GAP_DP} under the page bar,
+     * its bottom {@code GAP_DP} over a sheet held to the tallest resting sheet of the three pages,
+     * so Look, Layout and Icon pack show the launcher on the same rect.
      */
     private void layoutFrame(boolean animate) {
         AppearanceEditorFrame frame = mFrame;
@@ -1248,24 +1261,27 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int decorHeight = content.getRootView().getHeight();
         mNavInsetPx = Math.max(0, contentInWindow[1] + windowHeight
             - (decorHeight - bars.bottom));
-        int statusInset = Math.max(0, Math.max(bars.top, mHost.statusBarInsetTop())
-            - contentInWindow[1]);
         panel.setNavInset(mNavInsetPx);
         // Side insets (landscape navigation bar, camera cutout) over the sheet's content, from
         // the window's own insets and only where they overlap this content view.
         Insets sides = insets == null ? Insets.NONE : insets.getInsets(
             WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+        // Where the page bar stands: padded by the status bar and the cutout together, exactly as
+        // the surface pads its pages, so the preview is measured from the bar as it is drawn.
+        int pageInsetTop = AppearancePreviewArea.pageInsetTopPx(
+            insets == null ? mHost.statusBarInsetTop() : sides.top, contentInWindow[1]);
         int decorWidth = content.getRootView().getWidth();
         panel.setSideInsets(
             Math.max(0, sides.left - contentInWindow[0]),
             Math.max(0, sides.right - (decorWidth - (contentInWindow[0] + content.getWidth()))));
-        // The sheet's height follows its content, but the frame stands above the tallest it gets
-        // (Appearance with Row B up, or Layout), so it never moves when Row B comes and goes or
-        // when the mode pill does, and no sheet ever covers it.
+        // Every page's sheet is held to the tallest resting sheet of the three, so its top edge,
+        // and the preview over it, stay put when the pill changes page; only the Look page's
+        // Custom row stands taller, and takes its room from the preview while it shows.
         mPanelWidthPx = content.getWidth();
+        mSheetReservePx = measureSheetReserve(panel);
         mAppearanceHeightPx = panel.measureTallest(EditorMode.LOOK, mPanelWidthPx);
         mLayoutHeightPx = panel.measureTallest(EditorMode.LAYOUT, mPanelWidthPx);
-        mRestHeightPx = Math.max(mAppearanceHeightPx, mLayoutHeightPx);
+        mRestHeightPx = Math.max(mSheetReservePx, Math.max(mAppearanceHeightPx, mLayoutHeightPx));
         mInLayoutFrame = true;
         try {
             applyPanelHeight(false);
@@ -1278,29 +1294,27 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         int containerTop = parentOffset[1] + root.getTop();
         int containerLeft = parentOffset[0] + root.getLeft();
-        // The page bar (back, title, Undo, Done) stands between the status inset and the frame.
-        int frameTop = Math.max(containerTop, statusInset + dp(AppearanceEditorPage.BAR_DP))
-            + dp(FRAME_GAP_DP);
-        // Nothing stands between the frame and the sheet any more (DECISIONS item 2): the hide
-        // zone's 56dp are the frame's.
+        // The page bar (back, the page pill, Undo, Done) stands between the status inset and the
+        // preview; nothing stands between the preview and the sheet (DECISIONS item 2).
+        int frameTop = AppearancePreviewArea.topPx(pageInsetTop, density());
         mFrameCtxValid = true;
         mWindowHeightPx = windowHeight;
         mFrameTopPx = frameTop;
         mContainerTopPx = containerTop;
         mContainerLeftPx = containerLeft;
         cancelFrameAnimator();
-        // The frame fits the room the sheet leaves NOW (a Look stop's one row, or Custom's
-        // sliders), not the tallest it gets: refitFrame follows every later change of the sheet.
-        int frameBottom = windowHeight - panel.measureFor(mode(), mPanelWidthPx)
-            - dp(FRAME_GAP_DP);
-        float scale = AppearanceEditorFrame.fitScale(root.getHeight(), frameTop, frameBottom,
-            AppearanceEditorFrame.MAX_SCALE);
-        float ty = frameTop - containerTop;
+        // The display bands the frame shows round the container go into the fit, so it is the
+        // visible miniature, not the container alone, that stands between the two lines.
         pushDisplayInsets(content);
+        int frameBottom = AppearancePreviewArea.bottomPx(windowHeight, sheetHeightPx(panel),
+            density());
+        float scale = AppearancePreviewArea.scale(root.getHeight(), mRevealTopPx,
+            mDisplayInsetBottomPx, frameTop, frameBottom);
+        float ty = AppearancePreviewArea.translationY(frameTop, containerTop, mRevealTopPx, scale);
         frame.show(scale, ty, animate);
         mTargetScale = scale;
         mTargetTy = ty;
-        setFrameRect(scale);
+        setFrameRect(scale, ty);
         positionLayoutFrame();
         // A rotation moved the decor around the container: the picture is cropped to it again.
         if (mEditorWallpaper != null)
@@ -1308,10 +1322,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * Tells the frame where the display's edges stand around the container, from the window's own
+     * Tells the frame where its clip stands around the container, from the window's own
      * geometry: the container's rect in the decor against the decor's size, so the status bar
-     * above it, the navigation bar below it and any side bar are all counted. The clip's arc is
-     * then the display's, not the container's. Unknown geometry leaves the insets at 0.
+     * above it, the navigation bar below it and any side bar are counted, and the clip's arc is
+     * the display's, not the container's. Unknown geometry leaves every inset at 0.
      */
     private void pushDisplayInsets(@NonNull ViewGroup content) {
         AppearanceEditorFrame frame = mFrame;
@@ -1321,6 +1335,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int[] parentOffset = new int[2];
         if (root.getWidth() <= 0 || !(root.getParent() instanceof View)
             || !AppearanceEditorFrame.offsetIn((View) root.getParent(), content, parentOffset)) {
+            mDisplayInsetLeftPx = 0;
+            mDisplayInsetRightPx = 0;
+            mDisplayInsetBottomPx = 0;
+            mDisplayInsetTopPx = 0;
+            mRevealTopPx = 0;
             frame.setDisplayInsets(0, 0, 0, 0);
             return;
         }
@@ -1331,13 +1350,38 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int top = contentInWindow[1] + parentOffset[1] + root.getTop();
         mDisplayInsetLeftPx = Math.max(0, left);
         mDisplayInsetTopPx = Math.max(0, top);
-        frame.setDisplayInsets(left, top, decor.getWidth() - (left + root.getWidth()),
-            decor.getHeight() - (top + root.getHeight()));
+        mDisplayInsetRightPx = Math.max(0, decor.getWidth() - (left + root.getWidth()));
+        mDisplayInsetBottomPx = Math.max(0, decor.getHeight() - (top + root.getHeight()));
+        mRevealTopPx = mDisplayInsetTopPx;
+        frame.setDisplayInsets(mDisplayInsetLeftPx, mRevealTopPx, mDisplayInsetRightPx,
+            mDisplayInsetBottomPx);
     }
 
-    /** The display's left and top edges' distance from the container, for the ring. */
+    /** The display's edges' distance from the container, for the clip and the ring. */
     private int mDisplayInsetLeftPx;
     private int mDisplayInsetTopPx;
+    private int mDisplayInsetRightPx;
+    private int mDisplayInsetBottomPx;
+    /** How much of the band above the container the frame shows. */
+    private int mRevealTopPx;
+
+    /** The reserve every page's sheet is held to: the tallest resting sheet of the three. */
+    private int measureSheetReserve(@NonNull AppearanceEditorPanel panel) {
+        int reserve = 0;
+        for (EditorMode page : EditorMode.values())
+            reserve = Math.max(reserve, panel.measureResting(page, mPanelWidthPx));
+        return reserve;
+    }
+
+    /** The sheet's height on the page showing: its content's, held to the shared reserve. */
+    private int sheetHeightPx(@NonNull AppearanceEditorPanel panel) {
+        return AppearancePreviewArea.sheetPx(mSheetReservePx,
+            panel.measureFor(mode(), mPanelWidthPx));
+    }
+
+    private float density() {
+        return mHost.context().getResources().getDisplayMetrics().density;
+    }
 
     // ---- the frame follows the sheet -------------------------------------------------------------
 
@@ -1360,19 +1404,24 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             animator.cancel();
     }
 
-    /** The scaled container's rect in the content view, widened to whole pixels. */
-    private void setFrameRect(float scale) {
+    /**
+     * The scaled container's rect in the content view at {@code scale} and {@code translationY},
+     * widened to whole pixels: the layout canvas's host. It starts the shown band below the
+     * preview's top line.
+     */
+    private void setFrameRect(float scale, float translationY) {
         AppearanceEditorFrame frame = mFrame;
         if (frame == null)
             return;
         View root = frame.root();
         float scaledLeft = mContainerLeftPx + root.getWidth() * (1f - scale) / 2f;
-        mFrameRectInContent = new int[] {(int) Math.floor(scaledLeft), mFrameTopPx,
+        float top = mContainerTopPx + translationY;
+        mFrameRectInContent = new int[] {(int) Math.floor(scaledLeft), (int) Math.floor(top),
             (int) Math.ceil(scaledLeft + root.getWidth() * scale),
-            (int) Math.ceil(mFrameTopPx + root.getHeight() * scale)};
+            (int) Math.ceil(top + root.getHeight() * scale)};
         mFrameCornerPx = AppearanceEditorFrame.visibleCornerRadiusPx(
             AppearanceEditorFrame.deviceCornerRadiusPx(root), mDisplayInsetLeftPx,
-            mDisplayInsetTopPx) * scale;
+            mRevealTopPx) * scale;
     }
 
     /**
@@ -1387,10 +1436,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         View root = frame.root();
         if (root.getHeight() <= 0)
             return;
-        int bottom = mWindowHeightPx - sheetPx - dp(FRAME_GAP_DP);
-        float scale = AppearanceEditorFrame.fitScale(root.getHeight(), mFrameTopPx, bottom,
-            AppearanceEditorFrame.MAX_SCALE);
-        float ty = mFrameTopPx - mContainerTopPx;
+        int bottom = AppearancePreviewArea.bottomPx(mWindowHeightPx, sheetPx, density());
+        float scale = AppearancePreviewArea.scale(root.getHeight(), mRevealTopPx,
+            mDisplayInsetBottomPx, mFrameTopPx, bottom);
+        float ty = AppearancePreviewArea.translationY(mFrameTopPx, mContainerTopPx, mRevealTopPx,
+            scale);
         if (scale == mTargetScale && ty == mTargetTy)
             return;
         mTargetScale = scale;
@@ -1399,13 +1449,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (!mFramed) {
             // Still arriving: the opening hop re-aims at the new pose.
             frame.show(scale, ty, !ReducedMotion.isEnabled(mHost.context()));
-            setFrameRect(scale);
+            setFrameRect(scale, ty);
             positionLayoutFrame();
             return;
         }
         if (!animate || ReducedMotion.isEnabled(mHost.context())) {
             frame.show(scale, ty, false);
-            setFrameRect(scale);
+            setFrameRect(scale, ty);
             positionLayoutFrame();
             positionTargets();
             return;
@@ -1421,8 +1471,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         animator.addUpdateListener(a -> {
             float f = (Float) a.getAnimatedValue();
             float s = fromScale + (toScale - fromScale) * f;
-            frame.setPose(s, fromTy + (toTy - fromTy) * f);
-            setFrameRect(s);
+            float y = fromTy + (toTy - fromTy) * f;
+            frame.setPose(s, y);
+            setFrameRect(s, y);
             positionLayoutFrame();
         });
         animator.addListener(new android.animation.AnimatorListenerAdapter() {
@@ -1438,7 +1489,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (mCancelled || !mOpen)
                     return;
                 frame.setPose(toScale, toTy);
-                setFrameRect(toScale);
+                setFrameRect(toScale, toTy);
                 positionLayoutFrame();
                 positionTargets();
             }
@@ -1457,7 +1508,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         AppearanceEditorPanel panel = mPanel;
         if (panel == null || mRestHeightPx <= 0 || mPanelWidthPx <= 0)
             return;
-        int height = panel.measureFor(mode(), mPanelWidthPx);
+        int height = sheetHeightPx(panel);
         View view = panel.view();
         ViewGroup.LayoutParams params = view.getLayoutParams();
         if (params == null)

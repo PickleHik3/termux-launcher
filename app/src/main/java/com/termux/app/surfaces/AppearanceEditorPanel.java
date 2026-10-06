@@ -364,6 +364,24 @@ final class AppearanceEditorPanel {
     }
 
     /**
+     * The sheet's height on {@code mode}'s page at rest: Look at a stop (Row A alone), Layout at
+     * its tallest, Icon pack as its content stands. The tallest of the three is the reserve every
+     * page's sheet is held to (AppearancePreviewArea), so the preview is one size on every page.
+     */
+    int measureResting(@NonNull EditorMode mode, int widthPx) {
+        if (mode != EditorMode.LOOK)
+            return measureTallest(mode, widthPx);
+        EditorMode shown = mMode;
+        boolean rowShown = mRow2Shown;
+        mRow2Shown = false;
+        applyGroups(EditorMode.LOOK);
+        int height = measureNow(widthPx);
+        mRow2Shown = rowShown;
+        applyGroups(shown);
+        return height;
+    }
+
+    /**
      * Layout mode's height: Row B as Corner radius and Margin, and as the keyboard's tools in
      * their place, whichever stands taller, so the sheet does not move when the keyboard is
      * selected. The state showing is restored before returning.
