@@ -3600,22 +3600,28 @@ public final class SuggestionBarView extends GridLayout
                 ? buildLaunchAnimationContext(launchSourceView)
                 : null;
             Bundle options = launchAnimationContext != null ? launchAnimationContext.options : null;
-            if (!LauncherAppLauncher.tryStartProfileMainActivity(context, entry, options)) {
-                Log.w(LOG_TAG, "Failed to launch cloned/profile package " + entry.appRef.packageName
-                    + " activity=" + entry.appRef.activityName + " user=" + entry.appRef.userId);
-                return;
-            }
-            if (activeAzLetter != null) {
-                clearAzPreview();
-            }
-            getUsageStatsStore().recordLaunch(entry.appRef.stableId());
-            invalidateMostUsedCache();
-            if (terminalView != null) {
-                terminalView.clearInputLine();
-            }
-            dismissFolderPopup();
-            dismissAppContextPopup();
-            dismissShortcutsPopup();
+            // LauncherApps answers at once; only its am fallback answers later, off main.
+            LauncherAppLauncher.startProfileMainActivity(context, entry, options, (launched, later) -> {
+                if (!launched) {
+                    Log.w(LOG_TAG, "Failed to launch cloned/profile package " + entry.appRef.packageName
+                        + " activity=" + entry.appRef.activityName + " user=" + entry.appRef.userId);
+                    return;
+                }
+                // A late answer finds the bar as it is now; one that has left the window has
+                // nothing left to tidy.
+                if (later && !isAttachedToWindow()) return;
+                if (activeAzLetter != null) {
+                    clearAzPreview();
+                }
+                getUsageStatsStore().recordLaunch(entry.appRef.stableId());
+                invalidateMostUsedCache();
+                if (terminalView != null) {
+                    terminalView.clearInputLine();
+                }
+                dismissFolderPopup();
+                dismissAppContextPopup();
+                dismissShortcutsPopup();
+            });
             return;
         }
         PackageManager packageManager = context.getPackageManager();
