@@ -4,7 +4,8 @@
  * Distributed under terms of the GPLv3 license.
  * SPDX-License-Identifier: GPL-3.0-only
  * Modified for Termux Launcher: run on the CPU, one result per particle instead of one coverage
- * value per pixel, in y-down pixels. See the repository LICENSE and THIRD_PARTY_NOTICES.md.
+ * value per pixel, fed and returning y-down pixels, and a per-move sequence number mixed into the
+ * seed. See the repository LICENSE and THIRD_PARTY_NOTICES.md.
  */
 package com.termux.app.terminal;
 
@@ -12,6 +13,12 @@ package com.termux.app.terminal;
  * The railgun, torpedo and pixiedust particle trails. kitty evaluates every particle for every
  * pixel in a fragment shader; here each particle is computed once and the overlay draws it as a
  * circle. Pure JVM, no Android types, so it is unit tested directly.
+ *
+ * <p>Like kitty's {@code cursor_trail_history_*} uniforms, the moves are remembered newest first
+ * with the time each was made, and a particle's age is simply now minus that time: a move keeps
+ * its own age however long the overlay sleeps between frames, and an old move can only ever get
+ * older, so nothing replays. The maths runs in kitty's y-up space (y is negated on the way in and
+ * out) so that railgun's spiral turns the way kitty's does.
  */
 public final class CursorTrailParticles {
 
@@ -19,12 +26,13 @@ public final class CursorTrailParticles {
     public static final int MODE_TORPEDO = 1;
     public static final int MODE_PIXIEDUST = 2;
 
-    /** How many recent moves are remembered, newest first. */
+    /** How many recent moves are remembered, newest first: kitty's CURSOR_TRAIL_HISTORY_SIZE. */
     public static final int MAX_MOVES = 8;
     public static final int MAX_PARTICLES = 48;
     /** Size of the {@code out} array {@link #collect} needs: 64 particles per move, 4 floats each. */
     public static final int OUT_SIZE = MAX_MOVES * 64 * 4;
 
+    // The options at the top of cursor-trail-particles.slang, at their shipped values.
     static final float PARTICLE_DENSITY = 3.0f;
     public static final float LIFETIME = 0.8f;
     public static final float EMIT_DURATION = 0.08f;
@@ -36,13 +44,19 @@ public final class CursorTrailParticles {
     static final float TORPEDO_SPREAD = 1.0f;
     static final float OPACITY = 1.0f;
     static final float TAU = 6.28318530718f;
+    /** How long after its move a particle can still be alive, in milliseconds. */
+    public static final long MAX_AGE_MS = (long) Math.ceil((LIFETIME + EMIT_DURATION) * 1000f);
     // Noise constant from Dave Hoskins
     private static final float MOD4_X = 0.1031f, MOD4_Y = 0.1030f, MOD4_Z = 0.0973f, MOD4_W = 0.1099f;
 
-    // Per move: from centre x,y, to centre x,y, scale, time, seed.
-    private static final int FIELDS = 7;
+    // Per move, in kitty's y-up pixels: from centre x,y, to centre x,y, scale, seed.
+    private static final int FIELDS = 6;
     private final float[] mMoves = new float[MAX_MOVES * FIELDS];
+    /** When each move was made, on the caller's millisecond clock. */
+    private final long[] mAt = new long[MAX_MOVES];
     private int mCount;
+    /** Moves recorded so far; mixed into each seed so two identical moves still differ. */
+    private long mSequence;
 
     private final float[] mR = new float[4];
     private final float[] mR2 = new float[4];
@@ -55,52 +69,65 @@ public final class CursorTrailParticles {
         return mCount;
     }
 
-    /** Remember an accepted move; the oldest of {@link #MAX_MOVES} falls off. */
+    /**
+     * Remember an accepted move, made at {@code nowMs}; the oldest of {@link #MAX_MOVES} falls off.
+     * Rects are in y-down pixels, as the overlay has them.
+     */
     public void record(float fromL, float fromT, float fromR, float fromB,
-                       float toL, float toT, float toR, float toB, float nowSeconds) {
+                       float toL, float toT, float toR, float toB, long nowMs) {
         int keep = Math.min(mCount, MAX_MOVES - 1);
         System.arraycopy(mMoves, 0, mMoves, FIELDS, keep * FIELDS);
-        mMoves[0] = (fromL + fromR) * 0.5f;
-        mMoves[1] = (fromT + fromB) * 0.5f;
-        mMoves[2] = (toL + toR) * 0.5f;
-        mMoves[3] = (toT + toB) * 0.5f;
+        System.arraycopy(mAt, 0, mAt, 1, keep);
+        float fx = (fromL + fromR) * 0.5f, fy = -(fromT + fromB) * 0.5f;
+        float tx = (toL + toR) * 0.5f, ty = -(toT + toB) * 0.5f;
+        mMoves[0] = fx;
+        mMoves[1] = fy;
+        mMoves[2] = tx;
+        mMoves[3] = ty;
+        // The width of a beam cursor and the height of an underline cursor are tiny, so use the
+        // larger of the two dimensions for scale.
         mMoves[4] = Math.max(Math.max(toR - toL, toB - toT), 1.0f);
-        mMoves[5] = nowSeconds;
-        mMoves[6] = frac(nowSeconds * 0.731f) * 1000.0f;
+        // kitty: "the seed only needs to be stable over the lifetime of the move, so derive it from
+        // the end points of the move". The sequence term keeps a repeat of the very same move (two
+        // panes' prompts, a key held between two places) from repeating the same pattern.
+        double seed = (tx - fx) * 0.1371 + (ty - fy) * 0.2113 + tx * 0.0173 + ty * 0.0291
+            + (mSequence++ % 4096L) * 0.6180339887;
+        mMoves[5] = (float) ((seed - Math.floor(seed)) * 1000.0);
+        mAt[0] = nowMs;
         mCount = keep + 1;
     }
 
-    /** Whether any remembered move is young enough to still show particles. */
-    public boolean alive(float nowSeconds) {
-        for (int m = 0; m < mCount; m++) {
-            float time = mMoves[m * FIELDS + 5];
-            if (time > 0f && nowSeconds - time < LIFETIME + EMIT_DURATION) return true;
-        }
-        return false;
+    /** Whether any remembered move is young enough to still show particles at {@code nowMs}. */
+    public boolean alive(long nowMs) {
+        // Newest first, so the newest move decides: anything older is older still.
+        if (mCount == 0) return false;
+        long age = nowMs - mAt[0];
+        return age >= 0L && age < MAX_AGE_MS;
     }
 
     /**
-     * Writes x, y, radius, alpha for every live particle into {@code out}.
+     * Writes x, y, radius, alpha for every live particle at {@code nowMs} into {@code out}, in
+     * y-down pixels.
      *
      * @return how many particles were written
      */
-    public int collect(float nowSeconds, int mode, float[] out) {
+    public int collect(long nowMs, int mode, float[] out) {
         int floats = 0;
         for (int m = 0; m < mCount; m++) {
+            float age = (nowMs - mAt[m]) / 1000f;
+            // Moves are most recent first, so all remaining ones are older still.
+            if (age < 0f || age >= LIFETIME + EMIT_DURATION) break;
             int o = m * FIELDS;
-            float time = mMoves[o + 5];
-            float age = nowSeconds - time;
-            if (time <= 0f || age >= LIFETIME + EMIT_DURATION) break;
             float fx = mMoves[o], fy = mMoves[o + 1], tx = mMoves[o + 2], ty = mMoves[o + 3];
             float scale = mMoves[o + 4];
             float lines = length(tx - fx, ty - fy) / scale;
-            floats = moveParticles(fx, fy, tx, ty, scale, lines, age, mMoves[o + 6], mode,
+            floats = moveParticles(fx, fy, tx, ty, scale, lines, age, mMoves[o + 5], mode,
                 out, floats);
         }
         return floats / 4;
     }
 
-    /** @return the new write index into {@code out}, in floats */
+    /** kitty's {@code move_particles}, one particle at a time. @return the new write index. */
     private int moveParticles(float fx, float fy, float tx, float ty, float scale, float lines,
                               float age, float seed, int mode, float[] out, int written) {
         float pathX = tx - fx, pathY = ty - fy;
@@ -115,6 +142,7 @@ public final class CursorTrailParticles {
         for (int i = 0; i < count; i++) {
             hash43(i, seed, 17.0f, mR);
             hash43(seed, i, 59.0f, mR2);
+            // Where along the path the particle starts, 0 is the old cursor position
             float u = (i + mR[0]) / count;
             float t = age - u * EMIT_DURATION;
             float life = LIFETIME * lerp(0.6f, 1.0f, mR[1]);
@@ -132,8 +160,8 @@ public final class CursorTrailParticles {
                 float k = lerp(0.2f, 1.0f, mR[3]);
                 velX = rotX(0.4f, 0f, angle) * k;
                 velY = rotY(0.4f, 0f, angle) * k;
-                // y-down: gravity pulls toward +y.
-                fallY = 0.5f * GRAVITY * scale * t * t;
+                fallY = -0.5f * GRAVITY * scale * t * t;
+                // Glitter
                 brightness = 0.55f + 0.45f * (float) Math.sin(t * 40.0f + mR2[2] * TAU);
             } else {
                 float angle = u * lines * RAILGUN_PHASE;
@@ -144,7 +172,9 @@ public final class CursorTrailParticles {
             float dist = speed * dragDistance(t);
             float fade = 1f - t / life;
             out[written] = startX + velX * dist;
-            out[written + 1] = startY + velY * dist + fallY;
+            // Back to y-down.
+            out[written + 1] = -(startY + velY * dist + fallY);
+            // Particles shrink as they fade
             out[written + 2] = radius * lerp(0.5f, 1.0f, fade);
             out[written + 3] = Math.max(0f, Math.min(1f, fade * brightness * OPACITY));
             written += 4;
