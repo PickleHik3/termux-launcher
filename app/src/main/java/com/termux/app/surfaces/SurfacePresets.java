@@ -330,9 +330,16 @@ public final class SurfacePresets {
             return;
         }
         Batch batch = new Batch(store);
-        applyEach(new TermuxAppSharedPreferences(prefs.getContext(), batch,
-            prefs.getMultiProcessSharedPreferences()), preset);
+        applyEach(writingInto(prefs, batch), preset);
         batch.applyToStore();
+    }
+
+    /** {@code prefs}' setters and getters over {@code batch}: what they write, it holds. */
+    @NonNull
+    static TermuxAppSharedPreferences writingInto(@NonNull TermuxAppSharedPreferences prefs,
+                                                  @NonNull Batch batch) {
+        return new TermuxAppSharedPreferences(prefs.getContext(), batch,
+            prefs.getMultiProcessSharedPreferences());
     }
 
     /** {@link #apply}, one setter and one {@code apply()} at a time: the reference it must match. */
@@ -508,6 +515,24 @@ public final class SurfacePresets {
 
         Batch(@NonNull SharedPreferences store) {
             mStore = store;
+        }
+
+        /** Whether anything is held: a write, a removal or a clear. */
+        boolean isEmpty() {
+            return !mCleared && mPending.isEmpty();
+        }
+
+        /**
+         * A copy of what is held now, over the same store, that nothing writes to again: what a
+         * {@link com.termux.shared.settings.preferences.SharedPreferencesPreview} may be shown
+         * with while this batch goes on collecting.
+         */
+        @NonNull
+        Batch frozen() {
+            Batch copy = new Batch(mStore);
+            copy.mPending.putAll(mPending);
+            copy.mCleared = mCleared;
+            return copy;
         }
 
         /** Writes everything held to the store as one editor, then forgets it. */

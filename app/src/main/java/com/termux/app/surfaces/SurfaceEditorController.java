@@ -2,6 +2,7 @@ package com.termux.app.surfaces;
 
 import android.annotation.SuppressLint;
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.graphics.Outline;
 import android.graphics.drawable.Drawable;
@@ -53,6 +54,7 @@ import com.termux.app.terminal.PaneRetroEffect;
 import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.wall.PaneWallPage;
+import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -533,6 +535,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (restore != null && layoutMode && place == null)
             place = placeNamed(restore.place);
         mOpen = true;
+        // No Look drag is under way at an open: a preview left behind by one that never saw its
+        // lift (a recreated activity) must not stand between the launcher and its stored look.
+        if (mLookDrag == null)
+            SharedPreferencesPreview.clear();
         mEntry = AppearanceSnapshot.capture(prefs);
         mEntrySignature = mEntry.signature();
         mSessionCustom = null;
@@ -1756,8 +1762,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The bottom area's events, turned into writes. */
     private final class PanelListener implements AppearanceEditorPanel.Listener {
-        @Override public void onLookStop(int stop) {
-            moveToStop(stop);
+        @Override public void onLookStop(int stop, boolean dragging) {
+            if (dragging) {
+                previewStop(stop);
+                return;
+            }
+            // A drag still held lands first, so the stop below moves from what is stored.
+            settleLookDrag();
+            TermuxAppSharedPreferences prefs = prefs();
+            if (prefs != null && moveToStop(prefs, stop))
+                syncAfterBulkWrite();
         }
 
         @Override public void onStyle(boolean floating) {
@@ -1855,39 +1869,117 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     // ------------------------------------------------------------------------------ the slider
 
     /**
-     * The Look slider landed on a stop. A Look applies at once; leaving Custom keeps the Custom
+     * The Look slider landed on a stop: its values written into {@code into}, which is the store
+     * itself, or a drag's batch over it. A Look applies at once; leaving Custom keeps the Custom
      * values of this session, so returning to Custom brings them back even when Done has not
      * saved them. With none kept, Custom brings back the saved Custom look, or, with none saved,
-     * keeps the Look it was reached from as its seed.
+     * keeps the Look it was reached from as its seed. The caller restates the launcher; false
+     * when the slider was already there and nothing was written.
      */
-    private void moveToStop(int stop) {
-        TermuxAppSharedPreferences prefs = prefs();
-        if (prefs == null || stop == mStop)
-            return;
+    private boolean moveToStop(@NonNull TermuxAppSharedPreferences into, int stop) {
+        if (stop == mStop)
+            return false;
         boolean leavingCustom = AppearanceLooks.isCustomStop(mStop);
         SurfacePresets.Preset look = AppearanceLooks.presetForStop(SurfacePresets.presets(), stop);
         mTarget = null;
         if (look != null) {
             if (leavingCustom) {
-                SurfacePresets.Preset saved = SurfacePresets.custom(prefs);
-                mSessionCustom = saved != null && SurfacePresets.matches(prefs, saved)
-                    ? null : AppearanceSnapshot.capture(prefs);
+                SurfacePresets.Preset saved = SurfacePresets.custom(into);
+                mSessionCustom = saved != null && SurfacePresets.matches(into, saved)
+                    ? null : AppearanceSnapshot.capture(into);
             }
-            SurfacePresets.apply(prefs, look);
+            SurfacePresets.apply(into, look);
             mStop = stop;
-            syncAfterBulkWrite();
-            return;
+            return true;
         }
         AppearanceSnapshot session = mSessionCustom;
         if (session != null) {
-            session.restore(prefs);
+            session.restore(into);
         } else {
-            SurfacePresets.Preset custom = SurfacePresets.custom(prefs);
+            SurfacePresets.Preset custom = SurfacePresets.custom(into);
             if (custom != null)
-                SurfacePresets.apply(prefs, custom);
+                SurfacePresets.apply(into, custom);
         }
         mStop = AppearanceLooks.CUSTOM_STOP;
+        return true;
+    }
+
+    // ---- the Look slider under a finger -------------------------------------------------------
+    //
+    // A drag crosses the Looks faster than one can be stored and the terminal reflowed for it.
+    // While the finger is down every stop it crosses walks the same transition a tap makes (the
+    // session's Custom values included) into one batch over the store, and the batch is shown
+    // through a SharedPreferencesPreview: every surface draws the Look under the finger from it,
+    // and nothing is stored. The release stores the batch as one editor and restates the launcher
+    // once. Undo and Discard compare against the snapshot taken on entry, which the preview never
+    // touches; a revert drops the batch unstored.
+
+    /** The drag's writes, held over the store; null while no Look drag is under way. */
+    @Nullable private SurfacePresets.Batch mLookDrag;
+    /** The preferences' setters and getters over {@link #mLookDrag}. */
+    @Nullable private TermuxAppSharedPreferences mLookDragPrefs;
+
+    /** A finger on the Look slider crossed onto {@code stop}: shown, not stored. */
+    private void previewStop(int stop) {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null || stop == mStop)
+            return;
+        SharedPreferences store = prefs.getSharedPreferences();
+        if (store == null) {
+            // Nothing to lay a preview over: the stop is stored, as a tap would.
+            if (moveToStop(prefs, stop))
+                syncAfterBulkWrite();
+            return;
+        }
+        beginDrag(true);
+        if (mLookDrag == null || mLookDragPrefs == null) {
+            mLookDrag = new SurfacePresets.Batch(store);
+            mLookDragPrefs = SurfacePresets.writingInto(prefs, mLookDrag);
+        }
+        if (!moveToStop(mLookDragPrefs, stop))
+            return;
+        SharedPreferencesPreview.show(store, mLookDrag.frozen());
+        previewLook();
+    }
+
+    /**
+     * What {@link #syncAfterBulkWrite} restates, for the Look the drag is over, minus the two
+     * things that wait for the release: the pane layout pass and the terminal's resize. A Look's
+     * stops are few and each is a different picture, so the re-blur and the keyboard's glass run
+     * at every stop rather than waiting for the release the way a slider's ticks do.
+     */
+    private void previewLook() {
+        TermuxAppSharedPreferences prefs = prefs();
+        if (prefs == null)
+            return;
+        mHost.refreshTerminalPalette();
+        mHost.applyTerminalMotionLook();
+        SoftWallpaper.apply(mHost.findView(R.id.wallpaper_backdrop), prefs);
+        requestPreview(SurfaceEditorProperties.PREVIEW_ALL);
+        syncPanel();
+        positionOutline();
+    }
+
+    /** The finger left the Look slider: what it showed is stored, once, and restated once. */
+    private void settleLookDrag() {
+        SurfacePresets.Batch batch = mLookDrag;
+        mLookDrag = null;
+        mLookDragPrefs = null;
+        if (batch == null)
+            return;
+        // Stored before the preview goes, so no read in between finds the Look the drag left.
+        batch.applyToStore();
+        SharedPreferencesPreview.clear();
         syncAfterBulkWrite();
+    }
+
+    /** The drag's batch dropped unstored: a revert is putting the entry state back. */
+    private void dropLookDrag() {
+        if (mLookDrag == null)
+            return;
+        mLookDrag = null;
+        mLookDragPrefs = null;
+        SharedPreferencesPreview.clear();
     }
 
     // ---------------------------------------------------------------------------- the controls
@@ -2833,6 +2925,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** Undo: everything — the look and the arrangement — back to the state at open. */
     private void revertToEntry() {
+        dropLookDrag();
         LayoutEditorController layout = mHost.layoutEditor();
         if (layout != null && layout.isDirty())
             layout.revert();
@@ -2942,6 +3035,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         }
         dismissClockDropdown();
+        // A drag cut short by the leave keeps what it showed, as every editor write is kept.
+        if (mSliderDragActive)
+            endDrag();
         // The bar goes back to its stored shape as the editor leaves, from the same moment.
         mHost.setTopStatusBarExpandedForEditor(false, true);
         mOpen = false;
@@ -3080,6 +3176,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The activity stopped with the surface up: the status pane's borrowed shape goes back. */
     @Override
     public void onStopWhileOpen() {
+        // A drag the stop cut short (no lift will come) keeps what it showed.
+        if (mSliderDragActive)
+            endDrag();
         mHost.setTopStatusBarExpandedForEditor(false, false);
     }
 
@@ -3103,8 +3202,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mSliderDragActive = dragging;
     }
 
+    /**
+     * Whether a drag holds the re-blur and the keyboard's reload for its release: a slider's
+     * ticks do; a Look drag's stops do not (see {@link #previewLook}).
+     */
+    private boolean defersHeavyPasses() {
+        return mSliderDragActive && mLookDrag == null;
+    }
+
     private void endDrag() {
         mSliderDragActive = false;
+        settleLookDrag();
         if (mDragTouchedGeometry) {
             mDragTouchedGeometry = false;
             requestPreview(SurfaceEditorProperties.PREVIEW_GEOMETRY
@@ -3129,7 +3237,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             syncDirty();
             return;
         }
-        if (mSliderDragActive && (scopes & SurfaceEditorProperties.PREVIEW_BLUR) != 0) {
+        if (defersHeavyPasses() && (scopes & SurfaceEditorProperties.PREVIEW_BLUR) != 0) {
             // A re-blur is the frame a drag can least afford; the release settles it once.
             mDragTouchedBlur = true;
             scopes &= ~SurfaceEditorProperties.PREVIEW_BLUR;
@@ -3161,7 +3269,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mHost.refreshTerminalWindowBar();
         }
         if ((scopes & SurfaceEditorProperties.PREVIEW_KEYBOARD) != 0 && keyboard() != null) {
-            if (mSliderDragActive) mDragTouchedKeyboard = true;
+            if (defersHeavyPasses()) mDragTouchedKeyboard = true;
             else keyboard().onPreferencesReloaded();
         }
         mHost.applyGlassPreview();

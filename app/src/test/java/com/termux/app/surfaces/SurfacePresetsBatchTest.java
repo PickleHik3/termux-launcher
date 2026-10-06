@@ -6,6 +6,7 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.R;
+import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -91,6 +92,60 @@ public class SurfacePresetsBatchTest {
         assertEquals(3, batch.getInt("fresh", 0));
         batch.applyToStore();
         assertEquals(new HashSet<>(java.util.Collections.singletonList("fresh")), store.getAll().keySet());
+    }
+
+    @Test
+    public void aFrozenCopyKeepsWhatWasHeldWhileTheBatchGoesOn() {
+        SharedPreferences store = seededStore();
+        SurfacePresets.Batch batch = new SurfacePresets.Batch(store);
+        assertTrue(batch.isEmpty());
+        batch.edit().putInt("blur", 4).apply();
+        SurfacePresets.Batch frozen = batch.frozen();
+        batch.edit().putInt("blur", 25).apply();
+        assertFalse(batch.isEmpty());
+        assertEquals(4, frozen.getInt("blur", 0));
+        assertEquals(25, batch.getInt("blur", 0));
+    }
+
+    /**
+     * The Look slider under a finger: each Look crossed (and the session's Custom values put back
+     * on the way) goes into one batch that every reader sees through the preview while nothing is
+     * stored; the release stores exactly what stepping through them one by one stores.
+     */
+    @Test
+    public void aDragAcrossTheLooksIsShownUnstoredThenStoredAsTheStepsWouldStoreIt() {
+        List<SurfacePresets.Preset> looks = SurfacePresets.presets();
+        SharedPreferences dragged = seededStore();
+        SharedPreferences stepped = seededStore();
+        TermuxAppSharedPreferences live = new TermuxAppSharedPreferences(context, dragged, null);
+        TermuxAppSharedPreferences reference = new TermuxAppSharedPreferences(context, stepped, null);
+        AppearanceSnapshot session = AppearanceSnapshot.capture(live);
+        Map<String, ?> before = new LinkedHashMap<>(dragged.getAll());
+
+        SurfacePresets.Batch batch = new SurfacePresets.Batch(dragged);
+        TermuxAppSharedPreferences held = SurfacePresets.writingInto(live, batch);
+        try {
+            for (SurfacePresets.Preset look : looks) {
+                SurfacePresets.apply(held, look);
+                SurfacePresets.apply(reference, look);
+                SharedPreferencesPreview.show(dragged, batch.frozen());
+                // Every reader, through any handle on the store, draws the Look under the finger.
+                assertTrue(look.id, SurfacePresets.matches(
+                    new TermuxAppSharedPreferences(context, dragged, null), look));
+                // And none of it is stored.
+                assertEquals(look.id, before, dragged.getAll());
+            }
+            session.restore(held);
+            session.restore(reference);
+            SharedPreferencesPreview.show(dragged, batch.frozen());
+            assertEquals(session.signature(), AppearanceSnapshot.signatureOf(live));
+
+            batch.applyToStore();
+        } finally {
+            SharedPreferencesPreview.clear();
+        }
+        assertEquals(stepped.getAll(), dragged.getAll());
+        assertEquals(session.signature(), AppearanceSnapshot.signatureOf(live));
     }
 
     /** The four shipped looks, plus a saved Custom that detaches cells and names custom-only keys. */
