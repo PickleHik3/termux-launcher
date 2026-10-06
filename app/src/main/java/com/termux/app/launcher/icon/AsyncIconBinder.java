@@ -18,6 +18,7 @@ import androidx.annotation.VisibleForTesting;
 import com.termux.R;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -150,12 +151,18 @@ public final class AsyncIconBinder {
         IconArrivalDrawable tile = new IconArrivalDrawable(sizePx, tileColor.tileColor());
         slot.tile = tile;
         view.setImageDrawable(tile);
+        // Held weakly while queued: a request waiting behind a catalogue load must not keep a
+        // dropped dock row, or the activity behind it, alive. A collected view wanted nothing.
+        WeakReference<ImageView> target = new WeakReference<>(view);
         worker.execute(() -> {
             // Recycled to another app before its turn: skip the render, not just the result.
-            if (slot.generation != token) return;
+            if (slot.generation != token || target.get() == null) return;
             Drawable rendered = renderQuietly(entry, sizePx);
             Drawable icon = rendered != null ? rendered : fallback;
-            main.execute(() -> deliver(view, slot, token, tile, icon));
+            main.execute(() -> {
+                ImageView live = target.get();
+                if (live != null) deliver(live, slot, token, tile, icon);
+            });
         });
         return false;
     }
