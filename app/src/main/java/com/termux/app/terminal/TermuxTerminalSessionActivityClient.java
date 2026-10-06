@@ -899,13 +899,13 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 mLastMaterialTerminalPaletteSignature =
                     MaterialTerminalColorScheme.signature(mContext, level);
                 mLastColorsFileStamp = Long.MIN_VALUE;
-                // Built here, on the main thread, and handed over as finished values: the writer thread
-                // must not touch the theme or resources, and this way the files describe the same
-                // palette the terminal just took. The dark and light halves are derived beside it,
-                // off forced-mode configuration contexts, so the templates can dress a tool for the
-                // mode the phone is not in.
+                // The active roles are built here, on the main thread, from the activity's theme, so
+                // the files describe the same palette the terminal just took. The dark and light
+                // halves, which only the files and templates use, are derived on the writer thread
+                // off forced-mode contexts that only it touches, so the templates can dress a tool
+                // for the mode the phone is not in without costing this thread two theme builds.
                 ThemeTemplates.exportPaletteAndRunPassAsync(mContext,
-                    MaterialTerminalColorScheme.createPaletteSet(mContext, level, props));
+                    MaterialTerminalColorScheme.paletteSetSource(mContext, level, props));
             } else {
                 props = new Properties();
                 mLastMaterialTerminalPaletteSignature = 0;

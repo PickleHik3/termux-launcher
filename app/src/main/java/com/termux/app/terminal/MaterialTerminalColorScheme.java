@@ -306,18 +306,44 @@ public final class MaterialTerminalColorScheme {
                                               @NonNull TerminalContrastLevel level,
                                               @NonNull Properties activeTerminalProps) {
         Properties active = createMaterialRoleProperties(context, activeTerminalProps, level);
+        Configuration base = context.getResources().getConfiguration();
         return PaletteSet.of(active,
-            paletteForNightMode(context, level, Configuration.UI_MODE_NIGHT_YES),
-            paletteForNightMode(context, level, Configuration.UI_MODE_NIGHT_NO));
+            paletteForNightMode(context, base, level, Configuration.UI_MODE_NIGHT_YES),
+            paletteForNightMode(context, base, level, Configuration.UI_MODE_NIGHT_NO));
     }
 
-    /** The export as it would be with {@code nightMode} forced, or {@code null} if that failed. */
+    /**
+     * As {@link #createPaletteSet(Context, TerminalContrastLevel, Properties)}, split for the UI
+     * thread: the active palette, which reads the caller's own theme, is built here; the two
+     * forced-mode palettes, which only feed the exported files, are built when the returned source
+     * runs on the export thread. They resolve their attributes through a configuration context and
+     * theme that the source creates and only that thread ever touches, the way the application's
+     * night-flip export already builds all three, from a snapshot of the caller's configuration
+     * taken here — so the files say exactly what the single-thread build would have said.
+     */
+    @NonNull
+    public static java.util.concurrent.Callable<PaletteSet> paletteSetSource(
+        @NonNull Context context, @NonNull TerminalContrastLevel level,
+        @NonNull Properties activeTerminalProps) {
+        Properties active = createMaterialRoleProperties(context, activeTerminalProps, level);
+        Configuration base = new Configuration(context.getResources().getConfiguration());
+        Context application = context.getApplicationContext();
+        return () -> PaletteSet.of(active,
+            paletteForNightMode(application, base, level, Configuration.UI_MODE_NIGHT_YES),
+            paletteForNightMode(application, base, level, Configuration.UI_MODE_NIGHT_NO));
+    }
+
+    /**
+     * The export as it would be with {@code nightMode} forced onto {@code base}, or {@code null} if
+     * that failed. The new contexts are confined to the calling thread.
+     */
     @Nullable
     private static Properties paletteForNightMode(@NonNull Context context,
+                                                  @NonNull Configuration base,
                                                   @NonNull TerminalContrastLevel level,
                                                   int nightMode) {
         try {
-            Configuration configuration = new Configuration(context.getResources().getConfiguration());
+            Configuration configuration = new Configuration(base);
             configuration.uiMode = (configuration.uiMode & ~Configuration.UI_MODE_NIGHT_MASK) | nightMode;
             Context themed = new ContextThemeWrapper(
                 context.createConfigurationContext(configuration),
