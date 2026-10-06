@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tasks and Scratchpad: built-in widgets that show a file from the home folder. -->
+    <string name="bw_files_path_label">File</string>
+    <string name="bw_files_notes_files_label">More files to switch between, separated by commas</string>
+    <string name="bw_files_editor_unavailable">The editor couldn\'t open right now</string>
+    <string name="bw_files_save">Save</string>
+
+    <!-- Tasks -->
+    <string name="bw_files_tasks_today">Today</string>
+    <plurals name="bw_files_tasks_left_label">
+        <item quantity="one">task left</item>
+        <item quantity="other">tasks left</item>
+    </plurals>
+    <string name="bw_files_tasks_left_short">left</string>
+    <string name="bw_files_tasks_header">%1$d left · %2$d done</string>
+    <string name="bw_files_tasks_empty">No tasks yet</string>
+    <string name="bw_files_tasks_add">Add</string>
+    <string name="bw_files_tasks_add_description">Add a task</string>
+    <string name="bw_files_tasks_new_title">New task</string>
+    <string name="bw_files_tasks_new_hint">What needs doing?</string>
+    <string name="bw_files_task_open">%1$s, not done</string>
+    <string name="bw_files_task_done">%1$s, done</string>
+    <string name="bw_files_task_done_label">done</string>
+    <string name="bw_files_tasks_save_failed">Couldn\'t save the change to your tasks</string>
+    <plurals name="bw_files_tasks_description">
+        <item quantity="one">%d task left</item>
+        <item quantity="other">%d tasks left</item>
+    </plurals>
+    <string name="bw_files_tasks_description_done">%1$s, %2$d done</string>
+
+    <!-- Scratchpad -->
+    <string name="bw_files_notes_new">new note</string>
+    <string name="bw_files_notes_note">Note</string>
+    <string name="bw_files_notes_open">Edit %1$s</string>
+    <string name="bw_files_notes_show">Show %1$s</string>
+    <string name="bw_files_notes_empty">Tap to write</string>
+    <string name="bw_files_notes_name_age">%1$s · %2$s</string>
+    <string name="bw_files_notes_description">%1$s %2$s, %3$s</string>
+    <string name="bw_files_notes_description_empty">%1$s %2$s, empty</string>
+
+    <!-- How long ago a file was edited -->
+    <string name="bw_files_age_now">just now</string>
+    <string name="bw_files_age_minutes">%dm</string>
+    <string name="bw_files_age_hours">%dh</string>
+    <string name="bw_files_edited_now">edited just now</string>
+    <string name="bw_files_edited_ago">edited %1$s ago</string>
+    <string name="bw_files_edited_on">edited %1$s</string>
+    <plurals name="bw_files_edited_minutes_spoken">
+        <item quantity="one">edited %d minute ago</item>
+        <item quantity="other">edited %d minutes ago</item>
+    </plurals>
+    <plurals name="bw_files_edited_hours_spoken">
+        <item quantity="one">edited %d hour ago</item>
+        <item quantity="other">edited %d hours ago</item>
+    </plurals>
+</resources>
