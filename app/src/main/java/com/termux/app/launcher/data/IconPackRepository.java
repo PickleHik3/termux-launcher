@@ -64,6 +64,10 @@ public final class IconPackRepository {
         }
     };
     private final Map<String, Long> lastVersionChecks = new LinkedHashMap<>();
+    /** Resources kept per pack APK in use: the global, the pinned and a picked icon's pack or two. */
+    private static final int MAX_PACK_RESOURCES = 4;
+    private final IconPackResourcesCache<Resources> packResources =
+        new IconPackResourcesCache<>(MAX_PACK_RESOURCES);
 
     public IconPackRepository(@NonNull Context context) {
         this.context = context.getApplicationContext();
@@ -140,8 +144,8 @@ public final class IconPackRepository {
         InputStream appfilterStream = null;
         InputStream drawableStream = null;
         try {
-            Context iconPackContext = context.createPackageContext(packageName, Context.CONTEXT_IGNORE_SECURITY);
-            Resources resources = iconPackContext.getResources();
+            Resources resources = packResources(packageName);
+            if (resources == null) return null;
             AssetManager assets = resources.getAssets();
 
             XmlPullParser appfilter = null;
@@ -194,6 +198,32 @@ public final class IconPackRepository {
             parsedPacks.clear();
             lastVersionChecks.clear();
         }
+        packResources.clear();
+    }
+
+    /**
+     * The resources of {@code packageName} as installed now, loaded once per APK and reused for
+     * every drawable taken from it; null when the pack is not installed or cannot be read. See
+     * {@link IconPackResourcesCache}.
+     */
+    @Nullable
+    public Resources packResources(@Nullable String packageName) {
+        if (packageName == null || packageName.trim().isEmpty()) return null;
+        String apkPath;
+        try {
+            ApplicationInfo info = packageManager.getApplicationInfo(packageName, 0);
+            apkPath = info.sourceDir == null ? "" : info.sourceDir;
+        } catch (PackageManager.NameNotFoundException | RuntimeException notInstalled) {
+            apkPath = null;
+        }
+        return packResources.get(packageName, apkPath, name -> {
+            try {
+                return context.createPackageContext(name, Context.CONTEXT_IGNORE_SECURITY)
+                    .getResources();
+            } catch (PackageManager.NameNotFoundException | RuntimeException unreadable) {
+                return null;
+            }
+        });
     }
 
     @Nullable
