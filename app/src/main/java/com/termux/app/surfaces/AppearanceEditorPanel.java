@@ -130,6 +130,10 @@ final class AppearanceEditorPanel {
 
     private final Slider mLook;
     private final FrameLayout mLookLabels;
+    /** What {@link #styleLookLabels} last applied; -1 until it has run. */
+    private int mStyledLookStop = -1;
+    private int mStyledLookActive;
+    private int mStyledLookQuiet;
     private final TextView[] mLookLabelViews = new TextView[AppearanceLooks.STOP_COUNT];
     /** Each label's own typeface as its text appearance set it (family and weight kept). */
     private final Typeface[] mLookLabelBase = new Typeface[AppearanceLooks.STOP_COUNT];
@@ -570,6 +574,11 @@ final class AppearanceEditorPanel {
         return out;
     }
 
+    /**
+     * Colours the chosen stop's label and makes it bold. The slider reports every value it passes
+     * through while dragged, so this returns at once unless the stop or the theme's colours moved:
+     * re-laying out five labels per value was the work, not the answer.
+     */
     private void styleLookLabels(int stop) {
         int active = MaterialColors.getColor(mRoot,
             androidx.appcompat.R.attr.colorPrimary,
@@ -577,6 +586,11 @@ final class AppearanceEditorPanel {
         int quiet = MaterialColors.getColor(mRoot,
             com.google.android.material.R.attr.colorOnSurfaceVariant,
             ContextCompat.getColor(mContext, R.color.termux_on_surface));
+        if (stop == mStyledLookStop && active == mStyledLookActive && quiet == mStyledLookQuiet)
+            return;
+        mStyledLookStop = stop;
+        mStyledLookActive = active;
+        mStyledLookQuiet = quiet;
         for (int i = 0; i < mLookLabelViews.length; i++) {
             TextView label = mLookLabelViews[i];
             label.setTextColor(i == stop ? active : quiet);
