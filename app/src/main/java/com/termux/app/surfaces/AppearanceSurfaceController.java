@@ -36,8 +36,7 @@ import java.util.function.Consumer;
  * entries, whose hops each built a window or a sheet from scratch while animating.
  *
  * <p><b>Pages.</b> The Overview (the wallpaper page) is built once per session and hidden, not
- * destroyed, while another page shows; its thumbnails, living-still listener and preview shaders
- * live until the surface closes. Look and Layout are the editor ({@link Editor}), presented over
+ * destroyed, while another page shows; its thumbnails live until the surface closes. Look and Layout are the editor ({@link Editor}), presented over
  * the launcher by the surface: the editor's frame and sheet are not in the host view, they are the
  * launcher's container scaled and a sheet over it, as they always were. Icons is a page of its own
  * ({@link Page}); the host supplies it. Back goes to the previous page, then closes: Icons to
@@ -57,10 +56,9 @@ import java.util.function.Consumer;
  *
  * <p><b>One session.</b> The editor's session (the held wall, its wallpaper decoded when the
  * surface opens in passthrough mode only, the launcher left as it was) begins when the
- * surface opens and ends when it closes; Look, Layout and the Overview move inside it. The backdrop
- * is told it is covered once when the surface opens and once when it closes.</p>
+ * surface opens and ends when it closes; Look, Layout and the Overview move inside it.</p>
  *
- * <p><b>The hop.</b> Overview to editor: the strip, the Motion row and the shortcut row slide down
+ * <p><b>The hop.</b> Overview to editor: the strip and the shortcut row slide down
  * and fade while the editor's sheet slides up; the launcher's container, primed at the Home card's
  * rect, settles into the editor's frame while the Overview's background and cards fade, so the card
  * becomes the frame. Editor to Overview plays the same in reverse, and the swap happens from the
@@ -222,9 +220,6 @@ public final class AppearanceSurfaceController {
         /** {@code android.R.id.content}, which the host view is added to; null before it exists. */
         @Nullable ViewGroup content();
 
-        /** The launcher's own backdrop is hidden by the surface (true) or shows again (false). */
-        void setCovered(boolean covered);
-
         /**
          * Builds the Overview, reading what it needs off the main thread, and hands it to
          * {@code ready} on the main thread.
@@ -286,7 +281,6 @@ public final class AppearanceSurfaceController {
     private boolean mDirect;
     /** Done on Look or Layout: the editor goes back to the Overview, which then closes the surface. */
     private boolean mCloseAfterHop;
-    private boolean mCovered;
     private boolean mTransitioning;
     /** Which page is showing: Overview, an editor (Look or Layout by the editor's mode) or Icons. */
     @Nullable private PageId mShown;
@@ -380,7 +374,7 @@ public final class AppearanceSurfaceController {
         showScrim(content);
         if (page == PageId.LOOK || page == PageId.LAYOUT) {
             // Straight into an editor: nothing behind it. The backdrop is not covered (it is the
-            // frame's picture and keeps playing, scaled), the host takes no touches, the bar eases
+            // frame's picture, scaled), the host takes no touches, the bar eases
             // in and the scrim fades up behind the frame as it scales.
             mDirect = true;
             mShown = page;
@@ -394,11 +388,7 @@ public final class AppearanceSurfaceController {
         }
         mDirect = false;
         mShown = PageId.OVERVIEW;
-        mCovered = true;
-        mHost.setCovered(true);
-        // Every Overview open covers at once (2026-10-05, pong): while the host faded in, the
-        // live backdrop was already stopped underneath, so the window's own wallpaper (the lock
-        // engine's picture) showed through for a few frames. The page fades in over the cover.
+        // Every Overview open covers at once (2026-10-05, pong): the page fades in over the cover.
         final boolean cover = true;
         mCoverNextOpen = false;
         if (cover) {
@@ -1043,10 +1033,6 @@ public final class AppearanceSurfaceController {
         mEditor.setPageListener(null);
         mEditorPage = null;
         removeScrim(mEditor.isPresented());
-        if (mCovered) {
-            mCovered = false;
-            mHost.setCovered(false);
-        }
         mShown = null;
         mDirect = false;
         mCloseAfterHop = false;

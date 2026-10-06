@@ -385,22 +385,6 @@
                 android:resource="@xml/lock_accessibility_service" />
         </service>
 
-        <!-- The lock-screen live wallpaper (project-docs/active/animated-wallpaper/lock-live-wallpaper.md).
-             Enabled from API 34 only, so it is not even listed below. -->
-        <service
-            android:name=".app.chrome.wallpaper.LockLiveWallpaperService"
-            android:enabled="@bool/lock_live_wallpaper_enabled"
-            android:exported="true"
-            android:label="@string/lock_live_wallpaper_label"
-            android:permission="android.permission.BIND_WALLPAPER">
-            <intent-filter>
-                <action android:name="android.service.wallpaper.WallpaperService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.service.wallpaper"
-                android:resource="@xml/lock_live_wallpaper" />
-        </service>
-
         <!-- Shizuku Provider for privileged operations -->
         <provider
             android:name="rikka.shizuku.ShizukuProvider"

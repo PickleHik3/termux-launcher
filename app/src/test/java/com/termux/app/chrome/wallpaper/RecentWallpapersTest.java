@@ -95,21 +95,15 @@ public class RecentWallpapersTest {
     }
 
     @Test
-    public void theLivingFlagIsRememberedAndOldLinesStillParse() throws IOException {
+    public void oldTwoAndThreeTokenIndexLinesStillParse() throws IOException {
         RecentWallpapers store = store();
         File plain = store.add(picture("p.png", "plain"), 1000);
-        File alive = store.add(picture("l.png", "alive"), 2000, true);
-        assertTrue(store.isLiving(alive));
-        assertFalse(store.isLiving(plain));
-        // A plain re-apply keeps the flag.
-        store.add(picture("l2.png", "alive"), 3000, false);
-        assertTrue(store.isLiving(alive));
-        // An old two-token index line parses as not living.
+        File older = store.add(picture("l.png", "alive"), 2000);
         Files.write(new File(store.directory(), "index").toPath(),
-            (plain.getName() + " abc\n").getBytes(StandardCharsets.UTF_8));
-        assertEquals(1, store.entries().size());
-        assertFalse(store.entries().get(0).living);
+            (plain.getName() + " abc\n" + older.getName() + " def living\n").getBytes(StandardCharsets.UTF_8));
+        assertEquals(2, store.entries().size());
         assertEquals("abc", store.entries().get(0).hash);
+        assertEquals("def", store.entries().get(1).hash);
     }
 
     @Test

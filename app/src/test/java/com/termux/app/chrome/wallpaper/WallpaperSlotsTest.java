@@ -24,9 +24,6 @@ import org.robolectric.annotation.Config;
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class WallpaperSlotsTest {
 
-    private static final String LIVING = "living:0123456789abcdef";
-    private static final String LIVING_B = "living:fedcba9876543210";
-
     private TermuxAppSharedPreferences preferences;
     private SharedPreferences sp;
 
@@ -38,16 +35,16 @@ public class WallpaperSlotsTest {
         preferences = new TermuxAppSharedPreferences(context, sp, null);
     }
 
+    private static final String HOME_LIVING = "living:0123456789abcdef";
+    private static final String LOCK_LIVING = "animated:living:fedcba9876543210";
+
     @Test
-    public void lockChoiceDefaultsToSameAsHomeAndMotionToOn() {
+    public void lockChoiceDefaultsToSameAsHome() {
         assertEquals("same_as_home", preferences.getWallpaperLockChoice());
-        assertTrue(preferences.isWallpaperLockMotionEnabled());
     }
 
     @Test
     public void lockChoiceRoundTrips() {
-        preferences.setWallpaperLockChoice("animated:" + LIVING);
-        assertEquals("animated:" + LIVING, preferences.getWallpaperLockChoice());
         preferences.setWallpaperLockChoice("photo");
         assertEquals("photo", preferences.getWallpaperLockChoice());
         preferences.setWallpaperLockChoice("same_as_home");
@@ -55,96 +52,38 @@ public class WallpaperSlotsTest {
     }
 
     @Test
-    public void junkLockChoicesReadAsSameAsHome() {
+    public void junkAndRetiredLockChoicesReadAsSameAsHome() {
         preferences.setWallpaperLockChoice(null);
         assertEquals("same_as_home", preferences.getWallpaperLockChoice());
-        preferences.setWallpaperLockChoice("animated:");
+        preferences.setWallpaperLockChoice(LOCK_LIVING);
         assertEquals("same_as_home", preferences.getWallpaperLockChoice());
         sp.edit().putString("wallpaper_lock_choice", "both").commit();
         assertEquals("same_as_home", preferences.getWallpaperLockChoice());
     }
 
     @Test
-    public void lockMotionRoundTrips() {
-        preferences.setWallpaperLockMotionEnabled(false);
-        assertFalse(preferences.isWallpaperLockMotionEnabled());
-        preferences.setWallpaperLockMotionEnabled(true);
-        assertTrue(preferences.isWallpaperLockMotionEnabled());
-    }
-
-    @Test
-    public void slotPrefsDoNotTouchTheHomeSlot() {
-        preferences.setManagedWallpaperAnimatedId(LIVING);
-        preferences.setWallpaperLockChoice("animated:" + LIVING_B);
-        preferences.setWallpaperLockMotionEnabled(false);
-        assertEquals(LIVING, preferences.getManagedWallpaperAnimatedId());
-    }
-
-    @Test
     public void stateMapsTheStoredValues() {
-        WallpaperSlots.State s = WallpaperSlots.stateFrom(LIVING, "animated:" + LIVING_B, false, true);
-        assertEquals(LIVING, s.home.animatedId);
-        assertFalse(s.home.photo);
-        assertEquals(LIVING_B, s.lock.animatedId);
+        WallpaperSlots.State s = WallpaperSlots.stateFrom("photo", null, null);
+        assertTrue(s.home.photo);
+        assertTrue(s.lock.photo);
         assertFalse(s.lock.sameAsHome);
-        assertFalse(s.lockMotion);
-        assertTrue(s.lockLiveActive);
-    }
-
-    @Test
-    public void stateMapsAHomePhotoAndTheDefaults() {
-        WallpaperSlots.State s = WallpaperSlots.stateFrom(null, null, true, false);
-        assertTrue(s.home.photo);
-        assertNull(s.home.animatedId);
-        assertTrue(s.lock.sameAsHome);
-        assertTrue(s.lockMotion);
-        assertFalse(s.lockLiveActive);
-        assertTrue(WallpaperSlots.stateFrom("gone", "photo", true, false).home.photo);
-        assertTrue(WallpaperSlots.stateFrom(null, "photo", true, false).lock.photo);
-        assertTrue("unknown id", WallpaperSlots.stateFrom(null, "animated:gone", true, false).lock.sameAsHome);
-    }
-
-    @Test
-    public void retiredBackgroundsReadAsAPhotoAndSameAsHome() {
-        WallpaperSlots.State s = WallpaperSlots.stateFrom("aurora", "animated:mesh", true, false);
-        assertTrue(s.home.photo);
-        assertNull(s.home.animatedId);
-        assertTrue(s.lock.sameAsHome);
-    }
-
-    @Test
-    public void dropRetiredBackgroundsSpotsEveryRetiredHomeId() {
-        for (String retired : new String[] {"mesh", "aurora", "tide", "rain", "contour", "drift", "lava", "silk",
-            "caustics", "chrome"}) {
-            assertTrue(retired, WallpaperSlots.isRetiredHomeId(retired));
-        }
-        assertFalse("a photo", WallpaperSlots.isRetiredHomeId(null));
-        assertFalse(WallpaperSlots.isRetiredHomeId(LIVING));
-    }
-
-    @Test
-    public void dropRetiredBackgroundsHealsARetiredLockChoice() {
-        // Our live wallpaper holds the lock screen: follow Home (its picture is copied over it).
-        assertEquals("same_as_home", WallpaperSlots.healedLockValue("animated:aurora", true));
-        // Otherwise the lock screen already shows that background's still: keep it as a photo.
-        assertEquals("photo", WallpaperSlots.healedLockValue("animated:mesh", false));
-        assertNull(WallpaperSlots.healedLockValue("animated:" + LIVING, true));
-        assertNull(WallpaperSlots.healedLockValue("same_as_home", true));
-        assertNull(WallpaperSlots.healedLockValue("photo", false));
-        assertNull(WallpaperSlots.healedLockValue(null, true));
+        WallpaperSlots.State d = WallpaperSlots.stateFrom(null, null, null);
+        assertTrue(d.home.photo);
+        assertTrue(d.lock.sameAsHome);
+        assertTrue("a retired animated choice", WallpaperSlots.stateFrom(LOCK_LIVING, null, null).lock.sameAsHome);
     }
 
     @Test
     public void aSlotHoldingAPhotoCarriesItsKeptPicture() {
         java.io.File exact = new java.io.File("/files/managed-wallpaper/system-wallpaper-exact.png");
         java.io.File lockCopy = new java.io.File("/files/wallpaper/slots/lock.png");
-        WallpaperSlots.State s = WallpaperSlots.stateFrom(null, "photo", true, false, exact, lockCopy);
+        WallpaperSlots.State s = WallpaperSlots.stateFrom("photo", exact, lockCopy);
         assertEquals(exact, s.home.photoFile);
         assertEquals(lockCopy, s.lock.photoFile);
-        WallpaperSlots.State animated = WallpaperSlots.stateFrom(LIVING, "same_as_home", true, false, exact, lockCopy);
-        assertNull("an animated Home has no photo", animated.home.photoFile);
-        assertTrue(animated.lock.sameAsHome);
-        assertNull("unknown picture", WallpaperSlots.stateFrom(null, "photo", true, false).home.photoFile);
+        WallpaperSlots.State follows = WallpaperSlots.stateFrom("same_as_home", exact, lockCopy);
+        assertTrue(follows.lock.sameAsHome);
+        assertNull(follows.lock.photoFile);
+        assertNull("unknown picture", WallpaperSlots.stateFrom("photo", null, null).home.photoFile);
         assertEquals("photo", WallpaperSlots.lockSlotName(s.lock));
     }
 
@@ -152,12 +91,88 @@ public class WallpaperSlotsTest {
     public void lockSlotNamesForTheStatusRoute() {
         assertEquals("same_as_home", WallpaperSlots.lockSlotName(WallpaperSlots.Choice.sameAsHome()));
         assertEquals("photo", WallpaperSlots.lockSlotName(WallpaperSlots.Choice.photo()));
-        assertEquals(LIVING, WallpaperSlots.lockSlotName(WallpaperSlots.Choice.animated(LIVING)));
+    }
+
+    // --- the retired live wallpaper migration ---
+
+    private static WallpaperSlots.RetiredPlan plan(String home, String lock, boolean held, boolean photo,
+                                                    boolean moved, boolean exact) {
+        return WallpaperSlots.planRetiredLive(home, lock, held, photo, moved, exact);
     }
 
     @Test
-    public void readBelow34HasNoLockLive() {
-        WallpaperSlots.State s = WallpaperSlots.read(RuntimeEnvironment.getApplication());
-        assertFalse(s.lockLiveActive);
+    public void nothingStoredAndNothingHeldDoesNothing() {
+        WallpaperSlots.RetiredPlan p = plan(null, "same_as_home", false, false, false, true);
+        assertFalse(p.clearHome);
+        assertFalse(p.reapplyHome);
+        assertEquals(WallpaperSlots.RetiredLockAction.NONE, p.lock);
+        assertEquals(WallpaperSlots.RetiredLockAction.NONE, plan("", "photo", false, true, true, true).lock);
+    }
+
+    @Test
+    public void aStoredLivingHomeIdIsClearedAndThePhotoStays() {
+        WallpaperSlots.RetiredPlan p = plan(HOME_LIVING, "photo", false, false, false, true);
+        assertTrue(p.clearHome);
+        assertFalse("the system wallpaper is already the photo", p.reapplyHome);
+        assertEquals(WallpaperSlots.RetiredLockAction.NONE, p.lock);
+        assertTrue(plan("some-other-id", null, false, false, false, false).clearHome);
+    }
+
+    @Test
+    public void theHomeCopyIsSetAgainOnlyWhenTheSystemMovedAndTheCopyExists() {
+        assertTrue(plan(HOME_LIVING, "photo", false, false, true, true).reapplyHome);
+        assertFalse(plan(HOME_LIVING, "photo", false, false, true, false).reapplyHome);
+        assertFalse(plan(HOME_LIVING, "photo", false, false, false, true).reapplyHome);
+        assertFalse("no retired Home id", plan(null, "photo", false, false, true, true).reapplyHome);
+    }
+
+    @Test
+    public void anAnimatedLockChoiceBecomesItsPhotoWhenFound() {
+        WallpaperSlots.RetiredPlan p = plan(null, LOCK_LIVING, false, true, false, true);
+        assertEquals(WallpaperSlots.RetiredLockAction.APPLY_PHOTO, p.lock);
+        assertFalse(p.clearHome);
+    }
+
+    @Test
+    public void anAnimatedLockChoiceWithNoPhotoFollowsHome() {
+        assertEquals(WallpaperSlots.RetiredLockAction.COPY_HOME_AND_STORE_SAME_AS_HOME,
+            plan(HOME_LIVING, LOCK_LIVING, true, false, false, true).lock);
+        assertEquals(WallpaperSlots.RetiredLockAction.COPY_HOME_AND_STORE_SAME_AS_HOME,
+            plan(null, LOCK_LIVING, false, false, false, false).lock);
+    }
+
+    @Test
+    public void sameAsHomeCopiesTheHomePictureWhileHomeWasLivingOrOurServiceHoldsTheLock() {
+        assertEquals(WallpaperSlots.RetiredLockAction.COPY_HOME_PICTURE,
+            plan(HOME_LIVING, "same_as_home", false, false, false, true).lock);
+        assertEquals(WallpaperSlots.RetiredLockAction.COPY_HOME_PICTURE,
+            plan(HOME_LIVING, null, false, false, false, true).lock);
+        assertEquals(WallpaperSlots.RetiredLockAction.COPY_HOME_PICTURE,
+            plan(null, "same_as_home", true, false, false, true).lock);
+        assertEquals(WallpaperSlots.RetiredLockAction.NONE,
+            plan(null, "same_as_home", false, false, false, true).lock);
+    }
+
+    @Test
+    public void anOwnLockPhotoIsKeptUnlessOurServiceHoldsTheLock() {
+        assertEquals(WallpaperSlots.RetiredLockAction.NONE,
+            plan(HOME_LIVING, "photo", false, true, false, true).lock);
+        assertEquals(WallpaperSlots.RetiredLockAction.APPLY_PHOTO,
+            plan(null, "photo", true, true, false, true).lock);
+        assertEquals(WallpaperSlots.RetiredLockAction.COPY_HOME_PICTURE,
+            plan(null, "photo", true, false, false, true).lock);
+    }
+
+    @Test
+    public void retiredAnimatedLockAndHashParsing() {
+        assertTrue(WallpaperSlots.isRetiredAnimatedLock(LOCK_LIVING));
+        assertFalse(WallpaperSlots.isRetiredAnimatedLock("animated:"));
+        assertFalse(WallpaperSlots.isRetiredAnimatedLock("photo"));
+        assertFalse(WallpaperSlots.isRetiredAnimatedLock(null));
+        assertEquals("fedcba9876543210", WallpaperSlots.retiredLivingHash(LOCK_LIVING));
+        assertEquals("0123456789abcdef", WallpaperSlots.retiredLivingHash(HOME_LIVING));
+        assertNull("a path is never a hash", WallpaperSlots.retiredLivingHash("animated:living:../x"));
+        assertNull(WallpaperSlots.retiredLivingHash("animated:"));
+        assertNull(WallpaperSlots.retiredLivingHash(null));
     }
 }

@@ -6,7 +6,6 @@ import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.Rect;
-import android.graphics.Shader;
 import android.util.AttributeSet;
 import android.view.View;
 
@@ -53,15 +52,6 @@ public final class WallpaperBackdropView extends View {
     @NonNull private final int[] mLocation = new int[2];
     @NonNull private final int[] mRootScratch = new int[2];
     private int mDimColor = Color.TRANSPARENT;
-    /**
-     * The animated wallpaper's shader (animated-wallpaper SPEC §3.5), drawn full-screen in place of
-     * the frame while set; null draws the frame as always. Typed as the base {@link Shader} so this
-     * class, which runs from API 26, never names {@code RuntimeShader}: only the API 34 live
-     * clock creates the shader and hands it in. Its coordinates are the frame rect's own pixels.
-     */
-    @Nullable private Shader mLiveShader;
-    @NonNull private final Paint mLivePaint = new Paint();
-
     public WallpaperBackdropView(@NonNull Context context) {
         super(context);
         init();
@@ -151,22 +141,6 @@ public final class WallpaperBackdropView extends View {
         if (mFrame != null) invalidate();
     }
 
-    /**
-     * Live mode: draws {@code shader} (the wallpaper's animated shader, in frame-rect pixels) under
-     * the same parallax translate and dim instead of the frame; null goes back to the frame. The
-     * caller writes the shader's uniforms and calls this in the same message that publishes the
-     * live glass frames. A software canvas keeps drawing the frame.
-     */
-    public void setLiveShader(@Nullable Shader shader) {
-        if (mLiveShader == shader) {
-            if (shader != null) invalidate();
-            return;
-        }
-        mLiveShader = shader;
-        mLivePaint.setShader(shader);
-        if (mFrame != null) invalidate();
-    }
-
     /** Puts the backdrop away and lets go of its frames, so the cache can recycle them. */
     public void hide() {
         boolean wasShowing = mFrame != null;
@@ -243,11 +217,7 @@ public final class WallpaperBackdropView extends View {
         float offsetPx = mParallax == null ? 0f : mParallax.offsetPx();
         int save = canvas.save();
         canvas.translate(-offsetPx, 0f);
-        if (mLiveShader != null && canvas.isHardwareAccelerated()) {
-            // The shader's coordinates are the frame rect's pixels, so its origin is the dest's.
-            canvas.translate(mDest.left, mDest.top);
-            canvas.drawRect(0f, 0f, mDest.width(), mDest.height(), mLivePaint);
-        } else if (fading) {
+        if (fading) {
             // Both frames share this backdrop's own rect — a crossfade only ever starts when the
             // geometry held, never across a rotation — so one dest rect draws either of them.
             drawFrame(canvas, previous, 255);

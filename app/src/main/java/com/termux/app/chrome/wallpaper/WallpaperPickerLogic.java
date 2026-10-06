@@ -30,8 +30,7 @@ public final class WallpaperPickerLogic {
         if (a == b) return true;
         if (a == null || b == null) return false;
         if (a.sameAsHome != b.sameAsHome || a.photo != b.photo) return false;
-        if (a.photo && !samePicture(a.photoFile, b.photoFile)) return false;
-        return a.animatedId == null ? b.animatedId == null : a.animatedId.equals(b.animatedId);
+        return !a.photo || samePicture(a.photoFile, b.photoFile);
     }
 
     private static boolean samePicture(@Nullable File a, @Nullable File b) {
@@ -112,71 +111,6 @@ public final class WallpaperPickerLogic {
         return centred == WallpaperSlots.Slot.LOCK;
     }
 
-    /** The Motion toggle: Lock centred, and the lock live wallpaper exists on this API level. */
-    public static boolean showsMotion(@NonNull WallpaperSlots.Slot centred, int sdkInt) {
-        return centred == WallpaperSlots.Slot.LOCK && WallpaperSlots.lockLiveSupported(sdkInt);
-    }
-
-    /** Whether the Motion row has a place on the page at all (it keeps its height on Home). */
-    public static boolean motionRowExists(int sdkInt) {
-        return WallpaperSlots.lockLiveSupported(sdkInt);
-    }
-
-    /**
-     * As above, on a page that may not offer the animated backgrounds (below API 34, or Fancier
-     * Glass off): with no animated tiles there is nothing for Motion to play.
-     */
-    public static boolean motionRowExists(int sdkInt, boolean animatedOffered) {
-        return animatedOffered && motionRowExists(sdkInt);
-    }
-
-    /** What the Motion row holds (living-stills.md, Part D.6). */
-    public enum MotionRow {
-        /** The Motion switch. */
-        SWITCH,
-        /** The switch's place, kept empty so the pager never jumps. */
-        SWITCH_HIDDEN,
-        /** The Bring to life button: a photo with no living still yet. */
-        OFFER,
-        /** The bar, the stage and a cancel: that photo is being analysed. */
-        WORKING,
-    }
-
-    /** A slot choice that is a living still ({@code living:<hash>}). */
-    public static boolean isLiving(@Nullable WallpaperSlots.Choice c) {
-        return c != null && !c.photo && !c.sameAsHome && AnimatedWallpapers.isLivingId(c.animatedId);
-    }
-
-    /**
-     * What the Motion row shows for the centred slot. A living still always has its switch. A photo
-     * with its picture, where living stills are offered (API 34+, animated backgrounds on), has the
-     * Bring to life button, or the working bar while that photo is being analysed. Anything else
-     * keeps the page's older rule: the switch on Lock from API 34, an empty place on Home.
-     *
-     * @param livingOffered the page can build living stills at all
-     * @param hasLiving     a photo choice whose photo already has one (the page adopts it as the choice)
-     * @param working       the job is analysing this photo right now
-     */
-    @NonNull
-    public static MotionRow motionRow(@NonNull WallpaperSlots.Slot centred, int sdkInt, boolean livingOffered,
-                                      @NonNull WallpaperSlots.Choice shown, boolean hasLiving, boolean working) {
-        if (isLiving(shown)) return MotionRow.SWITCH;
-        if (livingOffered && photoWithPicture(shown)) {
-            if (working) return MotionRow.WORKING;
-            return hasLiving ? MotionRow.SWITCH : MotionRow.OFFER;
-        }
-        return showsMotion(centred, sdkInt) ? MotionRow.SWITCH : MotionRow.SWITCH_HIDDEN;
-    }
-
-    /**
-     * The stage label's key: {@code depth}, {@code scene}, {@code subject}, {@code gemma} (the
-     * recipe stage while Gemma is asked) or {@code recipe}.
-     */
-    @NonNull
-    public static String stageKey(@NonNull String stage, boolean askingGemma) {
-        return "recipe".equals(stage) && askingGemma ? "gemma" : stage;
-    }
-
     /**
      * The lock preview's clock as the glyphs to draw: "9:05" in 12-hour time (no leading zero,
      * 12 for noon and midnight), "09:05" or "21:05" in 24-hour time. Only digits and ':'.
@@ -246,21 +180,5 @@ public final class WallpaperPickerLogic {
         int h = w >= natural ? maxHeightPx
             : Math.max(1, Math.min(maxHeightPx, Math.round(w * (longSide / (float) shortSide))));
         return new int[] {w, h};
-    }
-
-    /**
-     * The low-memory notice before Bring to life: how many MB the on-device reader needs beyond
-     * what is free (so Android would close apps running in the background), or 0 when there is
-     * nothing to say. A remote reader loads nothing here; unknown figures (zero or less) say nothing.
-     *
-     * @param neededFreeBytes what a load needs free, margin and the floor kept for the phone included
-     * @param availableBytes  what is free now, with the idle models the load may close credited
-     */
-    public static long lowMemoryWarning(long neededFreeBytes, long availableBytes, boolean remote) {
-        if (remote || neededFreeBytes <= 0L || availableBytes < 0L) return 0L;
-        long shortfall = neededFreeBytes - availableBytes;
-        if (shortfall <= 0L) return 0L;
-        long mb = 1024L * 1024L;
-        return (shortfall + mb - 1L) / mb;
     }
 }

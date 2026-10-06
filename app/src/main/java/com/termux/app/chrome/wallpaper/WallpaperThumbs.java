@@ -27,8 +27,7 @@ import java.util.concurrent.RejectedExecutionException;
  * Photo pictures for the Appearance Overview, made off the main thread and kept in memory only
  * until {@link #release()}, which recycles them: the slots' pictures, a pending crop, the recent
  * photos, each decoded once per (file, size) at about that size, on every API level. The surface
- * releases it when it closes, not when the Overview is hidden behind Look or Layout. Nothing
- * animates here; the living still's own animation is the preview card's.
+ * releases it when it closes, not when the Overview is hidden behind Look or Layout.
  */
 public final class WallpaperThumbs {
 

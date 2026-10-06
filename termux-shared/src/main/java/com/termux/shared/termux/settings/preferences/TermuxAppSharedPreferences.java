@@ -3216,22 +3216,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         );
     }
     
-    /** The living still id the managed wallpaper came from, or null for a photo. */
-    @Nullable
-    public String getManagedWallpaperAnimatedId() {
-        String id = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED, null, true);
-        return id == null || id.isEmpty() ? null : id;
-    }
-
-    public void setManagedWallpaperAnimatedId(@Nullable String id) {
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED, id == null ? "" : id, false);
-    }
-
     /**
      * The Lock wallpaper slot, normalised: {@code same_as_home} (default, and for anything
-     * unreadable), {@code photo}, or {@code animated:<id>} with a non-empty id.
+     * unreadable) or {@code photo}.
      */
     @androidx.annotation.NonNull
     public String getWallpaperLockChoice() {
@@ -3250,35 +3237,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (choice == null) return TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE;
         String c = choice.trim();
         if (TERMUX_APP.VALUE_WALLPAPER_LOCK_PHOTO.equals(c)) return c;
-        if (c.startsWith(TERMUX_APP.VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX)
-            && c.length() > TERMUX_APP.VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX.length()) return c;
         return TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE;
-    }
-
-    /** The Lock slot's Motion toggle, on by default. */
-    public boolean isWallpaperLockMotionEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_WALLPAPER_LOCK_MOTION, TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_MOTION);
-    }
-
-    public void setWallpaperLockMotionEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_LOCK_MOTION, value, false);
-    }
-
-    /** The Home slot's Motion toggle for a living still, on by default. */
-    public boolean isWallpaperHomeMotionEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_WALLPAPER_HOME_MOTION, TERMUX_APP.DEFAULT_VALUE_WALLPAPER_HOME_MOTION);
-    }
-
-    public void setWallpaperHomeMotionEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_HOME_MOTION, value, false);
-    }
-
-    /** Hidden kill switch for generated backgrounds; no settings UI, set through the preference file. */
-    public boolean isAnimatedWallpaperDisabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_ANIMATED_WALLPAPER_DISABLED, TERMUX_APP.DEFAULT_VALUE_ANIMATED_WALLPAPER_DISABLED);
     }
 
     public boolean isExtraKeysBlurEnabled() {
