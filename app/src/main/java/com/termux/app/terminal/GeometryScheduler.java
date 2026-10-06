@@ -134,10 +134,6 @@ public final class GeometryScheduler {
             this.defersEchoes = defersEchoes;
             this.holdsDisplay = holdsDisplay;
         }
-
-        public boolean isSettled() {
-            return settled;
-        }
     }
 
     /**
@@ -165,7 +161,10 @@ public final class GeometryScheduler {
     private boolean mHasPassKey;
     private long mLastPassKey;
 
+    private boolean mSettlePassPosted;
+
     private final Runnable mFrame = this::onFrame;
+    private final Runnable mSettlePass = this::onSettlePass;
     private final Runnable mSettleCheck = this::onSettleCheck;
     private final Runnable mBackstop = this::onBackstop;
 
@@ -253,8 +252,27 @@ public final class GeometryScheduler {
         mHost.postFrame(mFrame);
     }
 
+    /**
+     * Books the pending pass behind the traversal already booked, so it reads the layout a
+     * transition ended on — the bar's last height — rather than the one before it.
+     */
+    private void postSettlePass() {
+        if (mSettlePassPosted) return;
+        mSettlePassPosted = true;
+        mHost.postAfterLayout(mSettlePass);
+    }
+
+    private void onSettlePass() {
+        mSettlePassPosted = false;
+        runBookedPass();
+    }
+
     private void onFrame() {
         mFramePosted = false;
+        runBookedPass();
+    }
+
+    private void runBookedPass() {
         if (!mHost.isAlive()) {
             mPassPending = false;
             mPendingReason = null;
@@ -303,9 +321,9 @@ public final class GeometryScheduler {
     }
 
     /**
-     * Ends a transition. With {@code runPass}, or when it deferred echoes, one pass is booked for
-     * the end of the dispatch; the grid resumes after the layout of the last pass booked, once
-     * nothing else holds it.
+     * Ends a transition. With {@code runPass}, or when it deferred echoes, one pass is booked
+     * behind the layout the transition ended on, so it reads that layout; the grid resumes after
+     * the layout of the last pass booked, once nothing else holds it.
      */
     public void settle(@Nullable Transition transition, boolean runPass) {
         if (transition == null || transition.settled) return;
@@ -319,17 +337,12 @@ public final class GeometryScheduler {
                 mEchoDeferred = false;
             }
         }
-        if (runPass || echoed) {
+        if ((runPass || echoed) && accept(transition.reason, ResizePolicy.AT_SETTLE)) {
             // The pass posts the check behind its own layout.
-            request(transition.reason, ResizePolicy.AT_SETTLE);
-            if (mPassPending) return;
+            if (!mInPass && mBatchDepth == 0) postSettlePass();
+            return;
         }
         postSettleCheck();
-    }
-
-    /** True while a transition holds the grid. */
-    public boolean isTransitionOpen() {
-        return mOpenTransitions > 0;
     }
 
     // ------------------------------------------------------------------ the hold

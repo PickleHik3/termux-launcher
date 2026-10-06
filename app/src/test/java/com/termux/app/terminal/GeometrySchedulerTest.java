@@ -109,13 +109,18 @@ public class GeometrySchedulerTest {
 
         mScheduler.settle(fold, true);
         mHost.frame();
+        assertEquals("not before the layout the fold ended on", before, mHost.passes.size());
+
+        // The last frame's traversal: the pass runs behind it, reading the bar's last height.
+        mHost.layout();
 
         assertEquals("one pass at settle", before + 1, mHost.passes.size());
         assertEquals(Reason.STATUS_FOLD, mHost.passes.get(before));
-        assertEquals("the grid waits for the settle pass's layout", 0, mHost.holdsFinished);
+        assertEquals("the grid waits for the settle pass's own layout", 0, mHost.holdsFinished);
 
         mHost.layout();
 
+        assertEquals(before + 1, mHost.passes.size());
         assertEquals(1, mHost.holdsFinished);
         assertEquals(1, mHost.displayFinished);
     }
@@ -177,15 +182,23 @@ public class GeometrySchedulerTest {
     }
 
     @Test
-    public void aCheckPostedBeforeAPassWaitsForThatPassesLayout() {
-        GeometryScheduler.Transition fold = mScheduler.begin(Reason.STATUS_FOLD, true, false);
-        mScheduler.settle(fold, true);
-        // The settle's pass is booked, so no check may be queued ahead of it.
-        assertTrue(mHost.afterLayout.isEmpty());
-
+    public void aCheckPostedBeforeAPassIsMovedBehindThatPassesLayout() {
+        GeometryScheduler.Transition drag = mScheduler.begin(Reason.DIVIDER, false, false);
+        mScheduler.settle(drag, false);
+        // Before the queued check runs, something books a pass: the check must not release the
+        // grid ahead of that pass's layout.
+        mScheduler.request(Reason.KEYBOARD, ResizePolicy.NOW);
         mHost.frame();
         assertEquals(1, mHost.passes.size());
+        // On a looper the earlier check sits ahead of the barrier the pass's layout books; it is
+        // taken out and posted again behind it.
+        assertEquals(1, mHost.afterLayoutWithdrawn);
         assertEquals(1, mHost.afterLayout.size());
+        assertEquals(0, mHost.holdsFinished);
+
+        mHost.layout();
+
+        assertEquals(1, mHost.holdsFinished);
     }
 
     @Test
@@ -241,6 +254,7 @@ public class GeometrySchedulerTest {
         int holdsFinished;
         int displayBegun;
         int displayFinished;
+        int afterLayoutWithdrawn;
 
         @Override public void postFrame(@NonNull Runnable frame) {
             frames.add(frame);
@@ -256,7 +270,7 @@ public class GeometrySchedulerTest {
 
         @Override public void removeCallbacks(@NonNull Runnable runnable) {
             frames.removeIf(r -> r == runnable);
-            afterLayout.removeIf(r -> r == runnable);
+            if (afterLayout.removeIf(r -> r == runnable)) afterLayoutWithdrawn++;
             delayed.removeIf(d -> d.runnable == runnable);
         }
 
