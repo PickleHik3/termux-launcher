@@ -2358,6 +2358,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 popup.dismiss();
             }
         });
+        popup.setBackgroundDrawable(EditorM3.surface(anchor,
+            com.google.android.material.R.attr.shapeAppearanceCornerMedium,
+            com.google.android.material.R.attr.colorSurfaceContainerHigh));
         mClockDropdown = popup;
         popup.show();
     }
@@ -2389,6 +2392,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setMinimumHeight(dp(48));
+        row.setPaddingRelative(dp(16), 0, dp(16), 0);
         boolean selected = style.equals(current);
 
         TextView name = new TextView(context);
@@ -2476,7 +2480,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 pickClockAlignment(alignment);
         });
         FrameLayout holder = new FrameLayout(context);
-        holder.setPadding(dp(12), dp(4), dp(12), dp(4));
+        holder.setPadding(dp(16), dp(4), dp(16), dp(4));
         holder.addView(group, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         return holder;
