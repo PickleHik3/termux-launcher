@@ -1643,7 +1643,7 @@ public final class TermuxInAppKeyboard {
     }
 
     /**
-     * [data] parted at every row's midpoint while the type is split, and [data] itself otherwise.
+     * [data] parted into two halves while the type is split, and [data] itself otherwise.
      * Memoised on the layout and gap it was built from: the whole host reads the layout through
      * here, so the view and every index-keyed override describe the same keys.
      */
@@ -1674,7 +1674,7 @@ public final class TermuxInAppKeyboard {
             mPreferences.getInAppKeyboardSplitGapFraction());
         if (mMinSplitGapPx <= 0 || mKeyboardView == null)
             return units;
-        return Math.max(units, LayoutModifier.commonGapUnitsForPx(data,
+        return Math.max(units, LayoutModifier.gapUnitsForPx(data,
             mKeyboardView.getKeyContentWidthPx(), mMinSplitGapPx));
     }
 

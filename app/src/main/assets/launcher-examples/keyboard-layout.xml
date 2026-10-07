@@ -38,6 +38,12 @@
 
       map ctrl+alt+w app.launch com.whatsapp
 
+  SPLIT KEYBOARD. In the split form every row is cut once into a left and a right half.
+  split_before="true" on a key starts the right half at that key; split_at="2.5" on a wide key
+  cuts it in two 2.5 units from its left edge (both pieces type its centre value; the west-side
+  swipes stay on the left piece, the east-side ones on the right, north and south on the wider
+  one). A row with neither is cut at its middle.
+
   THE FN LAYER. The <modmap> at the bottom is what makes this usable as a terminal keyboard:
   Fn+q..p give F1-F12, Fn+a/s give Esc/Tab, Fn+d..l give navigation, and Fn+n / Fn+m send ^C / ^D.
 
@@ -54,7 +60,7 @@
     <key c="e" nw="!" ne="3" sw="\#" se="loc €"/>
     <key c="r" ne="4" sw="$"/>
     <key c="t" ne="5" sw="%"/>
-    <key c="y" ne="6" sw="^"/>
+    <key c="y" split_before="true" ne="6" sw="^"/>
     <key c="u" ne="7" sw="&amp;"/>
     <key c="i" ne="8" sw="*"/>
     <key c="o" ne="9" sw="(" se=")"/>
@@ -66,7 +72,7 @@
     <key c="d"/>
     <key c="f"/>
     <key c="g" ne="-" sw="_"/>
-    <key c="h" ne="=" sw="+"/>
+    <key c="h" split_before="true" ne="=" sw="+"/>
     <key c="j" sw="{" se="}"/>
     <key c="k" sw="[" se="]"/>
     <key c="l" ne="|" sw="\\"/>
@@ -77,7 +83,7 @@
     <key c="x" ne="loc †"/>
     <key c="c" ne="&lt;" sw="."/>
     <key c="v" ne=">" sw=","/>
-    <key c="b" ne="\?" sw="/"/>
+    <key c="b" split_before="true" ne="\?" sw="/"/>
     <key c="n" ne=":" sw=";"/>
     <key c="m" ne="&quot;" sw="'"/>
     <key width="1.5" c="backspace" ne="delete"/>
@@ -85,7 +91,7 @@
   <row height="0.95">
     <key width="1.7" c="ctrl" ne="loc meta" sw="loc switch_clipboard" se="switch_numeric"/>
     <key width="1.3" c="loc alt" nw="fn" ne="loc change_method" se="config"/>
-    <key width="4.0" c="space" w="cursor_left" e="cursor_right" s="switch_backward"
+    <key width="4.0" c="space" split_at="2.5" w="cursor_left" e="cursor_right" s="switch_backward"
          n="tool:app.command_palette:󱎱"
          nw="tool:window.previous:󰜳" ne="tool:window.next:󰜶"
          sw="tool:session.previous:󰜹" se="tool:session.next:󰜰"/>

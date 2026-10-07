@@ -99,7 +99,8 @@ public final class LayoutModifier
 
   /**
    * The parting the split keyboard type asks for, in key-width units, for a fraction of the
-   * keyboard's width. Read from the layout as parsed, never from one already parted.
+   * width its two halves take together. Read from the layout as parsed, never from one
+   * already parted.
    */
   public static float gapUnits(KeyboardData keyboard, float gapFraction)
   {
@@ -107,21 +108,21 @@ public final class LayoutModifier
   }
 
   /**
-   * The parting, in key-width units, whose common band measures [gapPx] across once the
-   * keyboard is parted and laid out over [contentWidthPx] — what a host standing something in
-   * the gap asks for, because the band is the only part of the parting every row leaves clear.
-   * Read from the layout as parsed, never from one already parted. See {@link SplitLayout}.
+   * The parting, in key-width units, that measures [gapPx] across once the keyboard is parted
+   * and laid out over [contentWidthPx] — what a host standing something in the gap asks for.
+   * The gap is one straight band on every row, so the whole parting is usable. Read from the
+   * layout as parsed, never from one already parted. See {@link SplitLayout}.
    */
-  public static float commonGapUnitsForPx(KeyboardData keyboard, float contentWidthPx,
-      float gapPx)
+  public static float gapUnitsForPx(KeyboardData keyboard, float contentWidthPx, float gapPx)
   {
-    return SplitLayout.commonGapUnitsForPx(keyboard, contentWidthPx, gapPx);
+    return SplitLayout.gapUnitsForPx(keyboard, contentWidthPx, gapPx);
   }
 
   /**
-   * The split keyboard type: every row of the composed layout parted at its midpoint by
-   * [gapUnits]. A step of its own, applied after {@link #modify}, so the bottom row and the
-   * extra keys part with the rest. See {@link SplitLayout}.
+   * The split keyboard type: the composed layout as two rectangular halves against the edges
+   * with a straight gap of [gapUnits] between them, every row cut where the layout marks it or
+   * else at its midpoint. A step of its own, applied after {@link #modify}, so the bottom row
+   * and the extra keys part with the rest. See {@link SplitLayout}.
    */
   public static KeyboardData split(KeyboardData keyboard, float gapUnits)
   {
