@@ -58,7 +58,9 @@ public class TaiTierPolicyTest {
         // Voice, read aloud and search are offered, never preselected; LLMs are only listed.
         assertEquals(Offer.SUGGESTED, TaiTierPolicy.offer(env, "whisper-acft-base"));
         assertEquals(Offer.SUGGESTED, TaiTierPolicy.offer(env, TaiModelCatalog.KITTEN_TTS_NANO_ID));
-        assertEquals(Offer.SUGGESTED, TaiTierPolicy.offer(env, TaiModelCatalog.EMBEDDING_GEMMA_300M_ID));
+        assertEquals(Offer.SUGGESTED, TaiTierPolicy.offer(env, TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID));
+        assertEquals(Offer.LISTED, TaiTierPolicy.offer(env, TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID));
+        assertEquals(TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID, TaiTierPolicy.automatic(env, TaiFunction.EMBEDDINGS).modelId);
         assertEquals(Offer.LISTED, TaiTierPolicy.offer(env, E2B));
         assertEquals(Offer.LISTED, TaiTierPolicy.offer(env, E4B));
         for (WelcomeRow row : TaiTierPolicy.welcomeRows(env)) assertFalse(row.id, row.preselected);
@@ -76,7 +78,9 @@ public class TaiTierPolicyTest {
         assertEquals(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID,
             TaiTierPolicy.automatic(env, TaiFunction.WALLPAPER_DEPTH).modelId);
         assertEquals(TaiModelCatalog.KITTEN_TTS_NANO_ID, TaiTierPolicy.automatic(env, TaiFunction.READ_ALOUD).modelId);
-        assertEquals(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID, TaiTierPolicy.automatic(env, TaiFunction.EMBEDDINGS).modelId);
+        assertEquals(TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID, TaiTierPolicy.automatic(env, TaiFunction.EMBEDDINGS).modelId);
+        assertEquals(Offer.PRESELECTED, TaiTierPolicy.offer(env, TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID));
+        assertEquals(Offer.LISTED, TaiTierPolicy.offer(env, TaiModelCatalog.EMBEDDING_GEMMA_300M_ID));
 
         List<Choice> readerChain = TaiTierPolicy.fallbackChain(env, TaiFunction.WALLPAPER_READER);
         assertEquals(2, readerChain.size());

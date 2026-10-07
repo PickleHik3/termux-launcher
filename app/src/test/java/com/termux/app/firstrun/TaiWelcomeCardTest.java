@@ -45,6 +45,8 @@ public class TaiWelcomeCardTest {
         SIZES.put(E2B, 2_780_000_000L);
         SIZES.put(E4B, 3_930_000_000L);
         SIZES.put(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID, 183L * MIB);
+        SIZES.put(TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID, 388L * MIB);
+        SIZES.put(TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID, 165L * MIB);
         SIZES.put(TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID, 28L * MIB);
         SIZES.put(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, 55L * MIB);
         SIZES.put(TaiModelCatalog.U2NET_ID, 84L * MIB);

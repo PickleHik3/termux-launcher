@@ -258,7 +258,10 @@ public final class TaiTierPolicy {
                 return Choice.model(t1 || eight ? TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID
                     : TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, null);
             case EMBEDDINGS:
-                return Choice.model(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID, null);
+                // EmbeddingGemma 2 (2026-10-06): the 440M text+vision file everywhere it fits, the
+                // 270M text-only one on Tier 1; the v1 300M stays installable but is no longer chosen.
+                return Choice.model(t1 ? TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID
+                    : TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID, null);
             default:
                 return Choice.NOTHING;
         }
@@ -307,6 +310,13 @@ public final class TaiTierPolicy {
             case WALLPAPER_DEPTH:
                 chain.add(Choice.model(t1 || eight ? TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID
                     : TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID, null));
+                break;
+            case EMBEDDINGS:
+                // Any installed EmbeddingGemma serves: the other v2 file, then the v1 300M a phone
+                // may still carry from before 2026-10-06.
+                chain.add(Choice.model(t1 ? TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID
+                    : TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID, null));
+                chain.add(Choice.model(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID, null));
                 break;
             default:
                 break;
@@ -357,8 +367,12 @@ public final class TaiTierPolicy {
                 return t1 ? Offer.LISTED : Offer.SUGGESTED;
             case TaiModelCatalog.KITTEN_TTS_NANO_ID:
                 return t1 ? Offer.SUGGESTED : Offer.PRESELECTED;
+            case TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID:
+                return t1 ? Offer.LISTED : Offer.PRESELECTED;
+            case TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID:
+                return t1 ? Offer.SUGGESTED : Offer.LISTED;
             case TaiModelCatalog.EMBEDDING_GEMMA_300M_ID:
-                return t1 ? Offer.SUGGESTED : Offer.PRESELECTED;
+                return Offer.LISTED;
             case TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID:
                 if (!env.wallpaperSupported()) return Offer.HIDDEN;
                 if (t1) return Offer.SUGGESTED;
@@ -426,7 +440,8 @@ public final class TaiTierPolicy {
                 rows.add(new WelcomeRow("smarter_reading", ids(E4B), e4bFunctions, t3 && !env.noGpu()));
             }
         }
-        rows.add(new WelcomeRow("search", ids(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID),
+        rows.add(new WelcomeRow("search", ids(t1 ? TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID
+                : TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID),
             fns(TaiFunction.EMBEDDINGS), !t1));
         if (env.wallpaperSupported()) {
             String depth = t1 || eight ? TaiModelCatalog.DEPTH_ANYTHING_V2_SMALL_ID : TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID;
