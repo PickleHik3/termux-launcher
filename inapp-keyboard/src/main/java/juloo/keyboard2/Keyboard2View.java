@@ -768,23 +768,36 @@ public class Keyboard2View extends View
 
   /**
    * The band the parting leaves empty on every row, in view pixels, for a host that wants to
-   * stand something in the gap. False, leaving [out] alone, when the keyboard is not split, has
-   * not been measured, or its rows share no band.
+   * stand something in the gap: the same strip {@link #drawSplitBackground} leaves between the
+   * two slabs. False, leaving [out] alone, when the keyboard is not split or has not been
+   * measured.
    */
   public boolean getSplitGapBounds(Rect out)
   {
-    if (_splitGapUnits <= 0f || _keyboard == null || _tc == null || _keyWidth <= 0f)
-      return false;
-    float[] band = SplitLayout.commonGap(_keyboard, _splitGapUnits);
+    float[] band = splitGapPx();
     if (band == null)
       return false;
-    int left = Math.round(_marginLeft + band[0] * _keyWidth);
-    int right = Math.round(_marginLeft + band[1] * _keyWidth);
+    int left = Math.round(band[0]);
+    int right = Math.round(band[1]);
     int height = getHeight() > 0 ? getHeight() : getMeasuredHeight();
     if (right <= left || height <= 0)
       return false;
     out.set(left, 0, right, height);
     return true;
+  }
+
+  /**
+   * The parting as {left, right} in view pixels, or null when the keyboard is not split or has
+   * not been measured. One band for every row: {@link SplitLayout} parts the rows so.
+   */
+  private float[] splitGapPx()
+  {
+    if (_splitGapUnits <= 0f || _keyboard == null || _tc == null || _keyWidth <= 0f)
+      return null;
+    float[] band = SplitLayout.gapBand(_keyboard, _splitGapUnits);
+    if (band == null)
+      return null;
+    return new float[]{ _marginLeft + band[0] * _keyWidth, _marginLeft + band[1] * _keyWidth };
   }
 
   /**
@@ -1526,8 +1539,9 @@ public class Keyboard2View extends View
         float ty = event.getY(p);
         KeyboardData.Key rawKey = getKeyAtPosition(tx, ty);
         // The parting of a split keyboard is not the keyboard's: refusing the press hands the
-        // whole stream to whatever is under the gap.
-        if (rawKey == null && _splitGapUnits > 0f)
+        // whole stream to whatever is under the gap. A press on a half's slab beside its keys
+        // is still the keyboard's, as it is docked.
+        if (rawKey == null && _splitGapUnits > 0f && inSplitGap(tx))
           return false;
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN)
           requestDisallowIntercept(true);
@@ -1842,41 +1856,34 @@ public class Keyboard2View extends View
   private static final float SPLIT_SLAB_RADIUS_PX = 0f;
 
   /**
-   * The keyboard background of a split keyboard: one slab under each run of keys, so the parting
-   * between the halves is left clear. Slabs meet vertically and reach both view edges, so the
-   * result is the docked background with the gap taken out of it.
+   * The keyboard background of a split keyboard: two slabs, one per half, each the full height
+   * of the view and reaching its own edge, with the parting between them left clear. The halves
+   * are rectangles by construction ({@link SplitLayout}), so the slabs are too: the docked
+   * background with one straight band taken out of it. A layout handed in whole, with no band
+   * to leave, gets the docked background back as a single slab. Package-private for its test.
    */
-  private void drawSplitBackground(Canvas canvas)
+  void drawSplitBackground(Canvas canvas)
   {
     _splitBackgroundPaint.setColor(getSplitBackgroundColor());
-    float y = getPaddingTop() + _tc.margin_top;
-    int lastRow = _keyboard.rows.size() - 1;
-    for (int rowIndex = 0; rowIndex <= lastRow; rowIndex++)
+    float bottom = getHeight();
+    float[] band = splitGapPx();
+    if (band == null)
     {
-      KeyboardData.Row row = _keyboard.rows.get(rowIndex);
-      float top = rowIndex == 0 ? 0f : y;
-      y += (row.shift + row.height) * _tc.row_height;
-      float bottom = rowIndex == lastRow ? getHeight() : y;
-      float x = _marginLeft;
-      float runLeft = 0f;
-      float runRight = -1f;
-      for (int keyIndex = 0; keyIndex < row.keys.size(); keyIndex++)
-      {
-        KeyboardData.Key key = row.keys.get(keyIndex);
-        float keyLeft = x + key.shift * _keyWidth;
-        if (keyIndex > 0 && SplitLayout.startsRun(key, _splitGapUnits))
-        {
-          canvas.drawRoundRect(runLeft, top, runRight, bottom,
-              SPLIT_SLAB_RADIUS_PX, SPLIT_SLAB_RADIUS_PX, _splitBackgroundPaint);
-          runLeft = keyLeft;
-        }
-        x = keyLeft + key.width * _keyWidth;
-        runRight = x;
-      }
-      if (runRight > runLeft)
-        canvas.drawRoundRect(runLeft, top, getWidth(), bottom,
-            SPLIT_SLAB_RADIUS_PX, SPLIT_SLAB_RADIUS_PX, _splitBackgroundPaint);
+      canvas.drawRoundRect(0f, 0f, getWidth(), bottom,
+          SPLIT_SLAB_RADIUS_PX, SPLIT_SLAB_RADIUS_PX, _splitBackgroundPaint);
+      return;
     }
+    canvas.drawRoundRect(0f, 0f, band[0], bottom,
+        SPLIT_SLAB_RADIUS_PX, SPLIT_SLAB_RADIUS_PX, _splitBackgroundPaint);
+    canvas.drawRoundRect(band[1], 0f, getWidth(), bottom,
+        SPLIT_SLAB_RADIUS_PX, SPLIT_SLAB_RADIUS_PX, _splitBackgroundPaint);
+  }
+
+  /** Whether [x], in view pixels, falls in the parting of a split keyboard. */
+  private boolean inSplitGap(float x)
+  {
+    float[] band = splitGapPx();
+    return band == null || (x >= band[0] && x < band[1]);
   }
 
   @Override
