@@ -215,7 +215,7 @@ public final class HelpTopics {
             .lesson(LESSON_BORDER_DRAG)
             .related("status", "corners", "keyboard_swipe").terms("place", "border_drag")
             .aliases(R.string.help_topic_places_aliases)
-            .doc("Launcher_Usage.md#move-between-the-terminal-and-the-widget-grid"));
+            .doc("Widgets.md"));
         b.add(topic("corners", Group.FIND_YOUR_WAY, R.string.help_topic_corners_title,
                 R.string.help_topic_corners_purpose, R.string.help_topic_corners_action)
             .steps(R.string.help_topic_corners_step1, R.string.help_topic_corners_step2)
@@ -226,7 +226,7 @@ public final class HelpTopics {
             .related("palette", "layout_editor", "appearance_editor", "move_panes")
             .terms("pane", "corner_tab")
             .aliases(R.string.help_topic_corners_aliases)
-            .doc("Launcher_Usage.md#get-help"));
+            .doc("Learn_The_Launcher.md#get-help"));
         // Read rather than pointed at: its button is one of the corner tab's, and the tab is the
         // thing the reader opened help from.
         b.add(topic("minimal", Group.FIND_YOUR_WAY, R.string.help_topic_minimal_title,
@@ -234,7 +234,7 @@ public final class HelpTopics {
             .wayBack(R.string.help_topic_minimal_back)
             .related("corners", "layout_editor").terms("place", "minimal_mode")
             .aliases(R.string.help_topic_minimal_aliases)
-            .doc("Launcher_Usage.md#minimal-mode"));
+            .doc("Layout_And_Full_Screen.md#minimal-mode"));
         b.add(topic("palette", Group.FIND_YOUR_WAY, R.string.help_topic_palette_title,
                 R.string.help_topic_space_purpose, R.string.help_topic_palette_action)
             .steps(R.string.help_topic_palette_step1, R.string.help_topic_palette_step2)
@@ -242,7 +242,7 @@ public final class HelpTopics {
             .lesson(LESSON_FIND_ACTION)
             .related("space", "fix_action").terms("command_palette")
             .aliases(R.string.help_topic_palette_aliases)
-            .doc("Launcher_Usage.md#use-the-command-palette"));
+            .doc("Command_Palette_And_Actions.md"));
         b.add(topic("status", Group.FIND_YOUR_WAY, R.string.help_status_title,
                 R.string.help_topic_status_purpose, R.string.help_topic_status_action)
             .steps(R.string.help_topic_status_step1, R.string.help_topic_status_step2,
@@ -255,14 +255,14 @@ public final class HelpTopics {
             .related("places", "windows", "pinned_notifications")
             .terms("place", "window", "status_swipe")
             .aliases(R.string.help_topic_status_aliases)
-            .doc("Launcher_Usage.md#use-the-status-row"));
+            .doc("Status_Bar.md"));
         b.add(topic("stats", Group.FIND_YOUR_WAY, R.string.help_topic_stats_title,
                 R.string.help_topic_stats_purpose, R.string.help_topic_stats_action)
             .reveal(R.string.help_topic_stats_reveal)
             .target("stats", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY)
             .related("status", "fix_stats")
             .aliases(R.string.help_topic_stats_aliases)
-            .doc("Launcher_Settings.md#status-bar"));
+            .doc("Status_Bar.md"));
         b.add(topic("pinned_notifications", Group.FIND_YOUR_WAY,
                 R.string.help_topic_pinned_title, R.string.help_topic_pinned_summary,
                 R.string.help_topic_pinned_action)
@@ -272,7 +272,7 @@ public final class HelpTopics {
             .target("pinned", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY)
             .related("status", "stats").terms("pinned_notification")
             .aliases(R.string.help_topic_pinned_aliases)
-            .doc("Pinned_Notifications.md"));
+            .doc("Notifications.md"));
 
         // 2. Apps and widgets.
         b.add(topic("dock", Group.APPS, R.string.help_dock_title,
@@ -286,7 +286,7 @@ public final class HelpTopics {
             .lesson(LESSON_FIND_APPS)
             .related("az", "organize_apps", "fix_dock").terms("dock", "app_drawer")
             .aliases(R.string.help_topic_dock_aliases)
-            .doc("Launcher_Usage.md#pinned-apps"));
+            .doc("Home_Screen_And_Apps.md#pinned-apps"));
         b.add(topic("az", Group.APPS, R.string.help_az_title,
                 R.string.help_topic_az_purpose, R.string.help_topic_az_action)
             .steps(R.string.help_topic_az_step1)
@@ -295,14 +295,14 @@ public final class HelpTopics {
             .gesture(TourGesture.SCRUB)
             .related("dock", "organize_apps").terms("app_drawer")
             .aliases(R.string.help_topic_az_aliases)
-            .doc("Launcher_Usage.md#launch-android-apps"));
+            .doc("Home_Screen_And_Apps.md"));
         b.add(topic("organize_apps", Group.APPS, R.string.help_topic_organize_title,
                 R.string.help_topic_organize_summary, R.string.help_topic_organize_action)
             .steps(R.string.help_topic_organize_step1, R.string.help_topic_organize_step2)
             .lesson(LESSON_PIN_APPS)
             .related("dock", "az").terms("dock")
             .aliases(R.string.help_topic_organize_aliases)
-            .doc("Launcher_Usage.md#pinned-apps"));
+            .doc("Home_Screen_And_Apps.md#pinned-apps"));
         b.add(topic("widget", Group.APPS, R.string.help_topic_widget_title,
                 R.string.help_topic_widget_purpose, R.string.help_topic_widget_action)
             .steps(R.string.help_topic_widget_step1, R.string.help_topic_widget_step2,
@@ -311,7 +311,7 @@ public final class HelpTopics {
             .target("widget", PaneWallPage.WIDGETS)
             .related("pages", "places")
             .aliases(R.string.help_topic_widget_aliases)
-            .doc("Launcher_Usage.md#move-between-the-terminal-and-the-widget-grid"));
+            .doc("Widgets.md"));
         b.add(topic("pages", Group.APPS, R.string.help_topic_pages_title,
                 R.string.help_topic_pages_summary, R.string.help_topic_empty_action)
             .steps(R.string.help_topic_pages_step1, R.string.help_topic_pages_step2)
@@ -319,7 +319,7 @@ public final class HelpTopics {
             .target("empty", PaneWallPage.WIDGETS)
             .related("widget")
             .aliases(R.string.help_topic_pages_aliases)
-            .doc("Launcher_Settings.md#layout-editor"));
+            .doc("Layout_And_Full_Screen.md"));
 
         // 3. Terminal basics.
         b.add(topic("copy_paste", Group.TERMINAL, R.string.help_topic_copy_title,
@@ -328,20 +328,20 @@ public final class HelpTopics {
                 R.string.help_topic_copy_step3)
             .related("mouse_mode", "find_text", "clipboard")
             .aliases(R.string.help_topic_copy_aliases)
-            .doc("Launcher_Usage.md#touch-works-like-a-mouse"));
+            .doc("Touch_Links_And_Clipboard.md#touch-works-like-a-mouse"));
         b.add(topic("mouse_mode", Group.TERMINAL, R.string.help_topic_mouse_title,
                 R.string.help_topic_mouse_summary, R.string.help_topic_mouse_action)
             .steps(R.string.help_topic_mouse_step1, R.string.help_topic_mouse_step2)
             .wayBack(R.string.help_topic_mouse_back)
             .related("keys", "touchpad").terms("mouse_mode", "extra_keys")
             .aliases(R.string.help_topic_mouse_aliases)
-            .doc("Launcher_Usage.md#touch-works-like-a-mouse"));
+            .doc("Touch_Links_And_Clipboard.md#touch-works-like-a-mouse"));
         b.add(topic("find_text", Group.TERMINAL, R.string.help_topic_find_title,
                 R.string.help_topic_find_summary, R.string.help_topic_find_action)
             .steps(R.string.help_topic_find_step1, R.string.help_topic_find_step2)
             .related("copy_paste", "corners")
             .aliases(R.string.help_topic_find_aliases)
-            .doc("Launcher_Usage.md#touch-works-like-a-mouse"));
+            .doc("Touch_Links_And_Clipboard.md#touch-works-like-a-mouse"));
         b.add(topic("hierarchy", Group.TERMINAL, R.string.help_topic_hierarchy_title,
                 R.string.help_topic_hierarchy_summary, R.string.help_topic_sessions_action)
             .steps(R.string.help_topic_hierarchy_step1, R.string.help_topic_hierarchy_step2,
@@ -350,7 +350,7 @@ public final class HelpTopics {
             .target("sessions", PaneWallPage.TERMINAL)
             .related("windows", "panes", "workspaces").terms("session", "window", "pane")
             .aliases(R.string.help_topic_hierarchy_aliases)
-            .doc("Launcher_Usage.md#understand-the-terminal-hierarchy"));
+            .doc("Learn_The_Launcher.md"));
         b.add(topic("pictures", Group.TERMINAL, R.string.help_topic_pictures_title,
                 R.string.help_topic_pictures_summary, R.string.help_topic_pictures_action)
             .steps(R.string.help_topic_pictures_step1, R.string.help_topic_pictures_step2,
@@ -362,7 +362,7 @@ public final class HelpTopics {
             .wayBack(R.string.help_topic_size_back)
             .related("panes", "themes").terms("pane")
             .aliases(R.string.help_topic_size_aliases)
-            .doc("Launcher_Usage.md#resize-panes-and-text"));
+            .doc("Panes_Windows_And_Sessions.md#resize-panes-and-text"));
 
         // 4. Keyboard and shortcuts.
         b.add(topic("keyboard_swipe", Group.KEYBOARD, R.string.help_topic_kswipe_title,
@@ -376,7 +376,7 @@ public final class HelpTopics {
             .related("keyboard", "keyboard_layouts", "fix_keyboard")
             .terms("keyboard_swipe")
             .aliases(R.string.help_topic_kswipe_aliases)
-            .doc("Launcher_Usage.md#use-the-built-in-keyboard-and-action-row"));
+            .doc("Keyboard.md"));
         b.add(topic("keyboard", Group.KEYBOARD, R.string.help_topic_keyboard_title,
                 R.string.help_topic_keyboard_summary, R.string.help_topic_keyboard_action)
             .steps(R.string.help_topic_keyboard_step1, R.string.help_topic_keyboard_step2)
@@ -384,13 +384,13 @@ public final class HelpTopics {
             .related("keyboard_swipe", "keys", "keyboard_layouts", "fix_keyboard")
             .terms("extra_keys")
             .aliases(R.string.help_topic_keyboard_aliases)
-            .doc("Launcher_Usage.md#use-the-built-in-keyboard-and-action-row"));
+            .doc("Keyboard.md"));
         b.add(topic("keyboard_layouts", Group.KEYBOARD, R.string.help_topic_layouts_title,
                 R.string.help_topic_layouts_summary, R.string.help_topic_layouts_action)
             .wayBack(R.string.help_topic_layouts_back)
             .related("keyboard", "float_pane").terms("keyboard_form")
             .aliases(R.string.help_topic_layouts_aliases)
-            .doc("Launcher_Settings.md#keyboard"));
+            .doc("Keyboard.md"));
         b.add(topic("keys", Group.KEYBOARD, R.string.help_topic_keys_title,
                 R.string.help_topic_keys_purpose, R.string.help_topic_keys_action)
             .steps(R.string.help_topic_keys_step1, R.string.help_topic_keys_step2,
@@ -399,7 +399,7 @@ public final class HelpTopics {
             .target("keys", PaneWallPage.TERMINAL)
             .related("keyboard", "shortcuts", "fix_dock").terms("extra_keys")
             .aliases(R.string.help_topic_keys_aliases)
-            .doc("Launcher_Usage.md#use-the-built-in-keyboard-and-action-row"));
+            .doc("Keyboard.md"));
         b.add(topic("shortcuts", Group.KEYBOARD, R.string.help_topic_shortcuts_title,
                 R.string.help_topic_shortcuts_purpose, R.string.help_topic_prefix_action)
             .steps(R.string.help_topic_shortcuts_action, R.string.help_topic_shortcuts_step2)
@@ -407,7 +407,7 @@ public final class HelpTopics {
             .target("prefix", PaneWallPage.TERMINAL)
             .related("keys", "panes", "fix_shortcuts")
             .aliases(R.string.help_topic_shortcuts_aliases)
-            .doc("Launcher_Usage.md#use-the-built-in-keyboard-and-action-row"));
+            .doc("Keyboard.md"));
         b.add(topic("space", Group.KEYBOARD, R.string.help_space_title,
                 R.string.help_topic_space_summary, R.string.help_topic_space_action)
             .steps(R.string.help_topic_space_step1, R.string.help_topic_space_step2)
@@ -417,7 +417,7 @@ public final class HelpTopics {
             .lesson(LESSON_FIND_ACTION)
             .related("palette", "windows", "hierarchy").terms("command_palette")
             .aliases(R.string.help_topic_space_aliases)
-            .doc("Launcher_Usage.md#use-the-command-palette"));
+            .doc("Command_Palette_And_Actions.md"));
         b.add(topic("settings", Group.KEYBOARD, R.string.help_launcher_settings_title,
                 R.string.help_topic_settings_purpose, R.string.help_topic_settings_action)
             .steps(R.string.help_topic_settings_step1)
@@ -437,7 +437,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_clipboard_step1, R.string.help_topic_clipboard_step2)
             .related("copy_paste", "keys")
             .aliases(R.string.help_topic_clipboard_aliases)
-            .doc("Launcher_Usage.md#clipboard-history"));
+            .doc("Touch_Links_And_Clipboard.md#clipboard-history"));
 
         // 5. Multitasking and workspaces.
         b.add(topic("panes", Group.MULTITASKING, R.string.help_topic_panes_title,
@@ -448,19 +448,19 @@ public final class HelpTopics {
             .target("divider", PaneWallPage.TERMINAL)
             .related("move_panes", "float_pane", "hierarchy").terms("pane", "window")
             .aliases(R.string.help_topic_panes_aliases)
-            .doc("Launcher_Usage.md#work-with-panes-and-windows"));
+            .doc("Panes_Windows_And_Sessions.md"));
         b.add(topic("float_pane", Group.MULTITASKING, R.string.help_topic_float_title,
                 R.string.help_topic_float_summary, R.string.help_topic_float_action)
             .wayBack(R.string.help_topic_float_back)
             .related("panes", "keyboard_layouts").terms("pane")
             .aliases(R.string.help_topic_float_aliases)
-            .doc("Launcher_Usage.md#floating-panes"));
+            .doc("Panes_Windows_And_Sessions.md#floating-panes"));
         b.add(topic("move_panes", Group.MULTITASKING, R.string.help_topic_move_title,
                 R.string.help_topic_move_summary, R.string.help_topic_move_action)
             .steps(R.string.help_topic_move_step1)
             .related("panes", "float_pane").terms("pane")
             .aliases(R.string.help_topic_move_aliases)
-            .doc("Launcher_Usage.md#automatic-layouts"));
+            .doc("Panes_Windows_And_Sessions.md#automatic-layouts"));
         b.add(topic("windows", Group.MULTITASKING, R.string.help_topic_windows_title,
                 R.string.help_topic_windows_purpose, R.string.help_topic_windows_action)
             .steps(R.string.help_topic_windows_step1, R.string.help_topic_windows_step2,
@@ -469,13 +469,13 @@ public final class HelpTopics {
             .target("windows", PaneWallPage.TERMINAL)
             .related("hierarchy", "workspaces", "panes").terms("window", "session")
             .aliases(R.string.help_topic_windows_aliases)
-            .doc("Launcher_Usage.md#use-sessions"));
+            .doc("Panes_Windows_And_Sessions.md#sessions"));
         b.add(topic("workspaces", Group.MULTITASKING, R.string.help_topic_workspace_title,
                 R.string.help_topic_workspace_summary, R.string.help_topic_workspace_action)
             .steps(R.string.help_topic_workspace_step1, R.string.help_topic_workspace_step2)
             .related("windows", "panes").terms("workspace", "session")
             .aliases(R.string.help_topic_workspace_aliases)
-            .doc("Launcher_Usage.md#save-and-load-workspaces"));
+            .doc("Panes_Windows_And_Sessions.md#workspaces"));
 
         // 6. Make it yours.
         b.add(topic("appearance_editor", Group.YOURS, R.string.help_topic_appearance_title,
@@ -484,7 +484,7 @@ public final class HelpTopics {
             .wayBack(R.string.help_topic_appearance_back)
             .related("layout_editor", "themes").terms("look", "editors")
             .aliases(R.string.help_topic_appearance_aliases)
-            .doc("Launcher_Settings.md#look"));
+            .doc("Look_And_Themes.md"));
         b.add(topic("layout_editor", Group.YOURS, R.string.help_topic_layout_title,
                 R.string.help_topic_layout_summary, R.string.help_topic_layout_action)
             .steps(R.string.help_topic_layout_step1, R.string.help_topic_layout_step2,
@@ -493,12 +493,12 @@ public final class HelpTopics {
             .related("appearance_editor", "corners", "fix_dock")
             .terms("editors", "style", "hidden_elements")
             .aliases(R.string.help_topic_layout_aliases)
-            .doc("Launcher_Settings.md#layout-editor"));
+            .doc("Layout_And_Full_Screen.md"));
         b.add(topic("themes", Group.YOURS, R.string.help_topic_themes_title,
                 R.string.help_topic_themes_summary, R.string.help_topic_themes_action)
             .related("appearance_editor", "settings")
             .aliases(R.string.help_topic_themes_aliases)
-            .doc("Launcher_Settings.md#theming-from-a-color-scheme"));
+            .doc("Look_And_Themes.md#theming-from-a-color-scheme"));
 
         // 7. Tools.
         b.add(topic("tlstore", Group.TOOLS, R.string.help_topic_tlstore_title,
@@ -561,7 +561,7 @@ public final class HelpTopics {
                 R.string.help_fix_dock_summary, R.string.help_fix_dock_action)
             .related("layout_editor", "dock", "keys").terms("editors", "hidden_elements")
             .aliases(R.string.help_fix_dock_aliases)
-            .doc("Launcher_Settings.md#layout-editor"));
+            .doc("Layout_And_Full_Screen.md"));
         b.add(fix("fix_action", R.string.help_fix_action_title,
                 R.string.help_fix_action_summary, R.string.help_fix_action_action)
             .related("palette", "panes").terms("command_palette")
