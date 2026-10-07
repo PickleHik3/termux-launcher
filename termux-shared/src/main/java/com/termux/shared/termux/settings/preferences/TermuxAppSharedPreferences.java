@@ -27,18 +27,59 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     private static final String LOG_TAG = "TermuxAppSharedPreferences";
 
+    /**
+     * The multi-process handle is asked for first. Both handles are the same store (the context
+     * keeps one per file whatever the mode), but asking with {@code MODE_MULTI_PROCESS} for a store
+     * that already exists checks the file for an outside change, and on a store made a moment ago
+     * that check always finds one: its first load has not yet recorded the file's stat, or the file
+     * does not exist yet. The reload it starts can read the file before a write and land after it,
+     * putting the old values back in memory over the new one. Made by the multi-process request
+     * itself, the store is returned without that check.
+     */
     private TermuxAppSharedPreferences(@NonNull Context context) {
+        this(context, displayIdSuffixOf(context));
+    }
+
+    private TermuxAppSharedPreferences(@NonNull Context context, @NonNull String displayIdSuffix) {
+        this(context, SharedPreferenceUtils.getPrivateAndMultiProcessSharedPreferences(context,
+            TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION), displayIdSuffix);
+    }
+
+    private TermuxAppSharedPreferences(@NonNull Context context, @NonNull SharedPreferences multiProcessSharedPreferences,
+                                       @NonNull String displayIdSuffix) {
         this(
             context,
             SharedPreferenceUtils.getPrivateSharedPreferences(context, TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION),
-            SharedPreferenceUtils.getPrivateAndMultiProcessSharedPreferences(context, TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION)
+            multiProcessSharedPreferences,
+            displayIdSuffix
         );
     }
 
     public TermuxAppSharedPreferences(@NonNull Context context, @NonNull SharedPreferences sharedPreferences, @Nullable SharedPreferences multiProcessSharedPreferences) {
+        this(context, sharedPreferences, multiProcessSharedPreferences, displayIdSuffixOf(context));
+    }
+
+    private TermuxAppSharedPreferences(@NonNull Context context, @NonNull SharedPreferences sharedPreferences,
+                                       @Nullable SharedPreferences multiProcessSharedPreferences, @NonNull String displayIdSuffix) {
         super(context, sharedPreferences, multiProcessSharedPreferences);
+        mDisplayIdSuffix = displayIdSuffix;
         setFontVariables(context);
     }
+
+    /** These preferences over {@code sharedPreferences} instead, for the same context and display. */
+    @NonNull
+    public TermuxAppSharedPreferences over(@NonNull SharedPreferences sharedPreferences) {
+        return new TermuxAppSharedPreferences(getContext(), sharedPreferences, getMultiProcessSharedPreferences(),
+            mDisplayIdSuffix);
+    }
+
+    /**
+     * The font size key's suffix for the display the handle was built for: "" for the default
+     * display. Read from the caller at {@link #build}, since the handle's own context is made from
+     * the application and is tied to no display: on Android 11 and later its
+     * {@link Context#getDisplay} throws.
+     */
+    @NonNull private final String mDisplayIdSuffix;
 
     /**
      * The {@link TermuxConstants#TERMUX_PACKAGE_NAME} package context, made once from the
@@ -91,7 +132,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (termuxPackageContext == null)
             return null;
         else
-            return new TermuxAppSharedPreferences(termuxPackageContext);
+            return new TermuxAppSharedPreferences(termuxPackageContext, displayIdSuffixOf(context));
     }
 
     /**
@@ -111,7 +152,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (termuxPackageContext == null)
             return null;
         else
-            return new TermuxAppSharedPreferences(termuxPackageContext);
+            return new TermuxAppSharedPreferences(termuxPackageContext, displayIdSuffixOf(context));
     }
 
     public boolean shouldShowTerminalToolbar() {
@@ -2386,14 +2427,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     private String getDisplayIdAsString() {
-        Context context = getContext();
+        return mDisplayIdSuffix;
+    }
+
+    /** "" for the default display, else its id; a context tied to no display counts as the default. */
+    @NonNull
+    private static String displayIdSuffixOf(@NonNull Context context) {
         Display display;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            display = context.getDisplay();
-        } else {
-            display = ((WindowManager) context.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay();
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                display = context.getDisplay();
+            } else {
+                display = ((WindowManager) context.getSystemService(Context.WINDOW_SERVICE)).getDefaultDisplay();
+            }
+        } catch (UnsupportedOperationException e) {
+            // The application, a service: a context with no display of its own.
+            return "";
         }
-        int d = display.getDisplayId();
+        int d = display == null ? Display.DEFAULT_DISPLAY : display.getDisplayId();
         if (d == Display.DEFAULT_DISPLAY)
             return "";
         else

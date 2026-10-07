@@ -338,8 +338,7 @@ public final class SurfacePresets {
     @NonNull
     static TermuxAppSharedPreferences writingInto(@NonNull TermuxAppSharedPreferences prefs,
                                                   @NonNull Batch batch) {
-        return new TermuxAppSharedPreferences(prefs.getContext(), batch,
-            prefs.getMultiProcessSharedPreferences());
+        return prefs.over(batch);
     }
 
     /** {@link #apply}, one setter and one {@code apply()} at a time: the reference it must match. */
