@@ -217,8 +217,13 @@ public final class StatusBarWidgetView extends LinearLayout {
      */
     public void setValue(@NonNull CharSequence value) {
         boolean empty = android.text.TextUtils.isEmpty(value);
-        mValue.setVisibility(empty ? GONE : VISIBLE);
-        setMinimumWidth(empty ? 0 : dp(MIN_WIDTH_WITH_VALUE_DP));
+        int visibility = empty ? GONE : VISIBLE;
+        if (mValue.getVisibility() != visibility) mValue.setVisibility(visibility);
+        // Only on a change: View.setMinimumWidth requests a layout every time it is called, and
+        // this is called from the stats cluster's layout listener. Unconditional, it scheduled a
+        // layout from every layout for as long as the Widgets place was up (2026-10-07).
+        int minimumWidth = empty ? 0 : dp(MIN_WIDTH_WITH_VALUE_DP);
+        if (getMinimumWidth() != minimumWidth) setMinimumWidth(minimumWidth);
         if (android.text.TextUtils.equals(mValue.getText(), value)) return;
         mValue.setText(value);
     }
