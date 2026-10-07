@@ -132,7 +132,7 @@ public class PinnedCardLogicTest {
 
     @Test
     public void theCardAndMediaColumnKeepItsAirInsideTheSlot() {
-        int slot = Math.round(68 * DENSITY);
+        int slot = Math.round(65 * DENSITY);
         int air = Math.round(TopPaneSlotBudget.AIR_DP * DENSITY);
         TopPaneSlotBudget.Column column = TopPaneSlotBudget.layout(
             TopPaneSlotMode.NOTIFICATIONS_AND_MEDIA, 1, slot, DENSITY);
@@ -143,7 +143,8 @@ public class PinnedCardLogicTest {
             Math.round(MediaWidgetView.STRIP_HEIGHT_DP * DENSITY), column.mediaHeight);
         assertTrue("the card gave way, not the air",
             column.cardsHeight < Math.round(PinnedNotificationsView.CONTENTION_CARD_HEIGHT_DP * DENSITY));
-        assertTrue("and still reads as a card", column.cardsHeight >= Math.round(30 * DENSITY));
+        // Padding, a 10sp title, 2dp and one 9.5sp body line come to about 31.5dp in Roboto.
+        assertTrue("and keeps its body line", column.cardsHeight >= Math.round(31.5f * DENSITY));
         assertTrue("the gap stays at least its floor", column.mediaTop - (column.cardsTop
             + column.cardsHeight) >= Math.round(TopPaneSlotBudget.CONTENTION_GAP_MIN_DP * DENSITY));
         assertEquals("centred: the air is symmetric", column.cardsTop, slot - bottom, 1);
@@ -151,7 +152,7 @@ public class PinnedCardLogicTest {
 
     @Test
     public void cardsAloneAreCentredWithTheSameAir() {
-        int slot = Math.round(68 * DENSITY);
+        int slot = Math.round(65 * DENSITY);
         int air = Math.round(TopPaneSlotBudget.AIR_DP * DENSITY);
         TopPaneSlotBudget.Column one = TopPaneSlotBudget.layout(TopPaneSlotMode.NOTIFICATIONS, 1,
             slot, DENSITY);
@@ -167,9 +168,9 @@ public class PinnedCardLogicTest {
     @Test
     public void theCapsuleSlotGetsTheSameAirAndAFullerCard() {
         int docked = TopPaneSlotBudget.layout(TopPaneSlotMode.NOTIFICATIONS_AND_MEDIA, 1,
-            Math.round(68 * DENSITY), DENSITY).cardsHeight;
+            Math.round(65 * DENSITY), DENSITY).cardsHeight;
         int capsule = TopPaneSlotBudget.layout(TopPaneSlotMode.NOTIFICATIONS_AND_MEDIA, 1,
-            Math.round(72 * DENSITY), DENSITY).cardsHeight;
+            Math.round(69 * DENSITY), DENSITY).cardsHeight;
         assertTrue(capsule > docked);
         assertEquals(0, TopPaneSlotBudget.layout(TopPaneSlotMode.CLOCK_ONLY, 0, 180, DENSITY)
             .cardsHeight);

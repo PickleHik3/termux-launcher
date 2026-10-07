@@ -1,7 +1,7 @@
 package com.termux.app.statusbar;
 
 /**
- * Derived state of the 68dp widget slot. Priority order is pinned notifications, then media, then
+ * Derived state of the widget slot. Priority order is pinned notifications, then media, then
  * the clock at full size. The clock keeps its full face and scales to what the others leave.
  *
  * <p>Media only shares the slot with a single pinned card: the contention layout needs 40dp for the
@@ -40,7 +40,7 @@ public enum TopPaneSlotMode {
 
     /**
      * Whether the wall's navigation tiles fit. Pinned notifications and media outrank the clock
-     * and the tiles both: the 68dp band cannot hold three cells and a notification card at phone
+     * and the tiles both: the slot cannot hold three cells and a notification card at phone
      * widths, and the status-bar swipe remains the way across while they hold the slot.
      */
     public boolean showsTiles(boolean tilesRequested) {

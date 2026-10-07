@@ -56,7 +56,7 @@ public final class StatusBarLensMetrics {
     /** The home mark's leading edge, clear of the neighbour peeking past the bar's near end. */
     public static final float HOME_X_DP = 20f;
     /** The expanded bar's slot height; the home mark centres on it until the clock says where. */
-    public static final float SLOT_HEIGHT_DP = 68f;
+    public static final float SLOT_HEIGHT_DP = StatusBarEdgeGeometry.SLOT_DOCKED_DP;
     /** How far the home mark's glow reaches past its edge, as a share of its size. */
     public static final float GLOW_REACH = 0.55f;
     /** The glyph's size as a share of the mark's. */

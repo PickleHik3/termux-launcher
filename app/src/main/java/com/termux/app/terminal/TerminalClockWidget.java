@@ -68,7 +68,8 @@ public final class TerminalClockWidget extends View {
     /** Shared grid: the date row, and the gap between the date text and its trailing hairline. */
     private static final float DATE_ROW_DP = 11f;
     private static final float RULE_GAP_DP = 7f;
-    private static final float SLOT_HEIGHT_DP = 68f;
+    private static final float SLOT_HEIGHT_DP =
+        com.termux.app.statusbar.StatusBarEdgeGeometry.SLOT_DOCKED_DP;
     private static final float TAPE_TRACK_BLOCK_DP = 12.5f;
     /**
      * The full flip card's drop shadow: how far it blurs and how far it falls. Nothing else is

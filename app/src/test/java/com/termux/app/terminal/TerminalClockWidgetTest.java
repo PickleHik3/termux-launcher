@@ -146,7 +146,7 @@ public class TerminalClockWidgetTest {
         widget.updateTime(1_700_000_000_000L, 1_000L);
         float density = ApplicationProvider.getApplicationContext().getResources()
             .getDisplayMetrics().density;
-        int slot = Math.round(68f * density);
+        int slot = Math.round(65f * density);
         widget.measure(
             android.view.View.MeasureSpec.makeMeasureSpec(Math.round(360f * density),
                 android.view.View.MeasureSpec.EXACTLY),

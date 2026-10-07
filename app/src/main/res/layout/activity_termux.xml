@@ -113,7 +113,7 @@
             <com.termux.app.statusbar.StatusBarSwipeLayout
                 android:id="@+id/terminal_window_bar_host"
                 android:layout_width="match_parent"
-                android:layout_height="96dp"
+                android:layout_height="91dp"
                 android:clipChildren="false"
                 android:clipToPadding="false"
                 android:visibility="gone">
@@ -163,7 +163,7 @@
                 <com.termux.app.statusbar.TopPaneWidgetSlot
                     android:id="@+id/terminal_top_widget_area"
                     android:layout_width="match_parent"
-                    android:layout_height="68dp"
+                    android:layout_height="65dp"
                     android:layout_gravity="top"
                     android:elevation="6dp"
                     android:outlineProvider="none"
