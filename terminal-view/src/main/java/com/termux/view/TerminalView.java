@@ -163,9 +163,9 @@ public final class TerminalView extends View {
     @Nullable private ValueAnimator mReflowFrost;
     private float mReflowFrostLevel;
     /** How long the frost over a travel's reflow takes to thaw. */
-    static final long REFLOW_FROST_MS = 180L;
+    static final long REFLOW_FROST_MS = 110L;
     /** How long a held frost takes to come in. */
-    static final long TRAVEL_FROST_IN_MS = 100L;
+    static final long TRAVEL_FROST_IN_MS = 60L;
     /** Per-instance instrumentation seam; production leaves this null. */
     public interface SizeUpdateObserver { void onUpdateSize(TerminalView view); }
     private SizeUpdateObserver mSizeUpdateObserver;
