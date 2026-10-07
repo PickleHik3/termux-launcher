@@ -383,8 +383,11 @@ public class TaiFunctionRowsTest {
         TaiFunctionModels.Resolution resolution = models(env(12, 34, GpuPath.YES)).resolve(TaiFunction.WALLPAPER_READER);
         // The fake prints the message name; the real line lower-cases the without-model end ("rules only").
         assertEquals("CHAIN[" + E2B + " → rules_only]", TaiFunctionRows.chainLine(resolution.chain, LABELS));
-        // A function with no chain has no line.
-        assertEquals("", TaiFunctionRows.chainLine(models(env(12, 34, GpuPath.YES)).resolve(TaiFunction.EMBEDDINGS).chain, LABELS));
+        // Search falls back to the other EmbeddingGemma 2 file, then the v1 300M.
+        assertEquals("CHAIN[" + TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID + " → " + TaiModelCatalog.EMBEDDING_GEMMA_300M_ID + "]",
+            TaiFunctionRows.chainLine(models(env(12, 34, GpuPath.YES)).resolve(TaiFunction.EMBEDDINGS).chain, LABELS));
+        // An empty chain has no line.
+        assertEquals("", TaiFunctionRows.chainLine(Collections.<TaiTierPolicy.Choice>emptyList(), LABELS));
     }
 
     private static List<String> idsOf(List<TaiFunctionRows.GetEntry> entries) {
