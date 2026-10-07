@@ -805,6 +805,58 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT, value, false);
     }
 
+    /** The place the weather is fetched for, trimmed; empty when it follows the device. */
+    @NonNull
+    public String getStatusWidgetWeatherLocation() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_LOCATION, TERMUX_APP.DEFAULT_STATUS_WIDGET_WEATHER_LOCATION, true);
+        return value == null ? "" : value.trim();
+    }
+
+    /** The picked place's {latitude, longitude}, or null when none is stored or it is unreadable. */
+    @Nullable
+    public double[] getStatusWidgetWeatherLocationCoords() {
+        return parseCoords(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_LOCATION_COORDS,
+            TERMUX_APP.DEFAULT_STATUS_WIDGET_WEATHER_LOCATION_COORDS, true));
+    }
+
+    /** Stores a picked place: the label the weather shows and where to fetch it for. */
+    public void setStatusWidgetWeatherPlace(@NonNull String label, double latitude, double longitude) {
+        // Both keys in one commit: a reader seeing the new label with the old place's coordinates
+        // would fetch one place's weather under another's name.
+        SharedPreferences.Editor editor = mSharedPreferences.edit();
+        editor.putString(TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_LOCATION, label.trim());
+        editor.putString(TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_LOCATION_COORDS,
+            String.format(java.util.Locale.ROOT, "%.5f,%.5f", latitude, longitude));
+        editor.apply();
+    }
+
+    /** Back to the device's location. */
+    public void clearStatusWidgetWeatherPlace() {
+        mSharedPreferences.edit()
+            .remove(TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_LOCATION)
+            .remove(TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_LOCATION_COORDS)
+            .apply();
+    }
+
+    /** "29.33,48.07" as {29.33, 48.07}; null for anything that is not two finite numbers. */
+    @Nullable
+    public static double[] parseCoords(@Nullable String value) {
+        if (value == null) return null;
+        int comma = value.indexOf(',');
+        if (comma < 0) return null;
+        try {
+            double latitude = Double.parseDouble(value.substring(0, comma).trim());
+            double longitude = Double.parseDouble(value.substring(comma + 1).trim());
+            if (Double.isNaN(latitude) || Double.isNaN(longitude)
+                || Double.isInfinite(latitude) || Double.isInfinite(longitude)) return null;
+            return new double[] {latitude, longitude};
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+
     public boolean isTerminalCursorTrailEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL, TERMUX_APP.DEFAULT_TERMINAL_CURSOR_TRAIL);

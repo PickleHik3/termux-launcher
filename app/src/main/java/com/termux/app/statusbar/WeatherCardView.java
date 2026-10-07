@@ -347,12 +347,21 @@ public final class WeatherCardView extends LinearLayout {
     private void showUnavailable(@NonNull WeatherController.Weather weather) {
         setVisibleSections(false);
         mUnavailable.setVisibility(VISIBLE);
-        mUnavailable.setText("no-location".equals(weather.error)
-            ? getContext().getString(R.string.weather_card_unavailable_location)
-            : getContext().getString(R.string.weather_card_unavailable));
+        mUnavailable.setText(unavailableMessage(weather));
         // Nothing of theirs is on screen to credit.
         mAttribution.setVisibility(GONE);
         invalidate();
+    }
+
+    @NonNull
+    private String unavailableMessage(@NonNull WeatherController.Weather weather) {
+        if ("unknown-place".equals(weather.error)) {
+            // The place picked in Settings is the thing to fix, so say which one and where.
+            return getContext().getString(R.string.weather_card_unavailable_place, weather.requestedPlace);
+        }
+        return "no-location".equals(weather.error)
+            ? getContext().getString(R.string.weather_card_unavailable_location)
+            : getContext().getString(R.string.weather_card_unavailable);
     }
 
     private void setVisibleSections(boolean valid) {

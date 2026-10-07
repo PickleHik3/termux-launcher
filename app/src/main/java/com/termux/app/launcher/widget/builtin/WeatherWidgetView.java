@@ -50,6 +50,8 @@ public class WeatherWidgetView extends BuiltinWidgetView {
     @Nullable private WeatherController.Weather latest;
     /** Why there is no forecast yet, when there is none. */
     @Nullable private String error;
+    /** The place picked in Settings that {@link #error} is about, empty for the device. */
+    @NonNull private String errorPlace = "";
 
     // What the current layout was drawn from, so a replayed cache does not redraw it.
     private long shownFetchedAt = -1L;
@@ -93,9 +95,13 @@ public class WeatherWidgetView extends BuiltinWidgetView {
             error = null;
             if (unchanged) return;
         } else {
-            // A failed refresh keeps the forecast already on the card; stale beats blank.
-            if (latest != null) return;
+            // A failed refresh keeps the forecast already on the card; stale beats blank. Not once
+            // the place has changed (the controller emptied the cache latest points at, so it reads
+            // invalid) or the picked place cannot be found: that forecast is for somewhere else.
+            if (latest != null && latest.valid && !"unknown-place".equals(weather.error)) return;
+            latest = null;
             error = weather.error;
+            errorPlace = weather.requestedPlace;
             if (shownFetchedAt < 0 && Objects.equals(error, shownError)) return;
         }
         redraw();
@@ -363,6 +369,9 @@ public class WeatherWidgetView extends BuiltinWidgetView {
     }
 
     @NonNull private String emptyMessage() {
+        if ("unknown-place".equals(error)) {
+            return getContext().getString(R.string.weather_card_unavailable_place, errorPlace);
+        }
         return getContext().getString("no-location".equals(error)
             ? R.string.bw_feeds_weather_no_location : R.string.bw_feeds_weather_empty);
     }
