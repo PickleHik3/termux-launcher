@@ -16,14 +16,12 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
  */
 public final class WidgetGridCaps {
 
-    /** The least a cell is wide or tall, in dp. */
-    public static final float MIN_CELL_DP = 56f;
-
     /**
-     * A wall a fraction of a dp short of a whole count still gets it: a 386 dp wall is a 6 column
-     * wall at 55.7 dp a cell, and a 0.3 dp difference is rounding, not a different phone.
+     * The least a cell is wide or tall, in dp. The platform's own floor for a one-cell widget is
+     * 57 dp wide and 51 dp tall; 55 sits between them and lets a 386 dp phone wall hold six
+     * columns (55.7 dp cells), which is where the range for phones should end.
      */
-    static final float ROUNDING_SLACK_DP = 0.5f;
+    public static final float MIN_CELL_DP = 55f;
 
     private static final WidgetGridCaps UNBOUNDED = new WidgetGridCaps(
         TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS, TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS);
@@ -57,7 +55,7 @@ public final class WidgetGridCaps {
 
     /** n cells fit when {@code 2 * edge + (n - 1) * gap + n * cell <= length}. */
     static int maxCells(float lengthDp, int floor, int ceiling) {
-        float pitch = MIN_CELL_DP - ROUNDING_SLACK_DP + WidgetGridMetrics.GAP_DP;
+        float pitch = MIN_CELL_DP + WidgetGridMetrics.GAP_DP;
         float room = lengthDp - 2f * WidgetGridMetrics.EDGE_DP + WidgetGridMetrics.GAP_DP;
         int fitting = (int) Math.floor(room / pitch);
         return Math.max(floor, Math.min(ceiling, fitting));

@@ -24,12 +24,11 @@ public class WidgetGridCapsTest {
             int n = WidgetGridCaps.maxCells(wall, 1, 100);
             float cell = (wall - 2f * WidgetGridMetrics.EDGE_DP
                 - WidgetGridMetrics.GAP_DP * (n - 1)) / n;
-            assertTrue("wall " + wall, n == 1 || cell >= WidgetGridCaps.MIN_CELL_DP
-                - WidgetGridCaps.ROUNDING_SLACK_DP);
+            assertTrue("wall " + wall, n == 1 || cell >= WidgetGridCaps.MIN_CELL_DP);
             float next = (wall - 2f * WidgetGridMetrics.EDGE_DP
                 - WidgetGridMetrics.GAP_DP * n) / (n + 1);
             assertTrue("one more would be too small at " + wall,
-                next < WidgetGridCaps.MIN_CELL_DP - WidgetGridCaps.ROUNDING_SLACK_DP);
+                next < WidgetGridCaps.MIN_CELL_DP);
         }
     }
 
@@ -58,7 +57,8 @@ public class WidgetGridCapsTest {
     @Test
     public void landscapeSwapsWhatEachAxisCanHold() {
         WidgetGridCaps landscape = WidgetGridCaps.forWall(673f, 386f);
-        assertEquals(10, landscape.maxColumns);
+        // Ten would fit; the settings range's own ceiling (8) still applies.
+        assertEquals(TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS, landscape.maxColumns);
         assertEquals(6, landscape.maxRows);
     }
 

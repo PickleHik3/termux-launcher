@@ -143,46 +143,69 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     /** The grid the user asked for on this orientation, before the wall's caps; 0 until asked. */
     private int wantedRows, wantedColumns;
-    private int lastWallWidth, lastWallHeight;
+    /**
+     * The largest the wall has measured in each orientation. The caps come from this, not from
+     * the live size: the keyboard or a sheet shrinking the wall for a while must not shrink the
+     * grid and reflow the widgets, since a reflow is kept. A cap can only grow until the screen
+     * turns, and the two orientations keep their own.
+     */
+    private int portraitWallWidth, portraitWallHeight, landscapeWallWidth, landscapeWallHeight;
+    @Nullable private WidgetGridCaps appliedCaps;
 
     /**
-     * What this wall can hold, from the grid's measured size; unbounded before the first layout.
-     * The grid is the wall as far as cells go, so this is the answer for the wheels and the apply.
+     * What this wall can hold, from the largest it has been in this orientation; unbounded before
+     * its first layout. The grid is the wall as far as cells go, so this is the answer for the
+     * wheels and the apply.
      */
     @NonNull public WidgetGridCaps gridCaps() {
-        WidgetGridView grid = pane.grid();
+        boolean landscape = isLandscape();
         float density = pane.getResources().getDisplayMetrics().density;
-        return WidgetGridCaps.forWallPx(grid.getWidth(), grid.getHeight(), density);
+        return WidgetGridCaps.forWallPx(landscape ? landscapeWallWidth : portraitWallWidth,
+            landscape ? landscapeWallHeight : portraitWallHeight, density);
     }
 
     /**
      * Puts the user's grid on the wall, held to what the wall can hold. The stored count is not
-     * touched: it is remembered here, and the grid is worked out again whenever the wall changes
-     * size, so a wider orientation or a smaller font later gets the full count back.
+     * touched: it is remembered here, and the grid is worked out again when the wall turns out
+     * larger, so a wider orientation or a smaller font later gets the full count back.
      */
     public void applyWantedGrid(int rows, int columns) {
         wantedRows = rows;
         wantedColumns = columns;
-        WidgetGridCaps caps = wallIsCurrent() ? gridCaps() : WidgetGridCaps.unbounded();
+        rememberWall();
+        WidgetGridCaps caps = gridCaps();
+        appliedCaps = caps;
         widgets.applyGrid(caps.clampRows(rows), caps.clampColumns(columns));
     }
 
-    /** The measured wall is the orientation's own; right after a turn it is still the last one's. */
-    private boolean wallIsCurrent() {
-        WidgetGridView grid = pane.grid();
-        if (grid.getWidth() <= 0 || grid.getHeight() <= 0) return false;
-        boolean landscape = pane.getResources().getConfiguration().orientation
+    private boolean isLandscape() {
+        return pane.getResources().getConfiguration().orientation
             == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
-        return landscape == (grid.getWidth() > grid.getHeight());
+    }
+
+    /**
+     * Folds the grid's measured size into its orientation's record. False when there is nothing
+     * to learn: unmeasured, or still the other orientation's size right after a turn.
+     */
+    private boolean rememberWall() {
+        WidgetGridView grid = pane.grid();
+        int width = grid.getWidth(), height = grid.getHeight();
+        if (width <= 0 || height <= 0) return false;
+        boolean landscape = isLandscape();
+        if (landscape != (width > height)) return false;
+        if (landscape) {
+            landscapeWallWidth = Math.max(landscapeWallWidth, width);
+            landscapeWallHeight = Math.max(landscapeWallHeight, height);
+        } else {
+            portraitWallWidth = Math.max(portraitWallWidth, width);
+            portraitWallHeight = Math.max(portraitWallHeight, height);
+        }
+        return true;
     }
 
     private void onWallLayout() {
-        WidgetGridView grid = pane.grid();
-        int width = grid.getWidth(), height = grid.getHeight();
-        if (width <= 0 || height <= 0 || wantedRows <= 0) return;
-        if (width == lastWallWidth && height == lastWallHeight) return;
-        lastWallWidth = width;
-        lastWallHeight = height;
+        if (wantedRows <= 0 || !rememberWall()) return;
+        if (gridCaps().equals(appliedCaps)) return;
         // Never from inside the layout pass that reported the change.
         pane.post(() -> { if (wantedRows > 0) applyWantedGrid(wantedRows, wantedColumns); });
     }
@@ -619,7 +642,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 ? Math.min(minSpan.rows, record.cell.rowSpan()) : record.cell.rowSpan();
             // Android asks hosts not to grow a widget past the maximum it names; the span is read
             // against the provider's content size like the minimum is, not the cell's.
-            WidgetCellView cell = pane.grid().cellForId(appWidgetId);
             int padWidth = cell == null || cell.getWidth() <= 0 ? 0
                 : cell.getWidth() - cell.providerContentWidth();
             int padHeight = cell == null || cell.getHeight() <= 0 ? 0
