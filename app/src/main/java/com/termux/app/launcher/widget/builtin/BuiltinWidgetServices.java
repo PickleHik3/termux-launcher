@@ -80,7 +80,7 @@ public final class BuiltinWidgetServices {
     @NonNull public Context context() { return context; }
     @NonNull public Host host() { return host; }
     @NonNull public Handler main() { return main; }
-    /** One background thread for file reads, calendar queries and shell runs. */
+    /** One background thread for file reads and calendar queries. */
     @NonNull public ExecutorService io() { return io; }
 
     // ----- minute tick ----------------------------------------------------------------------

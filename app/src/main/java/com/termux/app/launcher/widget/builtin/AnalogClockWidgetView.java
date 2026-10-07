@@ -142,15 +142,15 @@ public class AnalogClockWidgetView extends BuiltinWidgetView {
         for (int i = 0; i < zones.size(); i++) {
             TextView city = ui.text("", 12f, style().sansBold, style().onSurface);
             TextView offset = ui.mono("", 10.5f);
-            LinearLayout names = ui.column(2, city, offset);
-            names.setBaselineAlignedChildIndex(0);
             ClockNumeralView time = numeral(22f, 0f, Gravity.END);
             zoneRows.add(new ZoneRow(zones.get(i), city, time, offset, true));
-            // Baseline-aligned like the design: the time sits on the city's line.
-            LinearLayout row = wide(ui.row(8, BuiltinWidgetUi.flex(names), time));
-            row.setGravity(Gravity.TOP);
-            row.setBaselineAligned(true);
-            rows[i] = row;
+            // Only the city and the time share a baseline, like the design: the time sits on the
+            // city's line. The offset is its own line below, so no nested column's baseline can
+            // push it out of the row.
+            LinearLayout head = wide(ui.row(8, BuiltinWidgetUi.flex(city), time));
+            head.setGravity(Gravity.TOP);
+            head.setBaselineAligned(true);
+            rows[i] = wide(ui.column(2, head, offset));
         }
         LinearLayout column = ui.column(12, rows);
         LinearLayout root = ui.row(20, face(160, 0.08f), BuiltinWidgetUi.flex(column));

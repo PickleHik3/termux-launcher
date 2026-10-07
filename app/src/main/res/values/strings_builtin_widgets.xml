@@ -12,7 +12,6 @@
     <string name="builtin_widget_notifications">Notifications</string>
     <string name="builtin_widget_tasks">Tasks</string>
     <string name="builtin_widget_notes">Scratchpad</string>
-    <string name="builtin_widget_shell">Command</string>
     <string name="builtin_widget_calendar">Calendar</string>
 
     <string name="builtin_widget_settings_save">Save</string>
