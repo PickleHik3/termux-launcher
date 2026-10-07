@@ -168,6 +168,25 @@ public class WidgetEditPolicyTest {
         assertLayoutValid(records, 1, candidate);
     }
 
+    @Test public void resizeStopsAtAProvidersMaximum() {
+        List<LauncherWidgetRecord> records = new ArrayList<>();
+        records.add(record(1, new WidgetCellRect(0, 0, 1, 1)));
+        WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.resize(metrics(), records, 1,
+            new WidgetCellRect(0, 0, 1, 1), WidgetEditPolicy.Handle.RIGHT, 400, 1, 1, 2, 0);
+        assertEquals(new WidgetCellRect(0, 0, 2, 1), candidate.rect);
+    }
+
+    @Test public void aWidgetAlreadyPastItsMaximumMayShrinkButNotGrow() {
+        List<LauncherWidgetRecord> records = new ArrayList<>();
+        records.add(record(1, new WidgetCellRect(0, 0, 3, 1)));
+        WidgetEditPolicy.Candidate grow = WidgetEditPolicy.resize(metrics(), records, 1,
+            new WidgetCellRect(0, 0, 3, 1), WidgetEditPolicy.Handle.RIGHT, 400, 1, 1, 2, 0);
+        assertEquals(new WidgetCellRect(0, 0, 3, 1), grow.rect);
+        WidgetEditPolicy.Candidate shrink = WidgetEditPolicy.resize(metrics(), records, 1,
+            new WidgetCellRect(0, 0, 3, 1), WidgetEditPolicy.Handle.RIGHT, 200, 1, 1, 2, 0);
+        assertEquals(new WidgetCellRect(0, 0, 2, 1), shrink.rect);
+    }
+
     @Test public void resizeShrinkDisplacesNobody() {
         List<LauncherWidgetRecord> records = new ArrayList<>();
         records.add(record(1, new WidgetCellRect(0, 0, 3, 1)));

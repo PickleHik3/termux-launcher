@@ -56,8 +56,8 @@ public final class WidgetGridView extends ViewGroup {
 
     public WidgetGridView(@NonNull Context context) {
         super(context);
-        edgePadding = Math.round(6f * getResources().getDisplayMetrics().density);
-        gap = Math.round(8f * getResources().getDisplayMetrics().density);
+        edgePadding = Math.round(WidgetGridMetrics.EDGE_DP * getResources().getDisplayMetrics().density);
+        gap = Math.round(WidgetGridMetrics.GAP_DP * getResources().getDisplayMetrics().density);
         touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
         setClipChildren(true);
         setClipToPadding(true);

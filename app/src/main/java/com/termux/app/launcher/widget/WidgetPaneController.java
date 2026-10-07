@@ -94,6 +94,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             });
         pane.grid().setBuiltinFactory(builtins);
         catalog.setBuiltinSource(builtins);
+        pane.grid().addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> onWallLayout());
         pane.grid().bind(widgets); pane.picker().setReducedMotion(host.reducedMotion());
         pane.setReducedMotion(host.reducedMotion());
         pane.picker().adapter().setPreviewLoader(catalog);
@@ -138,6 +139,52 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         widgets.repository().trimEmptyPages();
         clampCurrentPage();
         render();
+    }
+
+    /** The grid the user asked for on this orientation, before the wall's caps; 0 until asked. */
+    private int wantedRows, wantedColumns;
+    private int lastWallWidth, lastWallHeight;
+
+    /**
+     * What this wall can hold, from the grid's measured size; unbounded before the first layout.
+     * The grid is the wall as far as cells go, so this is the answer for the wheels and the apply.
+     */
+    @NonNull public WidgetGridCaps gridCaps() {
+        WidgetGridView grid = pane.grid();
+        float density = pane.getResources().getDisplayMetrics().density;
+        return WidgetGridCaps.forWallPx(grid.getWidth(), grid.getHeight(), density);
+    }
+
+    /**
+     * Puts the user's grid on the wall, held to what the wall can hold. The stored count is not
+     * touched: it is remembered here, and the grid is worked out again whenever the wall changes
+     * size, so a wider orientation or a smaller font later gets the full count back.
+     */
+    public void applyWantedGrid(int rows, int columns) {
+        wantedRows = rows;
+        wantedColumns = columns;
+        WidgetGridCaps caps = wallIsCurrent() ? gridCaps() : WidgetGridCaps.unbounded();
+        widgets.applyGrid(caps.clampRows(rows), caps.clampColumns(columns));
+    }
+
+    /** The measured wall is the orientation's own; right after a turn it is still the last one's. */
+    private boolean wallIsCurrent() {
+        WidgetGridView grid = pane.grid();
+        if (grid.getWidth() <= 0 || grid.getHeight() <= 0) return false;
+        boolean landscape = pane.getResources().getConfiguration().orientation
+            == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        return landscape == (grid.getWidth() > grid.getHeight());
+    }
+
+    private void onWallLayout() {
+        WidgetGridView grid = pane.grid();
+        int width = grid.getWidth(), height = grid.getHeight();
+        if (width <= 0 || height <= 0 || wantedRows <= 0) return;
+        if (width == lastWallWidth && height == lastWallHeight) return;
+        lastWallWidth = width;
+        lastWallHeight = height;
+        // Never from inside the layout pass that reported the change.
+        pane.post(() -> { if (wantedRows > 0) applyWantedGrid(wantedRows, wantedColumns); });
     }
 
     public void onStart() { render(); }
@@ -418,6 +465,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private static final class EditState {
         final int appWidgetId;
         final int minColumnSpan, minRowSpan;
+        /** The provider's own ceiling on a span, or 0 where it names none. */
+        final int maxColumnSpan, maxRowSpan;
         final boolean horizontalResizable, verticalResizable;
         float dragStartRawX, dragStartRawY;
         Rect dragStartBounds;
@@ -433,10 +482,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         int createdPage = -1;
         float lastRawX, lastRawY;
         EditState(int appWidgetId, int minColumnSpan, int minRowSpan,
+                  int maxColumnSpan, int maxRowSpan,
                   boolean horizontalResizable, boolean verticalResizable) {
             this.appWidgetId = appWidgetId;
             this.minColumnSpan = minColumnSpan;
             this.minRowSpan = minRowSpan;
+            this.maxColumnSpan = maxColumnSpan;
+            this.maxRowSpan = maxRowSpan;
             this.horizontalResizable = horizontalResizable;
             this.verticalResizable = verticalResizable;
         }
@@ -539,6 +591,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         AppWidgetProviderInfo info = widgets.providerInfo(appWidgetId);
         WidgetGridMetrics metrics = pane.grid().metrics();
         int minColumns = 1, minRows = 1;
+        int maxColumns = 0, maxRows = 0;
         boolean horizontal = false, vertical = false;
         if (record.isBuiltin()) {
             // Designed at five sizes and drawn at the largest that fits: any size the grid
@@ -564,8 +617,21 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 ? Math.min(minSpan.columns, record.cell.columnSpan()) : record.cell.columnSpan();
             minRows = minSpan.rows > 0
                 ? Math.min(minSpan.rows, record.cell.rowSpan()) : record.cell.rowSpan();
+            // Android asks hosts not to grow a widget past the maximum it names; the span is read
+            // against the provider's content size like the minimum is, not the cell's.
+            WidgetCellView cell = pane.grid().cellForId(appWidgetId);
+            int padWidth = cell == null || cell.getWidth() <= 0 ? 0
+                : cell.getWidth() - cell.providerContentWidth();
+            int padHeight = cell == null || cell.getHeight() <= 0 ? 0
+                : cell.getHeight() - cell.providerContentHeight();
+            WidgetGridMetrics.Span maxSpan = metrics.largestSpanWithin(
+                info.maxResizeWidth > 0 ? info.maxResizeWidth + padWidth : 0,
+                info.maxResizeHeight > 0 ? info.maxResizeHeight + padHeight : 0);
+            maxColumns = maxSpan.columns;
+            maxRows = maxSpan.rows;
         }
-        edit = new EditState(appWidgetId, minColumns, minRows, horizontal, vertical);
+        edit = new EditState(appWidgetId, minColumns, minRows, maxColumns, maxRows,
+            horizontal, vertical);
         WidgetEditOverlayView overlay = pane.widgetEditOverlay();
         overlay.setListener(overlayListener);
         overlay.show(paneBounds(record.cell), horizontal, vertical, editableOutlines(appWidgetId),
@@ -1189,7 +1255,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             : desiredEdgePx - pane.grid().getTop();
         edit.resizeCandidate = WidgetEditPolicy.resize(pane.grid().metrics(),
             widgets.repository().recordsOnPage(record.page), edit.appWidgetId, record.cell,
-            handle, gridEdgePx, edit.minColumnSpan, edit.minRowSpan);
+            handle, gridEdgePx, edit.minColumnSpan, edit.minRowSpan,
+            edit.maxColumnSpan, edit.maxRowSpan);
         pane.widgetEditOverlay().setFrameBounds(paneBounds(edit.resizeCandidate.rect));
         previewDisplacement(edit.resizeCandidate.displaced);
     }

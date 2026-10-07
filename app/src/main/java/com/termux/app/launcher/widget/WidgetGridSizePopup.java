@@ -40,6 +40,14 @@ public final class WidgetGridSizePopup {
     @NonNull
     public static WidgetGridSizePopup show(@NonNull View page, @NonNull RectF tab,
                                            int columns, int rows, @NonNull Listener listener) {
+        return show(page, tab, columns, rows, WidgetGridCaps.unbounded(), listener);
+    }
+
+    /** As {@link #show}, with the numbers the wall can hold; a larger stored count shows capped. */
+    @NonNull
+    public static WidgetGridSizePopup show(@NonNull View page, @NonNull RectF tab,
+                                           int columns, int rows, @NonNull WidgetGridCaps caps,
+                                           @NonNull Listener listener) {
         Context context = page.getContext();
         float density = context.getResources().getDisplayMetrics().density;
         int onSurfaceVariant = M3.onSurfaceVariant(context);
@@ -51,9 +59,9 @@ public final class WidgetGridSizePopup {
         shell.setPadding(pad, pad, pad, pad);
 
         GridSizeWheelView columnsWheel = new GridSizeWheelView(context,
-            GridSizeWheelPolicy.columns(), columns);
+            GridSizeWheelPolicy.columns(caps), columns);
         GridSizeWheelView rowsWheel = new GridSizeWheelView(context,
-            GridSizeWheelPolicy.rows(), rows);
+            GridSizeWheelPolicy.rows(caps), rows);
         GridSizeWheelView.Listener relay = value ->
             listener.onGridSizeChanged(columnsWheel.value(), rowsWheel.value());
         columnsWheel.setListener(relay);

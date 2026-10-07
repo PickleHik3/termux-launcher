@@ -12311,7 +12311,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayout layout = placeLayout(currentPlaceOrientation());
         boolean moved = mWidgetHostController.repository().applyOrientation(
             currentPlaceOrientation().storageValue(), layout.widgetRows, layout.widgetColumns);
-        mWidgetHostController.applyGrid(layout.widgetRows, layout.widgetColumns);
+        // The stored count is the user's; the wall holds what fits of it, and the pane works that
+        // out again whenever the wall changes size.
+        if (mWidgetPaneController != null) {
+            mWidgetPaneController.applyWantedGrid(layout.widgetRows, layout.widgetColumns);
+        } else {
+            mWidgetHostController.applyGrid(layout.widgetRows, layout.widgetColumns);
+        }
         // The grid is unchanged on a turn of the screen that only swapped the layouts, so the
         // host's own redraw does not fire; the pane is asked to draw itself again here instead.
         if (moved && mWidgetPaneController != null) mWidgetPaneController.redraw();
@@ -19485,10 +19491,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (mWidgetPaneController != null) mWidgetPaneController.editWidgets();
             }
             @Override public int widgetGridColumns() {
-                return placeLayout(currentPlaceOrientation()).widgetColumns;
+                return widgetGridCaps().clampColumns(
+                    placeLayout(currentPlaceOrientation()).widgetColumns);
             }
             @Override public int widgetGridRows() {
-                return placeLayout(currentPlaceOrientation()).widgetRows;
+                return widgetGridCaps().clampRows(
+                    placeLayout(currentPlaceOrientation()).widgetRows);
+            }
+            @Override @NonNull public com.termux.app.launcher.widget.WidgetGridCaps widgetGridCaps() {
+                return mWidgetPaneController != null ? mWidgetPaneController.gridCaps()
+                    : com.termux.app.launcher.widget.WidgetGridCaps.unbounded();
             }
             @Override public void setWidgetGrid(int columns, int rows) {
                 PlaceLayoutStore store = placeLayoutStore();
