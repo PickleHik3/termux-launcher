@@ -6344,14 +6344,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Remembered, so a Style change that reaches the surfaces without a chrome render redresses
         // the host at once instead of leaving the other Style's material on it.
         mKeyboardSurfaceDressedAsCard = capsule;
-        int horizontalMargin = resolveInAppKeyboardHorizontalInsetPx();
+        // The side gap keeps a docked capsule off the screen's edges; inside a floating card it was
+        // only more rim round the keys.
+        int horizontalMargin = floating ? 0 : resolveInAppKeyboardHorizontalInsetPx();
         // A floating keyboard already sits under its card's grab handle, so the capsule's top gap
         // would only push the keys further from it: the host runs straight up to the handle row
         // and keeps a thin inner rim of the one surface the card and the host share.
         int topMargin = capsule && !floating ? com.termux.app.dock.UnderKeyboardBand
             .keyboardGapPx(getResources().getDisplayMetrics().density) : 0;
-        int innerPadding = capsule ? Math.round(dpToPx(6)) : 0;
-        int innerTopPadding = floating ? Math.round(dpToPx(4)) : innerPadding;
+        // A floating card keeps a thin 3dp rim at the sides and none above and below: its handle row
+        // and the keyboard's own margins are rim enough.
+        int innerPadding = floating ? Math.round(dpToPx(3)) : capsule ? Math.round(dpToPx(6)) : 0;
+        int innerTopPadding = floating ? 0 : innerPadding;
         // The user's own chin allowance, from Settings, and it lands in a different place per shape:
         // padding inside the docked slab, a taller gap under the floating capsule. In the stack the
         // capsule's gap is not this host's to carry: the stack's own bottom margin is the one edge
@@ -6360,8 +6364,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // still keeps the card's gap under its keys.
         int chinPaddingPx = resolveInAppKeyboardBottomPaddingPx();
         int bottomMargin = ChromePolicy.keyboardChinBottomMarginPx(
-            capsule, floating ? getDockLayout().capsuleBottomGapPx : 0, chinPaddingPx);
-        int innerBottomPadding = ChromePolicy.keyboardChinBottomPaddingPx(
+            capsule, 0, chinPaddingPx);
+        int innerBottomPadding = floating ? 0 : ChromePolicy.keyboardChinBottomPaddingPx(
             capsule, innerPadding, chinPaddingPx);
         ViewGroup.LayoutParams layoutParams = surfaceHost.getLayoutParams();
         if (layoutParams instanceof ViewGroup.MarginLayoutParams) {

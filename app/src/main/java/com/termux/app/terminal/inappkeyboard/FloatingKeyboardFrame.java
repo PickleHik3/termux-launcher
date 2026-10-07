@@ -57,8 +57,8 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     /** Narrower than this and there is no keyboard left to type on, whatever the share says. */
     private static final float MIN_WIDTH_DP = 240f;
 
-    /** The strip above the keys the card is dragged by: the shared {@link GrabHandle}'s. */
-    static final float HANDLE_ROW_DP = GrabHandle.ROW_DP;
+    /** The strip above the keys the card is dragged by: the {@link GrabHandle} pill in a 12dp row, slimmer than the shared 18dp so the card carries less rim. */
+    static final float HANDLE_ROW_DP = 12f;
 
     /**
      * The corner the card is resized from, mirrored across from the floating terminal pane's,
