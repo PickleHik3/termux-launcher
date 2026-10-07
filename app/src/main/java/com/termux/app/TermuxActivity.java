@@ -139,6 +139,7 @@ import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.GeometryScheduler;
 import com.termux.app.terminal.PaneShape;
+import com.termux.app.terminal.ReturnResizeHold;
 import com.termux.app.terminal.TerminalFrameMetricsMonitor;
 import com.termux.app.terminal.TermuxActivityRootView;
 import com.termux.app.terminal.TermuxTerminalSessionActivityClient;
@@ -844,6 +845,60 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Activity-scoped embedded-keyboard controller and its currently attached renderer. */
     @Nullable private TermuxInAppKeyboard mInAppKeyboard;
+
+    /**
+     * The panes' grid is held from the stop until the layout the launcher returns to has settled,
+     * so a TUI hears one size for the whole round trip — usually none, the size it left with
+     * ({@link ReturnResizeHold}). The hold is one lease of the pane controller's pause, so the
+     * geometry scheduler's own holds over the same frames compose with it.
+     */
+    private final ReturnResizeHold mReturnHold = new ReturnResizeHold(new ReturnResizeHold.Host() {
+        @Override public void beginHold() {
+            if (mPaneController != null) mPaneController.beginReturnHold();
+        }
+
+        @Override public void finishHold(@NonNull String reason) {
+            android.util.Log.d(TerminalView.GEOMETRY_LOG_TAG, "return hold release reason="
+                + reason + " sinceResumeMs=" + (SystemClock.uptimeMillis() - mReturnHoldResumedAtMs));
+            if (mPaneController != null) mPaneController.finishReturnHold();
+        }
+    });
+    private long mReturnHoldResumedAtMs;
+    private boolean mReturnHoldFramePosted;
+    /**
+     * Fed every vsync while the return hold waits, rather than on pre-draw: a returning terminal
+     * with nothing to repaint draws no frame, and the hold would then only ever end on its
+     * backstop. Animation callbacks run ahead of the frame's traversal, so each one reads the
+     * layout the previous frame left plus whether another is already booked.
+     */
+    private final Choreographer.FrameCallback mReturnHoldFrame = this::onReturnHoldFrame;
+
+    private void onReturnHoldFrame(long frameTimeNanos) {
+        mReturnHoldFramePosted = false;
+        if (mIsInvalidState) return;
+        View paneHost = findViewById(R.id.terminal_pane_host);
+        View accessory = findViewById(R.id.accessory_stack_container);
+        View keyboard = findViewById(R.id.inapp_keyboard_container);
+        long key = geometryInputsKey();
+        key = mixKey(key, paneHost == null ? -1 : paneHost.getWidth());
+        key = mixKey(key, paneHost == null ? -1 : paneHost.getHeight());
+        key = mixKey(key, shownHeightPx(accessory));
+        key = mixKey(key, shownHeightPx(keyboard));
+        boolean layoutPending = (paneHost != null && paneHost.isLayoutRequested())
+            || (accessory != null && accessory.isLayoutRequested());
+        if (mReturnHold.onFrame(key, layoutPending, SystemClock.uptimeMillis()))
+            postReturnHoldFrame();
+    }
+
+    private static int shownHeightPx(@Nullable View view) {
+        return view == null || view.getVisibility() != View.VISIBLE ? -1 : view.getHeight();
+    }
+
+    private void postReturnHoldFrame() {
+        if (mReturnHoldFramePosted || !mReturnHold.wantsFrames()) return;
+        mReturnHoldFramePosted = true;
+        Choreographer.getInstance().postFrameCallback(mReturnHoldFrame);
+    }
     /** Hosts that keyboard in its floating frame while the place asks for a floating one. */
     @Nullable private FloatingKeyboardController mFloatingKeyboard;
     @Nullable private View mAttachedInAppKeyboardView;
@@ -2421,6 +2476,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         holdVoiceScreen();
         if (mIsInvalidState)
             return;
+        // A return hold opened by the stop starts watching for the layout to settle; it is let
+        // go once focus has come too (onWindowFocusChanged) and the size has stopped moving.
+        if (mReturnHold.isActive()) {
+            mReturnHoldResumedAtMs = SystemClock.uptimeMillis();
+            mReturnHold.onResumed(mReturnHoldResumedAtMs);
+            postReturnHoldFrame();
+        }
         // A new intent to the resumed launcher (HOME while home; a second start racing a cold
         // start) pauses and resumes it inside one message. Nothing can have changed in between,
         // so the passes below that re-read preferences and re-dress the chrome "in case they
@@ -2808,6 +2870,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     protected void onPause() {
+        mReturnHold.onPaused();
         dismissHelpOverlay();
         // The microphone is only ever open while this activity is the one on screen; what was
         // said stays in the panel, waiting for the user to come back to it.
@@ -8471,6 +8534,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mBarMemorySmoother.reset();
         if (mIsInvalidState)
             return;
+        // From here until the layout we come back to has settled, the panes' sizes are kept as
+        // pending: the stop's own geometry (the keyboard's, the dock's IME offset below) and the
+        // burst a return brings — insets, frame, fullscreen flags, the keyboard re-measuring, the
+        // re-measures posted from onResume and focus — would each reach the PTY on their own.
+        // The stop, not the pause: a paused window can still be on screen (a dialog over us, a
+        // multi-window peer) and its grid must keep following it; a stopped one shows nothing.
+        if (mPaneController != null && mReturnHold.begin())
+            android.util.Log.d(TerminalView.GEOMETRY_LOG_TAG, "return hold begin reason=stop");
         if (mWidgetPaneController != null) mWidgetPaneController.onStop();
         if (mWidgetHostController != null) mWidgetHostController.onStop();
         mIsVisible = false;
@@ -8570,6 +8641,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // First: what follows (the keyboard's teardown among it) must not book passes or holds
         // on the main looper for a window that is going away.
         mGeometry.dispose();
+        // Dropped, not resumed: the panes go with the window.
+        mReturnHold.cancel();
+        Choreographer.getInstance().removeFrameCallback(mReturnHoldFrame);
+        mReturnHoldFramePosted = false;
         if (mTermuxActivityRootView != null) mTermuxActivityRootView.setBottomMarginWriter(null);
         if (mPaneController != null) mPaneController.setGeometryScheduler(null);
         com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(terminalHost());
@@ -24255,6 +24330,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        mReturnHold.onFocusChanged(hasFocus, SystemClock.uptimeMillis());
+        postReturnHoldFrame();
         if (hasFocus) {
             applyFullscreenMode();
         }

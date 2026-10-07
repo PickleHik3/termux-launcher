@@ -337,6 +337,18 @@ public class TerminalPaneController {
     /** Nested controller-wide lease covering every source of transient host geometry. */
     private int mHostSurfaceResizeDepth;
     /**
+     * The activity's return hold ({@link ReturnResizeHold}) is one of the leases above: one count
+     * of {@link #mHostSurfaceResizeDepth}, taken when the launcher stops and given back once the
+     * layout it returns to has settled, so it composes with the scheduler's holds rather than one
+     * ending the other's pause early.
+     */
+    private boolean mReturnHoldActive;
+    /**
+     * A return hold covered the pause span now open: the resume that ends the span (whichever
+     * lease is last to go) is logged as {@link TerminalView#CAUSE_RETURN_HOLD}.
+     */
+    private boolean mReturnHoldInSpan;
+    /**
      * Owns the grid's pause through the transitions this controller drives (focus growth, a
      * resize-key burst, a divider or float drag), so they share one resize with whatever else is
      * moving the host. Null in tests and before the activity wires it: the pause is then direct.
@@ -1185,7 +1197,9 @@ public class TerminalPaneController {
 
     /** Re-measure every visible pane once layout settles. Returning from another app can leave the
      *  panes measured against a stale (tiny) host size; posting updateSize after the next layout
-     *  pass recomputes rows/cols against the restored full size. */
+     *  pass recomputes rows/cols against the restored full size. While any lease holds the grid
+     *  (the return hold among them) the posted updateSize only marks the pane pending, and the
+     *  lease's release sends the one size. */
     public void refreshPaneSizes() {
         for (TerminalView v : getVisiblePaneViews())
             v.post(v::updateSize);
@@ -1235,6 +1249,21 @@ public class TerminalPaneController {
 
     /** True while any host surface owns transient terminal geometry. */
     public boolean isHostSurfaceResizeInProgress() { return mHostSurfaceResizeDepth > 0; }
+
+    /** The launcher left the screen: hold the grid until {@link #finishReturnHold}. */
+    public void beginReturnHold() {
+        if (mReturnHoldActive) return;
+        mReturnHoldActive = true;
+        mReturnHoldInSpan = true;
+        beginHostSurfaceResize();
+    }
+
+    /** The layout it came back to has settled: give back the return hold's lease. */
+    public void finishReturnHold() {
+        if (!mReturnHoldActive) return;
+        mReturnHoldActive = false;
+        finishHostSurfaceResizeKeepingBottom();
+    }
 
     /** The cover last applied, so a frame that repeats it touches no pane. */
     private int mTravelBottomCoverPx;
@@ -3630,9 +3659,11 @@ public class TerminalPaneController {
                 view.setTerminalSizeUpdatesPaused(true, false);
             return;
         }
+        String cause = mReturnHoldInSpan ? TerminalView.CAUSE_RETURN_HOLD : "resume";
+        mReturnHoldInSpan = false;
         java.util.HashSet<TerminalView> visible = new java.util.HashSet<>(getVisiblePaneViews());
         for (TerminalView view : mPaneViews.values()) {
-            if (visible.contains(view)) view.setTerminalSizeUpdatesPaused(false, keepBottom);
+            if (visible.contains(view)) view.setTerminalSizeUpdatesPaused(false, keepBottom, cause);
             else view.resumeTerminalSizeUpdatesDiscardingPending();
         }
     }

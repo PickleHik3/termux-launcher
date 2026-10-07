@@ -769,7 +769,7 @@ public final class TerminalView extends View {
         mCombiningAccent = 0;
         // A different session's cursor is somewhere else entirely; do not streak across the switch.
         notifyCursorTrailSnap();
-        updateSize();
+        updateSize(false, "attach");
         // Wait with enabling the scrollbar until we have a terminal to get scroll position from.
         setVerticalScrollBarEnabled(true);
         return true;
@@ -2715,7 +2715,7 @@ public final class TerminalView extends View {
             mTerminalSizeUpdatePending = true;
             invalidate();
         } else {
-            updateSize();
+            updateSize(false, "layout");
         }
     }
 
@@ -2723,10 +2723,15 @@ public final class TerminalView extends View {
      * Check if the terminal size in rows and columns should be updated.
      */
     public void updateSize() {
-        updateSize(false);
+        updateSize(false, "direct");
     }
 
-    private void updateSize(boolean keepCursorAtBottom) {
+    /**
+     * @param cause what asked for this size, for the {@link #GEOMETRY_LOG_TAG} line written when
+     *              the session is actually resized: {@code layout}, {@code attach}, {@code direct}
+     *              (a caller's own re-measure), or the cause a paused span was resumed with
+     */
+    private void updateSize(boolean keepCursorAtBottom, @NonNull String cause) {
         if (mTerminalSizeUpdatesPaused) {
             mTerminalSizeUpdatePending = true;
             invalidate();
@@ -2753,6 +2758,7 @@ public final class TerminalView extends View {
         int newRows = Math.max(4, (viewHeight - mRenderer.mFontLineSpacingAndAscent) / mRenderer.mFontLineSpacing);
         if (mEmulator == null || (newColumns != mEmulator.mColumns || newRows != mEmulator.mRows)) {
             reflowed = true;
+            logSessionResize(newColumns, newRows, keepCursorAtBottom, cause);
             android.os.Trace.beginSection("Terminal.updateSize");
             try {
                 mTermSession.updateSize(newColumns, newRows, (int) mRenderer.getFontWidth(),
@@ -2774,6 +2780,25 @@ public final class TerminalView extends View {
             }
         }
         if (travelling) endTravelDisplacement(reflowed);
+    }
+
+    /**
+     * Tag of the one line written per PTY resize, kept for confirming on a device which path a
+     * resize came through: {@code adb logcat -s TermGeom}.
+     */
+    public static final String GEOMETRY_LOG_TAG = "TermGeom";
+
+    /** The cause a resume carries when a return hold covered the paused span it ends. */
+    public static final String CAUSE_RETURN_HOLD = "return-hold";
+
+    private void logSessionResize(int newColumns, int newRows, boolean keepCursorAtBottom,
+                                  @NonNull String cause) {
+        // The session's emulator, not this view's: a freshly attached session already has a size.
+        TerminalEmulator prior = mTermSession.getEmulator();
+        String from = prior == null ? "none" : prior.mColumns + "x" + prior.mRows;
+        android.util.Log.d(GEOMETRY_LOG_TAG, "resize " + from + " -> " + newColumns + "x" + newRows
+            + " keepBottom=" + keepCursorAtBottom + " cause=" + cause
+            + " returnHold=" + CAUSE_RETURN_HOLD.equals(cause));
     }
 
     // ---- The place slide's travel (see mTravelActive) ------------------------------------------
@@ -3074,13 +3099,22 @@ public final class TerminalView extends View {
     /** Resume a coalesced resize with optional bottom anchoring after the final layout pass. */
     public void setTerminalSizeUpdatesPaused(boolean paused,
                                              boolean keepCursorAtBottomOnResume) {
+        setTerminalSizeUpdatesPaused(paused, keepCursorAtBottomOnResume, "resume");
+    }
+
+    /**
+     * As {@link #setTerminalSizeUpdatesPaused(boolean, boolean)}, naming what ended the pause for
+     * the resize log line ({@link #CAUSE_RETURN_HOLD} when a return hold covered it).
+     */
+    public void setTerminalSizeUpdatesPaused(boolean paused, boolean keepCursorAtBottomOnResume,
+                                             @NonNull String resumeCause) {
         if (mTerminalSizeUpdatesPaused == paused) return;
         mTerminalSizeUpdatesPaused = paused;
         if (!paused && mTerminalSizeUpdatePending) {
             mTerminalSizeUpdatePending = false;
             // Run after the final split layout pass so only the settled geometry reaches the PTY.
             new Handler(Looper.getMainLooper()).post(
-                () -> updateSize(keepCursorAtBottomOnResume));
+                () -> updateSize(keepCursorAtBottomOnResume, resumeCause));
         }
     }
 
