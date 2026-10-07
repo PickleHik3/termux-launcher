@@ -33,7 +33,9 @@ import java.util.regex.Pattern;
  * is a single run with nothing after it, as the tail of a hand-wrapped address is. As a guard, the
  * address must cover at least {@value #MIN_HAND_WRAPPED_CELLS} cells of its row: a short address
  * ending a line is far more often complete than wrapped. A word after the tail, such as the rest
- * of the next log line or a prompt with a command typed, keeps the rows apart.</li>
+ * of the next log line or a prompt with a command typed, keeps the rows apart. And the text must
+ * sit in a box: indented from the window's left edge, or in a window with a divider on a side. A
+ * long address echoed at the screen's own edge, then an idle prompt, is two things.</li>
  * <li>Trailing punctuation that closed a sentence rather than the address — {@code .,;:!?}, quotes,
  * and a closing bracket without its opener inside the address — is dropped, as kitty does.</li>
  * </ul>
@@ -209,7 +211,7 @@ public final class UrlDetector {
             boolean atEdge = line.endsAtWindowEdge(columns);
             if (!atEdge && !line.mayWrapByHand()) continue;
             int below = lineBelow(lines, index + 1, line.lastRow() + 1, line.left, line.right);
-            if (below < 0 || (!atEdge && !lines.get(below).continuesByHand(line))) continue;
+            if (below < 0 || (!atEdge && !lines.get(below).continuesByHand(line, columns))) continue;
             frame.mBelow[index] = below;
             frame.join(index, below);
         }
@@ -835,11 +837,18 @@ public final class UrlDetector {
          * The row-below half of the hand-wrap rule: this line's text starts, on its first row, at
          * the column where {@code above}'s text starts, and is one run with nothing after it.
          */
-        boolean continuesByHand(Line above) {
+        boolean continuesByHand(Line above, int columns) {
             int start = firstTextIndex();
             int aboveStart = above.firstTextIndex();
             if (start < 0 || aboveStart < 0 || columnStart[start] != above.columnStart[aboveStart]) return false;
-            for (int k = start; k < text.length(); k++) {
+            // Text a program wrapped inside a box has a margin or a border on some side. Text at
+            // the screen's own left edge in a whole-row window is a shell's: a long address echoed
+            // there followed by an idle prompt (user@host:~$) must not become one address.
+            boolean boxed = columnStart[start] > above.left || above.left > 0 || above.right < columns;
+            if (!boxed) return false;
+            int last = text.length() - 1;
+            while (last > start && text.charAt(last) == ' ') last--;  // Blanks before a border.
+            for (int k = start; k <= last; k++) {
                 if (text.charAt(k) == ' ' || row[k] != rows[0]) return false;
             }
             return true;

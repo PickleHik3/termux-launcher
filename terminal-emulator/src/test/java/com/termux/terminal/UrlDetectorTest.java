@@ -437,6 +437,15 @@ public class UrlDetectorTest extends TerminalTestCase {
         assertNull(urlAt(5, 1));
     }
 
+    /** A long address echoed at the screen's own edge, then an idle prompt, is two things. */
+    public void testALongAddressAtTheScreensEdgeIsNotJoinedToAnIdlePrompt() {
+        withTerminalSized(80, 12);
+        row(BOX_HEAD)
+            .row("user@host:~$");
+        assertEquals(BOX_HEAD, urlAt(2, 0));
+        assertNull(urlAt(2, 1));
+    }
+
     /** A row below that starts at another column is other text, not the address carried on. */
     public void testAHandWrappedTailAtADifferentMarginIsNotJoined() {
         withTerminalSized(80, 12);
@@ -451,14 +460,14 @@ public class UrlDetectorTest extends TerminalTestCase {
         String atMinimum = "https://example.com/aaaa";
         assertEquals(UrlDetector.MIN_HAND_WRAPPED_CELLS, atMinimum.length());
         String under = "https://example.com/aaa";
-        row(under).row("bb/end");
-        assertEquals(under, urlAt(3, 0));
-        assertNull(urlAt(2, 1));
+        row("  " + under).row("  bb/end");
+        assertEquals(under, urlAt(5, 0));
+        assertNull(urlAt(4, 1));
 
         withTerminalSized(COLUMNS, 12);
-        row(atMinimum).row("bb/end");
-        assertEquals(atMinimum + "bb/end", urlAt(3, 0));
-        assertEquals(atMinimum + "bb/end", urlAt(2, 1));
+        row("  " + atMinimum).row("  bb/end");
+        assertEquals(atMinimum + "bb/end", urlAt(5, 0));
+        assertEquals(atMinimum + "bb/end", urlAt(4, 1));
     }
 
     /** A word after the tail makes the row below its own text, such as the next line of a log. */
