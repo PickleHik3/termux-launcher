@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
  * text dump so that an address can be mapped back to cells, and so that the row geometry — wrap
  * flags, the right edge, a multiplexer's pane border — can decide where an address continues.
  *
- * <p>Three kinds of row break are followed:
+ * <p>Four kinds of row break are followed:
  * <ul>
  * <li>A row the emulator wrapped itself carries a wrap flag, and the next row is simply more of the
  * same line. Every terminal does this much.</li>
@@ -26,6 +26,16 @@ import java.util.regex.Pattern;
  * and the row below, in the same window, opens with text after any indentation, the address is
  * tried with that text appended and kept if the match grows. Without dividers the window is the
  * whole row, which is kitty's rule: join when the address fills the last column.</li>
+ * <li>A program that wraps inside a padded box stops its rows short of the window's edge, so the
+ * rule above never sees them. Such a row is still followed when the address is the last text on
+ * it (only blanks follow, up to the window's edge), the row below in the same window starts its
+ * text at the same column as this row's text (one program wrapping one paragraph), and that text
+ * is a single run with nothing after it, as the tail of a hand-wrapped address is. As a guard, the
+ * address must cover at least {@value #MIN_HAND_WRAPPED_CELLS} cells of its row: a short address
+ * ending a line is far more often complete than wrapped. A word after the tail, such as the rest
+ * of the next log line or a prompt with a command typed, keeps the rows apart. And the text must
+ * sit in a box: indented from the window's left edge, or in a window with a divider on a side. A
+ * long address echoed at the screen's own edge, then an idle prompt, is two things.</li>
  * <li>Trailing punctuation that closed a sentence rather than the address — {@code .,;:!?}, quotes,
  * and a closing bracket without its opener inside the address — is dropped, as kitty does.</li>
  * </ul>
@@ -46,6 +56,9 @@ public final class UrlDetector {
 
     /** Consecutive rows a vertical line glyph must fill in one column for it to be a pane divider. */
     private static final int DIVIDER_RUN = 8;
+
+    /** The fewest cells an address must cover on a row that stops short of its window's edge to continue below. */
+    static final int MIN_HAND_WRAPPED_CELLS = 24;
 
     private UrlDetector() {
     }
@@ -150,8 +163,9 @@ public final class UrlDetector {
         int scanFirst = Math.max(minRow, firstRow - CONTEXT_ROWS);
         for (int i = 0; i < MAX_WRAP_CHAIN && scanFirst > dividerFirst && lineWraps(screen, scanFirst - 1); i++) scanFirst--;
         // A program that wraps by hand sets no wrap flag, so the chain above has to be walked by
-        // sight: while the row above still runs to a window's edge it may carry the start of an
-        // address that reaches into the range, and without it the rows in view match nothing at all.
+        // sight: while the row above still runs to a window's edge, or wraps by hand into the row
+        // below it, it may carry the start of an address that reaches into the range, and without
+        // it the rows in view match nothing at all.
         for (int i = 0; i < MAX_WRAP_CHAIN && scanFirst > dividerFirst && rowReachesEdge(screen, dividers, scanFirst - 1); i++) scanFirst--;
         int scanLast = Math.min(maxRow, lastRow + CONTEXT_ROWS);
         for (int i = 0; i < MAX_WRAP_CHAIN && scanLast < dividerLast && lineWraps(screen, scanLast); i++) scanLast++;
@@ -183,17 +197,23 @@ public final class UrlDetector {
             row++;
         }
 
-        // An address only ever continues from a line into the one lineBelow finds for it, so lines
-        // joined that way form a group whose answer depends on nothing outside it. A group whose
-        // text and cells match one from the cache's last call keeps that call's answer, moved to
-        // where the group now stands; only the others are matched against the grammar.
+        // An address only ever continues from a line into the one recorded in mBelow for it, and
+        // the scan below follows no other pair, so lines joined that way form a group whose answer
+        // depends on nothing outside it. Both rules decide from the two lines' own text and cells,
+        // which the group's signature holds. A group whose text and cells match one from the
+        // cache's last call keeps that call's answer, moved to where the group now stands; only
+        // the others are matched against the grammar.
         final int count = lines.size();
         final Cache.Frame frame = cache.beginFrame(count);
         for (int index = 0; index < count; index++) {
+            frame.mBelow[index] = -1;
             Line line = lines.get(index);
-            if (!line.endsAtWindowEdge(columns)) continue;
+            boolean atEdge = line.endsAtWindowEdge(columns);
+            if (!atEdge && !line.mayWrapByHand()) continue;
             int below = lineBelow(lines, index + 1, line.lastRow() + 1, line.left, line.right);
-            if (below >= 0) frame.join(index, below);
+            if (below < 0 || (!atEdge && !lines.get(below).continuesByHand(line, columns))) continue;
+            frame.mBelow[index] = below;
+            frame.join(index, below);
         }
         frame.collectGroups();
         for (int g = 0; g < frame.mGroupCount; g++) cache.lookUp(frame, g, lines, columns);
@@ -210,12 +230,16 @@ public final class UrlDetector {
                 from = end;
                 Match match = new Match();
                 match.append(line, start, end);
-                // Follow the address into the window's next row while it runs to the window's edge.
+                // Follow the address into the window's next row while it is the last text on its
+                // row and the grouping above joined that row to the next.
                 Line current = line;
-                int searchFrom = index + 1;
-                while (end == current.text.length() && current.endsAtWindowEdge(columns)) {
-                    int nextIndex = lineBelow(lines, searchFrom, current.lastRow() + 1, current.left, current.right);
+                int currentIndex = index;
+                int rowStart = start;
+                while (end == current.text.length()) {
+                    int nextIndex = frame.mBelow[currentIndex];
                     if (nextIndex < 0) break;
+                    boolean byHand = !current.endsAtWindowEdge(columns);
+                    if (byHand && current.columnEnd[end - 1] - current.columnStart[rowStart] < MIN_HAND_WRAPPED_CELLS) break;
                     Line next = lines.get(nextIndex);
                     int contStart = next.continuationStart();
                     if (contStart < 0) break;
@@ -224,12 +248,15 @@ public final class UrlDetector {
                     Matcher grown = URL_PATTERN.matcher(match.text() + continuation);
                     if (!grown.lookingAt() || grown.end() <= match.length()) break;
                     int consumed = grown.end() - match.length();
+                    // A hand-wrapped tail is all of its row; a word after it means the rows are unrelated.
+                    if (byHand && contStart + consumed < next.text.length()) break;
                     match.append(next, contStart, contStart + consumed);
                     next.consumed = contStart + consumed;
                     if (contStart + consumed < next.text.length()) break;  // Ended mid-row.
                     current = next;
+                    currentIndex = nextIndex;
+                    rowStart = contStart;
                     end = next.text.length();
-                    searchFrom = nextIndex + 1;
                 }
                 match.trimTrailingPunctuation();
                 if (match.length() == 0) continue;
@@ -307,6 +334,8 @@ public final class UrlDetector {
             int[] mOrdinal = new int[0];
             int[] mNextMember = new int[0];
             int[] mLastMember = new int[0];
+            /** Per line: the line an address on it may continue into, or -1. The scan follows nothing else. */
+            int[] mBelow = new int[0];
             /** Indexed by root line: the group's entry, its first row and, while scanning, what it found. */
             Entry[] mEntry = new Entry[0];
             int[] mBase = new int[0];
@@ -328,6 +357,7 @@ public final class UrlDetector {
                     mOrdinal = new int[size];
                     mNextMember = new int[size];
                     mLastMember = new int[size];
+                    mBelow = new int[size];
                     mEntry = new Entry[size];
                     mBase = new int[size];
                     mHash = new long[size];
@@ -535,16 +565,34 @@ public final class UrlDetector {
     /**
      * Whether some pane window of a row ends in text: a non-blank, non-border cell at the window's
      * last column, or one short of it at the screen's right edge. Such a row may carry the start of
-     * an address that continues below.
+     * an address that continues below. So may a row that looks wrapped by hand into the row below:
+     * a last run of text at least {@link #MIN_HAND_WRAPPED_CELLS} cells wide, and below it a single
+     * run of text starting at the same column. The row below always exists: it is the scan's first.
      */
     private static boolean rowReachesEdge(TerminalBuffer screen, Dividers dividers, int externalRow) {
         char[] cells = readCells(screen, externalRow);
+        char[] below = null;
         int[] windows = dividers.windows(externalRow);
         for (int w = 0; w < windows.length; w += 2) {
             int left = windows[w];
             int right = windows[w + 1];
             if (isText(cells[right - 1])) return true;
             if (right == cells.length && right - 2 >= left && isText(cells[right - 2])) return true;
+
+            int end = right;
+            while (end > left && !isText(cells[end - 1])) end--;
+            int runStart = end;
+            while (runStart > left && isText(cells[runStart - 1])) runStart--;
+            if (end - runStart < MIN_HAND_WRAPPED_CELLS) continue;
+            int margin = left;
+            while (!isText(cells[margin])) margin++;
+            if (below == null) below = readCells(screen, externalRow + 1);
+            int k = left;
+            while (k < right && !isText(below[k])) k++;
+            if (k != margin) continue;
+            while (k < right && isText(below[k])) k++;
+            while (k < right && !isText(below[k])) k++;
+            if (k == right) return true;
         }
         return false;
     }
@@ -769,6 +817,48 @@ public final class UrlDetector {
             if (n == 0) return false;
             int end = columnEnd[n - 1];
             return end == right || (right == columns && end == right - 1);
+        }
+
+        /**
+         * The row-above half of the hand-wrap rule: a single row whose last run of text, which only
+         * blanks follow to the window's edge since the text is trimmed, is at least
+         * {@link #MIN_HAND_WRAPPED_CELLS} cells wide. An address that is the last text on the row
+         * lies inside that run, so this holds whenever the scan could follow the row by hand.
+         */
+        boolean mayWrapByHand() {
+            int n = text.length();
+            if (rowCount != 1 || n == 0) return false;
+            int k = n - 1;
+            while (k > 0 && text.charAt(k - 1) != ' ') k--;
+            return columnEnd[n - 1] - columnStart[k] >= MIN_HAND_WRAPPED_CELLS;
+        }
+
+        /**
+         * The row-below half of the hand-wrap rule: this line's text starts, on its first row, at
+         * the column where {@code above}'s text starts, and is one run with nothing after it.
+         */
+        boolean continuesByHand(Line above, int columns) {
+            int start = firstTextIndex();
+            int aboveStart = above.firstTextIndex();
+            if (start < 0 || aboveStart < 0 || columnStart[start] != above.columnStart[aboveStart]) return false;
+            // Text a program wrapped inside a box has a margin or a border on some side. Text at
+            // the screen's own left edge in a whole-row window is a shell's: a long address echoed
+            // there followed by an idle prompt (user@host:~$) must not become one address.
+            boolean boxed = columnStart[start] > above.left || above.left > 0 || above.right < columns;
+            if (!boxed) return false;
+            int last = text.length() - 1;
+            while (last > start && text.charAt(last) == ' ') last--;  // Blanks before a border.
+            for (int k = start; k <= last; k++) {
+                if (text.charAt(k) == ' ' || row[k] != rows[0]) return false;
+            }
+            return true;
+        }
+
+        /** The index of the first non-blank character, or -1. */
+        int firstTextIndex() {
+            int n = text.length();
+            for (int i = 0; i < n; i++) if (text.charAt(i) != ' ') return i;
+            return -1;
         }
 
         /**

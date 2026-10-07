@@ -81,6 +81,33 @@ public class UrlDetectorCacheTest {
     }
 
     @Test
+    public void aHandWrappedPairIsOneGroupKeptOnScrollAndRescannedWhenItsTailChanges() {
+        for (int i = 0; i < 20; i++) enter("log " + i + "\r\n");
+        // A box with an inner margin: the address stops short of the edge and carries on beneath.
+        String head = "https://example.com/aaaa/bbbb/cccc";
+        enter("  " + head + "\r\n  dddd/end\r\n");
+        List<UrlDetector.UrlSpan> spans = visible();
+        assertEquals(head + "dddd/end", spans.get(spans.size() - 1).url);
+
+        // Scroll by one row: every group, the joined pair included, keeps its answer.
+        enter("\r\n");
+        spans = visible();
+        assertEquals(0, mCache.mScannedGroups);
+        UrlDetector.UrlSpan span = spans.get(spans.size() - 1);
+        assertEquals(head + "dddd/end", span.url);
+        assertEquals(2, span.segmentCount());
+        assertEquals(ROWS - 4, span.segmentRow(0));
+        assertEquals(ROWS - 3, span.segmentRow(1));
+
+        // Change only the tail row: both rows are matched again, as one group.
+        enter("\033[2A\033[2K  dddd/xyz\r\n\r\n");
+        spans = visible();
+        assertEquals(1, mCache.mScannedGroups);
+        assertEquals(2, mCache.mScannedLines);
+        assertEquals(head + "dddd/xyz", spans.get(spans.size() - 1).url);
+    }
+
+    @Test
     public void emulatorWrappedPanesAndSidebarsMatchTheUncachedAnswerAsTheyScroll() {
         String wrapped = "see https://github.com/microsoft/terminal/blob/main/src/cascadia/TerminalApp/Tab.xaml now";
         for (int i = 0; i < 30; i++) {
