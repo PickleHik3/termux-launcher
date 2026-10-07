@@ -46,11 +46,12 @@ public class StatusBarEdgeGeometryTest {
                 StatusBarEdgeGeometry.thicknessDp(edge, true, false)
                     > StatusBarEdgeGeometry.thicknessDp(edge, true, true));
         }
-        // The row's numbers are the ones the top bar has always used, unchanged.
+        // The compact row keeps the numbers the top bar has always used; the open row is its
+        // slot, the 24dp status row and the foot, with nothing between the slot and the row.
         assertEquals(32f, StatusBarEdgeGeometry.thicknessDp(Edge.TOP, false, true), 0f);
         assertEquals(30f, StatusBarEdgeGeometry.thicknessDp(Edge.TOP, true, true), 0f);
-        assertEquals(96f, StatusBarEdgeGeometry.thicknessDp(Edge.TOP, false, false), 0f);
-        assertEquals(100f, StatusBarEdgeGeometry.thicknessDp(Edge.TOP, true, false), 0f);
+        assertEquals(91f, StatusBarEdgeGeometry.thicknessDp(Edge.TOP, false, false), 0f);
+        assertEquals(96f, StatusBarEdgeGeometry.thicknessDp(Edge.TOP, true, false), 0f);
         assertEquals(StatusBarEdgeGeometry.thicknessDp(Edge.TOP, false, true),
             StatusBarEdgeGeometry.thicknessDp(Edge.BOTTOM, false, true), 0f);
         // 2.75 is the phone of record's density; the dp rounds to whole pixels.

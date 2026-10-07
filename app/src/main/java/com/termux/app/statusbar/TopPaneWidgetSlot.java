@@ -19,7 +19,7 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 import java.util.List;
 
 /**
- * The 68dp widget slot above the status row. It owns the {@code slotMode} state machine: pinned
+ * The widget slot above the status row. It owns the {@code slotMode} state machine: pinned
  * notifications outrank media, media outranks the clock at full size, and the clock compresses
  * through its grid forms rather than the pane ever changing height.
  *
@@ -32,8 +32,13 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     private static final float GAP_DP = 12f;
     /** The least run the media strip or the pinned cards keep beside a compact clock. */
     private static final float SIDE_MIN_DP = 120f;
-    /** Air the clock keeps off the slot's top and bottom edge when it fits itself to the slot. */
-    private static final float CLOCK_AIR_DP = 5f;
+    /**
+     * Air the clock keeps off the slot's top and bottom edge when it fits itself to the slot. The
+     * fit grows the face to whatever is left, so this sets the face's size: the docked slot's
+     * 65dp leaves 49dp, which holds the 51.5dp Flip column at about 0.95, its size since the fit
+     * came in. The cards and media keep their own, smaller air (TopPaneSlotBudget.AIR_DP).
+     */
+    private static final float CLOCK_AIR_DP = 8f;
     private static final long MEDIA_TRANSITION_MS = 180L;
     private static final long PINNED_TRANSITION_MS = 200L;
 
