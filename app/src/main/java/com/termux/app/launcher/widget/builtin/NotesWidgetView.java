@@ -171,7 +171,7 @@ public class NotesWidgetView extends BuiltinWidgetView
         ageView = null;
         ageLabel = null;
         MarkdownFileSource.Snapshot data = current();
-        LinearLayout root;
+        ViewGroup root;
         switch (span) {
             case ONE_BY_ONE: root = buildOne(ui); break;
             case TWO_BY_ONE: root = buildTwoByOne(ui, data); break;
@@ -199,13 +199,15 @@ public class NotesWidgetView extends BuiltinWidgetView
         return root;
     }
 
-    @NonNull private LinearLayout buildTwoByOne(@NonNull BuiltinWidgetUi ui,
+    @NonNull private FitStack buildTwoByOne(@NonNull BuiltinWidgetUi ui,
                                                 @Nullable MarkdownFileSource.Snapshot data) {
         BuiltinWidgetStyle style = ui.style;
         TextView header = ui.text(FilesWidgetPaths.fileName(shownPath()), 11f, style.sansBold,
             style.onSurfaceVariant);
         trackAge(header, AgeLabel.NAME_COMPACT);
-        LinearLayout root = ui.column(5, header);
+        // At 56dp the card has room for the name and one line of the note; each line that does
+        // not fit whole is left out from the last.
+        FitStack root = FitStack.column(getContext()).add(header, FitStack.ESSENTIAL, 0);
         addPreviewLines(ui, root, data, 3, 11.5f, 1.45f);
         inset(root, 14, 12, 14, 12, ui);
         return root;
@@ -309,7 +311,7 @@ public class NotesWidgetView extends BuiltinWidgetView
      * Up to {@code max} one-line previews of the note under {@code column}, each ellipsised, one
      * line height ({@code spacing} times the text size) apart.
      */
-    private void addPreviewLines(@NonNull BuiltinWidgetUi ui, @NonNull LinearLayout column,
+    private void addPreviewLines(@NonNull BuiltinWidgetUi ui, @NonNull FitStack column,
                                  @Nullable MarkdownFileSource.Snapshot data, int max, float sp,
                                  float spacing) {
         BuiltinWidgetStyle style = ui.style;
@@ -331,11 +333,8 @@ public class NotesWidgetView extends BuiltinWidgetView
         int natural = lines.isEmpty() ? 0 : lines.get(0).getPaint().getFontMetricsInt(null);
         int gap = Math.max(0, Math.round(textPx * spacing) - natural);
         for (int i = 0; i < lines.size(); i++) {
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             // The header sits 5dp above the first line (the column's gap); the rest are line-height apart.
-            params.topMargin = i == 0 ? ui.dp(5) : gap;
-            column.addView(lines.get(i), params);
+            column.addRow(lines.get(i), i == 0 ? ui.dp(5) : gap);
         }
     }
 
