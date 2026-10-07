@@ -4452,8 +4452,11 @@ public class TerminalPaneController {
             if (frame == null || !isOnHost(frame)) return null;
             int[] frameLocation = location(frame);
             int[] hostLocation = location(mHostView);
-            float left = frameLocation[0] - hostLocation[0];
-            float top = frameLocation[1] - hostLocation[1];
+            // In this overlay's space, which (MATCH_PARENT on the host) starts inside the host's
+            // padding: the lone bordered pane pads the host for its rounded corners, and a rect
+            // read from the host's outer edge put the tab and the hit areas that far off the pane.
+            float left = frameLocation[0] - hostLocation[0] - mHostView.getPaddingLeft();
+            float top = frameLocation[1] - hostLocation[1] - mHostView.getPaddingTop();
             out.set(left, top, left + frame.getWidth(), top + frame.getHeight());
             return out;
         }
