@@ -85,6 +85,7 @@ public final class TaiImportProfiles {
             return functionGemma(value);
         }
         if (value.contains("embeddinggemma-300m")) return embeddingGemma(value);
+        if (value.contains("embeddinggemma-2")) return embeddingGemma2();
         return null;
     }
 
@@ -266,6 +267,21 @@ public final class TaiImportProfiles {
         TaiModelProfile profile = new TaiModelProfile(Collections.singletonList("cpu"), 1024, 64, 0.95d, 1.0d, null,
             SOURCE, TaiModelProfile.THINKING_NONE, null, null, seq == null ? 0 : seq);
         return new Match(FAMILY_EMBEDDINGGEMMA, profile, caps(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS), null);
+    }
+
+    /**
+     * litert-community/embeddinggemma-2-text-270m-litert-lm and -text-vision-440m-litert-lm
+     * ({@code embeddinggemma-2-text-270m.litertlm}, {@code embeddinggemma-2-text-vision-440m.litertlm}).
+     * Embeddings only, served by {@link LiteRtLmEmbeddingRuntime} through LiteRT-LM's EmbeddingEngine,
+     * which the files need at 0.18.0 or later. The bundle carries its own tokenizer, so there is no
+     * sidecar. 768 dimensions, Matryoshka 512/256/128; the model's window is 8192, and the window
+     * here is the engine's input cap, {@link LiteRtLmEmbeddingRuntime#MAX_INPUT_TOKENS}.
+     */
+    @NonNull
+    private static Match embeddingGemma2() {
+        TaiModelProfile profile = new TaiModelProfile(Collections.singletonList("cpu"), 1024, 64, 0.95d, 1.0d, null,
+            SOURCE, TaiModelProfile.THINKING_NONE, null, null, LiteRtLmEmbeddingRuntime.MAX_INPUT_TOKENS);
+        return new Match(FAMILY_EMBEDDINGGEMMA, profile, caps(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS), "0.18.0");
     }
 
     /**
