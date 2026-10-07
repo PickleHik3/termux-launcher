@@ -36,6 +36,8 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     private final TaiRuntime liteRt;
     private final TaiRuntime mnn;
     private final LiteRtEmbeddingRuntime embeddings;
+    /** EmbeddingGemma 2 {@code .litertlm} files through LiteRT-LM's EmbeddingEngine; see {@link #liteRtEmbedderFor}. */
+    private final LiteRtLmEmbeddingRuntime litertLmEmbeddings;
     private final MnnEmbeddingRuntime mnnEmbeddings;
     /** The speech engines, one per model family; at most one holds a graph at a time, see {@link #sttFor}. */
     private final WhisperSttRuntime whisperStt;
@@ -86,6 +88,7 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         this.mnn = mnn;
         this.residency = residency;
         embeddings = new LiteRtEmbeddingRuntime(residency, context);
+        litertLmEmbeddings = new LiteRtLmEmbeddingRuntime(residency, context);
         mnnEmbeddings = new MnnEmbeddingRuntime(residency, context);
         whisperStt = new WhisperSttRuntime(residency, context);
         parakeetStt = new ParakeetSttRuntime(residency, context);
@@ -127,6 +130,7 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         synchronized (loadLock) {
             JSONObject result = activeAssistant.unload();
             embeddings.close();
+            litertLmEmbeddings.close();
             mnnEmbeddings.close();
             whisperStt.close();
             parakeetStt.close();
@@ -166,7 +170,10 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
                 if (current == null || current.busy) continue;
                 switch (victim.kind) {
                     case EMBEDDING:
+                        // Both LiteRT runtimes register under the litert-lm backend; the one that
+                        // holds the victim is the one that says so.
                         if (TaiModelSpec.BACKEND_MNN_LLM.equals(victim.backend)) mnnEmbeddings.close();
+                        else if (victim.modelId.equals(litertLmEmbeddings.loadedModelId())) litertLmEmbeddings.close();
                         else embeddings.close();
                         break;
                     case STT:
@@ -288,7 +295,13 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
     public JSONObject embed(@NonNull TaiModelSpec model, @NonNull List<String> inputs, int dimensions,
                              @NonNull String inputType, @Nullable String title) throws JSONException {
         boolean throttled = activeAssistant.getState().activeGeneration;
-        if (isLiteRtEmbeddingFlatbuffer(model)) return embeddings.embed(model, inputs, dimensions, inputType, title, throttled);
+        if (isLiteRtLmEmbeddingModel(model)) {
+            return liteRtEmbedderFor(litertLmEmbeddings).embed(model, inputs, dimensions, inputType, title, throttled);
+        }
+        if (isLiteRtEmbeddingFlatbuffer(model)) {
+            liteRtEmbedderFor(embeddings);
+            return embeddings.embed(model, inputs, dimensions, inputType, title, throttled);
+        }
         if (isMnnEmbeddingModel(model)) return mnnEmbeddings.embed(model, inputs, dimensions, inputType, title, throttled);
         if (inputs.size() == 1 && dimensions <= 0) return embed(model.id, inputs.get(0));
         JSONObject error = new JSONObject();
@@ -312,7 +325,9 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         JSONObject response = new JSONObject();
         if (!isLiteRtEmbeddingFlatbuffer(model)) {
             JSONObject error = new JSONObject();
-            error.put("message", "Tokenize is only available for the installed LiteRT embedding model today.");
+            error.put("message", isLiteRtLmEmbeddingModel(model)
+                ? "Tokenize is only available for .tflite embedding models; .litertlm models expose no tokenizer."
+                : "Tokenize is only available for the installed LiteRT embedding model today.");
             error.put("type", "invalid_request_error");
             error.put("param", "model");
             error.put("code", "capability_not_supported");
@@ -472,6 +487,34 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         return TaiModelSpec.BACKEND_LITERT_LM.equals(model.backend)
             && model.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
             && path.endsWith(".tflite");
+    }
+
+    /**
+     * An EmbeddingGemma 2-style {@code .litertlm} embedder, served by {@link LiteRtLmEmbeddingRuntime}:
+     * a LiteRT-LM bundle whose endpoint capabilities include {@code text_embeddings}. A {@code .litertlm}
+     * imported without capabilities is a chat model and never reaches this check.
+     */
+    static boolean isLiteRtLmEmbeddingModel(@NonNull TaiModelSpec model) {
+        String path = model.localPath == null ? "" : model.localPath.toLowerCase(Locale.ROOT);
+        return TaiModelSpec.BACKEND_LITERT_LM.equals(model.backend)
+            && model.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
+            && path.endsWith(".litertlm");
+    }
+
+    /**
+     * Closes the other LiteRT embedding runtime before {@code target} is used, so at most one LiteRT
+     * embedder is resident: {@link TaiResidency} tells embedders apart only by backend, and both
+     * register under litert-lm, so two at once would be credited and evicted as one slot. Closing an
+     * idle runtime is free; one mid-batch is waited for on its own monitor.
+     */
+    @NonNull
+    private <T> T liteRtEmbedderFor(@NonNull T target) {
+        if (target == litertLmEmbeddings) {
+            if (embeddings.loadedModelId() != null) embeddings.close();
+        } else if (litertLmEmbeddings.loadedModelId() != null) {
+            litertLmEmbeddings.close();
+        }
+        return target;
     }
 
     private boolean isMnnEmbeddingModel(@NonNull TaiModelSpec model) {
