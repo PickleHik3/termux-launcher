@@ -1,435 +1,168 @@
 # On-device AI
 
-On-device AI is a local AI service built into Termux Launcher. It lets apps and command-line tools
-talk to on-device AI models through a localhost API. Your prompts and model output stay on the
-device unless you deliberately use a network service or expose the API to your local network.
+On-device AI runs AI models on the phone itself and serves them to the launcher's own features
+(voice typing, tidy dictation, read aloud, app categories) and to any app or command-line tool that
+speaks the OpenAI or Ollama API. This page covers the settings, the Model centre and the `tai`
+command. The models themselves are on [On-device AI models](On_Device_AI_Models.md).
 
 The short version:
 
-- The AI runs on your device. Native model runtime work is isolated in the Android `:tai_runtime`
-  process so launcher UI survives native runtime crashes.
-- It exposes an OpenAI-compatible API for tools such as `aichat`, Codex, OpenCode, or Crush.
-- It supports LiteRT-LM and MNN model backends.
-- It does not run GGUF/raw weight files.
-- It does not bundle model files inside the APK. You download or import models yourself.
-- The API is protected by a bearer token stored on your device.
-- The command-line tool is `tai`.
+- Models run on this phone, in a separate `:tai_runtime` process, so a crash in a model never takes
+  the launcher down with it. Prompts and replies stay on the phone unless you set up a
+  [remote model](#remote-model) or turn on LAN access.
+- No model is inside the APK. You download or import the ones you want.
+- Two runtimes are built in: LiteRT-LM and MNN. GGUF and other raw weight files are not supported.
+- Apps reach it through a local, token-protected endpoint. The command-line tool is `tai`.
 
-## What It Is For
+## Where it lives
 
-On-device AI is mainly a model host. It gives other tools a local AI backend.
+Open **Settings → On-device AI**. It sits in the **Workspace** group, after **Display**, with the
+summary "Models, voice and local API". The page has five groups:
 
-Good uses:
+- **Runtime**: **Runtime status**, with the loaded model and quick actions.
+- **Models**: **Model centre**, **What runs on this phone**, **Benchmark** ("Which models this
+  phone runs well") and **Hugging Face token**.
+- **Remote model**: a model on OpenAI, OpenRouter or your own server. See [Remote model](#remote-model).
+- **Server**: **Model autoload**, **OpenAI endpoint**, **Require API token** and **LAN access**.
+- **Advanced**: **Parameters**, the global overrides (such as **Idle unload**, 10 minutes by
+  default) and **Share diagnostics log**.
 
-- chatting with a local model from a CLI tool
-- connecting OpenAI-compatible tools to an on-device endpoint
-- keeping a selected model warm in the background
-- switching between supported local models by changing the request model name
-- letting Termux Launcher manage local model downloads, imports, loading, and unloading
+## What runs on this phone
 
-It is not meant to replace every AI shell tool. Tools like `aichat`, coding assistants, or tmux
-helpers can provide the user interface. On-device AI provides the local model runtime they can
-call. On-device AI does not control Android apps or the device: the same local server has one
-separate app-launch route used by `launcherctl launch`; agent, MCP, and other device-control
-routes are not present.
+The **What runs on this phone** card shows what fits this phone and downloads it in one go. It
+appears once on the home screen, after the tour or on a later quiet moment; reopen it any time from
+the **What runs on this phone** row.
 
-## Where It Lives
-
-Open:
-
-```text
-Settings → On-device AI
-```
-
-It is a row in the **Launcher** category, right after **Display**. From there you reach:
-
-- **Model centre** — installed models, the catalog, downloads, and per-model settings
-- **Hugging Face token** — a token for gated downloads
-- **Context window** — the global or per-model window override
-- **Endpoint & access** — the local base URL, bearer token, and port
-
-## Quick start
-
-1. Open **Settings → On-device AI → Model centre**.
-2. Open the model catalog and choose a model that fits your device memory.
-3. Read and accept the model provider's terms when asked, then download the model.
-4. Tap the installed model and choose **Load**. You can also leave OpenAI auto-load enabled so the
-   first API request loads it after safety checks pass.
-5. Use `tai status` in Termux to confirm On-device AI is ready.
-
-Models are not bundled in the APK. A download can be several gigabytes, so check the size and
-available storage first.
+- The header names the phone: "Tier 2 · 12 GB · chip · Android 15" (see
+  [Device tiers](#device-tiers-and-what-automatic-picks)).
+- Each row is a feature with a tick: **Voice typing**, **Read aloud**, **Assistant and tidy
+  dictation** and **Dawn notes integration**, as far as they fit.
+- **Download selected** starts the ticked downloads. **Wi-Fi only** holds them until you are on
+  Wi-Fi. **Later** closes the card.
 
 ## Model centre
 
-Model centre lists every installed model plus a **Worth a download** catalog. Each row shows a
-quiet backend pill (LiteRT-LM or MNN). Models download from Hugging Face; gated ones ask for a
-Hugging Face token first, and every download shows the provider's license to accept.
+**Settings → On-device AI → Model centre** is where every model is got, installed and assigned. The
+header repeats the phone's tier line. Three segments sit under it:
 
-The built-in catalog is deliberately short: the two Gemma 4 chat models, the speech-to-text models
-[voice input](Voice_Input.md) uses, and the voice model for [text to speech](Text_To_Speech.md).
-Any other LiteRT-LM or MNN model (Qwen, DeepSeek, FunctionGemma, an embedding model) still runs
-when you add it by Hugging Face link or import the file; it is just not listed.
+- **Functions**: what each launcher feature uses. See [Functions](#functions).
+- **Installed**: every model on the phone. Each row shows a backend pill (**LiteRT** or **MNN**),
+  a "Used by:" line naming the functions it serves, and an overflow menu.
+- **Get models**: the catalogue, grouped under **Assistants**, **Speech**, **Voice output** and
+  **Search**. The import bar sits at the top.
 
-| Model | Best for | Approximate download | Suggested device RAM | Notes |
-| --- | --- | ---: | ---: | --- |
-| Gemma 4 E2B IT | General chat, images, audio, and tools | 2.4 GB | 8 GB+ | Recommended general model, Apache-2.0, not gated |
-| Gemma 4 E4B IT | Better coding and reasoning | 3.7 GB | 12 GB+ | Larger and slower, Apache-2.0, not gated |
-| Whisper ACFT Base / Base (English) | Voice input, multilingual or English only | 97 MB | 6 GB+ | 5 s or 10 s window |
-| Whisper ACFT Small / Small (English) | Voice input, better accuracy | 273 MB | 8 GB+ | 5 s or 10 s window |
-| Parakeet TDT 0.6B v3 | Voice input in 25 European languages | 586 MB | 8 GB+ | Language detected automatically |
-| KittenTTS Nano 0.8 | Reading text aloud, in English | 90 MB | 4 GB+ | Four voices; under Speech > Voice output |
+The import bar takes a Hugging Face link: paste it into **Paste a Hugging Face link…** and tap
+**Add**, or tap **File** to pick a model file on the phone. **More ways to add a model → Add a
+model folder (MNN)** imports an MNN model folder. Details are in
+[Importing and downloading](On_Device_AI_Models.md#importing-and-downloading).
 
-Only one chat/generation model is active at a time: loading a model replaces the currently loaded
-chat model. Speech models are separate: they load on demand beside the chat model and never
-replace it.
+On the Installed segment a chat model's overflow menu has **Load model**, **Use for…**,
+**Parameters**, **Benchmark** and **Delete**. Speech, voice output, embedding and image models have
+a shorter menu. Deleting a model that a function uses warns you first ("In use by …") and says what
+each function falls back to.
 
-Downloads run two at a time by default (the `tai_download_parallel` setting allows 1 to 3); the
-rest wait in line. A download can be paused and continues from the bytes it already has; one
-interrupted by the app closing or the network dropping is shown as paused and continues by itself
-on an unmetered (Wi-Fi) network, or waits for a tap on mobile data. Cancelling deletes the partial
-file. Before a download starts, the free space on the model directory must cover the remaining
-bytes plus a reserve of 500 MB or 5% of the volume.
+## Functions
 
-## Understanding model capabilities
+The **Functions** segment has one row per launcher feature:
 
-Every installed model reports what the local endpoint can actually accept. Run:
-
-```sh
-tai models
-```
-
-For the complete machine-readable list, run:
-
-```sh
-endpoint="$(cat ~/.launcherctl/endpoint)"
-token="$(cat ~/.launcherctl/token)"
-curl -sS -H "Authorization: Bearer $token" "$endpoint/v1/models" | jq .
-```
-
-Common capability names are:
-
-| Capability | Meaning |
+| Function | What it does |
 | --- | --- |
-| `text_chat` | Normal text prompts and replies |
-| `image_input` | Images can be included in a prompt |
-| `audio_input` | Audio can be included in a prompt |
-| `tool_use` | The model can return structured function/tool calls |
-| `text_embeddings` | Converts text into embedding vectors instead of chat text (EmbeddingGemma 2 Text+Vision 440M is the recommended embedder) |
-| `code` | Tuned or intended for programming tasks |
-| `reasoning` | Intended for multi-step reasoning |
-| `multilingual` | Intended for more than one language |
-| `llm_thinking` | Supports the backend's thinking mode |
-| `speculative_decoding` | A LiteRT model with the runtime flag, or an MNN package built around an EAGLE-3 draft head (a `config.json` with `speculative_type` and its `eagle*.mnn` files) |
-| `mobile_actions` | Tuned to choose from compatible Android action tools |
+| **Assistant and endpoint** | The default chat model, for the endpoint and the apps that use it |
+| **Voice typing** | Turns speech into text for [voice input](Voice_Input.md) |
+| **Tidy dictation** | Cleans up a dictation once you stop |
+| **Read aloud** | Speaks text for [text to speech](Text_To_Speech.md) |
+| **App categories** | Sorts the app drawer into categories |
+| **Dawn notes integration** | Lets Dawn notes find notes by meaning |
 
-`_capabilities` in `/v1/models` is the important field for apps. `_source_capabilities` describes
-upstream claims, while `_endpoint_capabilities` describes what this APK can currently provide.
+Tap a row to open its picker. It has up to six sections:
 
-A model with `speculative_decoding` shows a "Speculative decoding" switch in its parameters
-screen. For MNN, EAGLE-3 is off by default (auto and explicit off both fall back to plain
-decoding): measured on a phone it was slower than plain decoding on both CPU and GPU, and its text
-differed slightly, so it is not worth turning on by default. The switch lets a developer turn it
-on anyway to try it on an EAGLE-3 package; turning it on has no effect on a package that never
-shipped a draft head. LiteRT is unaffected by this default: a LiteRT model with the runtime flag
-keeps its own auto/on/off behaviour.
+- **Automatic**: the pick for this phone's tier, with "If it can't load:" naming the fallbacks.
+- **On this phone**: each installed model that can serve the function.
+- **Remote**: the remote model, shown as "Remote · model name", or **Set up a remote model**.
+- **Without a model**: **Raw text** for Tidy dictation, **Off** for App categories.
+- **Get a model**: catalogue models that would serve it, with a **Get** button.
+- **Settings**: extras for that function. **Runs on** chooses **GPU** or **CPU**, with **Answers
+  look wrong? Use the CPU** and **Try the GPU again**. Tidy dictation has **Cleanup level**. Read
+  aloud has **Voice** and **Speed**. Voice typing has **Voice typing window**.
 
-### Images and audio
+From the Installed segment, **Use for…** on a model does the same from the other side: it lists the
+functions that model can serve.
 
-Multimodal LiteRT models are advertised on the API as up to three ids sharing one downloaded file.
-By default (the split exposure) the bare id is text-only chat, and only the modalities beyond that
-get a suffix:
+## Device tiers and what Automatic picks
 
-- `model-id` for text (the default, canonical id)
-- `model-id-vision` for image input
-- `model-id-audio` for audio input
+The launcher puts the phone in a tier by its RAM. Swap and "virtual RAM" do not count.
 
-Choose the id matching the input you intend to send. Only one mode is loaded at a time, which
-reduces memory use. The advanced **Endpoint exposure** setting changes this: **Combined** serves
-every modality from the bare id alone, with no suffixed ids, at a higher memory cost; **Both**
-keeps that combined bare id and adds the splits, with the text-only variant as `model-id-text`.
+| | Tier 1 (6 GB or less) | Tier 2 (8 to 12 GB) | Tier 3 (16 GB or more) |
+| --- | --- | --- | --- |
+| Assistant and endpoint | none | Gemma 4 E2B | Gemma 4 E4B (E2B when there is no GPU path) |
+| Voice typing | Whisper Base | Whisper Small | Whisper Small |
+| Tidy dictation | Raw text | Gemma 4 E2B | Gemma 4 E2B |
+| Read aloud | KittenTTS Nano 0.8 | KittenTTS Nano 0.8 | KittenTTS Nano 0.8 |
+| App categories | Off | Gemma 4 E2B | Gemma 4 E4B |
+| Dawn notes integration | EmbeddingGemma 2 Text 270M | EmbeddingGemma 2 Text+Vision 440M | EmbeddingGemma 2 Text+Vision 440M |
 
-### FunctionGemma and phone actions
-
-FunctionGemma is an optional catalog model. It can return structured tool calls when a client
-sends compatible tool definitions, but it does not execute those calls and it does not run beside
-another model. Executing any returned tool call is the client's responsibility; On-device AI
-itself does not perform Android actions.
+Whisper picks the English-only file when the phone is set to English. When the automatic pick is
+not installed, the function falls back down its chain: for example, Tidy dictation tries E4B next
+and then raw text, and Dawn notes integration takes the other EmbeddingGemma 2 file and then
+EmbeddingGemma 300M.
 
 ## Connect an AI app
 
-On-device AI stores its current local address and secret token in:
+The **OpenAI endpoint** row (in the **Server** group) opens the **Endpoint & access** dialog: the
+**OpenAI base URL**, the **Bearer token** with **Copy** and **Reveal**, **Recreate token** and
+**Randomize port**. The same two values are written to files every time the launcher starts:
 
 ```text
 ~/.launcherctl/endpoint
 ~/.launcherctl/token
 ```
 
-The address normally looks like `http://127.0.0.1:54298`. OpenAI-compatible clients usually need
-`/v1` appended to it.
-
-Read the token and endpoint at call time rather than copying the secret into configuration files:
+The address looks like `http://127.0.0.1:54298`. OpenAI-compatible clients need `/v1` added;
+Ollama-compatible clients use the address as it is. Read both at call time rather than copying the
+token into a config file:
 
 ```sh
 export OPENAI_BASE_URL="$(cat ~/.launcherctl/endpoint)/v1"
 export OPENAI_API_KEY="$(cat ~/.launcherctl/token)"
 ```
 
-Use `/v1/responses` for current Codex-compatible Responses clients. Use `/v1/chat/completions` for
-OpenAI-compatible chat clients. Ollama-compatible clients use the same base address without adding
-`/v1`.
-
-The full HTTP route tables, request/response shapes, rate limits, and error codes are in
-[LauncherCtl API](LauncherCtl_API.md); this page covers the settings screens and the `tai` CLI.
+Use `/v1/responses` for Codex-style clients and `/v1/chat/completions` for other OpenAI clients.
+With **Model autoload** on (the default), the first request for an installed model loads it after a
+clean safety check. The full route list is in [LauncherCtl API](LauncherCtl_API.md).
 
 ## Using with aichat
 
-Install and configure `aichat` as an OpenAI-compatible client.
-
-Use:
-
-```sh
-export OPENAI_BASE_URL="$(cat ~/.launcherctl/endpoint)/v1"
-export OPENAI_API_KEY="$(cat ~/.launcherctl/token)"
-```
-
-Then choose one of the supported model IDs, for example:
+Install `aichat`, set it up as an OpenAI-compatible client with the two exports above, and pick a
+model id from `tai models`, for example:
 
 ```text
 gemma-4-e2b-it-litert-lm
 ```
 
-When the first request is sent, On-device AI will load the model if it is installed and not
-already loaded.
+The first request loads the model if it is installed and not yet loaded.
 
-## Useful `tai` commands
+## Remote model
 
-```sh
-tai status
-tai runtime
-tai models
-tai downloads
-tai download-pause MODEL_ID
-tai download-resume MODEL_ID
-tai download-now MODEL_ID
-tai download-cancel MODEL_ID
-tai preflight MODEL_ID
-tai load MODEL_ID
-tai load MODEL_ID --cpu
-tai load MODEL_ID --gpu
-tai keep-warm MODEL_ID --minutes 30
-tai cancel
-tai unload
-tai benchmark MODEL_ID --preset quick
-tai benchmark --results
-tai transcribe recording.wav
-tai speak "text to read aloud"
-tai speak --stop
-tai doctor
-```
+**Settings → On-device AI → Remote model** connects a model on another server, with your own key.
+Functions can then pick it ("Remote · model name"), and **Polished** dictation cleanup uses it
+whenever it is set up.
 
-`tai` manages models; it is not an interactive chat program. Add `--json` when you need raw output
-for a script. `tai transcribe` is described in
-[Voice input](Voice_Input.md#from-the-terminal-tai-transcribe) and `tai speak` in
-[Text to speech](Text_To_Speech.md#tai-speak).
+- **Server address**: presets for **OpenAI**, **OpenRouter** and **Server on this phone or LAN**.
+  Plain `http://` is allowed only for this phone and your own network.
+- **API key**: stored encrypted on the phone. A server on this phone or your network usually needs
+  none.
+- **Model**: picked from the server's list, or typed when the server does not list its models.
+- **Understands images**: checked automatically where possible, or set by you.
+- **When to use it**: **Prefer remote**, or **Only when no local model fits**.
+- **Test connection** sends one short message and times the answer. **Remove** forgets the address,
+  key and model.
 
-## Importing or downloading models
+Text you send to a function that uses the remote model leaves the phone for that server.
 
-The APK does not include model files. This keeps the APK smaller and avoids bundling third-party
-model licenses.
+## Status bar indicator
 
-You can download supported catalog models from the settings page, or use the CLI:
-
-```sh
-tai download gemma-4-e2b-it-litert-lm <model-url> --accept-terms
-```
-
-You can import an existing local package:
-
-- LiteRT-LM `.litertlm` or `.task` files
-- MNN model directories containing `config.json` and all required sidecar files
-- LiteRT EmbeddingGemma `.tflite` packages with their required tokenizer files
-- EmbeddingGemma 2 `.litertlm` files (`embeddinggemma-2-text-vision-440m.litertlm`,
-  `embeddinggemma-2-text-270m.litertlm`), which carry their own tokenizer; a file name containing
-  `embeddinggemma` imports as an embedder
-
-```sh
-tai import /absolute/path/to/model.litertlm MyModelName
-```
-
-You can also import from Settings → On-device AI → Model centre → **Add a model**, with Android's
-file picker; the selected file is copied into app-private model storage. Paste a Hugging Face repo
-URL there instead to download and register a model straight from Hugging Face. Capabilities are
-guessed from known model names; tick or untick them, then import and verify.
-
-For catalog models, use the official model ID so OpenAI-compatible tools can request it directly.
-
-MNN models should be installed from the catalog/download flow so On-device AI can fetch
-`config.json` and required sidecar files. GGUF, safetensors, PyTorch, ONNX, and other raw weight
-files are rejected by import/load paths because this APK does not include a GGUF/llama.cpp
-backend.
-
-For gated Hugging Face models, first accept the agreement on the model's Hugging Face page. Then
-create a read token and save it under **Settings → On-device AI → Hugging Face token**. A classic
-**Read** token, or a fine-grained token with `Contents: Read`, is enough. The token is used only
-for Hugging Face downloads.
-
-## Supported Model Names
-
-Use these model IDs exactly:
-
-```text
-gemma-4-e2b-it-litert-lm
-gemma-4-e4b-it-litert-lm
-functiongemma-270m-mobile-actions-litert-lm
-qwen2.5-coder-1.5b-instruct-mnn
-```
-
-`gemma-4-e2b-it-litert-lm` is the fast default assistant model.
-
-`gemma-4-e4b-it-litert-lm` is the larger assistant model.
-
-`functiongemma-270m-mobile-actions-litert-lm` is a smaller model intended for tool/function call
-output. It is CPU-only. On-device AI returns tool calls for the client to handle; it does not
-execute Android actions or shell commands itself.
-
-`qwen2.5-coder-1.5b-instruct-mnn` is the default installed MNN code model.
-
-## How Model Loading Works
-
-You do not always need to manually load a model first, but auto-load is guarded.
-
-When an OpenAI-compatible client sends a generation request, On-device AI checks the requested
-model:
-
-- If the model is already loaded, it uses it.
-- If the model is installed but not loaded, it loads it automatically only when compatibility
-  preflight is clean.
-- If the request uses another assistant model, it switches the assistant slot to that model.
-- If the model is unknown, not installed, low on memory, missing native libraries, or risky for
-  automatic GPU load, the request fails with a clear error such as `model_not_loaded`,
-  `device_not_supported`, or a preflight failure code.
-
-The loaded model is kept warm for the configured timeout, then unloaded when idle.
-
-You can also load manually:
-
-```sh
-tai load gemma-4-e2b-it-litert-lm
-```
-
-and unload manually:
-
-```sh
-tai unload
-```
-
-## One Active Model
-
-On-device AI keeps one chat/generation model active at a time. Loading a LiteRT-LM or MNN model
-unloads the previous chat model. FunctionGemma is a normal CPU-only catalog model and also
-replaces the active model when loaded.
-
-Automatic loads try the GPU first and use the CPU after a GPU load has failed on your phone. You
-can pick one explicitly with `tai load <model> --gpu` or `--cpu`.
-
-## Memory
-
-A model is loaded to fit the memory your phone has free at that moment, so it never crowds out the
-home screen and the apps you are using.
-
-- The context window is the part that grows with free memory. It shrinks by halves until the load
-  fits, down to 4096 tokens. A setting or request for a larger window is an upper limit, not a
-  promise. Override it globally or per model under **Settings → On-device AI → Context window**.
-- If the GPU load does not fit even at 4096 tokens, the CPU load is used instead: slower, but it
-  needs about half the memory.
-- If neither fits, the load is refused with a short message. Close some apps and try again.
-- About 1.5 GB, or 15% of your RAM if that is more, is always left free.
-- If your phone runs low on memory while a model is loaded, On-device AI unloads it. The next
-  request loads it again.
-- `/v1/models` reports the context window a load would actually get right now.
-- `tai --json runtime` shows the window the loaded model was given.
-
-## Benchmark
-
-**Settings → On-device AI → Model centre → Benchmark** measures how a model actually runs on this
-phone: Home → Choose models → Check (battery, heat, screen) → Run, with a cool-down between models
-and a Result screen per entry. An installed chat model also has **Benchmark** in its own overflow
-menu, which preselects it. Once you have run one, installed chat rows show a speed pill with their
-best ranked tok/s. The same thing runs from the shell as `tai benchmark`.
-
-`tai benchmark` measures how well a model runs on this phone, with three tests that stand for
-real use. LiteRT-LM and MNN models are timed the same way: every token goes through the runtime's
-generation callback and is stamped as it arrives, so the numbers are comparable across backends.
-
-### What it measures
-
-The model is unloaded and loaded cold through the normal preflight and memory budget, answers one
-short warm-up (thrown away), and then runs:
-
-| Test | What happens | You read it as |
-| --- | --- | --- |
-| Chat | "Explain what a shell alias is and give two useful examples", up to 320 tokens, greedy sampling | **Starts replying in X s** (time to first token) and **writes N tok/s** (from the first token to the last) |
-| Long input | A build log of about 2000 tokens is pasted, then "What went wrong, in two sentences?", up to 96 tokens | **Reads a long page in X s** (the wait for the first token) |
-| Sanity | Three questions with known answers (`17 + 25`, a fixed JSON object, repeat a word) | Only shown when a question fails: the model is **Broken**, whatever its speed |
-
-If the loaded context window cannot hold the log plus the reply, the log is cut from the top to
-fit, and the result says so. While the long input is read, the phone's memory use is sampled about
-four times a second and the peak of the `:tai_runtime` process is kept: that is the **Memory** figure.
-Each prompt starts a fresh conversation. A test that takes three times longer than expected is
-stopped and the record is marked `timeout`.
-
-### Verdict
-
-One word per model and processor:
-
-- **Broken** when a sanity question fails.
-- **Smooth** when it writes at 12 tok/s or more, the first token comes within 1.5 s and the long page
-  is read within 8 s.
-- **Usable** when it writes at 6 tok/s or more, the first token comes within 3 s and the long page is
-  read within 20 s.
-- **Slow** otherwise.
-
-The screens and `--results` list Smooth, then Usable, then Slow, each ordered by writing speed and
-then by the first token; Broken entries follow, unranked. Results from an older bench version are
-kept but never ranked against the current one, so those models show as untested until run again.
-
-### Presets
-
-| Preset | Runs of each test | Processors | Time per model |
-| --- | --- | --- | --- |
-| `quick` | 1 | The one an automatic load would pick | about 1.5 min |
-| `standard` (default) | 2, and the median is the mean of the two | The same | about 3 min |
-
-`--compare` (the "Compare CPU and GPU" switch on the Choose screen) runs both processors where the
-model and phone support them, each as its own entry, so it takes twice as long. `--cpu` or `--gpu`
-benches exactly that processor; if the model cannot load on it, the entry is skipped with the
-reason. `--eagle` switches the draft model on for MNN builds that ship one (a separate entry).
-
-```sh
-tai benchmark                                   # the default assistant model, standard preset
-tai benchmark gemma-4-e2b qwen3-vl-2b-instruct-mnn --preset quick
-tai benchmark qwen3-vl-2b-instruct-mnn --compare
-tai benchmark qwen3-vl-2b-instruct-mnn --cpu
-tai benchmark --results                         # the leaderboard
-tai benchmark --clear gemma-4-e2b               # forget one model's results (no model: all)
-tai benchmark --native gemma-4-e2b --gpu        # LiteRT-LM's own benchmark(), for comparison with Google AI Edge Gallery
-```
-
-The terminal shows one line per phase as it finishes. While a benchmark runs, chat and load
-requests are refused with `benchmark_running`; `tai cancel` stops it and keeps the phases that
-finished. Speech input and output are not blocked, but using them mid-run will disturb the numbers.
-
-Every entry's record is appended to `files/tai/benchmarks.json` in the app's private storage (the
-last 20 per model, backend, processor and draft-model combination). The leaderboard takes the
-latest complete record of each entry.
-The HTTP routes and their payloads are documented in
-[LauncherCtl API](LauncherCtl_API.md).
-
-## Status Bar Indicator
-
-Any status bar that can run a shell command on a timer can show whether an AI model is loaded —
-the launcher's own bar included. These are the glyphs it reports with.
+Any status bar that can run a shell command on a timer can show whether a model is loaded, the
+launcher's own [status bar](Status_Bar.md) included. These are the glyphs it reports with.
 
 Loaded:
 
@@ -443,102 +176,60 @@ Unloaded:
 󱚡
 ```
 
-When a model is loaded, the widget can also show the remaining keep-warm or idle timer. After the
-model is unloaded, the unloaded icon disappears after a short timeout.
+While a model is loaded the widget can also show the remaining keep-warm or idle time. After the
+model unloads, the unloaded icon disappears after a short timeout.
 
-## Security Notes
+## Security notes
 
-The AI endpoint is bound to localhost:
+- The endpoint listens on `127.0.0.1` only, for apps and tools on this phone.
+- Requests carry the token as `Authorization: Bearer <token>` or `X-Api-Key: <token>`.
+- **Require API token** (on by default) can be turned off so local tools need no real key. `GET /`
+  and `OPTIONS` never need the token.
+- **LAN access** opens the endpoint to your local network over unencrypted HTTP. It always requires
+  the token, whatever **Require API token** says, and turns itself off after 12 hours, rotating the
+  token as it does.
+- Treat the token like a password. If it leaks, open **OpenAI endpoint** and tap **Recreate
+  token**, then update any tool that stored the old one.
 
-```text
-127.0.0.1
-```
+## Useful `tai` commands
 
-It is meant for local apps and tools on the same device.
-
-Requests must include the bearer token (`Authorization: Bearer <token>` or `X-Api-Key: <token>`)
-from:
-
-```sh
-~/.launcherctl/token
-```
-
-A **Require API token** setting (default on) under **Settings → On-device AI → Endpoint & access**
-lets you turn token checks off for localhost so local CLI clients need no real key. `GET /` and
-`OPTIONS` never require auth, and **LAN bind mode always requires the token** regardless of the
-toggle; LAN mode also rebinds to localhost and rotates the token 12 hours after it is enabled.
-
-Treat this token like an API key. If it is exposed, recreate it from:
+`tai` manages models; it is not a chat program. Put `--json` (or `-j`) first for raw JSON, as in
+`tai --json models`.
 
 ```text
-Settings → On-device AI → Endpoint & access → Recreate token
+tai status                         is the runtime up, and what is loaded
+tai runtime [--clear-history]      the runtime's state and its recent history
+tai logs [--lines N] [--clear]     loads, evictions and failures
+tai models                         installed models and what each can do
+tai import <path> [model-id]       add a model file or folder from the phone
+tai download <model-id> <https-url> --accept-terms
+tai downloads                      download progress
+tai download-pause|-resume|-now|-cancel <model-id>
+tai delete <model-id>
+tai preflight [model] [--auto|--cpu|--gpu]
+tai load [model] [--auto|--cpu|--gpu] [--fresh]
+tai unload
+tai keep-warm [model] [--minutes N] [--auto|--cpu|--gpu]
+tai cancel                         stop the running generation or benchmark
+tai benchmark [model...] [--preset quick|standard] [--cpu|--gpu] [--compare]
+tai benchmark --results | --clear [model] | --skip-wait
+tai transcribe <file.wav>          see Voice input
+tai speak [text] | tai speak --stop   see Text to speech
+tai image "prompt" | tai image --stop see On-device AI models
+tai doctor                         check the whole setup
 ```
 
-After recreating the token, update any CLI tools that stored the old key.
+`tai --help` prints every option. `tai transcribe` is described in
+[Voice input](Voice_Input.md#from-the-terminal-tai-transcribe), `tai speak` in
+[Text to speech](Text_To_Speech.md#tai-speak), and `tai benchmark` and `tai image` in
+[On-device AI models](On_Device_AI_Models.md#benchmark).
 
-## Troubleshooting
+If something does not work, see
+[On-device AI problems](Launcher_Troubleshooting.md#on-device-ai-does-not-start-or-a-client-cannot-connect).
 
-### The CLI tool cannot connect
+## More details
 
-Check that Termux Launcher has been opened at least once after install:
-
-```sh
-cat ~/.launcherctl/endpoint
-cat ~/.launcherctl/token
-```
-
-If the files are missing, open the app again.
-
-### The model is not found
-
-Check installed models:
-
-```sh
-tai models
-```
-
-Make sure the request uses the exact model ID.
-
-### The model does not load
-
-Check runtime state:
-
-```sh
-tai runtime
-```
-
-Try CPU mode if GPU loading fails:
-
-```sh
-tai load gemma-4-e2b-it-litert-lm --cpu
-```
-
-### The API key does not work
-
-Read the current token:
-
-```sh
-cat ~/.launcherctl/token
-```
-
-If needed, recreate it in Settings and update your CLI tool.
-
-Common problems, start with `tai doctor`, `tai status`, `tai runtime`:
-
-- **Model not listed:** finish downloading or importing it, then check `tai models`.
-- **Model not loaded:** enable OpenAI auto-load or run `tai load MODEL_ID`.
-- **Not enough memory:** close other apps, choose CPU, or use a smaller model.
-- **GPU load crashes:** retry with `tai load MODEL_ID --cpu`.
-- **401 Unauthorized:** refresh your client with the current value from `~/.launcherctl/token`, or
-  turn off **Require API token** for localhost use.
-- **Connection refused:** reopen Termux Launcher, check `~/.launcherctl/endpoint`, and run
-  `tai status`.
-- **Tools are ignored:** confirm the selected model advertises `tool_use`.
-- **Image or audio rejected:** use the model's `-vision` or `-audio` ID from `/v1/models`.
-
-## More Details
-
-For the technical reference, see:
-
-- [On-device AI backends](On_Device_AI_Backends.md) — runtime internals, capability matrix, per-modality behaviour
-- [LauncherCtl API](LauncherCtl_API.md) — full HTTP route tables
+- [On-device AI models](On_Device_AI_Models.md): the catalogue, importing, loading, memory,
+  benchmark and image generation.
+- [On-device AI backends](On_Device_AI_Backends.md): runtime internals and the capability matrix.
+- [LauncherCtl API](LauncherCtl_API.md): every HTTP route, rate limit and error code.
