@@ -1965,13 +1965,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Where the weather's location stands, or null when the weather widget is switched off — a
      * permission for a feature the user is not running is exactly the row that gets refused out of
-     * hand, so it is left off the card entirely.
+     * hand, so it is left off the card entirely. Null too when a place is picked in Settings: the
+     * weather then never reads the device's location, so there is nothing to ask for.
      */
     @Nullable
     private com.termux.app.firstrun.FirstRunPermissionsCard.State firstRunWeatherState() {
         if (mPreferences == null || !mPreferences.isStatusWidgetWeatherEnabled()) return null;
+        if (weatherFollowsPickedPlace()) return null;
         return firstRunPermissionState(android.Manifest.permission.ACCESS_COARSE_LOCATION,
             mFirstRunWeatherAsked);
+    }
+
+    /** A place is picked in Settings, so the weather needs no location permission. */
+    private boolean weatherFollowsPickedPlace() {
+        return mPreferences != null && !mPreferences.getStatusWidgetWeatherLocation().isEmpty();
     }
 
     @NonNull
@@ -22642,7 +22649,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mStatusCardHost.dismiss();
             if (same) return;
         }
-        if (androidx.core.content.ContextCompat.checkSelfPermission(this,
+        // A place picked in Settings is fetched without the device's location; asking for the
+        // permission then would be asking for something the weather does not use.
+        if (!weatherFollowsPickedPlace()
+                && androidx.core.content.ContextCompat.checkSelfPermission(this,
                 android.Manifest.permission.ACCESS_COARSE_LOCATION)
                 != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             androidx.core.app.ActivityCompat.requestPermissions(this,
