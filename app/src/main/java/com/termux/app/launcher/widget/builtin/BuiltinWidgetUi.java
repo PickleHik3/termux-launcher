@@ -95,6 +95,18 @@ public final class BuiltinWidgetUi {
         return view;
     }
 
+    /**
+     * A {@link StatGlyphs} glyph standing where a reading's name would be; the name stays as its
+     * description, so a screen reader still says the word.
+     */
+    @NonNull public TextView statGlyph(@NonNull String glyph, float sp, @ColorInt int color,
+                                       @NonNull CharSequence name) {
+        TextView view = glyph(glyph, sp, color);
+        view.setContentDescription(name);
+        view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+        return view;
+    }
+
     // ----- layout ---------------------------------------------------------------------------
 
     @NonNull public LinearLayout row(int gapDp, @NonNull View... children) {
