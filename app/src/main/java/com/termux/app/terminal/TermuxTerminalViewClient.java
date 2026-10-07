@@ -149,6 +149,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     public void onCreate() {
         onReloadProperties();
+        TaiReadAloud.prewarmAvailability(mContext);
         // Panes are created lazily by TerminalPaneController (each configured in PaneHost), so
         // there may be no active pane yet at activity onCreate. Guard the initial font/keep-on setup.
         TerminalView view = mHost.focusedView();

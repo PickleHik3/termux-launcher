@@ -269,6 +269,10 @@ public class SystemWidgetView extends BuiltinWidgetView
                 diskTail)));
         tail.setBaselineAligned(false);
 
+        // Both rows span the column: left at WRAP_CONTENT they shrank to their content, and the
+        // equal weights then cut the longer RAM and storage readings short beside free space.
+        BuiltinWidgetUi.size(header, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        BuiltinWidgetUi.size(tail, ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         LinearLayout root = ui.column(10, header, chart, tail);
         inset(root, 16, 16, 16, 16, ui);
         return root;

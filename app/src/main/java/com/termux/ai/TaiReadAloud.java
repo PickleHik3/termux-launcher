@@ -87,6 +87,14 @@ public final class TaiReadAloud {
         return available;
     }
 
+    /**
+     * Works out the first answer on a background thread, so the first long press in a process
+     * does not wait on the model store's preferences and file checks (about a second on a phone).
+     */
+    public static void prewarmAvailability(@NonNull Context context) {
+        if (!availabilityKnown) refreshAvailabilityAsync(context.getApplicationContext());
+    }
+
     /** Forgets the cached answer, after a voice model was installed or deleted. */
     public static void invalidateAvailability() {
         AVAILABILITY_GENERATION.incrementAndGet();

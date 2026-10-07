@@ -165,7 +165,8 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
             .add(levelRow, FitStack.ESSENTIAL, ui.dp(12))
             .add(bar, 40, ui.dp(8))
             .add(statusRow, 20, ui.dp(8))
-            .addElastic(footer, 10, ui.dp(16));
+            .addElastic(BuiltinWidgetUi.size(footer, ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT), 10, ui.dp(16));
         inset(root, 14, 14, 14, 14, ui);
         return root;
     }
