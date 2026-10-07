@@ -373,6 +373,8 @@ public class TerminalPaneController {
     private final int[] mCursorViewLocationScratch = new int[2];
     private final int[] mCursorOverlayLocationScratch = new int[2];
     private final float[] mCursorBentScratch = new float[2];
+    /** The text sizing block the cursor stands in: row, column, rows, columns. */
+    private final int[] mCursorBlockScratch = new int[4];
 
     public TerminalPaneController(Host host, FrameLayout hostView, LayoutInflater inflater) {
         mHost = host;
@@ -397,7 +399,8 @@ public class TerminalPaneController {
      * the overlay's own pixel coordinates, pulled fresh on every animated frame. The shape rect
      * matches what {@code TerminalRenderer} actually draws for each cursor style — see
      * {@code TextBlockGeometry#cursorRect} — so the trail's target is exactly the pixels the live
-     * cursor occupies, not just its cell.
+     * cursor occupies, not just its cell. Inside a kitty text sizing block (OSC 66, a heading
+     * drawn big) the renderer grows the cursor over the whole block, and the target grows with it.
      */
     private boolean provideCursorTarget(@NonNull PaneMotionOverlayView.CursorTarget out) {
         TerminalView view = getActivePaneView();
@@ -414,22 +417,27 @@ public class TerminalPaneController {
         if (cellWidth <= 0f || cellHeight <= 0f) return false;
         view.getLocationOnScreen(mCursorViewLocationScratch);
         mMotionOverlay.getLocationOnScreen(mCursorOverlayLocationScratch);
+        int column = emulator.getCursorCol();
+        int columns = 1;
+        int rows = 1;
+        // The block the renderer last drew the cursor over; its top row is negative once it has
+        // scrolled partly into the transcript, which the row-top mapping below carries as is.
+        int[] block = mCursorBlockScratch;
+        if (view.mRenderer != null
+            && view.mRenderer.copyCursorBlock(emulator.getScreen(), row, column, block)) {
+            row = block[0];
+            column = block[1];
+            rows = block[2];
+            columns = block[3];
+        }
         float cellLeft = mCursorViewLocationScratch[0] - mCursorOverlayLocationScratch[0]
-            + view.getPointX(emulator.getCursorCol());
+            + view.getPointX(column);
         // The row's painted top, not row * height: the grid is drawn offset (anchored to the
         // bottom, travelling, smooth-scrolled) and starts its rows an ascent's slack down.
         float cellTop = mCursorViewLocationScratch[1] - mCursorOverlayLocationScratch[1]
             + view.getRowTopPixels(row);
-        out.left = cellLeft;
-        out.top = cellTop;
-        out.right = cellLeft + cellWidth;
-        out.bottom = cellTop + cellHeight;
-        int shape = emulator.getCursorStyle();
-        if (shape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR) {
-            out.right = cellLeft + cellWidth / 4f;
-        } else if (shape == TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE) {
-            out.top = cellTop + cellHeight * 3f / 4f;
-        }
+        cursorShapeRect(emulator.getCursorStyle(), cellLeft, cellTop, cellWidth * columns,
+            cellHeight * rows, cellWidth, cellHeight, out);
         out.hasClip = false;
         if (view.getParent() instanceof PaneContentFrame) {
             PaneContentFrame frame = (PaneContentFrame) view.getParent();
@@ -458,6 +466,8 @@ public class TerminalPaneController {
                 out.bottom = frameY + mCursorBentScratch[1];
             }
         }
+        // One cell even over a block: kitty's start threshold counts cells of the grid, and a move
+        // that stays inside one block leaves the target where it was, so it never trails anyway.
         out.cellWidthPx = cellWidth;
         out.cellHeightPx = cellHeight;
         out.dectcemOn = emulator.isCursorEnabled();
@@ -466,6 +476,26 @@ public class TerminalPaneController {
         out.ownerId = System.identityHashCode(view) | (1L << 32);
         out.color = cursorColorOf(view);
         return true;
+    }
+
+    /**
+     * The cursor's shape rect over what it covers — one cell, or a whole text sizing block — as
+     * {@code TextBlockGeometry#cursorRect} paints it: a block cursor fills it, a bar stands at its
+     * left edge down its full height a quarter of a cell wide, and an underline a quarter of a
+     * cell thick runs along its bottom.
+     */
+    static void cursorShapeRect(int shape, float left, float top, float width, float height,
+                                float cellWidth, float cellHeight,
+                                @NonNull PaneMotionOverlayView.CursorTarget out) {
+        out.left = left;
+        out.top = top;
+        out.right = left + width;
+        out.bottom = top + height;
+        if (shape == TerminalEmulator.TERMINAL_CURSOR_STYLE_BAR) {
+            out.right = left + cellWidth / 4f;
+        } else if (shape == TerminalEmulator.TERMINAL_CURSOR_STYLE_UNDERLINE) {
+            out.top = out.bottom - cellHeight / 4f;
+        }
     }
 
     /** App defaults for the tunables {@code kitty.conf} may override; see the class's design brief. */

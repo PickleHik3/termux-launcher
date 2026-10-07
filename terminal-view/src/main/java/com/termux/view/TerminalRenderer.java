@@ -526,6 +526,17 @@ public final class TerminalRenderer {
     /** Reused when a text sizing block's cursor rectangle is computed, for the same reason. */
     private final float[] mBlockCursorRect = new float[4];
 
+    /**
+     * The text sizing block the cursor stood in on the last frame drawn, kept for the cursor trail,
+     * which has to aim at everything the cursor covers rather than its one cell. Recorded with the
+     * cursor position it was resolved at, since the trail's frame callback can run before the
+     * frame that draws a move; see {@link #copyCursorBlock}. Plain ints, so a frame allocates
+     * nothing for it. {@code mCursorBlockRows} is 0 when the cursor stood in no block.
+     */
+    private int mCursorBlockAtRow = Integer.MIN_VALUE;
+    private int mCursorBlockAtColumn = Integer.MIN_VALUE;
+    private int mCursorBlockRow, mCursorBlockColumn, mCursorBlockRows, mCursorBlockColumns;
+
     /** Which visible rows this frame has to record; grown to the visible row count and reused. */
     private boolean[] mChangedRows = new boolean[0];
 
@@ -992,8 +1003,22 @@ public final class TerminalRenderer {
         mUrlUnderlines.prepare(screen, topRow, endRow, columns, mEmulator.mRows, mUrlUnderlineColor != 0);
         mKittyLayer.collect(mEmulator, topRow, Math.max(0, endRow - topRow));
         clearFrame(mEmulator, canvas, transparentBackground, transparentOverlayColor);
+        // D2: a cursor standing anywhere inside a text sizing block covers the whole block, so the
+        // block is resolved once per frame and every row it reaches is told about it. A focused
+        // pane resolves it even while its cursor blinks off or is hidden, so the trail aiming at
+        // it keeps one target through a blink or a redraw that hides the cursor.
+        final TerminalBuffer.TextBlock cursorBlock;
+        if (mCursorSuppressed) {
+            mCursorBlockAtRow = Integer.MIN_VALUE;
+            mCursorBlockAtColumn = Integer.MIN_VALUE;
+            cursorBlock = null;
+        } else {
+            final TerminalBuffer.TextBlock standingIn = screen.getTextBlockAt(cursorRow, cursorCol);
+            recordCursorBlock(cursorRow, cursorCol, standingIn);
+            cursorBlock = cursorVisible ? standingIn : null;
+        }
         if (drawRowsThroughNodes(mEmulator, canvas, screen, palette, topRow, endRow, columns,
-            cursorRow, cursorCol, cursorVisible, cursorShape, selectionY1, selectionY2,
+            cursorRow, cursorCol, cursorVisible, cursorBlock, cursorShape, selectionY1, selectionY2,
             selectionX1, selectionX2, boldWithBright, reverseVideo, transparentBackground,
             transparentOverlayColor, horizontalOffset, extraRows)) {
             drawExtraCursors(mEmulator, canvas, screen, palette, topRow, endRow, boldWithBright, reverseVideo, horizontalOffset);
@@ -1001,10 +1026,6 @@ public final class TerminalRenderer {
         }
         mRowsRecordedLastFrame = Math.max(0, endRow - topRow);
         mImageRowsRecordedLastFrame = 0;
-        // D2: a cursor standing anywhere inside a text sizing block covers the whole block, so the
-        // block is resolved once per frame and every row it reaches is told about it.
-        final TerminalBuffer.TextBlock cursorBlock =
-            cursorVisible ? screen.getTextBlockAt(cursorRow, cursorCol) : null;
         final CursorSpan span = mCursorSpan;
         final Selection selection = mSelection;
         selection.set(selectionY1, selectionY2, selectionX1, selectionX2);
@@ -1077,7 +1098,9 @@ public final class TerminalRenderer {
     private boolean drawRowsThroughNodes(TerminalEmulator mEmulator, Canvas canvas,
                                          TerminalBuffer screen, int[] palette, int topRow,
                                          int endRow, int columns, int cursorRow, int cursorCol,
-                                         boolean cursorVisible, int cursorShape, int selectionY1,
+                                         boolean cursorVisible,
+                                         @Nullable TerminalBuffer.TextBlock cursorBlock,
+                                         int cursorShape, int selectionY1,
                                          int selectionY2, int selectionX1, int selectionX2,
                                          boolean boldWithBright, boolean reverseVideo,
                                          boolean transparentBackground, int transparentOverlayColor,
@@ -1092,8 +1115,8 @@ public final class TerminalRenderer {
         final int visibleRows = endRow - topRow;
         if (viewWidth <= 0 || viewHeight <= 0 || visibleRows <= 0) return false;
         recordAndReplayRows((android.graphics.RecordingCanvas) canvas, mEmulator, screen, palette,
-            topRow, endRow, columns, cursorRow, cursorCol, cursorVisible, cursorShape, selectionY1,
-            selectionY2, selectionX1, selectionX2, boldWithBright, reverseVideo,
+            topRow, endRow, columns, cursorRow, cursorCol, cursorVisible, cursorBlock, cursorShape,
+            selectionY1, selectionY2, selectionX1, selectionX2, boldWithBright, reverseVideo,
             transparentBackground, transparentOverlayColor, horizontalOffset, extraRows, viewWidth,
             viewHeight, visibleRows);
         return true;
@@ -1104,6 +1127,7 @@ public final class TerminalRenderer {
                                      TerminalEmulator mEmulator, TerminalBuffer screen,
                                      int[] palette, int topRow, int endRow, int columns,
                                      int cursorRow, int cursorCol, boolean cursorVisible,
+                                     @Nullable TerminalBuffer.TextBlock cursorBlock,
                                      int cursorShape, int selectionY1, int selectionY2,
                                      int selectionX1, int selectionX2, boolean boldWithBright,
                                      boolean reverseVideo, boolean transparentBackground,
@@ -1125,9 +1149,6 @@ public final class TerminalRenderer {
         mImageGenerationSource = mEmulator;
         int recorded = 0;
         int imageRowsRecorded = 0;
-        // D2: the block the cursor stands on, resolved once, so every row it covers paints it.
-        final TerminalBuffer.TextBlock cursorBlock =
-            cursorVisible ? screen.getTextBlockAt(cursorRow, cursorCol) : null;
         final CursorSpan span = mCursorSpan;
         final Selection selection = mSelection;
         selection.set(selectionY1, selectionY2, selectionX1, selectionX2);
@@ -3103,6 +3124,42 @@ public final class TerminalRenderer {
         mImageGenerationSource = null;
         mRowsRecordedLastFrame = 0;
         mImageRowsRecordedLastFrame = 0;
+    }
+
+    private void recordCursorBlock(int cursorRow, int cursorCol,
+                                   @Nullable TerminalBuffer.TextBlock block) {
+        mCursorBlockAtRow = cursorRow;
+        mCursorBlockAtColumn = cursorCol;
+        if (block == null) {
+            mCursorBlockRows = 0;
+            return;
+        }
+        mCursorBlockRow = block.row;
+        mCursorBlockColumn = block.column;
+        mCursorBlockRows = block.rows;
+        mCursorBlockColumns = block.columns;
+    }
+
+    /**
+     * The text sizing block a cursor at ({@code cursorRow}, {@code cursorCol}) stands in, copied
+     * into {@code out} as {@code row, column, rows, columns}, the row external and negative when
+     * the block's top has scrolled into the transcript. It is the block the last frame drew the
+     * cursor over; only when the cursor has moved since that frame (the trail's frame callback can
+     * run ahead of the frame that draws a move) is it looked up on the screen now, and kept for
+     * the calls after.
+     *
+     * @return false when the cursor stands in no block.
+     */
+    public boolean copyCursorBlock(@NonNull TerminalBuffer screen, int cursorRow, int cursorCol,
+                                   @NonNull int[] out) {
+        if (cursorRow != mCursorBlockAtRow || cursorCol != mCursorBlockAtColumn)
+            recordCursorBlock(cursorRow, cursorCol, screen.getTextBlockAt(cursorRow, cursorCol));
+        if (mCursorBlockRows <= 0) return false;
+        out[0] = mCursorBlockRow;
+        out[1] = mCursorBlockColumn;
+        out[2] = mCursorBlockRows;
+        out[3] = mCursorBlockColumns;
+        return true;
     }
 
     /** @return true when the flag changed, so the caller can skip a needless invalidate */
