@@ -194,6 +194,42 @@ public class EmbeddingsEndpointTest {
     }
 
     @Test
+    public void embeddings_withLiteRtLmEmbeddingGemma2_returnsVectorsAndModelsShowsItsWindow() throws Exception {
+        File tempFile = File.createTempFile("embeddinggemma-2-text-270m", ".litertlm");
+        tempFile.deleteOnExit();
+        manager.importModel(new JSONObject()
+            .put("path", tempFile.getAbsolutePath())
+            .put("modelId", "embeddinggemma-2-text-270m")
+            .put("capabilities", new JSONArray().put(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS))
+            .toString());
+        fakeRuntime.addEmbeddingsCapableModel("embeddinggemma-2-text-270m");
+        assertEmbeddingModelIsNotLoadable("embeddinggemma-2-text-270m");
+
+        HttpURLConnection conn = post("/v1/embeddings", new JSONObject()
+            .put("model", "embeddinggemma-2-text-270m")
+            .put("input", "hello world"));
+
+        assertEquals(200, conn.getResponseCode());
+        JSONObject response = new JSONObject(readBody(conn));
+        assertEquals(768, response.getJSONArray("data").getJSONObject(0).getJSONArray("embedding").length());
+
+        HttpURLConnection models = get("/v1/models");
+        assertEquals(200, models.getResponseCode());
+        JSONObject entry = findModel(new JSONObject(readBody(models)), "embeddinggemma-2-text-270m");
+        assertTrue("the .litertlm embedder must be listed", entry != null);
+        assertEquals(2048, entry.getInt("_endpoint_context_window"));
+        assertFalse(entry.has("_endpoint_windows"));
+        assertEquals(768, entry.getInt("_endpoint_dimensions"));
+        JSONArray dims = entry.getJSONArray("_endpoint_matryoshka_dims");
+        assertEquals(4, dims.length());
+        assertEquals(768, dims.getInt(0));
+        assertEquals(128, dims.getInt(3));
+        JSONArray capabilities = entry.getJSONArray("_endpoint_capabilities");
+        assertEquals(1, capabilities.length());
+        assertEquals(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS, capabilities.getString(0));
+    }
+
+    @Test
     public void embeddings_withInputTypeAndTitle_reachesTheRuntime() throws Exception {
         File tempFile = File.createTempFile("embed-model", ".mnn");
         tempFile.deleteOnExit();
