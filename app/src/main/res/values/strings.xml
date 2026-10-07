@@ -1409,6 +1409,7 @@
         <string name="tai_centre_action_cancel">Cancel</string>
         <string name="tai_centre_action_start_now">Start now</string>
         <string name="tai_centre_action_retry">Retry</string>
+        <string name="tai_centre_license_fact">License: %1$s</string>
         <string name="tai_centre_action_install">Install</string>
         <string name="tai_centre_action_dismiss">Dismiss</string>
         <string name="tai_centre_action_more">More actions for %1$s</string>

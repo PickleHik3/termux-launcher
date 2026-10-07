@@ -4,6 +4,8 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.text.SpannableStringBuilder;
+import android.text.method.LinkMovementMethod;
 import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -705,7 +707,17 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
                 : next.speech ? R.drawable.ic_tai_wave : R.drawable.ic_tai_chat);
             setText(title, next.title);
             setText(subtitle, next.subtitle);
-            setText(extra, next.extra);
+            // A catalogue row shows its license before the download; the link opens the terms.
+            CharSequence license = next.installed == null && next.entry != null
+                ? TaiModelCentreRows.licenseFact(context, next.entry.license) : "";
+            if (license.length() == 0) {
+                setText(extra, next.extra);
+            } else {
+                SpannableStringBuilder lines = new SpannableStringBuilder(next.extra);
+                if (lines.length() > 0) lines.append('\n');
+                setText(extra, lines.append(license));
+                extra.setMovementMethod(LinkMovementMethod.getInstance());
+            }
             setText(pillSpeed, next.pillSpeed);
             setText(pillBackend, next.pillBackend);
             setText(pillPrimary, next.pillPrimary);
