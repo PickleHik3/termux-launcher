@@ -377,13 +377,114 @@ public class UrlDetectorTest extends TerminalTestCase {
         assertNull(urlAt(29, 1));
     }
 
-    /** An address that stops short of its window's edge is complete: the row below is not appended. */
-    public void testAnAddressShortOfTheWindowEdgeIsNotJoined() {
-        row(split(14, "", "https://example.com/aaaa"))
+    /**
+     * A short address that stops short of its window's edge is complete: the row below is not
+     * appended. Shortened from 24 cells when hand-wrapped rows began to be followed from that length.
+     */
+    public void testAShortAddressShortOfTheWindowEdgeIsNotJoined() {
+        row(split(14, "", "https://example.com/aa"))
             .row(split(14, "", "bbbb/end"));
         dividerRows(14, 7);
-        assertEquals("https://example.com/aaaa", urlAt(20, 0));
+        assertEquals("https://example.com/aa", urlAt(20, 0));
         assertNull(urlAt(16, 1));
+    }
+
+    private static final String BOX_HEAD = "http://amal-build.taild9c5dc.ts.net:4387/sess";
+    private static final String BOX_TAIL = "ion/70faf933cfc4543e";
+
+    /**
+     * herdr drawing into a box with an inner margin on a wider screen: the address is cut several
+     * columns short of the screen's edge and carried on under its own first column.
+     */
+    public void testAnAddressWrappedByHandInsideAPaddedBoxIsJoined() {
+        withTerminalSized(80, 12);
+        row("  Session ready:")
+            .row("  " + BOX_HEAD)
+            .row("  " + BOX_TAIL)
+            .row("");
+        String url = BOX_HEAD + BOX_TAIL;
+        assertEquals(url, urlAt(4, 1));
+        assertEquals(url, urlAt(3, 2));
+        UrlDetector.UrlSpan span = UrlDetector.at(mTerminal.getScreen(), 3, 2);
+        assertEquals(2, span.segmentCount());
+        assertEquals(1, span.segmentRow(0));
+        assertEquals(2, span.segmentStartColumn(0));
+        assertEquals(2 + BOX_HEAD.length(), span.segmentEndColumn(0));
+        assertEquals(2, span.segmentRow(1));
+        assertEquals(2, span.segmentStartColumn(1));
+        assertEquals(2 + BOX_TAIL.length(), span.segmentEndColumn(1));
+        assertNull(urlAt(30, 2));
+        assertEquals(1, urls().size());
+    }
+
+    /** The same box with its right border drawn: as a stray glyph on two rows, and as a divider. */
+    public void testAHandWrappedAddressBesideTheBoxsRightBorderIsJoined() {
+        for (int boxRows : new int[] {2, 9}) {
+            withTerminalSized(80, 12);
+            row(pad("  " + BOX_HEAD, 50) + "│")
+                .row(pad("  " + BOX_TAIL, 50) + "│");
+            for (int i = 2; i < boxRows; i++) row(pad("", 50) + "│");
+            assertEquals(boxRows + " rows", BOX_HEAD + BOX_TAIL, urlAt(4, 0));
+            assertEquals(boxRows + " rows", BOX_HEAD + BOX_TAIL, urlAt(3, 1));
+            assertEquals(boxRows + " rows", 1, urls().size());
+        }
+    }
+
+    public void testAShortAddressEndingASentenceIsNotJoinedToAnIndentedWord() {
+        row("see https://example.com/z")
+            .row("    done");
+        assertEquals("https://example.com/z", urlAt(6, 0));
+        assertNull(urlAt(5, 1));
+    }
+
+    /** A row below that starts at another column is other text, not the address carried on. */
+    public void testAHandWrappedTailAtADifferentMarginIsNotJoined() {
+        withTerminalSized(80, 12);
+        row("  " + BOX_HEAD)
+            .row("    " + BOX_TAIL);
+        assertEquals(BOX_HEAD, urlAt(4, 0));
+        assertNull(urlAt(6, 1));
+    }
+
+    /** The length guard, both ways: one cell under the minimum stays apart, the minimum joins. */
+    public void testTheHandWrapMinimumLengthDecidesTheJoin() {
+        String atMinimum = "https://example.com/aaaa";
+        assertEquals(UrlDetector.MIN_HAND_WRAPPED_CELLS, atMinimum.length());
+        String under = "https://example.com/aaa";
+        row(under).row("bb/end");
+        assertEquals(under, urlAt(3, 0));
+        assertNull(urlAt(2, 1));
+
+        withTerminalSized(COLUMNS, 12);
+        row(atMinimum).row("bb/end");
+        assertEquals(atMinimum + "bb/end", urlAt(3, 0));
+        assertEquals(atMinimum + "bb/end", urlAt(2, 1));
+    }
+
+    /** A word after the tail makes the row below its own text, such as the next line of a log. */
+    public void testAHandWrappedTailFollowedByMoreTextIsNotJoined() {
+        withTerminalSized(80, 12);
+        row("  " + BOX_HEAD)
+            .row("  " + BOX_TAIL + " ok");
+        assertEquals(BOX_HEAD, urlAt(4, 0));
+        assertNull(urlAt(4, 1));
+    }
+
+    /** A narrow box wraps one address over more rows than the context: it is whole from every row in view. */
+    public void testAnAddressHandWrappedPastTheContextWindowIsWholeFromEveryRow() {
+        String url = "https://example.com/4/aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd/eeeeeeeeee"
+            + "/ffffffffff/gggggggggg/hhhhhhhhhh/iiiiiiiiii/jjjjjjjjjj/kkkkkkkkkk/end-4";
+        int width = 30;
+        int rows = (url.length() + width - 1) / width;
+        assertTrue("the address must outrun the context window", rows > 4);
+        for (int i = 0; i < rows; i++) row("  " + url.substring(i * width, Math.min(url.length(), (i + 1) * width)));
+        TerminalBuffer screen = mTerminal.getScreen();
+        for (int topRow = 0; topRow < rows; topRow++) {
+            List<UrlDetector.UrlSpan> spans = UrlDetector.find(screen, topRow, mTerminal.mRows - 1);
+            assertEquals("visible from row " + topRow, 1, spans.size());
+            assertEquals("visible from row " + topRow, url, spans.get(0).url);
+            assertEquals("tapped on row " + topRow, url, urlAt(4, topRow));
+        }
     }
 
     /** One cell short of a divider is not the edge: that allowance is for the screen's right edge only. */
