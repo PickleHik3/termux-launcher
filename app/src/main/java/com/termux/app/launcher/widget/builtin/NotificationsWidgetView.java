@@ -321,7 +321,7 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
     @NonNull
     private View twoByTwo(@NonNull NotificationsWidgetData.Snapshot data, @NonNull BuiltinWidgetUi ui) {
         BuiltinWidgetStyle s = ui.style;
-        SignalsFitColumn list = new SignalsFitColumn(getContext(), ui.dp(8));
+        FitStack list = FitStack.column(getContext());
         for (int i = 0; i < Math.min(3, data.count()); i++) {
             NotificationsWidgetData.Item item = data.items.get(i);
             LinearLayout lines = ui.column(0,
@@ -334,7 +334,7 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
             card.setBackground(ui.rounded(s.container, ui.innerRadius(12)));
             card.setPadding(ui.dp(8), ui.dp(7), ui.dp(8), ui.dp(7));
             clickable(card, item);
-            list.addView(card);
+            list.addRow(card, ui.dp(8));
         }
         LinearLayout column = ui.column(8, wide(header(ui, BuiltinWidgetSpan.TWO_BY_TWO, data)),
             BuiltinWidgetUi.flexTall(list));
@@ -379,7 +379,7 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
     @NonNull
     private View fourByTwo(@NonNull NotificationsWidgetData.Snapshot data, @NonNull BuiltinWidgetUi ui) {
         BuiltinWidgetStyle s = ui.style;
-        SignalsFitColumn list = new SignalsFitColumn(getContext(), ui.dp(2));
+        FitStack list = FitStack.column(getContext());
         for (int i = 0; i < Math.min(4, data.count()); i++) {
             NotificationsWidgetData.Item item = data.items.get(i);
             SpannableStringBuilder head = new SpannableStringBuilder();
@@ -393,7 +393,7 @@ public class NotificationsWidgetView extends BuiltinWidgetView {
             line.setPadding(0, ui.dp(5), 0, ui.dp(5));
             LinearLayout entry = ui.column(0, ui.divider(false), wide(line));
             clickable(entry, item);
-            list.addView(entry);
+            list.addRow(entry, ui.dp(2));
         }
         LinearLayout header = header(ui, BuiltinWidgetSpan.FOUR_BY_TWO, data);
         header.setPadding(0, 0, 0, ui.dp(4));

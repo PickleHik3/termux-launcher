@@ -25,6 +25,11 @@ import java.util.Map;
  * without marks, and the wide spans ask for access where their event list would be.
  */
 public class CalendarWidgetView extends BuiltinWidgetView {
+    /** The 4×2 month's narrowest: 16dp a day column. */
+    private static final int MONTH_MIN_DP = 112;
+    /** The narrowest the 4×2 events column is shown at: a time and a title that still reads. */
+    private static final int EVENTS_MIN_DP = 72;
+
     @Nullable private FrameLayout frame;
     @Nullable private BuiltinWidgetUi ui;
     @Nullable private CalendarEventsSource.Snapshot shown;
@@ -207,24 +212,34 @@ public class CalendarWidgetView extends BuiltinWidgetView {
 
         TextView heading = ui.text(context.getString(R.string.bw_calendar_today), 11f,
             ui.style.sansBold, ui.style.onSurfaceVariant);
-        CalendarFitColumn list = new CalendarFitColumn(context, ui.dp(9));
+        FitStack list = FitStack.column(context);
         if (!day.permitted) {
-            list.addView(CalendarWidgetSupport.allowLine(ui, 12f, false));
+            list.addRow(CalendarWidgetSupport.allowLine(ui, 12f, false), ui.dp(9));
         } else if (day.loaded) {
             int count = 0;
             for (CalendarEvent event : todaysLeft(day)) {
                 if (count++ == 3) break;
-                list.addView(CalendarWidgetSupport.compactRow(ui, event, day.slot(event),
-                    !isPreview()));
+                list.addRow(CalendarWidgetSupport.compactRow(ui, event, day.slot(event),
+                    !isPreview()), ui.dp(9));
             }
-            if (count == 0) list.addView(CalendarWidgetSupport.emptyLine(ui, day.emptyText(context), 12f));
+            if (count == 0) {
+                list.addRow(CalendarWidgetSupport.emptyLine(ui, day.emptyText(context), 12f),
+                    ui.dp(9));
+            }
         }
         LinearLayout events = ui.column(9, CalendarWidgetSupport.wide(heading),
             BuiltinWidgetUi.flexTall(list));
         events.setPadding(0, ui.dp(2), 0, 0);
         events.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
 
-        LinearLayout root = ui.row(14, month, divider, events);
+        // At the 245dp minimum the month, shrunk to a 16dp column per day, and the day's events
+        // do not both fit: the events and their divider are the ones left out. The events never
+        // get less than a column of titles that still reads.
+        int gap = ui.dp(14);
+        FitStack root = FitStack.row(context)
+            .addShrink(month, FitStack.ESSENTIAL, 0, ui.dp(184), ui.dp(MONTH_MIN_DP))
+            .add(divider, 5, gap)
+            .addFlex(events, 5, gap, ui.dp(EVENTS_MIN_DP));
         inset(root, 10, 12, 14, 12, ui);
         return root;
     }
