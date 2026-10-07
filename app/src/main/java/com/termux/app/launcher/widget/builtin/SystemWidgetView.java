@@ -245,7 +245,9 @@ public class SystemWidgetView extends BuiltinWidgetView
 
     @NonNull private View buildFourByTwo(@NonNull BuiltinWidgetUi ui) {
         BuiltinWidgetStyle s = ui.style;
-        TextView label = ui.statGlyph(StatGlyphs.CPU, 12f, s.onSurfaceVariant,
+        // The glyph stands in for the word "CPU" beside a 30sp reading: sized to read as its
+        // peer, not as a caption.
+        TextView label = ui.statGlyph(StatGlyphs.CPU, 22f, s.onSurfaceVariant,
             getContext().getString(R.string.bw_device_cpu));
         cpuValue = ui.numeral("", 30f);
         LinearLayout left = baseline(ui.row(8, label, cpuValue));

@@ -26,6 +26,11 @@ import java.util.List;
 
 /** The widget grid's own body, a page of the pane wall; it has no authority over the wall or the terminal's geometry. */
 public final class WidgetPaneView extends FrameLayout {
+    /** The page dots' band under the grid: their height, their air to the pane's edge, and to the grid. */
+    private static final int DOTS_HEIGHT_DP = 14;
+    private static final int DOTS_BOTTOM_MARGIN_DP = 4;
+    private static final int DOTS_GAP_DP = 4;
+
     public interface Listener {
         /** The horizontal page swipe committed; the coordinator re-renders onto this page. */
         void onPageChangeRequested(int page);
@@ -87,7 +92,11 @@ public final class WidgetPaneView extends FrameLayout {
         setFocusable(false);
 
         grid = new WidgetGridView(context); grid.setId(R.id.widget_grid);
-        addView(grid, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
+        // The page dots sit in a band below the grid, never over its last row. The band is kept
+        // whether or not the dots show, so adding a page does not shrink every cell.
+        LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
+        gridParams.bottomMargin = dp(DOTS_HEIGHT_DP + DOTS_BOTTOM_MARGIN_DP + DOTS_GAP_DP);
+        addView(grid, gridParams);
 
         empty = new LinearLayout(context); empty.setOrientation(LinearLayout.VERTICAL);
         empty.setGravity(Gravity.CENTER);
@@ -99,9 +108,9 @@ public final class WidgetPaneView extends FrameLayout {
 
         dots = new PageDotsView(context); dots.setId(R.id.widget_page_dots);
         dots.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        LayoutParams dotsParams = new LayoutParams(LayoutParams.MATCH_PARENT, dp(14),
+        LayoutParams dotsParams = new LayoutParams(LayoutParams.MATCH_PARENT, dp(DOTS_HEIGHT_DP),
             Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        dotsParams.bottomMargin = dp(4);
+        dotsParams.bottomMargin = dp(DOTS_BOTTOM_MARGIN_DP);
         addView(dots, dotsParams);
         dots.setVisibility(GONE);
 

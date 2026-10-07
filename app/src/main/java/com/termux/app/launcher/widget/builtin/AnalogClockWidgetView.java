@@ -96,17 +96,32 @@ public class AnalogClockWidgetView extends BuiltinWidgetView {
         shownMinute = Long.MIN_VALUE;
 
         switch (span) {
-            case ONE_BY_ONE: buildOneByOne(frame); break;
+            case ONE_BY_ONE: buildOneByOne(frame, ui); break;
             case TWO_BY_ONE: buildTwoByOne(frame, ui); break;
-            case TWO_BY_TWO: buildTwoByTwo(frame); break;
+            case TWO_BY_TWO: buildTwoByTwo(frame, ui); break;
             case FOUR_BY_ONE: buildFourByOne(frame, ui); break;
             case FOUR_BY_TWO: buildFourByTwo(frame, ui); break;
         }
         refresh();
     }
 
-    private void buildOneByOne(@NonNull FrameLayout frame) {
-        frame.addView(face(70, 0.12f), centred());
+    /**
+     * Air between the face and the card: the face measures to the room it is given, and a cell
+     * narrower than the design (a 2x2 on a six-column grid) would otherwise put the dial's rim on
+     * the card's own, under its corners.
+     */
+    private static final int FACE_AIR_DP = 10;
+
+    private void buildOneByOne(@NonNull FrameLayout frame, @NonNull BuiltinWidgetUi ui) {
+        frame.addView(aired(face(70, 0.12f), ui), fill());
+    }
+
+    /** {@code face} centred inside a frame that keeps {@link #FACE_AIR_DP} on every side. */
+    @NonNull private FrameLayout aired(@NonNull AnalogClockFaceView face, @NonNull BuiltinWidgetUi ui) {
+        FrameLayout room = new FrameLayout(getContext());
+        inset(room, FACE_AIR_DP, FACE_AIR_DP, FACE_AIR_DP, FACE_AIR_DP, ui);
+        room.addView(face, centred());
+        return room;
     }
 
     private void buildTwoByOne(@NonNull FrameLayout frame, @NonNull BuiltinWidgetUi ui) {
@@ -118,10 +133,10 @@ public class AnalogClockWidgetView extends BuiltinWidgetView {
         frame.addView(root, fill());
     }
 
-    private void buildTwoByTwo(@NonNull FrameLayout frame) {
+    private void buildTwoByTwo(@NonNull FrameLayout frame, @NonNull BuiltinWidgetUi ui) {
         AnalogClockFaceView face = face(160, 0.08f);
         datedFace = face;
-        frame.addView(face, centred());
+        frame.addView(aired(face, ui), fill());
     }
 
     private void buildFourByOne(@NonNull FrameLayout frame, @NonNull BuiltinWidgetUi ui) {
