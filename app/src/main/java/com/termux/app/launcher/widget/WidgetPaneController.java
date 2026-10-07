@@ -391,13 +391,6 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         return item.columnSpan <= grid.columns && item.rowSpan <= grid.rows;
     }
 
-    private boolean canFit(@NonNull WidgetProviderItem item) {
-        if (!fitsGrid(item)) return false;
-        return WidgetGridPlacementPolicy.findPlacement(widgets.repository().gridDefinition(),
-            widgets.repository().recordsOnPage(currentPage), item.columnSpan, item.rowSpan).outcome
-            == WidgetGridPlacementPolicy.Outcome.PLACED;
-    }
-
     private void selectProvider(@NonNull WidgetProviderItem item) {
         LauncherWidgetRepository repository = widgets.repository();
         long revision = repository.revision();
@@ -1138,12 +1131,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * the card's own, drawn at the size the widget will be on the grid, so what the finger carries
      * and what the target under it outlines are the same shape.
      *
-     * <p>A card the grid has no room for is greyed out and does not answer a tap; it does not
-     * answer a hold either, so the one rule about space is stated in one place.
+     * <p>A page with no room is no reason to refuse: the finger can carry the widget on to
+     * another page. Only a widget larger than the whole grid is refused, as its greyed card
+     * refuses the tap, so the one rule about space is stated in one place.
      */
     void beginCarry(@NonNull WidgetProviderItem item, @NonNull View card, float rawX, float rawY) {
         if (carry != null || edit != null || awaitingExternal) return;
-        if (!canFit(item)) return;
+        if (!fitsGrid(item)) return;
         WidgetCellRect span = new WidgetCellRect(0, 0, item.columnSpan, item.rowSpan);
         Rect cell = pane.grid().metrics().boundsFor(span);
         if (cell.width() <= 0 || cell.height() <= 0) return;

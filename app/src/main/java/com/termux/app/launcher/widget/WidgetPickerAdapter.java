@@ -7,6 +7,7 @@ import android.graphics.Outline;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -23,6 +24,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.R;
+import com.termux.app.haptics.Haptics;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.ArrayList;
@@ -301,6 +303,7 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
             watching = false;
             Object bound = cell.bound;
             if (!(bound instanceof WidgetProviderItem)) return;
+            Haptics.tick(cell.itemView, HapticFeedbackConstants.LONG_PRESS);
             listener.onProviderHeld((WidgetProviderItem) bound, cell.itemView, rawX, rawY);
         }
     }

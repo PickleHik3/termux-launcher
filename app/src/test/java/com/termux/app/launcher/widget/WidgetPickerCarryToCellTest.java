@@ -151,7 +151,7 @@ public class WidgetPickerCarryToCellTest {
         assertEquals(CHOSEN, added.cell);
     }
 
-    @Test public void aCardWithNoRoomRefusesTheHoldAsItRefusesTheTap() {
+    @Test public void aCardWithNoRoomOnThePageStillLiftsOnAHold() {
         WidgetPickerProductionSelectionTest.Fixture fixture =
             new WidgetPickerProductionSelectionTest.Fixture(true);
         View card = openCard(fixture);
@@ -159,9 +159,18 @@ public class WidgetPickerCarryToCellTest {
 
         hold(fixture, card);
 
-        assertFalse(fixture.pane.widgetDragLayer().isLifted());
-        assertTrue("the sheet stays up to say so", fixture.pane.picker().isOpen());
+        assertTrue("the hold takes it out of the sheet all the same",
+            fixture.pane.widgetDragLayer().isLifted());
+        assertFalse(fixture.pane.picker().isOpen());
         assertEquals(0, fixture.platform.allocations);
+
+        // Over the full page the ghost says there is no room, and letting go there adds nothing.
+        Rect target = paneBounds(fixture, FIRST_FREE);
+        move(fixture, target.centerX(), target.centerY());
+        assertTrue(fixture.pane.widgetDragLayer().ghostBlocked());
+        up(fixture, target.centerX(), target.centerY());
+        assertEquals(0, fixture.platform.allocations);
+        assertFalse(fixture.pane.widgetDragLayer().isLifted());
     }
 
     // ---- the gesture, as the framework delivers it ------------------------------------------
