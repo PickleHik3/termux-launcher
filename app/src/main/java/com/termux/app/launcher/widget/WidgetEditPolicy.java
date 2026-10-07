@@ -177,9 +177,30 @@ public final class WidgetEditPolicy {
                                    int appWidgetId, @NonNull WidgetCellRect current,
                                    @NonNull Handle handle, int desiredEdgePx,
                                    int minColumnSpan, int minRowSpan) {
+        return resize(metrics, records, appWidgetId, current, handle, desiredEdgePx,
+            minColumnSpan, minRowSpan, 0, 0);
+    }
+
+    /**
+     * {@link #resize} with the provider's own ceiling: a span past {@code maxColumnSpan} or
+     * {@code maxRowSpan} (0 for none) is never offered. A widget already past it may keep its
+     * size or shrink, but not grow.
+     */
+    @NonNull
+    public static Candidate resize(@NonNull WidgetGridMetrics metrics,
+                                   @NonNull List<LauncherWidgetRecord> records,
+                                   int appWidgetId, @NonNull WidgetCellRect current,
+                                   @NonNull Handle handle, int desiredEdgePx,
+                                   int minColumnSpan, int minRowSpan,
+                                   int maxColumnSpan, int maxRowSpan) {
         WidgetGridDefinition grid = metrics.definition();
         int minColumns = Math.max(1, minColumnSpan);
         int minRows = Math.max(1, minRowSpan);
+        int columnCeiling = WidgetGridMetrics.effectiveMaxSpan(maxColumnSpan, minColumns,
+            grid.columns);
+        int rowCeiling = WidgetGridMetrics.effectiveMaxSpan(maxRowSpan, minRows, grid.rows);
+        columnCeiling = Math.max(columnCeiling, current.columnSpan());
+        rowCeiling = Math.max(rowCeiling, current.rowSpan());
         WidgetCellRect best = current;
         Map<Integer, WidgetCellRect> bestDisplaced = Collections.emptyMap();
         long bestDistance = edgeDistance(metrics.boundsFor(current), handle, desiredEdgePx);
@@ -197,6 +218,7 @@ public final class WidgetEditPolicy {
             WidgetCellRect candidate = withEdge(current, handle, edge);
             if (candidate.equals(current)) continue;
             if (!WidgetGridPlacementPolicy.inBounds(grid, candidate)) continue;
+            if (candidate.columnSpan() > columnCeiling || candidate.rowSpan() > rowCeiling) continue;
             long distance = edgeDistance(metrics.boundsFor(candidate), handle, desiredEdgePx);
             // Nothing further from the finger than what is already held can win, and rehoming
             // neighbours is the expensive part, so those candidates are never costed.

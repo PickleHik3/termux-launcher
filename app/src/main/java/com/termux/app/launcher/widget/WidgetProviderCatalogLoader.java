@@ -382,11 +382,24 @@ public final class WidgetProviderCatalogLoader implements WidgetPickerAdapter.Pr
                         ? info.targetCellHeight : 0;
                     int columns = Math.max(span.columns, targetColumns);
                     int rows = Math.max(span.rows, targetRows);
-                    boolean fits = span.fits && columns > 0 && rows > 0
-                        && columns <= metrics.definition().columns
-                        && rows <= metrics.definition().rows;
                     WidgetGridMetrics.Span minimum = metrics.spanForPixels(
                         Math.max(1, info.minResizeWidth), Math.max(1, info.minResizeHeight));
+                    // A provider that names a maximum is asked not to be placed past it, read
+                    // against its content size like its minimum is; a maximum under its own
+                    // minimum is ignored.
+                    WidgetGridMetrics.Span maximum = metrics.largestSpanWithin(
+                        info.maxResizeWidth > 0
+                            ? info.maxResizeWidth + padding.left + padding.right : 0,
+                        info.maxResizeHeight > 0
+                            ? info.maxResizeHeight + padding.top + padding.bottom : 0);
+                    int gridColumns = metrics.definition().columns;
+                    int gridRows = metrics.definition().rows;
+                    columns = Math.min(columns, WidgetGridMetrics.effectiveMaxSpan(
+                        maximum.columns, minimum.columns, Math.max(columns, gridColumns)));
+                    rows = Math.min(rows, WidgetGridMetrics.effectiveMaxSpan(
+                        maximum.rows, minimum.rows, Math.max(rows, gridRows)));
+                    boolean fits = span.fits && columns > 0 && rows > 0
+                        && columns <= gridColumns && rows <= gridRows;
                     // Preview and icon both stay deferred to loadPreview(): resolving either per
                     // provider is what made a full catalog build slow.
                     group.items.add(new WidgetProviderItem(group.serial, info,
