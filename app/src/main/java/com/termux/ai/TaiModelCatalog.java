@@ -18,8 +18,12 @@ public final class TaiModelCatalog {
     public static final String PARAKEET_TDT_V3_ID = "parakeet-tdt-0.6b-v3";
     /** The one speech-output entry: KittenTTS nano 0.8, the Model centre's "Voice output" row. */
     public static final String KITTEN_TTS_NANO_ID = "kittentts-nano-0.8";
-    /** The one embedding entry: EmbeddingGemma 300M, the Model centre's "Embeddings" row. */
+    /** EmbeddingGemma 300M: the v1 .tflite embedder, kept below the EmbeddingGemma 2 entries. */
     public static final String EMBEDDING_GEMMA_300M_ID = "embeddinggemma-300m";
+    /** EmbeddingGemma 2 Text+Vision 440M: the recommended embedder (text input only for now). */
+    public static final String EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID = "embeddinggemma-2-text-vision-440m";
+    /** EmbeddingGemma 2 Text 270M: the smaller text-only EmbeddingGemma 2. */
+    public static final String EMBEDDING_GEMMA_2_TEXT_270M_ID = "embeddinggemma-2-text-270m";
     private static final Map<String, CatalogEntry> BUILT_IN_ENTRIES = buildEntries();
     private static volatile Map<String, CatalogEntry> entries = BUILT_IN_ENTRIES;
     private TaiModelCatalog() {}
@@ -320,6 +324,24 @@ public final class TaiModelCatalog {
                 hfSidecar("litert-community/Matcha-TTS", matchaRevision, KittenTtsRuntime.PHONEMIZER_META_FILE,
                     "7b87bfeaaa072be236e8491d771b0cb97cc92c3e5d83e3558fff8849868810f5"))));
 
+        // EmbeddingGemma 2 (litert-community, Apache-2.0, not gated), one .litertlm bundle each with
+        // its tokenizer inside, served by LiteRtLmEmbeddingRuntime through LiteRT-LM's EmbeddingEngine.
+        // The Text+Vision 440M is the recommended embedder and listed first; its image input is not
+        // wired yet, so it declares text embeddings only. Sizes and hashes from the Hugging Face API
+        // (LFS sha256), revisions pinned. The per-SoC NPU variants in the repos are not offered.
+        entries.put(EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID, embeddingGemma2Available(
+            EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID, "EmbeddingGemma 2 Text+Vision 440M", "text_embeddings", true,
+            "litert-community/embeddinggemma-2-text-vision-440m-litert-lm", "e301f74d5551b0c2641bd5cb4652a76239d5c5f8",
+            "embeddinggemma-2-text-vision-440m.litertlm", 387_710_976L,
+            "92dcbea108899e5d6e30d919b0744f90d9967e80c67a4ab5503ac16d54f62eb0",
+            "388 MB", tags("Embeddings", "Vision")));
+        entries.put(EMBEDDING_GEMMA_2_TEXT_270M_ID, embeddingGemma2Available(
+            EMBEDDING_GEMMA_2_TEXT_270M_ID, "EmbeddingGemma 2 Text 270M", "text_embeddings_compact", false,
+            "litert-community/embeddinggemma-2-text-270m-litert-lm", "9be6e8b90982095dc05c2bd162e4b954ee4dbac7",
+            "embeddinggemma-2-text-270m.litertlm", 164_626_432L,
+            "2d079ee2f6f066b1f368e8d7c819f55214eaef1d0513b312321901f30ab286fb",
+            "165 MB", tags("Embeddings")));
+
         // EmbeddingGemma 300M (litert-community/embeddinggemma-300m, Gemma Terms of Use), served on
         // demand by LiteRtEmbeddingRuntime behind /v1/embeddings. Gated on Hugging Face, so the
         // download needs the saved token. The portable mixed-precision graphs only (not the
@@ -419,8 +441,23 @@ public final class TaiModelCatalog {
         return new CatalogEntry(id, name, role, repo, revision, artifactPath, "Gemma", primarySize,
             true, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, TaiImportProfiles.FAMILY_EMBEDDINGGEMMA,
             "mixed-precision", 1024, 1024, 128, ramGb(ramTier), sha256, capabilities, null, null,
-            "text_embeddings", "text_embeddings", tags("Embeddings"), sizeEstimate, ramTier, false, true, "",
+            "text_embeddings", "text_embeddings_legacy", tags("Embeddings"), sizeEstimate, ramTier, false, true, "",
             sidecars, null);
+    }
+
+    /** An EmbeddingGemma 2 entry: one hash-pinned .litertlm with its tokenizer inside, no sidecars,
+     *  not gated (Apache-2.0). Window 2048 is the engine's input cap ({@link LiteRtLmEmbeddingRuntime#MAX_INPUT_TOKENS});
+     *  the model's own window, 8192, is the source window. Embeddings only, never a chat or bench pick. */
+    private static CatalogEntry embeddingGemma2Available(String id, String name, String priority, boolean recommended,
+                                                         String repo, String revision, String artifactPath, long size,
+                                                         String sha256, String sizeEstimate,
+                                                         LinkedHashSet<String> displayTags) {
+        LinkedHashSet<String> capabilities = setOf(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+        return new CatalogEntry(id, name, "Text embeddings", repo, revision, artifactPath, "Apache-2.0", size,
+            false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, TaiImportProfiles.FAMILY_EMBEDDINGGEMMA,
+            "int4", LiteRtLmEmbeddingRuntime.MAX_INPUT_TOKENS, 8192, 128, ramGb("4GB+"), sha256, capabilities, null, null,
+            "text_embeddings", priority, displayTags, sizeEstimate, "4GB+", recommended, true, "",
+            null, null);
     }
 
     /** A sidecar file from a Hugging Face repo at a pinned revision. */

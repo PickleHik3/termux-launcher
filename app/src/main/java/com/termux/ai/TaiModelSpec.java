@@ -3,7 +3,8 @@ package com.termux.ai;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.ai.edge.litertlm.Capabilities;
+import com.google.ai.edge.litertlm.LlmCapability;
+import com.google.ai.edge.litertlm.ModelInfo;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -517,8 +518,9 @@ public final class TaiModelSpec {
         if (localPath == null || localPath.trim().isEmpty()) return false;
         File file = new File(localPath);
         if (!file.isFile() || !file.canRead()) return false;
-        try (Capabilities capabilities = new Capabilities(file.getAbsolutePath())) {
-            return capabilities.hasSpeculativeDecodingSupport();
+        // LiteRT-LM 0.18.0: ModelInfo.from() replaced Capabilities; only an LLM bundle answers.
+        try (ModelInfo info = ModelInfo.from(file.getAbsolutePath())) {
+            return info instanceof LlmCapability && ((LlmCapability) info).hasSpeculativeDecodingSupport();
         } catch (Throwable ignored) {
             return false;
         }

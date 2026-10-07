@@ -345,6 +345,8 @@ public class TaiFunctionPickerModelTest {
     public void theFallbackChainLineIsReadOnlyTextBelowTheList() {
         installGemma();
         assertEquals("CHAIN[" + E4B + " → raw_text]", build(TaiFunction.TIDY_DICTATION, env(12, 34, GpuPath.YES)).chainLine);
-        assertEquals("", build(TaiFunction.EMBEDDINGS, env(12, 34, GpuPath.YES)).chainLine);
+        // Search falls back to the other EmbeddingGemma 2 file, then the v1 300M a phone may still carry.
+        assertEquals("CHAIN[" + TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID + " → " + TaiModelCatalog.EMBEDDING_GEMMA_300M_ID + "]",
+            build(TaiFunction.EMBEDDINGS, env(12, 34, GpuPath.YES)).chainLine);
     }
 }

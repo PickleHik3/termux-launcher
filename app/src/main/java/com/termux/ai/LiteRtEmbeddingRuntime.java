@@ -37,7 +37,8 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
     /** For the load meter and its history; {@code null} in the router's test seam (nothing is measured). */
     @Nullable private final Context appContext;
     @Nullable private SentencePieceBpeTokenizer tokenizer;
-    @Nullable private String loadedModelId;
+    /** Read without the monitor by the router's eviction and its one-LiteRT-embedder rule. */
+    @Nullable private volatile String loadedModelId;
     @Nullable private String loadedModelPath;
     @Nullable private String loadedTokenizerPath;
     /** The window graphs beside the primary file, keyed by window (filename-derived), ascending. */
@@ -57,6 +58,12 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
     @NonNull
     synchronized JSONObject embed(@NonNull TaiModelSpec spec, @NonNull List<String> inputs, int dimensions) throws JSONException {
         return embed(spec, inputs, dimensions, INPUT_TYPE_DOCUMENT, null, false);
+    }
+
+    /** The model whose tokenizer or graphs this runtime holds, or {@code null}. Lock-free: never waits on a batch. */
+    @Nullable
+    String loadedModelId() {
+        return loadedModelId;
     }
 
     /**

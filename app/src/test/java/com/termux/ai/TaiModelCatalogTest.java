@@ -29,16 +29,16 @@ public class TaiModelCatalogTest {
             if (TaiModelSpec.BACKEND_MNN_LLM.equals(entry.backend)) mnnCount++;
         }
 
-        assertEquals(9, entries.size());
-        assertEquals(9, new HashSet<>(entries.keySet()).size());
-        assertEquals(9, liteRtCount);
+        assertEquals(11, entries.size());
+        assertEquals(11, new HashSet<>(entries.keySet()).size());
+        assertEquals(11, liteRtCount);
         assertEquals(0, mnnCount);
         assertTrue(entries.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT));
         assertTrue(entries.containsKey(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT));
         assertEquals(2, TaiModelCatalog.chatEntries().size());
         assertEquals(5, TaiModelCatalog.speechEntries().size());
         assertEquals(1, TaiModelCatalog.ttsEntries().size());
-        assertEquals(1, TaiModelCatalog.embeddingEntries().size());
+        assertEquals(3, TaiModelCatalog.embeddingEntries().size());
         assertNull(TaiModelCatalog.get("qwen2.5-coder-1.5b-instruct-mnn"));
         assertNull(TaiModelCatalog.get("deepseek-r1-distill-qwen-1.5b-litert-lm"));
         assertNull(TaiModelCatalog.get(TaiModelRegistry.MODEL_MOBILE_ACTIONS_270M));
@@ -256,6 +256,51 @@ public class TaiModelCatalogTest {
             "embeddinggemma-300M_seq512_mixed-precision.tflite",
             "embeddinggemma-300M_seq256_mixed-precision.tflite",
             "sentencepiece.model"), names);
+    }
+
+    @Test
+    public void embeddingGemma2_entriesArePinnedUngatedLiteRtLmBundlesWithNoSidecars() {
+        TaiModelCatalog.CatalogEntry big = TaiModelCatalog.get(TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID);
+        assertNotNull(big);
+        assertEquals("EmbeddingGemma 2 Text+Vision 440M", big.displayName);
+        assertEquals("litert-community/embeddinggemma-2-text-vision-440m-litert-lm", big.repositoryId);
+        assertEquals("e301f74d5551b0c2641bd5cb4652a76239d5c5f8", big.revision);
+        assertEquals("embeddinggemma-2-text-vision-440m.litertlm", big.artifactPath);
+        assertEquals(387_710_976L, big.sizeBytes);
+        assertEquals("92dcbea108899e5d6e30d919b0744f90d9967e80c67a4ab5503ac16d54f62eb0", big.sha256);
+        assertEquals("text_embeddings", big.priority);
+        assertTrue(big.recommended);
+        assertTrue(big.displayCapabilityTags.contains("Vision"));
+
+        TaiModelCatalog.CatalogEntry small = TaiModelCatalog.get(TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID);
+        assertNotNull(small);
+        assertEquals("EmbeddingGemma 2 Text 270M", small.displayName);
+        assertEquals("litert-community/embeddinggemma-2-text-270m-litert-lm", small.repositoryId);
+        assertEquals("9be6e8b90982095dc05c2bd162e4b954ee4dbac7", small.revision);
+        assertEquals("embeddinggemma-2-text-270m.litertlm", small.artifactPath);
+        assertEquals(164_626_432L, small.sizeBytes);
+        assertEquals("2d079ee2f6f066b1f368e8d7c819f55214eaef1d0513b312321901f30ab286fb", small.sha256);
+        assertFalse(small.recommended);
+
+        for (TaiModelCatalog.CatalogEntry entry : new TaiModelCatalog.CatalogEntry[] {big, small}) {
+            assertEquals("Apache-2.0", entry.license);
+            assertFalse(entry.gated);
+            assertTrue(entry.downloadAvailable);
+            assertEquals(TaiModelSpec.BACKEND_LITERT_LM, entry.backend);
+            assertEquals(TaiImportProfiles.FAMILY_EMBEDDINGGEMMA, entry.architecture);
+            assertEquals("int4", entry.quantization);
+            assertEquals(2048, entry.endpointContextWindow);
+            assertTrue(entry.sidecars.isEmpty());
+            assertEquals(java.util.Collections.singleton(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS), entry.endpointCapabilities);
+            assertTrue(TaiModelCatalog.embeddingEntries().containsKey(entry.modelId));
+            assertFalse(TaiModelCatalog.chatEntries().containsKey(entry.modelId));
+        }
+
+        // The 440M leads the Embeddings section; the 300M stays listed, after both EmbeddingGemma 2 entries.
+        java.util.List<String> order = new java.util.ArrayList<>(TaiModelCatalog.embeddingEntries().keySet());
+        assertEquals(java.util.Arrays.asList(TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID,
+            TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID, TaiModelCatalog.EMBEDDING_GEMMA_300M_ID), order);
+        assertEquals("text_embeddings_legacy", TaiModelCatalog.get(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID).priority);
     }
 
     @Test

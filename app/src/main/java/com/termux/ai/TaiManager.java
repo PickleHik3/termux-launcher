@@ -2224,6 +2224,10 @@ public final class TaiManager {
             JSONArray windowsArray = new JSONArray();
             for (int window : windows) windowsArray.put(window);
             item.put("_endpoint_windows", windowsArray);
+        } else if (localPath != null && localPath.toLowerCase(Locale.ROOT).endsWith(".litertlm")) {
+            // A .litertlm embedder (EmbeddingGemma 2) is one bundle with no seqNNNN in its name;
+            // its window is the input cap the LiteRT-LM embedding engine is built with.
+            item.put("_endpoint_context_window", LiteRtLmEmbeddingRuntime.MAX_INPUT_TOKENS);
         }
         int dimensions = TaiModelSpec.embeddingDimensionsFor(id, localPath);
         if (dimensions > 0) item.put("_endpoint_dimensions", dimensions);
@@ -4667,7 +4671,11 @@ public final class TaiManager {
             if (cut >= 0) normalized = normalized.substring(0, cut);
             cut = normalized.indexOf('#');
             if (cut >= 0) normalized = normalized.substring(0, cut);
+            String fileName = normalized.substring(normalized.lastIndexOf('/') + 1);
             if (normalized.endsWith(".tflite")) {
+                capabilities.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+            } else if (normalized.endsWith(".litertlm") && fileName.contains("embeddinggemma")) {
+                // EmbeddingGemma 2 ships as a .litertlm bundle served by LiteRtLmEmbeddingRuntime.
                 capabilities.add(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
             } else {
                 capabilities.add(TaiModelSpec.CAPABILITY_TEXT_CHAT);
