@@ -36,6 +36,8 @@ public class SystemWidgetView extends BuiltinWidgetView
     private static final String THERMOMETER = "";
 
     private static final long SAMPLE_INTERVAL_MS = 2000L;
+    /** The narrowest a 2×1 bar is drawn at; a row with less room for it shows only label and value. */
+    private static final int BAR_MIN_DP = 24;
     private static final int HISTORY = 32;
     /** A history older than this when the widget comes back on screen starts over. */
     private static final long HISTORY_FRESH_MS = 10_000L;
@@ -145,14 +147,22 @@ public class SystemWidgetView extends BuiltinWidgetView
     }
 
     /** The 2×1 row: a 30dp label, the bar taking the middle, a 36dp right-aligned value. */
-    @NonNull private LinearLayout barRow(@NonNull BuiltinWidgetUi ui, int label,
+    @NonNull private View barRow(@NonNull BuiltinWidgetUi ui, int label,
                                          @NonNull BuiltinWidgetUi.BarView rowBar,
                                          @NonNull TextView value) {
         TextView name = ui.mono(getContext().getString(label), 11f);
         BuiltinWidgetUi.size(name, ui.dp(30), ViewGroup.LayoutParams.WRAP_CONTENT);
         rowBar.setLayoutParams(new LinearLayout.LayoutParams(0, ui.dp(5), 1f));
         BuiltinWidgetUi.size(value, ui.dp(36), ViewGroup.LayoutParams.WRAP_CONTENT);
-        return ui.row(8, name, rowBar, value);
+        // At 109dp the card has 81dp inside its padding, 1dp less than the label and the value
+        // alone need with their gaps: the bar is left out of every row, and below 24dp it would
+        // not read as a bar anyway.
+        FitStack row = FitStack.row(getContext()).centerAcross()
+            .add(name, FitStack.ESSENTIAL, 0)
+            .addFlex(rowBar, 10, ui.dp(8), ui.dp(BAR_MIN_DP))
+            .add(value, FitStack.ESSENTIAL, ui.dp(8));
+        return BuiltinWidgetUi.size(row, ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT);
     }
 
     @NonNull private View buildTwoByTwo(@NonNull BuiltinWidgetUi ui) {
@@ -167,13 +177,18 @@ public class SystemWidgetView extends BuiltinWidgetView
         ramBar = ui.bar(0f, s.onTertiaryContainer, 5);
         tempBar = ui.bar(0f, s.warm, 5);
         diskBar = ui.bar(0f, s.done, 5);
-        LinearLayout groups = ui.column(0,
-            group(ui, R.string.bw_device_cpu_short, cpuValue, cpuBar), spacer(),
-            group(ui, R.string.bw_device_ram_short, ramValue, ramBar), spacer(),
-            group(ui, R.string.bw_device_temp_short, tempValue, tempBar), spacer(),
-            group(ui, R.string.bw_device_disk_short, diskValue, diskBar));
         uptime = ui.mono("", 10.5f);
-        LinearLayout root = ui.column(10, caption, BuiltinWidgetUi.flexTall(groups), uptime);
+        // At 115dp the four groups, the caption and the uptime are over a card high: the uptime
+        // goes first, then the caption, then the groups from the disk up; the groups share any
+        // room that is left between them.
+        FitStack root = FitStack.column(getContext())
+            .add(caption, 20, 0)
+            .add(group(ui, R.string.bw_device_cpu_short, cpuValue, cpuBar), FitStack.ESSENTIAL,
+                ui.dp(10))
+            .addElastic(group(ui, R.string.bw_device_ram_short, ramValue, ramBar), 50, 0)
+            .addElastic(group(ui, R.string.bw_device_temp_short, tempValue, tempBar), 40, 0)
+            .addElastic(group(ui, R.string.bw_device_disk_short, diskValue, diskBar), 30, 0)
+            .add(uptime, 10, ui.dp(10));
         inset(root, 14, 14, 14, 14, ui);
         return root;
     }
@@ -185,15 +200,15 @@ public class SystemWidgetView extends BuiltinWidgetView
     }
 
     /** The 2×2 group: label and value on one line, the bar under them. */
-    @NonNull private LinearLayout group(@NonNull BuiltinWidgetUi ui, int label,
-                                        @NonNull TextView value,
-                                        @NonNull BuiltinWidgetUi.BarView groupBar) {
+    @NonNull private View group(@NonNull BuiltinWidgetUi ui, int label,
+                                @NonNull TextView value,
+                                @NonNull BuiltinWidgetUi.BarView groupBar) {
         LinearLayout line = ui.row(8, ui.mono(getContext().getString(label), 11f),
             BuiltinWidgetUi.flex(value));
-        return ui.column(4, line, groupBar);
+        return BuiltinWidgetUi.size(ui.column(4, BuiltinWidgetUi.size(line,
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT), groupBar),
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
     }
-
-    @NonNull private View spacer() { return BuiltinWidgetUi.flexTall(new View(getContext())); }
 
     @NonNull private View buildFourByOne(@NonNull BuiltinWidgetUi ui) {
         BuiltinWidgetStyle s = ui.style;
