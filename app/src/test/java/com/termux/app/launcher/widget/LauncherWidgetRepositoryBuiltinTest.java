@@ -34,8 +34,8 @@ public class LauncherWidgetRepositoryBuiltinTest {
         WidgetTestFixtures.Memory memory = new WidgetTestFixtures.Memory();
         LauncherWidgetRepository repository = new LauncherWidgetRepository(memory);
         Bundle config = new Bundle();
-        config.putString("command", "uptime");
-        assertTrue(repository.putRecord(LauncherWidgetRecord.builtin(-1, "shell",
+        config.putString("title", "uptime");
+        assertTrue(repository.putRecord(LauncherWidgetRecord.builtin(-1, "battery",
             new WidgetCellRect(0, 1, 2, 2), 0, config)));
         assertEquals(5, new JSONObject(memory.value).getInt("version"));
 
@@ -43,10 +43,10 @@ public class LauncherWidgetRepositoryBuiltinTest {
         LauncherWidgetRecord record = reloaded.get(-1);
         assertNotNull(record);
         assertTrue(record.isBuiltin());
-        assertEquals("shell", record.builtinKind);
-        assertEquals(LauncherWidgetRecord.builtinProvider("shell"), record.provider);
+        assertEquals("battery", record.builtinKind);
+        assertEquals(LauncherWidgetRecord.builtinProvider("battery"), record.provider);
         assertEquals(new WidgetCellRect(0, 1, 2, 2), record.cell);
-        assertEquals("uptime", record.sizeOptions().getString("command"));
+        assertEquals("uptime", record.sizeOptions().getString("title"));
         assertEquals(1, reloaded.records().size());
     }
 

@@ -23,7 +23,6 @@ public final class BuiltinWidgetFactory {
             case NOTIFICATIONS: return new NotificationsWidgetView(context, services, style);
             case TASKS: return new TasksWidgetView(context, services, style);
             case NOTES: return new NotesWidgetView(context, services, style);
-            case SHELL: return new ShellWidgetView(context, services, style);
             case CALENDAR: return new CalendarWidgetView(context, services, style);
             default: throw new IllegalArgumentException("unknown kind " + kind);
         }

@@ -26,21 +26,4 @@
     <string name="bw_signals_notifications_description_empty">Notifications, nothing new</string>
     <string name="bw_signals_notifications_description_denied">Notifications. Allow notification access to see them here</string>
 
-    <!-- Command widget. -->
-    <string name="bw_signals_shell_field_command">Command</string>
-    <string name="bw_signals_shell_field_interval">Minutes between runs (0 runs it only when you tap)</string>
-    <string name="bw_signals_shell_field_title">Label (optional)</string>
-    <string name="bw_signals_shell_run">Run now</string>
-    <string name="bw_signals_shell_exit">exit %1$d</string>
-    <string name="bw_signals_shell_timed_out">timed out</string>
-    <string name="bw_signals_shell_failed">couldn\'t start</string>
-    <string name="bw_signals_shell_not_run">not run yet</string>
-    <string name="bw_signals_shell_running">running…</string>
-    <string name="bw_signals_shell_manual">on tap</string>
-    <string name="bw_signals_shell_status_duration">%1$s · %2$s</string>
-    <string name="bw_signals_shell_ago_every">%1$s · %2$s</string>
-    <!-- "Command uptime, exit 0, run 4 minutes ago" -->
-    <string name="bw_signals_shell_description">Command %1$s, %2$s, run %3$s</string>
-    <string name="bw_signals_shell_description_running">Command %1$s, running</string>
-    <string name="bw_signals_shell_description_none">Command %1$s, not run yet</string>
 </resources>
