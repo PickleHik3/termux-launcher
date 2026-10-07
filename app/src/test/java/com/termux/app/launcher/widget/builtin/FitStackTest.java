@@ -114,4 +114,26 @@ public class FitStackTest {
         layOut(stack, 150);
         assertEquals(2, stack.getChildCount());
     }
+
+    /**
+     * A line left out keeps taking updates while detached: a battery tick sets its text. A
+     * TextView without layout params throws from setText, and the first build crashed the
+     * launcher on every tick that way (2026-10-07).
+     */
+    @Test public void aChildLeftOutCanStillBeUpdated() {
+        android.widget.TextView kept = new android.widget.TextView(context);
+        kept.setText("kept");
+        android.widget.TextView dropped = new android.widget.TextView(context);
+        dropped.setText("dropped");
+        FitStack stack = FitStack.column(context)
+            .add(kept, FitStack.ESSENTIAL, 0)
+            .add(dropped, 1, 0);
+        layOut(stack, 1);
+        assertEquals(1, stack.getChildCount());
+        assertSame(kept, stack.getChildAt(0));
+
+        dropped.setText("still updated");
+        kept.setText("still updated");
+        assertEquals("still updated", dropped.getText().toString());
+    }
 }

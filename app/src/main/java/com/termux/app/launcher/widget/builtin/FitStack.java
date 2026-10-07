@@ -37,6 +37,18 @@ final class FitStack extends ViewGroup {
 
     private enum Kind { FIXED, FLEX, SHRINK }
 
+    /**
+     * Every child has layout params from the moment it joins, attached or not. A child left out
+     * is detached and keeps taking updates (a battery tick sets its text), and a TextView with
+     * no params throws from setText; the first build crashed the launcher on every tick that way
+     * (2026-10-07).
+     */
+    @NonNull private Slot slot(@NonNull View child, int rank, int gap, Kind kind, boolean elastic,
+                               int preferred, int minimum) {
+        if (child.getLayoutParams() == null) child.setLayoutParams(generateDefaultLayoutParams());
+        return new Slot(child, rank, gap, kind, elastic, preferred, minimum);
+    }
+
     private static final class Slot {
         final View view;
         final int rank;
@@ -82,7 +94,7 @@ final class FitStack extends ViewGroup {
 
     /** A content-sized child, {@code gapPx} after the one before it. */
     @NonNull FitStack add(@NonNull View child, int rank, int gapPx) {
-        slots.add(new Slot(child, rank, gapPx, Kind.FIXED, false, 0, 0));
+        slots.add(slot(child, rank, gapPx, Kind.FIXED, false, 0, 0));
         return this;
     }
 
@@ -91,27 +103,27 @@ final class FitStack extends ViewGroup {
      * other elastic children: {@code gapPx} at the least.
      */
     @NonNull FitStack addElastic(@NonNull View child, int rank, int gapPx) {
-        slots.add(new Slot(child, rank, gapPx, Kind.FIXED, true, 0, 0));
+        slots.add(slot(child, rank, gapPx, Kind.FIXED, true, 0, 0));
         return this;
     }
 
     /** A child that takes the room the others leave, and is left out if it cannot have {@code minPx}. */
     @NonNull FitStack addFlex(@NonNull View child, int rank, int gapPx, int minPx) {
-        slots.add(new Slot(child, rank, gapPx, Kind.FLEX, false, 0, minPx));
+        slots.add(slot(child, rank, gapPx, Kind.FLEX, false, 0, minPx));
         return this;
     }
 
     /** A child that wants {@code preferredPx} along the stack and takes as little as {@code minPx}. */
     @NonNull FitStack addShrink(@NonNull View child, int rank, int gapPx, int preferredPx,
                                 int minPx) {
-        slots.add(new Slot(child, rank, gapPx, Kind.SHRINK, false, preferredPx, minPx));
+        slots.add(slot(child, rank, gapPx, Kind.SHRINK, false, preferredPx, minPx));
         return this;
     }
 
     /** {@link #addShrink}, behind a gap that stretches as {@link #addElastic} does. */
     @NonNull FitStack addShrinkElastic(@NonNull View child, int rank, int gapPx, int preferredPx,
                                        int minPx) {
-        slots.add(new Slot(child, rank, gapPx, Kind.SHRINK, true, preferredPx, minPx));
+        slots.add(slot(child, rank, gapPx, Kind.SHRINK, true, preferredPx, minPx));
         return this;
     }
 
@@ -314,9 +326,7 @@ final class FitStack extends ViewGroup {
             boolean attached = slot.view.getParent() == this;
             if (slot.shown) {
                 if (!attached) {
-                    ViewGroup.LayoutParams params = slot.view.getLayoutParams();
-                    addViewInLayout(slot.view, index, params != null ? params
-                        : generateDefaultLayoutParams(), true);
+                    addViewInLayout(slot.view, index, slot.view.getLayoutParams(), true);
                 }
                 index++;
             } else if (attached) {
