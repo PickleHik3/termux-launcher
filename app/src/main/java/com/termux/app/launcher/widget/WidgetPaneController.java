@@ -374,14 +374,25 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 @Override public void onCatalog(long generation,
                                                 @NonNull List<WidgetAppGroup> groups) {
                     if (!pane.picker().isOpen()) return;
-                    pane.picker().adapter().setFitPredicate(WidgetPaneController.this::canFit);
+                    pane.picker().adapter().setFitPredicate(WidgetPaneController.this::fitsGrid);
                     pane.picker().showCatalog(groups);
                 }
             });
     }
 
-    private boolean canFit(@NonNull WidgetProviderItem item) {
+    /**
+     * Whether the widget fits the grid at all. A page with no room left is not this: the widget can
+     * still be held and carried to another page, so its card stays live. Only a span larger than
+     * the whole grid shuts the card, since no page anywhere could take it.
+     */
+    private boolean fitsGrid(@NonNull WidgetProviderItem item) {
         if (!item.fits || item.columnSpan <= 0 || item.rowSpan <= 0) return false;
+        WidgetGridDefinition grid = widgets.repository().gridDefinition();
+        return item.columnSpan <= grid.columns && item.rowSpan <= grid.rows;
+    }
+
+    private boolean canFit(@NonNull WidgetProviderItem item) {
+        if (!fitsGrid(item)) return false;
         return WidgetGridPlacementPolicy.findPlacement(widgets.repository().gridDefinition(),
             widgets.repository().recordsOnPage(currentPage), item.columnSpan, item.rowSpan).outcome
             == WidgetGridPlacementPolicy.Outcome.PLACED;
@@ -395,7 +406,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             repository.gridDefinition(), repository.recordsOnPage(currentPage),
             item.columnSpan, item.rowSpan);
         if (placement.outcome != WidgetGridPlacementPolicy.Outcome.PLACED) {
-            pane.picker().adapter().setFitPredicate(this::canFit);
+            pane.picker().adapter().setFitPredicate(this::fitsGrid);
             pane.picker().showNoSpace(item.columnSpan, item.rowSpan, repository.gridDefinition());
             return;
         }
@@ -406,7 +417,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         } else if (result == LauncherWidgetHostController.AddResult.READY) {
             pane.picker().close(); render(); liveOrigin = null;
         } else if (result == LauncherWidgetHostController.AddResult.NO_SPACE) {
-            pane.picker().adapter().setFitPredicate(this::canFit);
+            pane.picker().adapter().setFitPredicate(this::fitsGrid);
             pane.picker().showNoSpace(item.columnSpan, item.rowSpan, repository.gridDefinition());
         } else {
             pane.showNotice(messageFor(result)); liveOrigin = null;

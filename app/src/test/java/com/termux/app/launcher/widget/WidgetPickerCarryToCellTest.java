@@ -155,7 +155,7 @@ public class WidgetPickerCarryToCellTest {
         WidgetPickerProductionSelectionTest.Fixture fixture =
             new WidgetPickerProductionSelectionTest.Fixture(true);
         View card = openCard(fixture);
-        assertFalse(card.isEnabled());
+        assertTrue("a full page does not shut the card", card.isEnabled());
 
         hold(fixture, card);
 

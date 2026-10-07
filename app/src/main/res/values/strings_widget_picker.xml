@@ -8,7 +8,7 @@
     <string name="widget_picker_grid_full">No widget fits the grid.</string>
     <string name="widget_picker_card_span">%1$d × %2$d cells</string>
     <string name="widget_picker_card_span_minimum">%1$d × %2$d cells · minimum %3$d × %4$d</string>
-    <string name="widget_picker_card_description">%1$s, %2$s</string>
-    <string name="widget_picker_card_description_no_space">%1$s, %2$s, no space</string>
+    <string name="widget_picker_card_description">%1$s, %2$s, hold to place it on a page</string>
+    <string name="widget_picker_card_description_too_big">%1$s, %2$s, too big for this grid</string>
     <string name="widget_picker_app_description">%1$s, %2$s, %3$s</string>
 </resources>
