@@ -31,10 +31,6 @@ import java.util.concurrent.RejectedExecutionException;
  */
 public class SystemWidgetView extends BuiltinWidgetView
         implements SystemStatsController.Listener, BatterySource.Listener {
-    private static final String CHIP = "";
-    private static final String DRIVE = "";
-    private static final String THERMOMETER = "";
-
     private static final long SAMPLE_INTERVAL_MS = 2000L;
     /** The narrowest a 2×1 bar is drawn at; a row with less room for it shows only label and value. */
     private static final int BAR_MIN_DP = 24;
@@ -109,18 +105,22 @@ public class SystemWidgetView extends BuiltinWidgetView
         ramValue = ui.numeral("", 16f);
         tempValue = ui.numeral("", 16f);
         LinearLayout root = ui.column(7,
-            glyphRow(ui, CHIP, s.primary, cpuValue),
-            glyphRow(ui, DRIVE, s.onTertiaryContainer, ramValue),
-            glyphRow(ui, THERMOMETER, s.warm, tempValue));
+            glyphRow(ui, StatGlyphs.CPU, s.primary, R.string.bw_device_cpu, cpuValue),
+            glyphRow(ui, StatGlyphs.MEMORY, s.onTertiaryContainer, R.string.bw_device_ram,
+                ramValue),
+            glyphRow(ui, StatGlyphs.TEMPERATURE, s.warm, R.string.bw_device_temperature,
+                tempValue));
         root.setGravity(Gravity.CENTER_VERTICAL);
         inset(root, 12, 0, 12, 0, ui);
         return root;
     }
 
     @NonNull private LinearLayout glyphRow(@NonNull BuiltinWidgetUi ui, @NonNull String glyph,
-                                           @ColorInt int color, @NonNull TextView value) {
+                                           @ColorInt int color, int name,
+                                           @NonNull TextView value) {
         value.setGravity(Gravity.END);
-        return ui.row(4, ui.glyph(glyph, 13f, color), BuiltinWidgetUi.flex(value));
+        return ui.row(4, ui.statGlyph(glyph, 13f, color, getContext().getString(name)),
+            BuiltinWidgetUi.flex(value));
     }
 
     @NonNull private View buildTwoByOne(@NonNull BuiltinWidgetUi ui) {
@@ -132,9 +132,10 @@ public class SystemWidgetView extends BuiltinWidgetView
         ramBar = ui.bar(0f, s.onTertiaryContainer, 5);
         tempBar = ui.bar(0f, s.warm, 5);
         LinearLayout root = ui.column(8,
-            barRow(ui, R.string.bw_device_cpu_short, cpuBar, cpuValue),
-            barRow(ui, R.string.bw_device_ram_short, ramBar, ramValue),
-            barRow(ui, R.string.bw_device_temp_short, tempBar, tempValue));
+            barRow(ui, StatGlyphs.CPU, R.string.bw_device_cpu, cpuBar, cpuValue),
+            barRow(ui, StatGlyphs.MEMORY, R.string.bw_device_ram, ramBar, ramValue),
+            barRow(ui, StatGlyphs.TEMPERATURE, R.string.bw_device_temperature, tempBar,
+                tempValue));
         root.setGravity(Gravity.CENTER_VERTICAL);
         inset(root, 14, 0, 14, 0, ui);
         return root;
@@ -146,17 +147,16 @@ public class SystemWidgetView extends BuiltinWidgetView
         return value;
     }
 
-    /** The 2×1 row: a 30dp label, the bar taking the middle, a 36dp right-aligned value. */
-    @NonNull private View barRow(@NonNull BuiltinWidgetUi ui, int label,
+    /** The 2×1 row: the reading's glyph, the bar taking the middle, a 36dp right-aligned value. */
+    @NonNull private View barRow(@NonNull BuiltinWidgetUi ui, @NonNull String glyph, int label,
                                          @NonNull BuiltinWidgetUi.BarView rowBar,
                                          @NonNull TextView value) {
-        TextView name = ui.mono(getContext().getString(label), 11f);
-        BuiltinWidgetUi.size(name, ui.dp(30), ViewGroup.LayoutParams.WRAP_CONTENT);
+        TextView name = ui.statGlyph(glyph, 11f, ui.style.onSurfaceVariant,
+            getContext().getString(label));
         rowBar.setLayoutParams(new LinearLayout.LayoutParams(0, ui.dp(5), 1f));
         BuiltinWidgetUi.size(value, ui.dp(36), ViewGroup.LayoutParams.WRAP_CONTENT);
-        // At 109dp the card has 81dp inside its padding, 1dp less than the label and the value
-        // alone need with their gaps: the bar is left out of every row, and below 24dp it would
-        // not read as a bar anyway.
+        // A bar narrower than 24dp would not read as a bar: where the glyph and the value leave
+        // less than that between their gaps, the bar is left out of every row.
         FitStack row = FitStack.row(getContext()).centerAcross()
             .add(name, FitStack.ESSENTIAL, 0)
             .addFlex(rowBar, 10, ui.dp(8), ui.dp(BAR_MIN_DP))
@@ -168,7 +168,7 @@ public class SystemWidgetView extends BuiltinWidgetView
     @NonNull private View buildTwoByTwo(@NonNull BuiltinWidgetUi ui) {
         BuiltinWidgetStyle s = ui.style;
         View caption = ui.caption(getContext().getString(R.string.bw_device_system_caption),
-            CHIP, getContext().getString(R.string.bw_device_system_path));
+            StatGlyphs.CPU, getContext().getString(R.string.bw_device_system_path));
         cpuValue = groupValue(ui);
         ramValue = groupValue(ui);
         tempValue = groupValue(ui);
@@ -183,11 +183,14 @@ public class SystemWidgetView extends BuiltinWidgetView
         // room that is left between them.
         FitStack root = FitStack.column(getContext())
             .add(caption, 20, 0)
-            .add(group(ui, R.string.bw_device_cpu_short, cpuValue, cpuBar), FitStack.ESSENTIAL,
-                ui.dp(10))
-            .addElastic(group(ui, R.string.bw_device_ram_short, ramValue, ramBar), 50, 0)
-            .addElastic(group(ui, R.string.bw_device_temp_short, tempValue, tempBar), 40, 0)
-            .addElastic(group(ui, R.string.bw_device_disk_short, diskValue, diskBar), 30, 0)
+            .add(group(ui, StatGlyphs.CPU, R.string.bw_device_cpu, cpuValue, cpuBar),
+                FitStack.ESSENTIAL, ui.dp(10))
+            .addElastic(group(ui, StatGlyphs.MEMORY, R.string.bw_device_ram, ramValue, ramBar),
+                50, 0)
+            .addElastic(group(ui, StatGlyphs.TEMPERATURE, R.string.bw_device_temperature,
+                tempValue, tempBar), 40, 0)
+            .addElastic(group(ui, StatGlyphs.DISK, R.string.bw_device_storage, diskValue,
+                diskBar), 30, 0)
             .add(uptime, 10, ui.dp(10));
         inset(root, 14, 14, 14, 14, ui);
         return root;
@@ -199,12 +202,12 @@ public class SystemWidgetView extends BuiltinWidgetView
         return value;
     }
 
-    /** The 2×2 group: label and value on one line, the bar under them. */
-    @NonNull private View group(@NonNull BuiltinWidgetUi ui, int label,
+    /** The 2×2 group: glyph and value on one line, the bar under them. */
+    @NonNull private View group(@NonNull BuiltinWidgetUi ui, @NonNull String glyph, int label,
                                 @NonNull TextView value,
                                 @NonNull BuiltinWidgetUi.BarView groupBar) {
-        LinearLayout line = ui.row(8, ui.mono(getContext().getString(label), 11f),
-            BuiltinWidgetUi.flex(value));
+        LinearLayout line = ui.row(8, ui.statGlyph(glyph, 11f, ui.style.onSurfaceVariant,
+            getContext().getString(label)), BuiltinWidgetUi.flex(value));
         return BuiltinWidgetUi.size(ui.column(4, BuiltinWidgetUi.size(line,
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT), groupBar),
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -221,12 +224,13 @@ public class SystemWidgetView extends BuiltinWidgetView
         tempBar = ui.bar(0f, s.warm, 4);
         diskBar = ui.bar(0f, s.done, 4);
         LinearLayout root = ui.row(12,
-            BuiltinWidgetUi.flex(tile(ui, CHIP, s.primary, R.string.bw_device_cpu, cpuValue, cpuBar)),
-            BuiltinWidgetUi.flex(tile(ui, DRIVE, s.onTertiaryContainer, R.string.bw_device_ram,
-                ramValue, ramBar)),
-            BuiltinWidgetUi.flex(tile(ui, THERMOMETER, s.warm, R.string.bw_device_temp,
-                tempValue, tempBar)),
-            BuiltinWidgetUi.flex(tile(ui, DRIVE, s.done, R.string.bw_device_storage,
+            BuiltinWidgetUi.flex(tile(ui, StatGlyphs.CPU, s.primary, R.string.bw_device_cpu,
+                cpuValue, cpuBar)),
+            BuiltinWidgetUi.flex(tile(ui, StatGlyphs.MEMORY, s.onTertiaryContainer,
+                R.string.bw_device_ram, ramValue, ramBar)),
+            BuiltinWidgetUi.flex(tile(ui, StatGlyphs.TEMPERATURE, s.warm,
+                R.string.bw_device_temperature, tempValue, tempBar)),
+            BuiltinWidgetUi.flex(tile(ui, StatGlyphs.DISK, s.done, R.string.bw_device_storage,
                 diskValue, diskBar)));
         inset(root, 16, 0, 16, 0, ui);
         return root;
@@ -235,16 +239,14 @@ public class SystemWidgetView extends BuiltinWidgetView
     @NonNull private LinearLayout tile(@NonNull BuiltinWidgetUi ui, @NonNull String glyph,
                                        @ColorInt int color, int label, @NonNull TextView value,
                                        @NonNull BuiltinWidgetUi.BarView tileBar) {
-        TextView name = ui.text(getContext().getString(label), 11f, ui.style.sansBold,
-            ui.style.onSurfaceVariant);
-        LinearLayout head = ui.row(5, ui.glyph(glyph, 12f, color), BuiltinWidgetUi.flex(name));
+        TextView head = ui.statGlyph(glyph, 12f, color, getContext().getString(label));
         return ui.column(6, head, value, tileBar);
     }
 
     @NonNull private View buildFourByTwo(@NonNull BuiltinWidgetUi ui) {
         BuiltinWidgetStyle s = ui.style;
-        TextView label = ui.text(getContext().getString(R.string.bw_device_cpu), 12f, s.sansBold,
-            s.onSurfaceVariant);
+        TextView label = ui.statGlyph(StatGlyphs.CPU, 12f, s.onSurfaceVariant,
+            getContext().getString(R.string.bw_device_cpu));
         cpuValue = ui.numeral("", 30f);
         LinearLayout left = baseline(ui.row(8, label, cpuValue));
         left.setBaselineAlignedChildIndex(1);
@@ -258,9 +260,11 @@ public class SystemWidgetView extends BuiltinWidgetView
         tempTail = tailValue(ui);
         diskTail = tailValue(ui);
         LinearLayout tail = ui.row(12,
-            BuiltinWidgetUi.flex(tailPair(ui, R.string.bw_device_ram, ramTail)),
-            BuiltinWidgetUi.flex(tailPair(ui, R.string.bw_device_temp, tempTail)),
-            BuiltinWidgetUi.flex(tailPair(ui, R.string.bw_device_disk, diskTail)));
+            BuiltinWidgetUi.flex(tailPair(ui, StatGlyphs.MEMORY, R.string.bw_device_ram, ramTail)),
+            BuiltinWidgetUi.flex(tailPair(ui, StatGlyphs.TEMPERATURE,
+                R.string.bw_device_temperature, tempTail)),
+            BuiltinWidgetUi.flex(tailPair(ui, StatGlyphs.DISK, R.string.bw_device_storage,
+                diskTail)));
         tail.setBaselineAligned(false);
 
         LinearLayout root = ui.column(10, header, chart, tail);
@@ -274,10 +278,10 @@ public class SystemWidgetView extends BuiltinWidgetView
         return value;
     }
 
-    @NonNull private LinearLayout tailPair(@NonNull BuiltinWidgetUi ui, int label,
-                                           @NonNull TextView value) {
-        return baseline(ui.row(6, ui.mono(getContext().getString(label), 11f),
-            BuiltinWidgetUi.flex(value)));
+    @NonNull private LinearLayout tailPair(@NonNull BuiltinWidgetUi ui, @NonNull String glyph,
+                                           int label, @NonNull TextView value) {
+        return baseline(ui.row(6, ui.statGlyph(glyph, 11f, ui.style.onSurfaceVariant,
+            getContext().getString(label)), BuiltinWidgetUi.flex(value)));
     }
 
     /** A row whose children sit on one text baseline, the design's {@code align-items:baseline}. */

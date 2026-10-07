@@ -15,6 +15,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,11 +27,7 @@ import java.util.TimeZone;
  * at 4×2. Live from {@link BatterySource}; a tap opens the system's battery screen.
  */
 public class BatteryWidgetView extends BuiltinWidgetView implements BatterySource.Listener {
-    private static final String BOLT = "";
     private static final String PLUG = "";
-    private static final String BATTERY = "";
-    private static final String PHONE = "";
-    private static final String THERMOMETER = "";
 
     /** Below this the level is drawn in the error colour. */
     private static final int LOW_PERCENT = 15;
@@ -112,7 +109,7 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
         ringParams.gravity = Gravity.CENTER;
         root.addView(ring, ringParams);
 
-        ringGlyph = ui.glyph(BOLT, 13f, ui.style.done);
+        ringGlyph = ui.glyph(StatGlyphs.POWER, 13f, ui.style.done);
         level = ui.numeral("", 17f);
         level.setGravity(Gravity.CENTER);
         LinearLayout middle = ui.column(1, ringGlyph, level);
@@ -141,7 +138,7 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
 
     @NonNull private View buildTwoByTwo(@NonNull BuiltinWidgetUi ui) {
         View caption = ui.caption(getContext().getString(R.string.bw_device_battery_caption),
-            BATTERY, getContext().getString(R.string.bw_device_battery_path));
+            StatGlyphs.BATTERY, getContext().getString(R.string.bw_device_battery_path));
         level = ui.numeral("", 46f);
         level.setLetterSpacing(-0.03f);
         levelUnit = ui.text("%", 20f, ui.style.numerals, ui.style.onSurfaceVariant);
@@ -153,10 +150,12 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
         temperature = ui.text("", 12f, ui.style.monoMedium, ui.style.onSurface);
         power = ui.text("", 12f, ui.style.monoMedium, ui.style.onSurface);
         LinearLayout footer = ui.row(6,
-            BuiltinWidgetUi.flex(ui.column(2,
-                ui.mono(getContext().getString(R.string.bw_device_temp), 10.5f), temperature)),
-            BuiltinWidgetUi.flex(ui.column(2,
-                ui.mono(getContext().getString(R.string.bw_device_power), 10.5f), power)));
+            BuiltinWidgetUi.flex(ui.column(2, ui.statGlyph(StatGlyphs.TEMPERATURE, 10.5f,
+                ui.style.onSurfaceVariant, getContext().getString(R.string.bw_device_temperature)),
+                temperature)),
+            BuiltinWidgetUi.flex(ui.column(2, ui.statGlyph(StatGlyphs.POWER, 10.5f,
+                ui.style.onSurfaceVariant, getContext().getString(R.string.bw_device_power)),
+                power)));
         footer.setGravity(Gravity.TOP);
 
         // At 115dp the footer, the status and the caption are left out, in that order, before
@@ -179,10 +178,12 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
         power = ui.numeral("", 22f);
         powerBar = ui.bar(0f, ui.style.primary, 5);
         LinearLayout root = ui.row(12,
-            BuiltinWidgetUi.flex(tile(ui, PHONE, R.string.bw_device_phone, level, bar)),
-            BuiltinWidgetUi.flex(tile(ui, THERMOMETER, R.string.bw_device_temperature,
+            BuiltinWidgetUi.flex(tile(ui, StatGlyphs.BATTERY, R.string.bw_device_battery_caption,
+                level, bar)),
+            BuiltinWidgetUi.flex(tile(ui, StatGlyphs.TEMPERATURE, R.string.bw_device_temperature,
                 temperature, temperatureBar)),
-            BuiltinWidgetUi.flex(tile(ui, BOLT, R.string.bw_device_power, power, powerBar)));
+            BuiltinWidgetUi.flex(tile(ui, StatGlyphs.POWER, R.string.bw_device_power, power,
+                powerBar)));
         inset(root, 16, 0, 16, 0, ui);
         return root;
     }
@@ -190,11 +191,9 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
     @NonNull private FitStack tile(@NonNull BuiltinWidgetUi ui, @NonNull String glyph,
                                        int label, @NonNull TextView value,
                                        @NonNull BuiltinWidgetUi.BarView tileBar) {
-        TextView name = ui.text(getContext().getString(label), 11.5f, ui.style.sansBold,
-            ui.style.onSurfaceVariant);
-        LinearLayout head = ui.row(6, ui.glyph(glyph, 11.5f, ui.style.onSurface),
-            BuiltinWidgetUi.flex(name));
-        // At 56dp a tile is a pixel taller than the card: its bar goes, then its label.
+        TextView head = ui.statGlyph(glyph, 11.5f, ui.style.onSurface,
+            getContext().getString(label));
+        // At 56dp a tile is a pixel taller than the card: its bar goes, then its glyph.
         return FitStack.column(getContext())
             .add(head, 30, 0)
             .add(value, FitStack.ESSENTIAL, ui.dp(6))
@@ -247,7 +246,7 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
 
     /** The glyph + state line, in the state's colour; its text is the row's baseline. */
     @NonNull private LinearLayout statusRow(@NonNull BuiltinWidgetUi ui, float sp, int gapDp) {
-        statusGlyph = ui.glyph(BOLT, sp, ui.style.done);
+        statusGlyph = ui.glyph(StatGlyphs.POWER, sp, ui.style.done);
         status = ui.text("", sp, ui.style.sansBold, ui.style.done);
         LinearLayout row = ui.row(gapDp, statusGlyph, BuiltinWidgetUi.flex(status));
         row.setBaselineAlignedChildIndex(1);
@@ -319,10 +318,13 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
         if (status != null && statusGlyph != null) applyStatus(state, low);
 
         if (detail != null) {
-            detail.setText(state.charging && state.chargeTimeMs > 0
-                ? getContext().getString(R.string.bw_device_full_in,
-                    DeviceWidgetFormats.duration(state.chargeTimeMs))
-                : getContext().getString(R.string.bw_device_join, temp, watts));
+            if (state.charging && state.chargeTimeMs > 0) {
+                detail.setText(getContext().getString(R.string.bw_device_full_in,
+                    DeviceWidgetFormats.duration(state.chargeTimeMs)));
+                detail.setContentDescription(null);
+            } else {
+                showReadings(detail, temp, watts);
+            }
         }
         if (temperature != null) temperature.setText(temp);
         if (power != null) power.setText(watts);
@@ -334,12 +336,24 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
             powerBar.set(Double.isNaN(state.powerWatts) ? 0f
                 : (float) (state.powerWatts / POWER_SPAN_WATTS), s.primary);
         }
-        if (readings != null) {
-            readings.setText(getContext().getString(R.string.bw_device_join, temp, watts));
-        }
+        if (readings != null) showReadings(readings, temp, watts);
         if (chart != null) applyHistory(powered ? s.done : s.primary);
 
         setContentDescription(describe(state));
+    }
+
+    /** "{thermometer} 31.4°C · {bolt} 18 W", spoken with the words the glyphs stand for. */
+    private void showReadings(@NonNull TextView view, @NonNull String temp,
+                              @NonNull String watts) {
+        Context context = getContext();
+        view.setText(NerdFontSpans.span(context, context.getString(R.string.bw_device_join,
+            StatGlyphs.reading(StatGlyphs.TEMPERATURE, temp),
+            StatGlyphs.reading(StatGlyphs.POWER, watts))));
+        view.setContentDescription(context.getString(R.string.bw_device_join,
+            context.getString(R.string.bw_device_reading,
+                context.getString(R.string.bw_device_temperature), temp),
+            context.getString(R.string.bw_device_reading,
+                context.getString(R.string.bw_device_power), watts)));
     }
 
     private void applyStatus(@NonNull BatterySource.State state, boolean low) {
@@ -356,7 +370,7 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
             color = s.done;
         } else if (state.charging) {
             text = getContext().getString(R.string.bw_device_charging);
-            glyph = BOLT;
+            glyph = StatGlyphs.POWER;
             color = s.done;
             if (state.chargeTimeMs > 0 && statusForm != STATUS_PLAIN) {
                 String left = DeviceWidgetFormats.duration(state.chargeTimeMs);
