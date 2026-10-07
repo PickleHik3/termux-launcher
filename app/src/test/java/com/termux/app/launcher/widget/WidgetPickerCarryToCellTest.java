@@ -151,17 +151,210 @@ public class WidgetPickerCarryToCellTest {
         assertEquals(CHOSEN, added.cell);
     }
 
-    @Test public void aCardWithNoRoomRefusesTheHoldAsItRefusesTheTap() {
+    @Test public void aCardWithNoRoomOnThePageStillLiftsOnAHold() {
         WidgetPickerProductionSelectionTest.Fixture fixture =
             new WidgetPickerProductionSelectionTest.Fixture(true);
         View card = openCard(fixture);
-        assertFalse(card.isEnabled());
+        assertTrue("a full page does not shut the card", card.isEnabled());
 
         hold(fixture, card);
 
-        assertFalse(fixture.pane.widgetDragLayer().isLifted());
-        assertTrue("the sheet stays up to say so", fixture.pane.picker().isOpen());
+        assertTrue("the hold takes it out of the sheet all the same",
+            fixture.pane.widgetDragLayer().isLifted());
+        assertFalse(fixture.pane.picker().isOpen());
         assertEquals(0, fixture.platform.allocations);
+
+        // Over the full page the ghost says there is no room, and letting go there adds nothing.
+        Rect target = paneBounds(fixture, FIRST_FREE);
+        move(fixture, target.centerX(), target.centerY());
+        assertTrue(fixture.pane.widgetDragLayer().ghostBlocked());
+        up(fixture, target.centerX(), target.centerY());
+        assertEquals(0, fixture.platform.allocations);
+        assertFalse(fixture.pane.widgetDragLayer().isLifted());
+    }
+
+    // ---- turning the page at the pane's edge ------------------------------------------------
+
+    /**
+     * A card held near the pane's edge starts the carry inside the band. The band must not count
+     * until the finger has moved a band's width away, or the page would turn 350 ms after the
+     * hold with the finger never having moved.
+     */
+    @Test public void aCardHeldInsideTheBandDoesNotTurnThePageUntilTheFingerMoves() {
+        WidgetPickerProductionSelectionTest.Fixture fixture =
+            new WidgetPickerProductionSelectionTest.Fixture(true);
+        fixture.platform.nextId = 100;
+        View card = openCard(fixture);
+        float edge = trailingEdge(fixture);
+
+        send(card, MotionEvent.ACTION_DOWN, edge, 10);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(PAST_THE_HOLD_MS, TimeUnit.MILLISECONDS);
+        assertTrue("the widget is in the air", fixture.pane.widgetDragLayer().isLifted());
+        settleAtTheEdge();
+        assertEquals("no page while the finger has not moved", 1, fixture.repository.pageCount());
+
+        move(fixture, edge - 4, 60);  // A wobble inside the band is not a move away.
+        settleAtTheEdge();
+        assertEquals(1, fixture.repository.pageCount());
+
+        Rect target = paneBounds(fixture, CHOSEN);
+        move(fixture, target.centerX(), target.centerY());
+        move(fixture, edge, target.centerY());
+        settleAtTheEdge();
+        assertEquals("the finger came back to the band on purpose", 2, fixture.repository.pageCount());
+        up(fixture, edge, target.centerY());
+    }
+
+    @Test public void heldAtTheTrailingEdgePastTheLastPageMakesAPageAndTheDropKeepsIt() {
+        WidgetPickerProductionSelectionTest.Fixture fixture =
+            new WidgetPickerProductionSelectionTest.Fixture(true);
+        // The full page uses ids 1 to 24; the bound widget takes one past them.
+        fixture.platform.nextId = 100;
+        assertEquals("one full page, and nothing behind it", 1, fixture.repository.pageCount());
+        View card = openCard(fixture);
+
+        hold(fixture, card);
+        Rect target = paneBounds(fixture, CHOSEN);
+        move(fixture, trailingEdge(fixture), target.centerY());
+        settleAtTheEdge();
+
+        assertEquals("a page was made under the widget", 2, fixture.repository.pageCount());
+        assertEquals("and the pane turned onto it", 1, fixture.controller.currentPage());
+        assertTrue("the widget is still in the air", fixture.pane.widgetDragLayer().isLifted());
+
+        move(fixture, target.centerX(), target.centerY());
+        assertEquals(target, fixture.pane.widgetDragLayer().ghostBounds());
+        assertFalse(fixture.pane.widgetDragLayer().ghostBlocked());
+        up(fixture, target.centerX(), target.centerY());
+
+        assertEquals(1, fixture.platform.allocations);
+        LauncherWidgetRecord added = addedRecord(fixture);
+        assertNotNull(added);
+        assertEquals("it landed on the page under the finger", 1, added.page);
+        assertEquals(CHOSEN, added.cell);
+        assertEquals("which is now a page like any other", 2, fixture.repository.pageCount());
+        assertEquals(1, fixture.controller.currentPage());
+        assertFalse(fixture.pane.widgetDragLayer().isLifted());
+    }
+
+    @Test public void lettingGoOffTheGridAfterMakingAPageTakesThePageAway() {
+        WidgetPickerProductionSelectionTest.Fixture fixture =
+            new WidgetPickerProductionSelectionTest.Fixture(true);
+        View card = openCard(fixture);
+
+        hold(fixture, card);
+        move(fixture, trailingEdge(fixture), paneBounds(fixture, CHOSEN).centerY());
+        settleAtTheEdge();
+        assertEquals(2, fixture.repository.pageCount());
+
+        move(fixture, 200, -60);
+        up(fixture, 200, -60);
+
+        assertEquals(0, fixture.platform.allocations);
+        assertEquals("the page the carry made went with it", 1, fixture.repository.pageCount());
+        assertEquals(0, fixture.controller.currentPage());
+        assertFalse(fixture.pane.widgetDragLayer().isLifted());
+    }
+
+    @Test public void oneCarryMakesAtMostOnePage() {
+        WidgetPickerProductionSelectionTest.Fixture fixture =
+            new WidgetPickerProductionSelectionTest.Fixture(true);
+        // The full page uses ids 1 to 24; the bound widget takes one past them.
+        fixture.platform.nextId = 100;
+        View card = openCard(fixture);
+
+        hold(fixture, card);
+        Rect target = paneBounds(fixture, CHOSEN);
+        // Held at the trailing edge long enough for three turns.
+        move(fixture, trailingEdge(fixture), target.centerY());
+        settleAtTheEdge();
+        settleAtTheEdge();
+        settleAtTheEdge();
+
+        assertEquals("one page was made, not three", 2, fixture.repository.pageCount());
+        assertEquals(1, fixture.controller.currentPage());
+        move(fixture, target.centerX(), target.centerY());
+        up(fixture, target.centerX(), target.centerY());
+        LauncherWidgetRecord added = addedRecord(fixture);
+        assertNotNull(added);
+        assertEquals(1, added.page);
+        assertEquals(2, fixture.repository.pageCount());
+    }
+
+    @Test public void theLeadingEdgeNeverMakesAPage() {
+        WidgetPickerProductionSelectionTest.Fixture fixture =
+            new WidgetPickerProductionSelectionTest.Fixture(true);
+        View card = openCard(fixture);
+
+        hold(fixture, card);
+        move(fixture, 5, paneBounds(fixture, CHOSEN).centerY());
+        settleAtTheEdge();
+        settleAtTheEdge();
+
+        assertEquals("nothing is made before the first page", 1, fixture.repository.pageCount());
+        assertEquals(0, fixture.controller.currentPage());
+        move(fixture, 200, -60);
+        up(fixture, 200, -60);
+        assertEquals(0, fixture.platform.allocations);
+        assertEquals(1, fixture.repository.pageCount());
+    }
+
+    @Test public void aCarryCutShortByTheLauncherStoppingTakesItsPageAway() {
+        WidgetPickerProductionSelectionTest.Fixture fixture =
+            new WidgetPickerProductionSelectionTest.Fixture(true);
+        View card = openCard(fixture);
+
+        hold(fixture, card);
+        move(fixture, trailingEdge(fixture), paneBounds(fixture, CHOSEN).centerY());
+        settleAtTheEdge();
+        assertEquals(2, fixture.repository.pageCount());
+
+        fixture.controller.onStop();
+
+        assertFalse(fixture.pane.carrying());
+        assertFalse(fixture.pane.widgetDragLayer().isLifted());
+        assertEquals(1, fixture.repository.pageCount());
+        assertEquals(0, fixture.controller.currentPage());
+        assertEquals(0, fixture.platform.allocations);
+    }
+
+    @Test public void aWidgetLargerThanTheGridStillRefusesTheHoldAndTheTap() {
+        WidgetPickerProductionSelectionTest.Fixture fixture =
+            new WidgetPickerProductionSelectionTest.Fixture(false);
+        // Wider and taller than any grid this pane could hold.
+        fixture.info.minWidth = 20000;
+        fixture.info.minHeight = 20000;
+        fixture.info.targetCellWidth = 40;
+        fixture.info.targetCellHeight = 40;
+        View card = openCard(fixture);
+        assertFalse("a widget no page could take is shut", card.isEnabled());
+
+        assertFalse(card.performClick());
+        hold(fixture, card);
+
+        assertFalse(fixture.pane.widgetDragLayer().isLifted());
+        assertTrue(fixture.pane.picker().isOpen());
+        assertEquals(0, fixture.platform.allocations);
+        assertEquals(1, fixture.repository.pageCount());
+    }
+
+    /** The one widget the carry added, on a page after the full one. */
+    private static LauncherWidgetRecord addedRecord(
+            WidgetPickerProductionSelectionTest.Fixture fixture) {
+        for (LauncherWidgetRecord record : fixture.repository.records()) {
+            if (record.cell.equals(CHOSEN) && record.page != 0) return record;
+        }
+        return null;
+    }
+
+    /** Just inside the trailing edge band, in pane coordinates. */
+    private static float trailingEdge(WidgetPickerProductionSelectionTest.Fixture fixture) {
+        return fixture.pane.getWidth() - 5;
+    }
+
+    /** Comfortably past the 350 ms the edge band waits before it turns the page. */
+    private static void settleAtTheEdge() {
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(400L, TimeUnit.MILLISECONDS);
     }
 
     // ---- the gesture, as the framework delivers it ------------------------------------------

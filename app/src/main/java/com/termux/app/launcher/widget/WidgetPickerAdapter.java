@@ -7,6 +7,7 @@ import android.graphics.Outline;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.view.Gravity;
+import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -23,6 +24,7 @@ import androidx.recyclerview.widget.DiffUtil;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.R;
+import com.termux.app.haptics.Haptics;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.ArrayList;
@@ -50,6 +52,7 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         default void onProviderHeld(@NonNull WidgetProviderItem item, @NonNull View card,
                                     float rawX, float rawY) { }
     }
+    /** Whether a widget fits the grid at all; a card that does not is shut. */
     public interface FitPredicate { boolean canFit(@NonNull WidgetProviderItem item); }
     public interface PreviewLoader {
         /**
@@ -228,12 +231,14 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
             spanText = res.getString(R.string.widget_picker_card_span, item.columnSpan, item.rowSpan);
         }
         span.setText(spanText);
+        // Only a widget larger than the whole grid is shut: one that merely has no room on the
+        // page on screen stays live, since a hold can still carry it to another page.
         boolean enabled = fit.canFit(item);
         holder.itemView.setEnabled(enabled); holder.itemView.setAlpha(enabled ? 1f : 0.45f);
         holder.itemView.setClickable(enabled); makeKeyboardReachable(holder.itemView);
         holder.itemView.setContentDescription(res.getString(enabled
             ? R.string.widget_picker_card_description
-            : R.string.widget_picker_card_description_no_space, item.label, spanText));
+            : R.string.widget_picker_card_description_too_big, item.label, spanText));
         holder.itemView.setOnClickListener(enabled ? view -> listener.onProviderSelected(item) : null);
         // The hold rides alongside the tap rather than replacing it: the listener never consumes
         // an event, so a press that is not held long enough is the click it has always been.
@@ -263,7 +268,7 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
             cell.itemView.setOnTouchListener(this);
         }
 
-        /** A card with no room on the page refuses the hold exactly as it refuses the tap. */
+        /** A card too big for the grid refuses the hold exactly as it refuses the tap. */
         void arm(boolean value) { armed = value; if (!value) stop(); }
 
         void stop() {
@@ -298,6 +303,7 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
             watching = false;
             Object bound = cell.bound;
             if (!(bound instanceof WidgetProviderItem)) return;
+            Haptics.tick(cell.itemView, HapticFeedbackConstants.LONG_PRESS);
             listener.onProviderHeld((WidgetProviderItem) bound, cell.itemView, rawX, rawY);
         }
     }

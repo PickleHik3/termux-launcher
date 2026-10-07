@@ -58,6 +58,9 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
     private final RecyclerView list;
     private final WidgetPickerAdapter adapter;
     private final int slop;
+    /** A hint lasts as long as the pane's own notice does, then the sheet's standing notice returns. */
+    private static final long HINT_MS = 3500L;
+    private final Runnable expireHint = this::updateNotice;
     private boolean open;
     @Nullable private SearchFocusListener searchFocusListener;
     private boolean searchFocused;
@@ -113,9 +116,11 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
         searchParams.setMargins(pad, dp(4), pad, dp(4));
         sheet.addView(searchLayout, searchParams);
-        notice = new TextView(context); notice.setPadding(pad, dp(4), pad, dp(8));
+        notice = new TextView(context); notice.setTag("notice");
+        notice.setPadding(pad, dp(4), pad, dp(8));
         M3.textAppearance(notice, com.google.android.material.R.attr.textAppearanceBodyMedium);
         notice.setTextColor(M3.onSurfaceVariant(context));
+        notice.setAccessibilityLiveRegion(ACCESSIBILITY_LIVE_REGION_POLITE);
         notice.setVisibility(GONE); sheet.addView(notice);
         list = new RecyclerView(context); list.setLayoutManager(new LinearLayoutManager(context));
         list.setNestedScrollingEnabled(true); list.setFocusable(false);
@@ -227,6 +232,7 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
     }
 
     private void updateNotice() {
+        notice.removeCallbacks(expireHint);
         if (loading) return;
         if (catalogEmpty) { title.setText(R.string.widget_picker_title); showNotice(getContext().getString(R.string.widget_picker_empty)); return; }
         if (adapter.searchFoundNothing()) {
@@ -244,7 +250,16 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
         showNotice(getContext().getString(R.string.widget_picker_no_space, columns, rows,
             grid.columns, grid.rows));
     }
+    /**
+     * The widget has no room on the page on screen, though it fits the grid: say how to put it on
+     * another page. The sheet stays up, and the hint goes after a while.
+     */
+    public void showNoRoomOnPage() {
+        showNotice(getContext().getString(R.string.widget_picker_no_room_on_page));
+        notice.postDelayed(expireHint, HINT_MS);
+    }
     public void showNotice(@NonNull String message) {
+        notice.removeCallbacks(expireHint);
         notice.setText(message); notice.setContentDescription(message); notice.setVisibility(VISIBLE);
     }
 
@@ -322,6 +337,7 @@ public final class WidgetPickerSheetView extends CoordinatorLayout {
 
     /** A closing picker keeps nothing: not the query, and not the keyboard it borrowed. */
     private void clearSearch() {
+        notice.removeCallbacks(expireHint);
         loading = false; catalogEmpty = false;
         if (search.getText().length() > 0) search.setText("");
         if (search.hasFocus()) search.clearFocus();
