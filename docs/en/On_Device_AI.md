@@ -115,7 +115,7 @@ Common capability names are:
 | `image_input` | Images can be included in a prompt |
 | `audio_input` | Audio can be included in a prompt |
 | `tool_use` | The model can return structured function/tool calls |
-| `text_embeddings` | Converts text into embedding vectors instead of chat text |
+| `text_embeddings` | Converts text into embedding vectors instead of chat text (EmbeddingGemma 2 Text+Vision 440M is the recommended embedder) |
 | `code` | Tuned or intended for programming tasks |
 | `reasoning` | Intended for multi-step reasoning |
 | `multilingual` | Intended for more than one language |
@@ -249,6 +249,9 @@ You can import an existing local package:
 - LiteRT-LM `.litertlm` or `.task` files
 - MNN model directories containing `config.json` and all required sidecar files
 - LiteRT EmbeddingGemma `.tflite` packages with their required tokenizer files
+- EmbeddingGemma 2 `.litertlm` files (`embeddinggemma-2-text-vision-440m.litertlm`,
+  `embeddinggemma-2-text-270m.litertlm`), which carry their own tokenizer; a file name containing
+  `embeddinggemma` imports as an embedder
 
 ```sh
 tai import /absolute/path/to/model.litertlm MyModelName

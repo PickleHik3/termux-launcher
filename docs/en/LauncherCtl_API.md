@@ -575,11 +575,13 @@ Request fields beyond the OpenAI basics (`model`, `input`, `dimensions`):
 - `title`: an optional document heading (for example a note's title), folded into the document prefix in place of `none`. Ignored for `input_type: "query"`.
 - `encoding_format`: `"float"` (default) or `"base64"` (standard base64 of the vector's little-endian float32 bytes, OpenAI's shape).
 
-Each `data[i]` also reports `tokens` (the token count before any truncation; body and prefix combined, BOS/EOS excluded) and `truncated` (whether the body had to be cut to fit the model's window — the prefix itself is never the part that is cut). A long input is trimmed, never a 500.
+Each `data[i]` also reports `tokens` (the token count before any truncation; body and prefix combined, BOS/EOS excluded) and `truncated` (whether the body had to be cut to fit the model's window — the prefix itself is never the part that is cut). A long input is trimmed, never a 500. EmbeddingGemma 2 `.litertlm` models and MNN embedders expose no token count: their items carry `truncated: false` and no `tokens` field, and `usage.prompt_tokens` is `0`, so treat a missing `tokens` as "length unknown".
 
 Dawn brief items 5 and 6, useful for a client that indexes in the background: while a chat generation is running elsewhere in the process, embeddings run throttled (background thread priority) so they do not slow the live reply; every embedder's `/v1/models` entry states this policy as `_endpoint_throttle_while_generating: "priority"`, and `/v1/ai/runtime` `runtime.activeGeneration` says when it applies. A load that cannot fit in memory returns `503` with a `Retry-After` header and `code: "embedding_memory"`, distinct from the `429`/`Retry-After` a request over the 60/minute rate limit gets.
 
 LiteRT EmbeddingGemma `.tflite` installs require `sentencepiece.model` in the same model directory. New downloads fetch that sidecar automatically. Older installs that only contain the `.tflite` return `embedding_tokenizer_missing` until the model is re-downloaded or the sidecar is added.
+
+EmbeddingGemma 2 (`embeddinggemma-2-text-vision-440m`, the recommended embedder, and `embeddinggemma-2-text-270m`) ships as a single `.litertlm` bundle served by LiteRT-LM's embedding engine. The bundle carries its own tokenizer, so there is no sidecar, and the files need LiteRT-LM 0.18.0 or later. It answers in the same shape as above with `_runtime: "litertlm-embedding"`, text input only (the 440M's image input is not served yet), 768 dimensions with the same Matryoshka sizes, and the same `input_type`/`title` prefixes. The engine is built with a 2048-token input cap, which `/v1/models` reports as `_endpoint_context_window: 2048` (no `_endpoint_windows`). A `.litertlm` import whose file name contains `embeddinggemma` is classed as `text_embeddings` when no capabilities are given.
 
 The embedder's `/v1/models` entry additionally carries `_endpoint_dimensions` (the model's native output width; recognised families only), `_endpoint_matryoshka_dims` (the only sizes `dimensions` accepts when listed, largest first; any other size gets `400 invalid_dimensions`), `_endpoint_normalized` (`true`: every vector is L2-normalised), `_endpoint_max_batch`, and a stable `_revision` (a cheap hash of the model file's name/size/mtime, never its bytes) a client can use to know when to rebuild its index.
 
@@ -628,7 +630,7 @@ calls this route (progress on stderr, the PNG saved to `--out`, default `./tai-i
 
 #### `POST /v1/tokenize`
 
-`{model, input}` in, `{tokens: n}` out: the installed embedding model's own tokenizer, with no task prefix and no BOS/EOS framing added — just the raw count, so a client can split long text on real token counts instead of estimating from characters. Only the LiteRT/EmbeddingGemma path exposes a tokenizer today; other backends return `capability_not_supported`.
+`{model, input}` in, `{tokens: n}` out: the installed embedding model's own tokenizer, with no task prefix and no BOS/EOS framing added — just the raw count, so a client can split long text on real token counts instead of estimating from characters. Only the `.tflite` EmbeddingGemma path exposes a tokenizer today; an EmbeddingGemma 2 `.litertlm` model and other backends return `501 capability_not_supported`.
 
 ### Ollama-compatible
 

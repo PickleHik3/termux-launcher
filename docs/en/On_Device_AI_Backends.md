@@ -46,7 +46,7 @@ and response shapes, rate limits, and error codes; this page is the runtime and 
 | Audio input | Yes (`-audio` id) | No — `capability_not_supported` |
 | Tool calling | Native, through `tool_use` | Prompt-based (`_tool_mode: "prompt_fallback"`) |
 | Thinking / reasoning traces | Yes (`llm_thinking`) | No |
-| Embeddings | Yes (`.tflite` EmbeddingGemma) | Yes, where the model advertises `text_embeddings` |
+| Embeddings | Yes (`.tflite` EmbeddingGemma, `.litertlm` EmbeddingGemma 2) | Yes, where the model advertises `text_embeddings` |
 | Speculative decoding | Runtime flag, own auto/on/off | EAGLE-3 draft head, off by default |
 | Runs on | CPU or GPU | CPU or GPU (OpenCL) |
 
@@ -64,18 +64,27 @@ Image generation (`/v1/ai/images/generations`, `tai image`) is a third MNN use, 
 
 `/v1/embeddings` accepts a string or an array of strings (at most `_endpoint_max_batch`, currently
 64) and returns float (or, with `encoding_format:"base64"`, base64) vectors in OpenAI's `embedding`
-list shape, each carrying `tokens` and `truncated`. Use it only with models whose `/v1/models`
-`_capabilities` include `text_embeddings`. LiteRT EmbeddingGemma `.tflite` packages need
-`sentencepiece.model` beside the model file; new downloads fetch that sidecar automatically. Older
-installs missing the sidecar return `embedding_tokenizer_missing`.
+list shape, each carrying `truncated` and, where the runtime can count them, `tokens`. Use it only
+with models whose `/v1/models` `_capabilities` include `text_embeddings`. LiteRT EmbeddingGemma
+`.tflite` packages need `sentencepiece.model` beside the model file; new downloads fetch that
+sidecar automatically. Older installs missing the sidecar return `embedding_tokenizer_missing`.
+
+EmbeddingGemma 2 (the recommended Text+Vision 440M and the Text 270M) is one `.litertlm` bundle
+with its tokenizer inside, so there is no sidecar; it needs LiteRT-LM 0.18.0 or later. It runs on
+the CPU through LiteRT-LM's embedding engine (`_runtime: "litertlm-embedding"`), one engine at a
+time, built with a 2048-token input cap that `/v1/models` reports as `_endpoint_context_window`.
+The engine has no tokenizer API, so its items carry no `tokens`, `usage` is zero, and
+`/v1/tokenize` answers `501 capability_not_supported` for it. Text input only for now. At most one
+LiteRT embedder is resident: using the `.tflite` one closes the `.litertlm` one and the other way
+round.
 
 `input_type: "query"` or `"document"` (default) selects EmbeddingGemma's trained task prefix,
 applied on the server and counted inside the model's window; an optional `title` folds into the
 document prefix. While a chat generation is running, embeddings run throttled (background thread
 priority) so they never slow the live reply, and a load that does not fit in memory returns `503`
 with `Retry-After` and `code: "embedding_memory"` rather than the chat path's `409`. `/v1/tokenize`
-(`{model, input}` → `{tokens: n}`) uses the same tokenizer with no prefix, for splitting text on
-real token counts.
+(`{model, input}` → `{tokens: n}`) uses the `.tflite` model's tokenizer with no prefix, for
+splitting text on real token counts.
 
 EmbeddingGemma installs a fixed-shape graph per context window (`seq256`/`seq512`/`seq1024`/
 `seq2048`), and a short input on a big window still pays that window's full inference cost. A
