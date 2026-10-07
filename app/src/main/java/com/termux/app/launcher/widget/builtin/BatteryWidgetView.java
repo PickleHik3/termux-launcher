@@ -34,6 +34,8 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
 
     /** Below this the level is drawn in the error colour. */
     private static final int LOW_PERCENT = 15;
+    /** The shortest the 4×2 history chart is drawn at; a card with less room leaves it out. */
+    private static final int CHART_MIN_DP = 20;
     /** The temperature tile's bar runs 0..60°C, the power tile's 0..30 W. */
     private static final float TEMPERATURE_SPAN_TENTHS = 600f;
     private static final float POWER_SPAN_WATTS = 30f;
@@ -104,9 +106,9 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
 
     @NonNull private View buildOneByOne(@NonNull BuiltinWidgetUi ui) {
         FrameLayout root = new FrameLayout(getContext());
-        int ringSize = ui.dp(68);
-        ring = new BatteryRingView(getContext(), ui.style);
-        FrameLayout.LayoutParams ringParams = new FrameLayout.LayoutParams(ringSize, ringSize);
+        ring = new BatteryRingView(getContext(), ui.style, 68);
+        FrameLayout.LayoutParams ringParams = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         ringParams.gravity = Gravity.CENTER;
         root.addView(ring, ringParams);
 
@@ -128,8 +130,11 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
         LinearLayout top = baseline(ui.row(8, level, BuiltinWidgetUi.flex(statusRow)));
         bar = ui.bar(0f, ui.style.primary, 8);
         detail = ui.mono("", 10.5f);
-        LinearLayout root = ui.column(8, top, bar, detail);
-        root.setGravity(Gravity.CENTER_VERTICAL);
+        // At 56dp the temperature line and bar fill the card: the line under the bar goes.
+        FitStack root = FitStack.column(getContext()).centerAlong()
+            .add(top, FitStack.ESSENTIAL, 0)
+            .add(bar, 20, ui.dp(8))
+            .add(detail, 10, ui.dp(8));
         inset(root, 14, 0, 14, 0, ui);
         return root;
     }
@@ -154,9 +159,14 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
                 ui.mono(getContext().getString(R.string.bw_device_power), 10.5f), power)));
         footer.setGravity(Gravity.TOP);
 
-        LinearLayout root = ui.column(8, caption, levelRow, bar, statusRow,
-            BuiltinWidgetUi.flexTall(new View(getContext())), footer);
-        ((LinearLayout.LayoutParams) levelRow.getLayoutParams()).topMargin += ui.dp(4);
+        // At 115dp the footer, the status and the caption are left out, in that order, before
+        // the bar; the level stays. The level sits 4dp lower than the 8dp gap under the caption.
+        FitStack root = FitStack.column(getContext())
+            .add(caption, 30, 0)
+            .add(levelRow, FitStack.ESSENTIAL, ui.dp(12))
+            .add(bar, 40, ui.dp(8))
+            .add(statusRow, 20, ui.dp(8))
+            .addElastic(footer, 10, ui.dp(16));
         inset(root, 14, 14, 14, 14, ui);
         return root;
     }
@@ -177,14 +187,18 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
         return root;
     }
 
-    @NonNull private LinearLayout tile(@NonNull BuiltinWidgetUi ui, @NonNull String glyph,
+    @NonNull private FitStack tile(@NonNull BuiltinWidgetUi ui, @NonNull String glyph,
                                        int label, @NonNull TextView value,
                                        @NonNull BuiltinWidgetUi.BarView tileBar) {
         TextView name = ui.text(getContext().getString(label), 11.5f, ui.style.sansBold,
             ui.style.onSurfaceVariant);
         LinearLayout head = ui.row(6, ui.glyph(glyph, 11.5f, ui.style.onSurface),
             BuiltinWidgetUi.flex(name));
-        return ui.column(6, head, value, tileBar);
+        // At 56dp a tile is a pixel taller than the card: its bar goes, then its label.
+        return FitStack.column(getContext())
+            .add(head, 30, 0)
+            .add(value, FitStack.ESSENTIAL, ui.dp(6))
+            .add(tileBar, 10, ui.dp(6));
     }
 
     @NonNull private View buildFourByTwo(@NonNull BuiltinWidgetUi ui) {
@@ -192,8 +206,8 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
         level.setLetterSpacing(-0.03f);
         levelUnit = ui.text("%", 18f, ui.style.numerals, ui.style.onSurfaceVariant);
         statusForm = STATUS_FULL_IN;
-        LinearLayout left = ui.column(6, baseline(ui.row(4, level, levelUnit)),
-            statusRow(ui, 12f, 4));
+        LinearLayout levelRow = baseline(ui.row(4, level, levelUnit));
+        LinearLayout statusRow = statusRow(ui, 12f, 4);
 
         readings = ui.mono("", 10.5f);
         readings.setGravity(Gravity.END);
@@ -202,21 +216,31 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
         LinearLayout right = ui.column(3, readings, window);
         right.setGravity(Gravity.END);
 
-        LinearLayout header = ui.row(12, BuiltinWidgetUi.flex(left), right);
+        LinearLayout header = ui.row(12, BuiltinWidgetUi.flex(levelRow), right);
         header.setBaselineAligned(false);
         header.setGravity(Gravity.TOP);
 
-        chart = BuiltinWidgetUi.flexTall(new SparkBarsView(getContext(), ui.style));
+        chart = new SparkBarsView(getContext(), ui.style);
+        chart.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0));
 
-        LinearLayout axisRow = ui.row(0);
+        FitStack axisRow = FitStack.row(getContext()).centerAcross();
         for (int i = 0; i < 5; i++) {
-            if (i > 0) axisRow.addView(BuiltinWidgetUi.flex(new View(getContext())));
             TextView label = ui.mono("", 10f);
             axis.add(label);
-            axisRow.addView(label);
+            axisRow.addElastic(label, FitStack.ESSENTIAL, 0);
         }
 
-        LinearLayout root = ui.column(10, header, chart, axisRow);
+        // At 115dp the level and the history chart share the card: the hour axis goes first,
+        // then the status line under the level; the chart is left out only if it would be
+        // under 20dp tall.
+        FitStack root = FitStack.column(getContext())
+            .add(BuiltinWidgetUi.size(header, ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT), FitStack.ESSENTIAL, 0)
+            .add(BuiltinWidgetUi.size(statusRow, ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT), 20, ui.dp(6))
+            .addFlex(chart, 40, ui.dp(10), ui.dp(CHART_MIN_DP))
+            .add(BuiltinWidgetUi.size(axisRow, ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT), 30, ui.dp(10));
         inset(root, 16, 16, 16, 16, ui);
         return root;
     }

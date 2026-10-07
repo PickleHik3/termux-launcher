@@ -180,10 +180,13 @@ final class FitStack extends ViewGroup {
         }
         int flexCount = 0;
         int elasticCount = 0;
+        boolean opening = true;
         for (Slot slot : slots) {
             if (!slot.shown) continue;
             if (slot.kind == Kind.FLEX) flexCount++;
-            if (slot.elastic) elasticCount++;
+            // The first child has no gap before it to stretch.
+            if (slot.elastic && !opening) elasticCount++;
+            opening = false;
         }
         leadPx = 0;
         stretchPx = 0;
