@@ -145,7 +145,7 @@ public class IconPackPageTest {
     @Test
     public void tilesRunDefaultThenThePacksInListingOrder() {
         IconPackPage page = open();
-        assertEquals(Arrays.asList("Same as app icons", "Alpha", "Beta", "A Pack With A Rather Long Name"),
+        assertEquals(Arrays.asList("System", "Alpha", "Beta", "A Pack With A Rather Long Name"),
             labels(page));
         assertEquals("", page.tilesView().getChildAt(0).getTag());
         assertEquals("pack.beta", page.tilesView().getChildAt(2).getTag());
@@ -216,7 +216,7 @@ public class IconPackPageTest {
         IconPackPage page = open();
         page.pinnedOnlySwitch().performClick();
         assertEquals(Arrays.asList(IconPackChoices.KEY_PINNED + "=pack.alpha"), mBackend.writes);
-        assertEquals("Same as app icons", label(page.tilesView().getChildAt(0)));
+        assertEquals("System", label(page.tilesView().getChildAt(0)));
     }
 
     @Test
@@ -318,7 +318,7 @@ public class IconPackPageTest {
         page.onHidden();
         page.onShown();
         runBackground();
-        assertEquals(Arrays.asList("Same as app icons", "Alpha", "Gamma"), labels(page));
+        assertEquals(Arrays.asList("System", "Alpha", "Gamma"), labels(page));
         assertEquals(2, mContentChanged);
     }
 

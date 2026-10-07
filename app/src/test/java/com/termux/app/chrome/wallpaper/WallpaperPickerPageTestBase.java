@@ -91,7 +91,6 @@ public abstract class WallpaperPickerPageTestBase {
             if (cb != null) cb.onDone(true, null);
         }
 
-        @Override public void openMoreSettings() { calls.add("more settings"); }
     }
 
     static final class RecordingListener implements WallpaperPickerPage.Listener {
@@ -593,17 +592,6 @@ public abstract class WallpaperPickerPageTestBase {
         assertEquals("done", commit(page));
         assertEquals(Arrays.asList("apply LOCK", "apply LOCK"), mSlots.calls);
         assertTrue(mSlots.state.lock.sameAsHome);
-    }
-
-    @Test
-    public void moreSettingsOpensTheLookPage() {
-        WallpaperPickerPage page = open();
-        View more = page.root().findViewById(R.id.wallpaper_picker_more_settings);
-        assertTrue("a 48dp target", more.getHeight() >= dp(48) && more.getWidth() >= dp(48));
-        assertInside(page.root(), more);
-        more.performClick();
-        assertEquals(Arrays.asList("more settings"), mSlots.calls);
-        assertFalse("the page stays open", page.root().findViewById(R.id.wallpaper_picker_pager) == null);
     }
 
     /** Every shown view lies inside the root, and no shown text is cut short. */

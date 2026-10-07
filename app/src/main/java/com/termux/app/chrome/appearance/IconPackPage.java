@@ -45,7 +45,7 @@ import java.util.concurrent.Executors;
  * collapse: only the last one is parsed and written. With the switch on the choice is written to
  * {@link IconPackChoices#KEY_PINNED}; with it off to {@link IconPackChoices#KEY_GLOBAL} and the
  * pinned override is cleared, so the dock follows the global pack again. The Default tile stores
- * "" under the key in force and reads "Same as app icons" while the switch is on (the dock then
+ * "" under the key in force and reads "System" while the switch is on (the dock then
  * follows the global pack), "Default" while it is off (the system's icons).
  *
  * <p>Everything slow (the pack listing, the pack artwork, the parse) is loaded on a background

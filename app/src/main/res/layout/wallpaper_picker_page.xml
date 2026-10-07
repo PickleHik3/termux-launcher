@@ -88,16 +88,6 @@
                     android:text="@string/wallpaper_picker_photo"
                     app:icon="@drawable/ic_symbol_photo"
                     app:iconSize="24dp" />
-
-                <!-- The old Look page, for everything this page does not carry. -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/wallpaper_picker_more_settings"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="48dp"
-                    android:insetTop="0dp"
-                    android:insetBottom="0dp"
-                    android:text="@string/wallpaper_picker_more_settings" />
             </LinearLayout>
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>

@@ -32,8 +32,6 @@ import com.google.android.material.color.MaterialColors;
 import com.google.android.material.imageview.ShapeableImageView;
 import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.termux.R;
-import com.termux.app.activities.SettingsActivity;
-import com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment;
 import com.termux.app.layouteditor.EditorM3;
 import com.termux.app.surfaces.AppearanceSurfaceController;
 import com.termux.shared.logger.Logger;
@@ -86,9 +84,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
 
         void apply(@NonNull WallpaperSlots.Slot slot, @NonNull WallpaperSlots.Choice choice,
                    @Nullable WallpaperSlots.Callback cb);
-
-        /** Opens the old Look settings page. */
-        default void openMoreSettings() {}
 
         /** The recent photos, newest first. */
         @NonNull
@@ -173,11 +168,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
                                         @NonNull WallpaperSlots.Choice choice,
                                         @Nullable WallpaperSlots.Callback cb) {
                 WallpaperSlots.apply(activity, slot, choice, cb);
-            }
-
-            @Override public void openMoreSettings() {
-                activity.startActivity(SettingsActivity.createFragmentIntent(activity,
-                    TermuxStylePreferencesFragment.class, R.string.termux_style_preferences_title));
             }
 
             @NonNull @Override public List<File> recents() {
@@ -417,9 +407,6 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
             // The host closes the surface and brings it back with the cropped photo.
             mHandedOff = true;
             mListener.onPickPhoto(slot, back);
-        });
-        mRoot.findViewById(R.id.wallpaper_picker_more_settings).setOnClickListener(v -> {
-            if (!mReleased) mSlots.openMoreSettings();
         });
 
         mPagerLayout = new LinearLayoutManager(context, RecyclerView.HORIZONTAL, false);
