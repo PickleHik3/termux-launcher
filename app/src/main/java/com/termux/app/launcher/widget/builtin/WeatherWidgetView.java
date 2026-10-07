@@ -32,8 +32,11 @@ public class WeatherWidgetView extends BuiltinWidgetView {
 
     /** The 4×2 glyph column's narrowest, before the days beside it give anything up. */
     private static final int LEFT_MIN_DP = 96;
-    /** What a 4×2 day needs to show its name and its low and high: 36 + 8 + 20 + 6 + 20. */
-    private static final int DAY_MIN_DP = 90;
+    /**
+     * What a 4×2 day needs to show its name and its low and high: 36 + 8 + 20 + 6 + 20, and two
+     * more for the dp rounding of five parts measured in whole pixels.
+     */
+    private static final int DAY_MIN_DP = 92;
     /** The narrowest a day's range bar is drawn at; below it the bar is left out. */
     private static final int BAR_MIN_DP = 24;
     /** What the first 4×2 day ranks at; each later day ranks one lower. */

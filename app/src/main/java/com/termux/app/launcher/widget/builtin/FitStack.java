@@ -204,6 +204,18 @@ final class FitStack extends ViewGroup {
             }
             spare += shortfall - owed;
         }
+        // The essentials alone can still be a pixel or two over, from dp rounding across the
+        // stack: the content-sized children at the end give that back, measured to the room left,
+        // so a label ellipsizes rather than run past the stack.
+        for (int i = slots.size() - 1; i >= 0 && spare < 0; i--) {
+            Slot slot = slots.get(i);
+            if (!slot.shown || slot.kind != Kind.FIXED) continue;
+            int was = slot.main;
+            measure(slot, MeasureSpec.makeMeasureSpec(Math.max(0, was + spare), MeasureSpec.AT_MOST),
+                crossLimit, crossBounded);
+            slot.main = mainSize(slot.view);
+            spare += was - slot.main;
+        }
         int flexCount = 0;
         int elasticCount = 0;
         boolean opening = true;
