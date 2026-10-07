@@ -165,8 +165,14 @@ public class TerminalPaneController {
         @Nullable TerminalSession createShell(@Nullable String cwd);
         /** Wire client + font + text size + keep-screen-on onto a freshly created pane view. */
         void configurePaneView(TerminalView view);
-        /** Called after the shell is attached, when per-session view preferences can be selected. */
-        default void configureAttachedPaneView(TerminalView view, TerminalSession session) {}
+        /**
+         * Called after the shell is attached, when per-session view preferences can be selected.
+         * {@code pinnedFontSize} is the pane's own zoom, or 0 while it follows the default; the
+         * host sets the text size once, so a pinned pane never passes through the default size
+         * (each size change is a resize the shell hears).
+         */
+        default void configureAttachedPaneView(TerminalView view, TerminalSession session,
+                                               int pinnedFontSize) {}
         /** Kill/remove a shell session from the service. */
         void removeShell(TerminalSession session);
         /** The active pane changed; activity should refresh anything keyed off the current view. */
@@ -3343,7 +3349,7 @@ public class TerminalPaneController {
             });
             view.attachSession(session);
             view.setCursorTrailListener(mCursorTrailListener);
-            mHost.configureAttachedPaneView(view, session);
+            mHost.configureAttachedPaneView(view, session, pinnedFontSizeOf(session));
             mPaneFrames.put(session, frame);
             mPaneViews.put(session, view);
             PaneGlassBackdropView glass = frame.findViewById(R.id.terminal_pane_glass);
@@ -3370,16 +3376,23 @@ public class TerminalPaneController {
         return null;
     }
 
-    /** The per-render re-stamp of a pane's view: the host's defaults, then the pane's own zoom. */
+    /**
+     * The per-render re-stamp of a pane's view: the host's defaults, with the pane's own zoom in
+     * place of the default size, so re-showing a window (or any re-render) can't fold every pane
+     * back to the app-wide size. One size, not the default then the zoom: stamping both resized
+     * the shell twice on every render (78x38 -> 53x25 -> 78x38 within one message).
+     */
     private void refreshAttachedPaneView(TerminalSession session) {
         TerminalView attachedView = mPaneViews.get(session);
         if (attachedView == null) return;
-        mHost.configureAttachedPaneView(attachedView, session);
-        // Reapply the pane's pinned zoom after the host stamped its default, so re-showing a
-        // window (or any re-render) can't fold every pane back to the app-wide size.
+        mHost.configureAttachedPaneView(attachedView, session, pinnedFontSizeOf(session));
+    }
+
+    /** The pane's pinned font size, or 0 while it follows the app-wide default. */
+    private int pinnedFontSizeOf(TerminalSession session) {
         Window owner = windowOf(session);
         Leaf leaf = owner == null ? null : findLeafInWindow(owner, session);
-        if (leaf != null && leaf.fontSize > 0) attachedView.setTextSize(leaf.fontSize);
+        return leaf != null && leaf.fontSize > 0 ? leaf.fontSize : 0;
     }
 
     /** The focused pane's pinned font size, or 0 while it follows the app-wide default. */

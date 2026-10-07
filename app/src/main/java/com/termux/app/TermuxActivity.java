@@ -23484,12 +23484,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 getTermuxTerminalSessionClient().applyFontToView(view);
         }
 
-        @Override public void configureAttachedPaneView(TerminalView view, TerminalSession session) {
+        @Override public void configureAttachedPaneView(TerminalView view, TerminalSession session,
+                                                        int pinnedFontSize) {
             if (getPreferences() == null || view == null) return;
             // A pane view built after a program asked for a mouse pointer shape must wear it too.
             if (session != null && session.getEmulator() != null)
                 view.setRequestedPointerShape(session.getEmulator().getPointerShape());
-            view.setTextSize(com.termux.app.terminal.TerminalPaneController
+            view.setTextSize(pinnedFontSize > 0 ? pinnedFontSize
+                : com.termux.app.terminal.TerminalPaneController
                 .isScratchpadShellName(session == null ? null : session.mSessionName)
                 ? getPreferences().getScratchpadFontSize()
                 : getPreferences().getFontSize());
