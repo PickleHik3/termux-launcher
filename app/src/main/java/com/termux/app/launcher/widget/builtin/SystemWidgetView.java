@@ -265,9 +265,9 @@ public class SystemWidgetView extends BuiltinWidgetView
         // first starts at the left edge, the last ends at the right and the middle one is centred.
         LinearLayout tail = ui.row(0,
             tailPair(ui, StatGlyphs.MEMORY, R.string.bw_device_ram, ramTail),
-            BuiltinWidgetUi.flex(new View(getContext())),
+            spacer(),
             tailPair(ui, StatGlyphs.TEMPERATURE, R.string.bw_device_temperature, tempTail),
-            BuiltinWidgetUi.flex(new View(getContext())),
+            spacer(),
             tailPair(ui, StatGlyphs.DISK, R.string.bw_device_storage, diskTail));
         tail.setBaselineAligned(false);
 
@@ -278,6 +278,16 @@ public class SystemWidgetView extends BuiltinWidgetView
         LinearLayout root = ui.column(10, header, chart, tail);
         inset(root, 16, 16, 16, 16, ui);
         return root;
+    }
+
+    /**
+     * Free room along a row. Zero high: a bare View at WRAP_CONTENT takes all the height it is
+     * offered, which stretched the row past the card.
+     */
+    @NonNull private View spacer() {
+        View spacer = new View(getContext());
+        spacer.setLayoutParams(new LinearLayout.LayoutParams(0, 0, 1f));
+        return spacer;
     }
 
     @NonNull private TextView tailValue(@NonNull BuiltinWidgetUi ui) {
