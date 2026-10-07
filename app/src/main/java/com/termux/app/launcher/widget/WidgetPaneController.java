@@ -537,8 +537,18 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         int edgeDirection;
         /** The page this drag made past the end of the run, or -1: one drag makes at most one. */
         int createdPage = -1;
+        /**
+         * Whether the edge bands count yet. A drag that starts inside a band (a picker card held
+         * near the pane's edge, a widget sitting at the grid's edge) arms them only once the
+         * finger has been outside a band or has travelled a band's width from where the hold
+         * began; otherwise the page turns 350 ms after the hold with the finger never having moved.
+         */
+        boolean armed;
+        float startRawX;
 
-        void start(int startPage) { page = startPage; edgeDirection = 0; createdPage = -1; }
+        void start(int startPage, float rawX) {
+            page = startPage; edgeDirection = 0; createdPage = -1; armed = false; startRawX = rawX;
+        }
     }
 
     /**
@@ -797,7 +807,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit.dragStartRawY = rawY;
         edit.dragStartBounds = pane.grid().metrics().boundsFor(record.cell);
         edit.moveCandidate = null;
-        edit.turn.start(record.page);
+        edit.turn.start(record.page, rawX);
         edit.lastRawX = rawX;
         edit.lastRawY = rawY;
         pane.removeCallbacks(edgeFlip);
@@ -881,6 +891,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         if (pane.getWidth() > 2 * band) {
             if (x <= band) direction = -1;
             else if (x >= pane.getWidth() - band) direction = 1;
+        }
+        if (!turn.armed) {
+            if (direction != 0 && Math.abs(rawX - turn.startRawX) < band) return;  // Still where the hold began.
+            turn.armed = true;
         }
         if (direction != 0 && !canTurnTo(turn, turn.page + direction, direction)) direction = 0;
         if (direction == turn.edgeDirection) return;
@@ -1138,10 +1152,10 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         /** Where the finger last was, so a page turn can measure the new page under it. */
         float lastRawX, lastRawY;
         CarryState(@NonNull WidgetProviderItem item, int page, @NonNull WidgetCellRect span,
-                   int width, int height) {
+                   int width, int height, float rawX) {
             this.item = item; this.span = span;
             this.width = width; this.height = height;
-            turn.start(page);
+            turn.start(page, rawX);
         }
     }
 
@@ -1172,7 +1186,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         // The slot is the card's picture of the widget; the card around it is a list row.
         View picture = card.findViewWithTag("slot");
         if (picture == null) picture = card;
-        CarryState state = new CarryState(item, currentPage, span, cell.width(), cell.height());
+        CarryState state = new CarryState(item, currentPage, span, cell.width(), cell.height(), rawX);
         if (!pane.widgetDragLayer().lift(picture, carriedBounds(state, rawX, rawY))) return;
         carry = state;
         pane.beginCarry(carryListener);

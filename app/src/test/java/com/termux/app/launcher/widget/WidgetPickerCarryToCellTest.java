@@ -175,6 +175,36 @@ public class WidgetPickerCarryToCellTest {
 
     // ---- turning the page at the pane's edge ------------------------------------------------
 
+    /**
+     * A card held near the pane's edge starts the carry inside the band. The band must not count
+     * until the finger has moved a band's width away, or the page would turn 350 ms after the
+     * hold with the finger never having moved.
+     */
+    @Test public void aCardHeldInsideTheBandDoesNotTurnThePageUntilTheFingerMoves() {
+        WidgetPickerProductionSelectionTest.Fixture fixture =
+            new WidgetPickerProductionSelectionTest.Fixture(true);
+        fixture.platform.nextId = 100;
+        View card = openCard(fixture);
+        float edge = trailingEdge(fixture);
+
+        send(card, MotionEvent.ACTION_DOWN, edge, 10);
+        Shadows.shadowOf(Looper.getMainLooper()).idleFor(PAST_THE_HOLD_MS, TimeUnit.MILLISECONDS);
+        assertTrue("the widget is in the air", fixture.pane.widgetDragLayer().isLifted());
+        settleAtTheEdge();
+        assertEquals("no page while the finger has not moved", 1, fixture.repository.pageCount());
+
+        move(fixture, edge - 4, 60);  // A wobble inside the band is not a move away.
+        settleAtTheEdge();
+        assertEquals(1, fixture.repository.pageCount());
+
+        Rect target = paneBounds(fixture, CHOSEN);
+        move(fixture, target.centerX(), target.centerY());
+        move(fixture, edge, target.centerY());
+        settleAtTheEdge();
+        assertEquals("the finger came back to the band on purpose", 2, fixture.repository.pageCount());
+        up(fixture, edge, target.centerY());
+    }
+
     @Test public void heldAtTheTrailingEdgePastTheLastPageMakesAPageAndTheDropKeepsIt() {
         WidgetPickerProductionSelectionTest.Fixture fixture =
             new WidgetPickerProductionSelectionTest.Fixture(true);
