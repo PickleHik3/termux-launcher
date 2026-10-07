@@ -25,6 +25,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * <p>Streaming is producer/consumer: the TTS runtime synthesises a sentence and hands it over,
  * then starts the next while the player (or the API) consumes the first. Time to first audio is
  * the model load (once) plus one sentence of G2P and three graphs.
+ *
+ * <p>{@link #pause} and {@link #resume} also run on the control lane and reach the phone's player
+ * only ({@link #speak}): the speak call stays open while paused, its wait for the end leaving the
+ * paused time out ({@link TaiTtsPlayer#awaitDone}). {@link #state} tells Read aloud when the first
+ * sound has reached the speaker, so its card can stop showing that it is preparing.
  */
 final class TaiSpeechOutput {
     /** Where the PCM files for the API go; the app process deletes each once it has sent it. */
@@ -34,7 +39,15 @@ final class TaiSpeechOutput {
     /** What is speaking now; {@link #stop} cancels it. */
     private static final class Session implements TtsRuntime.Cancellation {
         final AtomicBoolean cancelled = new AtomicBoolean();
+        /** Played on the phone ({@link #speak}) rather than written to files: only these pause. */
+        final boolean plays;
         @Nullable volatile TaiTtsPlayer player;
+        /** A pause asked for; applied to the player as soon as there is one. */
+        volatile boolean paused;
+
+        Session(boolean plays) {
+            this.plays = plays;
+        }
 
         @Override
         public boolean isCancelled() {
@@ -60,7 +73,7 @@ final class TaiSpeechOutput {
     static JSONObject speak(@NonNull Context context, @NonNull MultiBackendTaiRuntime router, @NonNull TaiModelSpec spec,
                             @NonNull TaiSpeechRequest request) throws JSONException {
         long started = SystemClock.elapsedRealtime();
-        Session session = new Session();
+        Session session = new Session(true);
         current = session;
         TaiTtsPlayer player = new TaiTtsPlayer(context, router.ttsSampleRate());
         try {
@@ -68,6 +81,9 @@ final class TaiSpeechOutput {
                 return error(409, "tts_audio_busy", "The phone's audio is busy (a call or another app has it); try again in a moment.");
             }
             session.player = player;
+            // A pause that came before the player existed; pause() reads the player after setting
+            // the flag, so between the two of them one applies it.
+            if (session.paused) player.pause();
             JSONObject result = router.synthesizeSpeech(spec, request.text, request.voice, request.speed,
                 (samples, count, index) -> player.enqueue(samples, count) && !session.isCancelled(), session);
             boolean failed = !result.optBoolean("ok", false);
@@ -103,7 +119,7 @@ final class TaiSpeechOutput {
             return error(500, "tts_output_failed", "Could not create " + dir);
         }
         deleteStaleFiles(dir);
-        Session session = new Session();
+        Session session = new Session(false);
         current = session;
         String batch = UUID.randomUUID().toString();
         int sampleRate = router.ttsSampleRate();
@@ -147,6 +163,51 @@ final class TaiSpeechOutput {
     static boolean isSpeaking() {
         Session session = current;
         return session != null && !session.isCancelled();
+    }
+
+    /**
+     * Pauses the phone's speech mid-word; answers {@code {ok, paused}}, {@code paused} false when
+     * nothing was being played (between sentences, or only files being written).
+     */
+    @NonNull
+    static JSONObject pause() throws JSONException {
+        Session session = current;
+        boolean applied = session != null && session.plays && !session.isCancelled();
+        if (applied) {
+            session.paused = true;
+            TaiTtsPlayer player = session.player;
+            if (player != null) player.pause();
+        }
+        return new JSONObject().put("ok", true).put("paused", applied);
+    }
+
+    /** Carries the paused speech on; answers {@code {ok, resumed}}. */
+    @NonNull
+    static JSONObject resume() throws JSONException {
+        Session session = current;
+        boolean applied = session != null && session.plays && session.paused;
+        if (session != null) {
+            session.paused = false;
+            TaiTtsPlayer player = session.player;
+            if (player != null) player.resume();
+        }
+        return new JSONObject().put("ok", true).put("resumed", applied);
+    }
+
+    /**
+     * What the phone is doing with speech: {@code speaking} (an utterance is under way),
+     * {@code sounding} (its first sample has reached the speaker) and {@code paused}.
+     */
+    @NonNull
+    static JSONObject state() throws JSONException {
+        Session session = current;
+        boolean speaking = session != null && !session.isCancelled();
+        TaiTtsPlayer player = session == null ? null : session.player;
+        return new JSONObject()
+            .put("ok", true)
+            .put("speaking", speaking)
+            .put("sounding", speaking && player != null && player.firstSoundAtMs() >= 0L)
+            .put("paused", speaking && session.paused);
     }
 
     /** Files a client never collected (it went away mid-stream) are cleared before the next batch. */

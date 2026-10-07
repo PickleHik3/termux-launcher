@@ -62,6 +62,14 @@ final class TaiRuntimeIpc {
     static final String OP_TTS_SYNTHESIZE = "ttsSynthesize";
     static final String OP_TTS_WARM = "ttsWarm";
     static final String OP_TTS_STOP = "ttsStop";
+    /**
+     * Read aloud's controls, on the control lane like stop: pause and resume the phone's speech in
+     * place (the speak call stays open, its deadline leaving the pause out), and read whether the
+     * first sound has reached the speaker. Additive; the speak request and answer are unchanged.
+     */
+    static final String OP_TTS_PAUSE = "ttsPause";
+    static final String OP_TTS_RESUME = "ttsResume";
+    static final String OP_TTS_STATE = "ttsState";
 
     /**
      * Text-to-image. Generate is a stream (progress events, then the result with the PNG's path
