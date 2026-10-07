@@ -19192,6 +19192,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         ViewGroup cluster = findViewById(R.id.terminal_status_stats_cluster);
         View row = findViewById(R.id.terminal_status_row);
         if (forms == null || widget == null || cluster == null || row == null) return;
+        // A hidden chip has no row to fit: its forms are stale until the next weather update,
+        // and setting a value on it would still ask the cluster to lay out again.
+        if (widget.getVisibility() != View.VISIBLE) return;
         float[] bounds = statsClusterBounds();
         if (bounds == null || widget.getWidth() == 0) {
             // Not laid out yet: the whole of it, and the next layout pass fits it.

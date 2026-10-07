@@ -165,7 +165,9 @@ public final class StatusBarWidgetView extends LinearLayout {
      */
     public void setIconGlyph(@NonNull CharSequence glyph) {
         if (mGlyph.getTypeface() == null) return;
-        mGlyph.setText(glyph);
+        // Only on a change: this runs on every window-bar refresh, and a TextView's setText
+        // requests a layout of the whole cluster whether or not the glyph differs.
+        if (!android.text.TextUtils.equals(mGlyph.getText(), glyph)) mGlyph.setText(glyph);
         mGlyph.setVisibility(VISIBLE);
         mIcon.setVisibility(GONE);
         hideAnimation();
