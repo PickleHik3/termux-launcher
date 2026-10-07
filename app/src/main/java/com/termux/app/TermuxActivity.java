@@ -20862,6 +20862,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     };
                 }
             });
+        // The grid preference was applied in onCreate, before this controller existed, straight
+        // to the host; now the pane can hold it to what the wall fits, and re-cap on layout.
+        applyWidgetGridPreference();
     }
 
     /** A window chip was tapped, in the row's pills or the column's stack. */
