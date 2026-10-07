@@ -61,7 +61,9 @@ public class MediaWidgetView extends BuiltinWidgetView {
     /** The 2x2 and 4x2 art is not drawn at less than this: below it the art is left out. */
     private static final int ART_MIN_DP = 40;
     /** The least visible space kept between the marks of a spread control row. */
-    private static final int SPREAD_GAP_DP = 8;
+    private static final int SPREAD_GAP_DP = 4;
+    /** The narrowest a control in a spread row is made, to fit three of them in 89dp. */
+    private static final int CONTROL_MIN_DP = 32;
     /** The previous and next controls, which go from a narrow row after the decorations. */
     private static final int CONTROL_RANK = 30;
     private static final int DECORATION_RANK = 10;
@@ -581,8 +583,10 @@ public class MediaWidgetView extends BuiltinWidgetView {
      * gaps are the design's {@code gapDp} — or spread edge to edge, at least
      * {@link #SPREAD_GAP_DP} apart, when {@code spread}. Each control keeps its touch target; the
      * transparent margin of a target is taken out of the gap beside it, so neighbours' targets
-     * overlap a little rather than the visible marks drifting apart. When the row is too narrow
-     * the decorations go first, then the previous and next controls; the play control stays.
+     * overlap a little rather than the visible marks drifting apart. In a spread row the targets
+     * also give up width, down to {@link #CONTROL_MIN_DP}, before anything is left out; when it
+     * is still too narrow the decorations go first, then the previous and next controls, and the
+     * play control stays.
      */
     @NonNull private FitStack controlRow(@NonNull BuiltinWidgetUi ui, boolean spread, int gapDp,
                                          @NonNull Object... items) {
@@ -594,13 +598,17 @@ public class MediaWidgetView extends BuiltinWidgetView {
             int visible = (Integer) items[i * 2 + 1];
             int rank = view == playButton ? FitStack.ESSENTIAL
                 : view instanceof ControlButton ? CONTROL_RANK : DECORATION_RANK;
-            if (before == null) {
-                row.add(view, rank, 0);
+            int gap = before == null ? 0 : ui.dp((spread ? SPREAD_GAP_DP : gapDp)
+                - overhang(before, beforeVisible, spread) - overhang(view, visible, spread));
+            boolean control = view instanceof ControlButton;
+            if (!spread) {
+                row.add(view, rank, gap);
+            } else if (control) {
+                // A spread row keeps its marks apart however far the targets shrink to fit.
+                row.addShrinkElastic(view, rank, gap, ui.dp(TOUCH_DP),
+                    ui.dp(Math.max(visible, CONTROL_MIN_DP)));
             } else {
-                int gap = ui.dp((spread ? SPREAD_GAP_DP : gapDp)
-                    - overhang(before, beforeVisible) - overhang(view, visible));
-                if (spread) row.addElastic(view, rank, gap);
-                else row.add(view, rank, gap);
+                row.addElastic(view, rank, gap);
             }
             before = view;
             beforeVisible = visible;
@@ -610,9 +618,14 @@ public class MediaWidgetView extends BuiltinWidgetView {
         return row;
     }
 
-    /** What a control's smallest target adds either side of the {@code visibleDp} it shows. */
-    private static float overhang(@NonNull View view, int visibleDp) {
-        return view instanceof ControlButton ? Math.max(0f, (TOUCH_MIN_DP - visibleDp) / 2f) : 0f;
+    /**
+     * What a control's target adds either side of the {@code visibleDp} it shows: at the design's
+     * 48dp in a row that keeps the design's gaps, at the narrowest it shrinks to in a spread one.
+     */
+    private static float overhang(@NonNull View view, int visibleDp, boolean spread) {
+        if (!(view instanceof ControlButton)) return 0f;
+        int target = spread ? Math.max(visibleDp, CONTROL_MIN_DP) : TOUCH_DP;
+        return Math.max(0f, (target - visibleDp) / 2f);
     }
 
     /**
@@ -720,9 +733,19 @@ public class MediaWidgetView extends BuiltinWidgetView {
             setIncludeFontPadding(false);
         }
 
+        /** 48dp where {@code room} allows it, 40dp, then 36dp, never more than the room. */
+        private int target(int room) {
+            return room >= touchPx ? touchPx : room >= midPx ? midPx : Math.min(room, minPx);
+        }
+
         @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-            int room = Math.min(room(widthMeasureSpec), room(heightMeasureSpec));
-            int side = room >= touchPx ? touchPx : room >= midPx ? midPx : Math.min(room, minPx);
+            if (MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.EXACTLY) {
+                // A row that shrinks its targets for width: as tall as the room allows.
+                setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec),
+                    target(room(heightMeasureSpec)));
+                return;
+            }
+            int side = target(Math.min(room(widthMeasureSpec), room(heightMeasureSpec)));
             setMeasuredDimension(side, side);
         }
     }

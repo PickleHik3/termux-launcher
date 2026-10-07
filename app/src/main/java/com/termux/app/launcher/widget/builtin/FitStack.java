@@ -32,6 +32,8 @@ final class FitStack extends ViewGroup {
     static final int ESSENTIAL = Integer.MAX_VALUE;
     /** The rank a list's first row starts at; each later row ranks one below the one before. */
     private static final int ROW_RANK = 1 << 20;
+    private static final int MATCH_PARENT = LayoutParams.MATCH_PARENT;
+    private static final int WRAP_CONTENT = LayoutParams.WRAP_CONTENT;
 
     private enum Kind { FIXED, FLEX, SHRINK }
 
@@ -106,6 +108,13 @@ final class FitStack extends ViewGroup {
         return this;
     }
 
+    /** {@link #addShrink}, behind a gap that stretches as {@link #addElastic} does. */
+    @NonNull FitStack addShrinkElastic(@NonNull View child, int rank, int gapPx, int preferredPx,
+                                       int minPx) {
+        slots.add(new Slot(child, rank, gapPx, Kind.SHRINK, true, preferredPx, minPx));
+        return this;
+    }
+
     /**
      * The next row of a list: the first row outranks the second, the second the third, so the
      * list shows as many whole rows from the top as there is room for. Rows take the full width
@@ -170,13 +179,30 @@ final class FitStack extends ViewGroup {
 
         int spare = mainBounded ? limit - need : 0;
         if (spare < 0) {
-            for (int i = slots.size() - 1; i >= 0 && spare < 0; i--) {
+            // What can shrink gives up its share of the shortfall in proportion to its slack.
+            int slack = 0;
+            for (Slot slot : slots) {
+                if (slot.shown && slot.kind == Kind.SHRINK) slack += slot.preferred - slot.minimum;
+            }
+            int shortfall = Math.min(-spare, slack);
+            int owed = shortfall;
+            for (int i = slots.size() - 1; i >= 0 && owed > 0; i--) {
                 Slot slot = slots.get(i);
                 if (!slot.shown || slot.kind != Kind.SHRINK) continue;
-                int cut = Math.min(-spare, slot.preferred - slot.minimum);
+                int room = slot.preferred - slot.minimum;
+                int cut = Math.min(owed, Math.min(room, Math.round((float) shortfall * room / slack)));
                 slot.main -= cut;
-                spare += cut;
+                owed -= cut;
             }
+            // Rounding can leave a pixel or two owing: take them from whichever has any left.
+            for (int i = slots.size() - 1; i >= 0 && owed > 0; i--) {
+                Slot slot = slots.get(i);
+                if (!slot.shown || slot.kind != Kind.SHRINK) continue;
+                int cut = Math.min(owed, slot.main - slot.minimum);
+                slot.main -= cut;
+                owed -= cut;
+            }
+            spare += shortfall - owed;
         }
         int flexCount = 0;
         int elasticCount = 0;
