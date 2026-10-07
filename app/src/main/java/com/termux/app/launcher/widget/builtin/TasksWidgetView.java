@@ -358,9 +358,9 @@ public class TasksWidgetView extends BuiltinWidgetView implements MarkdownFileSo
             FilesWidgetPaths.baseName(path()));
         TextView add = addDisc(ui, 22, 10f);
         LinearLayout header = ui.row(8, BuiltinWidgetUi.flex(caption), add);
-        LinearLayout list = empty
-            ? ui.column(0, emptyLabel(ui))
-            : ui.column(10, rowViews(ui, shown, 16, 5, 12.5f, 8, false));
+        // The list shows the tasks that fit whole, from the first; at 115dp that is two or three.
+        View list = empty ? ui.column(0, emptyLabel(ui))
+            : taskList(ui, rowViews(ui, shown, 16, 5, 12.5f, 8, false), 10);
         LinearLayout root = ui.column(10, header, BuiltinWidgetUi.flexTall(list));
         inset(root, 14, 14, 14, 14, ui);
         FilesWidgetTapRouter router = FilesWidgetTapRouter.install(root, ui);
@@ -411,9 +411,8 @@ public class TasksWidgetView extends BuiltinWidgetView implements MarkdownFileSo
         makeAddControl(pill);
         LinearLayout header = ui.row(8, BuiltinWidgetUi.flex(titles), pill);
 
-        LinearLayout list = empty
-            ? ui.column(0, emptyLabel(ui))
-            : ui.column(9, rowViews(ui, shown, 16, 5, 12.5f, 10, true));
+        View list = empty ? ui.column(0, emptyLabel(ui))
+            : taskList(ui, rowViews(ui, shown, 16, 5, 12.5f, 10, true), 9);
         LinearLayout root = ui.column(9, header, BuiltinWidgetUi.flexTall(list));
         inset(root, 16, 14, 16, 14, ui);
         FilesWidgetTapRouter router = FilesWidgetTapRouter.install(root, ui);
@@ -444,6 +443,14 @@ public class TasksWidgetView extends BuiltinWidgetView implements MarkdownFileSo
             views[i] = row.view;
         }
         return views;
+    }
+
+    /** The task rows as a column that keeps the first {@code n} that fit whole. */
+    @NonNull private FitStack taskList(@NonNull BuiltinWidgetUi ui, @NonNull View[] views,
+                                       int gapDp) {
+        FitStack list = FitStack.column(getContext());
+        for (View view : views) list.addRow(view, ui.dp(gapDp));
+        return list;
     }
 
     @NonNull private List<View> rowList() {

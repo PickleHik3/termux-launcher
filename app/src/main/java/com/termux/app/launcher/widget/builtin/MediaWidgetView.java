@@ -4,16 +4,21 @@ import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.graphics.Canvas;
+import android.graphics.ColorFilter;
 import android.graphics.Outline;
+import android.graphics.Paint;
+import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.graphics.Typeface;
-import android.graphics.drawable.GradientDrawable;
-import android.graphics.drawable.InsetDrawable;
+import android.graphics.drawable.Drawable;
 import android.os.SystemClock;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.style.ForegroundColorSpan;
 import android.text.style.MetricAffectingSpan;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -49,6 +54,19 @@ public class MediaWidgetView extends BuiltinWidgetView {
     private static final String GLYPH_ACCESS = "\uf0f3";
 
     private static final int TOUCH_DP = 48;
+    /** The touch target of a control whose row is a little short of 48dp. */
+    private static final int TOUCH_MID_DP = 40;
+    /** The smallest touch target; below this room a control takes what there is. */
+    private static final int TOUCH_MIN_DP = 36;
+    /** The 2x2 and 4x2 art is not drawn at less than this: below it the art is left out. */
+    private static final int ART_MIN_DP = 40;
+    /** The least visible space kept between the marks of a spread control row. */
+    private static final int SPREAD_GAP_DP = 4;
+    /** The narrowest a control in a spread row is made, to fit three of them in 89dp. */
+    private static final int CONTROL_MIN_DP = 32;
+    /** The previous and next controls, which go from a narrow row after the decorations. */
+    private static final int CONTROL_RANK = 30;
+    private static final int DECORATION_RANK = 10;
     private static final long TICK_MS = 1000L;
 
     private final TopPaneFeed.Observer feedObserver = () -> syncFeed(false);
@@ -268,34 +286,38 @@ public class MediaWidgetView extends BuiltinWidgetView {
 
     @NonNull private View buildOneByOne(@NonNull BuiltinWidgetUi ui) {
         FrameLayout root = new FrameLayout(getContext());
-        root.addView(artFrame(ui, 8, 6, false), matchParent());
+        root.addView(artFrame(ui, 8, 6, false, 0), matchParent());
         playButton = control(ui, GLYPH_PAUSE, 15, style().onPrimary, 40, this::onPlayPause);
-        root.addView(playButton, new FrameLayout.LayoutParams(ui.dp(TOUCH_DP), ui.dp(TOUCH_DP),
-            Gravity.CENTER));
+        root.addView(playButton, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
         inset(root, 8, 8, 8, 8, ui);
         return root;
     }
 
     @NonNull private View buildTwoByOne(@NonNull BuiltinWidgetUi ui) {
-        View artView = BuiltinWidgetUi.size(artFrame(ui, 10, 6, false), ui.dp(68), ui.dp(68));
+        ArtFrame artView = artFrame(ui, 10, 6, false, 68);
         title = ui.text("", 12.5f, style().sansBold, style().onSurface);
         artist = ui.text("", 11, style().sansMedium, style().onSurfaceVariant);
         playButton = control(ui, GLYPH_PAUSE, 11, style().onPrimary, 28, this::onPlayPause);
         nextButton = control(ui, GLYPH_NEXT, 12, style().onSurfaceVariant, 0, TopPaneFeed::skipNext);
-        LinearLayout controls = controlRow(ui, 10, false, playButton, 28, nextButton, 12);
-        LinearLayout column = ui.column(6, ui.column(0, title, artist), controls);
-        settle(controls, 6, 28, ui);
-        LinearLayout row = ui.row(10, artView, BuiltinWidgetUi.flex(column));
+        FitStack controls = controlRow(ui, false, 10, playButton, 28, nextButton, 12);
+        // At 56dp the title and the controls fill the card: the artist goes first. At 109dp
+        // wide the card has no room for the art beside two controls, so the art goes too.
+        FitStack column = FitStack.column(getContext()).centerAlong()
+            .add(title, FitStack.ESSENTIAL, 0)
+            .add(artist, 20, 0)
+            .addShrink(controls, 30, controlGap(ui, 6, 28), ui.dp(TOUCH_DP), ui.dp(TOUCH_MIN_DP));
+        FitStack row = FitStack.row(getContext()).centerAcross()
+            .add(artView, 10, 0)
+            .addFlex(column, FitStack.ESSENTIAL, ui.dp(10), ui.dp(2 * TOUCH_MIN_DP));
         inset(row, 10, 0, 10, 0, ui);
         return row;
     }
 
     @NonNull private View buildTwoByTwo(@NonNull BuiltinWidgetUi ui) {
-        View artView = BuiltinWidgetUi.flexTall(artFrame(ui, 10, 6, false));
+        ArtFrame artView = artFrame(ui, 10, 6, false, 0);
         title = ui.text("", 13, style().sansBold, style().onSurface);
         artist = ui.text("", 11, style().sansMedium, style().onSurfaceVariant);
-        LinearLayout texts = ui.column(0, title, artist);
-        inset(texts, 4, 0, 4, 0, ui);
         bar = ui.bar(0f, style().primary, 4);
         LinearLayout.LayoutParams barParams = (LinearLayout.LayoutParams) bar.getLayoutParams();
         barParams.leftMargin = ui.dp(4);
@@ -304,17 +326,23 @@ public class MediaWidgetView extends BuiltinWidgetView {
             TopPaneFeed::skipPrevious);
         playButton = control(ui, GLYPH_PAUSE, 13, style().onPrimary, 34, this::onPlayPause);
         nextButton = control(ui, GLYPH_NEXT, 13, style().onSurfaceVariant, 0, TopPaneFeed::skipNext);
-        LinearLayout controls = controlRow(ui, 0, true, previousButton, 13, playButton, 34,
+        FitStack controls = controlRow(ui, true, 0, previousButton, 13, playButton, 34,
             nextButton, 13);
-        controls.setPadding(ui.dp(10), 0, ui.dp(10), 0);
-        LinearLayout column = ui.column(8, artView, wide(texts), bar, wide(controls));
-        settle(controls, 8, 34, ui);
+        // At 115dp the card cannot hold the art, the bar, the artist and the transport together:
+        // the art goes first, then the bar, then the artist; the title and the controls stay.
+        artView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0));
+        FitStack column = FitStack.column(getContext())
+            .addFlex(artView, 5, 0, ui.dp(ART_MIN_DP))
+            .add(indented(title, ui, 4), FitStack.ESSENTIAL, ui.dp(8))
+            .add(indented(artist, ui, 4), 20, 0)
+            .add(bar, 10, ui.dp(8))
+            .addShrink(controls, 40, controlGap(ui, 8, 34), ui.dp(TOUCH_DP), ui.dp(TOUCH_MIN_DP));
         inset(column, 10, 10, 10, 10, ui);
         return column;
     }
 
     @NonNull private View buildFourByOne(@NonNull BuiltinWidgetUi ui) {
-        View artView = BuiltinWidgetUi.size(artFrame(ui, 10, 6, false), ui.dp(68), ui.dp(68));
+        ArtFrame artView = artFrame(ui, 10, 6, false, 68);
         title = ui.text("", 13, style().sansBold, style().onSurface);
         elapsedOfTotal = ui.mono("", 10.5f);
         LinearLayout head = ui.row(8, BuiltinWidgetUi.flex(title), elapsedOfTotal);
@@ -323,19 +351,26 @@ public class MediaWidgetView extends BuiltinWidgetView {
             TopPaneFeed::skipPrevious);
         playButton = control(ui, GLYPH_PAUSE, 11, style().onPrimary, 28, this::onPlayPause);
         nextButton = control(ui, GLYPH_NEXT, 12, style().onSurface, 0, TopPaneFeed::skipNext);
-        LinearLayout controls = controlRow(ui, 18, false,
+        FitStack controls = controlRow(ui, false, 18,
             decoration(ui, GLYPH_SHUFFLE, 12), 12, previousButton, 12, playButton, 28,
             nextButton, 12, decoration(ui, GLYPH_HEART, 12), 12);
-        LinearLayout column = ui.column(7, wide(head), bar, controls);
-        settle(controls, 7, 28, ui);
-        LinearLayout row = ui.row(12, artView, BuiltinWidgetUi.flex(column));
+        // At 56dp the title line and the controls fill the card: the progress bar goes. At 245dp
+        // wide the shuffle and heart marks go from the controls before the buttons do.
+        FitStack column = FitStack.column(getContext()).centerAlong()
+            .add(BuiltinWidgetUi.size(head, ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT), FitStack.ESSENTIAL, 0)
+            .add(bar, 10, ui.dp(7))
+            .addShrink(controls, 20, controlGap(ui, 7, 28), ui.dp(TOUCH_DP), ui.dp(TOUCH_MIN_DP));
+        FitStack row = FitStack.row(getContext()).centerAcross()
+            .add(artView, 10, 0)
+            .addFlex(column, FitStack.ESSENTIAL, ui.dp(12), ui.dp(3 * TOUCH_MIN_DP));
         inset(row, 12, 0, 12, 0, ui);
         return row;
     }
 
     @NonNull private View buildFourByTwo(@NonNull BuiltinWidgetUi ui) {
-        ArtFrame artView = artFrame(ui, 12, 7, true);
-        artView.setLayoutParams(new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+        ArtFrame artView = artFrame(ui, 12, 7, true, 0);
+        artView.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
 
         sourceLabel = ui.mono("", 10.5f);
@@ -354,20 +389,26 @@ public class MediaWidgetView extends BuiltinWidgetView {
             TopPaneFeed::skipPrevious);
         playButton = control(ui, GLYPH_PAUSE, 14, style().onPrimary, 38, this::onPlayPause);
         nextButton = control(ui, GLYPH_NEXT, 13, style().onSurface, 0, TopPaneFeed::skipNext);
-        LinearLayout controls = controlRow(ui, 0, true,
+        FitStack controls = controlRow(ui, true, 0,
             decoration(ui, GLYPH_SHUFFLE, 13), 13, previousButton, 13, playButton, 38,
             nextButton, 13, decoration(ui, GLYPH_HEART, 13), 13);
 
-        LinearLayout column = ui.column(6, wide(source), title, artist,
-            BuiltinWidgetUi.flexTall(new View(getContext())), progress, wide(controls));
-        ((LinearLayout.LayoutParams) title.getLayoutParams()).topMargin = ui.dp(12);
-        settle(controls, 6, 38, ui);
+        // At 115dp the column holds the title, the artist and the controls and no more: the
+        // progress goes first, then the source, then the artist. The title stays; the 12dp
+        // gap under the source and the progress's own 12dp are the design's.
+        FitStack column = FitStack.column(getContext())
+            .add(BuiltinWidgetUi.size(source, ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT), 20, 0)
+            .add(title, FitStack.ESSENTIAL, ui.dp(12))
+            .add(artist, 30, ui.dp(6))
+            .addElastic(progress, 15, ui.dp(12))
+            .addShrink(controls, 25, controlGap(ui, 6, 38), ui.dp(TOUCH_DP), ui.dp(TOUCH_MIN_DP));
         inset(column, 0, 4, 4, 4, ui);
-        column.setLayoutParams(new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+        column.setLayoutParams(new ViewGroup.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT));
 
-        LinearLayout row = ui.row(16, artView, column);
-        row.setGravity(Gravity.TOP);
+        FitStack row = FitStack.row(getContext())
+            .add(artView, 10, 0)
+            .addFlex(column, FitStack.ESSENTIAL, ui.dp(16), ui.dp(3 * TOUCH_MIN_DP));
         inset(row, 12, 12, 12, 12, ui);
         return row;
     }
@@ -482,11 +523,12 @@ public class MediaWidgetView extends BuiltinWidgetView {
 
     /**
      * The art well: the striped stand-in with the session's artwork over it when there is some,
-     * rounded to the card's corner less {@code insetDp}.
+     * rounded to the card's corner less {@code insetDp}. {@code desiredDp} makes it a square of
+     * that size that settles for the room it is given; zero fills what the parent gives.
      */
     @NonNull private ArtFrame artFrame(@NonNull BuiltinWidgetUi ui, int insetDp, int bandDp,
-                                       boolean square) {
-        ArtFrame frame = new ArtFrame(getContext(), square);
+                                       boolean square, int desiredDp) {
+        ArtFrame frame = new ArtFrame(getContext(), square, ui.dp(desiredDp));
         float radius = ui.innerRadius(insetDp);
         frame.setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline outline) {
@@ -509,18 +551,13 @@ public class MediaWidgetView extends BuiltinWidgetView {
 
     /**
      * A transport control: a glyph, on a {@code discDp} primary disc when that is non-zero, in a
-     * 48dp touch target whose extra room is transparent.
+     * touch target of up to 48dp whose extra room is transparent; the target is 40dp, then
+     * 36dp, as its room shrinks, and never past its parent.
      */
     @NonNull private TextView control(@NonNull BuiltinWidgetUi ui, @NonNull String glyph, float sp,
                                       @ColorInt int color, int discDp, @NonNull Runnable action) {
-        TextView view = ui.glyph(glyph, sp, color);
-        if (discDp > 0) {
-            GradientDrawable disc = new GradientDrawable();
-            disc.setShape(GradientDrawable.OVAL);
-            disc.setColor(style().primary);
-            view.setBackground(new InsetDrawable(disc, ui.dp((TOUCH_DP - discDp) / 2f)));
-        }
-        view.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(TOUCH_DP), ui.dp(TOUCH_DP)));
+        ControlButton view = new ControlButton(ui, glyph, sp, color);
+        if (discDp > 0) view.setBackground(new DiscDrawable(style().primary, ui.dp(discDp)));
         int description = GLYPH_PREVIOUS.equals(glyph) ? R.string.bw_feeds_media_previous
             : GLYPH_NEXT.equals(glyph) ? R.string.bw_feeds_media_next
             : R.string.bw_feeds_media_pause;
@@ -543,46 +580,71 @@ public class MediaWidgetView extends BuiltinWidgetView {
 
     /**
      * Lays {@code items} (a view, then the dp it visibly occupies, repeated) in a row whose visible
-     * gaps are the design's {@code gapDp} — or spread edge to edge when {@code spread} — while each
-     * control keeps its full 48dp target. A target's transparent margin is taken back with negative
-     * margins, so in the row it occupies only what it shows and its touch area overlaps the gaps.
-     * Views without layout params (the decorations) are laid at their own size.
+     * gaps are the design's {@code gapDp} — or spread edge to edge, at least
+     * {@link #SPREAD_GAP_DP} apart, when {@code spread}. Each control keeps its touch target; the
+     * transparent margin of a target is taken out of the gap beside it, so neighbours' targets
+     * overlap a little rather than the visible marks drifting apart. In a spread row the targets
+     * also give up width, down to {@link #CONTROL_MIN_DP}, before anything is left out; when it
+     * is still too narrow the decorations go first, then the previous and next controls, and the
+     * play control stays.
      */
-    @NonNull private LinearLayout controlRow(@NonNull BuiltinWidgetUi ui, int gapDp, boolean spread,
-                                             @NonNull Object... items) {
-        LinearLayout row = new LinearLayout(getContext());
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
+    @NonNull private FitStack controlRow(@NonNull BuiltinWidgetUi ui, boolean spread, int gapDp,
+                                         @NonNull Object... items) {
+        FitStack row = FitStack.row(getContext()).centerAcross();
+        View before = null;
+        int beforeVisible = 0;
         for (int i = 0; i < items.length / 2; i++) {
             View view = (View) items[i * 2];
             int visible = (Integer) items[i * 2 + 1];
-            ViewGroup.LayoutParams existing = view.getLayoutParams();
-            boolean target = existing instanceof LinearLayout.LayoutParams;
-            LinearLayout.LayoutParams params = target ? (LinearLayout.LayoutParams) existing
-                : new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT);
-            int pad = target ? ui.dp((TOUCH_DP - visible) / 2f) : 0;
-            if (i > 0 && spread) {
-                row.addView(new View(getContext()), new LinearLayout.LayoutParams(0, 0, 1f));
+            int rank = view == playButton ? FitStack.ESSENTIAL
+                : view instanceof ControlButton ? CONTROL_RANK : DECORATION_RANK;
+            int gap = before == null ? 0 : ui.dp((spread ? SPREAD_GAP_DP : gapDp)
+                - overhang(before, beforeVisible, spread) - overhang(view, visible, spread));
+            boolean control = view instanceof ControlButton;
+            if (!spread) {
+                row.add(view, rank, gap);
+            } else if (control) {
+                // A spread row keeps its marks apart however far the targets shrink to fit.
+                row.addShrinkElastic(view, rank, gap, ui.dp(TOUCH_DP),
+                    ui.dp(Math.max(visible, CONTROL_MIN_DP)));
+            } else {
+                row.addElastic(view, rank, gap);
             }
-            params.leftMargin = (i > 0 && !spread ? ui.dp(gapDp) : 0) - pad;
-            params.rightMargin = -pad;
-            row.addView(view, params);
+            before = view;
+            beforeVisible = visible;
         }
+        row.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
         return row;
     }
 
     /**
-     * Seats a control row that follows a {@code gapDp} gap: its 48dp targets are taller than the
-     * {@code visibleDp} it shows, so the extra is taken back from the gap above and the padding
-     * below, keeping the visible spacing the design's.
+     * What a control's target adds either side of the {@code visibleDp} it shows: at the design's
+     * 48dp in a row that keeps the design's gaps, at the narrowest it shrinks to in a spread one.
      */
-    private static void settle(@NonNull View row, int gapDp, int visibleDp, @NonNull BuiltinWidgetUi ui) {
-        int overhang = ui.dp((TOUCH_DP - visibleDp) / 2f);
-        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) row.getLayoutParams();
-        params.topMargin = ui.dp(gapDp) - overhang;
-        params.bottomMargin = -overhang;
-        row.setLayoutParams(params);
+    private static float overhang(@NonNull View view, int visibleDp, boolean spread) {
+        if (!(view instanceof ControlButton)) return 0f;
+        int target = spread ? Math.max(visibleDp, CONTROL_MIN_DP) : TOUCH_DP;
+        return Math.max(0f, (target - visibleDp) / 2f);
+    }
+
+    /**
+     * The gap above a control row for the design's {@code gapDp} between what is visible: the
+     * row's target is taller than the {@code visibleDp} it shows, and the difference sits above it.
+     */
+    private static int controlGap(@NonNull BuiltinWidgetUi ui, int gapDp, int visibleDp) {
+        return Math.max(0, ui.dp(gapDp - (TOUCH_DP - visibleDp) / 2f));
+    }
+
+    /** {@code view} across its column, {@code insetDp} in from either side. */
+    @NonNull private static <V extends View> V indented(@NonNull V view, @NonNull BuiltinWidgetUi ui,
+                                                        int insetDp) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.leftMargin = ui.dp(insetDp);
+        params.rightMargin = ui.dp(insetDp);
+        view.setLayoutParams(params);
+        return view;
     }
 
     private static void enable(@NonNull View view, boolean enabled) {
@@ -611,17 +673,29 @@ public class MediaWidgetView extends BuiltinWidgetView {
             FrameLayout.LayoutParams.MATCH_PARENT);
     }
 
-    /** The art well; square to its height at 4×2, where the card's height decides its size. */
+    /**
+     * The art well. With a desired size it is a square of that size, or of the room it is given
+     * if that is smaller; at 4×2 it is square to its height, which the card decides.
+     */
     private static final class ArtFrame extends FrameLayout {
         private final boolean square;
+        private final int desiredPx;
 
-        ArtFrame(@NonNull Context context, boolean square) {
+        ArtFrame(@NonNull Context context, boolean square, int desiredPx) {
             super(context);
             this.square = square;
+            this.desiredPx = desiredPx;
             setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         }
 
         @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            if (desiredPx > 0) {
+                int side = Math.min(desiredPx, Math.min(room(widthMeasureSpec),
+                    room(heightMeasureSpec)));
+                int exact = MeasureSpec.makeMeasureSpec(side, MeasureSpec.EXACTLY);
+                super.onMeasure(exact, exact);
+                return;
+            }
             if (square && MeasureSpec.getMode(heightMeasureSpec) != MeasureSpec.UNSPECIFIED) {
                 int side = MeasureSpec.getSize(heightMeasureSpec);
                 int exact = MeasureSpec.makeMeasureSpec(side, MeasureSpec.EXACTLY);
@@ -630,6 +704,71 @@ public class MediaWidgetView extends BuiltinWidgetView {
             }
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         }
+    }
+
+    /** The size a spec offers; unbounded when it offers none. */
+    private static int room(int measureSpec) {
+        return View.MeasureSpec.getMode(measureSpec) == View.MeasureSpec.UNSPECIFIED
+            ? Integer.MAX_VALUE : View.MeasureSpec.getSize(measureSpec);
+    }
+
+    /**
+     * A glyph button that is 48dp square where the room allows, 40dp where it does not, and 36dp
+     * below that, never larger than the room it is given.
+     */
+    private static final class ControlButton extends TextView {
+        private final int touchPx, midPx, minPx;
+
+        ControlButton(@NonNull BuiltinWidgetUi ui, @NonNull String glyph, float sp,
+                      @ColorInt int color) {
+            super(ui.context);
+            touchPx = ui.dp(TOUCH_DP);
+            midPx = ui.dp(TOUCH_MID_DP);
+            minPx = ui.dp(TOUCH_MIN_DP);
+            setText(glyph);
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+            if (ui.style.nerd != null) setTypeface(ui.style.nerd);
+            setTextColor(color);
+            setGravity(Gravity.CENTER);
+            setIncludeFontPadding(false);
+        }
+
+        /** 48dp where {@code room} allows it, 40dp, then 36dp, never more than the room. */
+        private int target(int room) {
+            return room >= touchPx ? touchPx : room >= midPx ? midPx : Math.min(room, minPx);
+        }
+
+        @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            if (MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.EXACTLY) {
+                // A row that shrinks its targets for width: as tall as the room allows.
+                setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec),
+                    target(room(heightMeasureSpec)));
+                return;
+            }
+            int side = target(Math.min(room(widthMeasureSpec), room(heightMeasureSpec)));
+            setMeasuredDimension(side, side);
+        }
+    }
+
+    /** A round fill of at most {@code discPx} across, centred in whatever bounds it is given. */
+    private static final class DiscDrawable extends Drawable {
+        private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final int discPx;
+
+        DiscDrawable(@ColorInt int color, int discPx) {
+            paint.setColor(color);
+            this.discPx = discPx;
+        }
+
+        @Override public void draw(@NonNull Canvas canvas) {
+            Rect bounds = getBounds();
+            float radius = Math.min(discPx, Math.min(bounds.width(), bounds.height())) / 2f;
+            canvas.drawCircle(bounds.exactCenterX(), bounds.exactCenterY(), radius, paint);
+        }
+
+        @Override public void setAlpha(int alpha) { paint.setAlpha(alpha); }
+        @Override public void setColorFilter(@Nullable ColorFilter filter) { paint.setColorFilter(filter); }
+        @Override public int getOpacity() { return PixelFormat.TRANSLUCENT; }
     }
 
     /** A typeface for part of a line, on every API level the launcher runs on. */

@@ -138,8 +138,11 @@ public class AgendaWidgetView extends BuiltinWidgetView {
         TextView numeral = ui.numeral(Integer.toString(day.today.getDayOfMonth()), 36f);
         TextView line = !day.permitted ? CalendarWidgetSupport.allowLine(ui, 10.5f, true)
             : ui.mono(day.loaded ? day.countText(getContext()) : "", 10.5f);
-        LinearLayout root = ui.column(2, weekday, numeral, line);
-        root.setGravity(Gravity.CENTER);
+        // At 57dp the three lines are 8dp too tall: the count goes first, then the weekday.
+        FitStack root = FitStack.column(getContext()).centerAcross().centerAlong()
+            .add(weekday, 20, 0)
+            .add(numeral, FitStack.ESSENTIAL, ui.dp(2))
+            .add(line, 10, ui.dp(2));
         inset(root, 6, 0, 6, 0, ui);
         return root;
     }
@@ -164,17 +167,20 @@ public class AgendaWidgetView extends BuiltinWidgetView {
                 CalendarWidgetFormats.monthShort(day.today.getMonth(), day.locale)),
             13f, ui.style.sansBold, ui.style.onSurfaceVariant);
         LinearLayout heading = CalendarWidgetSupport.baselineRow(ui, 8, numeral, BuiltinWidgetUi.flex(label));
-        CalendarFitColumn list = new CalendarFitColumn(getContext(), ui.dp(9));
+        FitStack list = FitStack.column(getContext());
         if (!day.permitted) {
-            list.addView(CalendarWidgetSupport.allowLine(ui, 12f, false));
+            list.addRow(CalendarWidgetSupport.allowLine(ui, 12f, false), ui.dp(9));
         } else if (day.loaded) {
             int count = 0;
             for (CalendarEvent event : day.upcoming) {
                 if (count++ == 3) break;
-                list.addView(CalendarWidgetSupport.compactRow(ui, event, day.slot(event),
-                    !isPreview()));
+                list.addRow(CalendarWidgetSupport.compactRow(ui, event, day.slot(event),
+                    !isPreview()), ui.dp(9));
             }
-            if (count == 0) list.addView(CalendarWidgetSupport.emptyLine(ui, day.emptyText(getContext()), 12f));
+            if (count == 0) {
+                list.addRow(CalendarWidgetSupport.emptyLine(ui, day.emptyText(getContext()), 12f),
+                    ui.dp(9));
+            }
         }
         LinearLayout root = ui.column(10, CalendarWidgetSupport.wide(heading), BuiltinWidgetUi.flexTall(list));
         inset(root, 14, 14, 14, 14, ui);
@@ -208,13 +214,18 @@ public class AgendaWidgetView extends BuiltinWidgetView {
             12f, ui.style.sansBold, ui.style.onSurfaceVariant);
         TextView count = ui.mono(day.loaded
             ? context.getString(R.string.bw_calendar_today_count, day.todays.size()) : "", 10.5f);
-        LinearLayout date = ui.column(2, weekday, numeral, month,
-            BuiltinWidgetUi.flexTall(new View(context)), count);
+        // At 115dp the column is a few dp short of all five lines: the count goes first, then
+        // the month, then the weekday; the date numeral stays.
+        FitStack date = FitStack.column(context)
+            .add(weekday, 30, 0)
+            .add(numeral, FitStack.ESSENTIAL, ui.dp(2))
+            .add(month, 20, ui.dp(2))
+            .addElastic(count, 10, ui.dp(2));
         BuiltinWidgetUi.size(date, ui.dp(84), ViewGroup.LayoutParams.MATCH_PARENT);
 
-        CalendarFitColumn list = new CalendarFitColumn(context, ui.dp(10));
+        FitStack list = FitStack.column(context);
         if (!day.permitted) {
-            list.addView(CalendarWidgetSupport.allowLine(ui, 13f, false));
+            list.addRow(CalendarWidgetSupport.allowLine(ui, 13f, false), ui.dp(10));
         } else if (day.loaded) {
             List<CalendarEvent> rows = new ArrayList<>();
             for (CalendarEvent event : day.upcoming) {
@@ -232,9 +243,12 @@ public class AgendaWidgetView extends BuiltinWidgetView {
                     (int) Math.ceil(probe.getPaint().measureText(slot)) + ui.dp(1));
             }
             for (int i = 0; i < rows.size(); i++) {
-                list.addView(wideRow(ui, day, rows.get(i), slots.get(i), timeWidth));
+                list.addRow(wideRow(ui, day, rows.get(i), slots.get(i), timeWidth), ui.dp(10));
             }
-            if (rows.isEmpty()) list.addView(CalendarWidgetSupport.emptyLine(ui, day.emptyText(context), 13f));
+            if (rows.isEmpty()) {
+                list.addRow(CalendarWidgetSupport.emptyLine(ui, day.emptyText(context), 13f),
+                    ui.dp(10));
+            }
         }
         list.setLayoutParams(new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
         LinearLayout root = ui.row(16, date, list);

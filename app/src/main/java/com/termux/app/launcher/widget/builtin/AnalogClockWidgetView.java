@@ -30,6 +30,11 @@ import static com.termux.app.launcher.widget.builtin.ClockWidgetSupport.wide;
  * second hand crosses a minute, whichever comes first.</p>
  */
 public class AnalogClockWidgetView extends BuiltinWidgetView {
+    /** What a 4×2 zone's time ranks at, less its place in the list; the phone's own never goes. */
+    private static final int ZONE_RANK = 90;
+    /** The offset lines under the 4×2 times, the first thing left out of a short card. */
+    private static final int OFFSET_RANK = 10;
+
     static final String KEY_ZONE1 = "zone1";
     static final String KEY_ZONE2 = "zone2";
     static final String DEFAULT_ZONE1 = "Europe/London";
@@ -138,7 +143,9 @@ public class AnalogClockWidgetView extends BuiltinWidgetView {
 
     private void buildFourByTwo(@NonNull FrameLayout frame, @NonNull BuiltinWidgetUi ui) {
         List<ZoneId> zones = zones();
-        View[] rows = new View[zones.size()];
+        // Three zones with their offset lines are about 35dp taller than the 115dp minimum
+        // gives: the offset lines go, all together, and the three times stay.
+        FitStack column = FitStack.column(getContext());
         for (int i = 0; i < zones.size(); i++) {
             TextView city = ui.text("", 12f, style().sansBold, style().onSurface);
             TextView offset = ui.mono("", 10.5f);
@@ -150,9 +157,9 @@ public class AnalogClockWidgetView extends BuiltinWidgetView {
             LinearLayout head = wide(ui.row(8, BuiltinWidgetUi.flex(city), time));
             head.setGravity(Gravity.TOP);
             head.setBaselineAligned(true);
-            rows[i] = wide(ui.column(2, head, offset));
+            column.add(head, i == 0 ? FitStack.ESSENTIAL : ZONE_RANK - i, i == 0 ? 0 : ui.dp(12));
+            column.add(wide(offset), OFFSET_RANK, ui.dp(2));
         }
-        LinearLayout column = ui.column(12, rows);
         LinearLayout root = ui.row(20, face(160, 0.08f), BuiltinWidgetUi.flex(column));
         inset(root, 16, 0, 16, 0, ui);
         frame.addView(root, fill());

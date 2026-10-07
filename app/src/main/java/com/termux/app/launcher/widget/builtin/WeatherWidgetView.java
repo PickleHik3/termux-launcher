@@ -30,6 +30,18 @@ public class WeatherWidgetView extends BuiltinWidgetView {
     private static final String GLYPH_HUMIDITY = "\uf043";
     private static final String GLYPH_NO_WEATHER = "\uf0c2";
 
+    /** The 4×2 glyph column's narrowest, before the days beside it give anything up. */
+    private static final int LEFT_MIN_DP = 96;
+    /**
+     * What a 4×2 day needs to show its name and its low and high: 36 + 8 + 20 + 6 + 20, and two
+     * more for the dp rounding of five parts measured in whole pixels.
+     */
+    private static final int DAY_MIN_DP = 92;
+    /** The narrowest a day's range bar is drawn at; below it the bar is left out. */
+    private static final int BAR_MIN_DP = 24;
+    /** What the first 4×2 day ranks at; each later day ranks one lower. */
+    private static final int DAY_RANK = 50;
+
     private final WeatherController.Listener weatherListener = this::onWeather;
     private final BuiltinWidgetServices.TickListener tickListener = this::onTick;
 
@@ -154,9 +166,11 @@ public class WeatherWidgetView extends BuiltinWidgetView {
         TextView range = ui.mono(getContext().getString(R.string.bw_feeds_weather_range_short,
             m.high, m.low), 10.5f);
         range.setVisibility(m.hasRange() ? VISIBLE : GONE);
-        LinearLayout column = ui.column(4, ui.glyph(m.glyph, 22, tint(m.tone)),
-            ui.numeral(m.temp, 26), range);
-        column.setGravity(Gravity.CENTER);
+        // At 57dp the range goes first, then the glyph; the temperature stays.
+        FitStack column = FitStack.column(getContext()).centerAcross().centerAlong()
+            .add(ui.glyph(m.glyph, 22, tint(m.tone)), 20, 0)
+            .add(ui.numeral(m.temp, 26), FitStack.ESSENTIAL, ui.dp(4))
+            .add(range, 10, ui.dp(4));
         inset(column, 6, 0, 6, 0, ui);
         return column;
     }
@@ -176,9 +190,13 @@ public class WeatherWidgetView extends BuiltinWidgetView {
         temp.setLetterSpacing(-0.03f);
         LinearLayout head = wide(ui.row(8, BuiltinWidgetUi.flex(temp),
             ui.glyph(m.glyph, 32, tint(m.tone))));
-        LinearLayout column = ui.column(6, caption(m, ui), head, wide(conditionLine(m, 12, ui)),
-            BuiltinWidgetUi.flexTall(new View(getContext())),
-            wide(hourlyStrip(m.hours, 4, ui)));
+        // The hourly strip is 55dp of a 115dp card the temperature and the condition already fill:
+        // it goes first, then the place; the 6dp gaps either side of the design's spacer are 12.
+        FitStack column = FitStack.column(getContext())
+            .add(caption(m, ui), 20, 0)
+            .add(head, FitStack.ESSENTIAL, ui.dp(6))
+            .add(wide(conditionLine(m, 12, ui)), 30, ui.dp(6))
+            .addElastic(wide(hourlyStrip(m.hours, 4, ui)), 10, ui.dp(12));
         inset(column, 14, 14, 14, 14, ui);
         return column;
     }
@@ -215,27 +233,36 @@ public class WeatherWidgetView extends BuiltinWidgetView {
             facts.addView(wind, params);
         }
 
-        LinearLayout left = ui.column(6, caption(m, ui), glyph, temp, condition,
-            BuiltinWidgetUi.flexTall(new View(getContext())), facts);
-        // The design adds 6dp above the glyph; a TextView's line box is taller than CSS's
-        // line-height:1, so the column spends that 6dp on the numeral's ascent instead.
-        left.setLayoutParams(new LinearLayout.LayoutParams(ui.dp(120),
+        // At 115dp only the temperature and a line under it fit: the facts go first, then the
+        // place, then the glyph, then the condition.
+        FitStack left = FitStack.column(getContext())
+            .add(caption(m, ui), 20, 0)
+            .add(glyph, 30, ui.dp(6))
+            // The design adds 6dp above the glyph; a TextView's line box is taller than CSS's
+            // line-height:1, so the column spends that 6dp on the numeral's ascent instead.
+            .add(temp, FitStack.ESSENTIAL, ui.dp(6))
+            .add(condition, 40, ui.dp(6))
+            .addElastic(facts, 10, ui.dp(12));
+        left.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
 
-        LinearLayout days = new LinearLayout(getContext());
-        days.setOrientation(LinearLayout.VERTICAL);
         // justify-content: space-between — the first row at the top, the last at the bottom.
+        FitStack days = FitStack.column(getContext());
         for (int i = 0; i < m.days.size(); i++) {
-            if (i > 0) days.addView(BuiltinWidgetUi.flexTall(new View(getContext())));
-            days.addView(dayRow(m.days.get(i), ui), new LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            View day = dayRow(m.days.get(i), ui);
+            day.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            days.addElastic(day, DAY_RANK - i, 0);
         }
-        LinearLayout.LayoutParams daysParams = new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.MATCH_PARENT, 1f);
-        days.setLayoutParams(daysParams);
+        days.setLayoutParams(new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
 
-        LinearLayout row = ui.row(18, left, days);
-        row.setGravity(Gravity.TOP);
+        // At 245dp the days column has 75dp, which is less than a day's name and range: the
+        // glyph column shrinks to its 96dp minimum first, and what is still short in a day
+        // row (the range bar, then the sky glyph) is left out.
+        FitStack row = FitStack.row(getContext())
+            .addShrink(left, FitStack.ESSENTIAL, 0, ui.dp(120), ui.dp(LEFT_MIN_DP))
+            .addFlex(days, FitStack.ESSENTIAL, ui.dp(18), ui.dp(DAY_MIN_DP));
         inset(row, 16, 16, 16, 16, ui);
         return row;
     }
@@ -253,10 +280,14 @@ public class WeatherWidgetView extends BuiltinWidgetView {
         BuiltinWidgetUi.BarView bar = ui.bar(0f, style().warm, 5);
         bar.set(day.start, day.end, style().warm);
         bar.setLayoutParams(new LinearLayout.LayoutParams(0, ui.dp(5), 1f));
-        LinearLayout range = ui.row(6, low, bar, high);
-        range.setLayoutParams(new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        return ui.row(8, name, glyph, range);
+        // The day's name and its low and high always show; the sky glyph and then the range bar
+        // go when the row is narrower than they need.
+        return FitStack.row(getContext()).centerAcross()
+            .add(name, FitStack.ESSENTIAL, 0)
+            .add(glyph, 30, ui.dp(8))
+            .add(low, FitStack.ESSENTIAL, ui.dp(8))
+            .addFlex(bar, 10, ui.dp(6), ui.dp(BAR_MIN_DP))
+            .add(high, FitStack.ESSENTIAL, ui.dp(6));
     }
 
     /** The next {@code count} hours as equal columns: hour, sky, temperature. */

@@ -131,16 +131,17 @@ public class DigitalClockWidgetView extends BuiltinWidgetView {
         amPmView = ui.mono("", 10.5f);
         LinearLayout captionRow = wide(ui.row(8, BuiltinWidgetUi.flex(caption), amPmView));
 
-        // The design's margin-top:auto on the time, after a 10dp gap: the time sits low.
-        View spacer = BuiltinWidgetUi.flexTall(new View(getContext()));
-        ((LinearLayout.LayoutParams) spacer.getLayoutParams()).topMargin = ui.dp(10);
         timeView = wide(numeral(46f, -0.04f, Gravity.START, style().onSurface));
         LinearLayout bars = wide(ui.column(7,
             progress(ui, R.string.bw_clocks_day, style().primary, true),
             progress(ui, R.string.bw_clocks_year, style().warm, false)));
 
-        LinearLayout column = ui.column(0, captionRow, spacer, timeView, bars);
-        ((LinearLayout.LayoutParams) bars.getLayoutParams()).topMargin = ui.dp(10);
+        // The design's margin-top:auto on the time, after a 10dp gap: the time sits low. At the
+        // 115dp minimum the two progress bars do not fit under it, so they are the ones left out.
+        FitStack column = FitStack.column(getContext())
+            .add(captionRow, 50, 0)
+            .addElastic(timeView, FitStack.ESSENTIAL, ui.dp(10))
+            .add(bars, 10, ui.dp(10));
         inset(column, 14, 14, 14, 14, ui);
         frame.addView(column, fill());
     }

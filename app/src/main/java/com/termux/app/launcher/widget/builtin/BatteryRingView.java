@@ -18,15 +18,22 @@ public final class BatteryRingView extends View {
     /** The inner disc's diameter as a share of the ring's: 56 of 68 in the design. */
     private static final float INNER = 56f / 68f;
 
+    /** The clear space kept between the ring and the card's edge when the card is small. */
+    private static final int MARGIN_DP = 8;
+
     @NonNull private final BuiltinWidgetStyle style;
+    private final int desiredPx;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF oval = new RectF();
     private float fraction;
     @ColorInt private int fill;
 
-    public BatteryRingView(@NonNull Context context, @NonNull BuiltinWidgetStyle style) {
+    /** A ring that wants {@code desiredDp} and settles for what its room leaves under the margin. */
+    public BatteryRingView(@NonNull Context context, @NonNull BuiltinWidgetStyle style,
+                           int desiredDp) {
         super(context);
         this.style = style;
+        this.desiredPx = style.dp(desiredDp);
         fill = style.primary;
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
@@ -35,6 +42,17 @@ public final class BatteryRingView extends View {
         this.fraction = Math.max(0f, Math.min(1f, fraction));
         this.fill = fill;
         invalidate();
+    }
+
+    @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        int room = Math.min(
+            MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED ? Integer.MAX_VALUE
+                : MeasureSpec.getSize(widthMeasureSpec),
+            MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED ? Integer.MAX_VALUE
+                : MeasureSpec.getSize(heightMeasureSpec));
+        int side = room == Integer.MAX_VALUE ? desiredPx
+            : Math.min(desiredPx, Math.max(0, room - 2 * style.dp(MARGIN_DP)));
+        setMeasuredDimension(side, side);
     }
 
     @Override protected void onDraw(@NonNull Canvas canvas) {
