@@ -102,7 +102,7 @@ script, your file is kept and one line says so.
 `termux-notification-remove`, `termux-notification-list`, `termux-toast`, `termux-vibrate`,
 `termux-torch`, `termux-battery-status`, `termux-volume` and `termux-wallpaper`. They print what the
 originals print and take the same options, so scripts written for Termux:API run unchanged, with no
-companion app. Each one calls a [launcherctl](LauncherCtl.md#termux-api-commands-on-top-of-launcherctl)
+companion app. Each one calls a [launcherctl](LauncherCtl.md#termuxapi-commands-on-top-of-launcherctl)
 command.
 
 - Options the launcher cannot honour (notification buttons, sounds, LED colours, toast position)
