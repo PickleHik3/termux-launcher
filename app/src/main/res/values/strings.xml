@@ -2349,6 +2349,18 @@
     <string name="voice_input_meta_undone">· cleanup undone</string>
     <string name="voice_input_meta_inserted">· at the cursor</string>
     <string name="voice_input_meta_copied">· to the clipboard</string>
+    <!-- Read aloud's card: the dictation card's shell, reading the terminal selection. -->
+    <string name="read_aloud_reading">Reading</string>
+    <string name="read_aloud_paused">Paused</string>
+    <string name="read_aloud_done">Done</string>
+    <string name="read_aloud_meta_preparing">· preparing</string>
+    <string name="read_aloud_meta_progress">· %1$d of %2$d</string>
+    <string name="read_aloud_move_handle">Move the reading panel. Double-tap to put it back in the corner</string>
+    <string name="read_aloud_close">Stop reading and close</string>
+    <string name="read_aloud_pause">Pause reading</string>
+    <string name="read_aloud_resume">Resume reading</string>
+    <string name="read_aloud_stop">Stop reading</string>
+    <string name="read_aloud_voice">Voice: %1$s. Choose another</string>
     <string name="voice_input_no_model">No speech model installed — using the Android recognizer</string>
     <string name="voice_input_fallback">%1$s — using the Android recognizer</string>
     <string name="voice_input_stopped">Voice input stopped: %1$s</string>

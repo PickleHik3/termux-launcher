@@ -835,13 +835,19 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         return TaiReadAloud.isSpeaking();
     }
 
-    /** Reads the selection with the voice model, or stops the reading already under way. */
+    /**
+     * Reads the selection with the voice model on the reading card, or stops the reading already
+     * under way ("Stop reading", or an empty selection) and closes the card with it.
+     */
     @Override
     public void onReadAloud(String text) {
-        if (text == null || text.trim().isEmpty()) {
+        if (text == null || text.trim().isEmpty() || TaiReadAloud.isSpeaking()) {
             if (TaiReadAloud.isSpeaking()) TaiReadAloud.stop(mContext);
+            mHost.closeReadAloudCard();
             return;
         }
+        if (mHost.showReadAloudCard(text)) return;
+        // No card to show: read without one, as before it existed.
         TaiReadAloud.toggle(mContext, text, error -> {
             if (error != null) AppNotice.show(mContext, error, true);
         });
