@@ -135,9 +135,18 @@
     <string name="settings_memory_usage_title">Memory usage</string>
     <string name="settings_memory_usage_summary"></string>
     <string name="settings_weather_title">Weather</string>
-    <string name="settings_weather_summary">Uses your location. Needs location permission.</string>
+    <string name="settings_weather_summary">Uses your location, which needs location permission, or the place set below.</string>
     <string name="settings_weather_fahrenheit_title">Fahrenheit</string>
     <string name="settings_weather_fahrenheit_summary">Show °F instead of °C.</string>
+    <string name="settings_weather_location_title">Place</string>
+    <string name="settings_weather_location_summary_device">Uses your device location</string>
+    <string name="settings_weather_location_current">Now: %1$s</string>
+    <string name="settings_weather_location_search_hint">Search for a city</string>
+    <string name="settings_weather_location_type_more">Keep typing a city name</string>
+    <string name="settings_weather_location_searching">Searching…</string>
+    <string name="settings_weather_location_no_results">No places found</string>
+    <string name="settings_weather_location_network_error">Can\'t reach the place search. Check your connection.</string>
+    <string name="settings_weather_location_use_device">Use device location</string>
     <string name="settings_theme_header">Theme</string>
     <string name="settings_color_mode_title">App theme</string>
     <string name="settings_wallpaper_colors_title">Wallpaper colors</string>
@@ -2509,6 +2518,7 @@
     <string name="weather_card_today">TODAY</string>
     <string name="weather_card_unavailable">Weather unavailable</string>
     <string name="weather_card_unavailable_location">Weather needs a location fix</string>
+    <string name="weather_card_unavailable_place">Can\'t find %1$s. Check Settings → Status bar.</string>
 
     <!-- First-boot tour: one card per gesture, shown over the real home screen -->
     <string name="tour_skip">Skip</string>

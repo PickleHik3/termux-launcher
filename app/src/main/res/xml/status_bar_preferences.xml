@@ -35,6 +35,12 @@
             app:summary="@string/settings_weather_fahrenheit_summary"
             app:defaultValue="false"
             app:dependency="status_widget_weather" />
+        <Preference
+            app:key="status_widget_weather_location"
+            app:persistent="false"
+            app:title="@string/settings_weather_location_title"
+            app:summary="@string/settings_weather_location_summary_device"
+            app:dependency="status_widget_weather" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_status_more_header">

@@ -610,6 +610,22 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT = "status_widget_weather_fahrenheit";
         public static final boolean DEFAULT_STATUS_WIDGET_WEATHER_FAHRENHEIT = false;
 
+        /**
+         * The label of a place picked in Settings ("Salmiya, Hawalli") that the weather is fetched
+         * for instead of the device's location. Empty means the device's last known location, which
+         * is what needs the location permission; a place picked here never does.
+         */
+        public static final String KEY_STATUS_WIDGET_WEATHER_LOCATION = "status_widget_weather_location";
+        public static final String DEFAULT_STATUS_WIDGET_WEATHER_LOCATION = "";
+
+        /**
+         * The picked place's coordinates as "latitude,longitude" (Locale.ROOT decimals), stored with
+         * the label so the forecast is fetched without searching for the place again. Kept as one
+         * string because a float preference would round the coordinates.
+         */
+        public static final String KEY_STATUS_WIDGET_WEATHER_LOCATION_COORDS = "status_widget_weather_location_coords";
+        public static final String DEFAULT_STATUS_WIDGET_WEATHER_LOCATION_COORDS = "";
+
         /** Animate the terminal cursor between its old and new cell instead of jumping. */
         public static final String KEY_TERMINAL_CURSOR_TRAIL = "terminal_cursor_trail";
         public static final boolean DEFAULT_TERMINAL_CURSOR_TRAIL = true;

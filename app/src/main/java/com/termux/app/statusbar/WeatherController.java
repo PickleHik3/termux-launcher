@@ -17,6 +17,7 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 
 import com.termux.R;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -29,6 +30,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -37,6 +40,16 @@ import java.util.concurrent.Executors;
  * is no persistent location polling: the location is read once per refresh via
  * {@link LocationManager#getLastKnownLocation}. Results are cached for {@link #CACHE_TTL_MS}; a
  * refresh within that window replays the cache instead of hitting the network.
+ *
+ * <p>When the user has picked a place in Settings (status_widget_weather_location and its stored
+ * coordinates, chosen from {@link WeatherGeocoder}'s live results), the forecast is fetched for those
+ * coordinates instead and the device's location is never read, so the weather works without the
+ * location permission. No search is made at fetch time; a label stored without coordinates is the
+ * one exception, resolved by a search and cached. The place is read on every refresh and the
+ * cache remembers which place it was fetched for: a changed place empties the cache and fetches
+ * again, with no restart and no listener on the preference. That covers every controller at once
+ * (the status bar's and the home widgets' each hold their own), since each refreshes on its way
+ * back from Settings.
  */
 public final class WeatherController {
 
@@ -93,6 +106,11 @@ public final class WeatherController {
         @NonNull public String sunset = "";
         /** Nearest place name for the fix, empty when reverse geocoding is unavailable. */
         @NonNull public String locationName = "";
+        /**
+         * The place picked in Settings this was fetched for, empty when it follows the device. Set
+         * on a failed fetch too, so the {@code unknown-place} message can name what was not found.
+         */
+        @NonNull public String requestedPlace = "";
         public long fetchedAtMs;
         @Nullable public String error;
     }
@@ -102,6 +120,45 @@ public final class WeatherController {
     }
 
     private static final long CACHE_TTL_MS = 30 * 60 * 1000L;
+
+    /**
+     * The place picked in Settings: the label the header shows and the coordinates the forecast is
+     * asked for. An empty label means the weather follows the device.
+     */
+    private static final class PlaceSetting {
+        @NonNull final String label;
+        /** {latitude, longitude}; null when only a label was stored. */
+        @Nullable final double[] coords;
+
+        PlaceSetting(@NonNull String label, @Nullable double[] coords) {
+            this.label = label;
+            this.coords = coords;
+        }
+
+        boolean isDevice() {
+            return label.isEmpty();
+        }
+
+        /** Two settings that would fetch the same forecast have the same key. */
+        @NonNull
+        String key() {
+            if (coords == null) return label;
+            return String.format(Locale.ROOT, "%s@%.5f,%.5f", label, coords[0], coords[1]);
+        }
+    }
+
+    /**
+     * Labels resolved by searching, for a place stored without its coordinates (the picker always
+     * stores them, so this is a fallback). Process-wide: the home widgets' controller is dropped and
+     * rebuilt as they come and go, and a place does not move.
+     */
+    private static final Map<String, WeatherGeocoder.Result> sResolvedPlaces = new ConcurrentHashMap<>();
+    /**
+     * When a label last came back with no match. Kept for {@link #CACHE_TTL_MS}, because the status
+     * bar asks for a refresh on every relayout while it has no forecast, and an unknown place would
+     * otherwise send a search each time.
+     */
+    private static final Map<String, Long> sUnknownPlaces = new ConcurrentHashMap<>();
 
     private final Context mContext;
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
@@ -115,6 +172,8 @@ public final class WeatherController {
     @Nullable private final Listener mListener;
 
     private final Weather mCache = new Weather();
+    /** {@link PlaceSetting#key()} of the place {@link #mCache} belongs to; main thread only. */
+    @Nullable private String mCachePlace;
     private volatile boolean mInFlight;
 
     public WeatherController(@NonNull Context context, @Nullable Listener listener) {
@@ -127,8 +186,9 @@ public final class WeatherController {
         return mCache;
     }
 
-    /** Fetch only when the cache is missing or older than the TTL. */
+    /** Fetch only when the cache is missing, older than the TTL, or for another place. */
     public void refreshIfStale() {
+        syncPlace(placeSetting());
         long now = nowMs();
         if (mCache.valid && now - mCache.fetchedAtMs < CACHE_TTL_MS) {
             publish(mCache);
@@ -138,12 +198,20 @@ public final class WeatherController {
     }
 
     public void forceRefresh() {
+        PlaceSetting place = placeSetting();
+        syncPlace(place);
         if (mInFlight) return;
         mInFlight = true;
         mExecutor.execute(() -> {
-            Weather result = fetch();
+            Weather result = fetch(place);
             mMainHandler.post(() -> {
                 mInFlight = false;
+                // The place changed while this was in flight, and the refresh that saw the change
+                // was turned away by mInFlight: this answer is for the old place, so fetch again.
+                if (!place.key().equals(mCachePlace)) {
+                    forceRefresh();
+                    return;
+                }
                 if (result.valid) {
                     copyInto(mCache, result);
                 }
@@ -160,13 +228,61 @@ public final class WeatherController {
         if (mListener != null) mListener.onWeatherUpdated(weather);
     }
 
+    /** The place picked in Settings, read fresh: this is how a change there reaches the weather. */
     @NonNull
-    private Weather fetch() {
+    private PlaceSetting placeSetting() {
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(mContext, false);
+        if (preferences == null) return new PlaceSetting("", null);
+        return new PlaceSetting(preferences.getStatusWidgetWeatherLocation(),
+            preferences.getStatusWidgetWeatherLocationCoords());
+    }
+
+    /**
+     * A forecast for another place is not a stale forecast for this one, so a changed place empties
+     * the cache instead of letting the old place's weather stand in while the new one loads.
+     */
+    private void syncPlace(@NonNull PlaceSetting place) {
+        String key = place.key();
+        if (key.equals(mCachePlace)) return;
+        if (mCachePlace != null) copyInto(mCache, new Weather());
+        mCachePlace = key;
+    }
+
+    @NonNull
+    private Weather fetch(@NonNull PlaceSetting place) {
         Weather w = new Weather();
-        Location location = lastKnownLocation();
-        if (location == null) {
-            w.error = "no-location";
-            return w;
+        double latitude;
+        double longitude;
+        Location location = null;
+        String placeName = null;
+        if (!place.isDevice()) {
+            // A picked place never reads the device's location, so it needs no permission.
+            w.requestedPlace = place.label;
+            if (place.coords != null) {
+                latitude = place.coords[0];
+                longitude = place.coords[1];
+                placeName = place.label;
+            } else {
+                WeatherGeocoder.Result resolved = resolveLabel(place.label);
+                if (resolved == null) {
+                    // resolveLabel records a label the search had no match for; anything else
+                    // that left it empty-handed was the network.
+                    w.error = sUnknownPlaces.containsKey(labelKey(place.label))
+                        ? "unknown-place" : "network";
+                    return w;
+                }
+                latitude = resolved.latitude;
+                longitude = resolved.longitude;
+                placeName = resolved.label();
+            }
+        } else {
+            location = lastKnownLocation();
+            if (location == null) {
+                w.error = "no-location";
+                return w;
+            }
+            latitude = location.getLatitude();
+            longitude = location.getLongitude();
         }
         try {
             String url = String.format(Locale.ROOT,
@@ -177,20 +293,52 @@ public final class WeatherController {
                     + "&daily=weather_code,temperature_2m_max,temperature_2m_min,sunrise,sunset"
                     + ",uv_index_max"
                     + "&timezone=auto&forecast_days=7",
-                location.getLatitude(), location.getLongitude());
+                latitude, longitude);
             String body = httpGet(url);
             if (body == null) {
                 w.error = "network";
                 return w;
             }
             parse(new JSONObject(body), w);
-            w.locationName = placeName(location);
+            w.locationName = placeName != null ? placeName : placeName(location);
             w.valid = true;
             w.fetchedAtMs = nowMs();
         } catch (Exception e) {
             w.error = "parse";
         }
         return w;
+    }
+
+    /**
+     * A stored label's best match, from the cache or a search. Null when the search could not be
+     * made, or when it found nothing; the latter is recorded in {@link #sUnknownPlaces}, which is
+     * how the caller tells the two apart.
+     */
+    @Nullable
+    private static WeatherGeocoder.Result resolveLabel(@NonNull String label) {
+        String key = labelKey(label);
+        WeatherGeocoder.Result cached = sResolvedPlaces.get(key);
+        if (cached != null) return cached;
+        Long missedAt = sUnknownPlaces.get(key);
+        if (missedAt != null) {
+            if (nowMs() - missedAt < CACHE_TTL_MS) return null;
+            sUnknownPlaces.remove(key);
+        }
+        // One match is enough for a bare name; a qualifier needs a few to choose among.
+        int count = WeatherGeocoder.qualifier(label).isEmpty() ? 1 : 10;
+        List<WeatherGeocoder.Result> results = WeatherGeocoder.search(label, count);
+        if (results == null) return null;
+        if (results.isEmpty()) {
+            sUnknownPlaces.put(key, nowMs());
+            return null;
+        }
+        sResolvedPlaces.put(key, results.get(0));
+        return results.get(0);
+    }
+
+    @NonNull
+    private static String labelKey(@NonNull String label) {
+        return label.toLowerCase(Locale.ROOT) + "|" + WeatherGeocoder.language();
     }
 
     private static void parse(@NonNull JSONObject root, @NonNull Weather w) throws Exception {
@@ -352,8 +500,9 @@ public final class WeatherController {
         }
     }
 
+    /** A GET returning the body, or null on any failure; shared with {@link WeatherGeocoder}. */
     @Nullable
-    private static String httpGet(@NonNull String urlString) {
+    static String httpGet(@NonNull String urlString) {
         HttpURLConnection conn = null;
         try {
             URL url = new URL(urlString);
@@ -383,6 +532,7 @@ public final class WeatherController {
         dst.sunrise = src.sunrise;
         dst.sunset = src.sunset;
         dst.locationName = src.locationName;
+        dst.requestedPlace = src.requestedPlace;
         dst.currentCode = src.currentCode;
         dst.currentIsDay = src.currentIsDay;
         dst.humidityPct = src.humidityPct;
