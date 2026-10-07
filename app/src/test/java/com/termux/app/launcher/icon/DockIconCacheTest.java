@@ -332,4 +332,70 @@ public class DockIconCacheTest {
         assertEquals(DockIconCache.Badge.CLONE, DockIconCache.badgeFor(new LauncherAppEntry(
             new AppRef("com.example.a", "Main", -1, 7L, true, "clone"), "a", null)));
     }
+
+    // ------------------------------------------------------------------ binding off the main thread
+
+    /** What the main thread asks while binding: held or not, and never any work. */
+    @Test
+    public void peek_answersOnlyWhatIsHeld_andNeverRenders() {
+        DockIconCache cache = cacheWithMemoryClass(0);
+        LauncherAppEntry app = entry("a");
+
+        assertNull(cache.peek(app, 48));
+        assertEquals("a peek must not render", 0, cache.sizeBytes());
+
+        Drawable rendered = cache.icon(app, 48);
+        assertSame(rendered, cache.peek(app, 48));
+        assertNull("another size is another render", cache.peek(app, 64));
+        assertNull(cache.peek(app, 0));
+    }
+
+    /** A hit must not reach for raw artwork: that load is what the worker exists to take. */
+    @Test
+    public void aRenderedHit_doesNotAskForRawArtwork() {
+        int[] artworkRequests = {0};
+        DockIconCache cache = new DockIconCache(resources, 0, () -> defaultIcon, e -> {
+            artworkRequests[0]++;
+            return new ColorDrawable(0xFF00FF00);
+        });
+        LauncherAppEntry app = new LauncherAppEntry(new AppRef("com.example.a", "Main"), "a", null);
+
+        cache.icon(app, 48);
+        cache.icon(app, 48);
+
+        assertEquals(1, artworkRequests[0]);
+    }
+
+    /**
+     * The worker renders while the main thread may evict: a render that began before an
+     * invalidation is handed back to its caller but never stored, so it cannot resurrect what the
+     * eviction removed.
+     */
+    @Test
+    public void aRenderOverlappingAnInvalidation_isNotStored() {
+        DockIconCache[] holder = new DockIconCache[1];
+        holder[0] = new DockIconCache(resources, 0, () -> defaultIcon, e -> {
+            holder[0].invalidateAll();
+            return new ColorDrawable(0xFF00FF00);
+        });
+        LauncherAppEntry app = new LauncherAppEntry(new AppRef("com.example.a", "Main"), "a", null);
+
+        assertTrue(holder[0].icon(app, 48) instanceof RenderedIconDrawable);
+        assertEquals(0, holder[0].sizeBytes());
+        assertNull(holder[0].peek(app, 48));
+    }
+
+    @Test
+    public void aRenderOverlappingAnIconPackSwitch_isNotStored() {
+        DockIconCache[] holder = new DockIconCache[1];
+        holder[0] = new DockIconCache(resources, 0, () -> defaultIcon, e -> {
+            holder[0].setIconPackIdentity("com.pack.b:1");
+            return new ColorDrawable(0xFF00FF00);
+        });
+        LauncherAppEntry app = new LauncherAppEntry(new AppRef("com.example.a", "Main"), "a", null);
+
+        holder[0].icon(app, 48);
+
+        assertEquals(0, holder[0].sizeBytes());
+    }
 }

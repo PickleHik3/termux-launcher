@@ -126,6 +126,14 @@ public final class UrlDetector {
      * external: negative for the transcript, {@code 0..mScreenRows-1} for the screen.
      */
     public static List<UrlSpan> find(TerminalBuffer screen, int firstRow, int lastRow) {
+        return find(screen, firstRow, lastRow, new Cache(false));
+    }
+
+    /**
+     * {@link #find(TerminalBuffer, int, int)}, answered from {@code cache} wherever the text it
+     * would read is unchanged since the cache's last call. The answer is the same either way.
+     */
+    public static List<UrlSpan> find(TerminalBuffer screen, int firstRow, int lastRow, Cache cache) {
         List<UrlSpan> found = new ArrayList<>();
         final int minRow = -screen.getActiveTranscriptRows();
         final int maxRow = screen.mScreenRows - 1;
@@ -149,31 +157,50 @@ public final class UrlDetector {
         for (int i = 0; i < MAX_WRAP_CHAIN && scanLast < dividerLast && lineWraps(screen, scanLast); i++) scanLast++;
 
         final int columns = screen.mColumns;
-        List<Line> lines = new ArrayList<>();
+        final List<Line> lines = cache.mLines;
+        lines.clear();
+        cache.mLinesInUse = 0;
         for (int row = scanFirst; row <= scanLast; ) {
             if (lineWraps(screen, row) && row < scanLast) {
                 // Rows the emulator wrapped are full-width by definition: one line, no windows.
-                Line line = new Line(0, columns);
+                Line line = cache.obtainLine(0, columns);
                 line.appendRow(screen, row);
                 while (lineWraps(screen, row) && row < scanLast) {
                     row++;
                     line.appendRow(screen, row);
                 }
                 line.trimTrailingSpaces();
-                if (line.text.length() > 0) lines.add(line);
+                if (line.text.length() > 0) lines.add(line); else cache.mLinesInUse--;
             } else {
                 int[] windows = dividers.windows(row);
                 for (int w = 0; w < windows.length; w += 2) {
-                    Line line = new Line(windows[w], windows[w + 1]);
+                    Line line = cache.obtainLine(windows[w], windows[w + 1]);
                     line.appendRow(screen, row);
                     line.trimTrailingSpaces();
-                    if (line.text.length() > 0) lines.add(line);
+                    if (line.text.length() > 0) lines.add(line); else cache.mLinesInUse--;
                 }
             }
             row++;
         }
 
-        for (int index = 0; index < lines.size(); index++) {
+        // An address only ever continues from a line into the one lineBelow finds for it, so lines
+        // joined that way form a group whose answer depends on nothing outside it. A group whose
+        // text and cells match one from the cache's last call keeps that call's answer, moved to
+        // where the group now stands; only the others are matched against the grammar.
+        final int count = lines.size();
+        final Cache.Frame frame = cache.beginFrame(count);
+        for (int index = 0; index < count; index++) {
+            Line line = lines.get(index);
+            if (!line.endsAtWindowEdge(columns)) continue;
+            int below = lineBelow(lines, index + 1, line.lastRow() + 1, line.left, line.right);
+            if (below >= 0) frame.join(index, below);
+        }
+        frame.collectGroups();
+        for (int g = 0; g < frame.mGroupCount; g++) cache.lookUp(frame, g, lines, columns);
+
+        for (int index = 0; index < count; index++) {
+            if (frame.mEntry[frame.mRoot[index]] != null) continue;
+            cache.mScannedLines++;
             Line line = lines.get(index);
             Matcher matcher = URL_PATTERN.matcher(line.text);
             int from = line.consumed;
@@ -206,18 +233,294 @@ public final class UrlDetector {
                 }
                 match.trimTrailingPunctuation();
                 if (match.length() == 0) continue;
-                UrlSpan span = match.toSpan();
+                frame.addScanned(index, match.toSpan());
+            }
+        }
+        cache.endFrame(frame);
+
+        // Out in line order, as one pass over every line would have found them.
+        for (int index = 0; index < count; index++) {
+            Cache.Entry entry = frame.mEntry[frame.mRoot[index]];
+            int base = frame.mBase[frame.mRoot[index]];
+            int ordinal = frame.mOrdinal[index];
+            for (int k = 0; k < entry.mOrdinals.length; k++) {
+                if (entry.mOrdinals[k] != ordinal) continue;
+                UrlSpan span = entry.spanAt(k, base);
                 if (span.lastRow() >= firstRow && span.firstRow() <= lastRow) found.add(span);
             }
         }
         return found;
     }
 
+    /**
+     * What {@link #find(TerminalBuffer, int, int, Cache)} found last time, group by group, and
+     * the line objects it reads the screen into. One per caller that asks every frame; not
+     * thread-safe.
+     */
+    public static final class Cache {
+
+        /** One group's answer, kept with the exact cells it was computed from. */
+        static final class Entry {
+            final long mHash;
+            final int[] mSignature;
+            /** Per address: the ordinal, within the group, of the line it was found on. */
+            final int[] mOrdinals;
+            final String[] mUrls;
+            /** Per address: its segments with rows relative to the group's first row. */
+            final int[][] mRelativeSegments;
+            /** The spans as last handed out, and the group's first row they were handed out at. */
+            final UrlSpan[] mSpans;
+            int mSpansBase;
+
+            Entry(long hash, int[] signature, int[] ordinals, UrlSpan[] spans, int base) {
+                mHash = hash;
+                mSignature = signature;
+                mOrdinals = ordinals;
+                mSpans = spans;
+                mSpansBase = base;
+                mUrls = new String[spans.length];
+                mRelativeSegments = new int[spans.length][];
+                for (int k = 0; k < spans.length; k++) {
+                    mUrls[k] = spans[k].url;
+                    int[] segments = spans[k].mSegments.clone();
+                    for (int i = 0; i < segments.length; i += 3) segments[i] -= base;
+                    mRelativeSegments[k] = segments;
+                }
+            }
+
+            UrlSpan spanAt(int k, int base) {
+                if (base != mSpansBase) {
+                    for (int i = 0; i < mSpans.length; i++) {
+                        int[] segments = mRelativeSegments[i].clone();
+                        for (int j = 0; j < segments.length; j += 3) segments[j] += base;
+                        mSpans[i] = new UrlSpan(mUrls[i], segments);
+                    }
+                    mSpansBase = base;
+                }
+                return mSpans[k];
+            }
+        }
+
+        /** The grouping of one call's lines; reused from call to call. */
+        static final class Frame {
+            int[] mRoot = new int[0];
+            int[] mOrdinal = new int[0];
+            int[] mNextMember = new int[0];
+            int[] mLastMember = new int[0];
+            /** Indexed by root line: the group's entry, its first row and, while scanning, what it found. */
+            Entry[] mEntry = new Entry[0];
+            int[] mBase = new int[0];
+            long[] mHash = new long[0];
+            int[] mSignatureStart = new int[0];
+            int[] mSignatureEnd = new int[0];
+            final List<List<UrlSpan>> mScannedSpans = new ArrayList<>();
+            final List<List<Integer>> mScannedOrdinals = new ArrayList<>();
+            /** Roots in line order. */
+            int[] mGroups = new int[0];
+            int mGroupCount;
+            int mCount;
+
+            void reset(int count) {
+                mCount = count;
+                if (mRoot.length < count) {
+                    int size = Math.max(count, mRoot.length * 2);
+                    mRoot = new int[size];
+                    mOrdinal = new int[size];
+                    mNextMember = new int[size];
+                    mLastMember = new int[size];
+                    mEntry = new Entry[size];
+                    mBase = new int[size];
+                    mHash = new long[size];
+                    mSignatureStart = new int[size];
+                    mSignatureEnd = new int[size];
+                    mGroups = new int[size];
+                }
+                for (int i = 0; i < count; i++) {
+                    mRoot[i] = i;
+                    mEntry[i] = null;
+                }
+                mGroupCount = 0;
+            }
+
+            private int root(int i) {
+                while (mRoot[i] != i) {
+                    mRoot[i] = mRoot[mRoot[i]];
+                    i = mRoot[i];
+                }
+                return i;
+            }
+
+            /** The smaller index stays the root, so a group's root is its first line. */
+            void join(int a, int b) {
+                int ra = root(a), rb = root(b);
+                if (ra == rb) return;
+                if (ra < rb) mRoot[rb] = ra; else mRoot[ra] = rb;
+            }
+
+            void collectGroups() {
+                for (int i = 0; i < mCount; i++) {
+                    int r = root(i);
+                    mRoot[i] = r;
+                    mNextMember[i] = -1;
+                    if (r == i) {
+                        mGroups[mGroupCount++] = i;
+                        mOrdinal[i] = 0;
+                    } else {
+                        mNextMember[mLastMember[r]] = i;
+                        mOrdinal[i] = mOrdinal[mLastMember[r]] + 1;
+                    }
+                    mLastMember[r] = i;
+                }
+            }
+
+            void addScanned(int index, UrlSpan span) {
+                int root = mRoot[index];
+                int slot = -1;
+                for (int g = 0; g < mGroupCount; g++) if (mGroups[g] == root) slot = g;
+                while (mScannedSpans.size() <= slot) {
+                    mScannedSpans.add(new ArrayList<>());
+                    mScannedOrdinals.add(new ArrayList<>());
+                }
+                mScannedSpans.get(slot).add(span);
+                mScannedOrdinals.get(slot).add(mOrdinal[index]);
+            }
+        }
+
+        final List<Line> mLines = new ArrayList<>();
+        private final List<Line> mLinePool = new ArrayList<>();
+        int mLinesInUse;
+
+        /** False for the throwaway cache of a one-off call, which has nothing to remember for. */
+        private final boolean mRemember;
+
+        private final Frame mFrame = new Frame();
+        private List<Entry> mEntries = new ArrayList<>();
+        private List<Entry> mNextEntries = new ArrayList<>();
+        private int[] mSignatures = new int[256];
+        private int mSignaturesUsed;
+
+        /** Lines matched against the grammar in the last call, for tests. */
+        int mScannedLines;
+        /** Groups that missed the cache in the last call, for tests. */
+        int mScannedGroups;
+
+        public Cache() {
+            this(true);
+        }
+
+        private Cache(boolean remember) {
+            mRemember = remember;
+        }
+
+        Line obtainLine(int left, int right) {
+            Line line;
+            if (mLinesInUse < mLinePool.size()) {
+                line = mLinePool.get(mLinesInUse);
+                line.reset(left, right);
+            } else {
+                line = new Line(left, right);
+                mLinePool.add(line);
+            }
+            mLinesInUse++;
+            return line;
+        }
+
+        Frame beginFrame(int count) {
+            mScannedLines = 0;
+            mScannedGroups = 0;
+            mSignaturesUsed = 0;
+            mNextEntries.clear();
+            mFrame.reset(count);
+            for (List<UrlSpan> spans : mFrame.mScannedSpans) spans.clear();
+            for (List<Integer> ordinals : mFrame.mScannedOrdinals) ordinals.clear();
+            return mFrame;
+        }
+
+        /**
+         * Write the group's signature — every cell its answer is computed from, rows taken from
+         * its first row — and take the last call's entry for it if one matches exactly.
+         */
+        void lookUp(Frame frame, int g, List<Line> lines, int columns) {
+            final int root = frame.mGroups[g];
+            final int base = lines.get(root).rows[0];
+            frame.mBase[root] = base;
+            if (!mRemember) {
+                mScannedGroups++;
+                return;
+            }
+            final int start = mSignaturesUsed;
+            put(columns);
+            for (int i = root; i >= 0; i = frame.mNextMember[i]) {
+                Line line = lines.get(i);
+                put(line.rowCount);
+                for (int r = 0; r < line.rowCount; r++) put(line.rows[r] - base);
+                put(line.left);
+                put(line.right);
+                final int length = line.text.length();
+                put(length);
+                final int lineFirstRow = line.rows[0];
+                for (int k = 0; k < length; k++) {
+                    put((line.text.charAt(k) << 16) | ((line.row[k] - lineFirstRow) & 0xFFFF));
+                    put((line.columnStart[k] << 16) | ((line.columnEnd[k] - line.columnStart[k]) & 0xFFFF));
+                }
+            }
+            final int end = mSignaturesUsed;
+            long hash = 1125899906842597L;
+            for (int k = start; k < end; k++) hash = hash * 31 + mSignatures[k];
+            frame.mHash[root] = hash;
+            frame.mSignatureStart[root] = start;
+            frame.mSignatureEnd[root] = end;
+            for (Entry entry : mEntries) {
+                if (entry.mHash == hash && sameSignature(entry.mSignature, start, end)) {
+                    frame.mEntry[root] = entry;
+                    mNextEntries.add(entry);
+                    return;
+                }
+            }
+            mScannedGroups++;
+        }
+
+        private boolean sameSignature(int[] signature, int start, int end) {
+            if (signature.length != end - start) return false;
+            for (int k = 0; k < signature.length; k++) if (signature[k] != mSignatures[start + k]) return false;
+            return true;
+        }
+
+        private void put(int value) {
+            if (mSignaturesUsed == mSignatures.length) mSignatures = java.util.Arrays.copyOf(mSignatures, mSignatures.length * 2);
+            mSignatures[mSignaturesUsed++] = value;
+        }
+
+        /** Turn every scanned group into an entry, and keep only this call's entries for the next. */
+        void endFrame(Frame frame) {
+            for (int g = 0; g < frame.mGroupCount; g++) {
+                int root = frame.mGroups[g];
+                if (frame.mEntry[root] != null) continue;
+                List<UrlSpan> spans = g < frame.mScannedSpans.size() ? frame.mScannedSpans.get(g) : null;
+                int n = spans == null ? 0 : spans.size();
+                int[] ordinals = new int[n];
+                for (int k = 0; k < n; k++) ordinals[k] = frame.mScannedOrdinals.get(g).get(k);
+                int[] signature = mRemember
+                    ? java.util.Arrays.copyOfRange(mSignatures, frame.mSignatureStart[root], frame.mSignatureEnd[root])
+                    : null;
+                Entry entry = new Entry(frame.mHash[root], signature, ordinals, n == 0 ? NO_SPANS : spans.toArray(new UrlSpan[0]), frame.mBase[root]);
+                frame.mEntry[root] = entry;
+                if (mRemember) mNextEntries.add(entry);
+            }
+            List<Entry> previous = mEntries;
+            mEntries = mNextEntries;
+            mNextEntries = previous;
+            mNextEntries.clear();
+        }
+    }
+
+    private static final UrlSpan[] NO_SPANS = new UrlSpan[0];
+
     /** The index of the line that starts on {@code row} inside exactly the window {@code [left, right)}, or -1. */
     private static int lineBelow(List<Line> lines, int from, int row, int left, int right) {
         for (int i = from; i < lines.size(); i++) {
             Line line = lines.get(i);
-            int first = line.rows.get(0);
+            int first = line.rows[0];
             if (first > row) return -1;
             if (first == row && line.left == left && line.right == right) return i;
         }
@@ -303,10 +606,13 @@ public final class UrlDetector {
         private final int mColumns;
         /** Per row from {@code mFirst}: the divider columns, or null for a row without any candidate. */
         private final boolean[][] mCells;
+        /** The one window of a row without dividers; callers only read it. */
+        private final int[] mWholeRow;
 
         Dividers(TerminalBuffer screen, int first, int last, int minRun) {
             mFirst = first;
             mColumns = screen.mColumns;
+            mWholeRow = new int[] {0, mColumns};
             int rows = Math.max(0, last - first + 1);
             mCells = new boolean[rows][];
             boolean any = false;
@@ -356,7 +662,7 @@ public final class UrlDetector {
         int[] windows(int externalRow) {
             int r = externalRow - mFirst;
             boolean[] d = r >= 0 && r < mCells.length ? mCells[r] : null;
-            if (d == null) return new int[] {0, mColumns};
+            if (d == null) return mWholeRow;
             int count = 0;
             for (boolean b : d) if (b) count++;
             int[] out = new int[2 * (count + 1)];
@@ -381,25 +687,36 @@ public final class UrlDetector {
         int[] row = new int[64];
         int[] columnStart = new int[64];
         int[] columnEnd = new int[64];
-        /** Rows this line covers, in order. */
-        final List<Integer> rows = new ArrayList<>(1);
+        /** Rows this line covers, in order: the first {@link #rowCount} entries. */
+        int[] rows = new int[4];
+        int rowCount;
         /** Characters an address from the line above already absorbed; matching starts after them. */
         int consumed;
         /** The pane window {@code [left, right)} this line was read from; the full row for wrapped lines. */
-        final int left;
-        final int right;
+        int left;
+        int right;
 
         Line(int left, int right) {
             this.left = left;
             this.right = right;
         }
 
+        /** Make a pooled line empty again, for the window {@code [left, right)}. */
+        void reset(int left, int right) {
+            this.left = left;
+            this.right = right;
+            text.setLength(0);
+            rowCount = 0;
+            consumed = 0;
+        }
+
         int lastRow() {
-            return rows.get(rows.size() - 1);
+            return rows[rowCount - 1];
         }
 
         void appendRow(TerminalBuffer screen, int externalRow) {
-            rows.add(externalRow);
+            if (rowCount == rows.length) rows = java.util.Arrays.copyOf(rows, rowCount * 2);
+            rows[rowCount++] = externalRow;
             TerminalRow line = screen.mLines[screen.externalToInternalRow(externalRow)];
             if (line == null) return;
             final char[] chars = line.mText;
@@ -464,7 +781,7 @@ public final class UrlDetector {
             while (i < n && text.charAt(i) == ' ') i++;
             if (i >= n || i < consumed) return -1;
             // Only the first row of this line can continue the row above; a wrapped tail cannot.
-            return row[i] == rows.get(0) ? i : -1;
+            return row[i] == rows[0] ? i : -1;
         }
     }
 

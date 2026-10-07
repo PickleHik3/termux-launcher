@@ -390,6 +390,23 @@ public final class TermuxInAppKeyboard {
         mHost.requestAccessoryGeometrySync();
     }
 
+    /**
+     * The row heights a place layout decides, applied directly: the docked height scale and the
+     * floating multiplier, both kept per orientation. For the launcher's size pass — a turn of
+     * the screen, a grip dragged in the Layout editor — which only moves these; the full
+     * {@link #onPreferencesReloaded} stays for a real preference reload, since it also re-reads
+     * the tap-correction model from disk, the palette, the layout ring and the extra keys.
+     * Applied the way that reload applies them, so a height the grip is still dragging is left to
+     * the grip.
+     */
+    public void setPlaceSizes(float heightScale, float floatingHeightScale) {
+        if (mDestroyed || !mEnabled)
+            return;
+        applyFloatingHeightScale(floatingHeightScale, false);
+        if (!mHeightAdjusting)
+            applyHeightScale(heightScale);
+    }
+
     public void onPreferencesReloaded() {
         Trace.beginSection("Keyboard.onPreferencesReloaded");
         try {
@@ -1360,6 +1377,9 @@ public final class TermuxInAppKeyboard {
             && mPreferences.isAppHapticsEnabled();
         configBuilder.keySoundEnabled = mPreferences.isInAppKeyboardKeySoundEnabled();
         configBuilder.labelFont = loadCustomLabelFont();
+        // Nerd Font icons (the space bar's swipe glyphs, tool keys) stay in the bundled symbols
+        // font whatever face the user picked for labels; a picked font rarely has them.
+        configBuilder.symbolFont = bundledSymbolsLabelFont();
         mAppliedConfigSignature = configPreferenceSignature();
         mKeyboardView = new Keyboard2View(requireContainer().getContext(),
             configBuilder.build(), createPalette());

@@ -3,6 +3,7 @@ package com.termux.app;
 import android.app.Application;
 import android.content.Context;
 import android.content.res.Configuration;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.ContextThemeWrapper;
@@ -36,6 +37,9 @@ import com.termux.launcherctl.LauncherCtlApiServer;
 import com.termux.privileged.lane.PrivilegedLaneServer;
 
 import java.util.Properties;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class TermuxApplication extends Application {
 
@@ -50,6 +54,22 @@ public class TermuxApplication extends Application {
 
     /** {@code UI_MODE_NIGHT_MASK} bits last seen, so only an actual day/night flip does anything. */
     private volatile int mLastNightModeMask;
+
+    /**
+     * One thread for the start-up installers' asset compare-and-write, so they leave the main
+     * thread without racing each other. The thread only exists once something is queued.
+     */
+    private static final ExecutorService INSTALLER_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "TermuxInstallers");
+        thread.setDaemon(true);
+        return thread;
+    });
+
+    /** Where the start-up installers do their file work; see {@link #INSTALLER_EXECUTOR}. */
+    @NonNull
+    static Executor installerExecutor() {
+        return INSTALLER_EXECUTOR;
+    }
 
     public void onCreate() {
         super.onCreate();
@@ -108,6 +128,9 @@ public class TermuxApplication extends Application {
         // Init TermuxShellEnvironment constants and caches after everything has been setup including termux-am-socket server
         TermuxShellEnvironment.init(this);
         if (isTermuxFilesDirectoryAccessible) {
+            // Stays synchronous: it writes under $PREFIX, which the bootstrap installer checks for
+            // emptiness and replaces wholesale. The two installers below write only under ~/.termux
+            // and run once per process, mostly on the installer thread.
             TermuxShellEnvironment.writeEnvironmentToFile(this);
             TermuxShellIntegrationInstaller.ensureInstalled(this);
             TermuxLauncherConfigInstaller.ensureInstalled(this);
@@ -219,7 +242,12 @@ public class TermuxApplication extends Application {
     }
 
     private boolean isTaiRuntimeProcess(Context context) {
-        String processName = ProcessUtils.getAppProcessNameForPid(context, android.os.Process.myPid());
+        // Application.getProcessName() answers locally; the running-processes query is a binder
+        // call into the system server, kept only for the releases without it.
+        String processName = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+            ? Application.getProcessName() : null;
+        if (processName == null)
+            processName = ProcessUtils.getAppProcessNameForPid(context, android.os.Process.myPid());
         return processName != null && processName.endsWith(":tai_runtime");
     }
 }

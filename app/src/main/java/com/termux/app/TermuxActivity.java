@@ -137,6 +137,7 @@ import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
 import com.termux.app.terminal.ClipboardText;
+import com.termux.app.terminal.GeometryScheduler;
 import com.termux.app.terminal.PaneShape;
 import com.termux.app.terminal.TerminalFrameMetricsMonitor;
 import com.termux.app.terminal.TermuxActivityRootView;
@@ -599,8 +600,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean mStatusBarFoldDragging;
     private int mStatusBarFoldDragStartHeight;
-    private int mStatusBarFoldDragResizeGeneration;
-    private int mStatusBarTerminalResizeGeneration;
+    @Nullable private GeometryScheduler.Transition mStatusBarFoldDragTransition;
     /**
      * Whether the pane's top border has a bar to fold (syncBorderStatusSwipe): the bar shown,
      * along the top, where it can unfold. Kept as a field because the wall reads it on every
@@ -667,6 +667,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@link #finishTravelContentResizeAfterLayout}.
      */
     private boolean mTravelContentPreRolled;
+    /** The grid's hold over a pre-rolled slide, ended by finishTravelContentResizeAfterLayout. */
+    @Nullable private GeometryScheduler.Transition mTravelGridHold;
     /** The place {@link #mTravelRoomChangePx} was worked out for, so a frame costs one lookup. */
     @Nullable private com.termux.app.wall.PaneWallPage mTravelRoomArriving;
     private int mTravelRoomChangePx;
@@ -1196,8 +1198,39 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mWallpaperParallaxSparePx;
     /** Scratch for the managed picture's pixel size; never allocated per ask. */
     @NonNull private final int[] mManagedWallpaperSize = new int[2];
+    /**
+     * The system wallpaper id and the managed copy's facts, as last read; see
+     * {@link #refreshWallpaperSourceFacts()}. Null until the first ask reads them.
+     */
+    @Nullable private com.termux.app.chrome.WallpaperSourceFacts mWallpaperSourceFacts;
+    /** The managed exact copy's path, resolved (and its directory made) once. */
+    @Nullable private File mManagedWallpaperExactFile;
     /** The frost views that follow the parallax, looked up once; see {@link #syncWallpaperParallax}. */
     @Nullable private View[] mParallaxFrostViews;
+    /**
+     * Views the per-frame and per-touch paths reach for by id, kept after their first lookup; see
+     * {@link #hotView}. A walk of the whole tree per view per frame of a slide added up.
+     */
+    @NonNull private final android.util.SparseArray<View> mHotViews = new android.util.SparseArray<>();
+
+    /**
+     * {@link #findViewById} for the paths that run per frame or per touch: the view found last time,
+     * as long as it still hangs in this window's tree, else a fresh lookup. A view that was taken
+     * out (or never there yet) is looked up again, so the answer is always the one findViewById
+     * would give for this layout's one-view-per-id ids.
+     */
+    @Nullable
+    @SuppressWarnings("unchecked")
+    private <T extends View> T hotView(int id) {
+        View view = mHotViews.get(id);
+        if (view != null && getWindow() != null && view.getRootView() == getWindow().peekDecorView()) {
+            return (T) view;
+        }
+        view = findViewById(id);
+        if (view != null) mHotViews.put(id, view);
+        else mHotViews.remove(id);
+        return (T) view;
+    }
     /**
      * The screen rect {@link #mInAppKeyboardBackdropBitmap} was captured for, so a frame held
      * across a cache clear is kept only while it still describes the screen.
@@ -1354,7 +1387,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable private Bundle mHelpScreenNavigation;
     private final int[] mTmpParentLocation = new int[2];
     private final int[] mTmpViewLocation = new int[2];
-    private long mLastAccessoryGeometryApplyUptimeMs;
+    /**
+     * The root's IME margin the root view asked for, written by the next geometry pass rather than
+     * from inside its measure or a layout callback; null when nothing is waiting.
+     */
+    @Nullable private Integer mPendingRootBottomMarginPx;
+    /** The system keyboard's bottom inset as last dispatched, 0 while it is down. */
+    private int mLastDispatchedImeBottomPx;
     private int mAppliedTerminalFlushPaddingPx;
     /** The dock's rows and the bottom status band as the last geometry pass laid them out. */
     private int mAppliedDockContentHeightPx;
@@ -1488,11 +1527,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public int systemWallpaperId() {
-            return getCurrentSystemWallpaperId();
+            return wallpaperSourceFacts().systemWallpaperId;
         }
 
         @NonNull @Override public java.io.File managedWallpaperExactFile() {
             return getManagedWallpaperExactFile();
+        }
+
+        @Override public long managedWallpaperLastModified() {
+            return wallpaperSourceFacts().managedLastModified;
+        }
+
+        @Override public long managedWallpaperLength() {
+            return wallpaperSourceFacts().managedLength;
         }
 
         @Nullable @Override public com.termux.app.chrome.WallpaperBlurCache.FrameCapture beginCapture(
@@ -1556,18 +1603,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     ChromeRenderer getChromeRenderer() {
         return mChrome;
-    }
-
-    /**
-     * What a throttled accessory geometry pass still has to ask for. The pass itself moved
-     * nothing, so there is nothing for a render pass to re-cut — unless the reason is that the
-     * wallpaper, the style or the blur changed, which invalidates the crops whether or not the
-     * geometry settled. It used to ask for a render pass unconditionally, so a geometry pass that
-     * skipped its own work still cost a full apply of the chrome.
-     */
-    private static int accessorySkipScopes(@NonNull String reason) {
-        return reason.contains("wallpaper") || reason.contains("style") || reason.contains("blur")
-            ? ChromeRenderer.SCOPE_BACKDROPS | ChromeRenderer.SCOPE_ACCESSORY_RENDER : 0;
     }
 
     /** The rotation geometry pass waiting for the new layout, or null when none is pending. */
@@ -1649,6 +1684,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         setSuggestionBarView();
         mTermuxActivityRootView = findViewById(R.id.activity_termux_root_view);
         mTermuxActivityRootView.setActivity(this);
+        mTermuxActivityRootView.setBottomMarginWriter(this::requestRootBottomMargin);
         mWallpaperBackdropView = findViewById(R.id.wallpaper_backdrop);
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.setParallax(mWallpaperParallax);
         mTermuxActivityBottomSpaceView = findViewById(R.id.activity_termux_bottom_space_view);
@@ -1675,6 +1711,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (insetsSignature != mLastAppliedInsetsSignature) {
                 mLastAppliedInsetsSignature = insetsSignature;
                 mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+            }
+            int imeBottomPx = insetsCompat.isVisible(Type.ime())
+                ? insetsCompat.getInsets(Type.ime()).bottom : 0;
+            if (imeBottomPx != mLastDispatchedImeBottomPx) {
+                mLastDispatchedImeBottomPx = imeBottomPx;
+                // Dispatched ahead of this traversal's measure: the grid is held from here, so
+                // the window resizing for a system keyboard reflows nothing until the geometry
+                // pass this books has laid the chrome out around it — one resize, not two.
+                mGeometry.request(GeometryScheduler.Reason.INSETS,
+                    GeometryScheduler.ResizePolicy.NOW);
             }
             return insetsCompat.toWindowInsets();
         });
@@ -2128,7 +2174,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mSuggestionBarView != null) {
                 mSuggestionBarView.resetTransientVisualState();
             }
-            applyAccessoryGeometryIfNeeded(false, "onNewIntent:home");
+            mGeometry.request(GeometryScheduler.Reason.HOME, GeometryScheduler.ResizePolicy.NONE);
             mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
             // HOME while already home never stops the activity, so onStart does not fire for it.
             playWeatherArrivalAnimation();
@@ -2203,7 +2249,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mX11Display != null && isDisplayPageShowing() && !mPaneWallController.wall().isMoving()) {
             syncDisplayPageAttachment(com.termux.app.wall.PaneWallPage.DISPLAY);
         }
+        // The default home can have been changed while we were stopped.
+        mDefaultHomeApp = null;
         syncRecentsVisibilityPolicy();
+        mRecentsPolicySyncedSinceStart = true;
         mChrome.requestSync(ChromeRenderer.SCOPE_BLUR_HEALTH);
         registerTermuxActivityBroadcastReceiver();
         // Only something that lists apps hears about packages: the catalogue behind the dock and
@@ -2347,7 +2396,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean isOnDockPlankKeySurface(float rawX, float rawY) {
         for (int viewId : DOCK_PLANK_KEY_SURFACE_IDS) {
-            View view = findViewById(viewId);
+            View view = hotView(viewId);
             if (view == null || view.getVisibility() != View.VISIBLE
                 || view.getWidth() <= 0 || view.getHeight() <= 0) {
                 continue;
@@ -2461,7 +2510,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             syncTerminalWallpaperRenderingMode();
             applySeamlessStatusBackgroundModeIfNeeded();
             applyTerminalSurfaceAppearance();
-            syncRecentsVisibilityPolicy();
+            // Once per visible pass: onStart has just done it on an arrival. A resume with no
+            // start before it (a dialog such as the home-role request shown over us) re-reads.
+            if (mRecentsPolicySyncedSinceStart) {
+                mRecentsPolicySyncedSinceStart = false;
+            } else {
+                mDefaultHomeApp = null;
+                syncRecentsVisibilityPolicy();
+            }
             applyWallpaperOffsetFixIfNeeded();
             mChrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_BLUR_HEALTH);
@@ -2951,13 +3007,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private ViewOutlineProvider paneHostContainmentOutlineProvider() {
         final int slackPx = Math.round(dpToPx(
             com.termux.app.terminal.TerminalPaneController.PANE_PRESS_SLACK_DP));
-        return new ViewOutlineProvider() {
+        ViewOutlineProvider held = mPaneHostContainmentOutline;
+        if (held != null && slackPx == mPaneHostContainmentSlackPx) return held;
+        mPaneHostContainmentSlackPx = slackPx;
+        mPaneHostContainmentOutline = new ViewOutlineProvider() {
             @Override
             public void getOutline(View view, android.graphics.Outline outline) {
                 outline.setRect(-slackPx, -slackPx,
                     view.getWidth() + slackPx, view.getHeight() + slackPx);
             }
         };
+        return mPaneHostContainmentOutline;
+    }
+
+    /** The containment outline and the slack it was made for; one per slack, not per pass. */
+    @Nullable private ViewOutlineProvider mPaneHostContainmentOutline;
+    private int mPaneHostContainmentSlackPx = -1;
+    /** The pane host's rounded outline and the radius it was made for; see {@link #setOutlineIfChanged}. */
+    @Nullable private ViewOutlineProvider mPaneHostRoundedOutline;
+    private float mPaneHostRoundedRadiusPx = Float.NaN;
+
+    /** {@link #roundedOutlineProvider} for the pane host, kept while the radius holds. */
+    @NonNull
+    private ViewOutlineProvider paneHostRoundedOutlineProvider(float radiusPx) {
+        ViewOutlineProvider held = mPaneHostRoundedOutline;
+        if (held != null && Float.compare(radiusPx, mPaneHostRoundedRadiusPx) == 0) return held;
+        held = roundedOutlineProvider(radiusPx);
+        mPaneHostRoundedOutline = held;
+        mPaneHostRoundedRadiusPx = radiusPx;
+        return held;
     }
 
     @NonNull
@@ -3012,8 +3090,26 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The same two numbers the frame is laid out with, for a surface that has to meet its edge. */
     private int terminalFrameInsetPx(boolean vertical) {
+        return terminalFrameInsetPx(chromeShape(), vertical);
+    }
+
+    /**
+     * Both of {@link #terminalFrameInsetPx(boolean)}'s numbers off one chrome shape, for the
+     * callers that need the pair: {@code out[0]} the horizontal inset, {@code out[1]} the
+     * vertical. The shape is the same answer both calls built, built once.
+     */
+    private void terminalFrameInsetsPx(@NonNull int[] out) {
         com.termux.app.place.ChromeShape shape = chromeShape();
-        View root = findViewById(R.id.activity_termux_root_view);
+        out[0] = terminalFrameInsetPx(shape, false);
+        out[1] = terminalFrameInsetPx(shape, true);
+    }
+
+    /** Scratch for {@link #terminalFrameInsetsPx}; main thread only. */
+    @NonNull private final int[] mTmpFrameInsets = new int[2];
+
+    private int terminalFrameInsetPx(@NonNull com.termux.app.place.ChromeShape shape,
+                                     boolean vertical) {
+        View root = hotView(R.id.activity_termux_root_view);
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
         float width = root != null && root.getWidth() > 0 ? root.getWidth() : metrics.widthPixels;
         float height = root != null && root.getHeight() > 0 ? root.getHeight() : metrics.heightPixels;
@@ -3054,8 +3150,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         //
         // Keyed off the preference rather than off `enabled`, so splitting a window does not shift
         // the terminal: the pane borders land exactly where the terminal border was.
-        int borderVerticalInsetPx = terminalFrameInsetPx(true, preferBorder || glass);
-        int borderHorizontalInsetPx = terminalFrameInsetPx(false, preferBorder || glass);
+        terminalFrameInsetsPx(mTmpFrameInsets);
+        int borderVerticalInsetPx = mTmpFrameInsets[1];
+        int borderHorizontalInsetPx = mTmpFrameInsets[0];
         // The side stacks flank the canvas, so their bars start and end where the terminal's own
         // frame does rather than at the raw edges of the band it sits in. Under a joined Docked
         // frame the model stands the side bars flush between the top and bottom stacks, and the
@@ -3120,8 +3217,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // under Floating and the insert under Docked.
             applyPaneHostCornerPadding(paneHost, 0);
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                paneHost.setOutlineProvider(paneHostContainmentOutlineProvider());
-                paneHost.setClipToOutline(glass);
+                setOutlineIfChanged(paneHost, paneHostContainmentOutlineProvider(), glass);
             }
             setupTerminalPlankFx(glass);
             updateTerminalGlassFrost();
@@ -3131,7 +3227,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The lone pane's frame is the shared rim, the same border the status bar, dock and
         // keyboard wear (the dock's gradient, under every look). The Material active colour belongs to
         // the focused pane of a split only (PaneBorderStyle).
-        borderView.setBackground(mChrome.glass().rimDrawable(cornerRadiusPx));
+        borderView.setBackground(terminalBorderRim(borderView, cornerRadiusPx));
         if (borderView instanceof TerminalGlassFrameView) {
             ((TerminalGlassFrameView) borderView).setRim(false, 0f);
         }
@@ -3150,10 +3246,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyPaneHostCornerPadding(paneHost, PaneShape.contentInsetPx(innerRadiusPx));
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            paneHost.setOutlineProvider(innerRadiusPx > 0f
-                ? roundedOutlineProvider(innerRadiusPx) : ViewOutlineProvider.BOUNDS);
-            paneHost.setClipToOutline(true);
+            setOutlineIfChanged(paneHost, innerRadiusPx > 0f
+                ? paneHostRoundedOutlineProvider(innerRadiusPx) : ViewOutlineProvider.BOUNDS, true);
         }
+    }
+
+    /**
+     * Puts {@code provider} on {@code view} unless it is already there. A provider's outline is a
+     * function of its own key and the view's size, and the view rebuilds it itself on a resize,
+     * so handing it the same provider again (as every inset dispatch did, with a new one each
+     * time) only re-ran the outline and damaged the parent for nothing.
+     */
+    private static void setOutlineIfChanged(@NonNull View view, @NonNull ViewOutlineProvider provider,
+                                            boolean clip) {
+        if (view.getOutlineProvider() != provider) view.setOutlineProvider(provider);
+        if (view.getClipToOutline() != clip) view.setClipToOutline(clip);
+    }
+
+    /** The lone pane's frame line, kept while its radius and stroke hold; see {@link #terminalBorderRim}. */
+    @Nullable private Drawable mTerminalBorderRim;
+    private float mTerminalBorderRimRadiusPx = Float.NaN;
+    private int mTerminalBorderRimStrokePx = -1;
+
+    /**
+     * The rim the lone pane's frame line wears: the drawable it already has while the radius and
+     * the stroke it was made for still hold — it is drawn from those alone — else a new one.
+     */
+    @NonNull
+    private Drawable terminalBorderRim(@NonNull View borderView, float cornerRadiusPx) {
+        int strokePx = Math.max(1, Math.round(dpToPx(1)));
+        Drawable rim = mTerminalBorderRim;
+        if (rim != null && borderView.getBackground() == rim
+            && Float.compare(cornerRadiusPx, mTerminalBorderRimRadiusPx) == 0
+            && strokePx == mTerminalBorderRimStrokePx) {
+            return rim;
+        }
+        rim = mChrome.glass().rimDrawable(cornerRadiusPx);
+        mTerminalBorderRim = rim;
+        mTerminalBorderRimRadiusPx = cornerRadiusPx;
+        mTerminalBorderRimStrokePx = strokePx;
+        return rim;
     }
 
     /**
@@ -3650,10 +3782,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private Rect getWallpaperCaptureFrameRect() {
         Rect frame = getManagedWallpaperFrameRect();
         int spanPx = frame.width();
-        if (isWallpaperParallaxAvailable()
-            && mManagedWallpaperSource.readSize(getManagedWallpaperExactFile(), mManagedWallpaperSize)) {
-            spanPx = com.termux.app.wall.WallParallax.spanPx(mManagedWallpaperSize[0],
-                mManagedWallpaperSize[1], frame.width(), frame.height());
+        if (isWallpaperParallaxAvailable()) {
+            com.termux.app.chrome.WallpaperSourceFacts facts = wallpaperSourceFacts();
+            if (facts.hasManagedSize()) {
+                spanPx = com.termux.app.wall.WallParallax.spanPx(facts.managedWidth,
+                    facts.managedHeight, frame.width(), frame.height());
+            }
         }
         mWallpaperParallaxSparePx = Math.max(0, spanPx - frame.width());
         frame.right = frame.left + spanPx;
@@ -3668,6 +3802,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * one number written, and invalidates.
      */
     private void syncWallpaperParallax() {
+        syncWallpaperParallax(false);
+    }
+
+    /**
+     * @param pagesReaimed true from the wall's own offset tick, which re-aims the panes' slabs and
+     *                     the Widgets and Display pages itself on every frame: they are not aimed
+     *                     a second time here
+     */
+    private void syncWallpaperParallax(boolean pagesReaimed) {
         float offsetPx = 0f;
         int sparePx = mWallpaperParallaxSparePx;
         if (sparePx > 0 && mPaneWallController != null) {
@@ -3677,8 +3820,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!mWallpaperParallax.setOffsetPx(offsetPx)) return;
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.invalidate();
-        if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
-        if (mPaneWallController != null) {
+        if (!pagesReaimed && mPaneController != null) mPaneController.invalidatePaneGlassPositions();
+        if (!pagesReaimed && mPaneWallController != null) {
             if (mPaneWallController.widgetsPage() != null) mPaneWallController.widgetsPage().onWallMoved();
             if (mPaneWallController.displayPage() != null) mPaneWallController.displayPage().onWallMoved();
         }
@@ -3881,12 +4024,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         try {
             WallpaperManager wallpaperManager = WallpaperManager.getInstance(this);
             mWallpaperColorsChangedListener = (WallpaperColors colors, int which) -> {
+                // The new id first, so nothing that runs from here on cuts a frame for the old one.
+                com.termux.app.chrome.WallpaperSourceFacts facts = refreshWallpaperSourceFacts();
                 // A wallpaper set outside the launcher is still a wallpaper change: tagged so the
                 // surface that refills each radius crossfades into it instead of swapping outright.
                 mChrome.blurCache().clearForWallpaperChange();
                 // How a wallpaper set outside the launcher reaches us: the picture can have gone
                 // from a still to a live wallpaper, or back, and every glass turns on that.
-                refreshWallpaperPicture();
+                refreshWallpaperPicture(facts);
                 if (!mIsVisible) {
                     return;
                 }
@@ -4243,7 +4388,51 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private boolean isReducedMotionEnabled() {
-        return com.termux.app.ReducedMotion.isEnabled(this);
+        Boolean held = mReducedMotion;
+        if (held != null) return held;
+        boolean enabled = com.termux.app.ReducedMotion.isEnabled(this);
+        // Held only while an observer will say when it moves; without one, every ask reads.
+        if (ensureReducedMotionObserver()) mReducedMotion = enabled;
+        return enabled;
+    }
+
+    /**
+     * The animator scale's answer, held between changes: it was a Settings.Global read on every
+     * MOVE of a pane touch and every frame of a slide. Null until read, and again whenever the
+     * observer says the setting moved.
+     */
+    @Nullable private volatile Boolean mReducedMotion;
+    @Nullable private android.database.ContentObserver mReducedMotionObserver;
+
+    private boolean ensureReducedMotionObserver() {
+        if (mReducedMotionObserver != null) return true;
+        if (isDestroyed()) return false;
+        android.database.ContentObserver observer = new android.database.ContentObserver(
+                new Handler(Looper.getMainLooper())) {
+            @Override public void onChange(boolean selfChange) {
+                mReducedMotion = null;
+            }
+        };
+        try {
+            getContentResolver().registerContentObserver(
+                Settings.Global.getUriFor(Settings.Global.ANIMATOR_DURATION_SCALE), false, observer);
+        } catch (Throwable t) {
+            return false;
+        }
+        mReducedMotionObserver = observer;
+        return true;
+    }
+
+    private void unregisterReducedMotionObserver() {
+        android.database.ContentObserver observer = mReducedMotionObserver;
+        mReducedMotionObserver = null;
+        mReducedMotion = null;
+        if (observer == null) return;
+        try {
+            getContentResolver().unregisterContentObserver(observer);
+        } catch (Throwable ignored) {
+            // Already gone with the resolver.
+        }
     }
 
     private void playAppLaunchRipple(@NonNull String packageName, @Nullable Drawable icon,
@@ -4710,7 +4899,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The same, for a layout in hand: it may not be the stored one during a slide or a pre-roll. */
     @NonNull
     private com.termux.app.place.ChromeShape chromeShape(@NonNull PlaceLayout stored) {
-        View root = findViewById(R.id.activity_termux_root_view);
+        View root = hotView(R.id.activity_termux_root_view);
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
         int width = root != null && root.getWidth() > 0 ? root.getWidth() : metrics.widthPixels;
         int height = root != null && root.getHeight() > 0 ? root.getHeight() : metrics.heightPixels;
@@ -4723,7 +4912,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         float apps = chromeThicknessPx(Element.APPS, layout);
         float az = chromeThicknessPx(Element.AZ, layout);
         float keys = chromeThicknessPx(Element.EXTRA_KEYS, layout);
-        View keyboardHost = findViewById(R.id.inapp_keyboard_view_host);
+        View keyboardHost = hotView(R.id.inapp_keyboard_view_host);
         // Before its first layout the host has no height yet: the last measure stands in, so the
         // piece is not a zero-height one whose radius clamps to nothing.
         float keyboard = keyboardUp && keyboardHost != null
@@ -5403,7 +5592,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * @return true when the picture changed, so the caller can skip a redraw nothing needs
      */
     private boolean refreshWallpaperPicture() {
-        WallpaperPicture picture = WallpaperPictureReader.read(this, mPreferences);
+        return refreshWallpaperPicture(refreshWallpaperSourceFacts());
+    }
+
+    /** {@link #refreshWallpaperPicture()} with source facts the caller has just read. */
+    private boolean refreshWallpaperPicture(@NonNull com.termux.app.chrome.WallpaperSourceFacts facts) {
+        WallpaperPicture picture = WallpaperPictureReader.read(this, mPreferences,
+            facts.systemWallpaperId);
         if (picture == mWallpaperPicture) return false;
         mWallpaperPicture = picture;
         return true;
@@ -5432,8 +5627,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         int[] location = new int[2];
         host.getLocationOnScreen(location);
-        int sideInset = terminalFrameInsetPx(false);
-        int verticalInset = terminalFrameInsetPx(true);
+        terminalFrameInsetsPx(mTmpFrameInsets);
+        int sideInset = mTmpFrameInsets[0];
+        int verticalInset = mTmpFrameInsets[1];
         out.set(location[0] + sideInset, location[1] + verticalInset,
             location[0] + host.getWidth() - sideInset,
             location[1] + host.getHeight() - verticalInset);
@@ -6677,11 +6873,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null) {
             return false;
         }
-        int storedWallpaperId = mPreferences.getManagedWallpaperSystemId();
-        if (storedWallpaperId <= 0 || storedWallpaperId != getCurrentSystemWallpaperId()) {
-            return false;
+        return wallpaperSourceFacts().managedOnScreen();
+    }
+
+    /**
+     * The wallpaper source facts every glass surface reads in a pass, read once and held: the
+     * system id is a binder call and the file's facts are stats, and the blur cache alone asked
+     * for them once per surface per obtain.
+     */
+    @NonNull
+    private com.termux.app.chrome.WallpaperSourceFacts wallpaperSourceFacts() {
+        com.termux.app.chrome.WallpaperSourceFacts facts = mWallpaperSourceFacts;
+        // The stored id is a preference held in memory, so it is checked on every ask: the picker
+        // (or a command) writes it once the picture is on disk, and a moved id reads again.
+        if (facts == null || facts.isStaleFor(storedManagedWallpaperSystemId())) {
+            facts = refreshWallpaperSourceFacts();
         }
-        return getManagedWallpaperExactFile().isFile();
+        return facts;
+    }
+
+    private int storedManagedWallpaperSystemId() {
+        return mPreferences == null ? 0 : mPreferences.getManagedWallpaperSystemId();
+    }
+
+    /**
+     * Reads the wallpaper source facts afresh. Called wherever the wallpaper can have changed —
+     * {@link #refreshWallpaperPicture()} (every arrival and the picker's apply), the colours
+     * listener and the managed picture landing — and always before the capture that follows, so
+     * the blur cache's identity check sees the same id the capture is cut for.
+     */
+    @NonNull
+    private com.termux.app.chrome.WallpaperSourceFacts refreshWallpaperSourceFacts() {
+        File exact = getManagedWallpaperExactFile();
+        boolean present = exact.isFile();
+        int width = 0, height = 0;
+        if (present && mManagedWallpaperSource.readSize(exact, mManagedWallpaperSize)) {
+            width = mManagedWallpaperSize[0];
+            height = mManagedWallpaperSize[1];
+        }
+        com.termux.app.chrome.WallpaperSourceFacts facts = com.termux.app.chrome.WallpaperSourceFacts.of(
+            storedManagedWallpaperSystemId(), getCurrentSystemWallpaperId(), present,
+            exact.lastModified(), exact.length(), width, height);
+        mWallpaperSourceFacts = facts;
+        return facts;
     }
 
     private int computeAccessoryBackdropHorizontalOverscanPx(int blurRadiusDp) {
@@ -6753,6 +6987,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Bitmap sourceBitmap = mManagedWallpaperSource.obtain(sourceFile, frameRect.width(),
             frameRect.height(), () -> {
                 if (isFinishing() || isDestroyed()) return;
+                // The file that just landed is the one the facts must describe from here on.
+                refreshWallpaperSourceFacts();
                 // The managed file landing is a new wallpaper picture; tagged the same way, so the
                 // surface that refills each radius crossfades into it instead of swapping outright.
                 mChrome.blurCache().clearForWallpaperChange();
@@ -7429,6 +7665,103 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The one owner of when the chrome geometry pass runs and of the panes' grid pause around it.
+     * Keyboard, insets, layout echoes, font metrics, slides, divider drags and the status fold all
+     * ask here; see {@link GeometryScheduler}. Disposed in {@link #onDestroy}.
+     */
+    private final GeometryScheduler mGeometry = new GeometryScheduler(new GeometryHost(this));
+
+    /**
+     * The scheduler's window side. Static, and weak to the activity and to what it holds paused:
+     * the scheduler's callbacks sit on the process-wide main looper (the hold's fail-safe is 500 ms
+     * out), and a message still queued there must not keep a destroyed activity — its whole view
+     * tree with it — reachable. {@link #onDestroy} withdraws them as well.
+     */
+    private static final class GeometryHost implements GeometryScheduler.Host {
+
+        @NonNull private final java.lang.ref.WeakReference<TermuxActivity> mActivity;
+        /** Where the scheduler posts: the main looper, frame work ahead of booked traversals. */
+        private final Handler mHandler = new Handler(Looper.getMainLooper());
+        /** The pane controller whose grid this scheduler paused, so the resume reaches it. */
+        @Nullable private java.lang.ref.WeakReference<
+            com.termux.app.terminal.TerminalPaneController> mHeldPanes;
+        @Nullable private java.lang.ref.WeakReference<com.termux.app.x11.X11PaneFrame> mHeldDisplay;
+
+        GeometryHost(@NonNull TermuxActivity activity) {
+            mActivity = new java.lang.ref.WeakReference<>(activity);
+        }
+
+        @Override public void postFrame(@NonNull Runnable frame) {
+            // Asynchronous, so a traversal already booked does not hold it back behind its barrier:
+            // the pass's writes then reach that traversal instead of booking the next one.
+            android.os.Message message = android.os.Message.obtain(mHandler, frame);
+            message.setAsynchronous(true);
+            mHandler.sendMessage(message);
+        }
+
+        @Override public void postAfterLayout(@NonNull Runnable afterLayout) {
+            // Ordinary: a booked traversal's barrier holds it until that layout has run.
+            mHandler.post(afterLayout);
+        }
+
+        @Override public void postDelayed(@NonNull Runnable runnable, long delayMs) {
+            mHandler.postDelayed(runnable, delayMs);
+        }
+
+        @Override public void removeCallbacks(@NonNull Runnable runnable) {
+            mHandler.removeCallbacks(runnable);
+        }
+
+        @Override public void runPass(@NonNull GeometryScheduler.Reason reason) {
+            TermuxActivity activity = mActivity.get();
+            if (activity != null) activity.runAccessoryGeometryPass(reason);
+        }
+
+        @Override public void beginGridHold() {
+            TermuxActivity activity = mActivity.get();
+            com.termux.app.terminal.TerminalPaneController panes =
+                activity == null ? null : activity.mPaneController;
+            mHeldPanes = panes == null ? null : new java.lang.ref.WeakReference<>(panes);
+            if (panes != null) panes.beginHostSurfaceResize();
+        }
+
+        @Override public void finishGridHold() {
+            com.termux.app.terminal.TerminalPaneController panes =
+                mHeldPanes == null ? null : mHeldPanes.get();
+            mHeldPanes = null;
+            if (panes != null) panes.finishHostSurfaceResizeKeepingBottom();
+        }
+
+        @Override public void beginDisplayHold() {
+            // The display page shares the wall's height: without this every frame of a fold would
+            // resize the X screen, and the bar's motion would judder along with it.
+            TermuxActivity activity = mActivity.get();
+            com.termux.app.x11.X11PaneFrame display = activity == null
+                || activity.mPaneWallController == null
+                ? null : activity.mPaneWallController.displayPage();
+            mHeldDisplay = display == null ? null : new java.lang.ref.WeakReference<>(display);
+            if (display != null) display.beginHostResize();
+        }
+
+        @Override public void finishDisplayHold() {
+            com.termux.app.x11.X11PaneFrame display =
+                mHeldDisplay == null ? null : mHeldDisplay.get();
+            mHeldDisplay = null;
+            if (display != null) display.finishHostResize();
+        }
+
+        @Override public long layoutInputsKey() {
+            TermuxActivity activity = mActivity.get();
+            return activity == null ? 0L : activity.geometryInputsKey();
+        }
+
+        @Override public boolean isAlive() {
+            TermuxActivity activity = mActivity.get();
+            return activity != null && !activity.isFinishing() && !activity.isDestroyed();
+        }
+    }
+
+    /**
      * The in-app keyboard's geometry and its flash-free reveal choreography: the measurement memo,
      * the pending-reveal/pending-close protocol, the two pre-draw gates and the system-IME inset
      * gate. The Activity keeps the chrome <em>painters</em> — they are welded to the glass factory,
@@ -7473,7 +7806,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override public void applyAccessoryGeometry(@NonNull String reason) {
-                applyAccessoryGeometryIfNeeded(true, reason);
+                // Now, not at the end of the dispatch: the reveal gate armed by this show applies
+                // against the very next traversal, which must already have the stack's new height.
+                mGeometry.requestNow(GeometryScheduler.Reason.KEYBOARD,
+                    GeometryScheduler.ResizePolicy.NOW);
             }
 
             @Override public boolean keyboardGlassSurface() {
@@ -7900,7 +8236,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * and a keyboard sliding off would otherwise draw across the navigation bar on its way out.
      */
     private void applyAccessoryStackTranslation() {
-        View accessoryContainer = findViewById(R.id.accessory_stack_container);
+        View accessoryContainer = hotView(R.id.accessory_stack_container);
         if (accessoryContainer == null) {
             return;
         }
@@ -7911,11 +8247,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             accessoryContainer.setTranslationY(translationY);
             // The dock's and the keyboard's glass sample the wallpaper through this translation
             // (mAccessoryStackLift); a transform alone redraws nothing, so they are re-aimed here.
-            View backdrop = findViewById(R.id.accessory_blur_backdrop);
+            View backdrop = hotView(R.id.accessory_blur_backdrop);
             if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
-            View keyboardHost = findViewById(R.id.inapp_keyboard_view_host);
+            View keyboardHost = hotView(R.id.inapp_keyboard_view_host);
             if (keyboardHost != null && keyboardHost.getBackground() != null) keyboardHost.invalidate();
-            View under = findViewById(R.id.accessory_under_keyboard_stack);
+            View under = hotView(R.id.accessory_under_keyboard_stack);
             if (under != null && under.getBackground() != null) under.invalidate();
         }
         applyUnderKeyboardTravel();
@@ -7951,11 +8287,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * nothing left behind, while no band stands there or the keyboard is not in the column.
      */
     private void applyUnderKeyboardTravel() {
-        View under = findViewById(R.id.accessory_under_keyboard_stack);
-        View keyboard = findViewById(R.id.inapp_keyboard_container);
+        View under = hotView(R.id.accessory_under_keyboard_stack);
+        View keyboard = hotView(R.id.inapp_keyboard_container);
         boolean holds = under != null && under.getVisibility() == View.VISIBLE
             && keyboard != null && keyboard.getVisibility() != View.GONE
-            && keyboard.getParent() == findViewById(R.id.accessory_keyboard_column);
+            && keyboard.getParent() == hotView(R.id.accessory_keyboard_column);
         float share = holds ? Math.max(0f, mKeyboardTravelSharePx) : 0f;
         if (under != null && under.getTranslationY() != -share) {
             under.setTranslationY(-share);
@@ -8095,6 +8431,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mTermuxActivityRootView.setLayoutParams(marginLayoutParams);
             }
         }
+        mPendingRootBottomMarginPx = null;
         mTermuxActivityRootView.marginBottom = 0;
         mTermuxActivityRootView.lastMarginBottom = null;
         mTermuxActivityRootView.lastMarginBottomTime = 0L;
@@ -8222,9 +8559,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     public void onDestroy() {
         super.onDestroy();
         Logger.logDebug(LOG_TAG, "onDestroy");
+        // First: what follows (the keyboard's teardown among it) must not book passes or holds
+        // on the main looper for a window that is going away.
+        mGeometry.dispose();
+        if (mTermuxActivityRootView != null) mTermuxActivityRootView.setBottomMarginWriter(null);
+        if (mPaneController != null) mPaneController.setGeometryScheduler(null);
         com.termux.app.terminal.TerminalActionDispatcher.getInstance().detach(terminalHost());
         mTerminalFrameMetricsMonitor.stop();
         mManagedWallpaperSource.clear();
+        if (mPackageQueryExecutor != null) mPackageQueryExecutor.shutdown();
+        unregisterReducedMotionObserver();
         // The inspector holds this Activity strongly for the life of its overlay, so it has to go
         // with the Activity rather than outlive it.
         com.termux.app.terminal.TerminalKeyInspector.close();
@@ -8827,7 +9171,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return showWhenNotHomeEnabled && !isDefaultHome;
     }
 
+    /**
+     * Whether this app is the default home, as last resolved; null until asked. Cleared where the
+     * answer can have changed: onStart, a resume with no start before it, and the preferred
+     * activity broadcast.
+     */
+    @Nullable private Boolean mDefaultHomeApp;
+    /** Set by onStart's recents sync so the onResume that follows does not repeat it. */
+    private boolean mRecentsPolicySyncedSinceStart;
+
     private boolean isDefaultHomeApp() {
+        Boolean held = mDefaultHomeApp;
+        if (held != null) return held;
+        boolean answer = resolveIsDefaultHomeApp();
+        mDefaultHomeApp = answer;
+        return answer;
+    }
+
+    private boolean resolveIsDefaultHomeApp() {
         Intent home = new Intent(Intent.ACTION_MAIN);
         home.addCategory(Intent.CATEGORY_HOME);
         PackageManager packageManager = getPackageManager();
@@ -9425,28 +9786,32 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return isDefaultHomeApp() && isLauncherHomeIntent(getIntent());
     }
 
-    private void applyAccessoryGeometryIfNeeded(boolean force, @NonNull String reason) {
-        Trace.beginSection("Accessory.geometry");
+    /**
+     * The chrome geometry pass: the root's IME margin, the dock's height, the accessory stack and
+     * the content's room, in one go. Only {@link #mGeometry} runs it — every trigger asks there,
+     * with a reason, and the scheduler folds a dispatch's worth of them into one pass and owns the
+     * grid's pause around it ({@link GeometryScheduler}).
+     */
+    private void runAccessoryGeometryPass(@NonNull GeometryScheduler.Reason reason) {
+        // Named by its reason, so a trace counts the passes a transition cost and says why.
+        Trace.beginSection("Accessory.geometry." + reason.name());
         try {
-            doApplyAccessoryGeometryIfNeeded(force, reason);
+            doRunAccessoryGeometryPass();
         } finally {
             Trace.endSection();
         }
     }
 
-    private void doApplyAccessoryGeometryIfNeeded(boolean force, @NonNull String reason) {
+    private void doRunAccessoryGeometryPass() {
+        // First, and whatever owns the stack: the margin is the window's answer to the system
+        // keyboard, which the drawer's freeze has no say over.
+        applyPendingRootBottomMargin();
         // Same freeze as setTerminalToolbarHeight: while the drawer plane owns the stack every
         // band moves by translation/clip only, and a relayout here would fight it. Replayed on close.
         if (isAppDrawerEngaged()) {
             mAppDrawerGeometryFreezePending = true;
             return;
         }
-        long now = SystemClock.uptimeMillis();
-        if (!force && (now - mLastAccessoryGeometryApplyUptimeMs) < 120L) {
-            mChrome.requestSync(accessorySkipScopes(reason));
-            return;
-        }
-        mLastAccessoryGeometryApplyUptimeMs = now;
         // Only a pass that moved something needs the frame's apply. The layout listeners that
         // drive this pass fire on every band resize during a page slide, and each one used to book
         // an apply whether or not the dock and the stack came out where they already were.
@@ -9454,6 +9819,85 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean stackMoved = setTerminalToolbarHeight(true);
         if (dockMoved || stackMoved)
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+    }
+
+    /**
+     * The root view's IME margin ({@link TermuxActivityRootView}): kept until the next geometry
+     * pass writes it, so the margin and the stack it moves land in one layout and the panes, held
+     * from this request on, resize once for both.
+     */
+    private void requestRootBottomMargin(int marginPx) {
+        mPendingRootBottomMarginPx = Math.max(0, marginPx);
+        mGeometry.request(GeometryScheduler.Reason.INSETS, GeometryScheduler.ResizePolicy.NOW);
+    }
+
+    private void applyPendingRootBottomMargin() {
+        Integer margin = mPendingRootBottomMarginPx;
+        mPendingRootBottomMarginPx = null;
+        if (margin != null && mTermuxActivityRootView != null)
+            mTermuxActivityRootView.applyBottomMargin(margin);
+    }
+
+    /**
+     * The content root's height as the next layout will leave it: its laid-out height plus any
+     * root margin written since and not yet laid out. What the geometry pass measures the terminal
+     * against, so a pass that moves the margin reads the room it is about to give.
+     */
+    private int rootRelativeLayoutHeightPx(@NonNull View root) {
+        int height = root.getHeight();
+        if (height <= 0 || mTermuxActivityRootView == null) return height;
+        return Math.max(0, height + mTermuxActivityRootView.unlaidBottomMarginGivebackPx());
+    }
+
+    /**
+     * A digest of every layout fact the geometry pass reads, so the scheduler can tell a pass's own
+     * layout coming back from a change it has not seen: the content root's size and top, the top
+     * status bar's height, the terminal's top and line metrics while it alone stands on the dock,
+     * how many panes share the host, the system keyboard, the place, a floating keyboard's frame.
+     */
+    private long geometryInputsKey() {
+        long key = 17L;
+        View root = findViewById(R.id.activity_termux_root_relative_layout);
+        if (root != null) {
+            root.getLocationInWindow(mTmpViewLocation);
+            key = mixKey(key, root.getWidth());
+            key = mixKey(key, rootRelativeLayoutHeightPx(root));
+            key = mixKey(key, mTmpViewLocation[1]);
+        }
+        View bar = findViewById(R.id.terminal_window_bar_host);
+        boolean barShown = bar != null && bar.getVisibility() == View.VISIBLE;
+        key = mixKey(key, barShown ? bar.getHeight() : -1);
+        int panes = visiblePaneCount();
+        boolean floating = mPaneController != null && mPaneController.isActivePaneFloating();
+        key = mixKey(key, panes);
+        key = mixKey(key, floating ? 1 : 0);
+        key = mixKey(key, isImeVisible() ? 1 : 0);
+        key = mixKey(key, mLastWallPage == null ? -1 : mLastWallPage.ordinal());
+        TerminalView terminal = mTerminalView;
+        if (terminal != null) {
+            key = mixKey(key, System.identityHashCode(terminal));
+            if (panes <= 1 && !floating) {
+                // The dock lands on the lone terminal's whole rows, measured from its top.
+                terminal.getLocationInWindow(mTmpViewLocation);
+                key = mixKey(key, mTmpViewLocation[1]);
+                key = mixKey(key, terminal.getWidth() > 0 && terminal.getHeight() > 0 ? 1 : 0);
+            }
+            if (terminal.mRenderer != null) {
+                key = mixKey(key, terminal.mRenderer.getFontLineSpacing());
+                key = mixKey(key, terminal.mRenderer.getFontLineSpacingAndAscent());
+            }
+        }
+        KeyboardGeometryChoreographer.HostReference floatingKeyboard =
+            mFloatingKeyboard == null ? null : mFloatingKeyboard.reference();
+        if (floatingKeyboard != null) {
+            key = mixKey(key, floatingKeyboard.widthPx);
+            key = mixKey(key, floatingKeyboard.availableHeightPx);
+        }
+        return key;
+    }
+
+    private static long mixKey(long key, long value) {
+        return key * 1_000_003L + value;
     }
 
     static int calculateSuggestionBarMaxButtons(DisplayMetrics displayMetrics) {
@@ -10583,6 +11027,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.widget.FrameLayout paneHost = findViewById(R.id.terminal_pane_host);
         mPaneController = new com.termux.app.terminal.TerminalPaneController(
             new PaneHost(), paneHost, getLayoutInflater());
+        mPaneController.setGeometryScheduler(mGeometry);
         mAppliedPaneStyleKey = null;
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
         applyTrailStyleAndRetroEffect();
@@ -11054,8 +11499,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return null;
             // The same two numbers the border overlay and the pane host are laid out with, so the
             // editor's outline cannot disagree with the frame about where the frame is.
-            int horizontal = terminalFrameInsetPx(false);
-            int vertical = terminalFrameInsetPx(true);
+            terminalFrameInsetsPx(mTmpFrameInsets);
+            int horizontal = mTmpFrameInsets[0];
+            int vertical = mTmpFrameInsets[1];
             return new int[] {
                 location[0] + horizontal,
                 location[1] + vertical,
@@ -12940,7 +13386,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyTerminalSurfaceAppearance();
             if (mPaneController != null) mPaneController.refreshPaneLayout();
             refreshTerminalWindowBar();
-            if (mInAppKeyboard != null) mInAppKeyboard.onPreferencesReloaded();
+            // Only the sizes moved: the keyboard takes its rows' heights directly, without the
+            // full preference reload that re-reads the tap-correction model from disk.
+            if (mInAppKeyboard != null && mPreferences != null) {
+                mInAppKeyboard.setPlaceSizes(mPreferences.getInAppKeyboardHeightScale(),
+                    mPreferences.getInAppKeyboardFloatingHeightScale());
+            }
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_BACKDROPS
                 | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
@@ -12968,8 +13419,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (layout.slot(Element.STATUS).hidden) {
             if (host.getVisibility() != View.GONE) {
                 cancelTopStatusBarAnimator();
-                int dragLease = endTopStatusBarDrag();
-                if (dragLease >= 0) finishStatusBarTerminalResizeAfterLayout(host, dragLease);
+                finishStatusBarTerminalResize(endTopStatusBarDrag(), true);
                 host.setVisibility(View.GONE);
                 applyTerminalWindowBarBackdropInsets();
                 if (mTermuxActivityRootView != null) ViewCompat.requestApplyInsets(mTermuxActivityRootView);
@@ -12995,8 +13445,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A fold under way on the old edge — animated or under a finger — is dropped; the new
             // edge is laid out at rest below. The drag's lease is returned with it.
             cancelTopStatusBarAnimator();
-            int dragLease = endTopStatusBarDrag();
-            if (dragLease >= 0 && host != null) finishStatusBarTerminalResizeAfterLayout(host, dragLease);
+            finishStatusBarTerminalResize(endTopStatusBarDrag(), true);
         }
         mStatusBarEdge = edge;
         boolean first = !mStatusBarEdgeApplied;
@@ -13070,7 +13519,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The root relative layout already sits below the status-bar inset, so only the window bar
         // and the reserved terminal slice come out of its height.
         View root = findViewById(R.id.activity_termux_root_relative_layout);
-        int rootHeightPx = root != null ? root.getHeight() : 0;
+        int rootHeightPx = root != null ? rootRelativeLayoutHeightPx(root) : 0;
         if (rootHeightPx <= 0)
             return Integer.MAX_VALUE;
         // A bar standing in a column takes no height from the stack at all; only a row does — and
@@ -13271,11 +13720,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // must not strand a prompt that a shell placed against the bottom edge — growing the
             // pane with a plain resize pads the screen with blank rows below the cursor whenever
             // the transcript cannot fill them (fish's clear wipes it via ESC[3J).
-            if (mPaneController != null) mPaneController.beginHostSurfaceResize();
+            // The posted update finds the grid held and is kept as pending; the scheduler resumes
+            // it once, behind this pass's layout — or at the settle of a transition still open.
             mTerminalView.post(mTerminalView::updateSize);
-            accessoryStackContainer.post(() -> {
-                if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
-            });
+            mGeometry.resizeGridAfterLayout();
         }
         // The post-layout render pass re-cuts the crops for geometry this pass moved. Nothing
         // moved, nothing to re-cut: a page slide fires this pass on every band resize, and asking
@@ -13284,6 +13732,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             || accessoryHeightChanged || accessoryMarginChanged || contentReservationChanged
             || keyboardShownChanged;
         if (moved) mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        // Whoever ran it, the layout this pass books comes back as an echo of these facts.
+        mGeometry.notePassInputs();
         return moved;
     }
 
@@ -13367,14 +13817,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (fontLineSpacingPx <= 0)
             return mAppliedTerminalFlushPaddingPx;
         View rootRelativeLayout = findViewById(R.id.activity_termux_root_relative_layout);
-        if (rootRelativeLayout == null || rootRelativeLayout.getHeight() <= 0)
+        int rootHeightPx = rootRelativeLayout == null ? 0
+            : rootRelativeLayoutHeightPx(rootRelativeLayout);
+        if (rootHeightPx <= 0)
             return mAppliedTerminalFlushPaddingPx;
         // Structural base: the height the terminal will settle at once all accessory content
         // (without any flush padding) is laid out. Deliberately NOT derived from the terminal's current
         // height — mid-relayout passes (e.g. multi-row extra keys toggling with the IME) would
         // feed the previously applied padding back in and make the result oscillate.
         rootRelativeLayout.getLocationInWindow(mTmpViewLocation);
-        int accessoryBottomWindowY = mTmpViewLocation[1] + rootRelativeLayout.getHeight() - accessoryBottomMarginPx;
+        int accessoryBottomWindowY = mTmpViewLocation[1] + rootHeightPx - accessoryBottomMarginPx;
         mTerminalView.getLocationInWindow(mTmpViewLocation);
         int terminalTopWindowY = mTmpViewLocation[1];
         int baseTerminalHeightPx = accessoryBottomWindowY - accessoryContentHeightPx - terminalTopWindowY;
@@ -13385,13 +13837,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return availableTerminalHeightPx % fontLineSpacingPx;
     }
 
+    /**
+     * The terminal's font or rows changed. The dock lands on whole rows, so line metrics are a
+     * geometry fact; rows alone are not, and a reflow a geometry pass released reports back here
+     * with nothing the pass reads having moved — the scheduler recognises that echo and runs
+     * nothing for it.
+     */
     void requestTerminalFlushDockGeometryUpdate() {
         if (mTerminalView == null)
             return;
-        mTerminalView.post(() -> {
-            if (!isFinishing() && !isDestroyed())
-                applyAccessoryGeometryIfNeeded(true, "terminal:metrics");
-        });
+        mGeometry.request(GeometryScheduler.Reason.METRICS, GeometryScheduler.ResizePolicy.NONE);
     }
 
     private boolean updateAccessoryStackContainerHeight(View view, int height) {
@@ -13872,8 +14327,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @NonNull
     private File getManagedWallpaperExactFile() {
-        // One statement of the path, shared with the settings page's own check.
-        return com.termux.app.chrome.WallpaperPictureReader.managedWallpaperExactFile(this);
+        // One statement of the path, shared with the settings page's own check. Resolved once:
+        // the reader makes the directory on every call, and the writers make it themselves.
+        File exact = mManagedWallpaperExactFile;
+        if (exact == null) {
+            exact = com.termux.app.chrome.WallpaperPictureReader.managedWallpaperExactFile(this);
+            mManagedWallpaperExactFile = exact;
+        }
+        return exact;
     }
 
     @NonNull
@@ -14462,7 +14923,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         mAppDrawerGeometryFreezePending = false;
-        applyAccessoryGeometryIfNeeded(true, "appDrawer:flush");
+        mGeometry.requestNow(GeometryScheduler.Reason.DRAWER, GeometryScheduler.ResizePolicy.NOW);
     }
 
     /** Row-level haptic ticks, shared by the dock rows and the palette's focus movement. */
@@ -16260,8 +16721,63 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     void termuxSessionListNotifyUpdated() {
+        // A shell retitling itself arrives here too, several times a second under an agent's
+        // spinner. While the sessions browser is shut nothing lists the titles but the chips, so a
+        // notification that moved nothing the drawer list is built from takes the chips' coalesced
+        // refresh (the same 250 ms beat the title change already asked for) instead of the full
+        // rebuild — the window bar's glass, blur and preferences pass behind it.
+        if (mSessionBrowserRefreshCallback == null && mDrawerShape.isRecorded()) {
+            mDrawerShape.beginProbe();
+            feedDrawerShape();
+            if (mDrawerShape.endProbe()) {
+                // The full pass would also have restarted the foreground poll, which is what turns
+                // a new title's command into the chip's label: the coalesced refresh does it.
+                mWindowLabelPollOwed = true;
+                scheduleWindowBarRefresh();
+                return;
+            }
+        }
         // Rebuild the filtered drawer list (also calls notifyDataSetChanged).
         rebuildDrawerSessions();
+    }
+
+    /** What {@link #rebuildDrawerSessions} last built the drawer list from; see {@link #feedDrawerShape}. */
+    private final com.termux.app.terminal.IdentitySequence mDrawerShape =
+        new com.termux.app.terminal.IdentitySequence();
+    /** Set when a skipped rebuild owes the window labels a foreground poll; see refreshShellActivityIndication. */
+    private boolean mWindowLabelPollOwed;
+
+    /**
+     * Everything {@link #rebuildDrawerSessions} reads, by identity: the service and controller,
+     * the current session, and per session its name, current window and windows — each window's
+     * name and shells. A rename sets a new string, so it shows as a new identity.
+     */
+    private void feedDrawerShape() {
+        com.termux.app.terminal.IdentitySequence shape = mDrawerShape;
+        shape.add(mTermuxService);
+        shape.add(mPaneController);
+        shape.add(mCurrentWSession);
+        shape.addInt(mWSessions.size());
+        for (WSession ws : mWSessions) {
+            shape.add(ws);
+            shape.add(ws.name);
+            shape.addInt(ws.current);
+            shape.addInt(ws.windows.size());
+            // The entry the drawer lists for it, as the service holds it now.
+            if (mTermuxService != null && mPaneController != null && !ws.windows.isEmpty()
+                && ws.current >= 0 && ws.current < ws.windows.size()) {
+                shape.add(findTermuxSession(mPaneController.windowActiveSession(ws.currentWindow())));
+            }
+            for (com.termux.app.terminal.TerminalPaneController.Window window : ws.windows) {
+                shape.add(window);
+                if (mPaneController == null) continue;
+                shape.add(mPaneController.windowName(window));
+                shape.add(mPaneController.windowActiveSession(window));
+                java.util.List<TerminalSession> shells = mPaneController.shellsOf(window);
+                shape.addInt(shells.size());
+                for (TerminalSession shell : shells) shape.add(shell);
+            }
+        }
     }
 
     public boolean isVisible() {
@@ -17360,6 +17876,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mFirstBootTour.onSessionsSettled(sessionCountForTour(), currentSessionIdForTour());
             mFirstBootTour.onActiveWindowSettled(currentWindowIdForTour());
         }
+        mDrawerShape.beginRecord();
+        feedDrawerShape();
+        mDrawerShape.endRecord();
         refreshTerminalWindowBar();
         refreshSessionsDrawer();
     }
@@ -17503,7 +18022,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // half of the way (PlaceChromeTravel.KEYBOARD_HIDE_END) while a rising one lands with the page.
         com.termux.app.place.PlaceChromeTravel.Frame frame =
             com.termux.app.place.PlaceChromeTravel.at(pages, mPaneWallController.currentPage(),
-                offsetPx, wall.getWidth(), this::chromeRestOf, mLastWallPage);
+                offsetPx, wall.getWidth(), mChromeRestStates, mLastWallPage);
         // The dock rows are always laid out by the layout on screen, the minimal one included
         // (chromeRestOf), so only the keyboard is ever pre-rolled.
         if (!mTravelKeyboardPreRolled
@@ -17556,12 +18075,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.place.PlaceChromeTravel.Rest chromeRestOf(
             @NonNull com.termux.app.wall.PaneWallPage place) {
-        if (place == mLastWallPage) {
-            return new com.termux.app.place.PlaceChromeTravel.Rest(committedKeyboardVisible(),
-                false);
-        }
-        return new com.termux.app.place.PlaceChromeTravel.Rest(wantsKeyboardOnEnter(place), false);
+        boolean keyboardUp = place == mLastWallPage ? committedKeyboardVisible()
+            : wantsKeyboardOnEnter(place);
+        return keyboardUp ? REST_KEYBOARD_UP : REST_KEYBOARD_DOWN;
     }
+
+    /** The two rests a place can have (the Rest is immutable), so a slide frame allocates neither. */
+    private static final com.termux.app.place.PlaceChromeTravel.Rest REST_KEYBOARD_UP =
+        new com.termux.app.place.PlaceChromeTravel.Rest(true, false);
+    private static final com.termux.app.place.PlaceChromeTravel.Rest REST_KEYBOARD_DOWN =
+        new com.termux.app.place.PlaceChromeTravel.Rest(false, false);
+    /** {@link #chromeRestOf} as the travel asks it, bound once rather than per frame. */
+    private final com.termux.app.place.PlaceChromeTravel.States mChromeRestStates = this::chromeRestOf;
 
     /**
      * Whether the keyboard can be brought up below the screen for a slide. A floating keyboard is
@@ -17664,8 +18189,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             beginTravelHold();
             mTravelContentPreRolled = true;
             mTravelHeldReservationPx = Math.max(0, mTravelHeldReservationPx - roomGivenBackPx);
-            if (mPaneController != null) mPaneController.beginHostSurfaceResize();
-            applyAccessoryGeometryIfNeeded(true, "wall:preroll-content");
+            if (mTravelGridHold == null) {
+                mTravelGridHold = mGeometry.begin(GeometryScheduler.Reason.PLACE_TRAVEL,
+                    false, false);
+            }
+            // In this frame: the slide's first frame is drawn with the content's new room.
+            mGeometry.requestNow(GeometryScheduler.Reason.PLACE_TRAVEL,
+                GeometryScheduler.ResizePolicy.AT_SETTLE);
         } finally {
             Trace.endSection();
         }
@@ -17673,16 +18203,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The settle's counterpart: after the settle's layout the paused panes each send the PTY
-     * their one size, anchored at the bottom the way the status bar's fold does. Posted, so it
-     * runs after the traversal that applies the settle's geometry.
+     * their one size, anchored at the bottom the way the status bar's fold does. The scheduler
+     * resumes them behind the traversal that applies the settle's geometry.
      */
     private void finishTravelContentResizeAfterLayout() {
-        View stack = findViewById(R.id.accessory_stack_container);
-        Runnable finish = () -> {
-            if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
-        };
-        if (stack != null) stack.post(finish);
-        else finish.run();
+        GeometryScheduler.Transition hold = mTravelGridHold;
+        mTravelGridHold = null;
+        mGeometry.settle(hold, false);
     }
 
     /**
@@ -17753,7 +18280,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * container.
      */
     private int travelDockLaidOutPx(int keyboardPx) {
-        View stack = findViewById(R.id.accessory_stack_container);
+        View stack = hotView(R.id.accessory_stack_container);
         if (stack == null) return 0;
         ViewGroup.LayoutParams params = stack.getLayoutParams();
         int height = params != null && params.height > 0 ? params.height : 0;
@@ -17786,7 +18313,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private float mTravelSideAlpha = 1f;
 
     private void setTravelAlpha(int viewId, float alpha) {
-        View view = findViewById(viewId);
+        View view = hotView(viewId);
         if (view == null) return;
         float clamped = Math.max(0f, Math.min(1f, alpha));
         if (view.getAlpha() != clamped) view.setAlpha(clamped);
@@ -17809,57 +18336,69 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void doSettlePlaceChrome(@NonNull com.termux.app.wall.PaneWallPage page) {
-        // A keyboard swipe still landing lands first: it owns the same travel state.
-        settleKeyboardSwipeTravelNow();
-        boolean leavingKeyboardUp = committedKeyboardVisible();
-        boolean keyboardPreRolled = mTravelKeyboardPreRolled;
-        boolean contentPreRolled = mTravelContentPreRolled;
-        boolean held = mTravelHoldsContent;
-        boolean moved = mChromeTravelMoved;
-        com.termux.app.wall.PaneWallPage left = mLastWallPage;
-        mTravelHoldsContent = false;
-        mTravelKeyboardPreRolled = false;
-        mTravelKeyboardPlace = null;
-        mTravelContentPreRolled = false;
-        mTravelRoomArriving = null;
-        mChromeTravelMoved = false;
-        mDockTravelTranslationPx = 0f;
-        mKeyboardTravelSharePx = 0f;
-        mTravelHeldOverlapPx = 0;
-        // The material blend, if one ran, has landed on the arriving place's material; the pass
-        // below paints that material plainly, and the blend's layers go with it.
-        mKeyboardTravelSolidness = KeyboardMaterialPolicy.NO_TRAVEL;
-        mKeyboardTravelSolidFill = null;
-        applyAccessoryStackTranslation();
-        applyChromeTravelAlpha(1f, 1f);
-        // The panes' clip comes off with the hold: the geometry pass below lays them out at the
-        // size the clip was standing in for, in the same traversal.
-        if (held && mPaneController != null) mPaneController.setTravelBottomCoverPx(0);
-        // A keyboard pre-rolled for a place the wall did not stay on goes away quietly, as it came:
-        // the place under it never had it up. One the arriving place wants is already where it
-        // belongs, and the place's own sync below finds nothing to do.
-        if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()
-            && (page == left || !wantsKeyboardOnEnter(page))) {
-            mQuietKeyboardChange = true;
-            try {
-                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                    .HideReason.WALL_PAGE);
-            } finally {
-                mQuietKeyboardChange = false;
+        // Everything the settle shows, hides and lays out asks for its geometry inside one batch:
+        // a keyboard going away, the place's own keyboard coming up and the content's room are
+        // one pass, run in this frame at the batch's end.
+        boolean held = false;
+        boolean contentPreRolled = false;
+        boolean moved = false;
+        mGeometry.beginBatch();
+        try {
+            // A keyboard swipe still landing lands first: it owns the same travel state.
+            settleKeyboardSwipeTravelNow();
+            boolean leavingKeyboardUp = committedKeyboardVisible();
+            boolean keyboardPreRolled = mTravelKeyboardPreRolled;
+            contentPreRolled = mTravelContentPreRolled;
+            held = mTravelHoldsContent;
+            moved = mChromeTravelMoved;
+            com.termux.app.wall.PaneWallPage left = mLastWallPage;
+            mTravelHoldsContent = false;
+            mTravelKeyboardPreRolled = false;
+            mTravelKeyboardPlace = null;
+            mTravelContentPreRolled = false;
+            mTravelRoomArriving = null;
+            mChromeTravelMoved = false;
+            mDockTravelTranslationPx = 0f;
+            mKeyboardTravelSharePx = 0f;
+            mTravelHeldOverlapPx = 0;
+            // The material blend, if one ran, has landed on the arriving place's material; the
+            // pass below paints that material plainly, and the blend's layers go with it.
+            mKeyboardTravelSolidness = KeyboardMaterialPolicy.NO_TRAVEL;
+            mKeyboardTravelSolidFill = null;
+            applyAccessoryStackTranslation();
+            applyChromeTravelAlpha(1f, 1f);
+            // The panes' clip comes off with the hold: the geometry pass below lays them out at
+            // the size the clip was standing in for, in the same traversal.
+            if (held && mPaneController != null) mPaneController.setTravelBottomCoverPx(0);
+            // A keyboard pre-rolled for a place the wall did not stay on goes away quietly, as it
+            // came: the place under it never had it up. One the arriving place wants is already
+            // where it belongs, and the place's own sync below finds nothing to do.
+            if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()
+                && (page == left || !wantsKeyboardOnEnter(page))) {
+                mQuietKeyboardChange = true;
+                try {
+                    mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                        .HideReason.WALL_PAGE);
+                } finally {
+                    mQuietKeyboardChange = false;
+                }
+            } else if (keyboardPreRolled && page != left
+                && page == com.termux.app.wall.PaneWallPage.DISPLAY && mX11Display != null
+                && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+                // The display hears the keyboard come up as the place's own, which is what the
+                // settle-time show the pre-roll stood in for would have told it.
+                mX11Display.onUserKeyboardIntent(true);
             }
-        } else if (keyboardPreRolled && page != left
-            && page == com.termux.app.wall.PaneWallPage.DISPLAY && mX11Display != null
-            && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
-            // The display hears the keyboard come up as the place's own, which is what the
-            // settle-time show the pre-roll stood in for would have told it.
-            mX11Display.onUserKeyboardIntent(true);
+            syncPlaceState(page, leavingKeyboardUp);
+            // The hold is over: one geometry pass gives the content the room the place it landed
+            // on leaves it, which is the terminal's one resize for the whole slide. A slide that
+            // gave the room back in its first frame finds it already right, and only the grid's
+            // resize is left; the rows are drawn where it lands until it does.
+            if (held) mGeometry.requestNow(GeometryScheduler.Reason.PLACE_SETTLE,
+                GeometryScheduler.ResizePolicy.NOW);
+        } finally {
+            mGeometry.endBatch();
         }
-        syncPlaceState(page, leavingKeyboardUp);
-        // The hold is over: one geometry pass gives the content the room the place it landed on
-        // leaves it, which is the terminal's one resize for the whole slide. A slide that gave
-        // the room back in its first frame finds it already right, and only the grid's resize
-        // is left; the rows are drawn where it lands until it does.
-        if (held) applyAccessoryGeometryIfNeeded(true, "wall:settle");
         if (contentPreRolled) finishTravelContentResizeAfterLayout();
         if (held) settleTerminalTravelDisplacement();
         // The crops were cut where the stack was laid out; one pass re-cuts any a frame of the
@@ -17996,6 +18535,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void noteTerminalPlaceMayBeVisible() {
         if (mPaneController != null) mPaneController.onTerminalPlaceShown();
+        if (mTermuxTerminalSessionActivityClient != null)
+            mTermuxTerminalSessionActivityClient.onTerminalPlaceMayBeVisible();
+    }
+
+    /**
+     * {@link #noteTerminalPlaceMayBeVisible} for one frame of a slide: the focused pane's request
+     * is acknowledged as the full pass would (a pane that changes repaints its border through the
+     * attention listener), without re-dressing every pane's border per frame.
+     */
+    private void noteTerminalPlaceMayBeVisibleWhileMoving() {
+        if (mPaneController != null) mPaneController.acknowledgeActivePaneAttention();
         if (mTermuxTerminalSessionActivityClient != null)
             mTermuxTerminalSessionActivityClient.onTerminalPlaceMayBeVisible();
     }
@@ -18173,22 +18723,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTravelHeldOverlapPx = 0;
         applyAccessoryStackTranslation();
         if (held && mPaneController != null) mPaneController.setTravelBottomCoverPx(0);
-        if (open != mKeyboardSwipeFromOpen) {
-            // The pre-rolled keyboard, up already, becomes the one the person asked for; the
-            // display's policy hears it here, since the keyboard itself saw no change to report.
-            applyBorderKeyboardSwipe(open);
-            if (open && mX11Display != null && !mRaisingDisplayFrameKeyboard)
-                mX11Display.onUserKeyboardIntent(true);
-        } else if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
-            mQuietKeyboardChange = true;
-            try {
-                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                    .HideReason.WALL_PAGE);
-            } finally {
-                mQuietKeyboardChange = false;
+        // The keyboard's own show or hide and the content's room are one pass, at the batch's end.
+        mGeometry.beginBatch();
+        try {
+            if (open != mKeyboardSwipeFromOpen) {
+                // The pre-rolled keyboard, up already, becomes the one the person asked for; the
+                // display's policy hears it here, since the keyboard itself saw no change to
+                // report.
+                applyBorderKeyboardSwipe(open);
+                if (open && mX11Display != null && !mRaisingDisplayFrameKeyboard)
+                    mX11Display.onUserKeyboardIntent(true);
+            } else if (keyboardPreRolled && mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+                mQuietKeyboardChange = true;
+                try {
+                    mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                        .HideReason.WALL_PAGE);
+                } finally {
+                    mQuietKeyboardChange = false;
+                }
             }
+            if (held) mGeometry.requestNow(GeometryScheduler.Reason.PLACE_SETTLE,
+                GeometryScheduler.ResizePolicy.NOW);
+        } finally {
+            mGeometry.endBatch();
         }
-        if (held) applyAccessoryGeometryIfNeeded(true, "keyboard-swipe:settle");
         if (contentPreRolled) finishTravelContentResizeAfterLayout();
         if (held) settleTerminalTravelDisplacement();
         mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
@@ -18249,8 +18807,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override @Nullable public int[] borderInsetsPx() {
                     // The pane card's rim under Floating; the opening's own edge, with no inset,
                     // under Docked.
-                    int horizontal = terminalFrameInsetPx(false);
-                    int vertical = terminalFrameInsetPx(true);
+                    // One chrome shape for both numbers, per border touch.
+                    terminalFrameInsetsPx(mTmpFrameInsets);
+                    int horizontal = mTmpFrameInsets[0];
+                    int vertical = mTmpFrameInsets[1];
                     return new int[] {horizontal, vertical, horizontal, vertical};
                 }
 
@@ -18280,7 +18840,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // are the pane host's less the stroke's air on every side, so the two share
                     // a centre and one scale about it keeps the line where it frames the page.
                     if (page != com.termux.app.wall.PaneWallPage.TERMINAL) return;
-                    View borderView = findViewById(R.id.terminal_border_overlay);
+                    View borderView = hotView(R.id.terminal_border_overlay);
                     if (borderView == null) return;
                     borderView.setPivotX(borderView.getWidth() / 2f);
                     borderView.setPivotY(borderView.getHeight() / 2f);
@@ -18349,13 +18909,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     syncChromeTravel(offsetPx);
                     // The wallpaper pans with the wall, and every glass surface follows it; the
                     // terminal's slabs re-aim whether or not it panned, since the page they sit
-                    // on moved over a wallpaper that did not go with it.
-                    syncWallpaperParallax();
+                    // on moved over a wallpaper that did not go with it. Aimed once: the wall's
+                    // controller has re-aimed the other pages already, and the slabs are here.
+                    syncWallpaperParallax(true);
                     if (mPaneController != null) mPaneController.invalidatePaneGlassPositions();
                     // The wall moved at all, so the terminal may be sliding back into the frame:
                     // any pane whose screen changed while it was away is drawn now, before the
-                    // first frame of the slide, rather than one stale frame later.
-                    noteTerminalPlaceMayBeVisible();
+                    // first frame of the slide, rather than one stale frame later. The panes'
+                    // borders are re-dressed when the page comes on screen
+                    // (onTerminalOffScreenChanged), not per frame; per frame only the
+                    // acknowledgement is taken, which repaints them itself when it lands.
+                    noteTerminalPlaceMayBeVisibleWhileMoving();
                 }
                 @Override public void onTerminalOffScreenChanged(boolean offScreen) {
                     // Every pane the terminal place holds, tiled and floating alike, has to hear
@@ -18363,9 +18927,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // 707920f7 and the alpha-based fix after it), so each one is told by hand to
                     // pause what INVISIBLE used to pause for free.
                     if (mPaneController == null) return;
+                    // The attention glow's endless pulse is one of those: held while away.
+                    mPaneController.setTerminalOffScreen(offScreen);
                     for (com.termux.view.TerminalView view : mPaneController.getVisiblePaneViews()) {
                         view.setWallPageOffScreen(offScreen);
                     }
+                    // The one frame of a slide the borders are re-dressed in: the page's first
+                    // frame back on screen.
+                    if (!offScreen) mPaneController.onTerminalPlaceShown();
                 }
                 @Override public void onWallOutlineAlphaChanged(float alpha) {
                     // The terminal page's outline is its panes' rims; they fade with the other
@@ -18447,8 +19016,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncTerminalFrameLineTravel() {
         if (mPaneWallController == null) return;
-        View borderView = findViewById(R.id.terminal_border_overlay);
-        View paneHost = findViewById(R.id.terminal_pane_host);
+        View borderView = hotView(R.id.terminal_border_overlay);
+        View paneHost = hotView(R.id.terminal_pane_host);
         if (borderView == null || paneHost == null) return;
         float alpha = com.termux.app.wall.PaneWallPolicy.pageOutlineAlpha(
             paneHost.getTranslationX(), mPaneWallController.wall().getWidth());
@@ -18734,7 +19303,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the wall commits to the next place and the content becomes that place's.
         float travel = width <= 0 ? 0f : Math.min(1f, Math.abs(offsetPx) / (width * 0.5f));
         float alpha = 1f - travel;
-        View strip = findViewById(R.id.terminal_status_place_content);
+        View strip = hotView(R.id.terminal_status_place_content);
         if (strip != null) {
             // The place's content leaves the way the wall does: sideways past a row's ends,
             // up and down past a column's.
@@ -18758,7 +19327,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneWallController == null) return;
         java.util.List<com.termux.app.wall.PaneWallPage> pages = mPaneWallController.pages();
         com.termux.app.wall.PaneWallPage current = mPaneWallController.currentPage();
-        com.termux.app.statusbar.StatusBarLensView lens = findViewById(R.id.terminal_status_lens);
+        com.termux.app.statusbar.StatusBarLensView lens = hotView(R.id.terminal_status_lens);
         if (lens != null) lens.setWallState(pages, current, offsetPx, width);
     }
 
@@ -19314,7 +19883,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
         mLinuxAppRunnerHook = entry -> {
             if (mLinuxApps == null) return false;
-            com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxApp(entry.appRef);
+            com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxAppForLaunch(entry);
             if (app == null) {
                 showToast(getString(R.string.termux_x11_app_gone), true);
                 refreshLinuxApps(true);
@@ -19327,10 +19896,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mTerminalAppRunnerHook = new com.termux.app.launcher.LauncherAppLauncher.TerminalAppRunner() {
             @Override public boolean handles(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
                 com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxApp(entry.appRef);
+                // Held for the run that follows in this same launch, whichever runner takes it.
+                rememberLinuxAppResolution(entry, app);
                 return app != null && app.terminal;
             }
             @Override public boolean run(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
-                com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxApp(entry.appRef);
+                com.termux.app.x11.LinuxAppCatalog.LinuxApp app = resolveLinuxAppForLaunch(entry);
                 if (app == null) {
                     showToast(getString(R.string.termux_x11_app_gone), true);
                     refreshLinuxApps(true);
@@ -19357,6 +19928,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The Linux app an entry's id names, re-read from the live catalogue (nothing is cached or
      * watched, so an app installed a moment ago is simply there). Null once the app is gone.
      */
+    /**
+     * The answer {@code LauncherAppLauncher}'s {@code handles} just read for this launch, so the
+     * runner it hands the entry to does not scan every root again a moment later: one scan per
+     * tap instead of two. Valid only for the same entry, on the same thread, within
+     * {@link #LINUX_APP_RESOLUTION_REUSE_MS}, and used once.
+     */
+    @Nullable private com.termux.app.launcher.model.LauncherAppEntry mResolvedLinuxEntry;
+    @Nullable private com.termux.app.x11.LinuxAppCatalog.LinuxApp mResolvedLinuxApp;
+    @Nullable private Thread mResolvedLinuxThread;
+    private long mResolvedLinuxAtMs;
+    private static final long LINUX_APP_RESOLUTION_REUSE_MS = 1000L;
+    /** launcherctl launches from its own thread, so the memo is guarded. */
+    private final Object mResolvedLinuxLock = new Object();
+
+    private void rememberLinuxAppResolution(@NonNull com.termux.app.launcher.model.LauncherAppEntry entry,
+                                            @Nullable com.termux.app.x11.LinuxAppCatalog.LinuxApp app) {
+        synchronized (mResolvedLinuxLock) {
+            mResolvedLinuxEntry = entry;
+            mResolvedLinuxApp = app;
+            mResolvedLinuxThread = Thread.currentThread();
+            mResolvedLinuxAtMs = android.os.SystemClock.uptimeMillis();
+        }
+    }
+
+    /** The Linux app for a launch: the resolution {@code handles} just made for it, else a scan. */
+    @Nullable
+    private com.termux.app.x11.LinuxAppCatalog.LinuxApp resolveLinuxAppForLaunch(
+            @NonNull com.termux.app.launcher.model.LauncherAppEntry entry) {
+        synchronized (mResolvedLinuxLock) {
+            boolean reusable = mResolvedLinuxEntry == entry
+                && mResolvedLinuxThread == Thread.currentThread()
+                && android.os.SystemClock.uptimeMillis() - mResolvedLinuxAtMs
+                    <= LINUX_APP_RESOLUTION_REUSE_MS;
+            com.termux.app.x11.LinuxAppCatalog.LinuxApp app = mResolvedLinuxApp;
+            mResolvedLinuxEntry = null;
+            mResolvedLinuxApp = null;
+            mResolvedLinuxThread = null;
+            if (reusable) return app;
+        }
+        return resolveLinuxApp(entry.appRef);
+    }
+
     @Nullable
     private com.termux.app.x11.LinuxAppCatalog.LinuxApp resolveLinuxApp(
             @NonNull com.termux.app.launcher.model.AppRef ref) {
@@ -20382,14 +20995,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean vertical = isStatusBarVertical();
         ViewGroup.LayoutParams params = host.getLayoutParams();
         if (vertical ? params.width != height : params.height != height) {
+            int bandBeforePx = bottomStatusBandPx();
             if (vertical) params.width = height;
             else params.height = height;
             host.setLayoutParams(params);
             // A bar along the bottom is a band of the accessory stack, whose height is arithmetic
-            // rather than wrap_content — so the stack has to be re-added up as the bar grows, or
-            // the fold would open into a container that never made room for it. Without the
-            // terminal resize: that is a SIGWINCH per frame, and the settle at the end owns it.
-            if (mStatusBarEdge == PlaceLayout.Edge.BOTTOM) setTerminalToolbarHeight(false);
+            // rather than wrap_content — so the stack has to grow with the bar, or the fold would
+            // open into a container that never made room for it. By the band's change alone: the
+            // whole geometry pass per frame was a full chrome apply per frame, and the fold's
+            // settle runs the one pass that lays everything else out
+            // (beginStatusBarTerminalResize).
+            if (mStatusBarEdge == PlaceLayout.Edge.BOTTOM)
+                growAccessoryStackBy(bottomStatusBandPx() - bandBeforePx);
         }
         int collapsedHeight = targetStatusBarHeightPx(capsule, true);
         int expandedHeight = targetStatusBarHeightPx(capsule, false);
@@ -20499,6 +21116,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return geometry;
     }
 
+    /**
+     * Grows the accessory stack's explicit height by a band's change, without the pass that
+     * computes it: one height write for a frame of a bottom bar's fold. The stack is the sum of its
+     * bands ({@link #computeAccessoryStackHeight}), so this is exact until the stack meets its
+     * ceiling, where the settle's pass sheds the dock's rows as it always has.
+     */
+    private void growAccessoryStackBy(int deltaPx) {
+        if (deltaPx == 0) return;
+        View stack = findViewById(R.id.accessory_stack_container);
+        ViewGroup.LayoutParams params = stack == null ? null : stack.getLayoutParams();
+        if (params == null || params.height < 0) return;
+        params.height = Math.max(0, params.height + deltaPx);
+        stack.setLayoutParams(params);
+    }
+
     /** The bar's thickness across its own axis right now, whichever axis that is. */
     private int currentTopStatusBarHeight(View host) {
         ViewGroup.LayoutParams params = host.getLayoutParams();
@@ -20508,26 +21140,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return params != null && params.height > 0 ? params.height : host.getHeight();
     }
 
-    private int beginStatusBarTerminalResize() {
-        int generation = ++mStatusBarTerminalResizeGeneration;
-        if (mPaneController != null) mPaneController.beginHostSurfaceResize();
-        // The display page shares the wall's height: without this every animation frame would
-        // resize the X screen, and the bar's motion would judder along with it.
-        com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
-            ? null : mPaneWallController.displayPage();
-        if (display != null) display.beginHostResize();
-        return generation;
+    /**
+     * Opens the fold's transition: the panes' grid and the display's screen are held, and the
+     * layout the fold moves every frame books no geometry pass, until
+     * {@link #finishStatusBarTerminalResize}. Each pane then sends one final row/column update
+     * instead of a SIGWINCH for every frame.
+     */
+    @NonNull
+    private GeometryScheduler.Transition beginStatusBarTerminalResize() {
+        return mGeometry.begin(GeometryScheduler.Reason.STATUS_FOLD, true, true);
     }
 
-    private void finishStatusBarTerminalResizeAfterLayout(View host, int generation) {
-        // The posted resume runs after the requested terminal-surface layout. Each pane then sends
-        // exactly one final row/column update instead of a SIGWINCH for every animation frame.
-        host.post(() -> {
-            if (mPaneController != null) mPaneController.finishHostSurfaceResizeKeepingBottom();
-            com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
-                ? null : mPaneWallController.displayPage();
-            if (display != null) display.finishHostResize();
-        });
+    /**
+     * Ends a fold's transition. A landing ({@code settle}) books the one geometry pass for the
+     * bar's new height; a fold taken over by another hands what it moved to the one taking over,
+     * which opened its own transition first. Either way the grid resumes behind that pass's layout.
+     */
+    private void finishStatusBarTerminalResize(@Nullable GeometryScheduler.Transition fold,
+                                               boolean settle) {
+        mGeometry.settle(fold, settle);
     }
 
     private void setTopStatusBarCollapsed(boolean requestedCollapsed, boolean animate) {
@@ -20567,7 +21198,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void setTopStatusBarCollapsed(boolean requestedCollapsed, boolean animate,
                                           float towardOpenVelocityPxPerSec) {
         if (mPreferences == null) return;
-        int dragLease = endTopStatusBarDrag();
+        GeometryScheduler.Transition dragLease = endTopStatusBarDrag();
         // A bar down a side never rests expanded; isStatusBarCompact() already reflects that, so
         // this coercion never lands on a preference write below — it only refuses the request.
         boolean collapsed = requestedCollapsed
@@ -20595,24 +21226,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // opened would end the keyboard's or an animation's early and let panes settle on a
             // size they never reported.
             refreshTerminalWindowBar();
-            if (host != null && dragLease >= 0) finishStatusBarTerminalResizeAfterLayout(host, dragLease);
+            finishStatusBarTerminalResize(dragLease, true);
             return;
         }
         if (preferenceChanged) setStatusBarCompact(collapsed);
         if (mFirstBootTour != null) mFirstBootTour.onStatusBarCollapsedSettled(collapsed);
         if (host == null) {
             refreshTerminalWindowBar();
+            finishStatusBarTerminalResize(dragLease, true);
             return;
         }
         if (!animate || isReducedMotionEnabled()) {
-            int resizeGeneration = dragLease >= 0 ? dragLease : beginStatusBarTerminalResize();
+            GeometryScheduler.Transition snap = dragLease != null ? dragLease
+                : beginStatusBarTerminalResize();
             refreshTerminalWindowBar();
-            finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
+            finishStatusBarTerminalResize(snap, true);
             return;
         }
 
+        // Opened before the landing still running is cancelled, so what that one moved is this
+        // one's to settle rather than a pass of its own.
+        final GeometryScheduler.Transition foldTransition = dragLease != null ? dragLease
+            : beginStatusBarTerminalResize();
         cancelTopStatusBarAnimator();
-        final int resizeGeneration = dragLease >= 0 ? dragLease : beginStatusBarTerminalResize();
         int startHeight = currentTopStatusBarHeight(host);
         if (startHeight <= 0) startHeight = targetStatusBarHeightPx(capsule, !collapsed);
         applyTopStatusBarInteractiveHeight(host, topWidgets, startHeight, capsule);
@@ -20643,7 +21279,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     // Taken over — by a finger, another landing, or a new edge — from wherever the
                     // bar stands: whoever took over owns its geometry now, and only the lease
                     // this landing held is returned.
-                    finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
+                    finishStatusBarTerminalResize(foldTransition, false);
                     return;
                 }
                 if (topWidgets != null) {
@@ -20654,7 +21290,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         ? View.GONE : View.VISIBLE);
                 }
                 refreshTerminalWindowBar();
-                finishStatusBarTerminalResizeAfterLayout(host, resizeGeneration);
+                finishStatusBarTerminalResize(foldTransition, true);
             }
         });
         mStatusBarCollapseAnimator = fold;
@@ -20674,11 +21310,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         fold.cancel();
     }
 
-    /** Ends a finger's fold, returning the resize lease it held, or -1 when none was under way. */
-    private int endTopStatusBarDrag() {
-        if (!mStatusBarFoldDragging) return -1;
+    /** Ends a finger's fold, returning the transition it held, or null when none was under way. */
+    @Nullable
+    private GeometryScheduler.Transition endTopStatusBarDrag() {
+        if (!mStatusBarFoldDragging) return null;
         mStatusBarFoldDragging = false;
-        return mStatusBarFoldDragResizeGeneration;
+        GeometryScheduler.Transition drag = mStatusBarFoldDragTransition;
+        mStatusBarFoldDragTransition = null;
+        return drag;
     }
 
     /**
@@ -20698,10 +21337,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View topWidgets = findViewById(R.id.terminal_top_widget_area);
         boolean capsule = isRoundedDockStyle();
         if (!mStatusBarFoldDragging) {
+            // The drag's transition first: a landing it takes over hands it what that one moved.
+            GeometryScheduler.Transition drag = beginStatusBarTerminalResize();
             cancelTopStatusBarAnimator();
             mStatusBarFoldDragging = true;
             mStatusBarFoldDragStartHeight = currentTopStatusBarHeight(host);
-            mStatusBarFoldDragResizeGeneration = beginStatusBarTerminalResize();
+            mStatusBarFoldDragTransition = drag;
         }
         int height = com.termux.app.statusbar.StatusBarFoldMotion.heightForDrag(
             mStatusBarFoldDragStartHeight, towardOpenPx, targetStatusBarHeightPx(capsule, true),
@@ -21336,8 +21977,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void refreshShellActivityIndication() {
         mShellActivityRefreshPending = false;
+        boolean labelPollOwed = mWindowLabelPollOwed;
+        mWindowLabelPollOwed = false;
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
-        if (bar != null && isSplitPanesEnabled()) syncWindowBarItems(bar);
+        if (bar != null && isSplitPanesEnabled()) {
+            java.util.List<Integer> foregroundPids = syncWindowBarItems(bar);
+            if (labelPollOwed) scheduleWindowLabelPoll(foregroundPids);
+        }
         scheduleShellActivityDecay();
     }
 
@@ -23767,6 +24413,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             public void onReceive(Context context, Intent intent) {
                 if (intent == null || !ACTION_PREFERRED_ACTIVITY_CHANGED.equals(intent.getAction()))
                     return;
+                mDefaultHomeApp = null;
+                if (mLauncherTransitionController != null) mLauncherTransitionController.invalidateDefaultHome();
                 syncRecentsVisibilityPolicy();
             }
         };
@@ -23922,7 +24570,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // and blanked both surfaces for the whole rebuild.
             mSuggestionBarView.pruneInvalidIconOverrides();
             mSuggestionBarView.refreshAllApps(drainPendingChangedPackages());
-            mLastLauncherCatalogSignature = computeLauncherCatalogSignature();
+            computeLauncherCatalogSignatureOffMain(
+                signature -> mLastLauncherCatalogSignature = signature);
             syncAzScrubLettersAndTint();
         }
         // The drawer's catalogue is not the dock's: it must refresh even with the suggestion bar
@@ -23989,11 +24638,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return;
             }
             if (v.getId() == R.id.terminal_pane_host) {
-                // Never mutate accessory layout params from inside this layout pass.
-                v.post(() -> {
-                    if (!isFinishing() && !isDestroyed())
-                        applyAccessoryGeometryIfNeeded(true, "terminal:layout");
-                });
+                // Booked, never run inside this layout pass. Usually the layout a pass booked
+                // coming back, which the scheduler recognises and runs nothing for.
+                mGeometry.request(GeometryScheduler.Reason.LAYOUT,
+                    GeometryScheduler.ResizePolicy.NONE);
                 return;
             }
             if (v.getId() == R.id.inapp_keyboard_container) {
@@ -24005,7 +24653,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         if (!isFinishing() && !isDestroyed()
                             && v.getHeight() != mKeyboardGeometry.desiredHeightPx()) {
                             mKeyboardGeometry.discardMeasuredHeight();
-                            applyAccessoryGeometryIfNeeded(true, "inapp-keyboard:height");
+                            mGeometry.request(GeometryScheduler.Reason.KEYBOARD,
+                                GeometryScheduler.ResizePolicy.NOW);
                         }
                     });
                 } else {
@@ -24076,7 +24725,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mTermuxTerminalSessionActivityClient != null) {
             mTermuxTerminalSessionActivityClient.onImeVisibilityChanged(visible);
         }
-        applyAccessoryGeometryIfNeeded(true, visible ? "ime:open" : "ime:close");
+        // At the end of this layout dispatch, together with the root's margin the same probe may
+        // have asked for: one pass, and the grid held since the insets moved resizes once after it.
+        mGeometry.request(GeometryScheduler.Reason.INSETS, GeometryScheduler.ResizePolicy.NOW);
         mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_BLUR_HEALTH);
     }
 
@@ -24120,7 +24771,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!isLauncherCatalogEnabled() || mSuggestionBarView == null) {
             return;
         }
-        int signature = computeLauncherCatalogSignature();
+        // The package manager is asked on the worker; the comparison and what follows from it run
+        // here on main, in the order the questions were asked.
+        computeLauncherCatalogSignatureOffMain(this::onLauncherCatalogSignatureRead);
+    }
+
+    private void onLauncherCatalogSignatureRead(int signature) {
+        if (!isLauncherCatalogEnabled() || mSuggestionBarView == null) {
+            return;
+        }
         if (mLastLauncherCatalogSignature == Integer.MIN_VALUE) {
             mLastLauncherCatalogSignature = signature;
             return;
@@ -24145,6 +24804,50 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // yesterday's rendering, so the refresh must rebuild every entry.
         requestFullCatalogRebuild();
         scheduleSuggestionBarPackageRefresh(true, true);
+    }
+
+    /**
+     * {@link #computeLauncherCatalogSignature} on the package-query thread, its answer handed to
+     * {@code onRead} on main — unless the activity is gone by then. Answers come back in the order
+     * the questions were asked (one thread, one queue). Asked inline when the thread is gone.
+     */
+    private void computeLauncherCatalogSignatureOffMain(@NonNull java.util.function.IntConsumer onRead) {
+        boolean queued = runPackageQuery(() -> {
+            int signature = computeLauncherCatalogSignature();
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                onRead.accept(signature);
+            });
+        });
+        if (!queued && !isDestroyed()) onRead.accept(computeLauncherCatalogSignature());
+    }
+
+    /**
+     * One background thread for the package-manager questions the main thread used to ask itself
+     * on the way to the front (the catalogue signature, a Linux app's entry). Made on first use and
+     * shut down with the activity.
+     */
+    @Nullable private java.util.concurrent.ExecutorService mPackageQueryExecutor;
+
+    /** Runs {@code job} on the package-query thread; false when it cannot (the activity is gone). */
+    private boolean runPackageQuery(@NonNull Runnable job) {
+        if (isDestroyed()) return false;
+        java.util.concurrent.ExecutorService executor = mPackageQueryExecutor;
+        if (executor == null) {
+            executor = java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "launcher-package-query");
+                thread.setPriority(Thread.NORM_PRIORITY - 1);
+                thread.setDaemon(true);
+                return thread;
+            });
+            mPackageQueryExecutor = executor;
+        }
+        try {
+            executor.execute(job);
+            return true;
+        } catch (java.util.concurrent.RejectedExecutionException e) {
+            return false;
+        }
     }
 
     private int computeLauncherCatalogSignature() {
@@ -24383,7 +25086,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // is asked for here rather than left to the geometry pass, which only books one when it
         // moved something: a styling reload can change every surface's material without moving a
         // single band, and that is exactly the case that needs re-glazing.
-        applyAccessoryGeometryIfNeeded(true, "reloadActivityStyling");
+        mGeometry.requestNow(GeometryScheduler.Reason.STYLING, GeometryScheduler.ResizePolicy.NOW);
         mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
             | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         syncTerminalWallpaperRenderingMode();

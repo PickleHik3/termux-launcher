@@ -137,10 +137,27 @@ Turning the trail on or off is the `terminal_cursor_trail` preference, further g
 mode and on the pane layer's own reduce-motion setting: off means no trail at all, for a cursor
 move inside a pane or a switch between panes alike.
 
-The trail's look is a choice of style: Default, Motion blur, Railgun, Torpedo, Pixie dust or Comet,
-set in Settings, Terminal, Cursor trail. `kitty.conf` can pick one too with
+The trail's look is a choice of style, set in Settings, Terminal, Cursor trail:
+
+- Default — kitty's own trail: a solid quad that shears toward the cursor and is gone once it lands.
+- Motion blur — a soft, wide smear of blurred cursor copies that lags behind the cursor and lingers.
+- Railgun — a thin, white-hot beam from the old position that vanishes in a blink, throwing a few
+  sparks.
+- Torpedo — a pointed body that travels the path nose first into the cursor, leaving a faint wake of
+  rings.
+- Pixie dust — glittering dust that drifts off the path and falls.
+- Comet — a tapered streak with a glowing head that draws in behind the cursor.
+
+`cursor_trail_decay` paces the styles too: Motion blur and Torpedo take longer with a longer slow
+time, Railgun's shot with a longer fast time; Comet and Pixie dust's dust keep their own timing.
+`cursor_trail_color` colours every style, and `cursor_trail_start_threshold` decides which moves
+show one.
+
+`kitty.conf` can pick a style too with
 `custom_shaders cursor-trail-motion-blur | cursor-trail-railgun | cursor-trail-torpedo | cursor-trail-pixiedust | cursor-trail-default`;
-that overrides the Settings choice, and any other kitty shader name is ignored. Separately,
+that overrides the Settings choice, and any other kitty shader name is ignored. Motion blur, Railgun
+and Torpedo are this app's own takes on the kitty shaders they are named after, drawn so each one
+is recognisable at a glance; Pixie dust follows kitty's particles. Separately,
 Settings, Terminal, Terminal effect applies a CRT, green or amber CRT, or TFT grid look to the whole
 home screen: every terminal pane, and the status bar, dock, bars and keyboard around them, with the
 scanlines running straight across all of them (Android 13 and newer only). Only the terminal panes

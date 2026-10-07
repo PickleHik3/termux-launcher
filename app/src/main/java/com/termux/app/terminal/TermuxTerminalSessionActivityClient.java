@@ -83,7 +83,24 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     /** Cheap stamp (mtime, length) of colors.properties at the last non-dynamic apply. */
     private long mLastColorsFileStamp = Long.MIN_VALUE;
     @NonNull private String mLastFontErrorSummary = "";
+    /** The resolved faces, so a new pane does not re-read and re-scan the font config. */
+    private final TerminalFontMemo mFontMemo = new TerminalFontMemo();
     private final Runnable mForegroundTerminalRefreshRunnable;
+
+    /**
+     * Lazy mode as last read, or null to read it again. Asked for on every posted redraw, so it is
+     * kept here and dropped whenever the preference changes, and on every start in case another
+     * process wrote it.
+     */
+    @Nullable private Boolean mLazyModeEnabled;
+    /** The store {@link #mLazyModeListener} is registered on, while started. */
+    @Nullable private android.content.SharedPreferences mLazyModeStore;
+    /** Held here: the store keeps its listeners weakly. */
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener mLazyModeListener =
+        (store, key) -> {
+            if (key == null || com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
+                .TERMUX_APP.KEY_LAZY_MODE.equals(key)) mLazyModeEnabled = null;
+        };
 
     /**
      * Notifications, the progress ring and the clipboard: the escape callbacks below hand these
@@ -125,6 +142,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      * Should be called when onStart() is called
      */
     public void onStart() {
+        mLazyModeEnabled = null;
+        watchLazyMode();
         // The service has connected, but data may have changed since we were last in the foreground.
         // Get the session stored in shared preferences stored by {@link #onStop} if its valid,
         // otherwise get the last session currently running.
@@ -166,6 +185,33 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         mDeferredScreenUpdateSessions.clear();
         mForegroundRefreshPending = false;
         mUiHandler.removeCallbacks(mForegroundTerminalRefreshRunnable);
+        unwatchLazyMode();
+    }
+
+    private void watchLazyMode() {
+        unwatchLazyMode();
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences = mHost.preferences();
+        android.content.SharedPreferences store = preferences == null ? null : preferences.getSharedPreferences();
+        if (store == null) return;
+        store.registerOnSharedPreferenceChangeListener(mLazyModeListener);
+        mLazyModeStore = store;
+    }
+
+    private void unwatchLazyMode() {
+        if (mLazyModeStore != null) mLazyModeStore.unregisterOnSharedPreferenceChangeListener(mLazyModeListener);
+        mLazyModeStore = null;
+        mLazyModeEnabled = null;
+    }
+
+    private boolean isLazyModeEnabled() {
+        Boolean cached = mLazyModeEnabled;
+        if (cached != null) return cached;
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences = mHost.preferences();
+        boolean enabled = preferences != null && preferences.isLazyModeEnabled();
+        // Only a value something will tell us about is kept; otherwise it is read each time, as before.
+        if (mLazyModeStore != null && preferences != null
+            && preferences.getSharedPreferences() == mLazyModeStore) mLazyModeEnabled = enabled;
+        return enabled;
     }
 
     public void onImeVisibilityChanged(boolean visible) {
@@ -235,8 +281,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         //     (median 7ms, 3% janky): it competes with an already-ticking frame source.
         //
         // So: the frame clock exactly when nothing else is driving frames.
-        boolean pumpFrames = mHost.preferences() != null
-            && mHost.preferences().isLazyModeEnabled();
+        boolean pumpFrames = isLazyModeEnabled();
         if (pumpFrames) {
             changedView.postOnAnimation(redraw);
         } else {
@@ -854,13 +899,13 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 mLastMaterialTerminalPaletteSignature =
                     MaterialTerminalColorScheme.signature(mContext, level);
                 mLastColorsFileStamp = Long.MIN_VALUE;
-                // Built here, on the main thread, and handed over as finished values: the writer thread
-                // must not touch the theme or resources, and this way the files describe the same
-                // palette the terminal just took. The dark and light halves are derived beside it,
-                // off forced-mode configuration contexts, so the templates can dress a tool for the
-                // mode the phone is not in.
+                // The active roles are built here, on the main thread, from the activity's theme, so
+                // the files describe the same palette the terminal just took. The dark and light
+                // halves, which only the files and templates use, are derived on the writer thread
+                // off forced-mode contexts that only it touches, so the templates can dress a tool
+                // for the mode the phone is not in without costing this thread two theme builds.
                 ThemeTemplates.exportPaletteAndRunPassAsync(mContext,
-                    MaterialTerminalColorScheme.createPaletteSet(mContext, level, props));
+                    MaterialTerminalColorScheme.paletteSetSource(mContext, level, props));
             } else {
                 props = new Properties();
                 mLastMaterialTerminalPaletteSignature = 0;
@@ -984,8 +1029,10 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     /** Load the configured faces and apply them to every pane that has a renderer. */
     public void applyTerminalFonts() {
         try {
-            TerminalFontConfig.Result config = TerminalFontConfig.load();
-            TerminalFontLoader.Faces faces = TerminalFontLoader.load(config);
+            // Always a fresh load: this is the path a config edit or a return from Settings takes.
+            TerminalFontMemo.Entry loaded = mFontMemo.reload();
+            TerminalFontConfig.Result config = loaded.config;
+            TerminalFontLoader.Faces faces = loaded.faces;
             reportFontErrors(faces.errors);
             for (com.termux.view.TerminalView v : mHost.paneViews()) {
                 if (v.isFontInitialized())
@@ -1009,7 +1056,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (view == null || !view.isFontInitialized())
             return;
         try {
-            TerminalFontLoader.Faces faces = TerminalFontLoader.load(TerminalFontConfig.load());
+            TerminalFontLoader.Faces faces = mFontMemo.current().faces;
             for (String error : faces.errors) Logger.logError(LOG_TAG, "Font config: " + error);
             view.setTypeface(faces.regular, faces.bold, faces.italic, faces.boldItalic,
                 faces.symbolMaps, faces.ligaturePolicy, faces.fontFeatures,

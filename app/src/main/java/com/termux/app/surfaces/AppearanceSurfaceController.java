@@ -1029,7 +1029,8 @@ public final class AppearanceSurfaceController {
         host.getLocationInWindow(at);
         View decor = host.getRootView();
         int below = decor == null ? 0 : Math.max(0, decor.getHeight() - (at[1] + host.getHeight()));
-        int top = Math.max(0, bars.top - at[1]);
+        // The same inset the editor's preview is measured from (AppearancePreviewArea).
+        int top = AppearancePreviewArea.pageInsetTopPx(bars.top, at[1]);
         int bottom = Math.max(0, bars.bottom - below);
         for (int i = 0; i < host.getChildCount(); i++)
             host.getChildAt(i).setPadding(bars.left, top, bars.right, bottom);

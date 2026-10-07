@@ -26,9 +26,11 @@ import com.termux.app.SuggestionBarView;
 import com.termux.app.TermuxActivity;
 import com.termux.app.dock.TestDockLayouts;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
+import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -51,6 +53,18 @@ import org.robolectric.util.ReflectionHelpers;
 @ConscryptMode(ConscryptMode.Mode.OFF)
 @LooperMode(LooperMode.Mode.LEGACY)
 public class AppDrawerWarmUpTest {
+
+    /**
+     * Cells here are asserted on right after they bind, so icons render inline as they did before
+     * binding moved to the worker. {@code AsyncIconBinderTest} covers the asynchronous path.
+     */
+    @Before public void renderIconsSynchronously() {
+        AsyncIconBinder.setSynchronousForTesting(true);
+    }
+
+    @After public void restoreAsynchronousIcons() {
+        AsyncIconBinder.setSynchronousForTesting(false);
+    }
 
     private static final int WIDTH_PX = 1080;
     private static final int HEIGHT_PX = 2160;

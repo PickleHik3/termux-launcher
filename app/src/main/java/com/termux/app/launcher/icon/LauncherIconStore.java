@@ -51,7 +51,11 @@ public final class LauncherIconStore {
     /** Fraction of the per-app heap raw artwork may hold (1/16th). */
     private static final int HEAP_DIVISOR = 16;
 
-    /** Produces an app's raw artwork when it is not held. Runs on whichever thread asked. */
+    /**
+     * Produces an app's raw artwork when it is not held. Runs on whichever thread asked — for the
+     * drawer and the dock that is the icon thread ({@link AsyncIconBinder}), so a load costs
+     * the main thread nothing.
+     */
     public interface ArtworkLoader {
         @Nullable Drawable load(@NonNull AppRef ref);
     }
@@ -60,7 +64,13 @@ public final class LauncherIconStore {
     @NonNull private final ArtworkLoader loader;
     @NonNull private final LruCache<String, Drawable> cache;
     /** Which icon packs produced the held artwork. See {@link #artworkKey}. */
-    @NonNull private String iconPackIdentity = "";
+    @NonNull private volatile String iconPackIdentity = "";
+    /**
+     * Bumped by every {@link #invalidateAll()}. A load notes it before asking the loader and keeps
+     * its result only if it has not moved, so artwork loaded on the worker under the previous
+     * treatment cannot be put back after the eviction meant to remove it.
+     */
+    private volatile int epoch;
 
     public LauncherIconStore(@NonNull Resources resources, int memoryClassMb,
                              @NonNull ArtworkLoader loader) {
@@ -123,11 +133,15 @@ public final class LauncherIconStore {
     @Nullable
     public Drawable artwork(@Nullable AppRef ref) {
         if (ref == null) return null;
-        String key = artworkKey(ref, iconPackIdentity);
+        int startEpoch = epoch;
+        String identity = iconPackIdentity;
+        String key = artworkKey(ref, identity);
         Drawable held = cache.get(key);
         if (held != null) return held;
         Drawable loaded = shrink(loader.load(ref));
-        if (loaded != null) cache.put(key, loaded);
+        if (loaded != null && startEpoch == epoch && identity.equals(iconPackIdentity)) {
+            cache.put(key, loaded);
+        }
         return loaded;
     }
 
@@ -144,6 +158,7 @@ public final class LauncherIconStore {
 
     /** Drops every held drawable; the next read reloads at the current icon-pack treatment. */
     public void invalidateAll() {
+        epoch++;
         cache.evictAll();
     }
 

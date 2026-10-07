@@ -15,7 +15,7 @@
     <LinearLayout
         android:id="@+id/appearance_page_bar"
         android:layout_width="match_parent"
-        android:layout_height="64dp"
+        android:layout_height="@dimen/appearance_page_bar_height"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="4dp"

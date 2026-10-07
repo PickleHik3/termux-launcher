@@ -112,13 +112,56 @@ public final class StatusBarInk {
                                  double target) {
         int base = OnGlass.opaque(surface);
         int ink = OnGlass.resolveBare(base, seed, target).ink;
-        int from = Math.max(0, Math.min(255, alpha));
+        return carried(ink, base, Math.max(0, Math.min(255, alpha)), target);
+    }
+
+    /** {@link #inkAtAlpha}'s second half: the toned ink carried at the first alpha that clears. */
+    @ColorInt
+    private static int carried(@ColorInt int ink, @ColorInt int base, int from, double target) {
         for (int step = from; step <= 255; step++) {
             if (shownRatio(OnGlass.withAlpha(ink, step), base) >= target) {
                 return OnGlass.withAlpha(ink, step);
             }
         }
         return OnGlass.withAlpha(ink, 255);
+    }
+
+    /**
+     * {@link #inkAtAlpha} remembered for one surface, seed and target, for a view that asks it
+     * from {@code onDraw}: the tone search runs once per surface and seed, and each alpha's walk
+     * once, so a mark whose alpha moves with every frame of a drag pays for the search only the
+     * first time it meets an alpha. The answers are {@link #inkAtAlpha}'s own, bit for bit.
+     */
+    public static final class AlphaInkMemo {
+        private final int[] mInks = new int[256];
+        private final boolean[] mKnown = new boolean[256];
+        private boolean mValid;
+        private int mSurface;
+        private int mSeed;
+        private double mTarget;
+        private int mBase;
+        private int mToned;
+
+        /** Same arguments and answer as {@link StatusBarInk#inkAtAlpha}. */
+        @ColorInt
+        public int inkAtAlpha(@ColorInt int surface, @ColorInt int seed, int alpha,
+                              double target) {
+            if (!mValid || mSurface != surface || mSeed != seed || mTarget != target) {
+                mSurface = surface;
+                mSeed = seed;
+                mTarget = target;
+                mBase = OnGlass.opaque(surface);
+                mToned = OnGlass.resolveBare(mBase, seed, target).ink;
+                java.util.Arrays.fill(mKnown, false);
+                mValid = true;
+            }
+            int from = Math.max(0, Math.min(255, alpha));
+            if (!mKnown[from]) {
+                mInks[from] = carried(mToned, mBase, from, target);
+                mKnown[from] = true;
+            }
+            return mInks[from];
+        }
     }
 
     /**

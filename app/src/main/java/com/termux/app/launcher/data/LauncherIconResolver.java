@@ -52,7 +52,7 @@ public final class LauncherIconResolver {
     @Nullable private final SystemIconLoader systemIconLoader;
 
     public LauncherIconResolver(@NonNull Context context) {
-        this(context, new IconPackRepository(context), TermuxAppSharedPreferences.build(context, false),
+        this(context, IconPackRepository.getInstance(context), TermuxAppSharedPreferences.build(context, false),
             null, LauncherConfigRepository.getInstance(context));
     }
 
@@ -173,6 +173,7 @@ public final class LauncherIconResolver {
         return resolveDetailed(ref, null, null);
     }
 
+    /** Clears the icon-pack repository, which every surface shares: parsed packs and resources. */
     public void clearCache() {
         iconPackRepository.clearCache();
     }

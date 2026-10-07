@@ -11,6 +11,7 @@ import androidx.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -101,10 +102,14 @@ public final class TopPaneFeed {
         notifyChanged();
     }
 
+    /**
+     * A state equal to the one already held is dropped, so the listener can republish freely (it
+     * does on every notification) without the widgets rebinding for nothing.
+     */
     public static void setMedia(@Nullable TopPaneMediaState value) {
         TopPaneMediaState previous = media;
+        if (Objects.equals(previous, value)) return;
         media = value;
-        if (previous == value) return;
         notifyChanged();
     }
 

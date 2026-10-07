@@ -150,7 +150,11 @@ final class AppearanceEditorFrame {
         return Math.max(0f, radiusPx - Math.max(x, y));
     }
 
-    /** Where the display's edges stand around the container; see {@link #outlineRect}. */
+    /**
+     * Where the clip's edges stand around the container; see {@link #outlineRect}. The sides and
+     * the bottom are the display's own; the top is as much of the status-bar band as the editor
+     * shows ({@link AppearancePreviewArea#topRevealPx}).
+     */
     void setDisplayInsets(int left, int top, int right, int bottom) {
         mInsetLeft = Math.max(0, left);
         mInsetTop = Math.max(0, top);

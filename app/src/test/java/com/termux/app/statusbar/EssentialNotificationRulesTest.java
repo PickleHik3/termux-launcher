@@ -157,4 +157,36 @@ public class EssentialNotificationRulesTest {
             EssentialNotificationRules.describe(Collections.emptyList()).optInt("maxPinned"));
         assertEquals(0, EssentialNotificationRules.describe(Collections.emptyList()).optInt("count"));
     }
+
+    @Test
+    public void parseCachedAnswersTheSameTextWithTheSameList() {
+        String stored = EssentialNotificationRules.serialize(Arrays.asList(
+            new EssentialNotificationRule("a", "com.whatsapp", "", false)));
+        List<EssentialNotificationRule> first = EssentialNotificationRules.parseCached(stored);
+        List<EssentialNotificationRule> again =
+            EssentialNotificationRules.parseCached(new String(stored.toCharArray()));
+        assertTrue(first == again);
+        assertEquals(1, first.size());
+        assertEquals("a", first.get(0).id);
+    }
+
+    @Test
+    public void parseCachedReparsesWhenTheTextChanges() {
+        String one = EssentialNotificationRules.serialize(Arrays.asList(
+            new EssentialNotificationRule("a", "com.whatsapp", "", false)));
+        String two = EssentialNotificationRules.serialize(Arrays.asList(
+            new EssentialNotificationRule("a", "com.whatsapp", "", false),
+            new EssentialNotificationRule("b", "com.slack", "", true)));
+        List<EssentialNotificationRule> first = EssentialNotificationRules.parseCached(one);
+        List<EssentialNotificationRule> second = EssentialNotificationRules.parseCached(two);
+        assertFalse(first == second);
+        assertEquals(2, second.size());
+        assertTrue(EssentialNotificationRules.parseCached(null).isEmpty());
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void parseCachedHandsOutAListNobodyCanEdit() {
+        EssentialNotificationRules.parseCached("[]").add(
+            new EssentialNotificationRule("x", "com.whatsapp", "", false));
+    }
 }

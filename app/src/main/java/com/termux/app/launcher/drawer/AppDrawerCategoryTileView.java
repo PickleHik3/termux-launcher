@@ -6,7 +6,6 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
-import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -21,6 +20,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.termux.R;
 import com.termux.app.SuggestionBarView;
+import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.app.chrome.ChromeShade;
 import com.termux.app.chrome.GlassTokens;
 import com.termux.app.launcher.model.LauncherAppEntry;
@@ -212,8 +212,12 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
             }
             LauncherAppEntry entry = previews.get(i);
             int iconPx = i < 3 ? metrics.largeIconPx : metrics.smallIconPx;
-            Drawable artwork = dock == null ? entry.icon : dock.getRenderedIcon(entry, iconPx);
-            icon.setImageDrawable(artwork != null ? artwork : entry.icon);
+            if (dock == null) {
+                AsyncIconBinder.cancel(icon);
+                icon.setImageDrawable(entry.icon);
+            } else {
+                dock.bindRenderedIcon(icon, entry, iconPx);
+            }
             if (dock != null) dock.applyIconColorFilter(icon);
             icon.setVisibility(VISIBLE);
             if (i < LAUNCH_ICON_COUNT && dock != null) {
@@ -280,6 +284,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
 
     private static void clearIcon(@NonNull ImageView icon) {
         icon.cancelLongPress();
+        AsyncIconBinder.cancel(icon);
         icon.setImageDrawable(null);
         icon.setOnClickListener(null);
         icon.setOnLongClickListener(null);

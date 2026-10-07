@@ -3,7 +3,9 @@ package com.termux.app.statusbar;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.Process;
 import android.os.SystemClock;
 import android.util.Log;
 
@@ -15,6 +17,7 @@ import com.termux.privileged.PrivilegedBackendManager;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.HashSet;
@@ -22,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Samples CPU load, memory breakdown, and a short top-process list for the CPU/RAM status widgets
@@ -32,6 +36,10 @@ import java.util.Set;
  * {@code /proc/meminfo} breakdown, and the top-process list are read through the privileged backend
  * (Shizuku or su/rish) when available, with a best-effort direct-read fallback for the world-
  * readable files. Anything unavailable is simply left blank in the snapshot.
+ *
+ * <p>Sampling runs on one shared background thread: the tick, the reads, the parsing and the CPU
+ * delta all live there, and only a finished {@link Stats} snapshot is posted to the main thread.
+ * {@link #start}, {@link #stop} and {@link #latest} are called from main.
  */
 public final class SystemStatsController {
 
@@ -59,7 +67,11 @@ public final class SystemStatsController {
         }
     }
 
-    /** Immutable snapshot handed to the UI. Fields are -1 / empty when unknown. */
+    /**
+     * Snapshot handed to the UI. Fields are -1 / empty when unknown. The controller samples into a
+     * private working copy and hands out {@link #snapshot()}s, which nothing writes once they are
+     * published.
+     */
     public static final class Stats {
         public int cpuPercent = -1;
         @NonNull public int[] corePercent = new int[0];
@@ -74,6 +86,27 @@ public final class SystemStatsController {
          * reading of zero.
          */
         public boolean stale;
+
+        /** A copy that shares nothing writable with this one. */
+        @NonNull
+        public Stats snapshot() {
+            Stats copy = new Stats();
+            copy.cpuPercent = cpuPercent;
+            copy.corePercent = corePercent.clone();
+            copy.cores = cores;
+            copy.load1 = load1;
+            copy.memTotalKb = memTotalKb;
+            copy.memUsedKb = memUsedKb;
+            copy.memAvailKb = memAvailKb;
+            copy.memFreeKb = memFreeKb;
+            copy.buffersKb = buffersKb;
+            copy.cachedKb = cachedKb;
+            copy.swapTotalKb = swapTotalKb;
+            copy.swapFreeKb = swapFreeKb;
+            copy.top = Collections.unmodifiableList(new ArrayList<>(top));
+            copy.stale = stale;
+            return copy;
+        }
     }
 
     public interface Listener {
@@ -104,24 +137,48 @@ public final class SystemStatsController {
     /** How many fast ticks one priming episode may spend before falling back to the set cadence. */
     static final int PRIME_BUDGET_TICKS = 5;
 
+    /** Files whose refused read has been logged once already; a hardened /proc refuses every tick. */
+    private static final Set<String> LOGGED_REFUSED_READS = ConcurrentHashMap.newKeySet();
+
+    private static final Object WORKER_LOCK = new Object();
+    @Nullable private static Handler sWorker;
+
+    /** The sampling thread, shared by every controller and started on first use. */
+    @NonNull
+    private static Handler worker() {
+        synchronized (WORKER_LOCK) {
+            if (sWorker == null) {
+                HandlerThread thread = new HandlerThread("SystemStats",
+                    Process.THREAD_PRIORITY_BACKGROUND);
+                thread.start();
+                sWorker = new Handler(thread.getLooper());
+            }
+            return sWorker;
+        }
+    }
+
     private final Context mContext;
     private final Handler mMainHandler = new Handler(Looper.getMainLooper());
+    private final Handler mWorker = worker();
     @Nullable private final Listener mListener;
 
-    private boolean mRunning;
-    private long mIntervalMs = 4000L;
-    private boolean mWantTop;
-    private volatile boolean mInFlight;
-    /** When the in-flight request was started, for the watchdog. Main thread only. */
+    // Set on main by start()/stop(), read by the tick on the worker.
+    private volatile boolean mRunning;
+    private volatile long mIntervalMs = 4000L;
+    private volatile boolean mWantTop;
+
+    // Everything below up to mLatest is the sampler's own state: worker thread only.
+    private boolean mInFlight;
+    /** When the in-flight request was started, for the watchdog. */
     private long mInFlightStartedAtMs;
     /**
      * Bumped whenever a request is abandoned, so a late reply from a wedged command cannot corrupt
-     * the CPU delta afterwards. Written and read on the main thread only.
+     * the CPU delta afterwards.
      */
     private int mSampleGeneration;
     /** Last privileged-backend re-initialization attempt, for {@link #requestPrivilegedBackendRetry}. */
     private long mLastBackendRetryAtMs;
-    /** Remaining fast ticks in the current priming episode. Main thread only. */
+    /** Remaining fast ticks in the current priming episode. */
     private int mPrimeTicksLeft = PRIME_BUDGET_TICKS;
     /** Whether the previous sample saw a privileged backend, to re-prime when one comes up. */
     private boolean mSawPrivilegedAvailable;
@@ -131,17 +188,21 @@ public final class SystemStatsController {
     @Nullable private long[] mPrevIdle;
     @NonNull private final Map<Integer, Double> mSmoothedProcessCpu = new HashMap<>();
 
+    /** The working copy the sampler writes into; never handed out. */
     private final Stats mLatest = new Stats();
+    /** The last snapshot published on main, which {@link #latest()} answers with. */
+    @NonNull private volatile Stats mPublished;
 
     public SystemStatsController(@NonNull Context context, @Nullable Listener listener) {
         mContext = context.getApplicationContext();
         mListener = listener;
         mLatest.cores = Runtime.getRuntime().availableProcessors();
+        mPublished = mLatest.snapshot();
     }
 
     @NonNull
     public Stats latest() {
-        return mLatest;
+        return mPublished;
     }
 
     /**
@@ -152,29 +213,42 @@ public final class SystemStatsController {
         mIntervalMs = Math.max(1000L, intervalMs);
         mWantTop = wantTop;
         mRunning = true;
-        // A start with no reading on screen opens a fresh priming episode; a retune while a
-        // reading already exists (card open/close) keeps the ordinary cadence.
-        if (mLatest.cpuPercent < 0) mPrimeTicksLeft = PRIME_BUDGET_TICKS;
         // Re-post rather than return early when already running: retuning has to take effect now.
         // Opening the card drops the interval from 4s to 1.5s, and waiting out the old delay first
         // made the card sit empty for seconds.
-        mMainHandler.removeCallbacks(mTick);
-        mMainHandler.post(mTick);
+        mWorker.removeCallbacks(mTick);
+        mWorker.removeCallbacks(mStart);
+        mWorker.post(mStart);
     }
 
     public void stop() {
         mRunning = false;
-        mMainHandler.removeCallbacks(mTick);
+        mWorker.removeCallbacks(mStart);
+        mWorker.removeCallbacks(mTick);
     }
+
+    /** {@link #start}'s half that touches sampler state, so it runs on the worker. */
+    private final Runnable mStart = new Runnable() {
+        @Override
+        public void run() {
+            if (!mRunning) return;
+            // A start with no reading on screen opens a fresh priming episode; a retune while a
+            // reading already exists (card open/close) keeps the ordinary cadence.
+            if (mLatest.cpuPercent < 0) mPrimeTicksLeft = PRIME_BUDGET_TICKS;
+            mWorker.removeCallbacks(mTick);
+            mTick.run();
+        }
+    };
 
     private final Runnable mTick = new Runnable() {
         @Override
         public void run() {
             if (!mRunning) return;
             sampleOnce();
-            long delay = nextTickDelayMs(mLatest.cpuPercent >= 0, mPrimeTicksLeft, mIntervalMs);
-            if (delay < mIntervalMs) mPrimeTicksLeft--;
-            mMainHandler.postDelayed(this, delay);
+            long interval = mIntervalMs;
+            long delay = nextTickDelayMs(mLatest.cpuPercent >= 0, mPrimeTicksLeft, interval);
+            if (delay < interval) mPrimeTicksLeft--;
+            mWorker.postDelayed(this, delay);
         }
     };
 
@@ -215,7 +289,7 @@ public final class SystemStatsController {
             final boolean wantTop = mWantTop;
             final int generation = mSampleGeneration;
             manager.executeCommand(buildCommand(wantTop)).whenComplete((output, error) -> {
-                mMainHandler.post(() -> {
+                mWorker.post(() -> {
                     if (generation != mSampleGeneration) return;   // abandoned; do not corrupt state
                     mInFlight = false;
                     if (error != null || output == null) {
@@ -251,10 +325,11 @@ public final class SystemStatsController {
             return;
         }
         mLastBackendRetryAtMs = nowMs;
-        manager.initializeIfNeeded(mContext).exceptionally(throwable -> {
+        // The manager's (re)initialization is driven from main everywhere else; keep it there.
+        mMainHandler.post(() -> manager.initializeIfNeeded(mContext).exceptionally(throwable -> {
             Log.w(LOG_TAG, "Privileged backend retry failed: " + throwable);
             return false;
-        });
+        }));
     }
 
     /**
@@ -273,8 +348,15 @@ public final class SystemStatsController {
         return Math.max(6000L, mIntervalMs * 3);
     }
 
+    /** Posts a snapshot of the working copy to main; worker thread. */
     private void publish() {
-        if (mListener != null) mListener.onStatsUpdated(mLatest);
+        Stats snapshot = mLatest.snapshot();
+        mMainHandler.post(() -> {
+            mPublished = snapshot;
+            // Stopped meanwhile: the owner may be gone, so the listener is not called.
+            if (!mRunning) return;
+            if (mListener != null) mListener.onStatsUpdated(snapshot);
+        });
     }
 
     @NonNull
@@ -602,7 +684,9 @@ public final class SystemStatsController {
             String line;
             while ((line = r.readLine()) != null) out.add(line);
         } catch (Exception e) {
-            Log.w(LOG_TAG, "Cannot read " + path + ": " + e);
+            if (LOGGED_REFUSED_READS.add(path)) {
+                Log.w(LOG_TAG, "Cannot read " + path + " (logged once per process): " + e);
+            }
         }
         return out;
     }

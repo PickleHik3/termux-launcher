@@ -12,6 +12,8 @@ import android.graphics.Shader;
 
 import androidx.annotation.NonNull;
 
+import com.termux.view.KittyCursorTrail;
+
 /**
  * Paints the Comet cursor trail, this app's own style; {@link CursorTrailCometShape} says where it
  * is and what it looks like. A tapered streak in the trail colour, brightest at the cursor's
@@ -20,7 +22,7 @@ import androidx.annotation.NonNull;
  * <p>Allocation-free per frame: both gradients are built once in unit space for the current
  * colour and moved into place with a local matrix; they are rebuilt only when the colour changes.
  */
-public final class CursorTrailComet {
+public final class CursorTrailComet implements CursorTrailEffect {
 
     /** Streak alpha along its length, tail to head, at full strength. */
     private static final float[] BODY_STOPS = {0f, 0.55f, 1f};
@@ -47,11 +49,13 @@ public final class CursorTrailComet {
         mGlowPaint.setStyle(Paint.Style.FILL);
     }
 
+    @Override
     public void reset() {
         mShape.reset();
     }
 
     /** Whether a comet was started and has not yet aged out; clears itself once it has. */
+    @Override
     public boolean alive(long nowMs) {
         return mShape.alive(nowMs);
     }
@@ -61,6 +65,7 @@ public final class CursorTrailComet {
     }
 
     /** The box the last started comet can paint inside, glow included. */
+    @Override
     @NonNull
     public RectF bounds() {
         mBounds.set(mShape.boundsLeft(), mShape.boundsTop(), mShape.boundsRight(),
@@ -68,8 +73,11 @@ public final class CursorTrailComet {
         return mBounds;
     }
 
+    /** The comet keeps kitty's blaze timing whatever the decay; {@code config} is not read. */
+    @Override
     public void start(float fromL, float fromT, float fromR, float fromB,
-                      float toL, float toT, float toR, float toB, long nowMs) {
+                      float toL, float toT, float toR, float toB, long nowMs,
+                      @NonNull KittyCursorTrail.Config config) {
         mShape.start(fromL, fromT, fromR, fromB, toL, toT, toR, toB, nowMs);
     }
 
@@ -80,6 +88,7 @@ public final class CursorTrailComet {
      * @param color    trail colour; its alpha channel, when set, scales everything
      * @param strength the trail's own opacity, 0..1 (it fades while the cursor is hidden)
      */
+    @Override
     public void draw(@NonNull Canvas canvas, int color, float strength, long nowMs) {
         if (!mShape.layout(nowMs)) return;
         float s = Math.max(0f, Math.min(1f, strength)) * mShape.strength();

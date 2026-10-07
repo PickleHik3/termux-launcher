@@ -69,6 +69,28 @@ public final class IconPackRepository {
     private final IconPackResourcesCache<Resources> packResources =
         new IconPackResourcesCache<>(MAX_PACK_RESOURCES);
 
+    private static volatile IconPackRepository instance;
+
+    /**
+     * The process-wide repository every icon surface shares (the catalogue, the dock's pinned
+     * icons, the notification cards), so a pack's appfilter is parsed once and its resources
+     * loaded once rather than once per surface. Thread-safe: the maps are guarded by one lock and
+     * the resources cache by its own.
+     */
+    @NonNull
+    public static IconPackRepository getInstance(@NonNull Context context) {
+        IconPackRepository current = instance;
+        if (current != null) return current;
+        synchronized (IconPackRepository.class) {
+            if (instance == null) instance = new IconPackRepository(context);
+            return instance;
+        }
+    }
+
+    /**
+     * A private repository with caches of its own. Only for discovery-only callers and tests;
+     * anything that loads icons uses {@link #getInstance}.
+     */
     public IconPackRepository(@NonNull Context context) {
         this.context = context.getApplicationContext();
         this.packageManager = this.context.getPackageManager();

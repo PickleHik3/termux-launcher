@@ -1,5 +1,6 @@
 package com.termux.app.surfaces;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Typeface;
@@ -13,6 +14,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.Menu;
+import android.view.MotionEvent;
 import android.view.MenuItem;
 import android.view.ViewGroup;
 import android.view.animation.LinearInterpolator;
@@ -73,8 +75,12 @@ final class AppearanceEditorPanel {
 
     /** What the user did in the bottom area. */
     interface Listener {
-        /** The Look slider settled on a stop (a drag reports each stop it crosses). */
-        void onLookStop(int stop);
+        /**
+         * The Look slider is on {@code stop}. A drag reports each stop it crosses with
+         * {@code dragging} set and ends with {@link #onSliderReleased}; a tap, a label or an
+         * accessibility step reports the one stop with it clear.
+         */
+        void onLookStop(int stop, boolean dragging);
         /** Layout mode's Style toggle. */
         void onStyle(boolean floating);
         /** Layout mode's Corners slider, in dp. */
@@ -130,6 +136,10 @@ final class AppearanceEditorPanel {
 
     private final Slider mLook;
     private final FrameLayout mLookLabels;
+    /** What {@link #styleLookLabels} last applied; -1 until it has run. */
+    private int mStyledLookStop = -1;
+    private int mStyledLookActive;
+    private int mStyledLookQuiet;
     private final TextView[] mLookLabelViews = new TextView[AppearanceLooks.STOP_COUNT];
     /** Each label's own typeface as its text appearance set it (family and weight kept). */
     private final Typeface[] mLookLabelBase = new Typeface[AppearanceLooks.STOP_COUNT];
@@ -191,6 +201,8 @@ final class AppearanceEditorPanel {
     @Nullable private Listener mListener;
     private boolean mRestating;
     private boolean mCornersDragging;
+    /** A finger is down on the Look slider; set on its first touch, before any value moves. */
+    private boolean mLookDragging;
     private boolean mMarginDragging;
 
     private AppearanceEditorPanel(@NonNull Context context, @NonNull View root) {
@@ -352,6 +364,24 @@ final class AppearanceEditorPanel {
     }
 
     /**
+     * The sheet's height on {@code mode}'s page at rest: Look at a stop (Row A alone), Layout at
+     * its tallest, Icon pack as its content stands. The tallest of the three is the reserve every
+     * page's sheet is held to (AppearancePreviewArea), so the preview is one size on every page.
+     */
+    int measureResting(@NonNull EditorMode mode, int widthPx) {
+        if (mode != EditorMode.LOOK)
+            return measureTallest(mode, widthPx);
+        EditorMode shown = mMode;
+        boolean rowShown = mRow2Shown;
+        mRow2Shown = false;
+        applyGroups(EditorMode.LOOK);
+        int height = measureNow(widthPx);
+        mRow2Shown = rowShown;
+        applyGroups(shown);
+        return height;
+    }
+
+    /**
      * Layout mode's height: Row B as Corner radius and Margin, and as the keyboard's tools in
      * their place, whichever stands taller, so the sheet does not move when the keyboard is
      * selected. The state showing is restored before returning.
@@ -495,7 +525,7 @@ final class AppearanceEditorPanel {
                 if (AppearanceLooks.stopForSliderValue(mLook.getValue()) == stop)
                     return;
                 mLook.setValue(AppearanceLooks.sliderValueForStop(stop));
-                if (mListener != null) mListener.onLookStop(stop);
+                if (mListener != null) mListener.onLookStop(stop, false);
             });
             // Absolute LEFT: placeLookLabels translates each label from the strip's left edge,
             // which a START label in a right-to-left strip would not be standing on.
@@ -570,6 +600,11 @@ final class AppearanceEditorPanel {
         return out;
     }
 
+    /**
+     * Colours the chosen stop's label and makes it bold. The slider reports every value it passes
+     * through while dragged, so this returns at once unless the stop or the theme's colours moved:
+     * re-laying out five labels per value was the work, not the answer.
+     */
     private void styleLookLabels(int stop) {
         int active = MaterialColors.getColor(mRoot,
             androidx.appcompat.R.attr.colorPrimary,
@@ -577,6 +612,11 @@ final class AppearanceEditorPanel {
         int quiet = MaterialColors.getColor(mRoot,
             com.google.android.material.R.attr.colorOnSurfaceVariant,
             ContextCompat.getColor(mContext, R.color.termux_on_surface));
+        if (stop == mStyledLookStop && active == mStyledLookActive && quiet == mStyledLookQuiet)
+            return;
+        mStyledLookStop = stop;
+        mStyledLookActive = active;
+        mStyledLookQuiet = quiet;
         for (int i = 0; i < mLookLabelViews.length; i++) {
             TextView label = mLookLabelViews[i];
             label.setTextColor(i == stop ? active : quiet);
@@ -590,13 +630,50 @@ final class AppearanceEditorPanel {
 
     // ---------------------------------------------------------------------------------- wiring
 
+    // The Look slider's touch listener only watches (it returns false): the slider still handles,
+    // and announces, every touch itself.
+    @SuppressLint("ClickableViewAccessibility")
     private void bind() {
         mLook.addOnChangeListener((slider, value, fromUser) -> {
             int stop = AppearanceLooks.stopForSliderValue(value);
             styleLookLabels(stop);
             if (mRestating || !fromUser || mListener == null)
                 return;
-            mListener.onLookStop(stop);
+            mListener.onLookStop(stop, mLookDragging);
+        });
+        // The finger's span on the Look slider: down before the slider moves a value, released
+        // after it has handled the lift (its own stop callback, or the lift's posted backstop
+        // when a cancel or a parent takes the gesture), and on a detach mid-drag.
+        mLook.setOnTouchListener((view, event) -> {
+            switch (event.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    mLookDragging = true;
+                    break;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    view.post(this::releaseLook);
+                    break;
+                default:
+                    break;
+            }
+            return false;
+        });
+        mLook.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
+            @Override public void onStartTrackingTouch(@NonNull Slider slider) {
+                mLookDragging = true;
+            }
+
+            @Override public void onStopTrackingTouch(@NonNull Slider slider) {
+                releaseLook();
+            }
+        });
+        mLook.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(@NonNull View view) {
+            }
+
+            @Override public void onViewDetachedFromWindow(@NonNull View view) {
+                releaseLook();
+            }
         });
         mStyle.addOnButtonCheckedListener((group, checkedId, isChecked) -> {
             if (mRestating || !isChecked || mListener == null)
@@ -919,6 +996,14 @@ final class AppearanceEditorPanel {
         return mKeyRadius;
     }
 
+    /** The Look drag is over: the controller stores the stop it ended on. Once per drag. */
+    private void releaseLook() {
+        if (!mLookDragging)
+            return;
+        mLookDragging = false;
+        if (mListener != null) mListener.onSliderReleased();
+    }
+
     // ------------------------------------------------------------------------- restatements
 
     void setStop(int stop) {
@@ -979,6 +1064,9 @@ final class AppearanceEditorPanel {
         for (View button : new View[] {mKeyboardTheme, mClock, mTrail, mEffect})
             button.setEnabled(shown);
         mRow2.setVisibility(shown && mMode == EditorMode.LOOK ? View.VISIBLE : View.GONE);
+        // Where Row B scrolls inside the sheet, it comes up at its heading.
+        if (shown)
+            mRow2.scrollTo(0, 0);
     }
 
     /**

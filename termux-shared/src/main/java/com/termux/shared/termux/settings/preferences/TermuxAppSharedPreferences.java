@@ -41,6 +41,41 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     /**
+     * The {@link TermuxConstants#TERMUX_PACKAGE_NAME} package context, made once from the
+     * application context and kept while that application is the one running, so a {@link #build}
+     * does not create one per call: the dock, the chrome and every pane build a handle on each
+     * pass. A handle only ever reads and writes preferences, so it needs neither the caller's
+     * activity token nor its display. It is keyed on the application, never on the caller: a
+     * package context reaches its application through its LoadedApk, so a per-caller
+     * {@code WeakHashMap} kept every caller alive through its own value, and the Robolectric suite,
+     * which starts a fresh application per test, retained one asset manager and its themes per
+     * test class until the heap ran out. The preference lookups themselves still run on every
+     * build, so {@code MODE_MULTI_PROCESS} keeps re-checking the file exactly as before.
+     */
+    @Nullable private static Context sPackageContextApp;
+    @Nullable private static Context sPackageContext;
+
+    @NonNull
+    private static Context applicationOf(@NonNull Context caller) {
+        Context app = caller.getApplicationContext();
+        return app != null ? app : caller;
+    }
+
+    /** The cached package context for {@code caller}'s application, or null when it has none yet. */
+    @Nullable
+    private static synchronized Context cachedPackageContext(@NonNull Context caller) {
+        return sPackageContextApp == applicationOf(caller) ? sPackageContext : null;
+    }
+
+    @Nullable
+    private static synchronized Context rememberPackageContext(@NonNull Context caller, @Nullable Context packageContext) {
+        if (packageContext == null) return null;
+        sPackageContextApp = applicationOf(caller);
+        sPackageContext = packageContext;
+        return packageContext;
+    }
+
+    /**
      * Get {@link TermuxAppSharedPreferences}.
      *
      * @param context The {@link Context} to use to get the {@link Context} of the
@@ -49,7 +84,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      */
     @Nullable
     public static TermuxAppSharedPreferences build(@NonNull final Context context) {
-        Context termuxPackageContext = PackageUtils.getContextForPackage(context, TermuxConstants.TERMUX_PACKAGE_NAME);
+        Context termuxPackageContext = cachedPackageContext(context);
+        if (termuxPackageContext == null)
+            termuxPackageContext = rememberPackageContext(context,
+                PackageUtils.getContextForPackage(applicationOf(context), TermuxConstants.TERMUX_PACKAGE_NAME));
         if (termuxPackageContext == null)
             return null;
         else
@@ -66,7 +104,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * @return Returns the {@link TermuxAppSharedPreferences}. This will {@code null} if an exception is raised.
      */
     public static TermuxAppSharedPreferences build(@NonNull final Context context, final boolean exitAppOnError) {
-        Context termuxPackageContext = TermuxUtils.getContextForPackageOrExitApp(context, TermuxConstants.TERMUX_PACKAGE_NAME, exitAppOnError);
+        Context termuxPackageContext = cachedPackageContext(context);
+        if (termuxPackageContext == null)
+            termuxPackageContext = rememberPackageContext(context,
+                TermuxUtils.getContextForPackageOrExitApp(applicationOf(context), TermuxConstants.TERMUX_PACKAGE_NAME, exitAppOnError));
         if (termuxPackageContext == null)
             return null;
         else

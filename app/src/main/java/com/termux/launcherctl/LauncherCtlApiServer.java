@@ -3287,12 +3287,50 @@ public class LauncherCtlApiServer {
         file.setWritable(true, true);
     }
 
+    /** The mode {@link #writeExecutableTextFile} leaves behind: owner rw, everyone r and x. */
+    private static final int EXECUTABLE_SCRIPT_MODE = 0755;
+
+    /**
+     * Installs a CLI script, unless the one there already has this content and mode: every start
+     * of the server and every bootstrap callback asks, and the tai script alone is a thousand
+     * lines, so an unchanged install costs a stat and a read instead of a rewrite and four chmods.
+     */
     private void writeExecutableTextFile(String path, String content) throws IOException {
-        writeTextFile(path, content);
+        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
         File file = new File(path);
+        if (hasContent(file, bytes) && hasMode(file, EXECUTABLE_SCRIPT_MODE)) return;
+        writeTextFile(path, content);
         if (file.exists()) {
             file.setExecutable(true, false);
             file.setReadable(true, false);
+        }
+    }
+
+    /** True when {@code file} is a regular file holding exactly {@code expected}. */
+    static boolean hasContent(@NonNull File file, @NonNull byte[] expected) {
+        if (!file.isFile() || file.length() != expected.length) return false;
+        byte[] actual = new byte[expected.length];
+        try (InputStream input = new java.io.FileInputStream(file)) {
+            int offset = 0;
+            while (offset < actual.length) {
+                int count = input.read(actual, offset, actual.length - offset);
+                if (count < 0) return false;
+                offset += count;
+            }
+            // Longer than it said a moment ago: it is being written, so it is not ours yet.
+            if (input.read() != -1) return false;
+        } catch (IOException e) {
+            return false;
+        }
+        return java.util.Arrays.equals(actual, expected);
+    }
+
+    /** True when {@code file}'s permission bits are exactly {@code mode}; false when unknown. */
+    private static boolean hasMode(@NonNull File file, int mode) {
+        try {
+            return (android.system.Os.stat(file.getAbsolutePath()).st_mode & 07777) == mode;
+        } catch (Exception e) {
+            return false;
         }
     }
 

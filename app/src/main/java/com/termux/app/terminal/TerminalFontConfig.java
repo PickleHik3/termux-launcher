@@ -281,6 +281,13 @@ public final class TerminalFontConfig {
             this.errors = Collections.unmodifiableList(new ArrayList<>(errors));
         }
 
+        /** Every file and directory this load read or looked for, so a caller can tell when it is stale. */
+        @NonNull private List<File> inputs = Collections.emptyList();
+
+        @NonNull public List<File> inputs() {
+            return inputs;
+        }
+
         @Nullable public FaceSpec face(@NonNull Face face) {
             return faces.get(face);
         }
@@ -362,6 +369,8 @@ public final class TerminalFontConfig {
         final LinkedHashMap<String, String> symbolMapNames = new LinkedHashMap<>();
         final EnumMap<Metric, MetricAdjustment> metrics = new EnumMap<>(Metric.class);
         final List<String> errors = new ArrayList<>();
+        /** What {@link Result#inputs()} reports: files read, and files and folders looked for. */
+        final List<File> inputs = new ArrayList<>();
         LigaturePolicy ligaturePolicy = LigaturePolicy.NEVER;
         BoxDrawingMode boxDrawing = BoxDrawingMode.SYNTHESIZE;
         BoxDrawingScale boxDrawingScale = DEFAULT_BOX_DRAWING_SCALE;
@@ -411,6 +420,10 @@ public final class TerminalFontConfig {
     @NonNull
     static Result load(@Nullable File kittyConf, @NonNull File dropInDir, @NonNull File file) {
         Accumulator accumulator = new Accumulator();
+        if (kittyConf != null) accumulator.inputs.add(kittyConf);
+        // The folder itself, for a drop-in added or removed; each drop-in read is added below.
+        accumulator.inputs.add(dropInDir);
+        accumulator.inputs.add(file);
         if (kittyConf != null && kittyConf.exists()) {
             String prefix = KITTY_FILE_NAME + ": ";
             String kitty = read(kittyConf, prefix, MAX_KITTY_LINES, accumulator.errors);
@@ -431,6 +444,7 @@ public final class TerminalFontConfig {
                     + " files skipped");
                 break;
             }
+            accumulator.inputs.add(dropIn);
             String content = read(dropIn, prefix, accumulator.errors);
             if (content == null) continue;
             budget -= dropIn.length();
@@ -993,6 +1007,8 @@ public final class TerminalFontConfig {
         }
         File target = new File(expandPath(words.get(1)));
         if (!target.isAbsolute()) target = new File(source.includeDir, words.get(1));
+        // Recorded before it is known to exist: an include that appears later changes the load.
+        accumulator.inputs.add(target);
         if (!target.exists()) {
             errors.add(where + ": include " + words.get(1) + " does not exist");
             return;
@@ -1083,7 +1099,7 @@ public final class TerminalFontConfig {
                 features == null ? sharedFeatures : features,
                 variations == null ? sharedVariations : variations));
         }
-        return new Result(accumulator.filePresent, accumulator.faces, symbolMaps,
+        Result result = new Result(accumulator.filePresent, accumulator.faces, symbolMaps,
             accumulator.narrowSymbols,
             accumulator.fallbackFonts, accumulator.ligaturePolicy, accumulator.fontFeatures,
             accumulator.fontVariations, namedFeatures, namedVariations, accumulator.metrics,
@@ -1092,6 +1108,8 @@ public final class TerminalFontConfig {
             accumulator.cursorTrailDecaySlow, accumulator.cursorTrailThresholdX,
             accumulator.cursorTrailThresholdY, accumulator.cursorTrailColor,
             accumulator.cursorTrailStyleId, accumulator.errors);
+        result.inputs = Collections.unmodifiableList(new ArrayList<>(accumulator.inputs));
+        return result;
     }
 
     /**

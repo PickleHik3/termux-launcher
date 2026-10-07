@@ -469,7 +469,33 @@ public final class TerminalView extends View {
      */
     private String[] mAutoFillHints = new String[0];
 
-    private final boolean mAccessibilityEnabled;
+    private final AccessibilityManager mAccessibilityManager;
+
+    /** Text-changed events for a screen reader: only while one reads, and folded per burst. */
+    private final AccessibilityTextUpdates mAccessibilityTextUpdates =
+        new AccessibilityTextUpdates(new AccessibilityTextUpdates.Host() {
+            @Override
+            public void postDelayed(Runnable action, long delayMs) {
+                TerminalView.this.postDelayed(action, delayMs);
+            }
+
+            @Override
+            public void removeCallbacks(Runnable action) {
+                TerminalView.this.removeCallbacks(action);
+            }
+
+            @Override
+            public void sendTextChanged() {
+                // The service reads the text it is handed in onPopulateAccessibilityEvent.
+                sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED);
+            }
+        });
+
+    private final AccessibilityManager.AccessibilityStateChangeListener mAccessibilityStateListener =
+        enabled -> refreshAccessibilityServiceState();
+
+    private final AccessibilityManager.TouchExplorationStateChangeListener mTouchExplorationListener =
+        enabled -> refreshAccessibilityServiceState();
 
     /**
      * The {@link KeyEvent} is generated from a virtual keyboard, like manually with the {@link KeyEvent#KeyEvent(int, int)} constructor.
@@ -691,8 +717,8 @@ public final class TerminalView extends View {
         });
         mScroller = new Scroller(context);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        AccessibilityManager am = (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
-        mAccessibilityEnabled = am.isEnabled();
+        mAccessibilityManager = (AccessibilityManager) context.getSystemService(Context.ACCESSIBILITY_SERVICE);
+        refreshAccessibilityServiceState();
 
         // A view is important for accessibility if it fires accessibility events
         // and if it is reported to accessibility services that query the screen.
@@ -920,11 +946,14 @@ public final class TerminalView extends View {
         }
         mEmulator.clearScrollCounter();
         invalidate();
-        if (mAccessibilityEnabled) {
-            // fire off events that the content of this control changed,
-            // so that the accessibility service gets the updated text
-            sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED);
-        }
+        // Tell a screen reader the content of this control changed, so that it gets the updated text.
+        mAccessibilityTextUpdates.onScreenUpdated();
+    }
+
+    private void refreshAccessibilityServiceState() {
+        if (mAccessibilityManager == null) return;
+        mAccessibilityTextUpdates.setServiceState(mAccessibilityManager.isEnabled(),
+            mAccessibilityManager.isTouchExplorationEnabled());
     }
 
     // ultimately called as a result of the code in updateScreen
@@ -3021,10 +3050,20 @@ public final class TerminalView extends View {
         return Math.max(2f, mRenderer == null ? 8f : mRenderer.mFontLineSpacing * 0.45f);
     }
 
+    /** The blur radius last handed to setRenderEffect, on the half-pixel grid; 0 for none. */
+    private float mAppliedReflowFrostRadiusPx;
+
+    /**
+     * Sets the frost's blur. The radius is taken to the nearest half pixel, finer than the eye can
+     * tell, and an animator tick that lands on the radius already set builds no new effect.
+     */
     @RequiresApi(Build.VERSION_CODES.S)
     private void applyReflowFrost(float radiusPx) {
-        setRenderEffect(radiusPx < 0.5f ? null
-            : RenderEffect.createBlurEffect(radiusPx, radiusPx, Shader.TileMode.CLAMP));
+        float radius = radiusPx < 0.5f ? 0f : Math.round(radiusPx * 2f) / 2f;
+        if (radius == mAppliedReflowFrostRadiusPx) return;
+        mAppliedReflowFrostRadiusPx = radius;
+        setRenderEffect(radius == 0f ? null
+            : RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP));
     }
 
     /** Coalesce transient layout changes without forwarding every one to the attached PTY. */
@@ -3139,12 +3178,30 @@ public final class TerminalView extends View {
             // render the text selection handles
             renderTextSelection();
             long drawEndNanos = SystemClock.elapsedRealtimeNanos();
-            android.view.Display display = getDisplay();
-            float refreshRate = display == null ? 60f : display.getRefreshRate();
-            long frameBudgetNanos = refreshRate > 0f
-                ? (long) (1_000_000_000d / refreshRate) : 16_666_667L;
-            mRenderMetrics.recordDraw(drawStartNanos, drawEndNanos, frameBudgetNanos);
+            mRenderMetrics.recordDraw(drawStartNanos, drawEndNanos, mFrameBudgetNanos);
         }
+    }
+
+    /** One frame at the display's refresh rate, for the render metrics; read on attach and on display change. */
+    private long mFrameBudgetNanos = 16_666_667L;
+
+    private final android.hardware.display.DisplayManager.DisplayListener mDisplayListener =
+        new android.hardware.display.DisplayManager.DisplayListener() {
+            @Override public void onDisplayAdded(int displayId) { }
+
+            @Override public void onDisplayRemoved(int displayId) { }
+
+            @Override public void onDisplayChanged(int displayId) {
+                android.view.Display display = getDisplay();
+                if (display != null && display.getDisplayId() == displayId) refreshFrameBudget();
+            }
+        };
+
+    private void refreshFrameBudget() {
+        android.view.Display display = getDisplay();
+        float refreshRate = display == null ? 60f : display.getRefreshRate();
+        mFrameBudgetNanos = refreshRate > 0f
+            ? (long) (1_000_000_000d / refreshRate) : 16_666_667L;
     }
 
     /** Snapshot of this pane's renderer counters. Percentiles allocate only when queried. */
@@ -4105,6 +4162,15 @@ public final class TerminalView extends View {
         if (mTextSelectionCursorController != null) {
             getViewTreeObserver().addOnTouchModeChangeListener(mTextSelectionCursorController);
         }
+        refreshFrameBudget();
+        android.hardware.display.DisplayManager displayManager =
+            getContext().getSystemService(android.hardware.display.DisplayManager.class);
+        if (displayManager != null) displayManager.registerDisplayListener(mDisplayListener, null);
+        if (mAccessibilityManager != null) {
+            mAccessibilityManager.addAccessibilityStateChangeListener(mAccessibilityStateListener);
+            mAccessibilityManager.addTouchExplorationStateChangeListener(mTouchExplorationListener);
+            refreshAccessibilityServiceState();
+        }
     }
 
     /**
@@ -4194,6 +4260,14 @@ public final class TerminalView extends View {
         releaseHoldDownEvent();
         updateKittyAnimationVisibility();
         clearReflowFrost();
+        android.hardware.display.DisplayManager displayManager =
+            getContext().getSystemService(android.hardware.display.DisplayManager.class);
+        if (displayManager != null) displayManager.unregisterDisplayListener(mDisplayListener);
+        if (mAccessibilityManager != null) {
+            mAccessibilityManager.removeAccessibilityStateChangeListener(mAccessibilityStateListener);
+            mAccessibilityManager.removeTouchExplorationStateChangeListener(mTouchExplorationListener);
+        }
+        mAccessibilityTextUpdates.cancel();
         if (mTextSelectionCursorController != null) {
             // Might solve the following exception
             // android.view.WindowLeaked: Activity com.termux.app.TermuxActivity has leaked window android.widget.PopupWindow
