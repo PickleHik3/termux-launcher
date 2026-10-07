@@ -4450,13 +4450,24 @@ public class TerminalPaneController {
         private RectF paneRect(@NonNull Leaf leaf, @NonNull RectF out) {
             FrameLayout frame = mPaneFrames.get(leaf.session);
             if (frame == null || !isOnHost(frame)) return null;
-            int[] frameLocation = location(frame);
-            int[] hostLocation = location(mHostView);
+            // Laid-out positions up to the host, not getLocationOnScreen: that maps the corner
+            // through the frame's tilt and scale (the glass plank's press, still springing back
+            // when the tab comes out) while the size stays unscaled, which hung the tab off a
+            // shrunk, shifted pane until the next redraw (by tens of px on a tablet-sized pane).
+            // The frame's own translation is kept, so a pane sliding to its new place is followed.
+            float left = frame.getLeft() + frame.getTranslationX();
+            float top = frame.getTop() + frame.getTranslationY();
+            android.view.ViewParent parent = frame.getParent();
+            while (parent instanceof View && parent != mHostView) {
+                View view = (View) parent;
+                left += view.getLeft() - view.getScrollX();
+                top += view.getTop() - view.getScrollY();
+                parent = view.getParent();
+            }
             // In this overlay's space, which (MATCH_PARENT on the host) starts inside the host's
-            // padding: the lone bordered pane pads the host for its rounded corners, and a rect
-            // read from the host's outer edge put the tab and the hit areas that far off the pane.
-            float left = frameLocation[0] - hostLocation[0] - mHostView.getPaddingLeft();
-            float top = frameLocation[1] - hostLocation[1] - mHostView.getPaddingTop();
+            // padding: the lone bordered pane pads the host for its rounded corners.
+            left -= mHostView.getPaddingLeft();
+            top -= mHostView.getPaddingTop();
             out.set(left, top, left + frame.getWidth(), top + frame.getHeight());
             return out;
         }
