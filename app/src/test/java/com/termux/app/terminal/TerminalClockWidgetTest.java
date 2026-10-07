@@ -154,14 +154,19 @@ public class TerminalClockWidgetTest {
                 android.view.View.MeasureSpec.EXACTLY));
         widget.layout(0, 0, widget.getMeasuredWidth(), widget.getMeasuredHeight());
 
-        // Flip: a 35.5dp band over a 13.8dp gap and an 11.7dp date block, centred in the slot.
-        float top = (slot - 61f * density) / 2f;
+        // Flip: a 35.5dp band over the cards' 4.26dp shadow and an 11.7dp date block, centred in
+        // the slot.
+        float top = (slot - 51.46f * density) / 2f;
         assertTrue("the digits must be tappable",
             widget.isInsideTapTarget(density, top + 4f * density));
         assertTrue("the date row must not open the clock app",
-            !widget.isInsideTapTarget(density, top + 50f * density));
+            !widget.isInsideTapTarget(density, top + 45f * density));
         assertTrue("the slack above the window chips must not open the clock app",
             !widget.isInsideTapTarget(density, slot - density));
+        // The date row starts where the cards' shadow ends: band centre to rule centre is half
+        // the band, the shadow's 3.2dp blur and 1.06dp drop, and half the date row.
+        assertEquals((35.5f / 2f + 3.2f + 1.06f + 11.7f / 2f) * density,
+            widget.fullRuleCenterYPx() - widget.fullBandCenterYPx(), .01f);
     }
 
     @Test

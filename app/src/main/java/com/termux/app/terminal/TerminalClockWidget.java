@@ -70,6 +70,18 @@ public final class TerminalClockWidget extends View {
     private static final float RULE_GAP_DP = 7f;
     private static final float SLOT_HEIGHT_DP = 68f;
     private static final float TAPE_TRACK_BLOCK_DP = 12.5f;
+    /**
+     * The full flip card's drop shadow: how far it blurs and how far it falls. Nothing else is
+     * drawn under the cards, so the date row starts where this shadow ends.
+     */
+    private static final float FLIP_SHADOW_BLUR_DP = 3.2f;
+    private static final float FLIP_SHADOW_DROP_DP = 1.06f;
+    /**
+     * The band Slab and Minimal centre their digits' cap height in: Roboto's caps at those sizes
+     * (27–27.7dp) with about 1.5dp of air each side. Centring the ascent-to-descent box instead
+     * left the descent, which digits never use, as dead room under the time.
+     */
+    private static final float CAP_BAND_DP = 31f;
     private static final long[] FLIP_LOAD_STAGGER_MS = {300L, 430L, 560L, 690L};
     private static final float[] UPPER_FLIP_STOPS = {0f, .55f, .88f, 1f};
     private static final float[] LOWER_FLIP_STOPS = {0f, .07f, .28f, 1f};
@@ -984,6 +996,9 @@ public final class TerminalClockWidget extends View {
                 return 22f;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP:
                 return 35.5f;
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_MINIMAL:
+            case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_SLAB:
+                return CAP_BAND_DP;
             default:
                 return 34f;
         }
@@ -999,7 +1014,7 @@ public final class TerminalClockWidget extends View {
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_TAPE:
                 return 7f;
             case TermuxPreferenceConstants.TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP:
-                return 13.8f;
+                return FLIP_SHADOW_BLUR_DP + FLIP_SHADOW_DROP_DP;
             default:
                 return 5f;
         }
@@ -1074,7 +1089,8 @@ public final class TerminalClockWidget extends View {
         mFillPaint.setStyle(Paint.Style.FILL);
         mFillPaint.setColor(mFlipBase);
         // Below API 28 hardware setShadowLayer is text-only; API 26/27 are shadowless (accepted).
-        mFillPaint.setShadowLayer(dp(3.2f), 0f, dp(1.06f), mFlipShadow);
+        mFillPaint.setShadowLayer(dp(FLIP_SHADOW_BLUR_DP), 0f, dp(FLIP_SHADOW_DROP_DP),
+            mFlipShadow);
         canvas.drawRoundRect(card, dp(1.5f), dp(1.5f), mFillPaint);
         mFillPaint.clearShadowLayer();
 
@@ -1566,7 +1582,7 @@ public final class TerminalClockWidget extends View {
     // ---- Minimal ----------------------------------------------------------
 
     private void drawFullMinimal(Canvas canvas, long now, float dateTop, float right, float bandDx) {
-        float baseline = baseline(0f, dp(34f), thinTypeface(), 38f);
+        float baseline = capCenteredBaseline(dp(CAP_BAND_DP) / 2f, thinTypeface(), 38f);
         canvas.save();
         canvas.translate(bandDx, 0f);
         float x = drawFadingTime(canvas, now, thinTypeface(), 38f, -.02f, baseline);
@@ -1586,7 +1602,7 @@ public final class TerminalClockWidget extends View {
     // ---- Slab -------------------------------------------------------------
 
     private void drawFullSlab(Canvas canvas, long now, float dateTop, float right, float bandDx) {
-        float baseline = baseline(0f, dp(34f), Typeface.DEFAULT_BOLD, 39f);
+        float baseline = capCenteredBaseline(dp(CAP_BAND_DP) / 2f, Typeface.DEFAULT_BOLD, 39f);
         canvas.save();
         canvas.translate(bandDx, 0f);
         float x = drawFadingTime(canvas, now, Typeface.DEFAULT_BOLD, 39f, -.045f, baseline);
