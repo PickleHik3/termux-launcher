@@ -104,6 +104,38 @@ public final class TaiRuntimeServiceClient {
     }
 
     /**
+     * {@link #request(String, String, long)} whose deadline moves out by the time {@code pauses}
+     * spends paused while it waits: the phone's speech, which the user may pause for as long as
+     * they like, is still answered rather than timed out. A separate method so every other
+     * request keeps its plain wait.
+     */
+    @NonNull
+    JSONObject request(@NonNull String operation, @Nullable String body, long timeoutMs,
+                       @NonNull TaiPauseClock pauses) throws JSONException {
+        PendingRequest request = send(operation, body, false, null);
+        long startedAt = android.os.SystemClock.elapsedRealtime();
+        long pausedAtStart = pauses.totalPausedMs(startedAt);
+        try {
+            while (true) {
+                long left = pauses.remainingMs(startedAt, timeoutMs, pausedAtStart, android.os.SystemClock.elapsedRealtime());
+                if (left <= 0L) {
+                    pending.remove(request.requestId);
+                    releaseAbandonedMomentaryLoad(operation, body);
+                    return runtimeUnavailable("tai_runtime_timeout", "On-device AI runtime service timed out.");
+                }
+                if (request.done.await(left, TimeUnit.MILLISECONDS)) break;
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            pending.remove(request.requestId);
+            releaseAbandonedMomentaryLoad(operation, body);
+            return runtimeUnavailable("tai_runtime_interrupted", "On-device AI runtime request interrupted.");
+        }
+        if (request.result == null) return runtimeUnavailable("tai_runtime_unavailable", "On-device AI runtime service did not return a result.");
+        return request.result;
+    }
+
+    /**
      * A timeout only stops this caller waiting; the runtime's load or generation goes on. For a
      * momentary load the caller's own unload is skipped when the model
      * had not finished loading, so the model would stay resident until the idle timer (review T3).

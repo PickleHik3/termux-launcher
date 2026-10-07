@@ -269,6 +269,8 @@ public final class TaiRuntimeService extends Service {
     static boolean isConcurrentControlOperation(@NonNull String operation) {
         return TaiRuntimeIpc.OP_CANCEL.equals(operation) || TaiRuntimeIpc.OP_UNLOAD_MODEL.equals(operation)
             || TaiRuntimeIpc.OP_TTS_STOP.equals(operation) || TaiRuntimeIpc.OP_IMAGE_CANCEL.equals(operation)
+            || TaiRuntimeIpc.OP_TTS_PAUSE.equals(operation) || TaiRuntimeIpc.OP_TTS_RESUME.equals(operation)
+            || TaiRuntimeIpc.OP_TTS_STATE.equals(operation)
             || TaiRuntimeIpc.OP_BENCH_SKIP_WAIT.equals(operation)
             || TaiRuntimeIpc.OP_BENCH_HOLD.equals(operation);
     }
@@ -431,6 +433,12 @@ public final class TaiRuntimeService extends Service {
                 return manager.ttsWarm(body);
             case TaiRuntimeIpc.OP_TTS_STOP:
                 return manager.stopSpeaking();
+            case TaiRuntimeIpc.OP_TTS_PAUSE:
+                return manager.pauseSpeaking();
+            case TaiRuntimeIpc.OP_TTS_RESUME:
+                return manager.resumeSpeaking();
+            case TaiRuntimeIpc.OP_TTS_STATE:
+                return manager.speechState();
             case TaiRuntimeIpc.OP_IMAGE_CANCEL:
                 return manager.cancelImage();
             default:

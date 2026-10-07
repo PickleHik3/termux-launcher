@@ -21,6 +21,7 @@ package com.termux.ai;
 import androidx.annotation.NonNull;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -54,62 +55,168 @@ final class TaiTtsChunker {
     private static final String PUNCTUATION = ".!?,;:";
 
     private static final Pattern PARAGRAPH = Pattern.compile("\\r?\\n[ \\t]*\\r?\\n");
-    private static final Pattern LINE_BREAK = Pattern.compile("[ \\t]*\\r?\\n[ \\t]*");
-    private static final Pattern WHITESPACE = Pattern.compile("\\s+");
+    /** A word: what splitting on {@code \s+} leaves, found with its place. */
+    private static final Pattern WORD = Pattern.compile("\\S+");
     /** A sentence end: terminal punctuation, optional closing quotes or brackets, then white space. */
     private static final Pattern SENTENCE_END = Pattern.compile("[.!?…]+[\"')\\]]*(?=\\s|$)");
+
+    /**
+     * One chunk and the stretch of the source text it was read from, {@code [start, end)}. Read
+     * aloud speaks a selection a sentence at a time and marks the one being heard, so it needs to
+     * know where each chunk sits in what was selected. {@link #text} is the chunk as
+     * {@link #chunks} gives it (white space collapsed, the ending rewritten); the range covers the
+     * source as written, its line breaks and closing quotes included.
+     */
+    static final class Span {
+        final int start;
+        final int end;
+        @NonNull final String text;
+
+        Span(int start, int end, @NonNull String text) {
+            this.start = start;
+            this.end = end;
+            this.text = text;
+        }
+
+        @NonNull
+        @Override
+        public String toString() {
+            return "[" + start + "," + end + ") " + text;
+        }
+    }
 
     private TaiTtsChunker() {}
 
     @NonNull
     static List<String> chunks(@NonNull String text) {
-        List<String> chunks = new ArrayList<>();
-        for (String paragraph : PARAGRAPH.split(text)) {
-            String flat = WHITESPACE.matcher(LINE_BREAK.matcher(paragraph).replaceAll(" ")).replaceAll(" ").trim();
-            if (flat.isEmpty()) continue;
-            Matcher end = SENTENCE_END.matcher(flat);
-            int start = 0;
-            while (end.find()) {
-                addSentence(chunks, flat.substring(start, end.end()));
-                start = end.end();
-            }
-            if (start < flat.length()) addSentence(chunks, flat.substring(start));
-        }
+        List<Span> spans = spans(text);
+        List<String> chunks = new ArrayList<>(spans.size());
+        for (Span span : spans) chunks.add(span.text);
         return chunks;
     }
 
-    private static void addSentence(@NonNull List<String> chunks, @NonNull String raw) {
-        String sentence = terminate(raw.trim());
+    /**
+     * The chunks of {@code text} with where each came from; their texts are {@link #chunks}. Each
+     * paragraph is flattened with a note of where every flat character stood, and each cut made
+     * in the flat text is carried back through that note.
+     */
+    @NonNull
+    static List<Span> spans(@NonNull String text) {
+        List<Span> spans = new ArrayList<>();
+        Matcher paragraph = PARAGRAPH.matcher(text);
+        int from = 0;
+        while (true) {
+            boolean found = paragraph.find();
+            addParagraph(spans, text, from, found ? paragraph.start() : text.length());
+            if (!found) break;
+            from = paragraph.end();
+        }
+        return spans;
+    }
+
+    /**
+     * One paragraph, {@code text[from, to)}: every run of white space (line breaks included) is one
+     * space and the ends are trimmed as {@link String#trim} trims, then it is cut into sentences.
+     */
+    private static void addParagraph(@NonNull List<Span> spans, @NonNull String text, int from, int to) {
+        StringBuilder flat = new StringBuilder(Math.max(0, to - from));
+        // origin[k] is where the flat text's character k stood in text.
+        int[] origin = new int[Math.max(0, to - from)];
+        boolean inSpace = false;
+        for (int i = from; i < to; i++) {
+            char c = text.charAt(i);
+            if (isSpace(c)) {
+                if (inSpace) continue;
+                inSpace = true;
+                c = ' ';
+            } else {
+                inSpace = false;
+            }
+            origin[flat.length()] = i;
+            flat.append(c);
+        }
+        int first = 0;
+        int last = flat.length();
+        while (first < last && flat.charAt(first) <= ' ') first++;
+        while (last > first && flat.charAt(last - 1) <= ' ') last--;
+        if (first == last) return;
+        String paragraph = flat.substring(first, last);
+        int[] map = Arrays.copyOfRange(origin, first, last);
+        Matcher end = SENTENCE_END.matcher(paragraph);
+        int start = 0;
+        while (end.find()) {
+            addSentence(spans, paragraph, map, start, end.end());
+            start = end.end();
+        }
+        if (start < paragraph.length()) addSentence(spans, paragraph, map, start, paragraph.length());
+    }
+
+    /** {@code \s} as the regular expressions read it. */
+    private static boolean isSpace(char c) {
+        return c == ' ' || c == '\t' || c == '\n' || c == '\u000B' || c == '\f' || c == '\r';
+    }
+
+    /**
+     * The sentence {@code paragraph[from, to)}. What {@link #terminate} gives back is the trimmed
+     * sentence's own characters up to its closing punctuation, then a rewritten ending, so an index
+     * into it short of that ending is the same index into the paragraph from where it starts.
+     */
+    private static void addSentence(@NonNull List<Span> spans, @NonNull String paragraph, @NonNull int[] map,
+                                    int from, int to) {
+        while (from < to && paragraph.charAt(from) <= ' ') from++;
+        while (to > from && paragraph.charAt(to - 1) <= ' ') to--;
+        String sentence = terminate(paragraph.substring(from, to));
         if (sentence.isEmpty()) return;
-        if (chunks.isEmpty() && sentence.length() > FIRST_CHUNK_SOFT_LIMIT) {
+        int base = from;
+        if (spans.isEmpty() && sentence.length() > FIRST_CHUNK_SOFT_LIMIT) {
             int cut = clauseBreak(sentence, FIRST_CHUNK_SOFT_LIMIT);
             if (cut > 0) {
-                addBounded(chunks, sentence.substring(0, cut + 1));
-                sentence = sentence.substring(cut + 1).trim();
+                addBounded(spans, sentence.substring(0, cut + 1), map, base, base + cut + 1);
+                String rest = sentence.substring(cut + 1);
+                int lead = 0;
+                while (lead < rest.length() && rest.charAt(lead) <= ' ') lead++;
+                sentence = rest.trim();
+                base += cut + 1 + lead;
                 if (sentence.isEmpty()) return;
             }
         }
-        addBounded(chunks, sentence);
+        addBounded(spans, sentence, map, base, to);
     }
 
-    /** Splits an overlong sentence on word boundaries, as the Kotlin chunker does. */
-    private static void addBounded(@NonNull List<String> chunks, @NonNull String sentence) {
+    /**
+     * Splits an overlong sentence on word boundaries, as the Kotlin chunker does. {@code sentence}
+     * starts at {@code base} in the paragraph and its source ends at {@code to}; only the last piece
+     * holds the rewritten ending, so every earlier piece's end is an index into the paragraph.
+     */
+    private static void addBounded(@NonNull List<Span> spans, @NonNull String sentence, @NonNull int[] map,
+                                   int base, int to) {
         if (sentence.length() <= MAX_CHUNK_CHARS) {
-            chunks.add(ensurePunctuation(sentence));
+            spans.add(span(map, base, to, ensurePunctuation(sentence)));
             return;
         }
         StringBuilder builder = new StringBuilder();
-        for (String word : WHITESPACE.split(sentence)) {
-            if (word.isEmpty()) continue;
+        int pieceStart = 0;
+        int pieceEnd = 0;
+        Matcher words = WORD.matcher(sentence);
+        while (words.find()) {
+            String word = words.group();
             if (builder.length() + word.length() + 1 > MAX_CHUNK_CHARS && builder.length() > 0) {
-                chunks.add(ensurePunctuation(builder.toString()));
+                spans.add(span(map, base + pieceStart, base + pieceEnd, ensurePunctuation(builder.toString())));
                 builder.setLength(0);
             }
             if (word.length() > MAX_CHUNK_CHARS) word = word.substring(0, MAX_CHUNK_CHARS - 1);
             if (builder.length() > 0) builder.append(' ');
+            else pieceStart = words.start();
             builder.append(word);
+            pieceEnd = words.end();
         }
-        if (builder.length() > 0) chunks.add(ensurePunctuation(builder.toString()));
+        if (builder.length() > 0) spans.add(span(map, base + pieceStart, to, ensurePunctuation(builder.toString())));
+    }
+
+    /** The paragraph's {@code [from, to)} as a range of the source text. */
+    @NonNull
+    private static Span span(@NonNull int[] map, int from, int to, @NonNull String text) {
+        return new Span(map[from], map[to - 1] + 1, text);
     }
 
     /**

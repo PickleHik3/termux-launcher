@@ -64,6 +64,12 @@ import com.termux.app.terminal.inappkeyboard.FloatingKeyboardGeometry;
  * be, throws the text away and closes, and a sideways swipe of the card is the same. The waveform
  * rests while the microphone is closed. All of them are the host's to act on through
  * {@link Callbacks}.
+ *
+ * <p>The same card reads aloud ({@link #showReading}): the shell, the place and every gesture
+ * are the dictation's, the body is {@link ReadAloudPanel} (the selection with the sentence being
+ * heard marked; Pause, the voice and Stop), the strip says "Reading", "Paused" or "Done", and the
+ * × and the swipe stop the reading. The host gives reading an indicator of its own, so a
+ * dictation card that is up is left exactly as it is.
  */
 public final class VoiceListeningIndicator {
 
@@ -88,6 +94,24 @@ public final class VoiceListeningIndicator {
         void onInsert();
 
         /** A finger has come down anywhere on the pill or its panel: the user is still there. */
+        void onTouched();
+    }
+
+    /** The reading card's controls ({@link #showReading}); main thread. */
+    public interface ReadingCallbacks {
+        /** Pause: hold the reading mid-word. */
+        void onPause();
+
+        /** Resume: carry on from where it was held. */
+        void onResume();
+
+        /** Stop, the ×, or a swipe of the card: stop reading and close. */
+        void onClose();
+
+        /** A voice was picked on the card: keep it, and read on in it from the next sentence. */
+        void onVoice(@NonNull String voice);
+
+        /** A finger has come down anywhere on the card. */
         void onTouched();
     }
 
@@ -127,6 +151,12 @@ public final class VoiceListeningIndicator {
     @Nullable private TextView status;
     @Nullable private TextView meta;
     @Nullable private VoiceTranscriptPanel panel;
+    /** The card's body while it reads aloud ({@link #showReading}); {@link #panel} is null then. */
+    @Nullable private ReadAloudPanel readingPanel;
+    /** Reading: the first sound is not out yet, so the ring turns. */
+    private boolean readingPreparing;
+    /** Reading: "· 3 of 12", or empty for a single sentence. */
+    @NonNull private CharSequence readingProgress = "";
     /** The panel's width for this session, from the room at show time. */
     private int panelWidth;
     /** Captured segments still transcribing; the ghost bar shows while any are. */
@@ -139,6 +169,10 @@ public final class VoiceListeningIndicator {
     @StringRes private int cleanedStatus = R.string.voice_input_cleaned_up;
     private int accent;
     private int onSurfaceVariant;
+    private int onSurface;
+    private int onAccent;
+    private int surface;
+    private int raised;
 
     /** Where the card is, as fractions of its travel in {@link #room}. */
     private float xFraction = DEFAULT_X_FRACTION;
@@ -186,17 +220,154 @@ public final class VoiceListeningIndicator {
         ViewGroup content = activity.findViewById(android.R.id.content);
         if (content == null) return;
         Context context = activity;
-        int onSurface = themeColor(context, com.termux.shared.R.attr.termuxColorOnSurface);
-        onSurfaceVariant = themeColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant);
-        accent = themeColor(context, com.termux.shared.R.attr.termuxColorPrimary);
-        int onAccent = themeColor(context, com.termux.shared.R.attr.termuxColorOnPrimary);
-        int surface = themeColor(context, com.termux.shared.R.attr.termuxColorSurfaceBase);
-        int raised = themeColor(context, com.termux.shared.R.attr.termuxColorSurfacePanelHigh);
+        readColors(context);
         readRoom(content);
         readFractions();
         panelWidth = Math.max(dp(160), Math.min(dp(MAX_WIDTH_DP), room.width()));
 
-        SwipeCard view = new SwipeCard(context, callbacks::onClose, callbacks::onTouched);
+        VoiceTranscriptPanel transcript = new VoiceTranscriptPanel(context, onSurface, onSurfaceVariant,
+            accent, onAccent, raised, new VoiceTranscriptPanel.Actions() {
+                @Override
+                public void onUndo() {
+                    callbacks.onUndo();
+                }
+
+                @Override
+                public void onCopy() {
+                    callbacks.onCopy();
+                }
+
+                @Override
+                public void onInsert() {
+                    callbacks.onInsert();
+                }
+
+                @Override
+                public void onPause() {
+                    callbacks.onPause();
+                }
+
+                @Override
+                public void onResume() {
+                    callbacks.onResume();
+                }
+            });
+        transcript.setDimRaw(dimRaw);
+        if (!base.isEmpty()) transcript.resetTo(base);
+        attach(content, transcript, callbacks::onClose, callbacks::onTouched,
+            R.string.voice_input_move_handle, R.string.voice_input_close);
+        panel = transcript;
+        pending = 0;
+        cleaningUp = false;
+        warming = false;
+        cleanedStatus = R.string.voice_input_cleaned_up;
+        statusRes = R.string.voice_input_listening;
+        setToggle(true, true);
+        refreshHeader();
+        fitPanel();
+    }
+
+    /**
+     * Puts the card up for Read aloud ({@link ReadAloudPanel}): the same shell, place, drag, double
+     * tap and swipe as the dictation's, with {@code text} in it and Pause, the voice and Stop under
+     * it. The header says "Reading" with the ring until {@link #setReadingSounding}. A card this
+     * indicator already has up is replaced; the host keeps reading on an indicator of its own, so a
+     * dictation card stays as it is.
+     */
+    public void showReading(@NonNull ReadingCallbacks callbacks, @NonNull String text, @NonNull String voice) {
+        if (card != null) hide();
+        ViewGroup content = activity.findViewById(android.R.id.content);
+        if (content == null) return;
+        Context context = activity;
+        readColors(context);
+        readRoom(content);
+        readFractions();
+        panelWidth = Math.max(dp(160), Math.min(dp(MAX_WIDTH_DP), room.width()));
+        ReadAloudPanel body = new ReadAloudPanel(context, onSurface, onSurfaceVariant, accent, onAccent, raised,
+            text, voice, new ReadAloudPanel.Actions() {
+                @Override
+                public void onPause() {
+                    callbacks.onPause();
+                }
+
+                @Override
+                public void onResume() {
+                    callbacks.onResume();
+                }
+
+                @Override
+                public void onStop() {
+                    callbacks.onClose();
+                }
+
+                @Override
+                public void onVoice(@NonNull String picked) {
+                    callbacks.onVoice(picked);
+                }
+            });
+        attach(content, body, callbacks::onClose, callbacks::onTouched,
+            R.string.read_aloud_move_handle, R.string.read_aloud_close);
+        readingPanel = body;
+        readingPreparing = true;
+        readingProgress = "";
+        statusRes = R.string.read_aloud_reading;
+        refreshHeader();
+        fitPanel();
+    }
+
+    /** Sentence {@code index} of {@code count}, {@code text[start, end)}, is being read: marked, and counted in the header. */
+    public void setReadingSentence(int index, int count, int start, int end) {
+        ReadAloudPanel view = readingPanel;
+        if (view == null) return;
+        view.markSentence(start, end);
+        readingProgress = count > 1 ? activity.getString(R.string.read_aloud_meta_progress, index + 1, count) : "";
+        refreshHeader();
+    }
+
+    /** The first sound is out: the ring goes and the waveform moves. */
+    public void setReadingSounding() {
+        ReadAloudPanel view = readingPanel;
+        if (view == null) return;
+        readingPreparing = false;
+        view.setSounding();
+        refreshHeader();
+    }
+
+    /** "Paused" with Resume, or "Reading" with Pause again. */
+    public void setReadingPaused(boolean paused) {
+        ReadAloudPanel view = readingPanel;
+        if (view == null) return;
+        view.setPaused(paused);
+        setStatus(paused ? R.string.read_aloud_paused : R.string.read_aloud_reading);
+    }
+
+    /** Heard to the end: "Done", the controls gone, the text all read. */
+    public void showReadingDone() {
+        ReadAloudPanel view = readingPanel;
+        if (view == null) return;
+        readingPreparing = false;
+        readingProgress = "";
+        view.showDone();
+        setStatus(R.string.read_aloud_done);
+    }
+
+    private void readColors(@NonNull Context context) {
+        onSurface = themeColor(context, com.termux.shared.R.attr.termuxColorOnSurface);
+        onSurfaceVariant = themeColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant);
+        accent = themeColor(context, com.termux.shared.R.attr.termuxColorPrimary);
+        onAccent = themeColor(context, com.termux.shared.R.attr.termuxColorOnPrimary);
+        surface = themeColor(context, com.termux.shared.R.attr.termuxColorSurfaceBase);
+        raised = themeColor(context, com.termux.shared.R.attr.termuxColorSurfacePanelHigh);
+    }
+
+    /**
+     * Builds the card around {@code body} and puts it in {@code content}: the header strip, then
+     * the body, unseen until its first layout has placed it.
+     */
+    private void attach(@NonNull ViewGroup content, @NonNull View body, @NonNull Runnable onClose,
+                        @NonNull Runnable onTouched, @StringRes int handleDescription, @StringRes int closeDescription) {
+        Context context = activity;
+        SwipeCard view = new SwipeCard(context, onClose, onTouched);
         view.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable background = new GradientDrawable();
         background.setColor(surface);
@@ -212,7 +383,7 @@ public final class VoiceListeningIndicator {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPaddingRelative(dp(16), dp(4), dp(4), 0);
-        header.setContentDescription(context.getString(R.string.voice_input_move_handle));
+        header.setContentDescription(context.getString(handleDescription));
         header.setOnTouchListener((v, event) -> onHandleTouch(v, event));
 
         LinearLayout left = new LinearLayout(context);
@@ -269,42 +440,13 @@ public final class VoiceListeningIndicator {
         LinearLayout right = new LinearLayout(context);
         right.setOrientation(LinearLayout.HORIZONTAL);
         right.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-        ImageView closeButton = closeButton(context, onSurfaceVariant);
-        closeButton.setOnClickListener(v -> callbacks.onClose());
+        ImageView closeButton = closeButton(context, onSurfaceVariant, closeDescription);
+        closeButton.setOnClickListener(v -> onClose.run());
         right.addView(closeButton, new LinearLayout.LayoutParams(dp(32), dp(32)));
         header.addView(right, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 2f - LEFT_SHARE));
         view.addView(header, new LinearLayout.LayoutParams(panelWidth, dp(HEADER_DP)));
 
-        VoiceTranscriptPanel transcript = new VoiceTranscriptPanel(context, onSurface, onSurfaceVariant,
-            accent, onAccent, raised, new VoiceTranscriptPanel.Actions() {
-                @Override
-                public void onUndo() {
-                    callbacks.onUndo();
-                }
-
-                @Override
-                public void onCopy() {
-                    callbacks.onCopy();
-                }
-
-                @Override
-                public void onInsert() {
-                    callbacks.onInsert();
-                }
-
-                @Override
-                public void onPause() {
-                    callbacks.onPause();
-                }
-
-                @Override
-                public void onResume() {
-                    callbacks.onResume();
-                }
-            });
-        transcript.setDimRaw(dimRaw);
-        if (!base.isEmpty()) transcript.resetTo(base);
-        view.addView(transcript, new LinearLayout.LayoutParams(panelWidth, ViewGroup.LayoutParams.WRAP_CONTENT));
+        view.addView(body, new LinearLayout.LayoutParams(panelWidth, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // Placed by translation from the frame's top left, so the frame measures it at its own
         // size wherever it sits; seen from its first layout, once it is in its place.
@@ -318,15 +460,6 @@ public final class VoiceListeningIndicator {
         ring = busy;
         status = label;
         meta = note;
-        panel = transcript;
-        pending = 0;
-        cleaningUp = false;
-        warming = false;
-        cleanedStatus = R.string.voice_input_cleaned_up;
-        statusRes = R.string.voice_input_listening;
-        setToggle(true, true);
-        refreshHeader();
-        fitPanel();
     }
 
     /** The card was up with its text waiting, and a new dictation carries on from it. */
@@ -348,11 +481,15 @@ public final class VoiceListeningIndicator {
         anchor.removeOnLayoutChangeListener(anchorMoved);
         SwipeCard view = card;
         if (panel != null) panel.release();
+        if (readingPanel != null) readingPanel.release();
         card = null;
         ring = null;
         status = null;
         meta = null;
         panel = null;
+        readingPanel = null;
+        readingPreparing = false;
+        readingProgress = "";
         pending = 0;
         cleaningUp = false;
         drag.end();
@@ -426,6 +563,10 @@ public final class VoiceListeningIndicator {
         TextView note = meta;
         View busy = ring;
         if (label == null || note == null || busy == null) return;
+        if (readingPanel != null) {
+            refreshReadingHeader(label, note, busy);
+            return;
+        }
         boolean listening = statusRes == R.string.voice_input_listening;
         label.setText(statusRes);
         label.setTextColor(listening ? accent : onSurfaceVariant);
@@ -446,6 +587,24 @@ public final class VoiceListeningIndicator {
         note.setText(text);
         note.setVisibility(text.length() > 0 && metaFits(label, note, busyVisibility == View.VISIBLE)
             ? View.VISIBLE : View.GONE);
+    }
+
+    /**
+     * The reading card's header: "Reading" in the accent while the voice reads, "Paused" and
+     * "Done" in the secondary colour; the ring with "· preparing" until the first sound, then
+     * which sentence of how many.
+     */
+    private void refreshReadingHeader(@NonNull TextView label, @NonNull TextView note, @NonNull View busy) {
+        boolean reading = statusRes == R.string.read_aloud_reading;
+        label.setText(statusRes);
+        label.setTextColor(reading ? accent : onSurfaceVariant);
+        boolean preparing = readingPreparing && statusRes != R.string.read_aloud_done;
+        int busyVisibility = preparing ? View.VISIBLE : View.GONE;
+        if (busy.getVisibility() != busyVisibility) busy.setVisibility(busyVisibility);
+        CharSequence text = statusRes == R.string.read_aloud_done ? ""
+            : preparing ? activity.getString(R.string.read_aloud_meta_preparing) : readingProgress;
+        note.setText(text);
+        note.setVisibility(text.length() > 0 && metaFits(label, note, preparing) ? View.VISIBLE : View.GONE);
     }
 
     /**
@@ -545,8 +704,16 @@ public final class VoiceListeningIndicator {
      * keeps as many as fit in it with the header and the controls, and the top truncates.
      */
     private void fitPanel() {
+        if (card == null) return;
+        ReadAloudPanel reading = readingPanel;
+        if (reading != null) {
+            int line = reading.lineHeightPx();
+            reading.setMaxVisibleLines(line <= 0 || room.isEmpty() ? VoiceTranscriptPanel.VISIBLE_LINES
+                : (room.height() - dp(HEADER_DP) - reading.chromeHeightPx()) / line);
+            return;
+        }
         VoiceTranscriptPanel view = panel;
-        if (view == null || card == null) return;
+        if (view == null) return;
         int line = view.lineHeightPx();
         if (line <= 0 || room.isEmpty()) {
             view.setMaxVisibleLines(VoiceTranscriptPanel.VISIBLE_LINES);
@@ -699,12 +866,12 @@ public final class VoiceListeningIndicator {
 
     /** The x: a 16 dp glyph centred in its 32 dp, tinted {@code tint}, with a borderless ripple. */
     @NonNull
-    private ImageView closeButton(@NonNull Context context, int tint) {
+    private ImageView closeButton(@NonNull Context context, int tint, @StringRes int description) {
         ImageView button = new ImageView(context);
         button.setImageResource(R.drawable.ic_symbol_close);
         button.setColorFilter(tint, PorterDuff.Mode.SRC_IN);
         button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
-        button.setContentDescription(context.getString(R.string.voice_input_close));
+        button.setContentDescription(context.getString(description));
         button.setPadding(dp(8), dp(8), dp(8), dp(8));
         TypedValue ripple = new TypedValue();
         if (context.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless, ripple, true)) {

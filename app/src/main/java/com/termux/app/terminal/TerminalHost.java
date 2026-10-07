@@ -180,6 +180,18 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     /** Renames the current session, which only the activity owns while split panes are on. */
     boolean promptCurrentSessionRename();
 
+    /**
+     * Reads {@code text} aloud with the reading card up (the dictation card's shell: the sentence
+     * being heard marked, Pause, the voice and Stop). False when there is nowhere to show the card,
+     * and the caller reads without it.
+     */
+    default boolean showReadAloudCard(@NonNull String text) {
+        return false;
+    }
+
+    /** Stops the reading the card shows, if any, and closes the card; no-op when it is down. */
+    default void closeReadAloudCard() {}
+
     // --- Modal surfaces ---
 
     /**

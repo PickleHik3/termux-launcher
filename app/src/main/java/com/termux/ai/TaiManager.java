@@ -3,6 +3,7 @@ package com.termux.ai;
 import android.content.Context;
 import android.net.Uri;
 import android.os.Process;
+import android.os.SystemClock;
 import java.util.Base64;
 
 import androidx.annotation.NonNull;
@@ -2575,11 +2576,20 @@ public final class TaiManager {
     /**
      * The IPC deadline for {@link #speak}: the call returns only once the text has been heard, so
      * the deadline covers synthesis and playback of the whole text, generously (a slow phone
-     * synthesising slower than it speaks, and the model load on first use).
+     * synthesising slower than it speaks, and the model load on first use). Time the runtime spent
+     * paused ({@link #pauseSpeaking}) does not count against it; see {@link #speechPauses}.
      */
     static long speakTimeoutMs(int chars) {
         return Math.min(60L * 60_000L, 60_000L + chars * 200L);
     }
+
+    /**
+     * The app process's note of how long the phone's speech has been paused, opened when the
+     * runtime confirms a pause and closed on resume or stop, so a {@link #speak} waiting on the
+     * runtime moves its deadline out for as long as the user keeps it paused. The runtime keeps its
+     * own ({@link TaiTtsPlayer#awaitDone}).
+     */
+    private final TaiPauseClock speechPauses = new TaiPauseClock();
 
     /**
      * Speaks {@code input} through the phone's speaker with the speech-output model and returns
@@ -2596,8 +2606,9 @@ public final class TaiManager {
         TaiModelSpec spec = resolveTtsModel(request, parsed);
         if (spec == null) return ttsModelError(request, parsed);
         if (shouldDelegateRuntime()) {
-            return runtimeRequest(TaiRuntimeIpc.OP_TTS_SPEAK, delegatedTtsBody(parsed, spec),
-                speakTimeoutMs(parsed.text.length()));
+            if (runtimeClient == null) return error(500, "runtime_client_unavailable", "On-device AI runtime service client is unavailable.");
+            return runtimeClient.request(TaiRuntimeIpc.OP_TTS_SPEAK, delegatedTtsBody(parsed, spec),
+                speakTimeoutMs(parsed.text.length()), speechPauses);
         }
         MultiBackendTaiRuntime router = ttsRouter();
         if (router == null) return noTtsRuntime();
@@ -2609,8 +2620,43 @@ public final class TaiManager {
     /** Stops whatever the phone is saying; answers {@code {ok, stopped}}. Never waits for synthesis. */
     @NonNull
     public JSONObject stopSpeaking() throws JSONException {
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_TTS_STOP, "{}", RUNTIME_STATUS_TIMEOUT_MS);
+        if (shouldDelegateRuntime()) {
+            speechPauses.resume(SystemClock.elapsedRealtime());
+            return runtimeRequest(TaiRuntimeIpc.OP_TTS_STOP, "{}", RUNTIME_STATUS_TIMEOUT_MS);
+        }
         return TaiSpeechOutput.stop(ttsRouter());
+    }
+
+    /**
+     * Pauses the phone's speech where it is, mid-word; the speak call stays open until it is
+     * resumed or stopped. Answers {@code {ok, paused}}, {@code paused} false when nothing was
+     * playing (between two of Read aloud's sentences, say). Never waits for synthesis.
+     */
+    @NonNull
+    public JSONObject pauseSpeaking() throws JSONException {
+        if (shouldDelegateRuntime()) {
+            JSONObject result = runtimeRequest(TaiRuntimeIpc.OP_TTS_PAUSE, "{}", RUNTIME_STATUS_TIMEOUT_MS);
+            if (result.optBoolean("paused", false)) speechPauses.pause(SystemClock.elapsedRealtime());
+            return result;
+        }
+        return TaiSpeechOutput.pause();
+    }
+
+    /** Carries paused speech on from where it stopped; answers {@code {ok, resumed}}. */
+    @NonNull
+    public JSONObject resumeSpeaking() throws JSONException {
+        if (shouldDelegateRuntime()) {
+            speechPauses.resume(SystemClock.elapsedRealtime());
+            return runtimeRequest(TaiRuntimeIpc.OP_TTS_RESUME, "{}", RUNTIME_STATUS_TIMEOUT_MS);
+        }
+        return TaiSpeechOutput.resume();
+    }
+
+    /** Answers {@code {ok, speaking, sounding, paused}} for the phone's speech; see {@link TaiSpeechOutput#state}. */
+    @NonNull
+    public JSONObject speechState() throws JSONException {
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_TTS_STATE, "{}", RUNTIME_STATUS_TIMEOUT_MS);
+        return TaiSpeechOutput.state();
     }
 
     /** Loads the speech-output model ahead of its first sentence. */

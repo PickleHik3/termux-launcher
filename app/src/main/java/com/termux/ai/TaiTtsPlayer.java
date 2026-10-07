@@ -29,6 +29,11 @@ import java.util.concurrent.TimeUnit;
  * stops for good on a permanent loss (another app starts playing). Usage is
  * {@link AudioAttributes#USAGE_ASSISTANT} with {@link AudioAttributes#CONTENT_TYPE_SPEECH}: this is
  * the phone's assistant talking, and it follows the media volume.
+ *
+ * <p>The user can pause it too ({@link #pause}, Read aloud's Pause): the track stops mid-word and
+ * the writer waits, exactly as for a focus loss, but the two are kept apart so focus coming back
+ * does not undo a pause the user asked for, nor a resume undo a focus loss. Time spent paused
+ * either way is left out of {@link #awaitDone}'s deadline.
  */
 final class TaiTtsPlayer {
     private static final String TAG = "TaiTts";
@@ -54,7 +59,12 @@ final class TaiTtsPlayer {
     @Nullable private volatile AudioTrack track;
     @Nullable private Thread writer;
     private volatile boolean stopped;
+    /** Paused by a transient focus loss; written under {@link #pauseLock}. */
     private volatile boolean paused;
+    /** Paused by the user ({@link #pause}); written under {@link #pauseLock}. */
+    private volatile boolean userPaused;
+    /** Time spent with either pause holding, for {@link #awaitDone}. */
+    private final TaiPauseClock pauses = new TaiPauseClock();
     private volatile long framesWritten;
     private volatile long firstSoundAtMs = -1L;
     private volatile boolean done;
@@ -148,12 +158,70 @@ final class TaiTtsPlayer {
     boolean awaitDone(long timeoutMs) {
         Thread thread = writer;
         if (thread == null) return true;
+        long startedAt = SystemClock.elapsedRealtime();
+        long pausedAtStart = pauses.totalPausedMs(startedAt);
+        long budget = Math.max(1L, timeoutMs);
         try {
-            thread.join(Math.max(1L, timeoutMs));
+            // Paused time does not count: a pause moves the end out for as long as it lasts, so a
+            // reading paused for minutes is still waited for.
+            while (thread.isAlive()) {
+                long left = pauses.remainingMs(startedAt, budget, pausedAtStart, SystemClock.elapsedRealtime());
+                if (left <= 0L) break;
+                thread.join(left);
+            }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }
         return done && !stopped;
+    }
+
+    /**
+     * Pauses at once, mid-word: the track goes quiet and the writer waits. Synthesis carries on
+     * until {@link #MAX_QUEUED_SECONDS} are queued. Safe from any thread; no-op when stopped or
+     * already paused by the user.
+     */
+    void pause() {
+        synchronized (pauseLock) {
+            if (stopped || userPaused) return;
+            userPaused = true;
+            notePauses();
+        }
+        AudioTrack current = track;
+        if (current != null) {
+            try {
+                current.pause();
+            } catch (IllegalStateException ignored) {
+                // Released by the writer meanwhile.
+            }
+        }
+    }
+
+    /** Carries on from where {@link #pause} stopped, unless a focus loss still holds it. */
+    void resume() {
+        AudioTrack current = track;
+        synchronized (pauseLock) {
+            if (!userPaused) return;
+            userPaused = false;
+            notePauses();
+            if (!paused && !stopped && current != null) {
+                try {
+                    current.play();
+                } catch (IllegalStateException ignored) {
+                }
+            }
+            pauseLock.notifyAll();
+        }
+    }
+
+    boolean isPaused() {
+        return paused || userPaused;
+    }
+
+    /** Opens or closes the paused time after either flag changed; under {@link #pauseLock}. */
+    private void notePauses() {
+        long now = SystemClock.elapsedRealtime();
+        if (paused || userPaused) pauses.pause(now);
+        else pauses.resume(now);
     }
 
     /** Stops now: drops what is queued, silences the track and gives focus back. Safe from any thread, idempotent. */
@@ -238,7 +306,7 @@ final class TaiTtsPlayer {
         long total = framesWritten;
         long deadline = SystemClock.elapsedRealtime() + total * 1000L / sampleRate + 2_000L;
         while (!stopped && SystemClock.elapsedRealtime() < deadline) {
-            if (paused) {
+            if (isPaused()) {
                 waitWhilePaused();
                 deadline = SystemClock.elapsedRealtime() + total * 1000L / sampleRate + 2_000L;
                 continue;
@@ -251,7 +319,7 @@ final class TaiTtsPlayer {
 
     private void waitWhilePaused() {
         synchronized (pauseLock) {
-            while (paused && !stopped) {
+            while ((paused || userPaused) && !stopped) {
                 try {
                     pauseLock.wait(500L);
                 } catch (InterruptedException e) {
@@ -270,7 +338,10 @@ final class TaiTtsPlayer {
                 break;
             case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT:
             case AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK:
-                paused = true;
+                synchronized (pauseLock) {
+                    paused = true;
+                    notePauses();
+                }
                 if (current != null) {
                     try {
                         current.pause();
@@ -279,14 +350,16 @@ final class TaiTtsPlayer {
                 }
                 break;
             case AudioManager.AUDIOFOCUS_GAIN:
-                if (paused && current != null && !stopped) {
-                    try {
-                        current.play();
-                    } catch (IllegalStateException ignored) {
-                    }
-                }
                 synchronized (pauseLock) {
+                    // Focus back does not undo the user's own pause.
+                    if (paused && !userPaused && current != null && !stopped) {
+                        try {
+                            current.play();
+                        } catch (IllegalStateException ignored) {
+                        }
+                    }
                     paused = false;
+                    notePauses();
                     pauseLock.notifyAll();
                 }
                 break;

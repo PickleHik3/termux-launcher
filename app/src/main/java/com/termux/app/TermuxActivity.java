@@ -152,6 +152,7 @@ import com.termux.app.terminal.inappkeyboard.KeyboardGeometryChoreographer;
 import com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard;
 import com.termux.app.terminal.inappkeyboard.voice.DictationMarks;
 import com.termux.app.terminal.inappkeyboard.voice.LocalTaiVoiceTextPolisher;
+import com.termux.app.terminal.inappkeyboard.voice.ReadAloudCard;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceCommandFormatter;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceDictation;
 import com.termux.app.terminal.inappkeyboard.voice.VoiceInputSession;
@@ -738,6 +739,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The on-device voice input in progress, from the voice key to its end; null between. */
     @Nullable private VoiceInputSession mVoiceInput;
     @Nullable private VoiceListeningIndicator mVoiceIndicator;
+    /** Read aloud's card, made on the first Read aloud; its own indicator, apart from the dictation's. */
+    @Nullable private ReadAloudCard mReadAloudCard;
     /** The dictation in the panel: what has been heard, and the ✓ or Copy waiting for it to settle. */
     private final VoiceDictation mVoiceDictation = new VoiceDictation();
     /**
@@ -16206,6 +16209,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Read aloud from the selection toolbar, on the reading card ({@link ReadAloudCard}): in the
+     * same place viewport and the same remembered place as the dictation pill, on an indicator of
+     * its own so a dictation that is up is left alone. False without a viewport to put it in.
+     */
+    private boolean startReadAloudCard(@NonNull String text) {
+        View panes = findViewById(R.id.terminal_surface_host);
+        if (panes == null) return false;
+        if (mReadAloudCard == null) mReadAloudCard = new ReadAloudCard(this, panes, mVoicePillPlace);
+        mReadAloudCard.start(text);
+        return true;
+    }
+
+    /**
      * Holds the screen on for as long as the pill is up ({@link VoiceScreenHold}): without a limit
      * while the dictation listens, transcribes or cleans up, and with the idle release running
      * once the text only waits. No-op with the pill down or the activity paused.
@@ -23759,6 +23775,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean promptCurrentSessionRename() {
             return TermuxActivity.this.promptCurrentSessionRename();
+        }
+
+        @Override public boolean showReadAloudCard(@NonNull String text) {
+            return startReadAloudCard(text);
+        }
+
+        @Override public void closeReadAloudCard() {
+            if (mReadAloudCard != null) mReadAloudCard.close();
         }
 
         @Override public boolean overlaysConsumeKeyDown(int keyCode, @NonNull KeyEvent event) {
