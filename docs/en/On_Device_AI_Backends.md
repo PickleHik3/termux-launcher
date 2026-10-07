@@ -27,6 +27,8 @@ POST /v1/embeddings
 POST /v1/tokenize
 POST /v1/audio/transcriptions
 POST /v1/audio/speech
+POST /v1/ai/speak
+POST /v1/ai/images/generations
 ```
 
 Native Ollama compatibility is exposed from the same authenticated base URL through
@@ -67,10 +69,11 @@ Image generation (`/v1/ai/images/generations`, `tai image`) is a third MNN use, 
 list shape, each carrying `truncated` and, where the runtime can count them, `tokens`. Use it only
 with models whose `/v1/models` `_capabilities` include `text_embeddings`. LiteRT EmbeddingGemma
 `.tflite` packages need `sentencepiece.model` beside the model file; new downloads fetch that
-sidecar automatically. Older installs missing the sidecar return `embedding_tokenizer_missing`.
+sidecar automatically. Older installs missing the sidecar return `409 embedding_tokenizer_missing`.
 
 EmbeddingGemma 2 (the recommended Text+Vision 440M and the Text 270M) is one `.litertlm` bundle
-with its tokenizer inside, so there is no sidecar; it needs LiteRT-LM 0.18.0 or later. It runs on
+with its tokenizer inside, so there is no sidecar; it needs LiteRT-LM 0.18.0 or later, which is the
+version the app ships. It runs on
 the CPU through LiteRT-LM's embedding engine (`_runtime: "litertlm-embedding"`), one engine at a
 time, built with a 2048-token input cap that `/v1/models` reports as `_endpoint_context_window`.
 The engine has no tokenizer API, so its items carry no `tokens`, `usage` is zero, and
@@ -84,7 +87,9 @@ document prefix. While a chat generation is running, embeddings run throttled (b
 priority) so they never slow the live reply, and a load that does not fit in memory returns `503`
 with `Retry-After` and `code: "embedding_memory"` rather than the chat path's `409`. `/v1/tokenize`
 (`{model, input}` → `{tokens: n}`) uses the `.tflite` model's tokenizer with no prefix, for
-splitting text on real token counts.
+splitting text on real token counts. It is the only model with a tokenizer: EmbeddingGemma 2
+`.litertlm`, MNN embedders and every other model answer `501 capability_not_supported` ("Tokenize
+is only available for .tflite embedding models; .litertlm models expose no tokenizer.").
 
 EmbeddingGemma installs a fixed-shape graph per context window (`seq256`/`seq512`/`seq1024`/
 `seq2048`), and a short input on a big window still pays that window's full inference cost. A
@@ -103,14 +108,19 @@ Use the exact IDs returned by:
 tai models
 ```
 
-Common catalog IDs:
+Catalog chat and embedding IDs (the speech and voice IDs are in
+[On-device AI models](On_Device_AI_Models.md#supported-model-names)):
 
 ```text
 gemma-4-e2b-it-litert-lm
 gemma-4-e4b-it-litert-lm
-functiongemma-270m-mobile-actions-litert-lm
-qwen2.5-coder-1.5b-instruct-mnn
+embeddinggemma-2-text-vision-440m
+embeddinggemma-2-text-270m
+embeddinggemma-300m
 ```
+
+FunctionGemma (`functiongemma-270m-mobile-actions-litert-lm`) and MNN chat packages are no longer
+in the catalog; they still run when imported.
 
 The Gemma 4 E2B and E4B catalog entries are not gated; both are Apache-2.0 and download without a
 Hugging Face token.
@@ -143,8 +153,8 @@ conservative floor for each model (4096 for LiteRT-LM chat models, 8192 or 16384
 and the model's own limit in `_source_context_window`. On a device whose RAM is known, On-device AI
 raises the endpoint window to the RAM tier's cap — 4096 below 5.5 GiB, 8192 below 7.5 GiB, 16384
 below 11.5 GiB, 32768 above — never above the model's own limit and never below the catalog floor.
-The **Context window** setting (global or per model, under **Settings → On-device AI**) overrides
-the tier. The same value sizes the LiteRT-LM engine budget and MNN's `max_all_tokens`, gates the
+The **Context window** setting (global under **Settings → On-device AI → Advanced → Parameters**,
+or per model in the model's own **Parameters**) overrides the tier. The same value sizes the LiteRT-LM engine budget and MNN's `max_all_tokens`, gates the
 automatic-tool compatibility rule, and is what `/v1/models` advertises, so a client can trust it.
 
 ### Conversation Reuse
@@ -209,7 +219,8 @@ Gemma 4 uses a multimodal LiteRT engine configuration:
 
 This matches the LiteRT-LM Android pattern used by Google AI Edge Gallery: GPU can run text and
 vision while audio decoding uses CPU. If `accelerator` is omitted or set to `auto`, On-device AI
-defaults to CPU until the same model/device has a successful GPU load history.
+tries the GPU first and uses the CPU after a GPU failure has been recorded for that model on this
+device.
 
 #### Per-modality model ids
 
@@ -503,7 +514,7 @@ Supported models:
 Not supported yet: Wan video and Stable Diffusion 3.5 (the 3.6.1 build does not wire them into the model
 type the bridge uses).
 
-**Importing.** Model Centre imports an image package like any model: paste a Hugging Face repository link
+**Importing.** The Model centre imports an image package like any model: paste a Hugging Face repository link
 (for example `https://huggingface.co/taobao-mnn/stable-diffusion-v1-5-mnn-opencl` or
 `https://huggingface.co/taobao-mnn/MNN-Sana-Edit-V2`), or pick the package folder from the link bar's overflow
 menu, or run `tai import <folder or any file in it> [model-id]`. The importer recognises the package by its
