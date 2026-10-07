@@ -405,6 +405,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         WidgetGridPlacementPolicy.Result placement = WidgetGridPlacementPolicy.findPlacement(
             repository.gridDefinition(), repository.recordsOnPage(currentPage),
             item.columnSpan, item.rowSpan);
+        if (placement.outcome == WidgetGridPlacementPolicy.Outcome.NO_CONTIGUOUS_SPACE) {
+            // It fits the grid, just not this page: the sheet stays up and says how to carry it.
+            pane.picker().showNoRoomOnPage();
+            return;
+        }
         if (placement.outcome != WidgetGridPlacementPolicy.Outcome.PLACED) {
             pane.picker().adapter().setFitPredicate(this::fitsGrid);
             pane.picker().showNoSpace(item.columnSpan, item.rowSpan, repository.gridDefinition());
@@ -417,8 +422,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         } else if (result == LauncherWidgetHostController.AddResult.READY) {
             pane.picker().close(); render(); liveOrigin = null;
         } else if (result == LauncherWidgetHostController.AddResult.NO_SPACE) {
+            // The span fitted the grid a moment ago, so it is the page that filled up.
             pane.picker().adapter().setFitPredicate(this::fitsGrid);
-            pane.picker().showNoSpace(item.columnSpan, item.rowSpan, repository.gridDefinition());
+            pane.picker().showNoRoomOnPage();
         } else {
             pane.showNotice(messageFor(result)); liveOrigin = null;
         }

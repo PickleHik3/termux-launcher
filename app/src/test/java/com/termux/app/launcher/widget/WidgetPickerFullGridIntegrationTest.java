@@ -34,10 +34,20 @@ public class WidgetPickerFullGridIntegrationTest {
         // still carry it to another page. The tap adds nothing and the sheet stays up.
         assertNotNull(card); assertTrue(card.itemView.isEnabled());
         assertEquals(1f, card.itemView.getAlpha(), 0f);
-        assertTrue(card.itemView.performClick()); fixture.idleAndLayout();
+        assertTrue(card.itemView.performClick());
+        // The sheet says so itself: the pane's own notice sits under it.
+        android.widget.TextView notice = fixture.pane.picker().findViewWithTag("notice");
+        assertEquals(android.view.View.VISIBLE, notice.getVisibility());
+        assertEquals(fixture.activity.getString(R.string.widget_picker_no_room_on_page),
+            notice.getText().toString());
         assertTrue(fixture.pane.picker().isOpen()); assertEquals(0, fixture.platform.allocations);
         java.util.List<WidgetCellRect> after = new java.util.ArrayList<>();
         for (LauncherWidgetRecord record : fixture.repository.records()) after.add(record.cell);
         assertEquals(before, after);
+        // The hint goes after a while; the sheet is still the user's.
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(
+            4, java.util.concurrent.TimeUnit.SECONDS);
+        assertEquals(android.view.View.GONE, notice.getVisibility());
+        assertTrue(fixture.pane.picker().isOpen());
     }
 }
