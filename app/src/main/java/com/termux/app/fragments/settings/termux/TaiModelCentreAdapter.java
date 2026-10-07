@@ -5,7 +5,9 @@ import android.content.res.ColorStateList;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.text.SpannableStringBuilder;
+import android.text.Spanned;
 import android.text.method.LinkMovementMethod;
+import android.text.style.URLSpan;
 import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -716,8 +718,11 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
                 SpannableStringBuilder lines = new SpannableStringBuilder(next.extra);
                 if (lines.length() > 0) lines.append('\n');
                 setText(extra, lines.append(license));
-                extra.setMovementMethod(LinkMovementMethod.getInstance());
             }
+            // Rows are recycled: only a row whose license links to its terms keeps link taps.
+            boolean linked = license instanceof Spanned
+                && ((Spanned) license).getSpans(0, license.length(), URLSpan.class).length > 0;
+            extra.setMovementMethod(linked ? LinkMovementMethod.getInstance() : null);
             setText(pillSpeed, next.pillSpeed);
             setText(pillBackend, next.pillBackend);
             setText(pillPrimary, next.pillPrimary);

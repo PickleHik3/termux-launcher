@@ -386,7 +386,6 @@ final class TaiModelCentreRows {
         return "Stable Diffusion 1.5";
     }
 
-    /** Sizes the way every TAI screen writes them: binary units, one decimal from KB up. */
     /** Where the terms live for the licenses that are more than a plain OSI id; null for any other. */
     @Nullable
     static String licenseUrl(@Nullable String license) {
@@ -405,6 +404,7 @@ final class TaiModelCentreRows {
         return fact;
     }
 
+    /** Sizes the way every TAI screen writes them: binary units, one decimal from KB up. */
     @NonNull
     static String formatBytes(long bytes) {
         if (bytes <= 0L) return "0 B";
