@@ -14,7 +14,9 @@ import java.io.File;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class TaiModelSpec {
     public static final String BACKEND_LITERT_LM = "litert-lm";
@@ -514,16 +516,30 @@ public final class TaiModelSpec {
         return toolModeFor(backend, endpointCapabilities);
     }
 
+    /**
+     * The probe's answer per model file, keyed by path, length and modification time. Opening a
+     * multi-GB bundle natively takes seconds, and one /v1/models request reaches this 6-10 times
+     * per speculative-decoding model (spec copies, context-window policy, variants), so uncached
+     * the listing took 12-16 s on a phone. A replaced or re-downloaded file gets a new key.
+     */
+    private static final Map<String, Boolean> SPECULATIVE_PROBES = new ConcurrentHashMap<>();
+
     private static boolean liteRtPackageHasSpeculativeDecoding(@Nullable String localPath) {
         if (localPath == null || localPath.trim().isEmpty()) return false;
         File file = new File(localPath);
         if (!file.isFile() || !file.canRead()) return false;
+        String key = file.getAbsolutePath() + '|' + file.length() + '|' + file.lastModified();
+        Boolean known = SPECULATIVE_PROBES.get(key);
+        if (known != null) return known;
+        boolean has;
         // LiteRT-LM 0.18.0: ModelInfo.from() replaced Capabilities; only an LLM bundle answers.
         try (ModelInfo info = ModelInfo.from(file.getAbsolutePath())) {
-            return info instanceof LlmCapability && ((LlmCapability) info).hasSpeculativeDecodingSupport();
+            has = info instanceof LlmCapability && ((LlmCapability) info).hasSpeculativeDecodingSupport();
         } catch (Throwable ignored) {
-            return false;
+            has = false;
         }
+        SPECULATIVE_PROBES.put(key, has);
+        return has;
     }
 
     private static boolean hasMnnHint(@Nullable String path) {
