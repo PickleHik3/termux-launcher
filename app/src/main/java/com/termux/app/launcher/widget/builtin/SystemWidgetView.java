@@ -261,12 +261,14 @@ public class SystemWidgetView extends BuiltinWidgetView
         ramTail = tailValue(ui);
         tempTail = tailValue(ui);
         diskTail = tailValue(ui);
-        LinearLayout tail = ui.row(12,
-            BuiltinWidgetUi.flex(tailPair(ui, StatGlyphs.MEMORY, R.string.bw_device_ram, ramTail)),
-            BuiltinWidgetUi.flex(tailPair(ui, StatGlyphs.TEMPERATURE,
-                R.string.bw_device_temperature, tempTail)),
-            BuiltinWidgetUi.flex(tailPair(ui, StatGlyphs.DISK, R.string.bw_device_storage,
-                diskTail)));
+        // Each reading sits beside its glyph; the free room goes between the three pairs, so the
+        // first starts at the left edge, the last ends at the right and the middle one is centred.
+        LinearLayout tail = ui.row(0,
+            tailPair(ui, StatGlyphs.MEMORY, R.string.bw_device_ram, ramTail),
+            BuiltinWidgetUi.flex(new View(getContext())),
+            tailPair(ui, StatGlyphs.TEMPERATURE, R.string.bw_device_temperature, tempTail),
+            BuiltinWidgetUi.flex(new View(getContext())),
+            tailPair(ui, StatGlyphs.DISK, R.string.bw_device_storage, diskTail));
         tail.setBaselineAligned(false);
 
         // Both rows span the column: left at WRAP_CONTENT they shrank to their content, and the
@@ -279,15 +281,13 @@ public class SystemWidgetView extends BuiltinWidgetView
     }
 
     @NonNull private TextView tailValue(@NonNull BuiltinWidgetUi ui) {
-        TextView value = ui.text("", 13f, ui.style.monoMedium, ui.style.onSurface);
-        value.setGravity(Gravity.END);
-        return value;
+        return ui.text("", 13f, ui.style.monoMedium, ui.style.onSurface);
     }
 
     @NonNull private LinearLayout tailPair(@NonNull BuiltinWidgetUi ui, @NonNull String glyph,
                                            int label, @NonNull TextView value) {
         return baseline(ui.row(6, ui.statGlyph(glyph, 11f, ui.style.onSurfaceVariant,
-            getContext().getString(label)), BuiltinWidgetUi.flex(value)));
+            getContext().getString(label)), value));
     }
 
     /** A row whose children sit on one text baseline, the design's {@code align-items:baseline}. */
