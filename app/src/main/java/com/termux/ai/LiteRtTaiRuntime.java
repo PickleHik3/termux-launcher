@@ -7,7 +7,8 @@ import androidx.annotation.Nullable;
 
 import com.google.ai.edge.litertlm.Backend;
 import com.google.ai.edge.litertlm.BenchmarkInfo;
-import com.google.ai.edge.litertlm.Capabilities;
+import com.google.ai.edge.litertlm.LlmCapability;
+import com.google.ai.edge.litertlm.ModelInfo;
 import com.google.ai.edge.litertlm.Channel;
 import com.google.ai.edge.litertlm.Content;
 import com.google.ai.edge.litertlm.Contents;
@@ -597,7 +598,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         TaiModelProfile profile = TaiModelProfile.forModel(modelSpec);
         TaiDeviceCapabilities deviceCapabilities = TaiDeviceCapabilities.detect(appContext);
         if (!deviceCapabilities.liteRtLmAbiSupported) {
-            return error(501, "litert_lm_unsupported_abi", "LiteRT-LM 0.17.1 ships native libraries for arm64-v8a and x86_64 only.");
+            return error(501, "litert_lm_unsupported_abi", "LiteRT-LM 0.18.0 ships native libraries for arm64-v8a and x86_64 only.");
         }
         if (!deviceCapabilities.liteRtLmNativeLibrariesAvailable) {
             return error(501, "litert_lm_native_unavailable", "LiteRT-LM native libraries are not available in this APK.");
@@ -979,7 +980,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             modelPath,
             backend,
             imageInput ? visionBackend(modelSpec, options, profile, deviceCapabilities) : null,
-            // LiteRT-LM 0.17.1 also supports GPU/NPU audio acceleration; keep CPU as the default.
+            // LiteRT-LM 0.18.0 also supports GPU/NPU audio acceleration; keep CPU as the default.
             audioInput ? new Backend.CPU() : null,
             engineMaxTokens,
             imageInput ? 8 : null,
@@ -1135,8 +1136,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     @Nullable
     private Boolean speculativeDecodingFlag(@NonNull TaiRuntimeOptions options, @NonNull String modelPath) {
         if (!Boolean.TRUE.equals(options.speculativeDecodingEnabled)) return null;
-        try (Capabilities capabilities = new Capabilities(modelPath)) {
-            return capabilities.hasSpeculativeDecodingSupport() ? Boolean.TRUE : null;
+        try (ModelInfo info = ModelInfo.from(modelPath)) {
+            return info instanceof LlmCapability && ((LlmCapability) info).hasSpeculativeDecodingSupport() ? Boolean.TRUE : null;
         } catch (Exception ignored) {
             return null;
         }
