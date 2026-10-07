@@ -20,6 +20,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
 import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +31,8 @@ import java.util.List;
  * as picker cards (sample data), which is the text the design was drawn with.
  */
 @RunWith(RobolectricTestRunner.class)
+// Native graphics: real text metrics, so a label's width and height are the device's, not a stub's.
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class BuiltinWidgetRangeClipTest {
     private static final float DENSITY = 2.625f;
@@ -45,15 +48,11 @@ public class BuiltinWidgetRangeClipTest {
     private static int[][] sizesFor(@NonNull BuiltinWidgetSpan span) {
         int minW = span.columns == 1 ? 57 : span.minWidthDp;
         int minH = span.columns == 1 ? 57 : span.minHeightDp;
-        // "1.5x the design", held inside the bucket: the next bucket up starts at 109/245 dp wide
-        // and 56/115 dp tall, and a size there is that bucket's, not this one's.
-        int roomyW = Math.round(span.widthDp * 1.5f);
-        int roomyH = Math.round(span.heightDp * 1.5f);
-        if (span.columns < 4) roomyW = Math.min(roomyW, span.columns == 1 ? 108 : 244);
-        if (span.rows == 1) roomyH = Math.min(roomyH, span.columns == 1 ? 138 : 114);
-        if (span.columns == 1) roomyH = Math.min(roomyH, 300);
+        // 1.5x the design stays this bucket's: the view spans this bucket's cells, and the next
+        // bucket up is drawn only from 94% of its own design, which 1.5x of this one never reaches.
         return new int[][] {
-            {minW, minH}, {span.widthDp, span.heightDp}, {roomyW, roomyH}
+            {minW, minH}, {span.widthDp, span.heightDp},
+            {Math.round(span.widthDp * 1.5f), Math.round(span.heightDp * 1.5f)}
         };
     }
 
@@ -74,8 +73,12 @@ public class BuiltinWidgetRangeClipTest {
                         BuiltinWidgetView view = BuiltinWidgetFactory.create(context, kind,
                             services, style);
                         view.setPreview(true);
+                        view.setCells(span.columns, span.rows);
                         view.bind(null);
-                        int w = Math.round(size[0] * DENSITY), h = Math.round(size[1] * DENSITY);
+                        // Whole pixels that are not under the dp asked for: a minimum met in dp
+                        // must be met once rounded, as a cell's pixels are.
+                        int w = (int) Math.ceil(size[0] * DENSITY);
+                        int h = (int) Math.ceil(size[1] * DENSITY);
                         view.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
                             View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
                         view.layout(0, 0, w, h);

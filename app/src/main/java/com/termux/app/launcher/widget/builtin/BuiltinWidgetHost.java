@@ -80,6 +80,7 @@ public final class BuiltinWidgetHost implements WidgetGridView.BuiltinFactory,
             view = BuiltinWidgetFactory.create(context, kind, services, style());
             views.put(record.appWidgetId, view);
         }
+        view.setCells(record.cell.columnSpan(), record.cell.rowSpan());
         view.bind(record.sizeOptions());
         return view;
     }

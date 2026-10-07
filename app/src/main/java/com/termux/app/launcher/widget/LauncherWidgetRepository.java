@@ -637,6 +637,23 @@ public final class LauncherWidgetRepository {
             transaction.cell, ignored);
     }
 
+    /**
+     * A built-in widget that no longer exists (the shell widget went in 2026-10) leaves its cell
+     * empty rather than refusing the wall; the next commit writes the wall without it.
+     */
+    private static void dropRetiredBuiltins(@NonNull LinkedHashMap<Integer, LauncherWidgetRecord> loaded) {
+        java.util.Iterator<LauncherWidgetRecord> it = loaded.values().iterator();
+        while (it.hasNext()) {
+            LauncherWidgetRecord record = it.next();
+            if (record.builtinKind != null
+                && com.termux.app.launcher.widget.builtin.BuiltinWidgetKind.fromId(record.builtinKind) == null) {
+                android.util.Log.w("LauncherWidgets", "dropping retired built-in widget "
+                    + record.builtinKind);
+                it.remove();
+            }
+        }
+    }
+
     private void load(@Nullable String encoded) {
         if (encoded == null || encoded.trim().isEmpty()) return;
         try {
@@ -655,6 +672,7 @@ public final class LauncherWidgetRepository {
             WidgetGridDefinition loadedGrid = decodeGrid(root.getJSONObject("grid"));
             int loadedPages = Math.max(1, root.optInt("pages", 1));
             LinkedHashMap<Integer, LauncherWidgetRecord> loaded = decodeRecords(root, true);
+            dropRetiredBuiltins(loaded);
             WidgetAddTransaction loadedPending = root.has("pending")
                 ? decodeTransaction(root.getJSONObject("pending"), true, 0, 0) : null;
             if (!validatePaged(loadedGrid, loaded, loadedPending, loadedPages)) {

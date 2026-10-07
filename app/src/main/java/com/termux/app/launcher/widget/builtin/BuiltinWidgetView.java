@@ -44,6 +44,8 @@ public abstract class BuiltinWidgetView extends FrameLayout {
     @NonNull protected final BuiltinWidgetServices services;
     @NonNull private BuiltinWidgetStyle style;
     @NonNull private BuiltinWidgetSpan span = BuiltinWidgetSpan.ONE_BY_ONE;
+    /** The cells the widget spans on its grid; the bucket is chosen from them and the room. */
+    private int cellColumns = 1, cellRows = 1;
     @NonNull private Bundle config = new Bundle();
     private boolean preview;
     private boolean built;
@@ -84,10 +86,19 @@ public abstract class BuiltinWidgetView extends FrameLayout {
         if (changed) rebuild();
     }
 
+    /** The cells the widget spans on its grid, from its record. */
+    public final void setCells(int columns, int rows) {
+        if (columns == cellColumns && rows == cellRows) return;
+        cellColumns = columns;
+        cellRows = rows;
+        if (built) requestLayout();
+    }
+
     /** The bucket this view would draw at {@code widthPx}×{@code heightPx}. */
     @NonNull private BuiltinWidgetSpan spanForPixels(int widthPx, int heightPx) {
         float density = getResources().getDisplayMetrics().density;
-        return BuiltinWidgetSpan.forSize(widthPx / density, heightPx / density);
+        return BuiltinWidgetSpan.forSize(widthPx / density, heightPx / density,
+            cellColumns, cellRows);
     }
 
     @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {

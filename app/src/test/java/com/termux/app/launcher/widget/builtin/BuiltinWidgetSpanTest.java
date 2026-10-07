@@ -33,34 +33,43 @@ public class BuiltinWidgetSpanTest {
         assertEquals(null, BuiltinWidgetKind.fromId(null));
     }
 
-    @Test public void roomPicksTheLargestDesignThatFits() {
+    @Test public void roomAlonePromotesAtTheDesign() {
         assertEquals(BuiltinWidgetSpan.ONE_BY_ONE, BuiltinWidgetSpan.forSize(88, 92));
         assertEquals(BuiltinWidgetSpan.ONE_BY_ONE, BuiltinWidgetSpan.forSize(40, 40));
         assertEquals(BuiltinWidgetSpan.TWO_BY_ONE, BuiltinWidgetSpan.forSize(184, 92));
-        assertEquals(BuiltinWidgetSpan.FOUR_BY_TWO, BuiltinWidgetSpan.forSize(300, 150));
         assertEquals(BuiltinWidgetSpan.TWO_BY_TWO, BuiltinWidgetSpan.forSize(184, 192));
         assertEquals(BuiltinWidgetSpan.FOUR_BY_ONE, BuiltinWidgetSpan.forSize(376, 92));
         assertEquals(BuiltinWidgetSpan.FOUR_BY_TWO, BuiltinWidgetSpan.forSize(376, 192));
         assertEquals(BuiltinWidgetSpan.FOUR_BY_TWO, BuiltinWidgetSpan.forSize(1000, 1000));
+        // Just under the design is still the smaller bucket when the cells are not known.
+        assertEquals(BuiltinWidgetSpan.ONE_BY_ONE, BuiltinWidgetSpan.forSize(150, 126));
+        assertEquals(BuiltinWidgetSpan.TWO_BY_ONE, BuiltinWidgetSpan.forSize(300, 150));
     }
 
-    @Test public void androidsMinimumsDecideTheBucket() {
-        // Handheld ranges from the widget design guide: 2 cells 109 dp, 4 cells 245 dp wide;
-        // 1 row 56 dp, 2 rows 115 dp tall.
-        assertEquals(BuiltinWidgetSpan.TWO_BY_ONE, BuiltinWidgetSpan.forSize(109, 56));
-        assertEquals(BuiltinWidgetSpan.TWO_BY_TWO, BuiltinWidgetSpan.forSize(109, 115));
-        assertEquals(BuiltinWidgetSpan.FOUR_BY_ONE, BuiltinWidgetSpan.forSize(245, 56));
-        assertEquals(BuiltinWidgetSpan.FOUR_BY_TWO, BuiltinWidgetSpan.forSize(245, 115));
-        assertEquals(BuiltinWidgetSpan.ONE_BY_ONE, BuiltinWidgetSpan.forSize(108, 300));
-        assertEquals(BuiltinWidgetSpan.ONE_BY_ONE, BuiltinWidgetSpan.forSize(300, 55));
-        // A 2x1 cell on the 4x5 phone grid (about 183x126 dp) has the height of a two-row range.
-        assertEquals(BuiltinWidgetSpan.TWO_BY_TWO, BuiltinWidgetSpan.forSize(183, 126));
+    @Test public void aSpanKeepsItsBucketDownToAndroidsMinimum() {
+        // A 2x1 on the default phone grid (183x126 dp) is a 2x1, not a 2x2: one big row.
+        assertEquals(BuiltinWidgetSpan.TWO_BY_ONE, BuiltinWidgetSpan.forSize(183, 126, 2, 1));
+        // The same room spanning two rows of a dense grid is a 2x2.
+        assertEquals(BuiltinWidgetSpan.TWO_BY_TWO, BuiltinWidgetSpan.forSize(183, 126, 2, 2));
+        // A 2x1 on a six-column grid (119 dp) holds; on an eight-column one (90 dp) it is a 1x1.
+        assertEquals(BuiltinWidgetSpan.TWO_BY_ONE, BuiltinWidgetSpan.forSize(119, 126, 2, 1));
+        assertEquals(BuiltinWidgetSpan.ONE_BY_ONE, BuiltinWidgetSpan.forSize(90, 126, 2, 1));
+        // A 4x1 holds from 245 dp; a 4x2 from 245x115.
+        assertEquals(BuiltinWidgetSpan.FOUR_BY_ONE, BuiltinWidgetSpan.forSize(246, 126, 4, 1));
+        assertEquals(BuiltinWidgetSpan.TWO_BY_ONE, BuiltinWidgetSpan.forSize(244, 126, 4, 1));
+        assertEquals(BuiltinWidgetSpan.FOUR_BY_TWO, BuiltinWidgetSpan.forSize(245, 115, 4, 2));
+        assertEquals(BuiltinWidgetSpan.FOUR_BY_ONE, BuiltinWidgetSpan.forSize(245, 114, 4, 2));
+        // Below one row's minimum there is only the 1x1.
+        assertEquals(BuiltinWidgetSpan.ONE_BY_ONE, BuiltinWidgetSpan.forSize(300, 55, 4, 1));
     }
 
-    @Test public void aBucketIsNeverChosenBelowItsMinimum() {
-        assertEquals(BuiltinWidgetSpan.ONE_BY_ONE, BuiltinWidgetSpan.forSize(244, 55));
-        assertEquals(BuiltinWidgetSpan.TWO_BY_ONE, BuiltinWidgetSpan.forSize(244, 114));
-        assertEquals(BuiltinWidgetSpan.ONE_BY_ONE, BuiltinWidgetSpan.forSize(57, 57));
+    @Test public void moreRoomThanTheSpanPromotesAtTheDesign() {
+        // A 2x1 on a two-column grid has the whole width: it draws the 4x1.
+        assertEquals(BuiltinWidgetSpan.FOUR_BY_ONE, BuiltinWidgetSpan.forSize(386, 126, 2, 1));
+        // A 3x1 on the default grid (278 dp) stays a 2x1: under the 4x1's design.
+        assertEquals(BuiltinWidgetSpan.TWO_BY_ONE, BuiltinWidgetSpan.forSize(278, 126, 3, 1));
+        // A 1x2 has no bucket of its own: a column alone is a 1x1 however tall.
+        assertEquals(BuiltinWidgetSpan.ONE_BY_ONE, BuiltinWidgetSpan.forSize(87, 260, 1, 2));
     }
 
     @Test public void designedSizesFollowTheReferenceGrid() {

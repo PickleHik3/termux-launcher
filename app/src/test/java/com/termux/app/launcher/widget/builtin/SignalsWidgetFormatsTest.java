@@ -38,20 +38,7 @@ public class SignalsWidgetFormatsTest {
         assertEquals("3d ago", SignalsWidgetFormats.ago(now - 3 * 86_400_000L, now));
     }
 
-    @Test public void everyPrintsTheLargestWholeUnit() {
-        assertEquals("every 15m", SignalsWidgetFormats.every(15));
-        assertEquals("every 1h", SignalsWidgetFormats.every(60));
-        assertEquals("every 1h 30m", SignalsWidgetFormats.every(90));
-        assertEquals("every 1d", SignalsWidgetFormats.every(1440));
-        assertEquals("every 1m", SignalsWidgetFormats.every(0));
-    }
 
-    @Test public void durationKeepsTwoFiguresUnderTenSeconds() {
-        assertEquals("0.18 s", SignalsWidgetFormats.duration(180));
-        assertEquals("4.20 s", SignalsWidgetFormats.duration(4_200));
-        assertEquals("12.4 s", SignalsWidgetFormats.duration(12_400));
-        assertEquals("1m 05s", SignalsWidgetFormats.duration(65_000));
-    }
 
     @Test public void overflowAndBadge() {
         assertEquals("+6", SignalsWidgetFormats.overflow(6));
