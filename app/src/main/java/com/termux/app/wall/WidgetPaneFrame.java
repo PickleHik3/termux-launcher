@@ -69,6 +69,10 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         int widgetGridColumns();
         /** The rows the grid is showing now. */
         int widgetGridRows();
+        /** What this wall can hold; the wheels offer no more than that. */
+        @NonNull default com.termux.app.launcher.widget.WidgetGridCaps widgetGridCaps() {
+            return com.termux.app.launcher.widget.WidgetGridCaps.unbounded();
+        }
         /** A wheel moved: keep the grid this size, and reflow the page onto it. */
         void setWidgetGrid(int columns, int rows);
     }
@@ -333,7 +337,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         android.graphics.RectF tab = new android.graphics.RectF();
         mControls.tabBounds(tab);
         mGridSizePopup = com.termux.app.launcher.widget.WidgetGridSizePopup.show(this, tab,
-            mHost.widgetGridColumns(), mHost.widgetGridRows(), (columns, rows) -> {
+            mHost.widgetGridColumns(), mHost.widgetGridRows(), mHost.widgetGridCaps(),
+            (columns, rows) -> {
                 if (mHost != null) mHost.setWidgetGrid(columns, rows);
                 refreshGridSizeAction();
             });

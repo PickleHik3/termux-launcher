@@ -7,6 +7,9 @@ import android.content.res.ColorStateList;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.InputType;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.UnderlineSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -33,6 +36,7 @@ import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
+import com.termux.app.launcher.data.CategorySortLoadPolicy;
 import com.termux.app.launcher.data.LauncherCategoryCatalogue;
 import com.termux.app.launcher.data.LauncherCategoryPasteImporter;
 import com.termux.app.launcher.data.LauncherCategoryPasteNotification;
@@ -171,13 +175,38 @@ final class CategorySortDialogs {
                 ? R.string.tai_callers_category_remote_summary
                 : R.string.settings_app_drawer_category_sort_on_device_summary, modelName)
             : unavailable;
+        // What the sort will really load with: the accelerator its speed test chose, else the CPU.
+        CategorySortLoadPolicy.Decision load = onDeviceEnabled && !plan.remote && plan.model != null
+            ? CategorySortLoadPolicy.forContext(context, plan.model, plan.accelerator, 0) : null;
         String onDeviceNote = onDeviceEnabled
             ? context.getString(R.string.settings_app_drawer_category_sort_on_device_warning,
-                plan.estimatedMinutes(apps.size()))
+                plan.estimatedMinutes(apps.size(), load == null ? plan.accelerator : load.accelerator))
             : null;
         // A large model may make Android close cached background apps (tai-device-tiers spec section 4.4).
         if (onDeviceNote != null && plan.warnBackground) {
             onDeviceNote += "\n" + context.getString(R.string.tai_warn_background_apps);
+        }
+        // The row's one way forward, when it has one: a speed test when it runs unmeasured (a
+        // suggestion, never a gate: the row still starts the sort without it), or the Model centre
+        // when there is no model to run. A device that cannot run the model gets neither.
+        boolean missingModel = !plan.remote && model == null;
+        String suggestion = null;
+        String link = null;
+        Runnable onSuggestion = null;
+        if (load != null && !load.benchmarked) {
+            link = context.getString(R.string.settings_app_drawer_category_sort_speed_test_link);
+            suggestion = context.getString(R.string.settings_app_drawer_category_sort_speed_test_hint, link);
+            onSuggestion = () -> {
+                dialog.dismiss();
+                TaiBenchHomeFragment.open(activityOf(context), plan.model);
+            };
+        } else if (missingModel) {
+            link = context.getString(R.string.tai_model_centre_title);
+            suggestion = context.getString(R.string.settings_app_drawer_category_sort_get_model_hint, link);
+            onSuggestion = () -> {
+                dialog.dismiss();
+                TaiModelCentreFragment.open(activityOf(context), TaiModelCentreFragment.SEGMENT_GET);
+            };
         }
         container.addView(buildRow(context,
             R.drawable.ic_symbol_smart_toy,
@@ -188,7 +217,8 @@ final class CategorySortDialogs {
             () -> {
                 dialog.dismiss();
                 onDeviceChosen.run();
-            }));
+            },
+            suggestion, link, onSuggestion));
 
         if (onChangeModel != null) {
             container.addView(buildRow(context,
@@ -230,6 +260,25 @@ final class CategorySortDialogs {
                                  @Nullable String note,
                                  boolean enabled,
                                  @NonNull Runnable onClick) {
+        return buildRow(context, iconRes, title, summary, note, enabled, onClick, null, null, null);
+    }
+
+    /**
+     * As above, plus an optional suggestion line under the note: {@code suggestion} with {@code link}
+     * underlined inside it, the whole line a tap target of its own that runs {@code onSuggestion}
+     * instead of the card's click. It wraps, so a large font scale never clips it.
+     */
+    @NonNull
+    private static View buildRow(@NonNull Context context,
+                                 @DrawableRes int iconRes,
+                                 @NonNull String title,
+                                 @Nullable String summary,
+                                 @Nullable String note,
+                                 boolean enabled,
+                                 @NonNull Runnable onClick,
+                                 @Nullable String suggestion,
+                                 @Nullable String link,
+                                 @Nullable Runnable onSuggestion) {
         float density = context.getResources().getDisplayMetrics().density;
         int titleColor = enabled ? M3.onSurface(context) : M3.onSurfaceVariant(context);
         int summaryColor = M3.onSurfaceVariant(context);
@@ -287,6 +336,23 @@ final class CategorySortDialogs {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
             params.topMargin = Math.round(6 * density);
             texts.addView(noteView, params);
+        }
+
+        if (suggestion != null && !suggestion.isEmpty() && onSuggestion != null) {
+            SpannableString text = new SpannableString(suggestion);
+            int at = link == null ? -1 : suggestion.indexOf(link);
+            if (at >= 0) text.setSpan(new UnderlineSpan(), at, at + link.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            TextView suggestionView = new TextView(context);
+            suggestionView.setText(text);
+            M3.textAppearance(suggestionView, com.google.android.material.R.attr.textAppearanceBodySmall);
+            suggestionView.setTextColor(accent);
+            suggestionView.setMinHeight(Math.round(48 * density));
+            suggestionView.setGravity(Gravity.CENTER_VERTICAL);
+            suggestionView.setClickable(true);
+            suggestionView.setOnClickListener(v -> onSuggestion.run());
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            texts.addView(suggestionView, params);
         }
 
         row.addView(texts, new LinearLayout.LayoutParams(
@@ -400,6 +466,17 @@ final class CategorySortDialogs {
                 }
             });
         });
+    }
+
+    /** The Activity under a (possibly wrapped) context, or null. */
+    @Nullable
+    private static Activity activityOf(@NonNull Context context) {
+        Context current = context;
+        while (current instanceof ContextWrapper) {
+            if (current instanceof Activity) return (Activity) current;
+            current = ((ContextWrapper) current).getBaseContext();
+        }
+        return null;
     }
 
     /**

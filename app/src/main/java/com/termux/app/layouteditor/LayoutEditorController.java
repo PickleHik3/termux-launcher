@@ -270,7 +270,6 @@ public final class LayoutEditorController {
 
     /** The place the session is open on, or null while it is not. */
     @Nullable
-    @VisibleForTesting
     public PaneWallPage editedPlace() {
         return mPlan == null ? null : mPlan.place();
     }
@@ -357,11 +356,60 @@ public final class LayoutEditorController {
         return mPlan != null && mPlan.isDirty();
     }
 
+    /** The dock's height scale in the orientation being edited, or -1 with no session. */
+    public float dockHeightScale() {
+        return mPlan == null ? -1f : mPlan.dockHeightScale();
+    }
+
+    /**
+     * The dock's height, as the Look editor's Dock size slider writes it: the same write the
+     * dock handle makes in Layout mode, so the session's Undo and dirty state cover it.
+     */
+    public void setDockHeightScale(float scale) {
+        if (mPlan != null)
+            afterCanvasWrite(mPlan.setDockHeightScale(scale));
+    }
+
+    /**
+     * {@link #setDockHeightScale} under a finger that has not let go: the size is written, but the
+     * arrangement is not re-laid for it. The caller shows the dock at its new height with its own
+     * geometry preview (no terminal resize), and {@link #relayHeldWrites} re-lays the place once
+     * the finger lifts.
+     */
+    public void holdDockHeightScale(float scale) {
+        if (mPlan == null)
+            return;
+        LayoutEditorPlan.Drop drop = mPlan.setDockHeightScale(scale);
+        if (drop == LayoutEditorPlan.Drop.LIVE)
+            mRelayHeld = true;
+        if (drop != LayoutEditorPlan.Drop.NONE)
+            mSyncHeld = true;
+    }
+
+    /** The held writes' one re-lay and restatement; nothing when none are held. */
+    public void relayHeldWrites() {
+        boolean relay = mRelayHeld;
+        boolean sync = mSyncHeld;
+        mRelayHeld = false;
+        mSyncHeld = false;
+        if (relay)
+            mHost.applyPlaceArrangement();
+        if (sync && mPlan != null)
+            sync();
+    }
+
+    /** A held write owes the live place a re-lay, or the canvas a restatement. */
+    private boolean mRelayHeld;
+    private boolean mSyncHeld;
+
     /** Undo: every bar back where the session found it, without leaving the editor. */
     public void revert() {
         if (mPlan == null)
             return;
         mPlan.revert();
+        // The re-lay below covers anything a drag still held.
+        mRelayHeld = false;
+        mSyncHeld = false;
         // The bars have to be back on their edges before the chrome is re-read.
         mHost.applyPlaceArrangement();
         if (mViews != null)
@@ -385,6 +433,8 @@ public final class LayoutEditorController {
     public void end() {
         if (mPlan == null)
             return;
+        // A size a drag still held is kept, as every write is: the place is re-laid for it.
+        relayHeldWrites();
         PaneWallPage place = mPlan.place();
         mPlan = null;
         mHeldHandle = null;

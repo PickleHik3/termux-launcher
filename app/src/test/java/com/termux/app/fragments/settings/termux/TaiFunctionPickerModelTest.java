@@ -98,8 +98,9 @@ public class TaiFunctionPickerModelTest {
             item(TaiTierPolicy.WHISPER_SMALL, 300L << 20, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT),
             item(TaiModelCatalog.KITTEN_TTS_NANO_ID, 90L << 20, TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH),
             item(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID, 175L << 20, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS),
-            item(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, 55L << 20, TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION),
-            item(TaiModelCatalog.U2NET_ID, 170L << 20, TaiModelSpec.CAPABILITY_SUBJECT_SEGMENTATION));
+            // Retired vision tools: never offered to any function.
+            item("depth-anything-3-small", 55L << 20, TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION),
+            item("u2net", 170L << 20, TaiModelSpec.CAPABILITY_SUBJECT_SEGMENTATION));
     }
 
     private TaiFunctionPickerModel.Model build(TaiFunction function, Env env) {
@@ -168,12 +169,12 @@ public class TaiFunctionPickerModelTest {
     }
 
     @Test
-    public void theReaderListsOnlyModelsThatSeeImagesUnderTheirBaseIds() {
+    public void theCategoriesListEveryChatModelUnderItsBaseId() {
         installGemma();
         install("text-only", GIB, TaiModelSpec.CAPABILITY_TEXT_CHAT);
-        List<TaiFunctionPickerModel.Entry> onPhone = build(TaiFunction.WALLPAPER_READER, env(12, 34, GpuPath.YES)).entries(Section.ON_PHONE);
+        List<TaiFunctionPickerModel.Entry> onPhone = build(TaiFunction.APP_CATEGORIES, env(12, 34, GpuPath.YES)).entries(Section.ON_PHONE);
         // The stored pick is the file, not its -vision variant.
-        assertEquals(Arrays.asList(E2B, E4B), values(onPhone));
+        assertTrue(values(onPhone).containsAll(Arrays.asList(E2B, E4B, "text-only")));
     }
 
     @Test
@@ -270,15 +271,6 @@ public class TaiFunctionPickerModelTest {
     }
 
     @Test
-    public void theReadersRemoteEntryNeedsAModelThatUnderstandsImages() {
-        remoteConfigured = true;
-        remoteImages = false;
-        assertTrue(build(TaiFunction.WALLPAPER_READER, env(12, 34, GpuPath.YES)).entries(Section.REMOTE).isEmpty());
-        remoteImages = true;
-        assertEquals(1, build(TaiFunction.WALLPAPER_READER, env(12, 34, GpuPath.YES)).entries(Section.REMOTE).size());
-    }
-
-    @Test
     public void aRemotePickMarksTheRemoteEntryAndPreferRemoteRenamesAutomatic() {
         installGemma();
         remoteConfigured = true;
@@ -299,9 +291,8 @@ public class TaiFunctionPickerModelTest {
     // ----------------------------------------------------------------------------- without a model
 
     @Test
-    public void withoutAModelIsRulesOnlyRawTextOrOffWhereTheFunctionHasOne() {
+    public void withoutAModelIsRawTextOrOffWhereTheFunctionHasOne() {
         Env pong = env(12, 34, GpuPath.YES);
-        assertEquals("RULES_ONLY", build(TaiFunction.WALLPAPER_READER, pong).entries(Section.WITHOUT).get(0).title);
         assertEquals("RAW_TEXT", build(TaiFunction.TIDY_DICTATION, pong).entries(Section.WITHOUT).get(0).title);
         assertEquals("OFF", build(TaiFunction.APP_CATEGORIES, pong).entries(Section.WITHOUT).get(0).title);
         assertEquals(TaiFunctionModels.VALUE_OFF, build(TaiFunction.APP_CATEGORIES, pong).entries(Section.WITHOUT).get(0).value);
@@ -324,8 +315,6 @@ public class TaiFunctionPickerModelTest {
         assertTrue(get.get(0).warnBackground);
         assertEquals(Collections.singletonList(TaiTierPolicy.WHISPER_SMALL),
             values(build(TaiFunction.VOICE_TYPING, env(12, 34, GpuPath.YES)).entries(Section.GET)));
-        assertEquals(Collections.singletonList(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID),
-            values(build(TaiFunction.WALLPAPER_DEPTH, env(12, 34, GpuPath.YES)).entries(Section.GET)));
     }
 
     @Test
@@ -336,18 +325,18 @@ public class TaiFunctionPickerModelTest {
     }
 
     @Test
-    public void tierOneRecommendsNoLlmAndTheReaderHasNoGetEntriesBelowApi34() {
+    public void tierOneRecommendsNoLlm() {
         for (TaiFunctionPickerModel.Entry entry : build(TaiFunction.ASSISTANT, env(6, 34, GpuPath.YES)).entries(Section.GET)) {
             assertFalse(entry.suggested);
             assertEquals("FIT_BIGGER", entry.detail);
         }
-        assertTrue(build(TaiFunction.WALLPAPER_READER, env(12, 33, GpuPath.YES)).entries(Section.GET).isEmpty());
     }
 
     @Test
-    public void theCutOutIsNeverPickable() {
-        List<TaiFunctionPickerModel.Entry> get = build(TaiFunction.WALLPAPER_DEPTH, env(12, 34, GpuPath.YES)).entries(Section.GET);
-        assertFalse(values(get).contains(TaiModelCatalog.U2NET_ID));
+    public void aVisionToolIsNeverPickable() {
+        List<TaiFunctionPickerModel.Entry> get = build(TaiFunction.ASSISTANT, env(12, 34, GpuPath.YES)).entries(Section.GET);
+        assertFalse(values(get).contains("u2net"));
+        assertFalse(values(get).contains("depth-anything-3-small"));
     }
 
     // ----------------------------------------------------------------------------- the chain
@@ -355,7 +344,7 @@ public class TaiFunctionPickerModelTest {
     @Test
     public void theFallbackChainLineIsReadOnlyTextBelowTheList() {
         installGemma();
-        assertEquals("CHAIN[" + E2B + " → rules_only]", build(TaiFunction.WALLPAPER_READER, env(12, 34, GpuPath.YES)).chainLine);
+        assertEquals("CHAIN[" + E4B + " → raw_text]", build(TaiFunction.TIDY_DICTATION, env(12, 34, GpuPath.YES)).chainLine);
         // Search falls back to the other EmbeddingGemma 2 file, then the v1 300M a phone may still carry.
         assertEquals("CHAIN[" + TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID + " → " + TaiModelCatalog.EMBEDDING_GEMMA_300M_ID + "]",
             build(TaiFunction.EMBEDDINGS, env(12, 34, GpuPath.YES)).chainLine);

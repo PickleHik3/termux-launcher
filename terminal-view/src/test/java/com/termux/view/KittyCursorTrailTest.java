@@ -59,6 +59,27 @@ public class KittyCursorTrailTest {
         assertTrue(trail.cornerX(0) < 11 * CELL_W);
     }
 
+    /**
+     * kitty's {@code window_changed}: a move into another window always trails, even one that lands
+     * inside the start threshold; the same small move inside one window does not.
+     */
+    @Test
+    public void moveIntoAnotherPaneTrailsInsideTheThreshold() {
+        KittyCursorTrail.Config cfg = config(0, 2, 2);
+        KittyCursorTrail samePane = new KittyCursorTrail();
+        samePane.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, 7L, CELL_W, CELL_H, cfg);
+        samePane.update(16L, CELL_W, 0f, 2 * CELL_W, CELL_H, true, 0L, false, 7L,
+            CELL_W, CELL_H, cfg);
+        assertFalse(samePane.moveStartedOnLastUpdate());
+
+        KittyCursorTrail otherPane = new KittyCursorTrail();
+        otherPane.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, 7L, CELL_W, CELL_H, cfg);
+        assertTrue(otherPane.update(16L, CELL_W, 0f, 2 * CELL_W, CELL_H, true, 0L, false, 8L,
+            CELL_W, CELL_H, cfg));
+        assertTrue(otherPane.moveStartedOnLastUpdate());
+        assertTrue(otherPane.needsRender());
+    }
+
     /** Until {@code cursor_trail}'s delay elapses, the target must not move at all. */
     @Test
     public void delayGatesWhenTheTargetIsPickedUp() {
@@ -96,6 +117,23 @@ public class KittyCursorTrailTest {
             leadingRemaining < trailingRemaining);
     }
 
+    /**
+     * kitty spreads decay over the dots of all four corners, a corner that has arrived counting as
+     * zero: when an underline cursor turns into a block in place, only the top corners move, and
+     * against the settled bottom ones they lead, so they ease with decay_fast.
+     */
+    @Test
+    public void cornersStillMovingAreSpreadAgainstArrivedOnes() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(0, 0, 0);
+        float underlineTop = CELL_H * 3f / 4f;
+        trail.update(0L, 0f, underlineTop, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        trail.update(16L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        // decay_fast 0.1 s over 16 ms covers 1 - 2^-1.6 = 67% of the way; decay_slow only 24%.
+        float covered = (underlineTop - trail.cornerY(0)) / underlineTop;
+        assertEquals(1f - (float) Math.pow(2.0, -1.6), covered, 1e-3f);
+    }
+
     /** DECTCEM on fades the trail in; off, it fades back out. Both driven by decay_slow. */
     @Test
     public void opacityFadesInWhenCursorIsShownAndOutWhenHidden() {
@@ -104,8 +142,7 @@ public class KittyCursorTrailTest {
         // First frame has no elapsed time to integrate over, so opacity starts at zero.
         trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
         assertEquals(0f, trail.opacity(), 1e-4f);
-        // DECTCEM on: opacity climbs towards one over decay_slow seconds. Driven in 16 ms frames,
-        // since the engine clamps a single step to 1/20 s so a paused app cannot jump the trail.
+        // DECTCEM on: opacity climbs towards one over decay_slow seconds, driven in 16 ms frames.
         long t = runFrames(trail, 0L, 200L, true, cfg);
         assertTrue(trail.opacity() > 0f);
         assertTrue(trail.opacity() < 1f);
@@ -151,6 +188,72 @@ public class KittyCursorTrailTest {
         assertFalse(trail.needsRender());
     }
 
+    /**
+     * kitty stops rendering once every corner is within half a <em>pixel</em> of its edge
+     * ({@code g.dx / cell_size.width * 0.5}), not half a cell: a trail that stopped half a cell
+     * early left its trailing edge frozen as a strip beside the cursor.
+     */
+    @Test
+    public void trailStopsOnlyWithinHalfAPixelOfTheCursor() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(0, 0, 0);
+        trail.update(0L, 400f, 0f, 410f, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        // Enter: from column 40 to the first column, three lines down.
+        float left = 0f, top = CELL_H * 3, right = CELL_W, bottom = CELL_H * 4;
+        long t = 16L;
+        while (trail.update(t, left, top, right, bottom, true, 0L, false, CELL_W, CELL_H, cfg)) {
+            t += 16L;
+            assertTrue("the trail must settle", t < 5_000L);
+        }
+        for (int i = 0; i < KittyCursorTrail.CORNERS; i++) {
+            float edgeX = (i == 0 || i == 1) ? right : left;
+            float edgeY = (i == 0 || i == 3) ? top : bottom;
+            assertEquals("corner " + i + " x", edgeX, trail.cornerX(i), 0.5f);
+            assertEquals("corner " + i + " y", edgeY, trail.cornerY(i), 0.5f);
+        }
+    }
+
+    /**
+     * kitty's loop wakes for the output that moves the cursor, inside the delay, so the move is
+     * integrated from about when the cursor moved. Seconds of idle before it must not be folded
+     * into the first step, or every trail would start mostly finished.
+     */
+    @Test
+    public void moveAfterLongIdleStartsFromTheOldCursor() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(10, 2, 2);
+        // The first frame lands inside the delay window, so it asks for one more; a second later
+        // the trail is settled and idle.
+        trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        assertFalse(trail.update(1_000L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H,
+            cfg));
+        // Five seconds later the cursor jumps 50 cells; the first frame lands 12 ms after it.
+        long movedAt = 6_000L;
+        assertTrue(trail.update(movedAt + 12L, 500f, 0f, 510f, CELL_H, true, movedAt, false,
+            CELL_W, CELL_H, cfg));
+        assertTrue(trail.moveStartedOnLastUpdate());
+        // 12 ms of decay_slow (0.4 s) moves a trailing corner about 19% of the way, and 12 ms of
+        // decay_fast about 56%; the old 50 ms clamp moved them 58% and 97%.
+        float trailingCovered = trail.cornerX(3) / 500f;
+        assertTrue("trailing corner covered " + trailingCovered, trailingCovered < 0.3f);
+        float leadingCovered = (trail.cornerX(0) - CELL_W) / 500f;
+        assertTrue("leading corner covered " + leadingCovered, leadingCovered < 0.7f);
+    }
+
+    /** kitty does not clamp the step: a stalled loop resumes by finishing the trail, not by jumping. */
+    @Test
+    public void stalledLoopFinishesTheTrail() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(0, 0, 0);
+        trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        assertTrue(trail.update(16L, 500f, 0f, 510f, CELL_H, true, 0L, false, CELL_W, CELL_H,
+            cfg));
+        trail.update(3_000L, 500f, 0f, 510f, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        assertFalse(trail.needsRender());
+        assertEquals(510f, trail.cornerX(0), 0.5f);
+        assertEquals(500f, trail.cornerX(3), 0.5f);
+    }
+
     /** A live-resize-style discontinuity snaps the corners with no smear across the jump. */
     @Test
     public void snapRequestSkipsTheSmearOnce() {
@@ -160,6 +263,28 @@ public class KittyCursorTrailTest {
         trail.requestSnapOnNextUpdate();
         trail.update(16L, 500f, 0f, 510f, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
         assertEquals(510f, trail.cornerX(0), 1e-4f);
+        assertFalse(trail.needsRender());
+    }
+
+    /**
+     * A snap asked for while the cursor's own move is still inside the delay (a keyboard resize
+     * reflowing the prompt) lands on the new target at once; it must not be spent on the old one
+     * and leave the next frame to smear across the resize.
+     */
+    @Test
+    public void snapInsideTheDelayLandsOnTheNewTarget() {
+        KittyCursorTrail trail = new KittyCursorTrail();
+        KittyCursorTrail.Config cfg = config(10, 2, 2);
+        trail.update(0L, 0f, 0f, CELL_W, CELL_H, true, 0L, false, CELL_W, CELL_H, cfg);
+        trail.requestSnapOnNextUpdate();
+        // The reflow moved the cursor 20 rows at t=1000; the first frame lands 4 ms later.
+        trail.update(1_004L, 0f, 400f, CELL_W, 420f, true, 1_000L, false, CELL_W, CELL_H, cfg);
+        assertEquals(400f, trail.cornerY(0), 1e-4f);
+        assertFalse(trail.moveStartedOnLastUpdate());
+        // Past the delay, nothing is left to trail.
+        assertFalse(trail.update(1_020L, 0f, 400f, CELL_W, 420f, true, 1_000L, false,
+            CELL_W, CELL_H, cfg));
+        assertFalse(trail.moveStartedOnLastUpdate());
         assertFalse(trail.needsRender());
     }
 

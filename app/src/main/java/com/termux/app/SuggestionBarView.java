@@ -107,12 +107,14 @@ import com.termux.app.launcher.popup.MenuRow;
 import com.termux.app.launcher.popup.MenuRowFactory;
 import com.termux.app.launcher.popup.MenuRowWidths;
 import com.termux.app.launcher.popup.MenuSpec;
+import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.app.launcher.icon.DockIconCache;
 import com.termux.app.launcher.icon.RenderedIconDrawable;
 import com.termux.app.launcher.data.IconPack;
 import com.termux.app.launcher.data.IconPackDrawableItem;
 import com.termux.app.launcher.data.IconPackRepository;
 import com.termux.app.launcher.data.LauncherIconResolver;
+import com.termux.app.launcher.data.PinnedArtworkMemo;
 import com.termux.app.launcher.notifications.LauncherNotificationBadgeStore;
 import com.termux.app.launcher.notifications.NotificationBadgeFrame;
 import com.termux.app.launcher.notifications.NotificationCardSurface;
@@ -263,6 +265,28 @@ public final class SuggestionBarView extends GridLayout
         DockIconCache.memoryClassMb(getContext()),
         () -> getContext().getPackageManager().getDefaultActivityIcon(),
         entry -> LauncherAppDataProvider.getInstance(getContext()).icons().artwork(entry));
+    /**
+     * Binds the dock's and the drawer's icons without rendering on the main thread: an icon the
+     * cache holds binds at once, a missing one is rendered on the icon thread — into the same
+     * budgeted caches — and fades in over a quiet tile. See {@link AsyncIconBinder}. Only this
+     * view holds the binder; what it queues reaches it, and through it this view and the cache,
+     * weakly.
+     */
+    private final AsyncIconBinder iconBinder = new AsyncIconBinder(
+        new AsyncIconBinder.Renderer() {
+            @Override
+            public Drawable peek(@NonNull LauncherAppEntry entry, int sizePx) {
+                return iconCache.peek(entry, sizePx);
+            }
+
+            @Override
+            public Drawable render(@NonNull LauncherAppEntry entry, int sizePx) {
+                return iconCache.icon(entry, sizePx);
+            }
+        },
+        AsyncIconBinder.sharedWorker(),
+        AsyncIconBinder.mainThreadExecutor(),
+        this::iconTileColor);
     /** Visible alpha bounds per drawable; avoids rescanning custom/icon-pack artwork on every drag event. */
     private final Map<Drawable, RectF> drawableVisibleBoundsCache = new WeakHashMap<>();
     private final Map<Drawable, FocusOutlineRenderer.Visual> focusOutlineVisualCache = new WeakHashMap<>();
@@ -287,6 +311,14 @@ public final class SuggestionBarView extends GridLayout
     private final Map<String, WeakReference<View>> launchTargetViewsByPackage = new HashMap<>();
     private final Map<View, ValueAnimator> launchTouchAnimators = new WeakHashMap<>();
     private final Map<String, LauncherAppEntry> resolvedRefCache = new HashMap<>();
+    /**
+     * What {@link #resolvePinnedApp} last answered per pinned item, so a dock rebuild does not
+     * load each override or pinned-pack drawable from its pack again. Keyed on the item, its
+     * override, the packs in force with their versions and the day (calendar icons); cleared with
+     * the rendered caches whenever artwork is invalidated.
+     */
+    private final PinnedArtworkMemo<Drawable, LauncherIconResolver.ResolvedIcon> pinnedArtworkMemo =
+        new PinnedArtworkMemo<>(64);
     private final Map<String, List<ShortcutInfo>> shortcutCache = new HashMap<>();
     private final Paint swipePreviewBadgePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint swipePreviewBadgeStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -703,6 +735,8 @@ public final class SuggestionBarView extends GridLayout
             }
         }
         attachNotificationBadgeListener();
+        // Renders parked while the window was away, for cells still waiting on them.
+        iconBinder.resumeAll();
         if (configRepository != null) configRepository.addListener(configListener);
         LauncherAppDataProvider.getInstance(getContext()).addIconArtworkListener(iconArtworkListener);
         // A catalogue swap can land on a detached row; re-render on the way back in, since the
@@ -729,6 +763,8 @@ public final class SuggestionBarView extends GridLayout
         if (configRepository != null) configRepository.removeListener(configListener);
         LauncherAppDataProvider existing = LauncherAppDataProvider.peekInstance();
         if (existing != null) existing.removeIconArtworkListener(iconArtworkListener);
+        // Nothing is rendered, or kept queued, for a window that has gone.
+        iconBinder.cancelAll();
     }
 
     @Override
@@ -992,6 +1028,7 @@ public final class SuggestionBarView extends GridLayout
     private void invalidateRenderedIconCaches() {
         launcherTextColorCache = null;
         iconCache.invalidateAll();
+        pinnedArtworkMemo.clear();
         drawableVisibleBoundsCache.clear();
         focusOutlineVisualCache.clear();
         for (ValueAnimator animator : new ArrayList<>(terminalFocusOutlineAnimators.values())) {
@@ -1422,7 +1459,7 @@ public final class SuggestionBarView extends GridLayout
             iconResolver = new LauncherIconResolver(getContext());
         }
         if (iconPackRepository == null) {
-            iconPackRepository = new IconPackRepository(getContext());
+            iconPackRepository = IconPackRepository.getInstance(getContext());
         }
         syncIconPackIdentity();
         if (!appDataProvider.hasLoadedApps()) {
@@ -3486,6 +3523,40 @@ public final class SuggestionBarView extends GridLayout
         return iconForDisplay(entry, sizePx);
     }
 
+    /**
+     * Shows {@code entry}'s rendered icon in {@code view} without rendering on the main thread: at
+     * once when the cache holds it, otherwise as a quiet tile the icon fades in over once the
+     * worker has rendered it. The drawer's cells and the dock's buttons bind through here;
+     * {@link #getRenderedIcon} stays for callers that need the drawable in hand, such as a drag.
+     *
+     * @return true when the icon was bound now
+     */
+    public boolean bindRenderedIcon(@NonNull ImageView view, @NonNull LauncherAppEntry entry,
+                                    int sizePx) {
+        if (sizePx <= 0) {
+            AsyncIconBinder.cancel(view);
+            view.setImageDrawable(iconForDisplay(entry, sizePx));
+            return true;
+        }
+        return iconBinder.bind(view, entry, sizePx, entry.icon);
+    }
+
+    /**
+     * Renders {@code entries} at {@code sizePx} on the worker ahead of their cells, so a page
+     * about to be shown binds from the cache. Capped at {@link AsyncIconBinder#MAX_PREFETCH}.
+     */
+    public void prefetchRenderedIcons(@NonNull List<LauncherAppEntry> entries, int sizePx) {
+        iconBinder.prefetch(entries, sizePx);
+    }
+
+    /**
+     * The tile an icon shows while it is rendered: the launcher's own on-surface tone, which the
+     * scheme chrome already drives, at a low alpha so it reads as a quiet stand-in on any glass.
+     */
+    private int iconTileColor() {
+        return withAlphaComponent(getLauncherTextColor(), 0x1F);
+    }
+
     /** Read-only budget shared by dock and drawer rendered icons. */
     public int getRenderedIconCacheBudgetBytes() {
         return iconCache.budgetBytes();
@@ -3500,8 +3571,7 @@ public final class SuggestionBarView extends GridLayout
 
         ImageButton imageButton = new ImageButton(getContext());
         int size = iconSizePx();
-        Drawable icon = iconForDisplay(entry, size);
-        imageButton.setImageDrawable(icon);
+        bindRenderedIcon(imageButton, entry, size);
         imageButton.setScaleType(ImageButton.ScaleType.CENTER_INSIDE);
         imageButton.setAdjustViewBounds(true);
         imageButton.setPadding(0, 0, 0, 0);
@@ -3590,22 +3660,28 @@ public final class SuggestionBarView extends GridLayout
                 ? buildLaunchAnimationContext(launchSourceView)
                 : null;
             Bundle options = launchAnimationContext != null ? launchAnimationContext.options : null;
-            if (!LauncherAppLauncher.tryStartProfileMainActivity(context, entry, options)) {
-                Log.w(LOG_TAG, "Failed to launch cloned/profile package " + entry.appRef.packageName
-                    + " activity=" + entry.appRef.activityName + " user=" + entry.appRef.userId);
-                return;
-            }
-            if (activeAzLetter != null) {
-                clearAzPreview();
-            }
-            getUsageStatsStore().recordLaunch(entry.appRef.stableId());
-            invalidateMostUsedCache();
-            if (terminalView != null) {
-                terminalView.clearInputLine();
-            }
-            dismissFolderPopup();
-            dismissAppContextPopup();
-            dismissShortcutsPopup();
+            // LauncherApps answers at once; only its am fallback answers later, off main.
+            LauncherAppLauncher.startProfileMainActivity(context, entry, options, (launched, later) -> {
+                if (!launched) {
+                    Log.w(LOG_TAG, "Failed to launch cloned/profile package " + entry.appRef.packageName
+                        + " activity=" + entry.appRef.activityName + " user=" + entry.appRef.userId);
+                    return;
+                }
+                // A late answer finds the bar as it is now; one that has left the window has
+                // nothing left to tidy.
+                if (later && !isAttachedToWindow()) return;
+                if (activeAzLetter != null) {
+                    clearAzPreview();
+                }
+                getUsageStatsStore().recordLaunch(entry.appRef.stableId());
+                invalidateMostUsedCache();
+                if (terminalView != null) {
+                    terminalView.clearInputLine();
+                }
+                dismissFolderPopup();
+                dismissAppContextPopup();
+                dismissShortcutsPopup();
+            });
             return;
         }
         PackageManager packageManager = context.getPackageManager();
@@ -3629,18 +3705,14 @@ public final class SuggestionBarView extends GridLayout
             ? buildLaunchAnimationContext(launchSourceView)
             : null;
 
-        Intent pkgDefault = packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
-        ComponentName pkgDefaultComponent = pkgDefault != null ? pkgDefault.getComponent() : null;
-        ComponentName explicitComponent = explicit != null ? explicit.getComponent() : null;
-        boolean explicitIsPackageDefault = sameComponent(explicitComponent, pkgDefaultComponent);
-
-        boolean launched = false;
-        if (explicitIsPackageDefault && tryStartActivity(context, pkgDefault, launchAnimationContext)) {
-            launched = true;
-        } else if (tryStartActivity(context, explicit, launchAnimationContext)) {
-            launched = true;
-        } else if (!explicitIsPackageDefault && tryStartActivity(context, pkgDefault, launchAnimationContext)) {
-            launched = true;
+        // The catalogue already names the component: start it as it is and ask the package
+        // manager for the package's own launch intent only when that fails, rather than resolving
+        // it on every tap. A Launcher3-style launch intent is exactly this explicit one.
+        boolean launched = tryStartActivity(context, explicit, launchAnimationContext);
+        Intent pkgDefault = null;
+        if (!launched) {
+            pkgDefault = packageManager.getLaunchIntentForPackage(entry.appRef.packageName);
+            launched = tryStartActivity(context, pkgDefault, launchAnimationContext);
         }
 
         Intent resolveFallback = null;
@@ -3782,14 +3854,40 @@ public final class SuggestionBarView extends GridLayout
             return entry;
         }
         Drawable globalArtwork = artworkOrNull(entry);
-        LauncherIconResolver.ResolvedIcon resolvedIcon = getIconResolver().resolvePinnedDetailed(
-            entry.appRef, item.iconOverride, globalArtwork, entry.iconPackArtwork);
+        String memoKey = pinnedArtworkKey(entry, item);
+        LauncherIconResolver.ResolvedIcon resolvedIcon = pinnedArtworkMemo.get(memoKey, globalArtwork);
+        if (resolvedIcon == null) {
+            resolvedIcon = getIconResolver().resolvePinnedDetailed(
+                entry.appRef, item.iconOverride, globalArtwork, entry.iconPackArtwork);
+            pinnedArtworkMemo.put(memoKey, globalArtwork, resolvedIcon);
+        }
         Drawable pinnedIcon = resolvedIcon.drawable;
         if ((pinnedIcon == null || pinnedIcon == globalArtwork)
             && resolvedIcon.iconPackArtwork == entry.iconPackArtwork) {
             return entry;
         }
         return new LauncherAppEntry(entry.appRef, entry.label, pinnedIcon, resolvedIcon.iconPackArtwork);
+    }
+
+    /**
+     * Everything a pinned item's artwork depends on besides the global icon it falls back to:
+     * the item, its override, the icon packs in force (with their versions, through the
+     * provider's identity), whether the global icon is pack artwork, and the day of the month,
+     * which picks a calendar icon.
+     */
+    @NonNull
+    private String pinnedArtworkKey(@NonNull LauncherAppEntry entry, @NonNull PinnedAppItem item) {
+        LauncherAppDataProvider provider = appDataProvider != null
+            ? appDataProvider : LauncherAppDataProvider.peekInstance();
+        StringBuilder key = new StringBuilder(entry.appRef.stableId()).append('\n');
+        if (item.iconOverride != null && item.iconOverride.isValid()) {
+            key.append(item.iconOverride.iconPackPackage).append('/')
+                .append(item.iconOverride.drawableName);
+        }
+        key.append('\n').append(provider == null ? "" : provider.iconPackIdentity())
+            .append('\n').append(entry.iconPackArtwork)
+            .append('\n').append(java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_MONTH));
+        return key.toString();
     }
 
     private LauncherAppEntry folderSyntheticEntry(@NonNull PinnedFolderItem folder) {
@@ -3924,7 +4022,7 @@ public final class SuggestionBarView extends GridLayout
     @NonNull
     private IconPackRepository getIconPackRepository() {
         if (iconPackRepository == null) {
-            iconPackRepository = new IconPackRepository(getContext());
+            iconPackRepository = IconPackRepository.getInstance(getContext());
         }
         return iconPackRepository;
     }
@@ -3977,10 +4075,6 @@ public final class SuggestionBarView extends GridLayout
             Log.d(LOG_TAG, "launch failed for intent " + intent + ": " + e.getMessage());
             return false;
         }
-    }
-
-    private static boolean sameComponent(@Nullable ComponentName first, @Nullable ComponentName second) {
-        return first != null && second != null && first.equals(second);
     }
 
     @Nullable
@@ -4219,7 +4313,7 @@ public final class SuggestionBarView extends GridLayout
             LauncherAppEntry e = resolvePinnedApp(folderApp);
             if (artworkOrNull(e) == null) continue;
             ImageView mini = new ImageView(getContext());
-            mini.setImageDrawable(getRenderedIcon(e, miniSize));
+            bindRenderedIcon(mini, e, miniSize);
             mini.setScaleType(ImageView.ScaleType.FIT_CENTER);
             GridLayout.LayoutParams params = new GridLayout.LayoutParams();
             params.width = miniSize;
@@ -7552,8 +7646,7 @@ public final class SuggestionBarView extends GridLayout
     private View createPopupEntryButton(@NonNull LauncherAppEntry entry, int sizePx,
                                         @NonNull String sourceFolderId) {
         ImageButton button = new ImageButton(getContext());
-        Drawable icon = iconForDisplay(entry, sizePx);
-        button.setImageDrawable(icon);
+        bindRenderedIcon(button, entry, sizePx);
         button.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         button.setAdjustViewBounds(true);
         button.setPadding(0, 0, 0, 0);

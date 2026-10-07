@@ -1,8 +1,11 @@
 package com.termux.app.surfaces;
 
+import android.content.SharedPreferences;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.R;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -12,9 +15,11 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * The editor's presets: complete looks, as data.
@@ -72,15 +77,13 @@ public final class SurfacePresets {
     }
 
     private static final List<Preset> PRESETS = Collections.unmodifiableList(Arrays.asList(
-        // Clear (id minimal): the most transparent, fanciest glass. Blur at 44 dp (the cap is 48),
-        // opacity 2 on every surface with the terminal canvas detached at 8 so text keeps something
-        // to sit on, grain 14. The edge is sharp real glass: a deep bend in a 32 dp band, one even
-        // bright hairline (no directional bevel, no gradient wash into the pane, no second line
-        // inside it: the developer saw each on pong as a milky, lopsided or double rim), and a
-        // moderate chromatic split. Scheme tint, hairline rim, classic motion.
+        // Clear (id minimal): the most transparent glass, wallpaper forward. Blur 4, opacity 10 on
+        // every surface (the terminal follows Base, no detached override), grain 4, a subtle
+        // depth (bend 4, edge 10, light 18), no specular and no dispersion. Scheme tint,
+        // hairline rim, classic motion.
         preset("minimal", R.string.termux_surface_preset_minimal,
-            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 44, 2, 14, 28, 32, 85, 0, 40,
-            look -> look.put(TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY, 8)),
+            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 4, 10, 4, 4, 10, 18, 0, 0,
+            look -> { }),
         // Mist: Obsidian-Music's glass and motion (Apache-2.0; see
         // project-docs/reference/launcher/mist-preset-obsidian-values.md). Blur 25
         // and opacity 60 are Obsidian's own numbers. Grain 8 is not its 0.08 noise carried over:
@@ -94,10 +97,10 @@ public final class SurfacePresets {
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.GLASS_RIM_GRADIENT);
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_MOTION, TERMUX_APP.GLASS_MOTION_MIST);
             }),
-        // Tint (id stock): tinted, low blur, denser; for loud wallpapers and a dark terminal.
+        // Tint (id stock): glass in Material colours (surface tint toward primary container).
         preset("stock", R.string.termux_surface_preset_stock,
-            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 6, 46, 14, 4, 10, 18, 0, 0,
-            look -> look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_OBSIDIAN)),
+            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, 10, 46, 10, 4, 10, 18, 0, 0,
+            look -> look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_MATERIAL)),
         // Solid: opaque, no blur cost.
         preset("solid", R.string.termux_surface_preset_solid,
             TERMUX_APP.SURFACE_MATERIAL_SOLID, 78, 0, 92, 0, 0, 1, 0, 0, 0,
@@ -124,6 +127,8 @@ public final class SurfacePresets {
         look.put(TERMUX_APP.KEY_SURFACE_BASE_BLUR, blur);
         look.put(TERMUX_APP.KEY_SURFACE_BASE_OPACITY, opacity);
         look.put(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, grain);
+        // Every Look wears the full Material tint; a Look never dims it.
+        look.put(TERMUX_APP.KEY_SURFACE_BASE_TINT, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT);
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_BEND, bend);
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, edgeWidth);
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, edgeLight);
@@ -293,6 +298,9 @@ public final class SurfacePresets {
                 look.put(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR, 0);
             if (!look.containsKey(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION))
                 look.put(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION, 0);
+            // The tint strength came later still; before it every look wore the full tint.
+            if (!look.containsKey(TERMUX_APP.KEY_SURFACE_BASE_TINT))
+                look.put(TERMUX_APP.KEY_SURFACE_BASE_TINT, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT);
         }
         return look;
     }
@@ -309,8 +317,34 @@ public final class SurfacePresets {
      * with per-surface keys landing as fresh detaches. Corners and margins are not touched, links
      * included: they are Layout's, and a stored look that still names them is not obeyed. The
      * caller owns offering the Undo.
+     *
+     * <p>The fifty-odd writes land as one editor: the setters write into a {@link Batch} over the
+     * store, which then applies everything at once — one in-memory commit, one disk write, and
+     * listeners that see the finished look rather than each step towards it. The keys and values
+     * are exactly those {@link #applyEach} writes one by one.
      */
     public static void apply(@NonNull TermuxAppSharedPreferences prefs, @NonNull Preset preset) {
+        SharedPreferences store = prefs.getSharedPreferences();
+        if (store == null) {
+            applyEach(prefs, preset);
+            return;
+        }
+        Batch batch = new Batch(store);
+        applyEach(writingInto(prefs, batch), preset);
+        batch.applyToStore();
+    }
+
+    /** {@code prefs}' setters and getters over {@code batch}: what they write, it holds. */
+    @NonNull
+    static TermuxAppSharedPreferences writingInto(@NonNull TermuxAppSharedPreferences prefs,
+                                                  @NonNull Batch batch) {
+        return new TermuxAppSharedPreferences(prefs.getContext(), batch,
+            prefs.getMultiProcessSharedPreferences());
+    }
+
+    /** {@link #apply}, one setter and one {@code apply()} at a time: the reference it must match. */
+    @VisibleForTesting
+    static void applyEach(@NonNull TermuxAppSharedPreferences prefs, @NonNull Preset preset) {
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
                 if (!isLayoutOwned(property))
@@ -462,6 +496,202 @@ public final class SurfacePresets {
         if (cell != null)
             return prefs.getSurfaceOverrideValue(cell.slot, cell.property);
         return null;
+    }
+
+    /**
+     * A {@link SharedPreferences} that reads through to a store but holds every write until
+     * {@link #applyToStore}: reads see the held writes, so a setter that reads what an earlier one
+     * wrote behaves exactly as it would against the store. {@link #apply} lands a Look through one;
+     * the editor's Look slider holds a drag's stops in one until the finger lifts.
+     */
+    static final class Batch implements SharedPreferences {
+        /** Marks a held removal. */
+        private static final Object REMOVED = new Object();
+
+        private final SharedPreferences mStore;
+        /** Held writes in the order made; {@link #REMOVED} for a removal. */
+        private final LinkedHashMap<String, Object> mPending = new LinkedHashMap<>();
+        private boolean mCleared;
+
+        Batch(@NonNull SharedPreferences store) {
+            mStore = store;
+        }
+
+        /** Whether anything is held: a write, a removal or a clear. */
+        boolean isEmpty() {
+            return !mCleared && mPending.isEmpty();
+        }
+
+        /**
+         * A copy of what is held now, over the same store, that nothing writes to again: what a
+         * {@link com.termux.shared.settings.preferences.SharedPreferencesPreview} may be shown
+         * with while this batch goes on collecting.
+         */
+        @NonNull
+        Batch frozen() {
+            Batch copy = new Batch(mStore);
+            copy.mPending.putAll(mPending);
+            copy.mCleared = mCleared;
+            return copy;
+        }
+
+        /** Writes everything held to the store as one editor, then forgets it. */
+        void applyToStore() {
+            if (!mCleared && mPending.isEmpty())
+                return;
+            SharedPreferences.Editor editor = mStore.edit();
+            if (mCleared)
+                editor.clear();
+            for (Map.Entry<String, Object> entry : mPending.entrySet())
+                put(editor, entry.getKey(), entry.getValue());
+            editor.apply();
+            mPending.clear();
+            mCleared = false;
+        }
+
+        @SuppressWarnings("unchecked")
+        private static void put(SharedPreferences.Editor editor, String key, Object value) {
+            if (value == REMOVED) editor.remove(key);
+            else if (value instanceof String) editor.putString(key, (String) value);
+            else if (value instanceof Integer) editor.putInt(key, (Integer) value);
+            else if (value instanceof Boolean) editor.putBoolean(key, (Boolean) value);
+            else if (value instanceof Float) editor.putFloat(key, (Float) value);
+            else if (value instanceof Long) editor.putLong(key, (Long) value);
+            else if (value instanceof Set) editor.putStringSet(key, (Set<String>) value);
+        }
+
+        /** The held value, {@link #REMOVED}, or null when this batch has not touched the key. */
+        @Nullable
+        private Object held(String key) {
+            Object value = mPending.get(key);
+            if (value != null) return value;
+            return mCleared ? REMOVED : null;
+        }
+
+        @Override
+        public Map<String, ?> getAll() {
+            HashMap<String, Object> all = mCleared ? new HashMap<>() : new HashMap<>(mStore.getAll());
+            for (Map.Entry<String, Object> entry : mPending.entrySet()) {
+                if (entry.getValue() == REMOVED) all.remove(entry.getKey());
+                else all.put(entry.getKey(), entry.getValue());
+            }
+            return all;
+        }
+
+        @Nullable
+        @Override
+        public String getString(String key, @Nullable String defValue) {
+            Object value = held(key);
+            if (value == null) return mStore.getString(key, defValue);
+            return value == REMOVED ? defValue : (String) value;
+        }
+
+        @SuppressWarnings("unchecked")
+        @Nullable
+        @Override
+        public Set<String> getStringSet(String key, @Nullable Set<String> defValues) {
+            Object value = held(key);
+            if (value == null) return mStore.getStringSet(key, defValues);
+            return value == REMOVED ? defValues : (Set<String>) value;
+        }
+
+        @Override
+        public int getInt(String key, int defValue) {
+            Object value = held(key);
+            if (value == null) return mStore.getInt(key, defValue);
+            return value == REMOVED ? defValue : (Integer) value;
+        }
+
+        @Override
+        public long getLong(String key, long defValue) {
+            Object value = held(key);
+            if (value == null) return mStore.getLong(key, defValue);
+            return value == REMOVED ? defValue : (Long) value;
+        }
+
+        @Override
+        public float getFloat(String key, float defValue) {
+            Object value = held(key);
+            if (value == null) return mStore.getFloat(key, defValue);
+            return value == REMOVED ? defValue : (Float) value;
+        }
+
+        @Override
+        public boolean getBoolean(String key, boolean defValue) {
+            Object value = held(key);
+            if (value == null) return mStore.getBoolean(key, defValue);
+            return value == REMOVED ? defValue : (Boolean) value;
+        }
+
+        @Override
+        public boolean contains(String key) {
+            Object value = held(key);
+            if (value == null) return mStore.contains(key);
+            return value != REMOVED;
+        }
+
+        @Override
+        public SharedPreferences.Editor edit() {
+            return new BatchEditor();
+        }
+
+        @Override
+        public void registerOnSharedPreferenceChangeListener(OnSharedPreferenceChangeListener listener) {
+            mStore.registerOnSharedPreferenceChangeListener(listener);
+        }
+
+        @Override
+        public void unregisterOnSharedPreferenceChangeListener(OnSharedPreferenceChangeListener listener) {
+            mStore.unregisterOnSharedPreferenceChangeListener(listener);
+        }
+
+        /** Collects one editor's changes and folds them into the batch on apply or commit. */
+        private final class BatchEditor implements SharedPreferences.Editor {
+            private final LinkedHashMap<String, Object> mChanges = new LinkedHashMap<>();
+            private boolean mClear;
+
+            private SharedPreferences.Editor change(String key, @Nullable Object value) {
+                // A null value removes the key, as it does on a real editor.
+                mChanges.put(key, value == null ? REMOVED : value);
+                return this;
+            }
+
+            @Override public SharedPreferences.Editor putString(String key, @Nullable String value) { return change(key, value); }
+            @Override public SharedPreferences.Editor putStringSet(String key, @Nullable Set<String> values) { return change(key, values); }
+            @Override public SharedPreferences.Editor putInt(String key, int value) { return change(key, value); }
+            @Override public SharedPreferences.Editor putLong(String key, long value) { return change(key, value); }
+            @Override public SharedPreferences.Editor putFloat(String key, float value) { return change(key, value); }
+            @Override public SharedPreferences.Editor putBoolean(String key, boolean value) { return change(key, value); }
+            @Override public SharedPreferences.Editor remove(String key) { return change(key, null); }
+
+            @Override
+            public SharedPreferences.Editor clear() {
+                mClear = true;
+                return this;
+            }
+
+            @Override
+            public boolean commit() {
+                // As on a real editor, a clear empties the store before this editor's own changes.
+                if (mClear) {
+                    mPending.clear();
+                    mCleared = true;
+                }
+                for (Map.Entry<String, Object> entry : mChanges.entrySet()) {
+                    // Re-inserted so the held order follows the latest write.
+                    mPending.remove(entry.getKey());
+                    mPending.put(entry.getKey(), entry.getValue());
+                }
+                mChanges.clear();
+                mClear = false;
+                return true;
+            }
+
+            @Override
+            public void apply() {
+                commit();
+            }
+        }
     }
 
     /** The (surface, property) cell a legacy per-surface key names, via the editor's row table. */

@@ -96,6 +96,12 @@ public final class TaiManager {
         downloadEngine = runtimeProcess ? null : TaiDownloadEngine.getInstance(appContext);
         runtime = runtimeProcess ? new MultiBackendTaiRuntime(appContext) : null;
         runtimeClient = runtimeProcess ? null : new TaiRuntimeServiceClient(appContext);
+        if (!runtimeProcess) {
+            // The wallpaper vision models are gone; delete any left on the phone, once, off the main thread.
+            Thread visionCleanup = new Thread(() -> TaiVisionLeftovers.cleanOnce(appContext), "tai-vision-cleanup");
+            visionCleanup.setDaemon(true);
+            visionCleanup.start();
+        }
     }
 
     @NonNull
@@ -687,10 +693,9 @@ public final class TaiManager {
                     + "and tai speak and does not load into the chat runtime.");
         }
         if (spec.isVisionTool()) {
-            // Vision graphs run once per wallpaper analysis and never load into the chat runtime.
+            // Leftover vision tool models are never a chat target.
             return error(400, "vision_model_not_loadable",
-                "Model " + modelId + " is a wallpaper vision model. It runs in the wallpaper analysis "
-                    + "and does not load into the chat runtime.");
+                "Model " + modelId + " is a vision tool model and does not load into the chat runtime.");
         }
         String requestedBackend = request.optString("backend", "").trim();
         if (!requestedBackend.isEmpty() && !requestedBackend.equalsIgnoreCase(spec.backend)) {
@@ -2066,7 +2071,7 @@ public final class TaiManager {
             // speech_to_text yet (phase 2), and they're never a valid /v1/chat/completions target.
             if (stored.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
             if (stored.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) continue;
-            // Wallpaper vision graphs are tool models for the analysis job, never a chat target.
+            // Vision tool models are never a chat target.
             if (stored.isVisionTool()) continue;
             Integer userContext = settings.getRuntimeOptions(stored).contextWindow;
             TaiModelSpec spec = advertisedContextWindow(TaiContextWindowPolicy.apply(stored, device.memoryBytes,
@@ -3109,6 +3114,54 @@ public final class TaiManager {
     }
 
     /**
+     * A dry run of the memory budget for a momentary load of {@code modelId} (a model the caller
+     * unloads within a minute, such as a background job) as it would be decided now: the
+     * same request {@link #decideLoad} builds, but nothing is evicted, logged or loaded. Null when
+     * it cannot be worked out (unknown model, a blocked preflight, an error): the caller then goes
+     * ahead and lets the real load decide. Not for the main thread.
+     */
+    @Nullable
+    public TaiLoadBudget.Plan previewMomentaryLoad(@NonNull String modelId, @Nullable String accelerator,
+                                                   int contextWindow) {
+        try {
+            TaiModelSpec spec = resolveModel(modelId);
+            if (spec == null) return null;
+            JSONObject request = new JSONObject();
+            request.put("load_class", "momentary");
+            request.put("context_window", contextWindow);
+            if (accelerator != null) request.put("accelerator", accelerator);
+            TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
+            TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, true);
+            if (preflight.blocked) return null;
+            TaiDeviceCapabilities device = preflight.device;
+            List<String> accelerators;
+            if (!"auto".equals(preflight.requestedAccelerator) || TaiModelSpec.BACKEND_MNN_LLM.equals(spec.backend)) {
+                accelerators = Collections.singletonList(preflight.effectiveAccelerator);
+            } else {
+                accelerators = TaiLoadPreflight.autoAccelerators(appContext, spec, device, preflight.profile);
+                if (accelerators.isEmpty()) accelerators = Collections.singletonList(preflight.effectiveAccelerator);
+            }
+            int cap = TaiContextWindowPolicy.effectiveEndpointContextWindow(spec, device.memoryBytes, options.contextWindow);
+            boolean encoders = spec.capabilities.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT)
+                || spec.capabilities.contains(TaiModelSpec.CAPABILITY_AUDIO_INPUT);
+            List<TaiResidency.Entry> residents = residency().snapshot();
+            TaiMemInfo.Reading memory = TaiMemInfo.read(appContext);
+            long available = TaiResidency.creditedAvailable(availableMemory(memory, device), residents,
+                TaiResidency.Kind.CHAT, spec.backend);
+            return TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, TaiResidency.fileBytes(spec), encoders,
+                device.physicalMemoryBytes, available, accelerators, cap,
+                null, 0, options.contextWindow != null, device.memoryThresholdBytes,
+                measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend),
+                true)
+                .withConditions(TaiMemInfo.conditions(appContext, memory))
+                .withKvBytesPerToken(kvBytesPerToken(spec))
+                .withGpuless(!device.supportsAccelerator("gpu")));
+        } catch (Exception | LinkageError e) {
+            return null;
+        }
+    }
+
+    /**
      * Settles accelerator and context window for a load that passed preflight, from the memory free
      * right now (see {@link TaiLoadBudget}). Every load path goes through here: explicit loads,
      * keep-warm and the automatic load behind a chat request.
@@ -3580,261 +3633,6 @@ public final class TaiManager {
         return new JSONObject().put("ok", true).put("cancelled", cancelled);
     }
 
-    // ---- Wallpaper analysis (depth, scene, subject) ---------------------------------------------
-
-    /** Receives each stage ({@code depth}, {@code scene}, {@code subject}) with its 0-100 progress; called on the job's thread. */
-    public interface WallpaperAnalysisProgress {
-        void onStage(@NonNull String stage, int percent);
-    }
-
-    /** One photo to analyse: where it is, where the maps go, and which depth model to use ({@code null} or empty: {@link TaiVisionModels#depthModel}). */
-    public static final class WallpaperAnalysisRequest {
-        @NonNull public final String imagePath;
-        @NonNull public final String outDir;
-        @Nullable public final String depthModelId;
-
-        public WallpaperAnalysisRequest(@NonNull String imagePath, @NonNull String outDir, @Nullable String depthModelId) {
-            this.imagePath = imagePath;
-            this.outDir = outDir;
-            this.depthModelId = depthModelId;
-        }
-    }
-
-    /** How an analysis ended: the files are in {@code outDir} when {@link #ok}; otherwise {@link #error} is a stable code. */
-    public static final class WallpaperAnalysisResult {
-        public final boolean ok;
-        public final boolean cancelled;
-        /** A stable error code ({@code vision_model_missing}, {@code insufficient_memory}, {@code cancelled}, ...); {@code null} on success. */
-        @Nullable public final String error;
-        @NonNull public final String message;
-        @NonNull public final String outDir;
-        @NonNull public final String depthModelId;
-        public final long totalMs;
-        public final long depthMs;
-        public final long sceneMs;
-        public final long subjectMs;
-        /** The runtime's whole summary (also {@code analysis.json}); empty on failure. */
-        @NonNull public final JSONObject summary;
-
-        WallpaperAnalysisResult(boolean ok, @Nullable String error, @NonNull String message, @NonNull String outDir,
-                                @NonNull String depthModelId, @NonNull JSONObject summary) {
-            JSONObject timings = summary.optJSONObject("timings");
-            this.ok = ok;
-            this.error = error;
-            this.cancelled = "cancelled".equals(error);
-            this.message = message;
-            this.outDir = outDir;
-            this.depthModelId = depthModelId;
-            this.summary = summary;
-            this.totalMs = timings == null ? 0L : timings.optLong("totalMs", 0L);
-            this.depthMs = timings == null ? 0L : timings.optLong("depthMs", 0L);
-            this.sceneMs = timings == null ? 0L : timings.optLong("sceneMs", 0L);
-            this.subjectMs = timings == null ? 0L : timings.optLong("subjectMs", 0L);
-        }
-
-        @NonNull
-        static WallpaperAnalysisResult failure(@NonNull String error, @NonNull String message,
-                                               @NonNull String outDir, @NonNull String depthModelId) {
-            return new WallpaperAnalysisResult(false, error, message, outDir, depthModelId, new JSONObject());
-        }
-    }
-
-    /**
-     * Runs the wallpaper analysis on one photo: depth, then scene, then subject, in the runtime
-     * process (one graph in memory at a time), reporting each stage as it goes and writing
-     * {@code depth.png}, {@code scene0..2.png} + {@code scene.json}, {@code subject.png} and
-     * {@code analysis.json} into {@code request.outDir}. Blocking: call off the main thread. Never
-     * throws for a missing model, a bad image or a refusal; those come back as a failed result.
-     */
-    @NonNull
-    public WallpaperAnalysisResult analyzeWallpaper(@NonNull WallpaperAnalysisRequest request,
-                                                    @NonNull WallpaperAnalysisProgress progress) {
-        String depthId = request.depthModelId == null || request.depthModelId.trim().isEmpty()
-            ? TaiVisionModels.depthModel(appContext) : request.depthModelId.trim();
-        try {
-            TaiModelSpec depth = resolveVisionModel(depthId, TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION);
-            TaiModelSpec scene = resolveVisionModel(TaiModelCatalog.SEGFORMER_B0_ADE20K_ID, TaiModelSpec.CAPABILITY_SCENE_SEGMENTATION);
-            TaiModelSpec subject = resolveVisionModel(TaiModelCatalog.U2NET_ID, TaiModelSpec.CAPABILITY_SUBJECT_SEGMENTATION);
-            if (depth == null || scene == null || subject == null) {
-                StringBuilder missing = new StringBuilder();
-                if (depth == null) missing.append(depthId);
-                if (scene == null) missing.append(missing.length() == 0 ? "" : ", ").append(TaiModelCatalog.SEGFORMER_B0_ADE20K_ID);
-                if (subject == null) missing.append(missing.length() == 0 ? "" : ", ").append(TaiModelCatalog.U2NET_ID);
-                return WallpaperAnalysisResult.failure("vision_model_missing", "Not installed: " + missing + ".",
-                    request.outDir, depthId);
-            }
-            JSONObject body = new JSONObject();
-            body.put("imagePath", request.imagePath);
-            body.put("outDir", request.outDir);
-            body.put("depth", depth.toJson());
-            body.put("scene", scene.toJson());
-            body.put("subject", subject.toJson());
-            final JSONObject[] holder = new JSONObject[1];
-            OpenAiStreamSink sink = new OpenAiStreamSink() {
-                @Override
-                public void onEvent(@NonNull JSONObject event) {
-                    if (event.has("stage")) {
-                        progress.onStage(event.optString("stage", ""), event.optInt("percent", 0));
-                    } else if (event.has("result")) {
-                        holder[0] = event.optJSONObject("result");
-                    } else if (event.has("error")) {
-                        holder[0] = event;
-                    }
-                }
-
-                @Override
-                public void onDone() {
-                }
-            };
-            if (!shouldDelegateRuntime()) {
-                analyzeWallpaperToEvents(body.toString(), sink);
-            } else {
-                if (runtimeClient == null) {
-                    return WallpaperAnalysisResult.failure("runtime_client_unavailable",
-                        "On-device AI runtime service client is unavailable.", request.outDir, depthId);
-                }
-                try {
-                    runtimeClient.stream(TaiRuntimeIpc.OP_VISION_ANALYZE, body.toString(), sink);
-                } catch (IOException | RuntimeException e) {
-                    // The caller's side broke mid-run: have the runtime stop between graphs.
-                    cancelWallpaperAnalysis();
-                    throw e;
-                }
-            }
-            JSONObject summary = holder[0];
-            if (summary == null) {
-                return WallpaperAnalysisResult.failure("vision_stream_incomplete",
-                    "The analysis ended without a result.", request.outDir, depthId);
-            }
-            if (summary.optBoolean("ok", false) && !summary.has("error")) {
-                return new WallpaperAnalysisResult(true, null, "", request.outDir, depthId, summary);
-            }
-            JSONObject nested = summary.optJSONObject("error");
-            String code = nested != null ? nested.optString("code", "vision_failed")
-                : summary.optString("error", "vision_failed");
-            String message = nested != null ? nested.optString("message", "") : summary.optString("message", "");
-            return WallpaperAnalysisResult.failure(code, message.isEmpty() ? "The wallpaper analysis failed." : message,
-                request.outDir, depthId);
-        } catch (JSONException | IOException | RuntimeException e) {
-            return WallpaperAnalysisResult.failure("vision_failed",
-                e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage(), request.outDir, depthId);
-        }
-    }
-
-    /** The installed vision model {@code modelId} when it carries {@code capability} and its file is readable, else {@code null}. */
-    @Nullable
-    private TaiModelSpec resolveVisionModel(@NonNull String modelId, @NonNull String capability) {
-        TaiModelSpec spec = resolveModel(modelId);
-        if (spec == null || !spec.capabilities.contains(capability)) return null;
-        if (spec.localPath == null || spec.localPath.trim().isEmpty()) return null;
-        File file = new File(spec.localPath);
-        return file.isFile() && file.canRead() ? spec : null;
-    }
-
-    /** Stops the wallpaper analysis in flight between graphs and inside the running one; false when none runs. Call off the main thread. */
-    public boolean cancelWallpaperAnalysis() {
-        try {
-            return cancelWallpaperAnalysisJson().optBoolean("cancelled", false);
-        } catch (JSONException e) {
-            return false;
-        }
-    }
-
-    /** {@link #cancelWallpaperAnalysis} as the runtime service answers it: {@code {ok, cancelled}}. */
-    @NonNull
-    JSONObject cancelWallpaperAnalysisJson() throws JSONException {
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_VISION_CANCEL, "{}", RUNTIME_STATUS_TIMEOUT_MS);
-        MultiBackendTaiRuntime router = ttsRouter();
-        boolean cancelled = router != null && router.cancelWallpaperAnalysis();
-        return new JSONObject().put("ok", true).put("cancelled", cancelled);
-    }
-
-    /**
-     * The runtime-process half of {@link #analyzeWallpaper}: admission, then the run through the
-     * router with a {@code {stage, percent}} event per step, then {@code {result}} or the error.
-     */
-    void analyzeWallpaperToEvents(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
-        JSONObject result = runWallpaperAnalysis(parseBody(body), sink);
-        if (result.optBoolean("ok", false) && !result.has("error")) {
-            sink.onEvent(new JSONObject().put("result", result));
-        } else {
-            sink.onEvent(result);
-        }
-        sink.onDone();
-    }
-
-    @NonNull
-    private JSONObject runWallpaperAnalysis(@NonNull JSONObject request, @NonNull OpenAiStreamSink sink) throws JSONException {
-        String imagePath = request.optString("imagePath", "").trim();
-        String outDir = request.optString("outDir", "").trim();
-        if (imagePath.isEmpty() || outDir.isEmpty()) {
-            return error(400, "bad_request", "imagePath and outDir are required.");
-        }
-        TaiModelSpec depth, scene, subject;
-        try {
-            depth = TaiModelSpec.fromJson(request.getJSONObject("depth"));
-            scene = TaiModelSpec.fromJson(request.getJSONObject("scene"));
-            subject = TaiModelSpec.fromJson(request.getJSONObject("subject"));
-        } catch (JSONException | IllegalArgumentException e) {
-            return error(400, "bad_request", "The three vision models are required.");
-        }
-        MultiBackendTaiRuntime router = ttsRouter();
-        if (router == null) return error(501, "capability_not_supported", "Wallpaper analysis needs the multi-backend runtime.");
-        JSONObject refusal = decideVisionLoad(router, new TaiModelSpec[] {depth, scene, subject});
-        if (refusal != null) return refusal;
-        final IOException[] failure = new IOException[1];
-        WallpaperVisionRuntime.Params params = new WallpaperVisionRuntime.Params(imagePath, new File(outDir), depth, scene, subject);
-        JSONObject result = router.analyzeWallpaper(params, (stage, percent) -> {
-            if (failure[0] != null) return;
-            try {
-                sink.onEvent(new JSONObject().put("stage", stage).put("percent", percent));
-            } catch (IOException | JSONException e) {
-                // The client went away: stop between graphs rather than finish for nobody.
-                failure[0] = e instanceof IOException ? (IOException) e : new IOException(e.getMessage());
-                router.cancelWallpaperAnalysis();
-            }
-        });
-        return result;
-    }
-
-    /**
-     * The budget for a wallpaper analysis. The three graphs load one after another and each is
-     * closed before the next, so the peak is the largest one: its measured load when on record,
-     * else its file times {@link TaiResidency#VISION_FACTOR_TENTHS}. Idle embeddings are closed if
-     * that is what it takes; nothing else is. {@code null} means go ahead.
-     */
-    @Nullable
-    private JSONObject decideVisionLoad(@NonNull MultiBackendTaiRuntime router, @NonNull TaiModelSpec[] specs) throws JSONException {
-        TaiDeviceCapabilities device = TaiDeviceCapabilities.detect(appContext);
-        List<TaiResidency.Entry> residents = router.residency().snapshot();
-        long available = TaiResidency.creditedAvailable(availableMemory(device), residents, TaiResidency.Kind.VISION,
-            TaiModelSpec.BACKEND_LITERT_LM);
-        long peak = 0L;
-        TaiModelSpec peakSpec = specs[0];
-        boolean measuredPeak = false;
-        for (TaiModelSpec spec : specs) {
-            long measured = TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 0);
-            long bytes = measured > 0L ? measured : TaiResidency.visionEstimateBytes(spec);
-            if (bytes > peak) {
-                peak = bytes;
-                peakSpec = spec;
-                measuredPeak = measured > 0L;
-            }
-        }
-        TaiLoadBudget.Estimate estimate = measuredPeak ? TaiLoadBudget.Estimate.measured(peak)
-            : TaiLoadBudget.Estimate.ratio(peak, 0L);
-        List<TaiResidency.Entry> candidates = new ArrayList<>();
-        for (TaiResidency.Entry entry : TaiResidency.evictionCandidates(residents, TaiResidency.Kind.VISION,
-                TaiModelSpec.BACKEND_LITERT_LM)) {
-            if (entry.kind == TaiResidency.Kind.EMBEDDING) candidates.add(entry);
-        }
-        TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
-            device.memoryThresholdBytes, candidates, gateConditions());
-        if (!plan.fits) return insufficientMemory(peakSpec.displayName, plan);
-        evict(plan);
-        return null;
-    }
-
     /** How long dawn should wait before retrying an embedding request refused for memory. */
     private static final int EMBEDDING_MEMORY_RETRY_AFTER_SECONDS = 20;
 
@@ -3860,7 +3658,11 @@ public final class TaiManager {
         return null;
     }
 
-    /** The measured load costs of this model on this device, as the budget asks for them. */
+    /**
+     * The measured load costs of this model on this device, as the budget asks for them; with none
+     * of its own yet, the shipped {@link TaiLoadPriors} for the bundled Gemma files, so the first
+     * load is planned on a measurement rather than the seed that refused it.
+     */
     @NonNull
     private TaiLoadBudget.History measuredHistory(@NonNull TaiModelSpec spec, @NonNull TaiDeviceCapabilities device) {
         long fileBytes = TaiResidency.fileBytes(spec);
@@ -3868,8 +3670,11 @@ public final class TaiManager {
         // no samples of its own borrows the text key's plus the encoders' share of the file.
         long slope = TaiLoadBudget.seedSlopeBytes(spec.backend, fileBytes, kvBytesPerToken(spec));
         long encoderDelta = fileBytes / 10L;
-        return (accelerator, contextTokens) -> TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device,
-            spec.backend, accelerator, contextTokens, slope, encoderDelta);
+        return (accelerator, contextTokens) -> {
+            long measured = TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device,
+                spec.backend, accelerator, contextTokens, slope, encoderDelta);
+            return measured > 0L ? measured : TaiLoadPriors.bytes(spec, accelerator, contextTokens, slope);
+        };
     }
 
     /** The architecture's KV bytes per token for an MNN model whose config says so; {@code 0} keeps the file-size slope. */
@@ -4032,7 +3837,7 @@ public final class TaiManager {
         Boolean thinking = booleanOverride(request, "thinking");
         Boolean speculative = booleanOverride(request, "speculative_decoding");
         // "load_class": "momentary" declares a load the caller will unload within a minute, such as
-        // the living-still director; the budget then keeps the lower peak floor instead of the hold
+        // a background job; the budget then keeps the lower peak floor instead of the hold
         // floor, and the runtime process itself unloads the model three minutes after the load
         // starts (TaiRuntimeService). The field rides in the request body to the runtime process,
         // which resolves it here again, so the decision made there sees the flag. Any other value

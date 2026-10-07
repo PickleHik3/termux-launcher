@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+@font-face{font-family:"NerdSym";src:url("app/src/main/assets/fonts/SymbolsNerdFontMono.ttf") format("truetype");font-display:block}
+html,body{margin:0;background:#E6E8EC;-webkit-font-smoothing:antialiased}
+:root{--sans:"Figtree",system-ui,sans-serif;--mono:"JetBrains Mono",ui-monospace,monospace;--nf:"NerdSym";--bg:#F4F6FB;--w:#EAEFF7;--ch:#E1E7F2;--chh:#D7DFEC;--on:#171C24;--onv:#586171;--ov:#C1C9D6;--p:#345CA8;--onp:#FFFFFF;--pc:#D8E3FF;--opc:#0B1F44;--tc:#E8DEF8;--otc:#4F378B;--err:#BA1A1A;--done:#1B6B3A;--warm:#8D4E19;--r:24px;--rim:none;--sh:none;--blur:none;--capA:block;--capB:none;--numW:300;--face:#E1E7F2;--faceSh:none;--barR:3px}
+a{color:#345CA8}a:hover{color:#0B1F44}
+</style>
+</helmet>
+<section style="padding:64px;display:flex;flex-direction:column;gap:32px;font-family:var(--sans)">
+<div style="display:flex;flex-direction:column;gap:6px;max-width:900px">
+<div style="font:700 28px var(--sans);color:#171C24">First-party widgets · Termux Launcher</div>
+<div style="font:400 15px/1.5 var(--sans);color:#586171;text-wrap:pretty">Twelve widgets at five spans on the 4×5 widget page (cell 88×92 dp, 8 dp gap, 6 dp edge padding from WidgetGridView). Colours are the launcher's semantic tokens from values/colors.xml and values-night/colors.xml, so every widget follows the terminal scheme. Two directions: <a href="#1a">1a</a> Tonal and <a href="#1b">1b</a> Pane.</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:64px;align-items:flex-start">
+<sc-for list="{{ directions }}" as="d" hint-placeholder-count="2">
+<div id="{{ d.id }}" style="display:flex;flex-direction:column;gap:20px">
+<div style="display:flex;align-items:center;gap:12px">
+<div style="font:700 13px var(--mono);color:#FFFFFF;background:#171C24;border-radius:8px;padding:4px 9px">{{ d.id }}</div>
+<div style="font:700 22px var(--sans);color:#171C24">{{ d.name }}</div>
+<div style="font:400 14px var(--sans);color:#586171">{{ d.desc }}</div>
+</div>
+<div style="display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start">
+<sc-for list="{{ d.boards }}" as="b" hint-placeholder-count="2">
+<div style="{{ b.style }}">
+<div style="display:flex;justify-content:space-between;align-items:baseline">
+<div style="font:600 15px var(--sans);color:var(--lbl)">{{ b.label }}</div>
+<div style="font:400 12px var(--mono);color:var(--lbl2)">{{ d.id }} · 13:40 Tue 6 Oct</div>
+</div>
+<div style="display:grid;grid-template-columns:120px 88px 184px 184px 376px 376px;gap:20px;font:500 11px var(--mono);color:var(--lbl2)">
+<div></div><div>1×1</div><div>2×1</div><div>2×2</div><div>4×1</div><div>4×2</div>
+</div>
+
+<!-- CLOCK ANALOG -->
+<div style="display:grid;grid-template-columns:120px 88px 184px 184px 376px 376px;gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:3px;padding-top:4px"><div style="font:600 14px var(--sans);color:var(--lbl)">Analog clock</div><div style="font:400 11px var(--mono);color:var(--lbl2)">clock.analog</div></div>
+<div style="box-sizing:border-box;width:88px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;justify-content:center">
+<div style="position:relative;width:70px;height:70px;border-radius:50%;background:var(--face);box-shadow:var(--faceSh);flex:none"><sc-for list="{{ ticks }}" as="t" hint-placeholder-count="12"><div style="{{ t.wrap }}"><div style="{{ t.mark }}"></div></div></sc-for><div style="position:absolute;inset:0;transform:rotate(50deg)"><div style="position:absolute;left:47%;top:24%;width:6%;height:30%;border-radius:99px;background:var(--on)"></div></div><div style="position:absolute;inset:0;transform:rotate(240deg)"><div style="position:absolute;left:48%;top:10%;width:4%;height:44%;border-radius:99px;background:var(--on)"></div></div><div style="position:absolute;inset:0;transform:rotate(130deg)"><div style="position:absolute;left:49.25%;top:8%;width:1.5%;height:52%;background:var(--warm)"></div></div><div style="position:absolute;left:44%;top:44%;width:12%;height:12%;border-radius:50%;background:var(--warm)"></div></div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:12px;padding:0 12px">
+<div style="position:relative;width:68px;height:68px;border-radius:50%;background:var(--face);box-shadow:var(--faceSh);flex:none"><sc-for list="{{ ticks }}" as="t" hint-placeholder-count="12"><div style="{{ t.wrap }}"><div style="{{ t.mark }}"></div></div></sc-for><div style="position:absolute;inset:0;transform:rotate(50deg)"><div style="position:absolute;left:47%;top:24%;width:6%;height:30%;border-radius:99px;background:var(--on)"></div></div><div style="position:absolute;inset:0;transform:rotate(240deg)"><div style="position:absolute;left:48%;top:10%;width:4%;height:44%;border-radius:99px;background:var(--on)"></div></div><div style="position:absolute;inset:0;transform:rotate(130deg)"><div style="position:absolute;left:49.25%;top:8%;width:1.5%;height:52%;background:var(--warm)"></div></div><div style="position:absolute;left:44%;top:44%;width:12%;height:12%;border-radius:50%;background:var(--warm)"></div></div>
+<div style="display:flex;flex-direction:column;gap:4px;min-width:0"><div style="display:var(--capA);font:600 11px/14px var(--sans);color:var(--onv)">Kuwait City</div><div style="display:var(--capB);align-items:center;gap:5px;font:500 10.5px/14px var(--mono);color:var(--onv)"><span style="font-family:var(--nf);color:var(--p)">&#xf017;</span>kuwait</div><div style="font:var(--numW) 22px/1 var(--mono);letter-spacing:-0.02em">13:40</div><div style="font:500 11px var(--sans);color:var(--onv)">Tue 6 Oct</div></div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;justify-content:center">
+<div style="position:relative;width:160px;height:160px;border-radius:50%;background:var(--face);box-shadow:var(--faceSh);flex:none"><sc-for list="{{ ticks }}" as="t" hint-placeholder-count="12"><div style="{{ t.wrap }}"><div style="{{ t.mark }}"></div></div></sc-for><div style="position:absolute;left:0;right:0;top:62%;text-align:center;font:500 10px var(--mono);color:var(--onv)">TUE 06</div><div style="position:absolute;inset:0;transform:rotate(50deg)"><div style="position:absolute;left:47%;top:24%;width:6%;height:30%;border-radius:99px;background:var(--on)"></div></div><div style="position:absolute;inset:0;transform:rotate(240deg)"><div style="position:absolute;left:48%;top:10%;width:4%;height:44%;border-radius:99px;background:var(--on)"></div></div><div style="position:absolute;inset:0;transform:rotate(130deg)"><div style="position:absolute;left:49.25%;top:8%;width:1.5%;height:52%;background:var(--warm)"></div></div><div style="position:absolute;left:46%;top:46%;width:8%;height:8%;border-radius:50%;background:var(--warm)"></div></div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:14px;padding:0 14px">
+<div style="position:relative;width:68px;height:68px;border-radius:50%;background:var(--face);box-shadow:var(--faceSh);flex:none"><sc-for list="{{ ticks }}" as="t" hint-placeholder-count="12"><div style="{{ t.wrap }}"><div style="{{ t.mark }}"></div></div></sc-for><div style="position:absolute;inset:0;transform:rotate(50deg)"><div style="position:absolute;left:47%;top:24%;width:6%;height:30%;border-radius:99px;background:var(--on)"></div></div><div style="position:absolute;inset:0;transform:rotate(240deg)"><div style="position:absolute;left:48%;top:10%;width:4%;height:44%;border-radius:99px;background:var(--on)"></div></div><div style="position:absolute;inset:0;transform:rotate(130deg)"><div style="position:absolute;left:49.25%;top:8%;width:1.5%;height:52%;background:var(--warm)"></div></div><div style="position:absolute;left:44%;top:44%;width:12%;height:12%;border-radius:50%;background:var(--warm)"></div></div>
+<div style="flex:1;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+<sc-for list="{{ zones }}" as="z" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:3px"><div style="font:600 11px var(--sans);color:var(--onv)">{{ z.city }}</div><div style="font:var(--numW) 20px/1 var(--mono)">{{ z.t }}</div><div style="font:500 10.5px var(--mono);color:var(--onv)">{{ z.off }}</div></div></sc-for>
+</div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:20px;padding:0 16px">
+<div style="position:relative;width:160px;height:160px;border-radius:50%;background:var(--face);box-shadow:var(--faceSh);flex:none"><sc-for list="{{ ticks }}" as="t" hint-placeholder-count="12"><div style="{{ t.wrap }}"><div style="{{ t.mark }}"></div></div></sc-for><div style="position:absolute;inset:0;transform:rotate(50deg)"><div style="position:absolute;left:47%;top:24%;width:6%;height:30%;border-radius:99px;background:var(--on)"></div></div><div style="position:absolute;inset:0;transform:rotate(240deg)"><div style="position:absolute;left:48%;top:10%;width:4%;height:44%;border-radius:99px;background:var(--on)"></div></div><div style="position:absolute;inset:0;transform:rotate(130deg)"><div style="position:absolute;left:49.25%;top:8%;width:1.5%;height:52%;background:var(--warm)"></div></div><div style="position:absolute;left:46%;top:46%;width:8%;height:8%;border-radius:50%;background:var(--warm)"></div></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;min-width:0">
+<sc-for list="{{ zones }}" as="z" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><div style="display:flex;flex-direction:column;gap:2px"><div style="font:600 12px var(--sans)">{{ z.city }}</div><div style="font:500 10.5px var(--mono);color:var(--onv)">{{ z.off }}</div></div><div style="font:var(--numW) 22px/1 var(--mono)">{{ z.t }}</div></div></sc-for>
+</div>
+</div>
+</div>
+
+<!-- CLOCK DIGITAL -->
+<div style="display:grid;grid-template-columns:120px 88px 184px 184px 376px 376px;gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:3px;padding-top:4px"><div style="font:600 14px var(--sans);color:var(--lbl)">Digital clock</div><div style="font:400 11px var(--mono);color:var(--lbl2)">clock.digital</div></div>
+<div style="box-sizing:border-box;width:88px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+<div style="font:var(--numW) 30px/1 var(--mono)">13</div><div style="font:var(--numW) 30px/1 var(--mono);color:var(--p)">40</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;justify-content:center;gap:6px;padding:0 14px">
+<div style="font:var(--numW) 38px/1 var(--mono);letter-spacing:-0.03em">13:40</div>
+<div style="font:500 12px var(--sans);color:var(--onv)">Tuesday, 6 October</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:10px;padding:14px">
+<div style="display:var(--capA);font:600 11px/14px var(--sans);color:var(--onv)">Tue 6 Oct</div><div style="display:var(--capB);align-items:center;gap:5px;font:500 10.5px/14px var(--mono);color:var(--onv)"><span style="font-family:var(--nf);color:var(--p)">&#xf017;</span>clock</div>
+<div style="font:var(--numW) 46px/1 var(--mono);letter-spacing:-0.04em;margin-top:auto">13:40</div>
+<div style="display:flex;flex-direction:column;gap:7px">
+<div style="display:flex;flex-direction:column;gap:4px"><div style="display:flex;justify-content:space-between;font:500 10.5px var(--mono);color:var(--onv)"><span>Day</span><span>57%</span></div><div style="height:6px;border-radius:var(--barR);background:var(--chh);overflow:hidden"><div style="width:57%;height:100%;background:var(--p)"></div></div></div>
+<div style="display:flex;flex-direction:column;gap:4px"><div style="display:flex;justify-content:space-between;font:500 10.5px var(--mono);color:var(--onv)"><span>Year</span><span>76%</span></div><div style="height:6px;border-radius:var(--barR);background:var(--chh);overflow:hidden"><div style="width:76%;height:100%;background:var(--warm)"></div></div></div>
+</div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:16px;padding:0 16px">
+<div style="font:var(--numW) 44px/1 var(--mono);letter-spacing:-0.04em">13:40</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
+<div style="font:600 13px var(--sans)">Tuesday, 6 October</div>
+<div style="display:flex;gap:12px;font:500 11px var(--mono);color:var(--onv)"><span style="display:flex;gap:4px;align-items:center"><span style="font-family:var(--nf);color:var(--warm)">&#xf185;</span>05:38</span><span style="display:flex;gap:4px;align-items:center"><span style="font-family:var(--nf);color:var(--p)">&#xf186;</span>17:22</span></div>
+</div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:12px;padding:16px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="font:600 13px var(--sans);color:var(--onv)">Tuesday, 6 October 2026</div><div style="font:500 11px var(--mono);color:var(--onv)">GMT+3</div></div>
+<div style="font:var(--numW) 64px/1 var(--mono);letter-spacing:-0.04em;text-align:center;margin:auto 0">13:40<span style="font-size:22px;color:var(--onv)">:12</span></div>
+<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px">
+<div style="display:flex;flex-direction:column;gap:4px"><div style="display:flex;justify-content:space-between;font:500 10.5px var(--mono);color:var(--onv)"><span>Day</span><span>57%</span></div><div style="height:6px;border-radius:var(--barR);background:var(--chh);overflow:hidden"><div style="width:57%;height:100%;background:var(--p)"></div></div></div>
+<div style="display:flex;flex-direction:column;gap:4px"><div style="display:flex;justify-content:space-between;font:500 10.5px var(--mono);color:var(--onv)"><span>Year</span><span>76%</span></div><div style="height:6px;border-radius:var(--barR);background:var(--chh);overflow:hidden"><div style="width:76%;height:100%;background:var(--warm)"></div></div></div>
+</div>
+</div>
+</div>
+
+<!-- DATE / AGENDA -->
+<div style="display:grid;grid-template-columns:120px 88px 184px 184px 376px 376px;gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:3px;padding-top:4px"><div style="font:600 14px var(--sans);color:var(--lbl)">Date / agenda</div><div style="font:400 11px var(--mono);color:var(--lbl2)">agenda</div></div>
+<div style="box-sizing:border-box;width:88px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px">
+<div style="font:700 11px var(--sans);letter-spacing:.08em;color:var(--p)">TUE</div><div style="font:var(--numW) 36px/1 var(--mono)">6</div><div style="font:500 10.5px var(--mono);color:var(--onv)">3 events</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;justify-content:center;gap:6px;padding:0 14px">
+<div style="font:600 12px var(--sans);color:var(--onv)">Tue 6 Oct · Next</div>
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font:500 13px var(--mono);color:var(--p)">14:30</span><span style="font:600 14px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Standup</span></div>
+<div style="font:500 11px var(--sans);color:var(--onv)">in 50 min · Meet</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:10px;padding:14px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font:var(--numW) 30px/1 var(--mono)">6</span><span style="font:600 13px var(--sans);color:var(--onv)">Tue, Oct</span></div>
+<div style="display:flex;flex-direction:column;gap:9px">
+<sc-for list="{{ eventsShort }}" as="e" hint-placeholder-count="3"><div style="display:flex;gap:8px;align-items:center"><div style="{{ e.dot }}"></div><div style="display:flex;flex-direction:column;min-width:0"><div style="font:600 12px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ e.title }}</div><div style="font:500 10.5px var(--mono);color:var(--onv)">{{ e.time }}</div></div></div></sc-for>
+</div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:16px;padding:0 16px">
+<div style="display:flex;flex-direction:column;align-items:center;gap:2px;width:52px;flex:none"><div style="font:700 11px var(--sans);letter-spacing:.08em;color:var(--p)">TUE</div><div style="font:var(--numW) 34px/1 var(--mono)">6</div></div>
+<div style="width:1px;align-self:stretch;margin:18px 0;background:var(--ov)"></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font:500 13px var(--mono);color:var(--p)">14:30</span><span style="font:600 14px var(--sans)">Standup</span></div>
+<div style="font:500 11.5px var(--sans);color:var(--onv)">16:00 KU library meeting · 19:00 Gym</div>
+</div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;gap:16px;padding:16px">
+<div style="display:flex;flex-direction:column;gap:2px;width:84px;flex:none"><div style="font:700 11px var(--sans);letter-spacing:.08em;color:var(--p)">TUESDAY</div><div style="font:var(--numW) 52px/1 var(--mono)">6</div><div style="font:600 12px var(--sans);color:var(--onv)">October</div><div style="margin-top:auto;font:500 10.5px var(--mono);color:var(--onv)">3 today</div></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:10px;min-width:0">
+<sc-for list="{{ events }}" as="e" hint-placeholder-count="4"><div style="display:flex;gap:10px;align-items:center"><div style="font:500 11.5px var(--mono);color:var(--onv);width:40px;flex:none">{{ e.time }}</div><div style="{{ e.dot }}"></div><div style="display:flex;flex-direction:column;min-width:0"><div style="font:600 13px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ e.title }}</div><div style="font:400 11px var(--sans);color:var(--onv)">{{ e.where }}</div></div></div></sc-for>
+</div>
+</div>
+</div>
+
+<!-- WEATHER -->
+<div style="display:grid;grid-template-columns:120px 88px 184px 184px 376px 376px;gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:3px;padding-top:4px"><div style="font:600 14px var(--sans);color:var(--lbl)">Weather</div><div style="font:400 11px var(--mono);color:var(--lbl2)">weather</div></div>
+<div style="box-sizing:border-box;width:88px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+<div style="font:22px/1 var(--nf);color:var(--warm)">&#xf185;</div><div style="font:var(--numW) 26px/1 var(--mono)">34°</div><div style="font:500 10.5px var(--mono);color:var(--onv)">36 / 24</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="font:34px/1 var(--nf);color:var(--warm)">&#xf185;</div>
+<div style="display:flex;flex-direction:column;gap:4px"><div style="font:var(--numW) 30px/1 var(--mono)">34°</div><div style="font:600 11.5px var(--sans);color:var(--onv)">Sunny · 36/24</div></div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:6px;padding:14px">
+<div style="display:var(--capA);font:600 11px/14px var(--sans);color:var(--onv)">Kuwait City</div><div style="display:var(--capB);align-items:center;gap:5px;font:500 10.5px/14px var(--mono);color:var(--onv)"><span style="font-family:var(--nf);color:var(--p)">&#xf041;</span>kuwait city</div>
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="font:var(--numW) 44px/1 var(--mono);letter-spacing:-0.03em">34°</div><div style="font:32px/1 var(--nf);color:var(--warm)">&#xf185;</div></div>
+<div style="font:600 12px var(--sans)">Sunny <span style="color:var(--onv);font-weight:500">· H 36 L 24</span></div>
+<div style="margin-top:auto;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:2px;text-align:center">
+<sc-for list="{{ hourly4 }}" as="h" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:4px;align-items:center"><div style="font:500 10px var(--mono);color:var(--onv)">{{ h.t }}</div><div style="{{ h.ic }}">{{ h.g }}</div><div style="font:500 11px var(--mono)">{{ h.v }}</div></div></sc-for>
+</div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:14px;padding:0 16px">
+<div style="font:32px/1 var(--nf);color:var(--warm)">&#xf185;</div>
+<div style="display:flex;flex-direction:column;gap:4px;width:84px;flex:none"><div style="font:var(--numW) 30px/1 var(--mono)">34°</div><div style="font:600 11px var(--sans);color:var(--onv)">Sunny</div></div>
+<div style="flex:1;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:2px;text-align:center">
+<sc-for list="{{ hourly }}" as="h" hint-placeholder-count="5"><div style="display:flex;flex-direction:column;gap:4px;align-items:center"><div style="font:500 10px var(--mono);color:var(--onv)">{{ h.t }}</div><div style="{{ h.ic }}">{{ h.g }}</div><div style="font:500 11px var(--mono)">{{ h.v }}</div></div></sc-for>
+</div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;gap:18px;padding:16px">
+<div style="display:flex;flex-direction:column;gap:6px;width:120px;flex:none">
+<div style="display:var(--capA);font:600 11px/14px var(--sans);color:var(--onv)">Kuwait City</div><div style="display:var(--capB);align-items:center;gap:5px;font:500 10.5px/14px var(--mono);color:var(--onv)"><span style="font-family:var(--nf);color:var(--p)">&#xf041;</span>kuwait city</div>
+<div style="font:34px/1 var(--nf);color:var(--warm);margin-top:6px">&#xf185;</div>
+<div style="font:var(--numW) 44px/1 var(--mono);letter-spacing:-0.03em">34°</div>
+<div style="font:600 12px var(--sans)">Sunny</div>
+<div style="margin-top:auto;display:flex;gap:10px;font:500 10.5px var(--mono);color:var(--onv)"><span style="display:flex;gap:4px;align-items:center"><span style="font-family:var(--nf)">&#xf043;</span>18%</span><span>NW 14</span></div>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;justify-content:space-between;min-width:0">
+<sc-for list="{{ forecast }}" as="f" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:36px 22px 1fr;align-items:center;gap:8px"><div style="font:600 12px var(--sans)">{{ f.d }}</div><div style="{{ f.ic }}">{{ f.g }}</div><div style="display:flex;align-items:center;gap:6px;font:500 11px var(--mono)"><span style="color:var(--onv);width:20px;text-align:right">{{ f.lo }}</span><div style="flex:1;height:5px;border-radius:var(--barR);background:var(--chh);position:relative"><div style="{{ f.bar }}"></div></div><span style="width:20px">{{ f.hi }}</span></div></div></sc-for>
+</div>
+</div>
+</div>
+
+<!-- BATTERY -->
+<div style="display:grid;grid-template-columns:120px 88px 184px 184px 376px 376px;gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:3px;padding-top:4px"><div style="font:600 14px var(--sans);color:var(--lbl)">Battery</div><div style="font:400 11px var(--mono);color:var(--lbl2)">battery</div></div>
+<div style="box-sizing:border-box;width:88px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;justify-content:center">
+<div style="width:68px;height:68px;border-radius:50%;background:conic-gradient(var(--done) 0 79%, var(--chh) 0);display:flex;align-items:center;justify-content:center"><div style="width:56px;height:56px;border-radius:50%;background:var(--ringIn);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px"><span style="font:13px/1 var(--nf);color:var(--done)">&#xf0e7;</span><span style="font:var(--numW) 17px/1 var(--mono)">79</span></div></div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;justify-content:center;gap:8px;padding:0 14px">
+<div style="display:flex;align-items:baseline;gap:8px"><span style="font:var(--numW) 30px/1 var(--mono)">79%</span><span style="font:600 11.5px var(--sans);color:var(--done);display:flex;gap:3px;align-items:center"><span style="font-family:var(--nf)">&#xf0e7;</span>Charging</span></div>
+<div style="height:8px;border-radius:var(--barR);background:var(--chh);overflow:hidden"><div style="width:79%;height:100%;background:var(--done)"></div></div>
+<div style="font:500 10.5px var(--mono);color:var(--onv)">full in 42 min</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:8px;padding:14px">
+<div style="display:var(--capA);font:600 11px/14px var(--sans);color:var(--onv)">Battery</div><div style="display:var(--capB);align-items:center;gap:5px;font:500 10.5px/14px var(--mono);color:var(--onv)"><span style="font-family:var(--nf);color:var(--p)">&#xf240;</span>battery</div>
+<div style="display:flex;align-items:baseline;gap:6px;margin-top:4px"><span style="font:var(--numW) 46px/1 var(--mono);letter-spacing:-0.03em">79</span><span style="font:var(--numW) 20px/1 var(--mono);color:var(--onv)">%</span></div>
+<div style="height:8px;border-radius:var(--barR);background:var(--chh);overflow:hidden"><div style="width:79%;height:100%;background:var(--done)"></div></div>
+<div style="font:600 12px var(--sans);color:var(--done);display:flex;gap:4px;align-items:center"><span style="font-family:var(--nf)">&#xf0e7;</span>Charging · 42 min</div>
+<div style="margin-top:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;font:500 10.5px var(--mono);color:var(--onv)"><div style="display:flex;flex-direction:column;gap:2px"><span>Temp</span><span style="color:var(--on);font-size:12px">31.4°C</span></div><div style="display:flex;flex-direction:column;gap:2px"><span>Power</span><span style="color:var(--on);font-size:12px">18 W</span></div></div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;padding:0 16px;align-items:center">
+<sc-for list="{{ devices }}" as="v" hint-placeholder-count="3"><div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;align-items:center;gap:6px;font:600 11.5px var(--sans);color:var(--onv)"><span style="font-family:var(--nf);color:var(--on)">{{ v.g }}</span>{{ v.name }}</div><div style="font:var(--numW) 22px/1 var(--mono)">{{ v.pct }}</div><div style="height:5px;border-radius:var(--barR);background:var(--chh);overflow:hidden"><div style="{{ v.bar }}"></div></div></div></sc-for>
+</div>
+<div style="box-sizing:border-box;width:376px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:10px;padding:16px">
+<div style="display:flex;justify-content:space-between;align-items:flex-start">
+<div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;align-items:baseline;gap:4px"><span style="font:var(--numW) 40px/1 var(--mono);letter-spacing:-0.03em">79</span><span style="font:var(--numW) 18px/1 var(--mono);color:var(--onv)">%</span></div><div style="font:600 12px var(--sans);color:var(--done);display:flex;gap:4px;align-items:center"><span style="font-family:var(--nf)">&#xf0e7;</span>Charging · full in 42 min</div></div>
+<div style="display:flex;flex-direction:column;gap:3px;text-align:right;font:500 10.5px var(--mono);color:var(--onv)"><span>31.4°C · 18 W</span><span>last 24 h</span></div>
+</div>
+<div style="flex:1;display:flex;align-items:flex-end;gap:3px;min-height:0;border-bottom:1px solid var(--ov)">
+<sc-for list="{{ batteryBars }}" as="x" hint-placeholder-count="24"><div style="{{ x.style }}"></div></sc-for>
+</div>
+<div style="display:flex;justify-content:space-between;font:500 10px var(--mono);color:var(--onv)"><span>14:00</span><span>20:00</span><span>02:00</span><span>08:00</span><span>now</span></div>
+</div>
+</div>
+
+<!-- SYSTEM -->
+<div style="display:grid;grid-template-columns:120px 88px 184px 184px 376px 376px;gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:3px;padding-top:4px"><div style="font:600 14px var(--sans);color:var(--lbl)">System stats</div><div style="font:400 11px var(--mono);color:var(--lbl2)">system</div></div>
+<div style="box-sizing:border-box;width:88px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;justify-content:center;gap:7px;padding:0 12px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font:13px/1 var(--nf);color:var(--p)">&#xf2db;</span><span style="font:var(--numW) 16px/1 var(--mono)">24%</span></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font:13px/1 var(--nf);color:var(--otc)">&#xf0a0;</span><span style="font:var(--numW) 16px/1 var(--mono)">66%</span></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font:13px/1 var(--nf);color:var(--warm)">&#xf2c9;</span><span style="font:var(--numW) 16px/1 var(--mono)">31°</span></div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;justify-content:center;gap:8px;padding:0 14px">
+<sc-for list="{{ statsShort }}" as="s" hint-placeholder-count="3"><div style="display:grid;grid-template-columns:30px 1fr 36px;align-items:center;gap:8px;font:500 11px var(--mono)"><span style="color:var(--onv)">{{ s.k }}</span><div style="height:5px;border-radius:var(--barR);background:var(--chh);overflow:hidden"><div style="{{ s.bar }}"></div></div><span style="text-align:right">{{ s.v }}</span></div></sc-for>
+</div>
+<div style="box-sizing:border-box;width:184px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:10px;padding:14px">
+<div style="display:var(--capA);font:600 11px/14px var(--sans);color:var(--onv)">System</div><div style="display:var(--capB);align-items:center;gap:5px;font:500 10.5px/14px var(--mono);color:var(--onv)"><span style="font-family:var(--nf);color:var(--p)">&#xf2db;</span>system</div>
+<div style="flex:1;display:flex;flex-direction:column;justify-content:space-between">
+<sc-for list="{{ stats }}" as="s" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:4px"><div style="display:flex;justify-content:space-between;font:500 11px var(--mono)"><span style="color:var(--onv)">{{ s.k }}</span><span>{{ s.v }}</span></div><div style="height:5px;border-radius:var(--barR);background:var(--chh);overflow:hidden"><div style="{{ s.bar }}"></div></div></div></sc-for>
+</div>
+<div style="font:500 10.5px var(--mono);color:var(--onv)">up 3d 4h</div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;padding:0 16px;align-items:center">
+<sc-for list="{{ stats }}" as="s" hint-placeholder-count="4"><div style="display:flex;flex-direction:column;gap:6px"><div style="display:flex;gap:5px;align-items:center;font:600 11px var(--sans);color:var(--onv)"><span style="{{ s.ic }}">{{ s.g }}</span>{{ s.label }}</div><div style="font:var(--numW) 22px/1 var(--mono)">{{ s.v }}</div><div style="height:4px;border-radius:var(--barR);background:var(--chh);overflow:hidden"><div style="{{ s.bar }}"></div></div></div></sc-for>
+</div>
+<div style="box-sizing:border-box;width:376px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:10px;padding:16px">
+<div style="display:flex;justify-content:space-between;align-items:baseline"><div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 12px var(--sans);color:var(--onv)">CPU</span><span style="font:var(--numW) 30px/1 var(--mono)">24%</span></div><div style="font:500 10.5px var(--mono);color:var(--onv)">8 cores · 1.8 GHz · up 3d 4h</div></div>
+<div style="flex:1;display:flex;align-items:flex-end;gap:3px;min-height:0;border-bottom:1px solid var(--ov)">
+<sc-for list="{{ cpuBars }}" as="x" hint-placeholder-count="32"><div style="{{ x.style }}"></div></sc-for>
+</div>
+<div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+<sc-for list="{{ statsTail }}" as="s" hint-placeholder-count="3"><div style="display:flex;justify-content:space-between;align-items:baseline;font:500 11px var(--mono)"><span style="color:var(--onv)">{{ s.k }}</span><span style="font-size:13px">{{ s.v }}</span></div></sc-for>
+</div>
+</div>
+</div>
+
+<!-- MEDIA -->
+<div style="display:grid;grid-template-columns:120px 88px 184px 184px 376px 376px;gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:3px;padding-top:4px"><div style="font:600 14px var(--sans);color:var(--lbl)">Media</div><div style="font:400 11px var(--mono);color:var(--lbl2)">media</div></div>
+<div style="box-sizing:border-box;width:88px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;justify-content:center;padding:8px">
+<div style="position:absolute;inset:8px;border-radius:calc(var(--r) - 8px);background:repeating-linear-gradient(135deg,var(--chh) 0 6px,var(--ch) 6px 12px)"></div>
+<div style="position:relative;width:40px;height:40px;border-radius:50%;background:var(--p);color:var(--onp);display:flex;align-items:center;justify-content:center;font:15px/1 var(--nf)">&#xf04c;</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:10px;padding:0 10px">
+<div style="width:68px;height:68px;flex:none;border-radius:calc(var(--r) - 10px);background:repeating-linear-gradient(135deg,var(--chh) 0 6px,var(--ch) 6px 12px);display:flex;align-items:flex-end;padding:4px;box-sizing:border-box;font:500 8px var(--mono);color:var(--onv)">art</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0"><div style="display:flex;flex-direction:column"><div style="font:600 12.5px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Low Tide</div><div style="font:500 11px var(--sans);color:var(--onv);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Halcyon Tapes</div></div><div style="display:flex;align-items:center;gap:10px"><span style="width:28px;height:28px;border-radius:50%;background:var(--p);color:var(--onp);display:flex;align-items:center;justify-content:center;font:11px/1 var(--nf)">&#xf04c;</span><span style="font:12px/1 var(--nf);color:var(--onv)">&#xf051;</span></div></div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:8px;padding:10px">
+<div style="height:84px;flex:none;border-radius:calc(var(--r) - 10px);background:repeating-linear-gradient(135deg,var(--chh) 0 6px,var(--ch) 6px 12px);display:flex;align-items:flex-end;padding:6px;box-sizing:border-box;font:500 9px var(--mono);color:var(--onv)">album art</div>
+<div style="display:flex;flex-direction:column;padding:0 4px"><div style="font:600 13px var(--sans)">Low Tide</div><div style="font:500 11px var(--sans);color:var(--onv)">Halcyon Tapes</div></div>
+<div style="height:4px;margin:0 4px;border-radius:var(--barR);background:var(--chh);overflow:hidden"><div style="width:43%;height:100%;background:var(--p)"></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center;padding:0 10px"><span style="font:13px/1 var(--nf);color:var(--onv)">&#xf048;</span><span style="width:34px;height:34px;border-radius:50%;background:var(--p);color:var(--onp);display:flex;align-items:center;justify-content:center;font:13px/1 var(--nf)">&#xf04c;</span><span style="font:13px/1 var(--nf);color:var(--onv)">&#xf051;</span></div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:12px;padding:0 12px">
+<div style="width:68px;height:68px;flex:none;border-radius:calc(var(--r) - 10px);background:repeating-linear-gradient(135deg,var(--chh) 0 6px,var(--ch) 6px 12px)"></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:7px;min-width:0">
+<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><div style="font:600 13px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Low Tide <span style="color:var(--onv);font-weight:500">· Halcyon Tapes</span></div><span style="font:500 10.5px var(--mono);color:var(--onv);flex:none">1:42 / 3:58</span></div>
+<div style="height:4px;border-radius:var(--barR);background:var(--chh);overflow:hidden"><div style="width:43%;height:100%;background:var(--p)"></div></div>
+<div style="display:flex;align-items:center;gap:18px"><span style="font:12px/1 var(--nf);color:var(--onv)">&#xf074;</span><span style="font:12px/1 var(--nf);color:var(--on)">&#xf048;</span><span style="width:28px;height:28px;border-radius:50%;background:var(--p);color:var(--onp);display:flex;align-items:center;justify-content:center;font:11px/1 var(--nf)">&#xf04c;</span><span style="font:12px/1 var(--nf);color:var(--on)">&#xf051;</span><span style="font:12px/1 var(--nf);color:var(--onv)">&#xf004;</span></div>
+</div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;gap:16px;padding:12px">
+<div style="width:168px;height:168px;flex:none;border-radius:calc(var(--r) - 12px);background:repeating-linear-gradient(135deg,var(--chh) 0 7px,var(--ch) 7px 14px);display:flex;align-items:flex-end;padding:8px;box-sizing:border-box;font:500 10px var(--mono);color:var(--onv)">album art</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0;padding:4px 4px 4px 0">
+<div style="font:500 10.5px var(--mono);color:var(--onv);display:flex;gap:5px;align-items:center"><span style="font-family:var(--nf)">&#xf001;</span>media session</div>
+<div style="font:700 17px/1.2 var(--sans);margin-top:6px">Low Tide</div>
+<div style="font:500 12px var(--sans);color:var(--onv)">Halcyon Tapes</div>
+<div style="margin-top:auto;display:flex;flex-direction:column;gap:5px"><div style="height:4px;border-radius:var(--barR);background:var(--chh);overflow:hidden"><div style="width:43%;height:100%;background:var(--p)"></div></div><div style="display:flex;justify-content:space-between;font:500 10.5px var(--mono);color:var(--onv)"><span>1:42</span><span>3:58</span></div></div>
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font:13px/1 var(--nf);color:var(--onv)">&#xf074;</span><span style="font:13px/1 var(--nf)">&#xf048;</span><span style="width:38px;height:38px;border-radius:50%;background:var(--p);color:var(--onp);display:flex;align-items:center;justify-content:center;font:14px/1 var(--nf)">&#xf04c;</span><span style="font:13px/1 var(--nf)">&#xf051;</span><span style="font:13px/1 var(--nf);color:var(--onv)">&#xf004;</span></div>
+</div>
+</div>
+</div>
+
+<!-- NOTIFICATIONS -->
+<div style="display:grid;grid-template-columns:120px 88px 184px 184px 376px 376px;gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:3px;padding-top:4px"><div style="font:600 14px var(--sans);color:var(--lbl)">Notifications</div><div style="font:400 11px var(--mono);color:var(--lbl2)">notifications</div></div>
+<div style="box-sizing:border-box;width:88px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px">
+<div style="position:relative"><span style="font:26px/1 var(--nf)">&#xf0f3;</span><span style="position:absolute;top:-6px;right:-12px;min-width:18px;height:18px;border-radius:9px;background:var(--err);color:var(--bg);font:700 10.5px/18px var(--mono);text-align:center;padding:0 4px;box-sizing:border-box">7</span></div>
+<div style="font:500 10.5px var(--mono);color:var(--onv)">4 apps</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;justify-content:center;gap:5px;padding:0 14px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="display:flex;gap:6px;align-items:center;font:600 11px var(--sans);color:var(--onv)"><span style="font-family:var(--nf);color:var(--done)">&#xf232;</span>WhatsApp</span><span style="font:500 10.5px var(--mono);color:var(--onv)">13:32</span></div>
+<div style="font:600 13px var(--sans)">Ahmed</div>
+<div style="font:400 11.5px var(--sans);color:var(--onv);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Sent the PO, check mail</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:8px;padding:12px">
+<div style="display:flex;justify-content:space-between;align-items:center;padding:0 2px"><div style="display:var(--capA);font:600 11px/14px var(--sans);color:var(--onv)">Notifications</div><div style="display:var(--capB);align-items:center;gap:5px;font:500 10.5px/14px var(--mono);color:var(--onv)"><span style="font-family:var(--nf);color:var(--p)">&#xf0f3;</span>notifs</div><span style="font:700 10.5px var(--mono);color:var(--err)">7</span></div>
+<sc-for list="{{ notifs3 }}" as="n" hint-placeholder-count="3"><div style="display:flex;gap:8px;align-items:flex-start;background:var(--ch);border-radius:calc(var(--r) - 12px);padding:7px 8px"><span style="{{ n.ic }}">{{ n.g }}</span><div style="display:flex;flex-direction:column;min-width:0"><div style="font:600 11.5px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ n.who }}</div><div style="font:400 10.5px var(--sans);color:var(--onv);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ n.text }}</div></div></div></sc-for>
+</div>
+<div style="box-sizing:border-box;width:376px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:12px;padding:0 16px">
+<div style="width:40px;height:40px;flex:none;border-radius:50%;background:var(--ch);display:flex;align-items:center;justify-content:center;font:18px/1 var(--nf);color:var(--done)">&#xf232;</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:3px;min-width:0"><div style="display:flex;gap:8px;align-items:baseline"><span style="font:600 13px var(--sans)">Ahmed</span><span style="font:500 10.5px var(--mono);color:var(--onv)">WhatsApp · 13:32</span></div><div style="font:400 12px var(--sans);color:var(--onv);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Sent the PO, check mail when you can</div></div>
+<div style="display:flex;align-items:center;gap:6px;flex:none"><div style="display:flex"><span style="width:22px;height:22px;border-radius:50%;background:var(--ch);border:2px solid var(--w);display:flex;align-items:center;justify-content:center;font:10px/1 var(--nf);color:var(--err)">&#xf0e0;</span><span style="width:22px;height:22px;margin-left:-6px;border-radius:50%;background:var(--ch);border:2px solid var(--w);display:flex;align-items:center;justify-content:center;font:10px/1 var(--nf)">&#xf09b;</span></div><span style="font:600 11px var(--mono);color:var(--onv)">+6</span></div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:2px;padding:12px 16px">
+<div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:4px"><div style="display:var(--capA);font:600 11px/14px var(--sans);color:var(--onv)">Notifications</div><div style="display:var(--capB);align-items:center;gap:5px;font:500 10.5px/14px var(--mono);color:var(--onv)"><span style="font-family:var(--nf);color:var(--p)">&#xf0f3;</span>notifications</div><span style="font:600 11px var(--sans);color:var(--p)">Clear all</span></div>
+<sc-for list="{{ notifs }}" as="n" hint-placeholder-count="4"><div style="display:flex;gap:10px;align-items:center;padding:5px 0;border-top:1px solid var(--ov)"><span style="{{ n.ic }}">{{ n.g }}</span><div style="flex:1;display:flex;flex-direction:column;min-width:0"><div style="display:flex;gap:6px;align-items:baseline"><span style="font:600 12px var(--sans)">{{ n.who }}</span><span style="font:500 10px var(--mono);color:var(--onv)">{{ n.app }}</span></div><div style="font:400 11px var(--sans);color:var(--onv);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ n.text }}</div></div><span style="font:500 10.5px var(--mono);color:var(--onv)">{{ n.time }}</span></div></sc-for>
+</div>
+</div>
+
+<!-- TASKS -->
+<div style="display:grid;grid-template-columns:120px 88px 184px 184px 376px 376px;gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:3px;padding-top:4px"><div style="font:600 14px var(--sans);color:var(--lbl)">Tasks</div><div style="font:400 11px var(--mono);color:var(--lbl2)">tasks</div></div>
+<div style="box-sizing:border-box;width:88px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px">
+<div style="font:var(--numW) 34px/1 var(--mono)">4</div><div style="font:500 11px var(--sans);color:var(--onv)">tasks left</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:12px;padding:0 14px">
+<div style="display:flex;flex-direction:column;align-items:center;width:34px;flex:none"><span style="font:var(--numW) 28px/1 var(--mono)">4</span><span style="font:500 10px var(--mono);color:var(--onv)">left</span></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0">
+<div style="display:flex;gap:7px;align-items:center"><span style="width:14px;height:14px;flex:none;border-radius:4px;box-shadow:inset 0 0 0 1.5px var(--onv)"></span><span style="font:600 12px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Review dock PR</span></div>
+<div style="display:flex;gap:7px;align-items:center"><span style="width:14px;height:14px;flex:none;border-radius:4px;box-shadow:inset 0 0 0 1.5px var(--onv)"></span><span style="font:500 12px var(--sans);color:var(--onv);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Pay electricity bill</span></div>
+</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:10px;padding:14px">
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:var(--capA);font:600 11px/14px var(--sans);color:var(--onv)">Today</div><div style="display:var(--capB);align-items:center;gap:5px;font:500 10.5px/14px var(--mono);color:var(--onv)"><span style="font-family:var(--nf);color:var(--p)">&#xf046;</span>tasks</div><span style="width:22px;height:22px;border-radius:50%;background:var(--pc);color:var(--opc);display:flex;align-items:center;justify-content:center;font:10px/1 var(--nf)">&#xf067;</span></div>
+<sc-for list="{{ tasks4 }}" as="k" hint-placeholder-count="4"><div style="display:flex;gap:8px;align-items:center"><span style="{{ k.box }}">{{ k.g }}</span><span style="{{ k.txt }}">{{ k.t }}</span></div></sc-for>
+</div>
+<div style="box-sizing:border-box;width:376px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:14px;padding:0 16px">
+<div style="display:flex;flex-direction:column;align-items:center;width:40px;flex:none"><span style="font:var(--numW) 30px/1 var(--mono)">4</span><span style="font:500 10px var(--mono);color:var(--onv)">left</span></div>
+<div style="flex:1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;min-width:0">
+<sc-for list="{{ tasks4 }}" as="k" hint-placeholder-count="4"><div style="display:flex;gap:7px;align-items:center;min-width:0"><span style="{{ k.box }}">{{ k.g }}</span><span style="{{ k.txt }}">{{ k.t }}</span></div></sc-for>
+</div>
+<span style="width:32px;height:32px;flex:none;border-radius:50%;background:var(--pc);color:var(--opc);display:flex;align-items:center;justify-content:center;font:12px/1 var(--nf)">&#xf067;</span>
+</div>
+<div style="box-sizing:border-box;width:376px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:9px;padding:14px 16px">
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;align-items:baseline;gap:8px"><span style="font:600 13px var(--sans)">Today</span><span style="font:500 10.5px var(--mono);color:var(--onv)">4 left · 1 done</span></div><span style="height:26px;border-radius:13px;background:var(--pc);color:var(--opc);display:flex;align-items:center;gap:5px;padding:0 10px;font:600 11px var(--sans)"><span style="font-family:var(--nf);font-size:10px">&#xf067;</span>Add</span></div>
+<sc-for list="{{ tasks }}" as="k" hint-placeholder-count="5"><div style="display:flex;gap:10px;align-items:center"><span style="{{ k.box }}">{{ k.g }}</span><span style="{{ k.txt }}">{{ k.t }}</span><span style="margin-left:auto;font:500 10.5px var(--mono);color:var(--onv);flex:none">{{ k.due }}</span></div></sc-for>
+</div>
+</div>
+
+<!-- NOTES -->
+<div style="display:grid;grid-template-columns:120px 88px 184px 184px 376px 376px;gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:3px;padding-top:4px"><div style="font:600 14px var(--sans);color:var(--lbl)">Scratchpad</div><div style="font:400 11px var(--mono);color:var(--lbl2)">notes</div></div>
+<div style="box-sizing:border-box;width:88px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px">
+<div style="width:40px;height:40px;border-radius:calc(var(--r) - 10px);background:var(--tc);color:var(--otc);display:flex;align-items:center;justify-content:center;font:18px/1 var(--nf)">&#xf249;</div><div style="font:500 10.5px var(--mono);color:var(--onv)">new note</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:5px;padding:12px 14px">
+<div style="font:600 11px var(--sans);color:var(--onv)">scratch.md · 2m</div>
+<div style="font:400 11.5px/1.45 var(--mono);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">nix-shell -p ffmpeg<br>try kitty +kitten icat<br>dock glass alpha 0.62?</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:8px;padding:14px">
+<div style="display:var(--capA);font:600 11px/14px var(--sans);color:var(--onv)">scratch.md</div><div style="display:var(--capB);align-items:center;gap:5px;font:500 10.5px/14px var(--mono);color:var(--onv)"><span style="font-family:var(--nf);color:var(--p)">&#xf249;</span>~/notes/scratch.md</div>
+<div style="font:400 11.5px/1.55 var(--mono);white-space:pre-wrap;flex:1;overflow:hidden"><span style="color:var(--p)"># today</span>
+nix-shell -p ffmpeg
+try kitty +kitten icat
+dock glass alpha 0.62?
+<span style="color:var(--onv)">- [x] fix pane rim</span>
+- [ ] widget sizes</div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:12px;padding:0 12px 0 16px">
+<div style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0"><div style="font:600 11px var(--sans);color:var(--onv)">scratch.md · edited 2m ago</div><div style="font:400 12px/1.45 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">nix-shell -p ffmpeg · try kitty +kitten icat</div></div>
+<div style="height:44px;flex:none;border-radius:calc(var(--r) - 8px);background:var(--tc);color:var(--otc);display:flex;align-items:center;gap:7px;padding:0 14px;font:600 12px var(--sans)"><span style="font-family:var(--nf)">&#xf249;</span>Note</div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:8px;padding:14px 16px">
+<div style="display:flex;justify-content:space-between;align-items:center"><div style="display:flex;gap:6px"><span style="height:24px;border-radius:12px;background:var(--pc);color:var(--opc);padding:0 10px;display:flex;align-items:center;font:600 11px var(--mono)">scratch.md</span><span style="height:24px;border-radius:12px;background:var(--ch);color:var(--onv);padding:0 10px;display:flex;align-items:center;font:500 11px var(--mono)">ideas.md</span></div><span style="font:500 10.5px var(--mono);color:var(--onv)">2m</span></div>
+<div style="font:400 12px/1.6 var(--mono);white-space:pre-wrap;flex:1;overflow:hidden"><span style="color:var(--p)"># today</span>
+nix-shell -p ffmpeg
+try kitty +kitten icat on the media pane
+dock glass alpha 0.62? compare with 0.55
+<span style="color:var(--onv)">- [x] fix pane rim on landscape</span>
+- [ ] widget sizes for 4×2</div>
+</div>
+</div>
+
+<!-- SHELL -->
+<div style="display:grid;grid-template-columns:120px 88px 184px 184px 376px 376px;gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:3px;padding-top:4px"><div style="font:600 14px var(--sans);color:var(--lbl)">Command</div><div style="font:400 11px var(--mono);color:var(--lbl2)">shell</div></div>
+<div style="box-sizing:border-box;width:88px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;justify-content:space-between;padding:12px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font:16px/1 var(--nf);color:var(--p)">&#xf120;</span><span style="font:12px/1 var(--nf);color:var(--done)">&#xf00c;</span></div>
+<div style="display:flex;flex-direction:column;gap:2px"><div style="font:600 11.5px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">backup.sh</div><div style="font:500 10px var(--mono);color:var(--onv)">2h ago</div></div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:10px;padding:0 12px 0 14px">
+<div style="flex:1;display:flex;flex-direction:column;gap:5px;min-width:0"><div style="font:600 12px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="color:var(--p)">$</span> tlstore update</div><div style="font:500 10.5px var(--mono);color:var(--done);display:flex;gap:4px;align-items:center"><span style="font-family:var(--nf)">&#xf00c;</span>exit 0</div><div style="font:500 10.5px var(--mono);color:var(--onv)">12m ago</div></div>
+<span style="width:36px;height:36px;flex:none;border-radius:50%;background:var(--p);color:var(--onp);display:flex;align-items:center;justify-content:center;font:12px/1 var(--nf)">&#xf04b;</span>
+</div>
+<div style="box-sizing:border-box;width:184px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:8px;padding:14px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font:600 11.5px var(--mono)"><span style="color:var(--p)">$</span> df -h</span><span style="font:11px/1 var(--nf);color:var(--onv)">&#xf021;</span></div>
+<div style="font:400 10.5px/1.55 var(--mono);white-space:pre;flex:1;overflow:hidden;color:var(--on)"><span style="color:var(--onv)">mount  used  avail</span>
+/data   156G  100G
+/sdcard 156G  100G
+/system 6.1G    0B
+/cache  1.2M  442M</div>
+<div style="font:500 10px var(--mono);color:var(--onv);display:flex;justify-content:space-between"><span style="color:var(--done)">exit 0</span><span>every 1h</span></div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;align-items:center;gap:12px;padding:0 12px 0 16px">
+<div style="flex:1;display:flex;flex-direction:column;gap:6px;min-width:0"><div style="display:flex;justify-content:space-between;font:600 11.5px var(--mono)"><span><span style="color:var(--p)">$</span> uptime</span><span style="color:var(--onv);font-weight:500">30s ago</span></div><div style="font:400 12px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">up 3 days, 4:12 · load 1.08 0.94 0.88</div></div>
+<span style="width:36px;height:36px;flex:none;border-radius:50%;background:var(--ch);color:var(--on);display:flex;align-items:center;justify-content:center;font:12px/1 var(--nf)">&#xf021;</span>
+</div>
+<div style="box-sizing:border-box;width:376px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:8px;padding:14px 16px">
+<div style="display:flex;justify-content:space-between;align-items:center"><span style="font:600 12px var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="color:var(--p)">$</span> git -C ~/termux-launcher status -sb</span><span style="font:11px/1 var(--nf);color:var(--onv);flex:none">&#xf021;</span></div>
+<div style="font:400 11.5px/1.6 var(--mono);white-space:pre;flex:1;overflow:hidden;background:var(--ch);border-radius:calc(var(--r) - 12px);padding:8px 10px;display:flex;flex-direction:column"><div><span style="color:var(--done)">## dev…origin/dev</span> <span style="color:var(--warm)">[ahead 2]</span></div><div><span style="color:var(--err)"> M</span> …/WidgetPaneView.java</div><div><span style="color:var(--err)"> M</span> …/WidgetCellView.java</div><div><span style="color:var(--p)">??</span> docs/widgets.md</div></div>
+<div style="display:flex;justify-content:space-between;font:500 10.5px var(--mono);color:var(--onv)"><span style="color:var(--done);display:flex;gap:4px;align-items:center"><span style="font-family:var(--nf)">&#xf00c;</span>exit 0 · 0.18 s</span><span>4m ago · every 15m</span></div>
+</div>
+</div>
+
+<!-- CALENDAR -->
+<div style="display:grid;grid-template-columns:120px 88px 184px 184px 376px 376px;gap:20px;align-items:start">
+<div style="display:flex;flex-direction:column;gap:3px;padding-top:4px"><div style="font:600 14px var(--sans);color:var(--lbl)">Calendar</div><div style="font:400 11px var(--mono);color:var(--lbl2)">calendar.month</div></div>
+<div style="box-sizing:border-box;width:88px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column">
+<div style="background:var(--p);color:var(--onp);font:700 11px/24px var(--sans);letter-spacing:.1em;text-align:center">OCT</div>
+<div style="flex:1;display:flex;align-items:center;justify-content:center;font:var(--numW) 34px/1 var(--mono)">6</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;justify-content:center;gap:8px;padding:0 10px">
+<div style="font:600 11px var(--sans);color:var(--onv);padding-left:4px">October · week 41</div>
+<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:2px">
+<sc-for list="{{ week }}" as="w" hint-placeholder-count="7"><div style="{{ w.cell }}"><span style="font:600 9.5px var(--sans);opacity:.75">{{ w.k }}</span><span style="font:500 12.5px var(--mono)">{{ w.d }}</span></div></sc-for>
+</div>
+</div>
+<div style="box-sizing:border-box;width:184px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;gap:6px;padding:12px 10px">
+<div style="display:flex;justify-content:space-between;padding:0 4px"><span style="font:700 12px var(--sans)">October</span><span style="font:500 11px var(--mono);color:var(--onv)">2026</span></div>
+<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;font:600 9.5px var(--sans);color:var(--onv)"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+<div style="flex:1;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);gap:1px">
+<sc-for list="{{ month }}" as="m" hint-placeholder-count="35"><div style="{{ m.cell }}">{{ m.d }}</div></sc-for>
+</div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:92px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;flex-direction:column;justify-content:center;gap:6px;padding:0 12px">
+<div style="display:flex;justify-content:space-between;padding:0 4px;font:600 11px var(--sans);color:var(--onv)"><span>October · weeks 41–42</span><span style="font-family:var(--mono);font-weight:500">3 events</span></div>
+<div style="display:grid;grid-template-columns:repeat(14,minmax(0,1fr));gap:2px">
+<sc-for list="{{ twoWeeks }}" as="w" hint-placeholder-count="14"><div style="{{ w.cell }}"><span style="font:600 9.5px var(--sans);opacity:.75">{{ w.k }}</span><span style="font:500 12px var(--mono)">{{ w.d }}</span><span style="{{ w.dot }}"></span></div></sc-for>
+</div>
+</div>
+<div style="box-sizing:border-box;width:376px;height:192px;border-radius:var(--r);background:var(--w);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:var(--rim);box-shadow:var(--sh);overflow:hidden;position:relative;color:var(--on);display:flex;gap:14px;padding:12px 14px 12px 10px">
+<div style="width:184px;flex:none;display:flex;flex-direction:column;gap:5px">
+<div style="display:flex;justify-content:space-between;padding:0 4px"><span style="font:700 12px var(--sans)">October</span><span style="font:500 11px var(--mono);color:var(--onv)">2026</span></div>
+<div style="display:grid;grid-template-columns:repeat(7,minmax(0,1fr));text-align:center;font:600 9.5px var(--sans);color:var(--onv)"><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span><span>S</span></div>
+<div style="flex:1;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));grid-auto-rows:minmax(0,1fr);gap:1px">
+<sc-for list="{{ month }}" as="m" hint-placeholder-count="35"><div style="{{ m.cell }}">{{ m.d }}</div></sc-for>
+</div>
+</div>
+<div style="width:1px;background:var(--ov);margin:4px 0"></div>
+<div style="flex:1;display:flex;flex-direction:column;gap:9px;min-width:0;padding-top:2px">
+<div style="font:600 11px var(--sans);color:var(--onv)">Today</div>
+<sc-for list="{{ eventsShort }}" as="e" hint-placeholder-count="3"><div style="display:flex;gap:8px;align-items:center"><div style="{{ e.dot }}"></div><div style="display:flex;flex-direction:column;min-width:0"><div style="font:600 12px var(--sans);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ e.title }}</div><div style="font:500 10.5px var(--mono);color:var(--onv)">{{ e.time }}</div></div></div></sc-for>
+</div>
+</div>
+</div>
+
+</div>
+</sc-for>
+</div>
+</div>
+</sc-for>
+</div>
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;scheme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;both&quot;,&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;both&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Preview&quot;},&quot;surface&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;pair&quot;,&quot;solid&quot;,&quot;glass&quot;,&quot;both&quot;],&quot;default&quot;:&quot;pair&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Preview&quot;},&quot;directions&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;both&quot;,&quot;a&quot;,&quot;b&quot;],&quot;default&quot;:&quot;both&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Preview&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const scheme = this.props.scheme ?? 'both';
+    const surface = this.props.surface ?? 'pair';
+    const show = this.props.directions ?? 'both';
+    const T = {
+      light: { '--bg':'#F4F6FB','--c':'#EAEFF7','--ch':'#E1E7F2','--chh':'#D7DFEC','--on':'#171C24','--onv':'#586171','--ov':'#C1C9D6','--p':'#345CA8','--onp':'#FFFFFF','--pc':'#D8E3FF','--opc':'#0B1F44','--tc':'#E8DEF8','--otc':'#4F378B','--err':'#BA1A1A','--done':'#1B6B3A','--warm':'#8D4E19' },
+      dark: { '--bg':'#0F141B','--c':'#171D26','--ch':'#202837','--chh':'#2A3343','--on':'#E8EDF7','--onv':'#A9B4C5','--ov':'#404B5D','--p':'#B8C7FF','--onp':'#08204F','--pc':'#29477A','--opc':'#D9E2FF','--tc':'#4A3780','--otc':'#EADDFF','--err':'#FFB4AB','--done':'#7FD69B','--warm':'#F0B48A' }
+    };
+    const wall = {
+      light: 'radial-gradient(120% 70% at 80% 100%, #E7A06B 0%, transparent 55%), radial-gradient(90% 60% at 5% 0%, #8FCBC0 0%, transparent 60%), #C7D6D8',
+      dark: 'radial-gradient(110% 60% at 78% 100%, #B9542C 0%, transparent 55%), radial-gradient(100% 70% at 0% 0%, #1F5C5A 0%, transparent 60%), #10282C'
+    };
+    const glassW = { light: 'rgba(234,239,247,0.62)', dark: 'rgba(23,29,38,0.55)' };
+    const glassRim = { light: '1px solid rgba(255,255,255,0.55)', dark: '1px solid rgba(255,255,255,0.12)' };
+    const dirVars = {
+      a: { '--r':'24px','--capA':'block','--capB':'none','--numW':'300','--barR':'99px','--face':'var(--ch)','--faceSh':'none' },
+      b: { '--r':'12px','--capA':'none','--capB':'flex','--numW':'500','--barR':'1px','--face':'transparent','--faceSh':'inset 0 0 0 1px var(--ov)' }
+    };
+    const schemes = scheme === 'both' ? ['light','dark'] : [scheme];
+    const surfaces = surface === 'both' ? ['solid','glass'] : [surface];
+    const combos = surface === 'pair'
+      ? (scheme === 'both' ? [['solid','light'],['glass','dark']] : [['solid',scheme],['glass',scheme]])
+      : surfaces.flatMap(sf => schemes.map(sc => [sf, sc]));
+    const mkBoards = (dir) => {
+      const out = [];
+      combos.forEach(([sf, sc]) => {
+        const glass = sf === 'glass';
+        const rimB = glass ? glassRim[sc] : '1px solid var(--ov)';
+        out.push({
+          label: (sc === 'light' ? 'Light' : 'Dark') + ' · ' + (glass ? 'Glass' : 'Solid'),
+          style: Object.assign({}, T[sc], dirVars[dir], {
+            '--w': glass ? glassW[sc] : 'var(--c)',
+            '--blur': glass ? 'blur(22px) saturate(140%)' : 'none',
+            '--rim': dir === 'b' ? rimB : (glass ? glassRim[sc] : 'none'),
+            '--sh': glass ? '0 8px 24px rgba(0,0,0,0.12)' : 'none',
+            '--ringIn': glass ? (sc === 'light' ? '#E9EEF5' : '#18202A') : 'var(--c)',
+            '--lbl': glass ? (sc === 'light' ? '#171C24' : '#E8EDF7') : 'var(--on)',
+            '--lbl2': glass ? (sc === 'light' ? '#2E3644' : '#C9D2DF') : 'var(--onv)',
+            boxSizing:'border-box', width:'1508px', padding:'28px 32px 36px', borderRadius:'28px',
+            background: glass ? wall[sc] : 'var(--bg)', display:'flex', flexDirection:'column', gap:'26px',
+            fontFamily:'var(--sans)'
+          })
+        });
+      });
+      return out;
+    };
+    const directions = [
+      { id:'1a', key:'a', name:'Tonal', desc:'Material containers, 24 dp corners, sans captions, light mono numerals' },
+      { id:'1b', key:'b', name:'Pane', desc:'Dressed like a terminal pane: 12 dp corners, hairline rim, mono path captions with Nerd glyphs' }
+    ].filter(d => show === 'both' || show === d.key).map(d => Object.assign({}, d, { boards: mkBoards(d.key) }));
+
+    const ticks = Array.from({ length: 12 }, (_, i) => {
+      const major = i % 3 === 0;
+      return {
+        wrap: { position:'absolute', inset:0, transform:`rotate(${i*30}deg)` },
+        mark: { position:'absolute', left: major ? '48.75%' : '49.25%', top:'5%', width: major ? '2.5%' : '1.5%', height: major ? '9%' : '5%', background: major ? 'var(--on)' : 'var(--onv)', borderRadius:'1px' }
+      };
+    });
+    const dot = c => ({ width:'8px', height:'8px', borderRadius:'50%', background:c, flex:'none' });
+    const nf = (c, size) => ({ fontFamily:'var(--nf)', fontSize:(size||13)+'px', lineHeight:1, color:c });
+    const SUN = '\uf185', CLOUD = '\uf0c2', MOON = '\uf186';
+    const hourly = [['14','35°',SUN],['15','35°',SUN],['16','34°',SUN],['17','32°',CLOUD],['18','30°',MOON]].map(([t,v,g]) => ({ t, v, g, ic: nf(g === SUN ? 'var(--warm)' : g === MOON ? 'var(--p)' : 'var(--onv)', 14) }));
+    const fc = [['Wed',24,36,SUN],['Thu',23,35,SUN],['Fri',22,33,CLOUD],['Sat',23,34,SUN],['Sun',24,35,SUN]];
+    const forecast = fc.map(([d,lo,hi,g]) => ({ d, lo:lo+'°', hi:hi+'°', g, ic: nf(g === SUN ? 'var(--warm)' : 'var(--onv)', 14),
+      bar: { position:'absolute', top:0, bottom:0, left: ((lo-20)/20*100)+'%', right: (100-(hi-20)/20*100)+'%', borderRadius:'var(--barR)', background:'var(--warm)' } }));
+    const fill = (pct, c) => ({ width: pct+'%', height:'100%', background:c, borderRadius:'var(--barR)' });
+    const stats = [
+      { k:'cpu', label:'CPU', v:'24%', pct:24, c:'var(--p)', g:'\uf2db' },
+      { k:'ram', label:'RAM', v:'66%', pct:66, c:'var(--otc)', g:'\uf0a0' },
+      { k:'temp', label:'Temp', v:'31°', pct:52, c:'var(--warm)', g:'\uf2c9' },
+      { k:'disk', label:'Storage', v:'61%', pct:61, c:'var(--done)', g:'\uf0a0' }
+    ].map(s => Object.assign(s, { bar: fill(s.pct, s.c), ic: nf(s.c, 12) }));
+    const cpu = [18,22,30,26,41,35,28,24,19,22,37,52,44,31,26,22,20,25,33,29,24,27,35,48,39,30,24,21,26,29,23,24];
+    const bat = [96,92,88,84,80,76,72,70,68,66,64,63,62,61,60,58,56,52,48,44,52,62,71,79];
+    const events = [
+      { time:'14:30', title:'Standup', where:'Google Meet', c:'var(--p)' },
+      { time:'16:00', title:'KU library meeting', where:'Shuwaikh campus', c:'var(--warm)' },
+      { time:'19:00', title:'Gym', where:'Salmiya', c:'var(--done)' },
+      { time:'Wed', title:'Dentist 10:00', where:'Tomorrow', c:'var(--otc)' }
+    ].map(e => Object.assign(e, { dot: dot(e.c) }));
+    const notifs = [
+      { app:'WhatsApp', who:'Ahmed', text:'Sent the PO, check mail when you can', time:'13:32', g:'\uf232', c:'var(--done)' },
+      { app:'Gmail', who:'Elsevier', text:'Your 2027 renewal quote is ready', time:'12:10', g:'\uf0e0', c:'var(--err)' },
+      { app:'GitHub', who:'termux-launcher', text:'PR #412 approved: widget pane rim', time:'11:48', g:'\uf09b', c:'var(--on)' },
+      { app:'Telegram', who:'Termux Launcher', text:'v1.0.1 released', time:'09:15', g:'\uf2c6', c:'var(--p)' }
+    ].map(n => Object.assign(n, { ic: Object.assign(nf(n.c, 14), { width:'18px', textAlign:'center', flex:'none', paddingTop:'1px' }) }));
+    const taskList = [
+      { t:'Review dock PR', due:'today', done:false },
+      { t:'Pay electricity bill', due:'today', done:false },
+      { t:'Call Ahmed re: invoice', due:'16:00', done:false },
+      { t:'Back up ~/notes', due:'Wed', done:false },
+      { t:'Update tlstore', due:'done', done:true }
+    ].map(k => Object.assign(k, {
+      g: k.done ? '\uf00c' : '',
+      box: { width:'16px', height:'16px', flex:'none', borderRadius:'5px', boxShadow: k.done ? 'none' : 'inset 0 0 0 1.5px var(--onv)', background: k.done ? 'var(--p)' : 'transparent', color:'var(--onp)', fontFamily:'var(--nf)', fontSize:'9px', display:'flex', alignItems:'center', justifyContent:'center' },
+      txt: { font:'500 12.5px var(--sans)', color: k.done ? 'var(--onv)' : 'var(--on)', textDecoration: k.done ? 'line-through' : 'none', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }
+    }));
+    const today = 6, evDays = { 6:'var(--p)', 7:'var(--otc)', 9:'var(--warm)', 13:'var(--done)' };
+    const dayCell = (d, k, withDot) => {
+      const t = d === today;
+      return { k, d: String(d), cell: { display:'flex', flexDirection:'column', alignItems:'center', gap:'2px', padding:'5px 0', borderRadius:'calc(var(--r) / 2)', background: t ? 'var(--p)' : 'transparent', color: t ? 'var(--onp)' : (k === 'S' ? 'var(--onv)' : 'var(--on)') },
+        dot: withDot ? { width:'4px', height:'4px', borderRadius:'50%', background: evDays[d] ? (t ? 'var(--onp)' : evDays[d]) : 'transparent' } : {} };
+    };
+    const K = ['M','T','W','T','F','S','S'];
+    const week = [5,6,7,8,9,10,11].map((d,i) => dayCell(d, K[i], false));
+    const twoWeeks = [5,6,7,8,9,10,11,12,13,14,15,16,17,18].map((d,i) => dayCell(d, K[i%7], true));
+    const month = Array.from({ length: 35 }, (_, i) => {
+      const d = i - 2; const valid = d >= 1 && d <= 31; const t = d === today; const wkend = i % 7 >= 5;
+      return { d: valid ? String(d) : '', cell: { display:'flex', alignItems:'center', justifyContent:'center', font:'500 10.5px var(--mono)', borderRadius:'50%', aspectRatio:'1', margin:'0 auto', height:'100%', background: t ? 'var(--p)' : 'transparent', color: t ? 'var(--onp)' : (wkend ? 'var(--onv)' : 'var(--on)'), boxShadow: (!t && evDays[d]) ? 'inset 0 -2px 0 ' + evDays[d] : 'none' } };
+    });
+    return {
+      directions, ticks,
+      zones: [{ city:'Kuwait', t:'13:40', off:'Today' }, { city:'London', t:'11:40', off:'−2 h' }, { city:'Kochi', t:'16:10', off:'+2:30' }],
+      hourly, hourly4: hourly.slice(0,4), forecast,
+      devices: [{ name:'Phone', pct:'79%', g:'\uf10b', bar: fill(79,'var(--done)') }, { name:'Buds', pct:'54%', g:'\uf025', bar: fill(54,'var(--p)') }, { name:'Watch', pct:'18%', g:'\uf017', bar: fill(18,'var(--err)') }],
+      batteryBars: bat.map((h,i) => ({ style: { flex:1, height: h+'%', borderRadius:'var(--barR) var(--barR) 0 0', background: i >= 20 ? 'var(--done)' : 'var(--chh)' } })),
+      cpuBars: cpu.map((h,i) => ({ style: { flex:1, height: (h*1.6)+'%', borderRadius:'var(--barR) var(--barR) 0 0', background: i === cpu.length-1 ? 'var(--p)' : 'var(--chh)' } })),
+      stats, statsShort: stats.slice(0,3),
+      statsTail: [{ k:'RAM', v:'5.1/7.7G' }, { k:'Temp', v:'31.4°' }, { k:'Disk', v:'156/256G' }],
+      events, eventsShort: events.slice(0,3), notifs, notifs3: notifs.slice(0,3),
+      tasks: taskList, tasks4: taskList.slice(0,4), week, twoWeeks, month
+    };
+  }
+}
+</script>
+</body>
+</html>

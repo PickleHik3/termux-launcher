@@ -7,6 +7,7 @@ import android.view.View;
 
 import androidx.annotation.Nullable;
 
+import com.termux.shared.settings.preferences.SharedPreferenceUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
@@ -29,11 +30,9 @@ public final class SoftWallpaper {
     public static boolean isOn(@Nullable TermuxAppSharedPreferences prefs) {
         if (prefs == null || prefs.getSharedPreferences() == null)
             return false;
-        try {
-            return prefs.getSharedPreferences().getBoolean(KEY_WALLPAPER_SOFT, false);
-        } catch (ClassCastException e) {
-            return false;
-        }
+        // Through the utilities, as every getter reads: a Look the editor previews is seen here too.
+        return SharedPreferenceUtils.getBoolean(prefs.getSharedPreferences(), KEY_WALLPAPER_SOFT,
+            false);
     }
 
     public static void set(@Nullable TermuxAppSharedPreferences prefs, boolean on) {
@@ -56,7 +55,24 @@ public final class SoftWallpaper {
         }
         float radius = AppearanceLooks.SOFT_BLUR_DP
             * backdrop.getResources().getDisplayMetrics().density;
-        backdrop.setRenderEffect(
-            RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP));
+        // The same effect instance for the same radius: the view's render node keeps an effect it
+        // already holds and redraws nothing, where a new one each pass re-blurred the whole
+        // screen's backdrop on every inset dispatch.
+        backdrop.setRenderEffect(blurEffect(radius));
+    }
+
+    /** The last blur handed out and the radius it was made for; an effect is immutable. */
+    @Nullable private static RenderEffect sBlurEffect;
+    private static float sBlurRadiusPx = Float.NaN;
+
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.S)
+    private static RenderEffect blurEffect(float radiusPx) {
+        RenderEffect effect = sBlurEffect;
+        if (effect == null || Float.compare(radiusPx, sBlurRadiusPx) != 0) {
+            effect = RenderEffect.createBlurEffect(radiusPx, radiusPx, Shader.TileMode.CLAMP);
+            sBlurEffect = effect;
+            sBlurRadiusPx = radiusPx;
+        }
+        return effect;
     }
 }

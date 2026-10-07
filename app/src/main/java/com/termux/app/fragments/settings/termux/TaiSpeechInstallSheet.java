@@ -1,6 +1,7 @@
 package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
+import android.text.method.LinkMovementMethod;
 import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
@@ -47,6 +48,9 @@ final class TaiSpeechInstallSheet {
         title.setText(context.getString(R.string.tai_centre_sheet_title, context.getString(R.string.speech_model_engine_whisper)));
         content.addView(title);
 
+        TextView licenseHint = hint(context);
+        licenseHint.setMovementMethod(LinkMovementMethod.getInstance());
+        content.addView(licenseHint);
         TextView sizeHint = hint(context);
         TextView windowHint = hint(context);
         MaterialButton install = new MaterialButton(context);
@@ -58,6 +62,9 @@ final class TaiSpeechInstallSheet {
             if (small[0] && deviceMemoryBytes > 0L && deviceMemoryBytes < TaiSpeechActions.SMALL_MIN_MEMORY_BYTES) {
                 hint = hint + "\n" + context.getString(R.string.tai_centre_small_ram_note);
             }
+            CharSequence license = TaiModelCentreRows.licenseFact(context, entry == null ? null : entry.license);
+            licenseHint.setText(license);
+            licenseHint.setVisibility(license.length() == 0 ? View.GONE : View.VISIBLE);
             sizeHint.setText(hint);
             windowHint.setText(window[0] == 5 ? R.string.speech_model_window_5_hint : R.string.speech_model_window_10_hint);
             install.setText(context.getString(R.string.tai_centre_sheet_install, TaiModelCentreRows.formatBytes(bytes)));

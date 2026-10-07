@@ -3,7 +3,7 @@ package com.termux.app.surfaces;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNotSame;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -12,12 +12,14 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewParent;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 
 import androidx.constraintlayout.widget.ConstraintLayout;
 import androidx.constraintlayout.widget.Group;
 
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.button.MaterialButtonToggleGroup;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.slider.Slider;
 
@@ -118,41 +120,63 @@ public class LayoutModeViewsTest {
         assertEquals(48f, ((Slider) margin).getValueTo(), 0f);
         assertNotNull(panel.findViewById(R.id.appearance_editor_corners_label));
         assertNotNull(panel.findViewById(R.id.appearance_editor_margin_label));
-        // The mode pill, Undo and Done stay on the top row for both modes.
-        assertNotNull(panel.findViewById(R.id.appearance_editor_mode_layout));
-        assertNotNull(panel.findViewById(R.id.appearance_editor_undo));
-        assertNotNull(panel.findViewById(R.id.appearance_editor_done));
+        // The mode pill, Undo and Done are the page bar's, not the sheet's.
+        assertEquals("the pill left the sheet for the page bar", 0,
+            panel.getResources().getIdentifier("appearance_editor_mode_layout", "id",
+                panel.getContext().getPackageName()));
+        assertNull(panel.findViewById(R.id.appearance_page_undo));
+        assertNull(panel.findViewById(R.id.appearance_page_done));
     }
 
-    /** Contrast is the terminal's: its own label and slider in Row B, apart from the first control's. */
+    /** Row B holds five vertical LegendSliders in one row, apart from the heading row. */
     @Test
-    public void rowTwoCarriesLegibilityInAColumnOfItsOwn() {
+    public void rowTwoCarriesSixVerticalLegendSliders() {
         View panel = inflate(R.layout.appearance_editor_panel);
         View row2 = panel.findViewById(R.id.appearance_editor_row2);
-        View label = panel.findViewById(R.id.appearance_editor_cl_label);
-        View legibility = panel.findViewById(R.id.appearance_editor_legibility);
-        assertNotNull(label);
-        assertTrue(legibility instanceof Slider);
-        assertEquals(2f, ((Slider) legibility).getValueTo(), 0f);
-        assertTrue(isInside(legibility, row2));
-        assertTrue(isInside(label, row2));
-        assertNotNull(panel.findViewById(R.id.appearance_editor_row2_barrier));
-        assertNotSame(label, panel.findViewById(R.id.appearance_editor_c1_label));
+        View sliders = panel.findViewById(R.id.appearance_editor_sliders);
+        assertTrue(isInside(sliders, row2));
+        int[] ids = {R.id.appearance_editor_slider_0, R.id.appearance_editor_slider_1,
+            R.id.appearance_editor_slider_2, R.id.appearance_editor_slider_3,
+            R.id.appearance_editor_slider_4, R.id.appearance_editor_slider_5};
+        for (int id : ids) {
+            View slider = panel.findViewById(id);
+            assertTrue(slider instanceof LegendSlider);
+            assertTrue("vertical", ((LegendSlider) slider).isVertical());
+            assertTrue(isInside(slider, sliders));
+            assertEquals("hidden until the controller shows a set", View.GONE,
+                slider.getVisibility());
+        }
+        assertNotNull(panel.findViewById(R.id.appearance_editor_row2_name));
     }
 
-    /** Trail and Effect are menu buttons in Row B, hidden until the terminal shows them. */
+    /**
+     * The buttons are in the heading row, hidden until the selection shows them: Keyboard theme
+     * and Clock are buttons, the terminal's Cursor trail and Terminal effect are pills (a card
+     * holding a heading over the chosen option) that take a tap.
+     */
     @Test
-    public void rowTwoCarriesTrailAndEffectAsMenuButtonsThatStartHidden() {
+    public void rowTwoCarriesItsButtonsInTheHeadingRowHidden() {
         View panel = inflate(R.layout.appearance_editor_panel);
-        View row2 = panel.findViewById(R.id.appearance_editor_row2);
-        View trail = panel.findViewById(R.id.appearance_editor_trail);
-        View effect = panel.findViewById(R.id.appearance_editor_effect);
-        assertTrue(trail instanceof MaterialButton);
-        assertTrue(effect instanceof MaterialButton);
-        assertTrue(isInside(trail, row2));
-        assertTrue(isInside(effect, row2));
-        assertEquals(View.GONE, trail.getVisibility());
-        assertEquals(View.GONE, effect.getVisibility());
+        View head = panel.findViewById(R.id.appearance_editor_row2_head);
+        for (int id : new int[] {R.id.appearance_editor_door_keyboard_theme,
+                R.id.appearance_editor_door_clock, R.id.appearance_editor_trail,
+                R.id.appearance_editor_effect}) {
+            View button = panel.findViewById(id);
+            boolean pill = id == R.id.appearance_editor_trail || id == R.id.appearance_editor_effect;
+            assertTrue(pill ? button instanceof MaterialCardView : button instanceof MaterialButton);
+            assertTrue("takes a tap", button.isClickable());
+            assertTrue(isInside(button, head));
+            assertEquals(View.GONE, button.getVisibility());
+        }
+        TextView trailTitle = panel.findViewById(R.id.appearance_editor_trail_title);
+        TextView effectTitle = panel.findViewById(R.id.appearance_editor_effect_title);
+        assertEquals("Cursor trail", trailTitle.getText().toString());
+        assertEquals("Terminal effect", effectTitle.getText().toString());
+        assertNotNull(panel.findViewById(R.id.appearance_editor_trail_value));
+        assertNotNull(panel.findViewById(R.id.appearance_editor_effect_value));
+        assertEquals("the soften toggle and the wallpaper's row are gone", 0,
+            panel.getResources().getIdentifier("appearance_editor_row2_barrier", "id",
+                panel.getContext().getPackageName()));
     }
 
     /**
@@ -195,22 +219,26 @@ public class LayoutModeViewsTest {
         assertEquals(View.GONE, corners.getVisibility());
     }
 
-    /** Row B is GONE until an element is tapped, and keeps its state across Layout mode. */
+    /** Row B is GONE until the Custom stop shows it, and keeps its state across Layout mode. */
     @Test
-    public void rowTwoIsGoneUntilTappedAndKeepsItsStateAcrossLayoutMode() {
+    public void rowTwoIsGoneUntilShownAndKeepsItsStateAcrossLayoutMode() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ContextThemeWrapper themed = new ContextThemeWrapper(activity,
             R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
         View row2 = panel.view().findViewById(R.id.appearance_editor_row2);
-        Slider blur = panel.view().findViewById(R.id.appearance_editor_c2_slider);
         assertEquals(View.GONE, row2.getVisibility());
-        assertFalse("a hidden Row B takes no touches", blur.isEnabled());
 
         panel.showRow2(R.string.appearance_editor_target_dock);
-        panel.hideFirst();
-        panel.hideLegibility();
-        panel.setSecondSlider("Blur · 8 dp", 8, 32);
+        java.util.List<AppearanceEditorPanel.SliderState> states = new java.util.ArrayList<>();
+        for (AppearanceLooks.Control control
+                : AppearanceLooks.controls(AppearanceLooks.Target.DOCK)) {
+            states.add(new AppearanceEditorPanel.SliderState(control, control.min, true,
+                value -> control.name()));
+        }
+        panel.setSliders(states);
+        LegendSlider blur = panel.sliderFor(AppearanceLooks.Control.BLUR);
+        assertNotNull(blur);
         assertTrue(panel.isRow2Shown());
         assertEquals(View.VISIBLE, row2.getVisibility());
         assertTrue(blur.isEnabled());
@@ -225,7 +253,7 @@ public class LayoutModeViewsTest {
         panel.hideRow2();
         assertFalse(panel.isRow2Shown());
         assertEquals(View.GONE, row2.getVisibility());
-        assertFalse(blur.isEnabled());
+        assertFalse("a hidden Row B takes no touches", blur.isEnabled());
     }
 
     /** The keyboard's tools are in the sheet: its type chips and Key radius, gone until selected. */
@@ -257,7 +285,7 @@ public class LayoutModeViewsTest {
         View root = panel.view();
         int width = Math.round(360 * root.getResources().getDisplayMetrics().density);
         panel.showLayoutMode();
-        int closed = panel.measureFor(true, width);
+        int closed = panel.measureFor(EditorMode.LAYOUT, width);
         View tools = root.findViewById(R.id.layout_editor_keyboard_tools);
         View corners = root.findViewById(R.id.appearance_editor_corners);
 
@@ -266,8 +294,8 @@ public class LayoutModeViewsTest {
         assertEquals(View.VISIBLE, tools.getVisibility());
         assertEquals("kept for its height, not shown", View.INVISIBLE, corners.getVisibility());
         assertFalse(corners.isEnabled());
-        assertEquals("the sheet does not move", closed, panel.measureFor(true, width));
-        assertEquals(closed, panel.measureTallest(true, width));
+        assertEquals("the sheet does not move", closed, panel.measureFor(EditorMode.LAYOUT, width));
+        assertEquals(closed, panel.measureTallest(EditorMode.LAYOUT, width));
 
         panel.setHiddenTilesOpen(true);
         assertEquals("the tiles win while both would", View.GONE, tools.getVisibility());
@@ -293,7 +321,7 @@ public class LayoutModeViewsTest {
         View root = panel.view();
         int width = Math.round(360 * root.getResources().getDisplayMetrics().density);
         panel.showLayoutMode();
-        int closed = panel.measureFor(true, width);
+        int closed = panel.measureFor(EditorMode.LAYOUT, width);
         View tiles = root.findViewById(R.id.layout_editor_hidden_tiles);
         View corners = root.findViewById(R.id.appearance_editor_corners);
         assertEquals(View.GONE, tiles.getVisibility());
@@ -304,7 +332,7 @@ public class LayoutModeViewsTest {
         assertEquals(View.VISIBLE, tiles.getVisibility());
         assertEquals("kept for its height, not shown", View.INVISIBLE, corners.getVisibility());
         assertFalse(corners.isEnabled());
-        assertEquals("the sheet does not move", closed, panel.measureFor(true, width));
+        assertEquals("the sheet does not move", closed, panel.measureFor(EditorMode.LAYOUT, width));
 
         panel.showAppearanceMode();
         assertEquals("Appearance never shows the tiles", View.GONE, tiles.getVisibility());
@@ -315,42 +343,79 @@ public class LayoutModeViewsTest {
         assertEquals(View.VISIBLE, corners.getVisibility());
     }
 
+    /** A disabled column (Contrast without wallpaper colours) stays disabled with Row B up. */
+    @Test
+    public void aDisabledColumnStaysDisabledWhenRowTwoComesUp() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ContextThemeWrapper themed = new ContextThemeWrapper(activity,
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
+        java.util.List<AppearanceEditorPanel.SliderState> states = new java.util.ArrayList<>();
+        states.add(new AppearanceEditorPanel.SliderState(AppearanceLooks.Control.BLUR, 4, true,
+            value -> "Blur"));
+        states.add(new AppearanceEditorPanel.SliderState(AppearanceLooks.Control.CONTRAST, 1,
+            false, value -> "Contrast"));
+        panel.showRow2(R.string.appearance_editor_target_terminal);
+        panel.setSliders(states);
+        assertTrue(panel.sliderFor(AppearanceLooks.Control.BLUR).isEnabled());
+        assertFalse(panel.sliderFor(AppearanceLooks.Control.CONTRAST).isEnabled());
+        panel.hideRow2();
+        panel.showRow2(R.string.appearance_editor_target_terminal);
+        assertTrue(panel.sliderFor(AppearanceLooks.Control.BLUR).isEnabled());
+        assertFalse(panel.sliderFor(AppearanceLooks.Control.CONTRAST).isEnabled());
+    }
+
+    /** The buttons the selection has show, and only those. */
+    @Test
+    public void theHeadingRowShowsExactlyTheSelectionsButtons() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        ContextThemeWrapper themed = new ContextThemeWrapper(activity,
+            R.style.Theme_TermuxActivity_DayNight_NoActionBar);
+        AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
+        panel.showRow2(R.string.appearance_editor_target_keyboard);
+        panel.setDoors(AppearanceLooks.doors(AppearanceLooks.Target.KEYBOARD));
+        assertEquals(java.util.Collections.singletonList(AppearanceLooks.Door.KEYBOARD_THEME),
+            panel.shownDoors());
+        MaterialButton theme = panel.view().findViewById(
+            R.id.appearance_editor_door_keyboard_theme);
+        assertEquals("Keyboard theme", theme.getText().toString());
+        assertTrue(theme.isEnabled());
+        assertTrue("the keyboard keeps its name", panel.isRow2NameShown());
+        panel.setDoors(AppearanceLooks.doors(AppearanceLooks.Target.TERMINAL));
+        assertEquals(java.util.Arrays.asList(AppearanceLooks.Door.TRAIL,
+            AppearanceLooks.Door.EFFECT), panel.shownDoors());
+        assertFalse("the terminal's pills take the name's place", panel.isRow2NameShown());
+        panel.setTerminalLooks("default", "crt_amber");
+        View trail = panel.view().findViewById(R.id.appearance_editor_trail);
+        View effect = panel.view().findViewById(R.id.appearance_editor_effect);
+        TextView trailValue = panel.view().findViewById(R.id.appearance_editor_trail_value);
+        assertEquals("Cursor trail, " + trailValue.getText(), trail.getContentDescription().toString());
+        assertTrue(effect.getContentDescription().toString().startsWith("Terminal effect, "));
+        panel.setDoors(AppearanceLooks.doors(null));
+        assertTrue(panel.shownDoors().isEmpty());
+        assertTrue(panel.isRow2NameShown());
+    }
+
     /**
-     * The global row's middle column is a slider of its own, and the keyboard's last column the
-     * "Keyboard theme" button (DECISIONS items 13 and 15).
+     * A switch into or out of Icons fades the rows that show in over the sheet; rows that do not
+     * show are left opaque, and a zero fade (or a cut-short one) settles everything at full alpha.
      */
     @Test
-    public void rowTwoCarriesTheGlobalRowAndTheKeyboardThemeDoor() {
+    public void theRowsThatShowFadeInAndAZeroFadeSettlesThem() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         ContextThemeWrapper themed = new ContextThemeWrapper(activity,
             R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         AppearanceEditorPanel panel = AppearanceEditorPanel.inflate(themed, new FrameLayout(themed));
         View root = panel.view();
-        Slider middle = root.findViewById(R.id.appearance_editor_cl_slider);
-        MaterialButton theme = root.findViewById(R.id.appearance_editor_c2_button);
-        assertNotNull(middle);
-        assertNotNull(theme);
-
-        panel.showRow2(R.string.appearance_editor_target_all);
-        panel.setFirstSlider("Blur · 8 dp", 8, 30);
-        panel.setMiddleSlider("Opacity · 34%", 34, 100);
-        panel.setSecondSlider("Grain · 18%", 18, 100);
-        assertTrue(panel.isMiddleSliderShown());
-        assertEquals(View.GONE, root.findViewById(R.id.appearance_editor_legibility)
-            .getVisibility());
-        assertFalse(panel.isSecondButtonShown());
-        assertEquals(34f, middle.getValue(), 0f);
-
-        panel.showRow2(R.string.appearance_editor_target_keyboard);
-        panel.setFirstSlider("Blur · 8 dp", 8, 30);
-        panel.hideLegibility();
-        panel.setSecondButton("Keyboard theme");
-        assertFalse(panel.isMiddleSliderShown());
-        assertTrue(panel.isSecondButtonShown());
-        assertEquals(View.GONE, root.findViewById(R.id.appearance_editor_c2_slider)
-            .getVisibility());
-        assertEquals("Keyboard theme", theme.getText().toString());
-        assertTrue(theme.isEnabled());
+        View look = root.findViewById(R.id.appearance_editor_look);
+        View orientation = root.findViewById(R.id.layout_editor_orientation);
+        panel.showAppearanceMode();
+        panel.fadeInRows(240L);
+        assertEquals("a row that shows starts clear", 0f, look.getAlpha(), 0f);
+        assertEquals("a row that does not show is left opaque", 1f, orientation.getAlpha(), 0f);
+        panel.fadeInRows(0L);
+        assertEquals(1f, look.getAlpha(), 0f);
+        assertEquals(1f, orientation.getAlpha(), 0f);
     }
 
     private static boolean isInside(View view, View ancestor) {
@@ -359,15 +424,5 @@ public class LayoutModeViewsTest {
                 return true;
         }
         return false;
-    }
-
-    /** The terminal's Grain stands in a fourth column of Row B, hidden until the terminal is tapped. */
-    @Test
-    public void rowBHasAFourthColumnForTheTerminalsGrain() {
-        View panel = inflate(R.layout.appearance_editor_panel);
-        assertTrue(panel.findViewById(R.id.appearance_editor_c3_label) instanceof android.widget.TextView);
-        assertTrue(panel.findViewById(R.id.appearance_editor_c3_slider) instanceof Slider);
-        assertEquals(View.GONE, panel.findViewById(R.id.appearance_editor_c3_label).getVisibility());
-        assertEquals(View.GONE, panel.findViewById(R.id.appearance_editor_c3_slider).getVisibility());
     }
 }

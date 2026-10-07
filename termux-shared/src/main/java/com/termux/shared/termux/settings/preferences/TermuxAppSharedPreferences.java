@@ -41,6 +41,41 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     /**
+     * The {@link TermuxConstants#TERMUX_PACKAGE_NAME} package context, made once from the
+     * application context and kept while that application is the one running, so a {@link #build}
+     * does not create one per call: the dock, the chrome and every pane build a handle on each
+     * pass. A handle only ever reads and writes preferences, so it needs neither the caller's
+     * activity token nor its display. It is keyed on the application, never on the caller: a
+     * package context reaches its application through its LoadedApk, so a per-caller
+     * {@code WeakHashMap} kept every caller alive through its own value, and the Robolectric suite,
+     * which starts a fresh application per test, retained one asset manager and its themes per
+     * test class until the heap ran out. The preference lookups themselves still run on every
+     * build, so {@code MODE_MULTI_PROCESS} keeps re-checking the file exactly as before.
+     */
+    @Nullable private static Context sPackageContextApp;
+    @Nullable private static Context sPackageContext;
+
+    @NonNull
+    private static Context applicationOf(@NonNull Context caller) {
+        Context app = caller.getApplicationContext();
+        return app != null ? app : caller;
+    }
+
+    /** The cached package context for {@code caller}'s application, or null when it has none yet. */
+    @Nullable
+    private static synchronized Context cachedPackageContext(@NonNull Context caller) {
+        return sPackageContextApp == applicationOf(caller) ? sPackageContext : null;
+    }
+
+    @Nullable
+    private static synchronized Context rememberPackageContext(@NonNull Context caller, @Nullable Context packageContext) {
+        if (packageContext == null) return null;
+        sPackageContextApp = applicationOf(caller);
+        sPackageContext = packageContext;
+        return packageContext;
+    }
+
+    /**
      * Get {@link TermuxAppSharedPreferences}.
      *
      * @param context The {@link Context} to use to get the {@link Context} of the
@@ -49,7 +84,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      */
     @Nullable
     public static TermuxAppSharedPreferences build(@NonNull final Context context) {
-        Context termuxPackageContext = PackageUtils.getContextForPackage(context, TermuxConstants.TERMUX_PACKAGE_NAME);
+        Context termuxPackageContext = cachedPackageContext(context);
+        if (termuxPackageContext == null)
+            termuxPackageContext = rememberPackageContext(context,
+                PackageUtils.getContextForPackage(applicationOf(context), TermuxConstants.TERMUX_PACKAGE_NAME));
         if (termuxPackageContext == null)
             return null;
         else
@@ -66,7 +104,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * @return Returns the {@link TermuxAppSharedPreferences}. This will {@code null} if an exception is raised.
      */
     public static TermuxAppSharedPreferences build(@NonNull final Context context, final boolean exitAppOnError) {
-        Context termuxPackageContext = TermuxUtils.getContextForPackageOrExitApp(context, TermuxConstants.TERMUX_PACKAGE_NAME, exitAppOnError);
+        Context termuxPackageContext = cachedPackageContext(context);
+        if (termuxPackageContext == null)
+            termuxPackageContext = rememberPackageContext(context,
+                TermuxUtils.getContextForPackageOrExitApp(applicationOf(context), TermuxConstants.TERMUX_PACKAGE_NAME, exitAppOnError));
         if (termuxPackageContext == null)
             return null;
         else
@@ -330,6 +371,50 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setStatusBarOpacity(int value) {
         writeSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.OPACITY,
             TERMUX_APP.KEY_STATUS_BAR_OPACITY, DataUtils.clamp(value, 0, 100));
+    }
+
+    public int getStatusBarTintStrength() {
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_STATUS_BAR_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT), 0, 100);
+    }
+
+    public void setStatusBarTintStrength(int value) {
+        writeSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_STATUS_BAR_TINT_STRENGTH, DataUtils.clamp(value, 0, 100));
+    }
+
+    /** How much of the Material colour tint the terminal's glass wears, percent. */
+    public int getTerminalTintStrength() {
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT), 0, 100);
+    }
+
+    public void setTerminalTintStrength(int value) {
+        writeSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH, DataUtils.clamp(value, 0, 100));
+    }
+
+    /** How much of the Material colour tint the keyboard's glass wears, percent. */
+    public int getInAppKeyboardTintStrength() {
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT),
+            0, 100);
+    }
+
+    public void setInAppKeyboardTintStrength(int value) {
+        writeSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_IN_APP_KEYBOARD_TINT_STRENGTH, DataUtils.clamp(value, 0, 100));
+    }
+
+    /** How much of the Material colour tint the dock's glass wears, percent. */
+    public int getDockTintStrength() {
+        return DataUtils.clamp(resolveSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_DOCK_TINT_STRENGTH, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT), 0, 100);
+    }
+
+    public void setDockTintStrength(int value) {
+        writeSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT,
+            TERMUX_APP.KEY_DOCK_TINT_STRENGTH, DataUtils.clamp(value, 0, 100));
     }
 
     public int getStatusBarGrain() {
@@ -878,6 +963,18 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setAppLauncherWidgetPaneEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_APP_LAUNCHER_WIDGET_PANE_ENABLED, value, false);
+    }
+
+    /** The direction the launcher's own widgets are drawn in: "tonal" or "pane". */
+    public String getAppLauncherBuiltinWidgetStyle() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, true);
+    }
+
+    public void setAppLauncherBuiltinWidgetStyle(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE, value, false);
     }
 
     public boolean isX11DisplayEnabled() {
@@ -2797,6 +2894,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                     case BLUR: return TERMUX_APP.KEY_IN_APP_KEYBOARD_BLUR_RADIUS;
                     case OPACITY: return TERMUX_APP.KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
                     case GRAIN: return TERMUX_APP.KEY_IN_APP_KEYBOARD_GRAIN;
+                    case TINT: return TERMUX_APP.KEY_IN_APP_KEYBOARD_TINT_STRENGTH;
                     default: return TERMUX_APP.KEY_IN_APP_KEYBOARD_HORIZONTAL_INSET;
                 }
             case STATUS:
@@ -2804,6 +2902,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                     case BLUR: return TERMUX_APP.KEY_STATUS_BAR_BLUR_RADIUS;
                     case OPACITY: return TERMUX_APP.KEY_STATUS_BAR_OPACITY;
                     case GRAIN: return TERMUX_APP.KEY_STATUS_BAR_GRAIN;
+                    case TINT: return TERMUX_APP.KEY_STATUS_BAR_TINT_STRENGTH;
                     case CORNER_RADIUS: return TERMUX_APP.KEY_STATUS_BAR_CORNER_RADIUS;
                     default: return TERMUX_APP.KEY_STATUS_BAR_HORIZONTAL_INSET;
                 }
@@ -2811,6 +2910,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 switch (property) {
                     case BLUR: return TERMUX_APP.KEY_TERMINAL_GLASS_BLUR_RADIUS;
                     case GRAIN: return TERMUX_APP.KEY_TERMINAL_GLASS_GRAIN;
+                    case TINT: return TERMUX_APP.KEY_TERMINAL_TINT_STRENGTH;
                     default: return TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY;
                 }
             default:
@@ -2818,6 +2918,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                     case BLUR: return TERMUX_APP.KEY_EXTRAKEYS_BLUR_RADIUS;
                     case OPACITY: return TERMUX_APP.KEY_APP_BAR_OPACITY;
                     case GRAIN: return TERMUX_APP.KEY_DOCK_GLASS_GRAIN;
+                    case TINT: return TERMUX_APP.KEY_DOCK_TINT_STRENGTH;
                     case CORNER_RADIUS: return TERMUX_APP.KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS;
                     default: return TERMUX_APP.KEY_DOCK_HORIZONTAL_INSET;
                 }
@@ -2845,6 +2946,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         BLUR("blur", TERMUX_APP.KEY_SURFACE_BASE_BLUR, TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR),
         OPACITY("opacity", TERMUX_APP.KEY_SURFACE_BASE_OPACITY, TERMUX_APP.DEFAULT_SURFACE_BASE_OPACITY),
         GRAIN("grain", TERMUX_APP.KEY_SURFACE_BASE_GRAIN, TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN),
+        TINT("tint", TERMUX_APP.KEY_SURFACE_BASE_TINT, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT),
         CORNER_RADIUS("corner_radius", TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS,
             TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS),
         SIDE_GAP("side_gap", TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP, TERMUX_APP.DEFAULT_SURFACE_BASE_SIDE_GAP);
@@ -2883,7 +2985,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 return property != SurfaceProperty.CORNER_RADIUS;
             case CANVAS:
                 return property == SurfaceProperty.BLUR || property == SurfaceProperty.OPACITY
-                    || property == SurfaceProperty.GRAIN;
+                    || property == SurfaceProperty.GRAIN || property == SurfaceProperty.TINT;
             default:
                 return true;
         }
@@ -2972,7 +3074,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     @NonNull
     public String getSurfaceGlassTint() {
         return knownOrDefault(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT,
-            TERMUX_APP.GLASS_TINT_SCHEME, TERMUX_APP.GLASS_TINT_OBSIDIAN);
+            TERMUX_APP.GLASS_TINT_SCHEME, TERMUX_APP.GLASS_TINT_OBSIDIAN,
+            TERMUX_APP.GLASS_TINT_MATERIAL);
     }
 
     public void setSurfaceGlassTint(@Nullable String tint) {
@@ -3070,6 +3173,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                     case BLUR: return TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR;
                     case OPACITY: return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BACKGROUND_OPACITY;
                     case GRAIN: return TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN;
+                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
                     default: return TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HORIZONTAL_INSET;
                 }
             case STATUS:
@@ -3077,6 +3181,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                     case BLUR: return TERMUX_APP.DEFAULT_STATUS_BAR_BLUR_RADIUS;
                     case OPACITY: return TERMUX_APP.DEFAULT_STATUS_BAR_OPACITY;
                     case GRAIN: return TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
+                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
                     case CORNER_RADIUS: return TERMUX_APP.DEFAULT_STATUS_BAR_CORNER_RADIUS;
                     default: return TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
                 }
@@ -3084,6 +3189,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 switch (property) {
                     case BLUR: return TERMUX_APP.DEFAULT_TERMINAL_GLASS_BLUR_RADIUS;
                     case GRAIN: return TERMUX_APP.DEFAULT_TERMINAL_GLASS_GRAIN;
+                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
                     default: return TERMUX_APP.DEFAULT_VALUE_TERMINAL_BACKGROUND_OPACITY;
                 }
             default:
@@ -3091,6 +3197,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                     case BLUR: return TERMUX_APP.DEFAULT_VALUE_EXTRAKEYS_BLUR_RADIUS;
                     case OPACITY: return TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY;
                     case GRAIN: return TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
+                    case TINT: return TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
                     case CORNER_RADIUS: return TERMUX_APP.DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS;
                     default: return TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET;
                 }
@@ -3214,23 +3321,27 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             false
         );
     }
+
+    public int getManagedWallpaperLockId() {
+        return SharedPreferenceUtils.getInt(
+            mSharedPreferences,
+            TERMUX_APP.KEY_MANAGED_WALLPAPER_LOCK_ID,
+            TERMUX_APP.DEFAULT_VALUE_MANAGED_WALLPAPER_LOCK_ID
+        );
+    }
+
+    public void setManagedWallpaperLockId(int value) {
+        SharedPreferenceUtils.setInt(
+            mSharedPreferences,
+            TERMUX_APP.KEY_MANAGED_WALLPAPER_LOCK_ID,
+            value,
+            false
+        );
+    }
     
-    /** The living still id the managed wallpaper came from, or null for a photo. */
-    @Nullable
-    public String getManagedWallpaperAnimatedId() {
-        String id = SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED, null, true);
-        return id == null || id.isEmpty() ? null : id;
-    }
-
-    public void setManagedWallpaperAnimatedId(@Nullable String id) {
-        SharedPreferenceUtils.setString(mSharedPreferences,
-            TERMUX_APP.KEY_MANAGED_WALLPAPER_ANIMATED, id == null ? "" : id, false);
-    }
-
     /**
      * The Lock wallpaper slot, normalised: {@code same_as_home} (default, and for anything
-     * unreadable), {@code photo}, or {@code animated:<id>} with a non-empty id.
+     * unreadable) or {@code photo}.
      */
     @androidx.annotation.NonNull
     public String getWallpaperLockChoice() {
@@ -3249,35 +3360,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (choice == null) return TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE;
         String c = choice.trim();
         if (TERMUX_APP.VALUE_WALLPAPER_LOCK_PHOTO.equals(c)) return c;
-        if (c.startsWith(TERMUX_APP.VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX)
-            && c.length() > TERMUX_APP.VALUE_WALLPAPER_LOCK_ANIMATED_PREFIX.length()) return c;
         return TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE;
-    }
-
-    /** The Lock slot's Motion toggle, on by default. */
-    public boolean isWallpaperLockMotionEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_WALLPAPER_LOCK_MOTION, TERMUX_APP.DEFAULT_VALUE_WALLPAPER_LOCK_MOTION);
-    }
-
-    public void setWallpaperLockMotionEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_LOCK_MOTION, value, false);
-    }
-
-    /** The Home slot's Motion toggle for a living still, on by default. */
-    public boolean isWallpaperHomeMotionEnabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_WALLPAPER_HOME_MOTION, TERMUX_APP.DEFAULT_VALUE_WALLPAPER_HOME_MOTION);
-    }
-
-    public void setWallpaperHomeMotionEnabled(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_WALLPAPER_HOME_MOTION, value, false);
-    }
-
-    /** Hidden kill switch for generated backgrounds; no settings UI, set through the preference file. */
-    public boolean isAnimatedWallpaperDisabled() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
-            TERMUX_APP.KEY_ANIMATED_WALLPAPER_DISABLED, TERMUX_APP.DEFAULT_VALUE_ANIMATED_WALLPAPER_DISABLED);
     }
 
     public boolean isExtraKeysBlurEnabled() {

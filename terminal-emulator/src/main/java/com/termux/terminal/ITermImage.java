@@ -292,7 +292,10 @@ public class ITermImage {
                 Logger.logError(mClient, LOG_TAG, "Failed to decode image: " + t.getMessage());
                 System.gc();
             } else {
-                Logger.logStackTraceWithMessage(mClient, LOG_TAG, "Failed to decode image: " + encodedImageString, t);
+                // The payload can be megabytes of base64; its head is enough to recognise it.
+                String head = encodedImageString == null || encodedImageString.length() <= 64
+                    ? encodedImageString : encodedImageString.substring(0, 64) + "...";
+                Logger.logStackTraceWithMessage(mClient, LOG_TAG, "Failed to decode image: " + head, t);
             }
             setStateFailed(null);
             return false;

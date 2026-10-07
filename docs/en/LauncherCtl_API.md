@@ -477,7 +477,7 @@ the first time the new store opens.
 | POST | `/v1/volume` | `{"stream": "music", "volume": 7}` | `{"ok": true, "stream": "music", "volume": 7, "max_volume": 15}` |
 | POST | `/v1/toast` | `{"text": "hi", "short": false}` | `{"ok": true, "length": 2}` |
 | POST | `/v1/wallpaper` | `{"path": "/sdcard/a.jpg", "target": "both"}` (`target`: `home`, `lock`, `both`; default `both`) | `{"ok": true, "target": "both", "width": 2400, "height": 1080, "launcher_refresh": "live"}` |
-| GET | `/v1/wallpaper` | none | `{"ok": true, "home_id": 12, "lock_id": 13, "live": false, "managed": true, "animated": "living:0123456789abcdef", "palette": "own", "playing": true, "reason": null, "tier": 0, "kills": 0, "lock_slot": "same_as_home", "lock_motion": true, "lock_live": true, "desired_width": 1080, "desired_height": 2400}` (`lock_slot`: `same_as_home`, a living still id, or `photo`; `lock_live`: the launcher's live wallpaper holds the lock screen) |
+| GET | `/v1/wallpaper` | none | `{"ok": true, "home_id": 12, "lock_id": 13, "live": false, "managed": true, "lock_slot": "same_as_home", "desired_width": 1080, "desired_height": 2400}` (`lock_slot`: `same_as_home` or `photo`) |
 
 These are the answers `termux-vibrate`, `termux-torch`, `termux-battery-status`, `termux-volume`
 and `termux-toast` give, so a compatibility script can pass them through. They need no pane and
@@ -515,12 +515,7 @@ vibrate and torch, 60 for toast and volume writes, 120 for battery and volume re
   reports the current ids, whether a live wallpaper is on, and whether the home wallpaper is the
   one the launcher set (`managed`).
 - `wallpaper` with `builtin` is gone with the pre-made backgrounds: 400 `bad_request`
-  ("'builtin' was removed; use 'path'"), and `GET /v1/wallpaper/builtins` no longer exists. Setting
-  a `path` afterwards forgets a living still. `GET /v1/wallpaper` adds `animated` (the living
-  still's id, `living:<hash>`, or null), `palette` (`own` or null), `playing`, and `reason` (`api`,
-  `fancier_glass_off`, `paused`, `killed`, `inactive`, or null while playing); with no launcher
-  screen registered it reports `playing: false`, `reason: "inactive"`. A stored id of a retired
-  background reads as a photo.
+  ("'builtin' was removed; use 'path'"), and `GET /v1/wallpaper/builtins` no longer exists.
 
 ```sh
 launcherctl vibrate -d 200 --force

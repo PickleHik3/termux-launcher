@@ -47,7 +47,17 @@ public final class TaiReadAloud {
         return thread;
     });
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
+    /** Re-reads the model store for {@link #isAvailable}; one at a time, never on the main thread. */
+    private static final ExecutorService CHECKER = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "tai-read-aloud-check");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final AtomicBoolean CHECKING = new AtomicBoolean();
+    /** Bumped by {@link #invalidateAvailability}, so a check that began before it is not kept. */
+    private static final AtomicInteger AVAILABILITY_GENERATION = new AtomicInteger();
     private static volatile long availabilityCheckedAt = -AVAILABILITY_CACHE_MS;
+    private static volatile boolean availabilityKnown;
     private static volatile boolean available;
 
     private TaiReadAloud() {}
@@ -58,21 +68,55 @@ public final class TaiReadAloud {
     }
 
     /**
-     * Whether a voice model is installed, so Read aloud is worth offering. Read from the model
-     * store at most every ten seconds: the selection toolbar asks on every long press.
+     * Whether a voice model is installed, so Read aloud is worth offering. The selection toolbar
+     * asks on every long press, so this answers from memory: the first answer in a process, and
+     * the first after {@link #invalidateAvailability}, is worked out here; from then on an answer
+     * older than ten seconds is returned as it is while a background check refreshes it for the
+     * next press.
      */
     public static boolean isAvailable(@NonNull Context context) {
-        long now = SystemClock.elapsedRealtime();
-        if (now - availabilityCheckedAt >= AVAILABILITY_CACHE_MS) {
-            available = TaiTtsModels.resolveActive(context.getApplicationContext(), new TaiModelStore(context.getApplicationContext())) != null;
-            availabilityCheckedAt = now;
+        Context app = context.getApplicationContext();
+        if (!availabilityKnown) {
+            // Nothing to answer from yet; a guess would hide Read aloud on the first long press,
+            // or keep offering it after its model was deleted.
+            checkAvailability(app);
+            return available;
         }
+        if (SystemClock.elapsedRealtime() - availabilityCheckedAt >= AVAILABILITY_CACHE_MS)
+            refreshAvailabilityAsync(app);
         return available;
     }
 
     /** Forgets the cached answer, after a voice model was installed or deleted. */
     public static void invalidateAvailability() {
+        AVAILABILITY_GENERATION.incrementAndGet();
+        availabilityKnown = false;
         availabilityCheckedAt = -AVAILABILITY_CACHE_MS;
+    }
+
+    private static void refreshAvailabilityAsync(@NonNull Context app) {
+        if (!CHECKING.compareAndSet(false, true)) return;
+        try {
+            CHECKER.execute(() -> {
+                try {
+                    checkAvailability(app);
+                } finally {
+                    CHECKING.set(false);
+                }
+            });
+        } catch (RuntimeException e) {
+            CHECKING.set(false);
+        }
+    }
+
+    private static synchronized void checkAvailability(@NonNull Context app) {
+        int generation = AVAILABILITY_GENERATION.get();
+        long startedAt = SystemClock.elapsedRealtime();
+        boolean answer = TaiTtsModels.resolveActive(app, new TaiModelStore(app)) != null;
+        if (generation != AVAILABILITY_GENERATION.get()) return;
+        available = answer;
+        availabilityKnown = true;
+        availabilityCheckedAt = startedAt;
     }
 
     /** Reads {@code text}, or stops if something is being read already: the one action a toolbar needs. */

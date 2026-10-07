@@ -83,17 +83,18 @@ public final class PaneMotionOverlayView extends View {
     private CursorTrailStyle mCursorTrailStyle = CursorTrailStyle.DEFAULT;
     private final CursorTrailParticles mParticles = new CursorTrailParticles();
     private final CursorTrailMotionBlur mMotionBlur = new CursorTrailMotionBlur();
+    private final CursorTrailRailgun mRailgun = new CursorTrailRailgun();
+    private final CursorTrailTorpedo mTorpedo = new CursorTrailTorpedo();
     private final CursorTrailComet mComet = new CursorTrailComet();
     private final float[] mParticleBuf = new float[CursorTrailParticles.OUT_SIZE];
     private boolean mParticlesWereAlive;
-    private boolean mCometWasActive;
+    private boolean mEffectWasAlive;
     /**
-     * Seconds on a clock that restarts whenever no particles live, so float precision never
-     * degrades with device uptime. Starts at 1 s so a move's time is always above 0.
+     * The latest frame's vsync time in milliseconds. Every effect keeps the time its move was made
+     * on this same clock and ages by subtraction, the way kitty hands its shaders
+     * {@code now - move.at}; there is no second clock to rebase.
      */
-    private long mClockBaseMs;
     private long mFrameMs;
-    private float mFrameSeconds;
 
     /** App defaults, per the design brief: delay 10ms, decay 0.1/0.4s, threshold 2/2 cells. */
     private static final KittyCursorTrail.Config DEFAULT_TRAIL_CONFIG =
@@ -106,7 +107,10 @@ public final class PaneMotionOverlayView extends View {
      * notify on every one of those; see {@code TerminalView.CursorTrailListener} for what does push.
      */
     public interface CursorTargetProvider {
-        /** @return false when there is no pane to track right now (no focus, or it left the screen). */
+        /**
+         * @return false when there is no cursor to track right now: no focused pane, it left the
+         *         screen, or it is scrolled back into its history
+         */
         boolean provideCursorTarget(@NonNull CursorTarget out);
     }
 
@@ -116,11 +120,17 @@ public final class PaneMotionOverlayView extends View {
         public float cellWidthPx, cellHeightPx;
         public boolean dectcemOn;
         public long positionChangedAtMillis;
+        /**
+         * Which pane the cursor belongs to, never 0 for a real pane. A move into another pane
+         * always trails, whatever the start threshold, as kitty always trails a move into another
+         * window.
+         */
+        public long ownerId;
         public int color;
         /**
-         * The focused pane's card, in this overlay's pixels. Particles and the comet stay inside
-         * it, as kitty's stay inside its window; the trail itself is not clipped, so a flight
-         * between panes still crosses the gap.
+         * The focused pane's card, in this overlay's pixels. Particles stay inside it; the trail
+         * and the styles' own effects are not clipped, so a flight between panes still crosses
+         * the gap.
          */
         public boolean hasClip;
         public float clipLeft, clipTop, clipRight, clipBottom;
@@ -189,7 +199,7 @@ public final class PaneMotionOverlayView extends View {
         mCursorTrailConfig = config;
     }
 
-    /** Picks how the trail looks; resets any particles or comet in flight. */
+    /** Picks how the trail looks; resets any particles or effect in flight. */
     public void setCursorTrailStyle(@NonNull CursorTrailStyle style) {
         if (mCursorTrailStyle == style) return;
         mCursorTrailStyle = style;
@@ -199,9 +209,12 @@ public final class PaneMotionOverlayView extends View {
 
     private void resetStyleState() {
         mParticles.reset();
+        mMotionBlur.reset();
+        mRailgun.reset();
+        mTorpedo.reset();
         mComet.reset();
         mParticlesWereAlive = false;
-        mCometWasActive = false;
+        mEffectWasAlive = false;
     }
 
     /**
@@ -263,65 +276,105 @@ public final class PaneMotionOverlayView extends View {
     private void onFrame(long frameTimeNanos) {
         mCursorFrameScheduled = false;
         if (!mCursorTrailEnabled) return;
-        CursorTargetProvider provider = mCursorTargetProvider;
-        boolean hasTarget = provider != null && provider.provideCursorTarget(mCursorTarget);
-        if (!hasTarget) {
-            // Nothing to track (no focused pane on screen): let the trail sit wherever it was:
-            // resuming later finds a stale target invalid rather than smearing in from it.
-            if (mCursorTargetValid) invalidate();
-            mCursorTargetValid = false;
-            return;
-        }
-        mCursorTargetValid = true;
-        RectF previous = mPreviousTrailBounds;
-        previous.set(cursorTrailBounds());
         // The frame's own vsync time, so every step is one even frame interval rather than
         // whenever this callback happened to run. It is System.nanoTime's clock, the same one
         // {@code TerminalEmulator#monotonicMillis()} stamps getCursorPositionChangedAtMillis() on, so the
         // delay gate still compares like with like.
         long now = frameTimeNanos / 1_000_000L;
         mFrameMs = now;
-        boolean needsFrame = mCursorTrail.update(now, mCursorTarget.left, mCursorTarget.top,
-            mCursorTarget.right, mCursorTarget.bottom, mCursorTarget.dectcemOn,
-            mCursorTarget.positionChangedAtMillis, false, mCursorTarget.cellWidthPx,
-            mCursorTarget.cellHeightPx, mCursorTrailConfig);
-        previous.union(cursorTrailBounds());
-        invalidateRect(previous);
-        boolean styleLive = updateStyleEffects(now);
+        CursorTargetProvider provider = mCursorTargetProvider;
+        boolean hasTarget = provider != null && provider.provideCursorTarget(mCursorTarget);
+        boolean needsFrame = false;
+        boolean moved = false;
+        if (hasTarget) {
+            // Coming back from no target (scrolled back, no focused pane on screen): the old
+            // corners belong to a picture that is gone, so land on the cursor rather than smear in.
+            if (!mCursorTargetValid) mCursorTrail.requestSnapOnNextUpdate();
+            mCursorTargetValid = true;
+            RectF previous = mPreviousTrailBounds;
+            previous.set(cursorTrailBounds());
+            float previousOpacity = mCursorTrail.opacity();
+            boolean previousRender = mCursorTrail.needsRender();
+            needsFrame = mCursorTrail.update(now, mCursorTarget.left, mCursorTarget.top,
+                mCursorTarget.right, mCursorTarget.bottom, mCursorTarget.dectcemOn,
+                mCursorTarget.positionChangedAtMillis, false, mCursorTarget.ownerId,
+                mCursorTarget.cellWidthPx, mCursorTarget.cellHeightPx, mCursorTrailConfig);
+            moved = mCursorTrail.moveStartedOnLastUpdate();
+            RectF current = cursorTrailBounds();
+            // A settled trail draws nothing and drew nothing last time (the quad is painted only
+            // while needsRender holds, and update() asks for a frame whenever it did or does), so
+            // the many calls a pane makes per output burst or blink repaint nothing. Anything the
+            // quad could show differently — a frame asked for, a corner or opacity that moved —
+            // still repaints the union of where it was and where it is. A style that draws its
+            // own effect instead of the quad repaints that effect's bounds below.
+            if (effectFor(mCursorTrailStyle) == null
+                && (needsFrame || previousRender != mCursorTrail.needsRender()
+                || previousOpacity != mCursorTrail.opacity() || !previous.equals(current))) {
+                previous.union(current);
+                invalidateRect(previous);
+            }
+        } else if (mCursorTargetValid) {
+            // Nothing to track (scrolled back, or no focused pane on screen): the trail is no
+            // longer drawn, and snaps when tracking resumes. Effects already launched play out.
+            mCursorTargetValid = false;
+            invalidate();
+        }
+        boolean styleLive = updateStyleEffects(now, moved);
         if (needsFrame || styleLive) requestCursorTrailFrame();
     }
 
-    /** Feeds accepted moves to the particle and comet styles; true while either still shows. */
-    private boolean updateStyleEffects(long nowMs) {
+    /**
+     * Feeds a move the trail just accepted to the particle style or the style's own effect,
+     * stamped with this frame's time; true while either still has something to show.
+     */
+    private boolean updateStyleEffects(long nowMs, boolean moved) {
         CursorTrailStyle style = mCursorTrailStyle;
-        boolean particleStyle = style == CursorTrailStyle.RAILGUN
-            || style == CursorTrailStyle.TORPEDO || style == CursorTrailStyle.PIXIEDUST;
-        boolean comet = style == CursorTrailStyle.COMET;
-        if (!particleStyle && !comet) return false;
-        if (!mParticlesWereAlive && !mComet.active()) mClockBaseMs = nowMs - 1000L;
-        mFrameSeconds = (nowMs - mClockBaseMs) / 1000f;
-        boolean moved = mCursorTrail.moveStartedOnLastUpdate();
+        boolean particleStyle = isParticleStyle(style);
+        CursorTrailEffect effect = effectFor(style);
+        if (!particleStyle && effect == null) return false;
         if (moved && particleStyle) {
             mParticles.record(mCursorTrail.moveFromEdge(0), mCursorTrail.moveFromEdge(1),
                 mCursorTrail.moveFromEdge(2), mCursorTrail.moveFromEdge(3),
                 mCursorTrail.moveToEdge(0), mCursorTrail.moveToEdge(1),
-                mCursorTrail.moveToEdge(2), mCursorTrail.moveToEdge(3), mFrameSeconds);
-        }
-        if (moved && comet) {
-            mComet.start(mCursorTrail.moveFromEdge(0), mCursorTrail.moveFromEdge(1),
-                mCursorTrail.moveFromEdge(2), mCursorTrail.moveFromEdge(3),
-                mCursorTrail.moveToEdge(0), mCursorTrail.moveToEdge(1),
                 mCursorTrail.moveToEdge(2), mCursorTrail.moveToEdge(3), nowMs);
         }
-        boolean particlesAlive = particleStyle && mParticles.alive(mFrameSeconds);
-        boolean cometAlive = comet && mComet.alive(nowMs);
+        if (moved && effect != null) {
+            // The new effect replaces the old one, which must be erased where it was.
+            if (mEffectWasAlive) invalidateRect(effect.bounds());
+            effect.start(mCursorTrail.moveFromEdge(0), mCursorTrail.moveFromEdge(1),
+                mCursorTrail.moveFromEdge(2), mCursorTrail.moveFromEdge(3),
+                mCursorTrail.moveToEdge(0), mCursorTrail.moveToEdge(1),
+                mCursorTrail.moveToEdge(2), mCursorTrail.moveToEdge(3), nowMs,
+                mCursorTrailConfig);
+        }
+        boolean particlesAlive = particleStyle && mParticles.alive(nowMs);
+        boolean effectAlive = effect != null && effect.alive(nowMs);
         // Particles can wander anywhere near the path; repaint the whole layer while they live,
         // and once more on the frame they die so the last ones are erased.
         if (particlesAlive || mParticlesWereAlive) invalidate();
-        if (cometAlive || mCometWasActive) invalidateRect(mComet.bounds());
+        if (effect != null && (effectAlive || mEffectWasAlive)) invalidateRect(effect.bounds());
         mParticlesWereAlive = particlesAlive;
-        mCometWasActive = cometAlive;
-        return particlesAlive || cometAlive;
+        mEffectWasAlive = effectAlive;
+        return particlesAlive || effectAlive;
+    }
+
+    /**
+     * The effect a style draws in place of kitty's quad, or null for the styles that draw the
+     * quad itself (Default, and Pixie dust under its particles).
+     */
+    @Nullable
+    private CursorTrailEffect effectFor(@NonNull CursorTrailStyle style) {
+        switch (style) {
+            case MOTION_BLUR: return mMotionBlur;
+            case RAILGUN: return mRailgun;
+            case TORPEDO: return mTorpedo;
+            case COMET: return mComet;
+            default: return null;
+        }
+    }
+
+    private static boolean isParticleStyle(@NonNull CursorTrailStyle style) {
+        return style == CursorTrailStyle.PIXIEDUST;
     }
 
     /** Drop everything in flight, for a re-render that invalidates the coordinates we captured. */
@@ -347,7 +400,7 @@ public final class PaneMotionOverlayView extends View {
     @Override
     protected void onDraw(Canvas canvas) {
         for (int i = 0; i < mGhosts.size(); i++) drawGhost(canvas, mGhosts.get(i));
-        if (mCursorTargetValid && mCursorTrail.opacity() > 0f) drawCursorTrail(canvas);
+        if (mCursorTrailEnabled) drawCursorTrail(canvas);
     }
 
     private void drawGhost(@NonNull Canvas canvas, @NonNull Ghost ghost) {
@@ -374,43 +427,40 @@ public final class PaneMotionOverlayView extends View {
     }
 
     /**
-     * One filled quad through the trail's four corners — the same primitive kitty draws. The live
-     * cursor cell is clipped out first, exactly as kitty masks its own trail: without it the streak
-     * paints a second, dimmer cursor on top of whichever pane is now focused.
+     * The trail as kitty composes it: the quad through the trail's four corners, or the style's
+     * own effect in its place, with the live cursor cell masked out so the cursor renders cleanly
+     * on top; then, for the particle styles, every live particle of the recent moves, which
+     * outlive the quad as kitty's do.
      */
     private void drawCursorTrail(@NonNull Canvas canvas) {
-        boolean didClip = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
-        if (didClip) {
-            canvas.save();
-            canvas.clipOutRect(mCursorTarget.left, mCursorTarget.top,
-                mCursorTarget.right, mCursorTarget.bottom);
-        }
         int color = mCursorTrailConfig.hasColor ? mCursorTrailConfig.color : mCursorTarget.color;
         int baseAlpha = Color.alpha(color) > 0 ? Color.alpha(color) : 255;
         float opacity = clamp01(mCursorTrail.opacity());
         CursorTrailStyle style = mCursorTrailStyle;
-        if (style == CursorTrailStyle.COMET) {
+        boolean maskCursor = mCursorTargetValid && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O;
+        if (maskCursor) {
+            canvas.save();
+            canvas.clipOutRect(mCursorTarget.left, mCursorTarget.top,
+                mCursorTarget.right, mCursorTarget.bottom);
+        }
+        CursorTrailEffect effect = effectFor(style);
+        if (effect != null) {
+            // Like the quad it stands in for, an effect may cross the gap between two panes.
+            effect.draw(canvas, color, opacity, mFrameMs);
+        } else if (mCursorTargetValid && opacity > 0f && mCursorTrail.needsRender()) {
+            // kitty draws its trail only while needs_render holds (shaders.c draw_cursor_trail
+            // call; cursor_trail_color.a is zero for custom shaders otherwise): a settled trail
+            // leaves nothing behind, however much opacity it still has.
+            drawQuad(canvas, color, baseAlpha, opacity);
+        }
+        if (maskCursor) canvas.restore();
+        if (isParticleStyle(style) && mParticlesWereAlive) {
+            // The particle shader runs after cursor-trail-default and masks nothing, so particles
+            // pass over the cursor too; they stay inside the focused pane's card.
             boolean clipped = clipToPane(canvas);
-            mComet.draw(canvas, color, opacity, mFrameMs, getResources().getDisplayMetrics().density);
-            if (clipped) canvas.restore();
-        } else {
-            boolean blurred = style == CursorTrailStyle.MOTION_BLUR
-                && mMotionBlur.draw(canvas, mCursorTrail, color, baseAlpha / 255f * opacity,
-                    mCursorTarget.left, mCursorTarget.top, mCursorTarget.right,
-                    mCursorTarget.bottom);
-            if (!blurred) drawQuad(canvas, color, baseAlpha, opacity);
-            boolean clipped = style != CursorTrailStyle.DEFAULT && style != CursorTrailStyle.MOTION_BLUR
-                && clipToPane(canvas);
-            if (style == CursorTrailStyle.RAILGUN) {
-                drawParticles(canvas, CursorTrailParticles.MODE_RAILGUN, color, baseAlpha, opacity);
-            } else if (style == CursorTrailStyle.TORPEDO) {
-                drawParticles(canvas, CursorTrailParticles.MODE_TORPEDO, color, baseAlpha, opacity);
-            } else if (style == CursorTrailStyle.PIXIEDUST) {
-                drawParticles(canvas, CursorTrailParticles.MODE_PIXIEDUST, color, baseAlpha, opacity);
-            }
+            drawParticles(canvas, color, baseAlpha);
             if (clipped) canvas.restore();
         }
-        if (didClip) canvas.restore();
     }
 
     /** Saves and clips to the focused pane's card; false (nothing saved) when there is none. */
@@ -435,14 +485,18 @@ public final class PaneMotionOverlayView extends View {
         canvas.drawPath(mSmearPath, mPaint);
     }
 
-    private void drawParticles(@NonNull Canvas canvas, int mode, int color, int baseAlpha,
-                               float opacity) {
-        int count = mParticles.collect(mFrameSeconds, mode, mParticleBuf);
+    /**
+     * kitty blends the particle colour in by each particle's own coverage times {@code OPACITY}; the
+     * trail's opacity does not enter into it, so particles finish their flight whatever the
+     * cursor does next.
+     */
+    private void drawParticles(@NonNull Canvas canvas, int color, int baseAlpha) {
+        int count = mParticles.collect(mFrameMs, mParticleBuf);
         mPaint.setStyle(Paint.Style.FILL);
         mPaint.setColor(color);
         for (int i = 0; i < count; i++) {
             int o = i * 4;
-            mPaint.setAlpha(Math.round(baseAlpha * opacity * mParticleBuf[o + 3]));
+            mPaint.setAlpha(Math.round(baseAlpha * mParticleBuf[o + 3]));
             canvas.drawCircle(mParticleBuf[o], mParticleBuf[o + 1], mParticleBuf[o + 2], mPaint);
         }
     }

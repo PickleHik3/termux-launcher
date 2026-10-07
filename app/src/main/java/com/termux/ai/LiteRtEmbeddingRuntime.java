@@ -19,7 +19,7 @@ import java.util.Map;
 import java.util.TreeMap;
 
 final class LiteRtEmbeddingRuntime implements AutoCloseable {
-    /** Gemma sentencepiece control ids; the sentencepiece4j binding does not expose bosId()/eosId(). */
+    /** Gemma sentencepiece control ids; SentencePieceBpeTokenizer returns ids without them, so this class frames the sequence. */
     private static final int TOKEN_BOS = 2;
     private static final int TOKEN_EOS = 1;
 

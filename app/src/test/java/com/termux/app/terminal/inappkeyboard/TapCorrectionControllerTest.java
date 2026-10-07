@@ -19,6 +19,8 @@ import org.robolectric.annotation.Config;
 
 import java.io.File;
 import java.time.Duration;
+import java.util.ArrayDeque;
+import java.util.concurrent.Executor;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 28)
@@ -133,5 +135,102 @@ public class TapCorrectionControllerTest {
         c.setEnabled(false);
         assertTrue(file.isFile());
         assertEquals(1f, TapModelStore.load(file).totalTaps(), 0f);
+    }
+
+    /** An executor that runs nothing until told to, so a test can hold a save or a load back. */
+    private static final class HeldExecutor implements Executor {
+        final ArrayDeque<Runnable> queue = new ArrayDeque<>();
+
+        @Override
+        public void execute(Runnable command) {
+            queue.add(command);
+        }
+
+        void runAll() {
+            Runnable next;
+            while ((next = queue.poll()) != null) next.run();
+        }
+    }
+
+    /** Writes a model that pulls a press at 1.05 from key 1 to key 0. */
+    private static void writeLearnedModel(File file) {
+        TapCorrectionController seed = new TapCorrectionController(file, Runnable::run,
+            new Handler(Looper.getMainLooper()));
+        seed.setEnabled(true);
+        TapGeometry g = twoKeys();
+        for (int i = 0; i < 100; i++)
+            seed.observeTap(g, 0, 0.7f, 0.5f, false);
+        for (int i = 0; i < 100; i++)
+            seed.observeTap(g, 1, 1.7f, 0.5f, false);
+        seed.flush();
+    }
+
+    @Test
+    public void reloadWhileASaveIsPendingKeepsTheTapsThatSaveCarries() {
+        File file = new File(folder.getRoot(), "m.json");
+        TapGeometry g = twoKeys();
+        TapCorrectionController first = controller(file);
+        first.setEnabled(true);
+        for (int i = 0; i < 10; i++)
+            first.observeTap(g, 0, 0.7f, 0.5f, false);
+        first.flush();
+        assertEquals(10f, TapModelStore.load(file).totalTaps(), 0f);
+
+        HeldExecutor io = new HeldExecutor();
+        TapCorrectionController c = new TapCorrectionController(file, io,
+            new Handler(Looper.getMainLooper()));
+        io.runAll();
+        c.setEnabled(true);
+        for (int i = 0; i < 50; i++)
+            c.observeTap(g, 0, 0.7f, 0.5f, false);
+        c.flush();
+        // The save is queued, not written: the file still says 10.
+        assertEquals(10f, TapModelStore.load(file).totalTaps(), 0f);
+        c.reload();
+        assertEquals(60f, c.totalTaps(), 0f);
+
+        io.runAll();
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(60f, c.totalTaps(), 0f);
+        assertEquals(60f, TapModelStore.load(file).totalTaps(), 0f);
+    }
+
+    @Test
+    public void whileTheFileLoadsPressesPassThroughAndNothingIsLearned() {
+        File file = new File(folder.getRoot(), "m.json");
+        writeLearnedModel(file);
+        HeldExecutor io = new HeldExecutor();
+        TapCorrectionController c = new TapCorrectionController(file, io,
+            new Handler(Looper.getMainLooper()));
+        c.setEnabled(true);
+        TapGeometry g = twoKeys();
+
+        assertEquals(1, c.resolveTap(g, 1, 1.05f, 0.5f));
+        c.observeTap(g, 1, 1.7f, 0.5f, false);
+        assertEquals(0f, c.totalTaps(), 0f);
+        c.flush();
+        assertEquals(1, io.queue.size());
+
+        io.runAll();
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(0, c.resolveTap(g, 1, 1.05f, 0.5f));
+        assertEquals(200f, c.totalTaps(), 0f);
+    }
+
+    @Test
+    public void aResetBeforeTheLoadArrivesIsNotUndoneByIt() {
+        File file = new File(folder.getRoot(), "m.json");
+        writeLearnedModel(file);
+        HeldExecutor io = new HeldExecutor();
+        TapCorrectionController c = new TapCorrectionController(file, io,
+            new Handler(Looper.getMainLooper()));
+        c.setEnabled(true);
+        c.reset();
+
+        io.runAll();
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(0f, c.totalTaps(), 0f);
+        assertFalse(file.exists());
+        assertEquals(1, c.resolveTap(twoKeys(), 1, 1.05f, 0.5f));
     }
 }

@@ -118,11 +118,12 @@ public class LauncherWidgetRepositoryV3Test {
         assertEquals(1, new JSONObject(storage.value).getJSONObject("pending").getInt("page"));
 
         WidgetTestFixtures.Memory future = new WidgetTestFixtures.Memory();
-        future.value = new JSONObject().put("version", 5).toString();
+        // 5 is the built-in widgets' version now; 6 is the first this build does not know.
+        future.value = new JSONObject().put("version", 6).toString();
         LauncherWidgetRepository readOnly = new LauncherWidgetRepository(future);
         assertFalse(readOnly.putRecord(record(5, new WidgetCellRect(0, 0, 1, 1), 0)));
         assertEquals("an unknown newer payload is never overwritten",
-            new JSONObject().put("version", 5).toString(), future.value);
+            new JSONObject().put("version", 6).toString(), future.value);
     }
 
     private static LauncherWidgetRecord record(int id, WidgetCellRect cell, int page) {

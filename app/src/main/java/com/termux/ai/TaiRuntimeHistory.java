@@ -178,7 +178,7 @@ public final class TaiRuntimeHistory {
      * Whether a failed load result with this code says something about the accelerator, and so is
      * worth recording as its failure. A cancelled load is the incident: one GPU load of gemma-4-e4b
      * was cancelled, "Model load cancelled." was written down as a GPU failure, and from then on the
-     * automatic order put the CPU first, so the living-wallpaper director ran a minute per photo on
+     * automatic order put the CPU first, so a background job ran a minute per request on
      * the CPU. Cancellations, timeouts, memory refusals, file problems, a load already in progress
      * and "known failed" echoes are about the moment, not the accelerator; native or GPU
      * initialisation failures, unsupported operations, corrupt output and crashes are verdicts. An

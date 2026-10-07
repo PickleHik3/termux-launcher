@@ -26,7 +26,7 @@ import java.util.Set;
  * walks the chain from the caller's side.
  *
  * <p>Storage and the installed-model lookup sit behind small interfaces so tests can fake them.
- * The callers (categories, reader, tidy dictation, speech, voice, depth, embeddings) resolve here.
+ * The callers (categories, tidy dictation, speech, voice, embeddings) resolve here.
  */
 public final class TaiFunctionModels {
     /** The stored value for "turn this function off" (or its without-model choice). */
@@ -73,12 +73,6 @@ public final class TaiFunctionModels {
             caps.addAll(spec.sourceCapabilities);
             return new ModelInfo(spec.id, spec.sizeBytes, caps, spec.backend);
         }
-
-        /** The same file advertised as its vision-enabled load ({@code <id>-vision}). */
-        @NonNull
-        ModelInfo asVision() {
-            return new ModelInfo(id + TaiModelVariants.SUFFIX_VISION, sizeBytes, capabilities, backend);
-        }
     }
 
     /** The installed models, keyed by base id (no modality suffix), in a stable order. */
@@ -118,18 +112,14 @@ public final class TaiFunctionModels {
 
     /**
      * Whether {@code function} can run on a remote model at all: not voice typing, read aloud or
-     * embeddings (the app's audio and embedding paths are local), and not the depth model. The
-     * reader needs a remote model that understands images ({@code understandsImages}).
+     * embeddings (the app's audio and embedding paths are local).
      */
     public static boolean remoteAllowed(@NonNull TaiFunction function, boolean understandsImages) {
         switch (function) {
             case VOICE_TYPING:
             case READ_ALOUD:
             case EMBEDDINGS:
-            case WALLPAPER_DEPTH:
                 return false;
-            case WALLPAPER_READER:
-                return understandsImages;
             default:
                 return true;
         }
@@ -137,7 +127,7 @@ public final class TaiFunctionModels {
 
     /** The outcome of {@link #resolve}; immutable. */
     public static final class Resolution {
-        /** The model to load (the reader's carries the {@code -vision} suffix), {@code null} without one. */
+        /** The model to load {@code null} without one. */
         @Nullable public final String modelId;
         /** {@code "gpu"} or {@code "cpu"} for a chat function with a model, else {@code null}. */
         @Nullable public final String accelerator;
@@ -269,7 +259,7 @@ public final class TaiFunctionModels {
 
     /**
      * Stores a pick: {@code ""} or {@code null} for Automatic, a model id, {@code remote/<id>} or
-     * {@code off}. The reader's {@code -vision} suffix is dropped (the pick is the file).
+     * {@code off}. A {@code -vision} suffix is dropped (the pick is the file).
      */
     public void set(@NonNull TaiFunction function, @Nullable String value) {
         store.put(function.modelKey, normalizePick(function, value));
@@ -309,10 +299,6 @@ public final class TaiFunctionModels {
 
     private Resolution resolve(TaiFunction function, Map<String, ModelInfo> models) {
         List<TaiTierPolicy.Choice> chain = TaiTierPolicy.fallbackChain(env, function);
-        if (!TaiTierPolicy.functionAvailable(env, function)) {
-            return new Resolution(null, null, Source.NONE, TaiTierPolicy.WithoutModel.NONE, chain, false);
-        }
-
         String pick = pick(function);
         if (VALUE_OFF.equals(pick)) {
             TaiTierPolicy.WithoutModel off = function.withoutModel != TaiTierPolicy.WithoutModel.NONE
@@ -370,11 +356,10 @@ public final class TaiFunctionModels {
 
     private Resolution withModel(TaiFunction function, ModelInfo info, @Nullable String accelerator, Source source,
                                  List<TaiTierPolicy.Choice> chain) {
-        String id = function == TaiFunction.WALLPAPER_READER ? info.id + TaiModelVariants.SUFFIX_VISION : info.id;
         String accel = function.usesChatModel() ? accelerator : null;
         // A GPU pick on a phone with no GPU path runs on the CPU.
         if (TaiTierPolicy.ACCEL_GPU.equals(accel) && env.noGpu()) accel = TaiTierPolicy.ACCEL_CPU;
-        return new Resolution(id, accel, source, TaiTierPolicy.WithoutModel.NONE, chain,
+        return new Resolution(info.id, accel, source, TaiTierPolicy.WithoutModel.NONE, chain,
             TaiTierPolicy.warnsBackground(env, info.sizeBytes));
     }
 
@@ -398,8 +383,7 @@ public final class TaiFunctionModels {
 
     /**
      * The installed models that can serve {@code function} on this platform, for the picker's "On this
-     * phone" section: vision variants (ids with {@code -vision}) for the reader, embedders for
-     * embeddings, speech models for voice typing, voice models for read aloud, depth models for depth,
+     * phone" section: embedders for embeddings, speech models for voice typing, voice models for read aloud,
      * chat models for the assistant, tidy dictation and categories. Image models never qualify.
      */
     @NonNull
@@ -408,7 +392,7 @@ public final class TaiFunctionModels {
         if (!TaiTierPolicy.platformAllows(env, function)) return out;
         for (ModelInfo info : installed.models().values()) {
             if (!backendRuns(info) || !canServe(function, info)) continue;
-            out.add(function == TaiFunction.WALLPAPER_READER ? info.asVision() : info);
+            out.add(info);
         }
         return out;
     }
@@ -439,10 +423,6 @@ public final class TaiFunctionModels {
                 return caps.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH);
             case EMBEDDINGS:
                 return caps.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
-            case WALLPAPER_DEPTH:
-                return caps.contains(TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION);
-            case WALLPAPER_READER:
-                return isChat(caps) && caps.contains(TaiModelSpec.CAPABILITY_IMAGE_INPUT);
             default:
                 return isChat(caps);
         }

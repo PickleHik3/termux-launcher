@@ -66,9 +66,9 @@ public class SurfacePresetsTest {
         SurfacePresets.Preset tint = preset("stock");
         SurfacePresets.apply(preferences, tint);
 
-        assertEquals(6, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertEquals(10, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
         assertEquals(46, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
-        assertEquals(14, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
+        assertEquals(10, preferences.getSurfaceBaseValue(SurfaceProperty.GRAIN));
         // A Look never detaches a surface and never touches Style.
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows())
             assertTrue(row.slot + "/" + row.property,
@@ -186,6 +186,7 @@ public class SurfacePresetsTest {
             TERMUX_APP.KEY_SURFACE_BASE_BLUR,
             TERMUX_APP.KEY_SURFACE_BASE_OPACITY,
             TERMUX_APP.KEY_SURFACE_BASE_GRAIN,
+            TERMUX_APP.KEY_SURFACE_BASE_TINT,
         };
         for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
             for (String key : glass)
@@ -275,5 +276,37 @@ public class SurfacePresetsTest {
         SurfacePresets.saveCustom(preferences);
         for (String key : SurfacePresets.custom(preferences).values.keySet())
             assertFalse(key, SurfacePresets.isLayoutOwned(key));
+    }
+
+    @Test
+    public void everyLookResetsTheTintToFull() {
+        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
+            assertEquals(preset.id, TERMUX_APP.DEFAULT_SURFACE_BASE_TINT,
+                preset.values.get(TERMUX_APP.KEY_SURFACE_BASE_TINT));
+            preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 20);
+            preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT, 10);
+            SurfacePresets.apply(preferences, preset);
+            assertEquals(preset.id, 100, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+            assertTrue(preset.id,
+                preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT));
+            assertTrue(preset.id, SurfacePresets.matches(preferences, preset));
+        }
+    }
+
+    @Test
+    public void customKeepsAHandTunedTintAndAnOlderCustomReadsAsFull() {
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 45);
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT, 15);
+        SurfacePresets.saveCustom(preferences);
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 100);
+        preferences.setSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT, true);
+
+        SurfacePresets.apply(preferences, SurfacePresets.custom(preferences));
+        assertEquals(45, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertEquals(15, preferences.getDockTintStrength());
+
+        java.util.Map<String, Object> older = SurfacePresets.deserialize(
+            "{\"format_version\":2,\"surface_base_blur\":21}");
+        assertEquals(100, older.get(TERMUX_APP.KEY_SURFACE_BASE_TINT));
     }
 }

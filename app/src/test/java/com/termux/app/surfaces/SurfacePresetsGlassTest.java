@@ -78,17 +78,17 @@ public class SurfacePresetsGlassTest {
 
     @Test
     public void clearTintAndSolidCarryTheRecipesOfTheSpec() {
-        assertRecipe(preset("minimal"), 44, 2, 14, 28, 32, 85);
-        assertRecipe(preset("stock"), 6, 46, 14, 4, 10, 18);
+        assertRecipe(preset("minimal"), 4, 10, 4, 4, 10, 18);
+        assertRecipe(preset("stock"), 10, 46, 10, 4, 10, 18);
         assertRecipe(preset("solid"), 0, 92, 0, 0, 1, 0);
         assertRecipe(preset("frost"), 25, 60, 8, 9, 20, 18);
-        assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN,
+        assertEquals(TERMUX_APP.GLASS_TINT_MATERIAL,
             preset("stock").values.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
 
         // Leaving Mist for Tint hands rim and motion back.
         SurfacePresets.apply(preferences, preset("frost"));
         SurfacePresets.apply(preferences, preset("stock"));
-        assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN, preferences.getSurfaceGlassTint());
+        assertEquals(TERMUX_APP.GLASS_TINT_MATERIAL, preferences.getSurfaceGlassTint());
         assertEquals(TERMUX_APP.GLASS_RIM_HAIRLINE, preferences.getSurfaceGlassRim());
         assertEquals(TERMUX_APP.GLASS_MOTION_CLASSIC, preferences.getSurfaceGlassMotion());
         assertEquals(10, preferences.getFancierGlassEdgeWidthDp());
@@ -96,22 +96,21 @@ public class SurfacePresetsGlassTest {
     }
 
     @Test
-    public void clearIsTheFanciestGlassWithTheCanvasDetachedAtEight() {
+    public void clearIsTheMostTransparentGlassWithNoDetachedTerminalOpacity() {
         SurfacePresets.Preset clear = preset("minimal");
         assertEquals("one hairline, no second line inside it", 0, clear.values.get(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR));
-        assertEquals(40, clear.values.get(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION));
+        assertEquals(0, clear.values.get(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION));
         assertEquals("a sharp, even hairline, no gradient wash into the pane",
             TERMUX_APP.GLASS_RIM_HAIRLINE, clear.values.get(TERMUX_APP.KEY_SURFACE_GLASS_RIM));
         assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, clear.values.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT));
         assertEquals(TERMUX_APP.GLASS_MOTION_CLASSIC,
             clear.values.get(TERMUX_APP.KEY_SURFACE_GLASS_MOTION));
-        assertEquals(8, clear.values.get(TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY));
+        assertFalse(clear.values.containsKey(TERMUX_APP.KEY_TERMINAL_BACKGROUND_OPACITY));
 
         SurfacePresets.apply(preferences, clear);
-        assertEquals(2, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
-        assertEquals(8, preferences.getTerminalBackgroundOpacity());
+        assertEquals(10, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
         assertEquals(0, preferences.getFancierGlassSpecularPercent());
-        assertEquals(40, preferences.getFancierGlassDispersionPercent());
+        assertEquals(0, preferences.getFancierGlassDispersionPercent());
         assertTrue(SurfacePresets.matches(preferences, clear));
     }
 

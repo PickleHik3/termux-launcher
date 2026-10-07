@@ -334,10 +334,12 @@ It uses the same pattern as the first-run permissions card (`app/firstrun/FirstR
 │  ☑ Assistant and tidy  Gemma 4 E2B       2.6 GB      │
 │    dictation                                         │
 │      Fixes punctuation after you speak; serves apps. │
-│  ☑ Search and memory   EmbeddingGemma    183 MB      │
-│  ☑ Wallpaper creator   depth + cut-out   143 MB      │
-│  ☐ Smarter reading     Gemma 4 E4B       3.7 GB      │
-│      Reads wallpapers and sorts apps better.         │
+│  ☑ Dawn notes          EmbeddingGemma    183 MB      │
+│    integration                                       │
+│  ☑ Wallpaper creator   depth, cut-out    3.8 GB      │
+│                        and Gemma 4 E4B               │
+│      Turns a photo into a living wallpaper, and      │
+│      reads what is in it.                            │
 │      May close apps running in the background.       │
 │                                                      │
 │  Selected: 3.3 GB · 41 GB free · ☑ Wi-Fi only        │
@@ -347,10 +349,15 @@ It uses the same pattern as the first-run permissions card (`app/firstrun/FirstR
 ```
 
 - **Header**: tier, RAM class, SoC name and Android version.
-- **Rows**: one per download group, each with its model, size, one plain line, and the background-app warning
-  where §4.4 applies.
+- **Rows**: one per download group, each with a leading glyph (the settings pages' mark), its model, size, one
+  plain line, and the background-app warning where §4.4 applies. The checkbox sits at the row's end, over the
+  size; an installed row shows "Installed" there instead.
+- **Smarter reading is not a row of its own** (developer, 2026-10-05): on a 10–12 GB Tier 2 phone E4B is the
+  wallpaper reader only, so it rides in the wallpaper creator's row and downloads with it; on Tier 3 it is the
+  "Assistant" row.
+- **Dawn notes integration** is the embedder's row: Dawn notes is the only app that uses it.
 - **Hidden rows**: a row the platform removes is hidden.
-- **Tier 1**: the card shows voice typing, read aloud, search and the wallpaper creator, all unticked. It adds
+- **Tier 1**: the card shows voice typing, read aloud, Dawn notes integration and the wallpaper creator, all unticked. It adds
   one line: "Assistants and smart features: add your own model in the Model Centre."
 - **Footer**:
   - the selected total against free storage;
@@ -372,13 +379,14 @@ depends on how full the phone is today. Storage can disable Download; it never c
 |---|---|---|---|---|
 | Voice typing | ☐ Whisper base | ☑ Whisper small | ☑ Whisper small | ☑ Whisper small |
 | Read aloud | ☐ KittenTTS | ☑ | ☑ | ☑ |
+| Assistant (E4B) | — | — | — | ☑ E4B (assistant, reader, categories) |
 | Assistant and tidy dictation | — (the Model Centre line) | ☑ E2B | ☑ E2B | ☑ E2B (tidy dictation) |
-| Smarter reading / assistant | — | — | ☐ E4B | ☑ E4B (assistant, reader, categories) |
-| Search and memory | ☐ EmbeddingGemma | ☑ | ☑ | ☑ |
-| Wallpaper creator (API 34+) | ☐ DA2 + U-2-Net | ☑ DA2 + U-2-Net | ☑ DA3 + U-2-Net | ☑ DA3 + U-2-Net |
+| Dawn notes integration | ☐ EmbeddingGemma | ☑ | ☑ | ☑ |
+| Wallpaper creator (API 34+) | ☐ DA2 + U-2-Net | ☑ DA2 + U-2-Net | ☑ DA3 + U-2-Net + E4B (reader) | ☑ DA3 + U-2-Net |
 
-Platform rules (§2) apply after the table. A removed row is hidden. On a phone with no GPU path, the E4B row is
-unticked.
+Platform rules (§2) apply after the table. A removed row is hidden. On a phone with no GPU path, Tier 3's E4B
+row is unticked. Tier 2 offers E4B only inside the wallpaper row, so where the platform removes that row
+(below API 34) the card offers no E4B; the Model Centre still lists it.
 
 ## 6. Gates
 

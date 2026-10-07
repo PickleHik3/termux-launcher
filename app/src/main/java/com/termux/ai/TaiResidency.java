@@ -35,7 +35,7 @@ public final class TaiResidency {
     /**
      * {@code TTS} is speech output ({@link KittenTtsRuntime}); like STT it is given up before idle
      * chat and closed after its own idle limit, and nothing it loads is ever credited against
-     * another kind's load. {@code VISION} is one wallpaper-analysis graph ({@link WallpaperVisionRuntime}):
+     * another kind's load. {@code VISION} is a one-shot vision graph (no runtime serves one any more):
      * resident only while its stage runs (busy throughout), closed before the next stage loads, so it
      * is never an eviction candidate and has no idle limit.
      */
@@ -80,7 +80,7 @@ public final class TaiResidency {
      */
     static final long TTS_FACTOR_TENTHS = 20L;
     /**
-     * Wallpaper-vision footprint per byte of one graph's file until a measured load is on record:
+     * Vision-graph footprint per byte of one graph's file until a measured load is on record:
      * the mapped flatbuffer plus the tensor arena and the XNNPACK-packed weights. A deliberate
      * over-estimate (2x) until the load meter has measured the four graphs on a phone.
      */
@@ -165,7 +165,7 @@ public final class TaiResidency {
                 ttsEstimateBytes(spec), null, System.currentTimeMillis(), false);
         }
 
-        /** One wallpaper-vision graph (depth, scene or subject) on the CPU. */
+        /** One vision graph (depth, scene or subject) on the CPU. */
         @NonNull
         public static Entry vision(@NonNull TaiModelSpec spec) {
             return new Entry(spec.id, Kind.VISION, spec.backend, "cpu", 0,
@@ -411,7 +411,7 @@ public final class TaiResidency {
         return fileBytes(spec) * TTS_FACTOR_TENTHS / 10L;
     }
 
-    /** What loading one wallpaper-vision graph costs: its file times {@link #VISION_FACTOR_TENTHS}. */
+    /** What loading one vision graph costs: its file times {@link #VISION_FACTOR_TENTHS}. */
     public static long visionEstimateBytes(@NonNull TaiModelSpec spec) {
         return fileBytes(spec) * VISION_FACTOR_TENTHS / 10L;
     }

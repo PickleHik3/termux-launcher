@@ -4,6 +4,7 @@ import android.content.SharedPreferences;
 
 import androidx.annotation.NonNull;
 
+import com.termux.shared.settings.preferences.SharedPreferencesPreview;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -13,15 +14,19 @@ import java.util.List;
 
 /**
  * Everything the Appearance editor can write, captured raw so it can be put back exactly: the
- * editor's Undo and Discard (back to the state at open) and the "Custom look replaced" notice's
- * Undo (back to the Custom values a Look just replaced) are both one of these.
+ * editor's Undo and Discard (back to the state at open) and the Custom values of the session
+ * (kept while a Look shows, so the Custom stop brings them back) are both one of these.
  *
  * <p>Raw values and the link shape rather than resolved numbers: a surface that was detached at
  * the same number as Base must come back detached, and a key cap radius that was the theme's
  * default (absent) must come back absent rather than written as today's default. The same fields,
  * folded to one string, are the editor's dirty signature, so Undo, Discard and "is anything
  * unsaved" cannot disagree about what the editor owns (SPEC §4: tint, rim, motion and the depth
- * keys included).</p>
+ * keys included). The Custom row's Key spacing and App icons are here too. Dock size is the dock
+ * height scale, which lives in the layout store per orientation: the layout session's own
+ * snapshot ({@code PlaceArrangeSnapshot}, behind the editor's one Undo and dirty state) holds it,
+ * so it is deliberately not restored here, where a turn of the phone could write it to the
+ * wrong orientation.</p>
  */
 final class AppearanceSnapshot {
 
@@ -47,6 +52,10 @@ final class AppearanceSnapshot {
     private final int mKeyOpacity;
     /** The stored radius, or NaN when the key is absent and the style's default applies. */
     private final float mKeyRadiusRaw;
+    /** The stored key spacing, or NaN when the key is absent and the Style's default applies. */
+    private final float mKeySpacingRaw;
+    /** How many app buttons the dock shows. */
+    private final int mDockButtonCount;
     private final int mDim;
     private final boolean mSoft;
     private final String mContrast;
@@ -88,6 +97,8 @@ final class AppearanceSnapshot {
         mKeyboardBlurRaw = prefs.getInAppKeyboardBlurRadiusRaw();
         mKeyOpacity = prefs.getInAppKeyboardKeyOpacity();
         mKeyRadiusRaw = rawKeyRadius(prefs);
+        mKeySpacingRaw = rawFloat(prefs, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE);
+        mDockButtonCount = prefs.getAppLauncherButtonCount();
         mDim = prefs.getWallpaperBackdropDim();
         mSoft = SoftWallpaper.isOn(prefs);
         mContrast = prefs.getTerminalContrastLevel().value;
@@ -134,6 +145,8 @@ final class AppearanceSnapshot {
         prefs.setInAppKeyboardBlurRadiusRaw(mKeyboardBlurRaw);
         prefs.setInAppKeyboardKeyOpacity(mKeyOpacity);
         restoreKeyRadius(prefs, mKeyRadiusRaw);
+        restoreFloat(prefs, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE, mKeySpacingRaw);
+        prefs.setAppLauncherButtonCount(mDockButtonCount);
         prefs.setWallpaperBackdropDim(mDim);
         SoftWallpaper.set(prefs, mSoft);
         prefs.setTerminalContrastLevel(mContrast);
@@ -158,7 +171,8 @@ final class AppearanceSnapshot {
             .append('|').append(mBend).append('|').append(mEdgeWidth).append('|').append(mEdgeLight)
             .append('|').append(mSpecular).append('|').append(mDispersion)
             .append('|').append(mKeyboardBlurRaw).append('|').append(mKeyOpacity)
-            .append('|').append(mKeyRadiusRaw).append('|').append(mDim).append('|').append(mSoft)
+            .append('|').append(mKeyRadiusRaw).append('|').append(mKeySpacingRaw)
+            .append('|').append(mDockButtonCount).append('|').append(mDim).append('|').append(mSoft)
             .append('|').append(mContrast).append('|').append(mTrailStyle)
             .append('|').append(mRetroEffect).append('|').append(mClockStyle)
             .append('|').append(mClockAlignment)
@@ -196,24 +210,36 @@ final class AppearanceSnapshot {
     }
 
     private static float rawKeyRadius(@NonNull TermuxAppSharedPreferences prefs) {
-        SharedPreferences store = prefs.getSharedPreferences();
-        if (store == null || !store.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP))
+        return rawFloat(prefs, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP);
+    }
+
+    /** The stored float, or NaN when the key is absent (or not a float). */
+    private static float rawFloat(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key) {
+        // What the getters read: a Look previewed over the store, while one is.
+        SharedPreferences store = SharedPreferencesPreview.readsFor(prefs.getSharedPreferences());
+        if (store == null || !store.contains(key))
             return Float.NaN;
         try {
-            return store.getFloat(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP, Float.NaN);
+            return store.getFloat(key, Float.NaN);
         } catch (ClassCastException e) {
             return Float.NaN;
         }
     }
 
     private static void restoreKeyRadius(@NonNull TermuxAppSharedPreferences prefs, float raw) {
+        restoreFloat(prefs, TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP, raw);
+    }
+
+    /** Puts a float key back: written as it was, or removed when it was absent. */
+    private static void restoreFloat(@NonNull TermuxAppSharedPreferences prefs,
+                                     @NonNull String key, float raw) {
         SharedPreferences store = prefs.getSharedPreferences();
         if (store == null)
             return;
         if (Float.isNaN(raw))
-            store.edit().remove(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP).apply();
+            store.edit().remove(key).apply();
         else
-            store.edit().putFloat(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_CORNER_RADIUS_DP, raw).apply();
+            store.edit().putFloat(key, raw).apply();
     }
 
     @NonNull

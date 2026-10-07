@@ -24,11 +24,6 @@ public final class TaiModelCatalog {
     public static final String EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID = "embeddinggemma-2-text-vision-440m";
     /** EmbeddingGemma 2 Text 270M: the smaller text-only EmbeddingGemma 2. */
     public static final String EMBEDDING_GEMMA_2_TEXT_270M_ID = "embeddinggemma-2-text-270m";
-    /** Wallpaper vision graphs (the Model centre's Vision segment), run by the analysis job. */
-    public static final String DEPTH_ANYTHING_3_SMALL_ID = "depth-anything-3-small";
-    public static final String DEPTH_ANYTHING_V2_SMALL_ID = "depth-anything-v2-small";
-    public static final String SEGFORMER_B0_ADE20K_ID = "segformer-b0-ade20k";
-    public static final String U2NET_ID = "u2net";
     private static final Map<String, CatalogEntry> BUILT_IN_ENTRIES = buildEntries();
     private static volatile Map<String, CatalogEntry> entries = BUILT_IN_ENTRIES;
     private TaiModelCatalog() {}
@@ -53,7 +48,6 @@ public final class TaiModelCatalog {
         for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
             if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
             if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) continue;
-            if (TaiModelSpec.isVisionTool(entry.getValue().endpointCapabilities)) continue;
             if (isImageGeneration(entry.getValue())) continue;
             if (isEmbeddingOnly(entry.getValue())) continue;
             chat.put(entry.getKey(), entry.getValue());
@@ -79,18 +73,6 @@ public final class TaiModelCatalog {
     private static boolean isEmbeddingOnly(@NonNull CatalogEntry entry) {
         return entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS)
             && !entry.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_CHAT);
-    }
-
-    /** Wallpaper vision catalog entries only (the Model centre's Vision segment). */
-    @NonNull
-    public static Map<String, CatalogEntry> visionEntries() {
-        LinkedHashMap<String, CatalogEntry> vision = new LinkedHashMap<>();
-        for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
-            if (TaiModelSpec.isVisionTool(entry.getValue().endpointCapabilities)) {
-                vision.put(entry.getKey(), entry.getValue());
-            }
-        }
-        return vision;
     }
 
     /** Speech-output catalog entries only (the Speech segment's "Voice output" section). */
@@ -384,48 +366,7 @@ public final class TaiModelCatalog {
                 hfSidecar(embeddingGemmaRepo, embeddingGemmaRevision, "sentencepiece.model",
                     "d6daa52d93d7aad10e8388bd526c4e501d914b47177398d1d9621f1fe48438c7"))));
 
-        // Wallpaper vision graphs for the analysis job (living stills), all LiteRT .tflite run on CPU
-        // through XNNPACK by WallpaperVisionRuntime. None is gated; SegFormer is NVIDIA's source-code
-        // licence (non-commercial), so the launcher offers it for testing only. Sizes and hashes from
-        // the Hugging Face API (LFS sha256), revisions pinned.
-        entries.put(DEPTH_ANYTHING_3_SMALL_ID, visionAvailable(
-            DEPTH_ANYTHING_3_SMALL_ID, "Depth Anything 3 Small", "Depth for wallpapers (sharper)",
-            "litert-community/Depth-Anything-3-Small", "5cd25d936e3fde2edef68f53b4123401454ac9c8",
-            "da3_small_gpu_fp16.tflite", "Apache-2.0", 55_035_456L,
-            "e170369a72ba1bba7486a4d2de555639fccd0595a9bb5b5349f7733ed4aebd1f",
-            "depth-anything-3", "fp16", TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION, "Depth", "55 MB", "4GB+"));
-        entries.put(DEPTH_ANYTHING_V2_SMALL_ID, visionAvailable(
-            DEPTH_ANYTHING_V2_SMALL_ID, "Depth Anything V2 Small", "Depth for wallpapers (smaller, faster)",
-            "litert-community/depth-anything-v2-small", "178427e448dbf4da93b1e7b1b2abc103ad329bd6",
-            "tflite/depth_anything_v2_small_wi8_afp32.tflite", "Apache-2.0", 27_733_680L,
-            "f74509422e4a9270a354b249a9193abdd4903354be63701262238a7f4b869611",
-            "depth-anything-v2", "int8", TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION, "Depth", "28 MB", "4GB+"));
-        entries.put(SEGFORMER_B0_ADE20K_ID, visionAvailable(
-            SEGFORMER_B0_ADE20K_ID, "SegFormer B0 (ADE20K)", "Scene regions: water, sky, foliage, lights",
-            "sollaholla/segformer_b0_ade20k", "1ba929c2bc51ea2bdcc3a7374a504b0e3e5196af",
-            "segformer_b0_ade20k.tflite", "NVIDIA source code licence (non-commercial, testing only)", 15_533_492L,
-            "59849627a23803db4471eeb61996c77bcfce92dd7347aa8fb9308050941c8cc9",
-            "segformer-ade20k", "fp32", TaiModelSpec.CAPABILITY_SCENE_SEGMENTATION, "Scene", "16 MB", "4GB+"));
-        entries.put(U2NET_ID, visionAvailable(
-            U2NET_ID, "U-2-Net", "Subject cut-out for wallpapers",
-            "litert-community/U-2-Net", "defc203955a46f3cc760deb8c76d96f10331a46c",
-            "u2net_fp16.tflite", "Apache-2.0", 88_230_272L,
-            "dd338f190a538ca3de9792b20b7617038cd56f8e440f38ff25da5554f32b9df2",
-            "u2net", "fp16", TaiModelSpec.CAPABILITY_SUBJECT_SEGMENTATION, "Subject", "88 MB", "4GB+"));
-
         return Collections.unmodifiableMap(entries);
-    }
-
-    /** A wallpaper vision entry: one hash-pinned .tflite, no sidecars, one vision capability. */
-    private static CatalogEntry visionAvailable(String id, String name, String role, String repo, String revision,
-                                                String artifactPath, String license, long size, String sha256,
-                                                String architecture, String quantization, String capability,
-                                                String tag, String sizeEstimate, String ramTier) {
-        return new CatalogEntry(id, name, role, repo, revision, artifactPath, license, size,
-            false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, architecture, quantization,
-            128, 128, 128, ramGb(ramTier), sha256, setOf(capability), null, null,
-            "wallpaper_vision", "wallpaper_vision", tags(tag), sizeEstimate, ramTier, false, true, "",
-            null, null);
     }
 
     private static CatalogEntry liteRtAvailable(String id, String name, String jobGroup, String priority, boolean recommended,

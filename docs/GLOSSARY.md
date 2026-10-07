@@ -161,7 +161,7 @@ capsule, rounded
 ### Look and motion
 
 **Fancier Glass**:
-The extra glass: refraction at glass edges on every glass surface, living stills (animated backgrounds) and the
+The extra glass: refraction at glass edges on every glass surface and the
 tilting page motions. It has no switch any more (it left Settings › Look with the Looks): it is on
 wherever the device supports it — Android 13 and later, with a managed wallpaper — and each Look
 sets how deep the bend is. Lazy mode, battery saver and reduced motion override it. See ADR 0005
@@ -386,9 +386,10 @@ speech and hears nearby talk and TVs more.
 _Avoid_: gain, VAD threshold, microphone volume
 
 **Panel**:
-What the pill grows into, downward (upward when placed low): the dictation's text (seven lines, the
-oldest scrolling off the top) over the action pill, one long rounded bar holding undo, Copy and ✓. It
-is where the text waits until one of them is used. Text as heard is italic in the secondary colour;
+The dictation card's body under its strip, growing downward (upward when placed low): the
+dictation's text (seven lines, the oldest scrolling off the top) over one row of controls: pause
+with the waveform in it (resume once the microphone is closed), undo, Copy and Insert. It is where
+the text waits until Copy or Insert is used. Text as heard is italic in the secondary colour;
 cleaned text is upright in the primary one.
 _Avoid_: transcript view, preview
 
@@ -399,17 +400,16 @@ and the Dictate key do the same (start, pause, resume).
 _Avoid_: stop (the × is not a stop)
 
 **Pill**:
-The small bar at the top right of the place viewport while a dictation is up: waveform, state,
-pause/resume and ×, as long as its contents and no longer. Same corner on every place until moved
-by its handle. The waveform rests (a dim line) while not listening. The screen stays on for as long
-as it is up (released after 3 minutes of untouched waiting text, and at once when it closes or the
-app pauses).
+The dictation card at the top right of the place viewport while a dictation is up: a strip (state,
+a few words of detail, the handle, ×), then the panel. Same corner on every place until moved by
+its strip. The screen stays on for as long as it is up (released after 3 minutes of untouched
+waiting text, and at once when it closes or the app pauses).
 _Avoid_: voice indicator, overlay
 
 **Pill handle**:
-The floating keyboard's grab handle, under the panel: dragged, it moves the pill and panel anywhere
-in the place viewport, remembered per orientation beside the floating keyboard's place; a double tap
-puts it back in the top right corner. Placed low, the panel grows upward.
+The strip along the top of the pill, with its short centred handle: dragged, it moves the pill
+anywhere in the place viewport, remembered per orientation beside the floating keyboard's place; a
+double tap puts it back in the top right corner. Placed low, the panel grows upward.
 _Avoid_: drag bar, grip (the floating keyboard's resize corner)
 
 **Undo**:

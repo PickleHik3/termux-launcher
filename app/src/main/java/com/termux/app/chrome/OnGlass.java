@@ -405,13 +405,20 @@ public final class OnGlass {
      */
     public static int veilAlphaFor(@ColorInt int backdrop, @ColorInt int ink,
                                    @ColorInt int veilColor, double target) {
+        return veilAlphaFor(backdrop, ink, veilColor, target, MAX_VEIL_ALPHA_255);
+    }
+
+    /** {@link #veilAlphaFor(int, int, int, double)} with the search held to {@code maxVeilAlpha255}. */
+    public static int veilAlphaFor(@ColorInt int backdrop, @ColorInt int ink,
+                                   @ColorInt int veilColor, double target, int maxVeilAlpha255) {
+        int ceiling = Math.max(0, Math.min(MAX_VEIL_ALPHA_255, maxVeilAlpha255));
         int opaqueBackdrop = opaque(backdrop);
         if (ratio(ink, opaqueBackdrop) >= target) return 0;
-        for (int alpha = 1; alpha <= MAX_VEIL_ALPHA_255; alpha++) {
+        for (int alpha = 1; alpha <= ceiling; alpha++) {
             int surface = composite(withAlpha(veilColor, alpha), opaqueBackdrop);
             if (ratio(ink, surface) >= target) return alpha;
         }
-        return MAX_VEIL_ALPHA_255;
+        return ceiling;
     }
 
     /** {@code color} with its alpha channel replaced by an 8-bit {@code alpha}. */
@@ -478,6 +485,20 @@ public final class OnGlass {
     public static Resolution resolve(@ColorInt int backdrop, @ColorInt int preferredInk,
                                      @ColorInt int alternateInk, @ColorInt int veilColor,
                                      double target, @Nullable Boolean paleSide) {
+        return resolve(backdrop, preferredInk, alternateInk, veilColor, target, paleSide,
+            MAX_VEIL_ALPHA_255);
+    }
+
+    /**
+     * {@link #resolve(int, int, int, int, double, Boolean)} with the veil held to
+     * {@code maxVeilAlpha255}: where that ceiling binds the ink moves instead.
+     */
+    @NonNull
+    public static Resolution resolve(@ColorInt int backdrop, @ColorInt int preferredInk,
+                                     @ColorInt int alternateInk, @ColorInt int veilColor,
+                                     double target, @Nullable Boolean paleSide,
+                                     int maxVeilAlpha255) {
+        int ceiling = Math.max(0, Math.min(MAX_VEIL_ALPHA_255, maxVeilAlpha255));
         int base = opaque(backdrop);
         double bare = ratio(preferredInk, base);
         if (bare >= target) {
@@ -489,13 +510,13 @@ public final class OnGlass {
             return new Resolution(Color.TRANSPARENT, base, alternateInk, bareAlternate, target,
                 false, true, false);
         }
-        int alpha = veilAlphaFor(base, preferredInk, veilColor, target);
+        int alpha = veilAlphaFor(base, preferredInk, veilColor, target, ceiling);
         int veil = alpha <= 0 ? Color.TRANSPARENT : withAlpha(veilColor, alpha);
         int surface = alpha <= 0 ? base : opaque(composite(veil, base));
         double achieved = ratio(preferredInk, surface);
         if (achieved >= target) {
             return new Resolution(veil, surface, preferredInk, achieved, target,
-                alpha >= MAX_VEIL_ALPHA_255, false, false);
+                alpha >= ceiling, false, false);
         }
         int toned = toneOf(surface, preferredInk, target, paleSide);
         double tonedRatio = ratio(toned, surface);
@@ -601,6 +622,21 @@ public final class OnGlass {
                                              @ColorInt int ink, double inkTarget,
                                              @ColorInt int secondInk, double secondTarget,
                                              @ColorInt int veilColor) {
+        return resolveFixedInk(backdrop, cap, ink, inkTarget, secondInk, secondTarget, veilColor,
+            255);
+    }
+
+    /**
+     * {@link #resolveFixedInk} with the veil held to {@code maxVeilAlpha255}: the search stops
+     * there, and the answer is flagged capped (not legible-by-veil) when the ceiling was reached
+     * before the target. The terminal pane uses it so a thin glass tint never becomes a slab.
+     */
+    @NonNull
+    public static Resolution resolveFixedInk(@ColorInt int backdrop, @ColorInt int cap,
+                                             @ColorInt int ink, double inkTarget,
+                                             @ColorInt int secondInk, double secondTarget,
+                                             @ColorInt int veilColor, int maxVeilAlpha255) {
+        int ceiling = Math.max(0, Math.min(255, maxVeilAlpha255));
         int base = opaque(backdrop);
         int bareSurface = opaque(composite(cap, base));
         double bare = margin(ink, inkTarget, secondInk, secondTarget, bareSurface);
@@ -612,7 +648,7 @@ public final class OnGlass {
         if (Color.alpha(cap) < 255) {
             int bestAlpha = 0;
             double best = bare;
-            for (int alpha = 1; alpha <= 255; alpha++) {
+            for (int alpha = 1; alpha <= ceiling; alpha++) {
                 int veiled = opaque(composite(withAlpha(veilColor, alpha), base));
                 int surface = opaque(composite(cap, veiled));
                 double achieved = margin(ink, inkTarget, secondInk, secondTarget, surface);
@@ -629,11 +665,11 @@ public final class OnGlass {
                 int veil = withAlpha(veilColor, bestAlpha);
                 int surface = opaque(composite(cap, opaque(composite(veil, base))));
                 return fixedAnswer(veil, surface, ink, inkTarget, secondInk, secondTarget,
-                    bestAlpha, true);
+                    bestAlpha, true, ceiling < 255);
             }
         }
         return fixedAnswer(Color.TRANSPARENT, bareSurface, ink, inkTarget, secondInk,
-            secondTarget, 0, true);
+            secondTarget, 0, true, ceiling < 255);
     }
 
     /** The lower of two inks' ratios on one surface, each over its own tier: 1 or more clears both. */
@@ -648,12 +684,20 @@ public final class OnGlass {
                                           @ColorInt int ink, double inkTarget,
                                           @ColorInt int secondInk, double secondTarget,
                                           int alpha, boolean shortfall) {
+        return fixedAnswer(veil, surface, ink, inkTarget, secondInk, secondTarget, alpha, shortfall,
+            false);
+    }
+
+    private static Resolution fixedAnswer(@ColorInt int veil, @ColorInt int surface,
+                                          @ColorInt int ink, double inkTarget,
+                                          @ColorInt int secondInk, double secondTarget,
+                                          int alpha, boolean shortfall, boolean ceilingHit) {
         double first = ratio(ink, surface);
         double second = ratio(secondInk, surface);
         boolean secondBinds = second / secondTarget < first / inkTarget;
         return new Resolution(veil, surface, secondBinds ? secondInk : ink,
             secondBinds ? second : first, secondBinds ? secondTarget : inkTarget,
-            alpha > MAX_VEIL_ALPHA_255, false, shortfall);
+            alpha > MAX_VEIL_ALPHA_255 || ceilingHit, false, shortfall);
     }
 
     /**

@@ -133,4 +133,74 @@ public class AppearanceSnapshotTest {
         assertEquals(0, preferences.getFancierGlassDispersionPercent());
         assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
     }
+
+    /** Key spacing and App icons (the Custom row's) are seen by the signature and come back. */
+    @Test
+    public void keySpacingAndTheDockButtonCountAreSnapshottedAndRestored() {
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        String before = AppearanceSnapshot.signatureOf(preferences);
+        int count = preferences.getAppLauncherButtonCount();
+
+        preferences.setInAppKeyboardKeyMarginScale(3.5f);
+        assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
+        entry.restore(preferences);
+        assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
+
+        preferences.setAppLauncherButtonCount(count == 5 ? 6 : 5);
+        assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
+        entry.restore(preferences);
+        assertEquals(count, preferences.getAppLauncherButtonCount());
+        assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
+    }
+
+    /** A key spacing the Style owned (no key at all) comes back as no key, not a written default. */
+    @Test
+    public void anAbsentKeySpacingComesBackAbsent() {
+        assertFalse(store.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE));
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+
+        preferences.setInAppKeyboardKeyMarginScale(2f);
+        entry.restore(preferences);
+
+        assertFalse(store.contains(TERMUX_APP.KEY_IN_APP_KEYBOARD_KEY_MARGIN_SCALE));
+    }
+
+    @Test
+    public void unsavedCustomValuesComeBackAfterAVisitToALook() {
+        SurfacePresets.apply(preferences, SurfacePresets.presets().get(1));
+        SurfacePresets.saveCustom(preferences);
+        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 63);
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, 77);
+        // Leaving Custom keeps the session values, then a Look replaces them.
+        AppearanceSnapshot session = AppearanceSnapshot.capture(preferences);
+        SurfacePresets.apply(preferences, SurfacePresets.presets().get(3));
+        assertNotEquals(session.signature(), AppearanceSnapshot.signatureOf(preferences));
+
+        session.restore(preferences);
+
+        assertEquals(63, preferences.getSurfaceBaseValue(SurfaceProperty.BLUR));
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
+        assertEquals(session.signature(), AppearanceSnapshot.signatureOf(preferences));
+    }
+
+    @Test
+    public void undoPutsTheTintBack() {
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 70);
+        preferences.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.TINT, 55);
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        String signature = entry.signature();
+
+        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 5);
+        preferences.setSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT, true);
+        preferences.detachSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.TINT, 9);
+        assertNotEquals(signature, AppearanceSnapshot.signatureOf(preferences));
+
+        entry.restore(preferences);
+
+        assertEquals(70, preferences.getSurfaceBaseValue(SurfaceProperty.TINT));
+        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.TINT));
+        assertEquals(55, preferences.getStatusBarTintStrength());
+        assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.TINT));
+        assertEquals(signature, AppearanceSnapshot.signatureOf(preferences));
+    }
 }

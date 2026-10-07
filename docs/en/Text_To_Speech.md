@@ -72,6 +72,7 @@ tai speak --stop
 | --- | --- |
 | `--voice Bruno\|Hugo\|Jasper\|Rosie` | The voice. Without it, the voice from **Voice output**. |
 | `--speed N` | A number such as `1.2`, from 0.5 to 2.0. Without it, the speed from **Voice output**. |
+| `--whole` | Collects all the text first and speaks it in one go, instead of sentence by sentence. |
 | `--out file.wav` | Saves the audio as a WAV file instead of playing it, and prints `Saved file.wav`. |
 | `--stop` | Stops whatever the phone is reading aloud, from any shell. |
 
@@ -85,6 +86,19 @@ Spoke 3 sentences (4.2 s) as Jasper; first sound after 0.9 s.
 "First sound after" is how long it took from the command to the first audio. Ctrl-C stops the voice
 as well as the command, and a stopped reading prints `Stopped after 1 sentence.` Add `--json` before
 `speak` (`tai --json speak …`) for the raw answer.
+
+### Speaking as an agent talks
+
+```sh
+claude -p "Summarise today's commits" | tai speak
+some-agent | tai speak --voice Rosie
+```
+
+When text is piped in, `tai speak` reads it as it arrives: each sentence plays as soon as it is
+complete, so you hear the start of a long answer while the rest is still being written. Colour
+codes and Markdown marks (`**`, backticks, `#` headings, list bullets) are dropped, so they are not
+read out. Ctrl-C stops the voice and the command. Add `--whole` to collect everything first and
+speak it as one piece, or `--stream` to stream from a shell that reports no pipe.
 
 ## The API: `/v1/audio/speech`
 

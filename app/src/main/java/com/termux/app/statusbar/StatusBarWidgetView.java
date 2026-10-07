@@ -165,7 +165,9 @@ public final class StatusBarWidgetView extends LinearLayout {
      */
     public void setIconGlyph(@NonNull CharSequence glyph) {
         if (mGlyph.getTypeface() == null) return;
-        mGlyph.setText(glyph);
+        // Only on a change: this runs on every window-bar refresh, and a TextView's setText
+        // requests a layout of the whole cluster whether or not the glyph differs.
+        if (!android.text.TextUtils.equals(mGlyph.getText(), glyph)) mGlyph.setText(glyph);
         mGlyph.setVisibility(VISIBLE);
         mIcon.setVisibility(GONE);
         hideAnimation();
@@ -217,8 +219,13 @@ public final class StatusBarWidgetView extends LinearLayout {
      */
     public void setValue(@NonNull CharSequence value) {
         boolean empty = android.text.TextUtils.isEmpty(value);
-        mValue.setVisibility(empty ? GONE : VISIBLE);
-        setMinimumWidth(empty ? 0 : dp(MIN_WIDTH_WITH_VALUE_DP));
+        int visibility = empty ? GONE : VISIBLE;
+        if (mValue.getVisibility() != visibility) mValue.setVisibility(visibility);
+        // Only on a change: View.setMinimumWidth requests a layout every time it is called, and
+        // this is called from the stats cluster's layout listener. Unconditional, it scheduled a
+        // layout from every layout for as long as the Widgets place was up (2026-10-07).
+        int minimumWidth = empty ? 0 : dp(MIN_WIDTH_WITH_VALUE_DP);
+        if (getMinimumWidth() != minimumWidth) setMinimumWidth(minimumWidth);
         if (android.text.TextUtils.equals(mValue.getText(), value)) return;
         mValue.setText(value);
     }
@@ -309,7 +316,7 @@ public final class StatusBarWidgetView extends LinearLayout {
         int secondary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSecondary,
             ContextCompat.getColor(context, R.color.termux_secondary));
         int tertiary = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorTertiary, primary);
+            com.termux.shared.R.attr.termuxColorTertiary, primary);
         int roleColor = mColorRole == ColorRole.SECONDARY ? secondary
             : mColorRole == ColorRole.TERTIARY ? tertiary : primary;
         if (mMuted) {

@@ -226,7 +226,26 @@ fails when the catalogue has gone stale.
   launcher (`app/.../terminal/inappkeyboard/KeyPopupOverlayView`,
   `KeyPopupGeometry`, `KeyPopupPalette`, `KeyPopupController`); the module draws
   none of it.
+- Label faces (local addition): upstream draws every label in the system font
+  except `FLAG_KEY_FONT` values, which use `special_font.ttf`. Here `Config`
+  carries `labelFont` (the face the user picks for labels) and `symbolFont`
+  (the launcher's bundled Nerd Font symbols), and `LabelFace` (no upstream
+  counterpart) picks one of three faces per label: the key font for
+  `FLAG_KEY_FONT`, `symbolFont` for any label holding a private-use code point
+  (the space bar's `tool:<id>:<glyph>` swipe icons are Nerd Font glyphs a picked
+  font lacks), `labelFont` for the rest. So `Theme.Computed.Key` holds a third
+  pair of label paints and `label_paint` / `sublabel_paint` take the label text
+  beside the key-font flag; `Keyboard2View.symbolFont()` hands the face to the
+  launcher's popup.
 - Logging, utilities, and haptics are reduced to the retained embedded needs.
+- Per-key color overrides (local addition: `KeyColorOverride`, the host's color-scheme
+  overrides and the keybind hint lighting with its breath and fade-out) reach the draw path as
+  primitives. `onDraw` resolves a key's overrides into one reused `OverrideSlots` (a set flag
+  and an `int` per slot) instead of passing boxed `Integer`s, and the hint fade-out blends into
+  that same instance instead of allocating a `KeyColorOverride` per lit key per frame. So
+  `drawKeyFrame`, `drawLabel` and `drawSubLabel` take `(boolean has…, int color)` pairs where
+  upstream's `drawKeyFrame` takes no override and the labels take none. Upstream draws no
+  overrides, so a refresh keeps upstream's drawing and re-applies these parameters.
 
 ## Refresh procedure
 

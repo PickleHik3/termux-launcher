@@ -7,8 +7,14 @@ import android.net.Uri;
 import android.os.ParcelFileDescriptor;
 import android.provider.OpenableColumns;
 import android.util.Patterns;
+import android.util.TypedValue;
+import android.widget.FrameLayout;
+import android.widget.ProgressBar;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.shared.android.PackageUtils;
 import com.termux.shared.data.DataUtils;
@@ -37,6 +43,10 @@ import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Iterator;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -60,6 +70,34 @@ public class FileReceiverActivity extends AppCompatActivity {
 
     private static final String LOG_TAG = "FileReceiverActivity";
 
+    /**
+     * Provider reads and copies run here, one at a time, never on main: a shared file can be any
+     * size and a content provider can be another process taking its time.
+     */
+    private static final ExecutorService IO = newIoExecutor();
+
+    @NonNull
+    private static ExecutorService newIoExecutor() {
+        ThreadPoolExecutor executor = new ThreadPoolExecutor(0, 1, 15L, TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(), runnable -> new Thread(runnable, "FileReceiverIO"));
+        executor.allowCoreThreadTimeOut(true);
+        return executor;
+    }
+
+    /** Work for {@link #IO}. */
+    private interface BackgroundStep<T> {
+        T run();
+    }
+
+    /** What happens on main with a {@link BackgroundStep}'s result. */
+    private interface MainStep<T> {
+        void accept(T result);
+    }
+
+    /** Set while a background step runs, so a resume meanwhile does not handle the intent again. */
+    private boolean mWorkInFlight;
+    @Nullable private AlertDialog mProgressDialog;
+
     static boolean isSharedTextAnUrl(String sharedText) {
         if (sharedText == null || sharedText.isEmpty()) return false;
 
@@ -73,6 +111,7 @@ public class FileReceiverActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
+        if (mWorkInFlight) return;
         final Intent intent = getIntent();
         final String action = intent.getAction();
         final String type = intent.getType();
@@ -127,12 +166,133 @@ public class FileReceiverActivity extends AppCompatActivity {
         }
     }
 
+    @Override
+    protected void onDestroy() {
+        dismissProgress();
+        super.onDestroy();
+    }
+
+    /**
+     * Runs {@code work} on {@link #IO} and hands its result to {@code then} on main, unless the
+     * activity has gone meanwhile; then {@code ifGone} gets it instead, to release what it holds.
+     *
+     * <p>With {@code afterNameDialog} the step follows a tap on the name dialog: an indeterminate
+     * progress dialog stands in while it runs, and the name dialog's own dismissal (which follows
+     * the tap) must not finish the activity before the work is done.
+     */
+    private <T> void runOffMain(boolean afterNameDialog, @NonNull BackgroundStep<T> work,
+                                @NonNull MainStep<T> then, @Nullable MainStep<T> ifGone) {
+        mWorkInFlight = true;
+        if (afterNameDialog) {
+            mFinishOnDismissNameDialog = false;
+            showProgress();
+        }
+        IO.execute(() -> {
+            T result;
+            try {
+                result = work.run();
+            } catch (RuntimeException e) {
+                // The steps report their own failures; this is what used to crash on main.
+                Logger.logStackTraceWithMessage(LOG_TAG, "Receiving shared content failed", e);
+                runOnUiThread(() -> {
+                    mWorkInFlight = false;
+                    dismissProgress();
+                    if (isFinishing() || isDestroyed()) return;
+                    showErrorDialogAndQuit("Unable to handle shared content:\n\n" + e.getMessage());
+                });
+                return;
+            }
+            runOnUiThread(() -> {
+                mWorkInFlight = false;
+                dismissProgress();
+                if (isFinishing() || isDestroyed()) {
+                    if (ifGone != null) ifGone.accept(result);
+                    return;
+                }
+                then.accept(result);
+            });
+        });
+    }
+
+    private void showProgress() {
+        if (mProgressDialog != null) return;
+        ProgressBar progress = new ProgressBar(this);
+        progress.setIndeterminate(true);
+        int padding = Math.round(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 24,
+            getResources().getDisplayMetrics()));
+        FrameLayout frame = new FrameLayout(this);
+        frame.setPadding(padding, padding, padding, padding);
+        frame.addView(progress, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT, android.view.Gravity.CENTER));
+        mProgressDialog = new MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.title_file_received)
+            .setView(frame)
+            .setCancelable(false)
+            .create();
+        mProgressDialog.setCanceledOnTouchOutside(false);
+        mProgressDialog.show();
+    }
+
+    private void dismissProgress() {
+        AlertDialog dialog = mProgressDialog;
+        mProgressDialog = null;
+        if (dialog == null) return;
+        try {
+            dialog.dismiss();
+        } catch (RuntimeException ignored) {
+            // The window went with the activity.
+        }
+    }
+
+    private static void closeQuietly(@Nullable AutoCloseable closeable) {
+        if (closeable == null) return;
+        try {
+            closeable.close();
+        } catch (Exception ignored) {
+        }
+    }
+
     void showErrorDialogAndQuit(String message) {
         mFinishOnDismissNameDialog = false;
         MessageDialogUtils.showMessage(this, API_TAG, message, null, (dialog, which) -> finish(), null, null, dialog -> finish());
     }
 
+    /** What {@link #openSharedContent} found: a directory, a stream, or why neither. */
+    private static final class SharedContent {
+        @Nullable String attachmentFileName;
+        @Nullable Path directoryLink;
+        @Nullable ParcelFileDescriptor directoryDescriptor;
+        @Nullable InputStream stream;
+        @Nullable String error;
+
+        void close() {
+            closeQuietly(directoryDescriptor);
+            closeQuietly(stream);
+        }
+    }
+
+    /**
+     * Reads the shared content's name and opens it, off main (the provider query and open are
+     * calls into another process), then asks for the name to save it under.
+     */
     void handleContentUri(@NonNull final Uri uri, String subjectFromIntent) {
+        runOffMain(false, () -> openSharedContent(uri, subjectFromIntent), content -> {
+            if (content.error != null) {
+                showErrorDialogAndQuit(content.error);
+            } else if (content.directoryLink != null && content.directoryDescriptor != null
+                && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                promptNameAndCopy(content.directoryLink, content.directoryDescriptor,
+                    content.attachmentFileName);
+            } else {
+                promptNameAndSave(content.stream, content.attachmentFileName);
+            }
+        }, SharedContent::close);
+    }
+
+    /** {@link #handleContentUri}'s provider work; on {@link #IO}. */
+    @NonNull
+    private SharedContent openSharedContent(@NonNull final Uri uri, String subjectFromIntent) {
+        SharedContent content = new SharedContent();
         try {
             Logger.logVerbose(LOG_TAG, "uri: \"" + uri + "\", path: \"" + uri.getPath() + "\", fragment: \"" + uri.getFragment() + "\"");
             String attachmentFileName = null;
@@ -147,6 +307,7 @@ public class FileReceiverActivity extends AppCompatActivity {
 
             if (attachmentFileName == null) attachmentFileName = subjectFromIntent;
             if (attachmentFileName == null) attachmentFileName = UriUtils.getUriFileBasename(uri, true);
+            content.attachmentFileName = attachmentFileName;
 
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 ParcelFileDescriptor fileDescriptor = null;
@@ -155,8 +316,9 @@ public class FileReceiverActivity extends AppCompatActivity {
                     int fd = fileDescriptor.getFd();
                     Path link = Paths.get("/proc/self/fd/" + fd);
                     if (Files.isDirectory(link)) {
-                        promptNameAndCopy(link, fileDescriptor, attachmentFileName);
-                        return;
+                        content.directoryLink = link;
+                        content.directoryDescriptor = fileDescriptor;
+                        return content;
                     }
                 } catch (Exception e) {
                     Logger.logStackTraceWithMessage(LOG_TAG, "handleContentUri(uri=" + uri + ") as directory failed (continuing as file)", e);
@@ -166,59 +328,28 @@ public class FileReceiverActivity extends AppCompatActivity {
                 }
             }
 
-            InputStream in = getContentResolver().openInputStream(uri);
-            promptNameAndSave(in, attachmentFileName);
+            content.stream = getContentResolver().openInputStream(uri);
         } catch (Exception e) {
-            showErrorDialogAndQuit("Unable to handle shared content:\n\n" + e.getMessage());
+            content.error = "Unable to handle shared content:\n\n" + e.getMessage();
             Logger.logStackTraceWithMessage(LOG_TAG, "handleContentUri(uri=" + uri + ") failed", e);
         }
+        return content;
     }
 
     @androidx.annotation.RequiresApi(api = android.os.Build.VERSION_CODES.O)
     void promptNameAndCopy(final Path SOURCE, @NonNull final ParcelFileDescriptor fd, final String attachmentFileName) {
         final TextInputDialogUtils.TextSetListener listener = (
-            text -> {
-                try (final ParcelFileDescriptor fileDescriptor = fd) {
-                    if (DataUtils.isNullOrEmpty(text)) {
-                        showErrorDialogAndQuit("File name cannot be null or empty");
-                        return;
-                    }
-                    final Path receiveDir = resolveReceiveDirectory(text);
-                    Files.createDirectories(receiveDir);
-                    if (!Files.isDirectory(receiveDir)) {
-                        showErrorDialogAndQuit("Cannot create directory: " + receiveDir.toAbsolutePath().toString());
-                        return;
-                    }
-                    try (Stream<Path> children = Files.list(SOURCE)) {
-                        for (Iterator<Path> itr = children.iterator(); itr.hasNext();) {
-                            Path child = itr.next();
-                            try (Stream<Path> stream = Files.walk(child)) {
-                                for (Iterator<Path> i = stream.iterator(); i.hasNext();) {
-                                    Path source = i.next();
-                                    if (Files.isSymbolicLink(source)) {
-                                        throw new IOException("Symbolic links are not supported in received directories: " + source);
-                                    }
-                                    Path target = receiveDir.resolve(SOURCE.relativize(source)).normalize();
-                                    if (!target.startsWith(receiveDir)) {
-                                        throw new IOException("Refusing to copy outside receive directory: " + source);
-                                    }
-                                    Files.copy(source, target, LinkOption.NOFOLLOW_LINKS);
-                                }
-                            }
-                        }
-                    }
-                    fileDescriptor.getFd();
-
-                    Intent executeIntent = new Intent(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE);
-                    executeIntent.putExtra(TERMUX_SERVICE.EXTRA_WORKDIR, receiveDir.toString());
-                    executeIntent.setClass(FileReceiverActivity.this, TermuxService.class);
-                    startService(executeIntent);
-                    finish();
-                } catch (Exception e) {
-                    showErrorDialogAndQuit("Error copying directory:\n\n" + e);
-                    Logger.logStackTraceWithMessage(LOG_TAG, "Error copying directory", e);
+            text -> runOffMain(true, () -> copyDirectory(SOURCE, fd, text), outcome -> {
+                if (outcome.error != null) {
+                    showErrorDialogAndQuit(outcome.error);
+                    return;
                 }
-            });
+                Intent executeIntent = new Intent(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE);
+                executeIntent.putExtra(TERMUX_SERVICE.EXTRA_WORKDIR, outcome.receiveDir.toString());
+                executeIntent.setClass(FileReceiverActivity.this, TermuxService.class);
+                startService(executeIntent);
+                finish();
+            }, null));
         TextInputDialogUtils.textInput(this, R.string.title_file_received, attachmentFileName,
             R.string.action_file_received_edit, listener,
             R.string.action_file_received_open_directory, listener,
@@ -227,6 +358,56 @@ public class FileReceiverActivity extends AppCompatActivity {
                     finish();
                 }
             });
+    }
+
+    /** Where a directory copy ended: the directory written, or why it failed. */
+    private static final class CopyOutcome {
+        @Nullable Path receiveDir;
+        @Nullable String error;
+    }
+
+    /** Copies the shared directory under the receive directory; on {@link #IO}. */
+    @NonNull
+    @androidx.annotation.RequiresApi(api = android.os.Build.VERSION_CODES.O)
+    private static CopyOutcome copyDirectory(final Path SOURCE, @NonNull final ParcelFileDescriptor fd,
+                                             final String text) {
+        CopyOutcome outcome = new CopyOutcome();
+        try (final ParcelFileDescriptor fileDescriptor = fd) {
+            if (DataUtils.isNullOrEmpty(text)) {
+                outcome.error = "File name cannot be null or empty";
+                return outcome;
+            }
+            final Path receiveDir = resolveReceiveDirectory(text);
+            Files.createDirectories(receiveDir);
+            if (!Files.isDirectory(receiveDir)) {
+                outcome.error = "Cannot create directory: " + receiveDir.toAbsolutePath().toString();
+                return outcome;
+            }
+            try (Stream<Path> children = Files.list(SOURCE)) {
+                for (Iterator<Path> itr = children.iterator(); itr.hasNext();) {
+                    Path child = itr.next();
+                    try (Stream<Path> stream = Files.walk(child)) {
+                        for (Iterator<Path> i = stream.iterator(); i.hasNext();) {
+                            Path source = i.next();
+                            if (Files.isSymbolicLink(source)) {
+                                throw new IOException("Symbolic links are not supported in received directories: " + source);
+                            }
+                            Path target = receiveDir.resolve(SOURCE.relativize(source)).normalize();
+                            if (!target.startsWith(receiveDir)) {
+                                throw new IOException("Refusing to copy outside receive directory: " + source);
+                            }
+                            Files.copy(source, target, LinkOption.NOFOLLOW_LINKS);
+                        }
+                    }
+                }
+            }
+            fileDescriptor.getFd();
+            outcome.receiveDir = receiveDir;
+        } catch (Exception e) {
+            outcome.error = "Error copying directory:\n\n" + e;
+            Logger.logStackTraceWithMessage(LOG_TAG, "Error copying directory", e);
+        }
+        return outcome;
     }
     
     void promptNameAndSave(final InputStream in, final String attachmentFileName) {
@@ -242,43 +423,62 @@ public class FileReceiverActivity extends AppCompatActivity {
      */
     void promptNameAndSave(final InputStream in, final String attachmentFileName, final String sourcePath) {
         String message = sourcePath != null ? getString(R.string.msg_file_received_source, sourcePath) : null;
-        TextInputDialogUtils.textInput(this, R.string.title_file_received, message, attachmentFileName, R.string.action_file_received_edit, text -> {
-            File outFile = saveStreamWithName(in, text);
-            if (outFile == null)
-                return;
-            final File editorProgramFile = new File(EDITOR_PROGRAM);
-            if (!editorProgramFile.isFile()) {
-                showErrorDialogAndQuit("The following file does not exist:\n$HOME/bin/termux-file-editor\n\n" + "Create this file as a script or a symlink - it will be called with the received file as only argument.");
-                return;
-            }
-            // Do this for the user if necessary:
-            //noinspection ResultOfMethodCallIgnored
-            editorProgramFile.setExecutable(true);
-            final Uri scriptUri = UriUtils.getFileUri(EDITOR_PROGRAM);
-            Intent executeIntent = new Intent(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE, scriptUri);
-            executeIntent.setClass(FileReceiverActivity.this, TermuxService.class);
-            executeIntent.putExtra(TERMUX_SERVICE.EXTRA_ARGUMENTS, new String[] { outFile.getAbsolutePath() });
-            startService(executeIntent);
-            finish();
-        }, R.string.action_file_received_open_directory, text -> {
-            if (saveStreamWithName(in, text) == null)
-                return;
-            Intent executeIntent = new Intent(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE);
-            executeIntent.putExtra(TERMUX_SERVICE.EXTRA_WORKDIR, TERMUX_RECEIVEDIR);
-            executeIntent.setClass(FileReceiverActivity.this, TermuxService.class);
-            startService(executeIntent);
-            finish();
-        }, android.R.string.cancel, text -> finish(), dialog -> {
+        TextInputDialogUtils.textInput(this, R.string.title_file_received, message, attachmentFileName, R.string.action_file_received_edit,
+            text -> runOffMain(true, () -> saveStreamWithName(in, text, true), saved -> {
+                if (saved.error != null) {
+                    showErrorDialogAndQuit(saved.error);
+                    return;
+                }
+                if (!saved.editorExists) {
+                    showErrorDialogAndQuit("The following file does not exist:\n$HOME/bin/termux-file-editor\n\n" + "Create this file as a script or a symlink - it will be called with the received file as only argument.");
+                    return;
+                }
+                final Uri scriptUri = UriUtils.getFileUri(EDITOR_PROGRAM);
+                Intent executeIntent = new Intent(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE, scriptUri);
+                executeIntent.setClass(FileReceiverActivity.this, TermuxService.class);
+                executeIntent.putExtra(TERMUX_SERVICE.EXTRA_ARGUMENTS, new String[] { saved.outFile.getAbsolutePath() });
+                startService(executeIntent);
+                finish();
+            }, null),
+            R.string.action_file_received_open_directory,
+            text -> runOffMain(true, () -> saveStreamWithName(in, text, false), saved -> {
+                if (saved.error != null) {
+                    showErrorDialogAndQuit(saved.error);
+                    return;
+                }
+                Intent executeIntent = new Intent(TERMUX_SERVICE.ACTION_SERVICE_EXECUTE);
+                executeIntent.putExtra(TERMUX_SERVICE.EXTRA_WORKDIR, TERMUX_RECEIVEDIR);
+                executeIntent.setClass(FileReceiverActivity.this, TermuxService.class);
+                startService(executeIntent);
+                finish();
+            }, null),
+            android.R.string.cancel, text -> finish(), dialog -> {
             if (mFinishOnDismissNameDialog)
                 finish();
         });
     }
 
-    public File saveStreamWithName(InputStream in, String attachmentFileName) {
+    /** Where a save ended: the file written, or why it failed. */
+    static final class SaveOutcome {
+        @Nullable File outFile;
+        @Nullable String error;
+        /** Whether $HOME/bin/termux-file-editor is there (made executable when it is). */
+        boolean editorExists;
+    }
+
+    /**
+     * Copies {@code in} to {@code attachmentFileName} in the receive directory; on {@link #IO}.
+     * With {@code checkEditor} it also looks for the editor script, so the main thread does no
+     * file system work after it.
+     */
+    @NonNull
+    static SaveOutcome saveStreamWithName(InputStream in, String attachmentFileName,
+                                          boolean checkEditor) {
+        SaveOutcome outcome = new SaveOutcome();
         File receiveDir = new File(TERMUX_RECEIVEDIR);
         if (!receiveDir.isDirectory() && !receiveDir.mkdirs()) {
-            showErrorDialogAndQuit("Cannot create directory: " + receiveDir.getAbsolutePath());
-            return null;
+            outcome.error = "Cannot create directory: " + receiveDir.getAbsolutePath();
+            return outcome;
         }
         try {
             final File outFile = resolveReceiveFile(receiveDir, attachmentFileName);
@@ -289,12 +489,21 @@ public class FileReceiverActivity extends AppCompatActivity {
                     f.write(buffer, 0, readBytes);
                 }
             }
-            return outFile;
+            outcome.outFile = outFile;
         } catch (IOException e) {
-            showErrorDialogAndQuit("Error saving file:\n\n" + e);
+            outcome.error = "Error saving file:\n\n" + e;
             Logger.logStackTraceWithMessage(LOG_TAG, "Error saving file", e);
-            return null;
+            return outcome;
         }
+        if (!checkEditor) return outcome;
+        final File editorProgramFile = new File(EDITOR_PROGRAM);
+        outcome.editorExists = editorProgramFile.isFile();
+        if (outcome.editorExists) {
+            // Do this for the user if necessary:
+            //noinspection ResultOfMethodCallIgnored
+            editorProgramFile.setExecutable(true);
+        }
+        return outcome;
     }
 
     static String sanitizeReceiveName(String attachmentFileName) throws IOException {

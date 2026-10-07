@@ -48,7 +48,7 @@ public class TaiFunctionRowsTest {
         }
 
         @Override public String functionName(TaiFunction function) {
-            return function == TaiFunction.WALLPAPER_READER || function == TaiFunction.WALLPAPER_DEPTH ? "WALLPAPER" : function.name();
+            return function.name();
         }
 
         @Override public String modelName(String modelId) {
@@ -111,8 +111,9 @@ public class TaiFunctionRowsTest {
             item(TaiTierPolicy.WHISPER_SMALL, 300L << 20, lite, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT),
             item(TaiModelCatalog.KITTEN_TTS_NANO_ID, 90L << 20, lite, TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH),
             item(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID, 175L << 20, lite, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS),
-            item(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, 55L << 20, lite, TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION),
-            item(TaiModelCatalog.U2NET_ID, 170L << 20, lite, TaiModelSpec.CAPABILITY_SUBJECT_SEGMENTATION),
+            // Retired vision tools: never shown anywhere in the Centre.
+            item("depth-anything-3-small", 55L << 20, lite, TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION),
+            item("u2net", 170L << 20, lite, TaiModelSpec.CAPABILITY_SUBJECT_SEGMENTATION),
             // An image-generation entry: never shown anywhere in the Centre (spec §3.6).
             item("sd-turbo", 2L * GIB, TaiModelSpec.BACKEND_MNN_DIFFUSION, TaiModelSpec.CAPABILITY_IMAGE_GENERATION));
     }
@@ -150,9 +151,8 @@ public class TaiFunctionRowsTest {
     }
 
     @Test
-    public void aFunctionWithoutAModelSaysRulesOnlyRawTextOrOff() {
+    public void aFunctionWithoutAModelSaysRawTextOrOff() {
         TaiFunctionModels tier1 = models(env(6, 34, GpuPath.YES));
-        assertEquals("RULES_ONLY", TaiFunctionRows.summary(tier1.resolve(TaiFunction.WALLPAPER_READER), LABELS));
         assertEquals("RAW_TEXT", TaiFunctionRows.summary(tier1.resolve(TaiFunction.TIDY_DICTATION), LABELS));
         assertEquals("OFF", TaiFunctionRows.summary(tier1.resolve(TaiFunction.APP_CATEGORIES), LABELS));
         // A pick of "off" reads the same way.
@@ -182,41 +182,24 @@ public class TaiFunctionRowsTest {
     // ------------------------------------------------------------------------------ the rows
 
     @Test
-    public void thereIsOneRowPerAllowedFunctionAndNoneForImageGenerationOrDepth() {
+    public void thereIsOneRowPerFunctionAndNoneForImageGeneration() {
         installGemma();
         List<TaiFunctionRows.FunctionRow> rows = TaiFunctionRows.functionRows(models(env(12, 34, GpuPath.YES)), LABELS, "polished");
         List<TaiFunction> functions = new ArrayList<>();
         for (TaiFunctionRows.FunctionRow row : rows) functions.add(row.function);
         assertEquals(Arrays.asList(TaiFunction.ASSISTANT, TaiFunction.VOICE_TYPING, TaiFunction.TIDY_DICTATION,
-            TaiFunction.READ_ALOUD, TaiFunction.APP_CATEGORIES, TaiFunction.WALLPAPER_READER, TaiFunction.EMBEDDINGS), functions);
-    }
-
-    @Test
-    public void theWallpaperCreatorGoesBelowApi34() {
-        installGemma();
-        for (TaiFunctionRows.FunctionRow row : TaiFunctionRows.functionRows(models(env(12, 33, GpuPath.YES)), LABELS, "polished")) {
-            assertFalse(row.function == TaiFunction.WALLPAPER_READER);
-        }
-    }
-
-    @Test
-    public void theWallpaperRowShowsReaderAndDepthTogether() {
-        installGemma();
-        install(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, 55L << 20, TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION);
-        TaiFunctionRows.FunctionRow wallpaper = row(TaiFunctionRows.functionRows(models(env(12, 34, GpuPath.YES)), LABELS, "polished"),
-            TaiFunction.WALLPAPER_READER);
-        assertEquals("READER_DEPTH[AUTOMATIC[" + E4B + "] · GPU, AUTOMATIC["
-            + TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID + "]]", wallpaper.summary);
+            TaiFunction.READ_ALOUD, TaiFunction.APP_CATEGORIES, TaiFunction.EMBEDDINGS), functions);
     }
 
     @Test
     public void theBackgroundWarningFollowsTheResolvedModelsSize() {
         installGemma();
-        // E4B (the reader on 12 GB) is 30 % of 12 GB: warns. E2B (assistant, categories) is 21 %: does not.
+        // E2B (assistant, categories) is 21 % of 12 GB: does not warn; at 8 GB it is 32 %: warns.
         List<TaiFunctionRows.FunctionRow> rows = TaiFunctionRows.functionRows(models(env(12, 34, GpuPath.YES)), LABELS, "polished");
-        assertTrue(row(rows, TaiFunction.WALLPAPER_READER).warnBackground);
         assertFalse(row(rows, TaiFunction.APP_CATEGORIES).warnBackground);
         assertFalse(row(rows, TaiFunction.ASSISTANT).warnBackground);
+        List<TaiFunctionRows.FunctionRow> eight = TaiFunctionRows.functionRows(models(env(8, 34, GpuPath.YES)), LABELS, "polished");
+        assertTrue(row(eight, TaiFunction.ASSISTANT).warnBackground);
     }
 
     @Test
@@ -240,9 +223,6 @@ public class TaiFunctionRowsTest {
     public void usedByNamesEachFunctionOnceAndIsEmptyForAnUnusedModel() {
         assertEquals("USED_BY[ASSISTANT, TIDY_DICTATION]", TaiFunctionRows.usedByLine(
             Arrays.asList(TaiFunction.ASSISTANT, TaiFunction.TIDY_DICTATION), LABELS));
-        // Reader and depth are one name, "Wallpaper creator".
-        assertEquals("USED_BY[WALLPAPER]", TaiFunctionRows.usedByLine(
-            Arrays.asList(TaiFunction.WALLPAPER_READER, TaiFunction.WALLPAPER_DEPTH), LABELS));
         assertEquals("", TaiFunctionRows.usedByLine(Collections.<TaiFunction>emptyList(), LABELS));
     }
 
@@ -252,11 +232,10 @@ public class TaiFunctionRowsTest {
         TaiFunctionModels models = models(env(12, 34, GpuPath.YES));
         models.set(TaiFunction.ASSISTANT, E4B);
         String warning = TaiFunctionRows.deleteWarning(models, E4B, LABELS);
-        // E4B is the pick for the assistant and Automatic for the reader (categories use E2B on Tier 2).
+        // E4B is the pick for the assistant only (categories use E2B on Tier 2).
         assertTrue(warning, warning.startsWith("DELETE_IN_USE["));
         assertTrue(warning, warning.contains("DELETE_LINE[ASSISTANT, AUTOMATIC[" + E2B + "] · GPU]"));
         assertFalse(warning, warning.contains("DELETE_LINE[APP_CATEGORIES"));
-        assertTrue(warning, warning.contains("DELETE_LINE[CHOOSER_READER, AUTOMATIC[" + E2B + "] · GPU]"));
     }
 
     @Test
@@ -308,7 +287,7 @@ public class TaiFunctionRowsTest {
         Map<TaiFunctionRows.Group, List<TaiFunctionRows.GetEntry>> groups =
             TaiFunctionRows.getModels(env(12, 34, GpuPath.YES), catalogue(), Collections.<String>emptySet());
         assertEquals(Arrays.asList(TaiFunctionRows.Group.ASSISTANTS, TaiFunctionRows.Group.SPEECH,
-            TaiFunctionRows.Group.VOICE_OUTPUT, TaiFunctionRows.Group.SEARCH, TaiFunctionRows.Group.WALLPAPER_VISION),
+            TaiFunctionRows.Group.VOICE_OUTPUT, TaiFunctionRows.Group.SEARCH),
             new ArrayList<>(groups.keySet()));
         List<String> ids = new ArrayList<>();
         for (List<TaiFunctionRows.GetEntry> list : groups.values()) {
@@ -316,16 +295,9 @@ public class TaiFunctionRowsTest {
         }
         assertFalse(ids.contains("sd-turbo"));
         assertEquals(Arrays.asList(E2B, E4B), idsOf(groups.get(TaiFunctionRows.Group.ASSISTANTS)));
-        assertEquals(Arrays.asList(TaiModelCatalog.DEPTH_ANYTHING_3_SMALL_ID, TaiModelCatalog.U2NET_ID),
-            idsOf(groups.get(TaiFunctionRows.Group.WALLPAPER_VISION)));
-    }
-
-    @Test
-    public void wallpaperVisionIsHiddenBelowApi34() {
-        Map<TaiFunctionRows.Group, List<TaiFunctionRows.GetEntry>> groups =
-            TaiFunctionRows.getModels(env(12, 33, GpuPath.YES), catalogue(), Collections.<String>emptySet());
-        assertNull(groups.get(TaiFunctionRows.Group.WALLPAPER_VISION));
-        assertTrue(groups.containsKey(TaiFunctionRows.Group.ASSISTANTS));
+        // A leftover vision tool model is in the list but never shown.
+        assertFalse(ids.contains("depth-anything-3-small"));
+        assertFalse(ids.contains("u2net"));
     }
 
     @Test
@@ -363,26 +335,22 @@ public class TaiFunctionRowsTest {
     }
 
     @Test
-    public void forLineListsWhatAModelCanServeAndTheCutOutIsWallpaperCreator() {
+    public void forLineListsWhatAModelCanServeAndAVisionToolServesNothing() {
         Env pong = env(12, 34, GpuPath.YES);
         ModelInfo gemma = new ModelInfo(E2B, E2B_BYTES, caps(TaiModelSpec.CAPABILITY_TEXT_CHAT, TaiModelSpec.CAPABILITY_IMAGE_INPUT),
             TaiModelSpec.BACKEND_LITERT_LM);
-        assertEquals("FOR[ASSISTANT, TIDY_DICTATION, APP_CATEGORIES, WALLPAPER]", TaiFunctionRows.forLine(pong, gemma, LABELS));
-        ModelInfo cutout = new ModelInfo(TaiModelCatalog.U2NET_ID, 1L, caps(TaiModelSpec.CAPABILITY_SUBJECT_SEGMENTATION),
+        assertEquals("FOR[ASSISTANT, TIDY_DICTATION, APP_CATEGORIES]", TaiFunctionRows.forLine(pong, gemma, LABELS));
+        ModelInfo cutout = new ModelInfo("u2net", 1L, caps(TaiModelSpec.CAPABILITY_SUBJECT_SEGMENTATION),
             TaiModelSpec.BACKEND_LITERT_LM);
-        assertEquals("FOR[FOR_CUTOUT]", TaiFunctionRows.forLine(pong, cutout, LABELS));
-        // The cut-out can be shown but never picked: it serves no function.
+        assertEquals("", TaiFunctionRows.forLine(pong, cutout, LABELS));
         assertTrue(TaiFunctionRows.servedBy(pong, cutout).isEmpty());
-        // A text-only chat model serves no wallpaper reader.
-        ModelInfo textOnly = new ModelInfo("t", 1L, caps(TaiModelSpec.CAPABILITY_TEXT_CHAT), TaiModelSpec.BACKEND_LITERT_LM);
-        assertFalse(TaiFunctionRows.servedBy(pong, textOnly).contains(TaiFunction.WALLPAPER_READER));
     }
 
     @Test
     public void theChainReadsAsModelsThenAWithoutModelEnd() {
-        TaiFunctionModels.Resolution resolution = models(env(12, 34, GpuPath.YES)).resolve(TaiFunction.WALLPAPER_READER);
-        // The fake prints the message name; the real line lower-cases the without-model end ("rules only").
-        assertEquals("CHAIN[" + E2B + " → rules_only]", TaiFunctionRows.chainLine(resolution.chain, LABELS));
+        TaiFunctionModels.Resolution resolution = models(env(12, 34, GpuPath.YES)).resolve(TaiFunction.TIDY_DICTATION);
+        // The fake prints the message name; the real line lower-cases the without-model end ("raw text").
+        assertEquals("CHAIN[" + E4B + " → raw_text]", TaiFunctionRows.chainLine(resolution.chain, LABELS));
         // Search falls back to the other EmbeddingGemma 2 file, then the v1 300M.
         assertEquals("CHAIN[" + TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID + " → " + TaiModelCatalog.EMBEDDING_GEMMA_300M_ID + "]",
             TaiFunctionRows.chainLine(models(env(12, 34, GpuPath.YES)).resolve(TaiFunction.EMBEDDINGS).chain, LABELS));

@@ -1,102 +1,53 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The Icon pack page (appearance-round-2026-10-04.md, "Icons page"), modelled on Nothing OS's
-     icon pack page. IconPackPage fills it; the host supplies the top bar and the system bar
-     insets, so there is no title bar here.
+<!-- The Icon pack controls (Icons mode of the Appearance editor), living in the editor's bottom
+     sheet under the real launcher: the row of round pack tiles (Default, then the installed
+     packs; IconPackPage adds the tiles) and one rounded container holding the Pinned app icons
+     only switch. The sheet supplies the 16dp side padding, its surface and the navigation inset,
+     so there is no background and no scrolling here; the sheet is as tall as this content.
 
-     Top to bottom: the phone-shaped Home preview (a 9:16 card, 188 x 334dp, the Home still behind
-     the pinned apps' icons in the chosen pack), the row of round pack tiles (Default, then the
-     installed packs; IconPackPage adds the tiles), and one rounded container holding the
-     Pinned app icons only switch. The page scrolls when the screen is short. -->
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+     Height, dp: tiles 4 + 64 + 6 + label (up to two LabelMedium lines, ~32) + 4 = ~110, then
+     12 + the 64dp switch card = ~186 (the slot adds 8 above, the sheet 16 below). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/icon_pack_page"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="?attr/colorSurface"
+    android:layout_height="wrap_content"
     android:layoutDirection="locale"
-    android:fillViewport="true"
-    android:overScrollMode="never">
+    android:orientation="vertical">
 
-    <LinearLayout
+    <HorizontalScrollView
+        android:id="@+id/icon_pack_tiles_scroll"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:paddingBottom="24dp">
+        android:clipToPadding="false"
+        android:overScrollMode="never"
+        android:scrollbars="none">
 
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/icon_pack_preview"
-            android:layout_width="188dp"
-            android:layout_height="334dp"
-            android:layout_gravity="center_horizontal"
-            android:layout_marginTop="8dp"
-            android:contentDescription="@string/icon_pack_page_preview_description"
-            app:cardBackgroundColor="?attr/colorSurfaceContainerHighest"
-            app:cardCornerRadius="28dp"
-            app:cardElevation="0dp"
-            app:strokeColor="?attr/colorOutlineVariant"
-            app:strokeWidth="2dp"
-            xmlns:app="http://schemas.android.com/apk/res-auto">
+        <LinearLayout
+            android:id="@+id/icon_pack_tiles"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
 
-            <FrameLayout
-                android:layout_width="match_parent"
-                android:layout_height="match_parent">
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        app:cardBackgroundColor="?attr/colorSurfaceContainerHighest"
+        app:cardCornerRadius="28dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="0dp">
 
-                <ImageView
-                    android:id="@+id/icon_pack_preview_still"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:importantForAccessibility="no"
-                    android:scaleType="centerCrop" />
-
-                <LinearLayout
-                    android:id="@+id/icon_pack_preview_apps"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="bottom"
-                    android:orientation="vertical"
-                    android:padding="12dp" />
-            </FrameLayout>
-        </com.google.android.material.card.MaterialCardView>
-
-        <HorizontalScrollView
-            android:id="@+id/icon_pack_tiles_scroll"
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/icon_pack_pinned_only"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:clipToPadding="false"
-            android:overScrollMode="never"
-            android:paddingStart="12dp"
-            android:paddingEnd="12dp"
-            android:scrollbars="none">
-
-            <LinearLayout
-                android:id="@+id/icon_pack_tiles"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal" />
-        </HorizontalScrollView>
-
-        <com.google.android.material.card.MaterialCardView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="16dp"
-            android:layout_marginTop="20dp"
-            android:layout_marginEnd="16dp"
-            app:cardBackgroundColor="?attr/colorSurfaceContainer"
-            app:cardCornerRadius="28dp"
-            app:cardElevation="0dp"
-            app:strokeWidth="0dp"
-            xmlns:app="http://schemas.android.com/apk/res-auto">
-
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/icon_pack_pinned_only"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:minHeight="64dp"
-                android:paddingStart="24dp"
-                android:paddingEnd="24dp"
-                android:text="@string/icon_pack_page_pinned_only"
-                android:textAppearance="?attr/textAppearanceBodyLarge"
-                android:textColor="?attr/colorOnSurface" />
-        </com.google.android.material.card.MaterialCardView>
-    </LinearLayout>
-</ScrollView>
+            android:minHeight="64dp"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:text="@string/icon_pack_page_pinned_only"
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            android:textColor="?attr/colorOnSurface" />
+    </com.google.android.material.card.MaterialCardView>
+</LinearLayout>

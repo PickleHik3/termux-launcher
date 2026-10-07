@@ -51,6 +51,8 @@ public final class SessionsIndicatorView extends LinearLayout {
      * which is what it is, near enough, at this alpha over the mode's own glass.
      */
     @Nullable private Integer mBandSurface;
+    @Nullable private com.termux.app.chrome.ChromeInk mInk;
+    @Nullable private com.termux.app.chrome.OnGlass.Resolution mBand;
 
     public SessionsIndicatorView(Context context) {
         this(context, null);
@@ -108,6 +110,18 @@ public final class SessionsIndicatorView extends LinearLayout {
     public void setBandSurface(@ColorInt int bandSurface) {
         if (mBandSurface != null && mBandSurface == bandSurface) return;
         mBandSurface = bandSurface;
+        applyColors();
+    }
+
+    /**
+     * The band's resolution and the chrome that measured it, so the label and rim are inked by
+     * {@code ChromeInk.inkOn} rather than against a nominal panel colour.
+     */
+    public void setBandInk(@NonNull com.termux.app.chrome.ChromeInk ink,
+                           @NonNull com.termux.app.chrome.OnGlass.Resolution band) {
+        mInk = ink;
+        mBand = band;
+        mBandSurface = band.surface;
         applyColors();
     }
 
@@ -182,12 +196,16 @@ public final class SessionsIndicatorView extends LinearLayout {
         int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
         int accent = mAccent != null ? mAccent : MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorTertiary, primary);
-        int panel = ContextCompat.getColor(context, R.color.termux_surface_panel_high);
+            com.termux.shared.R.attr.termuxColorTertiary, primary);
+        int panel = MaterialColors.getColor(context,
+            com.termux.shared.R.attr.termuxColorSurfacePanelHigh,
+            ContextCompat.getColor(context, R.color.termux_surface_panel_high));
         int onSurface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
             ContextCompat.getColor(context, R.color.termux_on_surface));
-        StatusBarInk.Chip resolved = StatusBarInk.chip(
-            mBandSurface != null ? mBandSurface : panel, panel, CONTAINER_ALPHA, onSurface, accent);
+        StatusBarInk.Chip resolved = mInk != null && mBand != null
+            ? StatusBarInk.chipOn(mInk, mBand, panel, CONTAINER_ALPHA, onSurface, accent)
+            : StatusBarInk.chip(mBandSurface != null ? mBandSurface : panel, panel,
+                CONTAINER_ALPHA, onSurface, accent);
 
         GradientDrawable chip = new GradientDrawable();
         // The caller resolves the shape (the chip-radius knob, or the bar's own shape while that

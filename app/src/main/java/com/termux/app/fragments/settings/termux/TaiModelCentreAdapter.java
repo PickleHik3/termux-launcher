@@ -4,6 +4,10 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.method.LinkMovementMethod;
+import android.text.style.URLSpan;
 import android.util.TypedValue;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
@@ -172,8 +176,6 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         boolean voiceOutput;
         /** A text-to-image model: the picture icon, and a menu with Delete only. */
         boolean image;
-        /** A wallpaper vision graph: the picture icon, and a menu with "Use for depth maps" and Delete only. */
-        boolean vision;
         /** Brought into view from a deep link: ringed for a moment so the eye finds it. */
         boolean highlighted;
         /** "Used by: Assistant" on an installed model; the fit line and "For: ..." on a catalogue one. */
@@ -533,9 +535,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             row = next;
             boundId = next.snapshot.id;
             TaiModelCentreRows.State state = next.state;
-            kind.setImageResource(next.speech ? R.drawable.ic_tai_wave
-                : TaiModelCatalog.visionEntries().containsKey(next.snapshot.modelId) ? R.drawable.ic_tai_image
-                : R.drawable.ic_tai_chat);
+            kind.setImageResource(next.speech ? R.drawable.ic_tai_wave : R.drawable.ic_tai_chat);
             setText(title, next.title);
             setText(subtitle, next.subtitle);
             setText(pill, state.pill);
@@ -705,11 +705,24 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         void bind(@NonNull ModelRow next) {
             Context context = itemView.getContext();
             row = next;
-            kind.setImageResource(next.image || next.vision ? R.drawable.ic_tai_image
+            kind.setImageResource(next.image ? R.drawable.ic_tai_image
                 : next.speech ? R.drawable.ic_tai_wave : R.drawable.ic_tai_chat);
             setText(title, next.title);
             setText(subtitle, next.subtitle);
-            setText(extra, next.extra);
+            // A catalogue row shows its license before the download; the link opens the terms.
+            CharSequence license = next.installed == null && next.entry != null
+                ? TaiModelCentreRows.licenseFact(context, next.entry.license) : "";
+            if (license.length() == 0) {
+                setText(extra, next.extra);
+            } else {
+                SpannableStringBuilder lines = new SpannableStringBuilder(next.extra);
+                if (lines.length() > 0) lines.append('\n');
+                setText(extra, lines.append(license));
+            }
+            // Rows are recycled: only a row whose license links to its terms keeps link taps.
+            boolean linked = license instanceof Spanned
+                && ((Spanned) license).getSpans(0, license.length(), URLSpan.class).length > 0;
+            extra.setMovementMethod(linked ? LinkMovementMethod.getInstance() : null);
             setText(pillSpeed, next.pillSpeed);
             setText(pillBackend, next.pillBackend);
             setText(pillPrimary, next.pillPrimary);

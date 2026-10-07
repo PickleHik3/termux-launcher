@@ -134,4 +134,12 @@ public class ManagedWallpaperSourceTest {
         assertNull(source.obtain(file, 100, 200, () -> {}));
         assertTrue("no second read of a file that failed", executor.queued.isEmpty());
     }
+
+    @Test
+    public void aHomeOnlySetMovesTheLockBaselineOnlyWhileTheLockIsOurs() {
+        assertTrue("still ours", ManagedWallpaper.lockIdUnchanged(7, 7));
+        assertTrue("no baseline yet", ManagedWallpaper.lockIdUnchanged(0, 9));
+        assertTrue("unreadable now", ManagedWallpaper.lockIdUnchanged(7, 0));
+        assertFalse("set by another app: the baseline stays", ManagedWallpaper.lockIdUnchanged(7, 9));
+    }
 }

@@ -50,6 +50,19 @@ public final class WallpaperBlurCache {
         /** The managed wallpaper file, consulted for its size/mtime identity. */
         @NonNull File managedWallpaperExactFile();
 
+        /**
+         * The managed file's {@code lastModified()}, part of the identity the frames were cut for.
+         * A source that already holds the answer overrides this so an obtain costs no file stat.
+         */
+        default long managedWallpaperLastModified() {
+            return managedWallpaperExactFile().lastModified();
+        }
+
+        /** The managed file's {@code length()}; see {@link #managedWallpaperLastModified()}. */
+        default long managedWallpaperLength() {
+            return managedWallpaperExactFile().length();
+        }
+
         /** The configuration orientation the next capture would be taken in. */
         int orientation();
 
@@ -269,9 +282,8 @@ public final class WallpaperBlurCache {
         Rect frameRect = mSource.wallpaperFrameRect();
         boolean managedSource = mSource.useManagedWallpaperSource();
         int systemWallpaperId = mSource.systemWallpaperId();
-        File managedFile = managedSource ? mSource.managedWallpaperExactFile() : null;
-        long managedLastModified = managedFile != null ? managedFile.lastModified() : -1L;
-        long managedLength = managedFile != null ? managedFile.length() : -1L;
+        long managedLastModified = managedSource ? mSource.managedWallpaperLastModified() : -1L;
+        long managedLength = managedSource ? mSource.managedWallpaperLength() : -1L;
         boolean sourceValid = sourceStillMatches(frameRect, managedSource, systemWallpaperId,
             managedLastModified, managedLength);
         if (sourceValid) {
@@ -440,11 +452,10 @@ public final class WallpaperBlurCache {
     public void dropIfSourceMoved() {
         if (mByRadius.isEmpty()) return;
         boolean managedSource = mSource.useManagedWallpaperSource();
-        File managedFile = managedSource ? mSource.managedWallpaperExactFile() : null;
         if (!sourceStillMatches(mSource.wallpaperFrameRect(), managedSource,
                 mSource.systemWallpaperId(),
-                managedFile != null ? managedFile.lastModified() : -1L,
-                managedFile != null ? managedFile.length() : -1L)) {
+                managedSource ? mSource.managedWallpaperLastModified() : -1L,
+                managedSource ? mSource.managedWallpaperLength() : -1L)) {
             clear();
         }
     }

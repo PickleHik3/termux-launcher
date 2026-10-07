@@ -139,6 +139,10 @@ public class TermuxCrashUtils implements CrashHandler.CrashHandlerClient {
     public static void notifyAppCrashFromCrashLogFile(final Context currentPackageContext, final String logTagParam) {
         if (currentPackageContext == null)
             return;
+        // Nearly every call finds no crash log: called from every onResume, so answer that with one
+        // stat before building package contexts, reading preferences and starting a thread.
+        if (!FileUtils.regularFileExists(TermuxConstants.TERMUX_CRASH_LOG_FILE_PATH, false))
+            return;
         String currentPackageName = currentPackageContext.getPackageName();
         final Context context = TermuxUtils.getTermuxPackageContext(currentPackageContext);
         if (context == null) {

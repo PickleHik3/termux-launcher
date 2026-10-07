@@ -6,6 +6,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.surfaces.AppearanceLooks.Control;
+import com.termux.app.surfaces.AppearanceLooks.Door;
 import com.termux.app.surfaces.AppearanceLooks.Target;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -13,12 +15,14 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
 
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /**
  * The Appearance editor's rules (appearance-layout-editor SPEC §3.3–3.4), held as arithmetic:
- * which Look each slider stop is, and what Darkness, Key corners, Soft wallpaper, Dim and Layout's
- * Corners and Margin write.
+ * which Look each slider stop is, the Custom row's slider and button sets, and what Key corners,
+ * Key spacing, Dock size, Soft wallpaper's arithmetic and Layout's Corners and Margin write.
  */
 public class AppearanceLooksTest {
 
@@ -75,26 +79,95 @@ public class AppearanceLooksTest {
 
     // ------------------------------------------------------------------------------ the targets
 
-    /**
-     * Terminal: Darkness, Legibility, Blur. Status bar and dock: Blur alone. Keyboard: Blur and
-     * the "Keyboard theme" door; Key radius has moved to Layout mode (layout editor v2, items 6
-     * and 15). Wallpaper: Soft and Dim (2026-10-01).
-     */
+    /** The Custom row's sets, legend order, per selection (appearance final pass, section 5). */
     @Test
-    public void eachTargetHasItsControls() {
-        assertFalse(Target.STATUS.hasFirstControl());
-        assertFalse(Target.DOCK.hasFirstControl());
-        assertTrue(Target.TERMINAL.hasFirstControl());
-        assertTrue(Target.KEYBOARD.hasFirstControl());
-        assertTrue(Target.WALLPAPER.hasFirstControl());
+    public void eachSelectionHasItsSliderSet() {
+        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
+            Control.MARGIN, Control.CORNER_RADIUS), AppearanceLooks.controls(null));
+        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
+            Control.KEY_RADIUS, Control.KEY_SPACING), AppearanceLooks.controls(Target.KEYBOARD));
+        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
+            Control.DOCK_SIZE, Control.APP_ICONS), AppearanceLooks.controls(Target.DOCK));
+        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT,
+            Control.CONTRAST), AppearanceLooks.controls(Target.TERMINAL));
+        assertEquals(Arrays.asList(Control.BLUR, Control.GRAIN, Control.OPACITY, Control.TINT),
+            AppearanceLooks.controls(Target.STATUS));
         for (Target target : Target.values()) {
-            assertEquals(target == Target.TERMINAL, target.hasLegibility());
-            assertEquals(target != Target.WALLPAPER && target != Target.KEYBOARD,
-                target.secondControlIsBlur());
-            assertEquals(target == Target.KEYBOARD, target.firstControlIsBlur());
-            assertEquals(target == Target.KEYBOARD, target.secondControlIsKeyboardTheme());
-            assertFalse("Key radius is Layout's now: " + target, target.hasKeyRadius());
+            assertTrue(target.name(), AppearanceLooks.controls(target).size()
+                <= AppearanceLooks.MAX_CONTROLS);
+            assertEquals("glass first, so the same columns stay under the thumb", Control.BLUR,
+                AppearanceLooks.controls(target).get(0));
         }
+        assertEquals(AppearanceLooks.MAX_CONTROLS, AppearanceLooks.controls(null).size());
+    }
+
+    /** The buttons above the sliders: Keyboard theme, Trail and Effect, Clock; none elsewhere. */
+    @Test
+    public void eachSelectionHasItsButtons() {
+        assertTrue(AppearanceLooks.doors(null).isEmpty());
+        assertTrue(AppearanceLooks.doors(Target.DOCK).isEmpty());
+        assertEquals(Collections.singletonList(Door.KEYBOARD_THEME),
+            AppearanceLooks.doors(Target.KEYBOARD));
+        assertEquals(Arrays.asList(Door.TRAIL, Door.EFFECT),
+            AppearanceLooks.doors(Target.TERMINAL));
+        assertEquals(Collections.singletonList(Door.CLOCK), AppearanceLooks.doors(Target.STATUS));
+    }
+
+    /** Each control's range is the stored value's own, and its value round-trips. */
+    @Test
+    public void controlRangesAreTheStoredRanges() {
+        assertEquals(AppearanceLooks.BLUR_MAX_DP, Control.BLUR.max);
+        assertEquals(AppearanceLooks.CORNERS_MAX_DP, Control.CORNER_RADIUS.max);
+        assertEquals(AppearanceLooks.MARGIN_MAX_DP, Control.MARGIN.max);
+        assertEquals(AppearanceLooks.KEY_CORNERS_MAX_DP, Control.KEY_RADIUS.max);
+        assertEquals(3, Control.APP_ICONS.min);
+        assertEquals(10, Control.APP_ICONS.max);
+        assertEquals("three stops", 2, Control.CONTRAST.max);
+        for (Control control : Control.values()) {
+            assertEquals(control.name(), control.min, control.clamp(control.min - 50));
+            assertEquals(control.name(), control.max, control.clamp(control.max + 50));
+            assertEquals("the range is whole steps: " + control, 0,
+                (control.max - control.min) % control.step);
+        }
+    }
+
+    /** Key spacing is the key margin scale in tenths, 0.0 to 8.0. */
+    @Test
+    public void keySpacingIsTheMarginScaleInTenths() {
+        assertEquals(TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
+            AppearanceLooks.keySpacingScaleFor(0), 0f);
+        assertEquals(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_MARGIN_SCALE,
+            AppearanceLooks.keySpacingScaleFor(Control.KEY_SPACING.max), 0f);
+        assertEquals(1.5f, AppearanceLooks.keySpacingScaleFor(15), 0f);
+        assertEquals(15, AppearanceLooks.keySpacingValueFor(1.5f));
+        assertEquals(Control.KEY_SPACING.max, AppearanceLooks.keySpacingValueFor(20f));
+        for (int tenths = 0; tenths <= Control.KEY_SPACING.max; tenths++)
+            assertEquals(tenths, AppearanceLooks.keySpacingValueFor(
+                AppearanceLooks.keySpacingScaleFor(tenths)));
+    }
+
+    /** Dock size is the dock height scale (0.4 to 3.0) in percent, five at a time. */
+    @Test
+    public void dockSizeIsTheHeightScaleInFivePercentSteps() {
+        assertEquals(TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT,
+            AppearanceLooks.dockScaleFor(Control.DOCK_SIZE.min), 1e-6f);
+        assertEquals(TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT,
+            AppearanceLooks.dockScaleFor(Control.DOCK_SIZE.max), 1e-6f);
+        assertEquals(1.0f, AppearanceLooks.dockScaleFor(100), 1e-6f);
+        assertEquals(100, AppearanceLooks.dockSizeValueFor(1.0f));
+        assertEquals(40, AppearanceLooks.dockSizeValueFor(0.1f));
+        assertEquals(300, AppearanceLooks.dockSizeValueFor(9f));
+        for (int value = Control.DOCK_SIZE.min; value <= Control.DOCK_SIZE.max; value += 5)
+            assertEquals(value, AppearanceLooks.dockSizeValueFor(AppearanceLooks.dockScaleFor(value)));
+        assertEquals(7, AppearanceLooks.appIconsValueFor(7));
+        assertEquals(3, AppearanceLooks.appIconsValueFor(1));
+        assertEquals(10, AppearanceLooks.appIconsValueFor(20));
+    }
+
+    @Test
+    public void aLegendNameIsTheTextBeforeTheSeparator() {
+        assertEquals("Blur", AppearanceLooks.legendName("Blur · 12 dp"));
+        assertEquals("Contrast", AppearanceLooks.legendName("Contrast"));
     }
 
     // ------------------------------------------------------------- layout editor v2: the global row
@@ -115,18 +188,12 @@ public class AppearanceLooksTest {
         }
     }
 
-    /** The empty canvas brings the global row back; the bare wallpaper is still reachable. */
+    /** A tap on bare wallpaper deselects at Custom and does nothing at a Look stop. */
     @Test
-    public void aWallpaperTapGoesBackToTheGlobalRowFromAnElement() {
-        int custom = AppearanceLooks.CUSTOM_STOP;
-        assertNull(AppearanceLooks.afterWallpaperTap(custom, Target.DOCK));
-        assertNull(AppearanceLooks.afterWallpaperTap(custom, Target.KEYBOARD));
-        assertNull("the wallpaper's own row closes too",
-            AppearanceLooks.afterWallpaperTap(custom, Target.WALLPAPER));
-        assertSame("from the global row it opens the wallpaper's", Target.WALLPAPER,
-            AppearanceLooks.afterWallpaperTap(custom, null));
-        assertSame("at a Look stop a tap moves to Custom as any does", Target.WALLPAPER,
-            AppearanceLooks.afterWallpaperTap(0, null));
+    public void aWallpaperTapGoesBackToTheGlobalSetOnlyAtCustom() {
+        assertTrue(AppearanceLooks.wallpaperTapDeselects(AppearanceLooks.CUSTOM_STOP));
+        for (int stop = 0; stop < AppearanceLooks.CUSTOM_STOP; stop++)
+            assertFalse(AppearanceLooks.wallpaperTapDeselects(stop));
     }
 
     /** The global Opacity and Grain ranges cover every Look's value (DECISIONS item 13). */
@@ -151,32 +218,13 @@ public class AppearanceLooksTest {
     }
 
     @Test
-    public void targetsMapToTheirSurfacesAndTheWallpaperToNone() {
+    public void targetsMapToTheirSurfaces() {
         assertEquals(Target.TERMINAL, Target.forSlot(SurfaceSlot.CANVAS));
         assertEquals(Target.STATUS, Target.forSlot(SurfaceSlot.STATUS));
         assertEquals(Target.DOCK, Target.forSlot(SurfaceSlot.DOCK));
         assertEquals(Target.KEYBOARD, Target.forSlot(SurfaceSlot.KEYBOARD));
         assertNull(Target.forSlot(null));
-        assertNull(Target.WALLPAPER.slot);
-    }
-
-    // ---------------------------------------------------------------------------- Darkness
-
-    @Test
-    public void darknessIsTheTerminalsOwnOpacity() {
-        assertEquals(0, AppearanceLooks.darknessOpacity(0));
-        assertEquals(46, AppearanceLooks.darknessOpacity(46));
-        assertEquals(100, AppearanceLooks.darknessOpacity(100));
-        assertEquals(0, AppearanceLooks.darknessOpacity(-5));
-        assertEquals(100, AppearanceLooks.darknessOpacity(140));
-    }
-
-    @Test
-    public void darknessTurnsTheTintObsidianFromHalfway() {
-        assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, AppearanceLooks.darknessTint(0));
-        assertEquals(TERMUX_APP.GLASS_TINT_SCHEME, AppearanceLooks.darknessTint(49));
-        assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN, AppearanceLooks.darknessTint(50));
-        assertEquals(TERMUX_APP.GLASS_TINT_OBSIDIAN, AppearanceLooks.darknessTint(100));
+        assertEquals("the wallpaper is no target", 4, Target.values().length);
     }
 
     // ------------------------------------------------------------------------- Key corners
@@ -282,21 +330,5 @@ public class AppearanceLooksTest {
             assertEquals(level,
                 AppearanceLooks.legibilityAt(AppearanceLooks.legibilityIndex(level)));
         assertEquals(1, AppearanceLooks.legibilityIndex(null));
-    }
-
-    /** Every surface has a Grain slider, in a column of its own: the wallpaper has no glass. */
-    @Test
-    public void everySurfaceHasGrainInItsOwnColumn() {
-        for (AppearanceLooks.Target target : AppearanceLooks.Target.values()) {
-            boolean glass = target != AppearanceLooks.Target.WALLPAPER;
-            assertEquals(target.name(), glass, target.hasGrain());
-            assertEquals(target.name(), glass, target.grainColumn() != 0);
-        }
-        assertEquals("the status bar and the dock use their empty first column", 1,
-            AppearanceLooks.Target.STATUS.grainColumn());
-        assertEquals(1, AppearanceLooks.Target.DOCK.grainColumn());
-        assertEquals("the keyboard uses the middle", 2, AppearanceLooks.Target.KEYBOARD.grainColumn());
-        assertEquals("the terminal's middle is Text contrast: its Grain is a fourth column", 4,
-            AppearanceLooks.Target.TERMINAL.grainColumn());
     }
 }

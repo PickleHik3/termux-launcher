@@ -1,17 +1,14 @@
 package com.termux.app.chrome.appearance;
 
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Handler;
 import android.os.Looper;
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
-import android.view.ViewGroup;
+import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -24,45 +21,49 @@ import com.google.android.material.materialswitch.MaterialSwitch;
 import com.termux.R;
 import com.termux.app.launcher.data.IconPackChoices;
 import com.termux.app.launcher.data.IconPackRepository;
-import com.termux.app.launcher.data.LauncherConfigRepository;
-import com.termux.app.launcher.data.LauncherIconResolver;
-import com.termux.app.launcher.model.AppRef;
-import com.termux.app.launcher.model.PinnedAppItem;
-import com.termux.app.launcher.model.PinnedItem;
+import com.termux.app.launcher.icon.DrawablePixels;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The Icon pack page of the Appearance surface: a phone-shaped Home preview with the user's pinned
- * apps drawn from the previewed pack, a row of round pack tiles (Default, then each installed
- * pack; the one in force ringed) and the <b>Pinned app icons only</b> switch.
+ * The Icon pack controls of the Appearance editor's Icons mode: a row of round pack tiles
+ * (Default, then each installed pack; the one in force ringed) and the <b>Pinned app icons
+ * only</b> switch. They live in the editor's bottom sheet; the real launcher stands above in the
+ * frame, so a tap shows the pack on the real dock.
  *
- * <p>A plain {@link View} tree: the surface adds {@link #root()} to its pager and supplies the top
- * bar, showing {@link #title()}. Tapping a tile previews that pack at once and applies it through
- * {@link IconPackChoices#apply}: with the switch on the choice is written to
+ * <p>A plain {@link View} tree: the editor puts {@link #root()} in its sheet. A tap on a tile
+ * rings it at once, parses the pack off the main thread ({@link Backend#warm}) and only then
+ * writes the choice through {@link Backend#apply} (live: the preference and the artwork, no
+ * restyle), so the dock's redraw never parses on the main thread. Taps in quick succession
+ * collapse: only the last one is parsed and written. With the switch on the choice is written to
  * {@link IconPackChoices#KEY_PINNED}; with it off to {@link IconPackChoices#KEY_GLOBAL} and the
  * pinned override is cleared, so the dock follows the global pack again. The Default tile stores
- * "" under the key in force and reads "Same as app icons" while the switch is on (the dock then
+ * "" under the key in force and reads "System" while the switch is on (the dock then
  * follows the global pack), "Default" while it is off (the system's icons).
  *
- * <p>Everything slow (the pack listing, the pinned apps, the pack and app artwork) is loaded on a
- * background executor; the tiles and icons show placeholders until it lands. Every read of the
- * launcher's state goes through {@link Backend}, so the tests run on fakes.
+ * <p>Everything slow (the pack listing, the pack artwork, the parse) is loaded on a background
+ * executor; the tiles show placeholders until it lands. Every read of the launcher's state goes
+ * through {@link Backend}, so the tests run on fakes.
  */
 public final class IconPackPage {
 
     /** What the surface hosting the page provides; the page knows nothing of the activity. */
     public interface Host {
-        /** The Home wallpaper still for the preview card, null for none (the card stays tonal). */
-        @Nullable Bitmap homeStill();
-
-        /** The choice was written and the launcher is restyling; the surface may refresh its own view. */
+        /** The choice was written live (nothing restyled): the host owes a restyle when it closes. */
         default void onApplied() {}
+
+        /**
+         * The tile row was rebuilt with a different set of packs (the listing landed): the page
+         * may now be a different height, so the sheet holding it measures it again.
+         */
+        default void onContentChanged() {}
     }
 
     /**
@@ -73,55 +74,26 @@ public final class IconPackPage {
         /** The installed packs, in listing order, without the Default row (slow: asks the package manager). */
         @NonNull List<IconPackChoices.Entry> packs();
 
-        /** The apps pinned in the dock, in order. */
-        @NonNull List<AppRef> pinnedApps();
-
-        /** {@code ref}'s icon in {@code pack} ("" = the system's), null when it cannot be drawn. */
-        @Nullable Drawable icon(@NonNull String pack, @NonNull AppRef ref);
-
         /** The pack's own launcher icon, null for "" or when it has none. */
         @Nullable Drawable packArt(@NonNull String pack);
+
+        /** Parses {@code pack} (slow) so the launcher's first icon from it is cached; off the main thread. */
+        default void warm(@NonNull String pack) {}
 
         /** The stored package for {@code key}, "" when unset. */
         @NonNull String current(@NonNull String key);
 
-        /** Stores {@code value} for {@code key} and has the launcher pick it up. */
+        /** Stores {@code value} for {@code key} and has the launcher's artwork follow, restyling nothing. */
         void apply(@NonNull String key, @NonNull String value);
 
         @NonNull
         static Backend real(@NonNull Context context) {
             final Context app = context.getApplicationContext();
-            final LauncherIconResolver resolver = new LauncherIconResolver(app);
             return new Backend() {
                 @NonNull @Override public List<IconPackChoices.Entry> packs() {
                     List<IconPackChoices.Entry> all = IconPackChoices.entries("",
                         new IconPackRepository(app).discoverIconPacks(), false);
                     return new ArrayList<>(all.subList(1, all.size()));
-                }
-
-                @NonNull @Override public List<AppRef> pinnedApps() {
-                    List<AppRef> out = new ArrayList<>();
-                    for (PinnedItem item : LauncherConfigRepository.getInstance(app).loadPinnedItems()) {
-                        if (item instanceof PinnedAppItem) out.add(((PinnedAppItem) item).appRef);
-                    }
-                    return out;
-                }
-
-                @Nullable @Override public Drawable icon(@NonNull String pack, @NonNull AppRef ref) {
-                    if (!pack.isEmpty()) {
-                        Drawable d = resolver.loadFromPack(pack, ref);
-                        if (d != null) return d;
-                    }
-                    try {
-                        return app.getPackageManager().getActivityIcon(
-                            new ComponentName(ref.packageName, ref.activityName));
-                    } catch (Exception e) {
-                        try {
-                            return app.getPackageManager().getApplicationIcon(ref.packageName);
-                        } catch (Exception ignored) {
-                            return null;
-                        }
-                    }
                 }
 
                 @Nullable @Override public Drawable packArt(@NonNull String pack) {
@@ -133,20 +105,23 @@ public final class IconPackPage {
                     }
                 }
 
+                @Override public void warm(@NonNull String pack) {
+                    IconPackChoices.warm(app, pack);
+                }
+
                 @NonNull @Override public String current(@NonNull String key) {
                     return IconPackChoices.current(TermuxAppSharedPreferences.build(app, false), key);
                 }
 
                 @Override public void apply(@NonNull String key, @NonNull String value) {
-                    IconPackChoices.apply(app, TermuxAppSharedPreferences.build(app, false), key, value);
+                    IconPackChoices.applyLive(app, TermuxAppSharedPreferences.build(app, false), key, value);
                 }
             };
         }
     }
 
-    /** How many pinned apps the preview draws, four to a row. */
-    static final int PREVIEW_APPS = 8;
-    private static final int PREVIEW_COLUMNS = 4;
+    /** The pack art is drawn inside the 64dp tile's 12dp padding: 40dp. */
+    private static final int ART_DP = 40;
 
     @NonNull private final Context context;
     @NonNull private final Host host;
@@ -156,22 +131,34 @@ public final class IconPackPage {
     @Nullable private final ExecutorService ownedExecutor;
 
     @NonNull private final View root;
-    @NonNull private final ImageView previewStill;
-    @NonNull private final LinearLayout previewApps;
+    @NonNull private final HorizontalScrollView tileScroll;
     @NonNull private final LinearLayout tiles;
     @NonNull private final MaterialSwitch pinnedOnly;
 
     /** The installed packs; the Default row is not in it. */
     @NonNull private List<IconPackChoices.Entry> packs = new ArrayList<>();
-    @NonNull private List<AppRef> pinned = new ArrayList<>();
+    /** Each installed pack's tile art, shrunk to the tile: as many small drawables as the row has tiles. */
+    @NonNull private final Map<String, Drawable> art = new HashMap<>();
     /** The package in force for the scope the switch names; "" is the Default tile. */
     @NonNull private String selected = "";
     private boolean pinnedOnlyOn;
     private boolean released;
     /** Bumped on every listing load, so a slow one never lands over a newer one. */
     private int loadGeneration;
-    /** Bumped on every preview, so a slow icon never draws over a newer pack's. */
-    private int previewGeneration;
+    /** Bumped on every tap, so only the last one parses and writes (read on the background thread too). */
+    private volatile int applyGeneration;
+    /** A tap has not been written yet: a release writes it rather than lose it. */
+    private boolean writePending;
+    /**
+     * The tile set the row holds now (the scope and every pack's value and label), or null before
+     * the first build: a choice or a listing that leaves it the same moves the ring in place and
+     * never tears the row down, so nothing in the sheet blinks.
+     */
+    @Nullable private String shownTiles;
+    /** A pack listing has landed since the page was built: the row holds all it will. */
+    private boolean listed;
+    /** A scroll to put the row back to once it holds the packs, px; -1 for none. */
+    private int pendingScrollX = -1;
 
     /** The production page: loads on its own single background thread, until {@link #release}. */
     public IconPackPage(@NonNull Context context, @NonNull Host host) {
@@ -198,51 +185,53 @@ public final class IconPackPage {
         }
 
         root = LayoutInflater.from(context).inflate(R.layout.icon_pack_page, null, false);
-        previewStill = root.findViewById(R.id.icon_pack_preview_still);
-        previewApps = root.findViewById(R.id.icon_pack_preview_apps);
+        tileScroll = root.findViewById(R.id.icon_pack_tiles_scroll);
         tiles = root.findViewById(R.id.icon_pack_tiles);
+        // A remembered scroll waits for the row to be laid out with the packs in it.
+        tiles.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            if (pendingScrollX >= 0) tileScroll.post(this::applyPendingScroll);
+        });
         pinnedOnly = root.findViewById(R.id.icon_pack_pinned_only);
 
         pinnedOnly.setOnCheckedChangeListener((button, checked) -> {
             if (checked == pinnedOnlyOn) return;
             pinnedOnlyOn = checked;
-            writeChoice();
-            rebuildTiles();
-            drawPreview();
+            commitChoice();
+            showTiles();
         });
         onShown();
     }
 
-    /** The page's view tree; the surface adds it and sizes it to the pager. */
+    /** The page's view tree; the editor puts it in its sheet. */
     @NonNull
     public View root() {
         return root;
     }
 
-    /** What the surface's top bar reads while this page is up. */
+    /** The mode's name, as the bar reads it. */
     @NonNull
     public String title() {
         return context.getString(R.string.icon_pack_page_title);
     }
 
-    /** The page came into view: re-read the choice, the wallpaper still, the packs and the pinned apps. */
+    /**
+     * The page came into view: re-read the choice and the packs. A row that already holds the
+     * same tiles only moves its ring; a listing that lands with the same packs changes nothing.
+     */
     public void onShown() {
         if (released) return;
         readChoice();
         pinnedOnly.setChecked(pinnedOnlyOn);
-        previewStill.setImageBitmap(host.homeStill());
-        rebuildTiles();
-        drawPreview();
+        showTiles();
         final int gen = ++loadGeneration;
         background.execute(() -> {
             final List<IconPackChoices.Entry> loadedPacks = backend.packs();
-            final List<AppRef> loadedApps = backend.pinnedApps();
             main.execute(() -> {
                 if (released || gen != loadGeneration) return;
                 packs = new ArrayList<>(loadedPacks);
-                pinned = new ArrayList<>(loadedApps);
-                rebuildTiles();
-                drawPreview();
+                listed = true;
+                if (showTiles()) host.onContentChanged();
+                else if (pendingScrollX >= 0) tileScroll.post(this::applyPendingScroll);
             });
         });
     }
@@ -252,12 +241,41 @@ public final class IconPackPage {
         loadGeneration++;
     }
 
-    /** The surface is done with the page: later loads are dropped and the background thread ends. */
+    /**
+     * The surface is done with the page: later loads are dropped and the background thread ends. A
+     * tap not yet written is written first, so the choice shown is the choice kept.
+     */
     public void release() {
+        if (writePending && !released) writeChoice();
         released = true;
         loadGeneration++;
-        previewGeneration++;
+        applyGeneration++;
+        art.clear();
         if (ownedExecutor != null) ownedExecutor.shutdownNow();
+    }
+
+    /** How far the tile row is scrolled, px. */
+    public int tileScrollX() {
+        return tileScroll.getScrollX();
+    }
+
+    /**
+     * Puts the tile row back at {@code px} (the Appearance surface's memory of where it was left)
+     * once the row is laid out with the packs in it; a row that holds less scrolls as far as it
+     * can.
+     */
+    public void restoreTileScrollX(int px) {
+        pendingScrollX = Math.max(0, px);
+        tileScroll.post(this::applyPendingScroll);
+    }
+
+    private void applyPendingScroll() {
+        if (released || pendingScrollX < 0 || tiles.getWidth() <= 0 || tileScroll.getWidth() <= 0)
+            return;
+        tileScroll.scrollTo(pendingScrollX, 0);
+        // Until the listing lands the row holds Default alone; the scroll is kept for it.
+        if (listed)
+            pendingScrollX = -1;
     }
 
     /** The pack in force for the scope the switch names ("" for Default). */
@@ -280,13 +298,10 @@ public final class IconPackPage {
         return pinnedOnly;
     }
 
-    @NonNull
-    LinearLayout previewAppsView() {
-        return previewApps;
-    }
-
     /** ON when the pinned key is set, else OFF when the global one is, else ON (nothing is set). */
     private void readChoice() {
+        // A tap still waiting for its parse is the choice in force: the stored one is behind it.
+        if (writePending) return;
         String pinnedPack = backend.current(IconPackChoices.KEY_PINNED);
         String globalPack = backend.current(IconPackChoices.KEY_GLOBAL);
         pinnedOnlyOn = !pinnedPack.isEmpty() || globalPack.isEmpty();
@@ -295,6 +310,7 @@ public final class IconPackPage {
 
     /** Stores {@link #selected} under the key the switch names and tells the host. */
     private void writeChoice() {
+        writePending = false;
         if (pinnedOnlyOn) {
             backend.apply(IconPackChoices.KEY_PINNED, selected);
         } else {
@@ -304,18 +320,32 @@ public final class IconPackPage {
         host.onApplied();
     }
 
-    private void select(@NonNull String pack) {
-        selected = pack;
-        writeChoice();
-        rebuildTiles();
-        drawPreview();
+    /**
+     * Parses the chosen pack off the main thread, then writes the choice on it. Each call
+     * supersedes the one before: a tap that a later one overtook neither parses nor writes.
+     */
+    private void commitChoice() {
+        final int gen = ++applyGeneration;
+        final String pack = selected;
+        writePending = true;
+        if (pack.isEmpty()) {
+            writeChoice();
+            return;
+        }
+        background.execute(() -> {
+            if (gen != applyGeneration) return;
+            backend.warm(pack);
+            main.execute(() -> {
+                if (released || gen != applyGeneration) return;
+                writeChoice();
+            });
+        });
     }
 
-    /** The pack the preview draws: the selection, or with Default under the pinned scope the global one. */
-    @NonNull
-    private String previewPack() {
-        if (!selected.isEmpty() || !pinnedOnlyOn) return selected;
-        return backend.current(IconPackChoices.KEY_GLOBAL);
+    private void select(@NonNull String pack) {
+        selected = pack;
+        commitChoice();
+        showTiles();
     }
 
     private int dp(float v) {
@@ -335,76 +365,84 @@ public final class IconPackPage {
         return g;
     }
 
-    private void rebuildTiles() {
+    /**
+     * Puts the row in step with the scope, the packs and the choice. The tiles are built again
+     * only when the set of them changed (a new listing, the Default tile's name with the scope);
+     * otherwise the ring moves on the tiles already there.
+     *
+     * @return whether the row was built again, and so may have a new height
+     */
+    private boolean showTiles() {
+        String set = tileSet();
+        if (set.equals(shownTiles) && tiles.getChildCount() == packs.size() + 1) {
+            for (int i = 0; i < tiles.getChildCount(); i++) {
+                View tile = tiles.getChildAt(i);
+                Object value = tile.getTag();
+                TextView text = tile.findViewById(R.id.icon_pack_tile_label);
+                styleTile(tile, text.getText(), value instanceof String ? (String) value : "");
+            }
+            return false;
+        }
+        shownTiles = set;
         tiles.removeAllViews();
         addTile(context.getString(pinnedOnlyOn
             ? R.string.icon_pack_page_default_global : R.string.icon_pack_page_default_system), "");
         for (IconPackChoices.Entry pack : packs) addTile(pack.label, pack.value);
+        return true;
+    }
+
+    /** What the row's tiles are: the scope (it names the Default tile) and each pack in order. */
+    @NonNull
+    private String tileSet() {
+        StringBuilder set = new StringBuilder(pinnedOnlyOn ? "pinned" : "global");
+        for (IconPackChoices.Entry pack : packs)
+            set.append('\n').append(pack.value).append('\t').append(pack.label);
+        return set.toString();
+    }
+
+    /** The ring, the selected state and the spoken name of one tile for the current choice. */
+    private void styleTile(@NonNull View tile, @NonNull CharSequence label, @NonNull String value) {
+        ImageView image = tile.findViewById(R.id.icon_pack_tile_art);
+        boolean on = value.equals(selected);
+        // The ring: 3dp primary on the selected tile, a 1dp outline on the rest.
+        image.setBackground(circle(color(com.google.android.material.R.attr.colorSurfaceContainerHigh),
+            on ? color(androidx.appcompat.R.attr.colorPrimary)
+                : color(com.google.android.material.R.attr.colorOutlineVariant), dp(on ? 3 : 1)));
+        tile.setSelected(on);
+        tile.setContentDescription(on
+            ? context.getString(R.string.icon_pack_page_tile_selected, label) : label);
     }
 
     private void addTile(@NonNull CharSequence label, @NonNull final String value) {
         View tile = LayoutInflater.from(context).inflate(R.layout.icon_pack_tile, tiles, false);
-        final ImageView art = tile.findViewById(R.id.icon_pack_tile_art);
+        final ImageView image = tile.findViewById(R.id.icon_pack_tile_art);
         TextView text = tile.findViewById(R.id.icon_pack_tile_label);
         text.setText(label);
-        boolean on = value.equals(selected);
-        // The ring: 3dp primary on the selected tile, a 1dp outline on the rest.
-        art.setBackground(circle(color(com.google.android.material.R.attr.colorSurfaceContainerHigh),
-            on ? color(androidx.appcompat.R.attr.colorPrimary)
-                : color(com.google.android.material.R.attr.colorOutlineVariant), dp(on ? 3 : 1)));
-        tile.setSelected(on);
         tile.setTag(value);
-        tile.setContentDescription(on
-            ? context.getString(R.string.icon_pack_page_tile_selected, label) : label);
+        styleTile(tile, label, value);
         tile.setOnClickListener(v -> select(value));
         tiles.addView(tile);
 
         // The Default tile has no pack of its own, so it shows the platform's generic app icon at
         // once; a pack's own icon lands from the background, the bare circle holding its place.
         if (value.isEmpty()) {
-            art.setImageResource(android.R.drawable.sym_def_app_icon);
+            image.setImageResource(android.R.drawable.sym_def_app_icon);
             return;
         }
+        Drawable cached = art.get(value);
+        if (cached != null) {
+            image.setImageDrawable(cached);
+            return;
+        }
+        final int size = dp(ART_DP);
         background.execute(() -> {
-            final Drawable d = backend.packArt(value);
+            // Held for the page's life and drawn at 40dp: never more pixels than that.
+            final Drawable d = DrawablePixels.shrink(context.getResources(), backend.packArt(value), size);
             main.execute(() -> {
-                if (!released) art.setImageDrawable(d);
+                if (released || d == null) return;
+                art.put(value, d);
+                image.setImageDrawable(d);
             });
         });
-    }
-
-    /** Draws the pinned apps over the still: a placeholder circle each, then the icon as it loads. */
-    private void drawPreview() {
-        previewApps.removeAllViews();
-        final String pack = previewPack();
-        final int gen = ++previewGeneration;
-        int count = Math.min(pinned.size(), PREVIEW_APPS);
-        LinearLayout row = null;
-        for (int i = 0; i < count; i++) {
-            if (i % PREVIEW_COLUMNS == 0) {
-                row = new LinearLayout(context);
-                row.setOrientation(LinearLayout.HORIZONTAL);
-                row.setGravity(Gravity.CENTER);
-                previewApps.addView(row, new LinearLayout.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-            }
-            final ImageView icon = new ImageView(context);
-            icon.setImageDrawable(circle(
-                color(com.google.android.material.R.attr.colorSurfaceContainerHigh), 0, 0));
-            icon.setScaleType(ImageView.ScaleType.FIT_CENTER);
-            icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-            // Four 30dp icons with 4dp margins make 152dp, inside the 164dp the card leaves.
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(30), dp(30));
-            lp.setMargins(dp(4), dp(4), dp(4), dp(4));
-            row.addView(icon, lp);
-            final AppRef ref = pinned.get(i);
-            background.execute(() -> {
-                final Drawable d = backend.icon(pack, ref);
-                main.execute(() -> {
-                    if (released || gen != previewGeneration || d == null) return;
-                    icon.setImageDrawable(d);
-                });
-            });
-        }
     }
 }

@@ -31,13 +31,21 @@ import com.termux.app.terminal.Motion;
  * <p>In wallpaper passthrough mode the wallpaper is not the launcher's to scale: the system draws
  * it behind the translucent window, and the scaled launcher would sit as a cut-out over an
  * unscaled picture. For the editor's lifetime the frame then paints the wallpaper itself, at the
- * decor's rect inside the container ({@link #showWallpaper}), so it scales with everything else,
- * and the host makes the window opaque around it.</p>
+ * decor's rect inside the container ({@link #showWallpaper}), so it scales with everything else.
+ * What shows around the scaled frame is the Appearance surface's colorSurface scrim in the content
+ * view, never a swap of the window's background.</p>
+ *
+ * <p><b>Wallpaper display contract.</b> The frame never replaces {@code wallpaper_backdrop}: in
+ * self-drawn mode the real backdrop view is part of the container and scales, clips and glasses
+ * with it, and no editor wallpaper is loaded. {@link #showWallpaper} is for passthrough mode only,
+ * where the backdrop is hidden and the system draws the wallpaper.</p>
  */
 final class AppearanceEditorFrame {
 
     /** How far the launcher is scaled at most; smaller only when the bottom area needs the room. */
     static final float PREFERRED_SCALE = 0.76f;
+    /** The most the frame grows to where the sheet under it is short (a Look stop). */
+    static final float MAX_SCALE = 0.86f;
     /** Never smaller than this, however short the window: past it the frame is unreadable. */
     static final float MIN_SCALE = 0.5f;
     /** The radius used where the platform cannot say what the display's corners are. */
@@ -50,6 +58,11 @@ final class AppearanceEditorFrame {
     private boolean mClipped;
     @Nullable private ViewOutlineProvider mSavedProvider;
     private boolean mSavedClipToOutline;
+    /** How far the display reaches past the container on each side, px; 0 where unknown. */
+    private int mInsetLeft;
+    private int mInsetTop;
+    private int mInsetRight;
+    private int mInsetBottom;
 
     AppearanceEditorFrame(@NonNull View root) {
         mRoot = root;
@@ -69,10 +82,27 @@ final class AppearanceEditorFrame {
      * @param frameBottomPx     how far down the frame may reach, in the same space
      */
     static float fitScale(int containerHeightPx, int frameTopPx, int frameBottomPx) {
+        return fitScale(containerHeightPx, frameTopPx, frameBottomPx, PREFERRED_SCALE);
+    }
+
+    /** {@link #fitScale(int, int, int)} with the cap given: {@link #MAX_SCALE} for a short sheet. */
+    static float fitScale(int containerHeightPx, int frameTopPx, int frameBottomPx, float cap) {
         if (containerHeightPx <= 0)
-            return PREFERRED_SCALE;
+            return Math.min(cap, PREFERRED_SCALE);
         float fit = (frameBottomPx - frameTopPx) / (float) containerHeightPx;
-        return Math.max(MIN_SCALE, Math.min(PREFERRED_SCALE, fit));
+        return Math.max(MIN_SCALE, Math.min(cap, fit));
+    }
+
+    /**
+     * Puts the root at {@code scale} and {@code translationYPx} now, on the frame's pivot, without
+     * touching its animations or clip: one tick of an animation the caller drives.
+     */
+    void setPose(float scale, float translationYPx) {
+        mRoot.setPivotX(mRoot.getWidth() / 2f);
+        mRoot.setPivotY(0f);
+        mRoot.setScaleX(scale);
+        mRoot.setScaleY(scale);
+        mRoot.setTranslationY(translationYPx);
     }
 
     /** The display's own corner radius, in px: the platform's on API 31+, 28dp below. */
@@ -87,6 +117,51 @@ final class AppearanceEditorFrame {
         if (corner == null || corner.getRadius() <= 0)
             return fallback;
         return corner.getRadius();
+    }
+
+    /**
+     * The display's rect in the container's own coordinates, {left, top, right, bottom}: the
+     * container sits below the status bar and above the navigation bar, but the device's corners
+     * are the display's, so the clip's round rect is extended by the insets. An inset of 0 gives
+     * the container's own rect.
+     */
+    @NonNull
+    static float[] outlineRect(int width, int height, int insetLeft, int insetTop, int insetRight,
+                               int insetBottom) {
+        return new float[] {-Math.max(0, insetLeft), -Math.max(0, insetTop),
+            width + Math.max(0, insetRight), height + Math.max(0, insetBottom)};
+    }
+
+    /**
+     * The rounding the container's own corner shows when the display's arc of {@code radiusPx}
+     * is clipped at a corner standing {@code insetX} and {@code insetY} inside the display's: 0
+     * where that corner lies within the arc (nothing is cut), else the radius less the larger
+     * inset. The layout canvas's ring follows this, so it matches what the clip leaves.
+     */
+    static float visibleCornerRadiusPx(float radiusPx, int insetX, int insetY) {
+        float x = Math.max(0, insetX);
+        float y = Math.max(0, insetY);
+        if (x >= radiusPx || y >= radiusPx)
+            return 0f;
+        float dx = radiusPx - x;
+        float dy = radiusPx - y;
+        if (dx * dx + dy * dy <= radiusPx * radiusPx)
+            return 0f;
+        return Math.max(0f, radiusPx - Math.max(x, y));
+    }
+
+    /**
+     * Where the clip's edges stand around the container; see {@link #outlineRect}. The sides and
+     * the bottom are the display's own; the top is as much of the status-bar band as the editor
+     * shows ({@link AppearancePreviewArea#topRevealPx}).
+     */
+    void setDisplayInsets(int left, int top, int right, int bottom) {
+        mInsetLeft = Math.max(0, left);
+        mInsetTop = Math.max(0, top);
+        mInsetRight = Math.max(0, right);
+        mInsetBottom = Math.max(0, bottom);
+        if (mClipped)
+            mRoot.invalidateOutline();
     }
 
     /**
@@ -152,7 +227,12 @@ final class AppearanceEditorFrame {
                 @Override public void getOutline(View view, Outline outline) {
                     // In the view's own coordinates: the scale shrinks the arc with the frame, so
                     // the frame reads as a small copy of the phone rather than a card.
-                    outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), mCornerRadiusPx);
+                    // The display's rect, not the container's: the container starts below the
+                    // status bar, and the corners belong to the glass.
+                    float[] rect = outlineRect(view.getWidth(), view.getHeight(), mInsetLeft,
+                        mInsetTop, mInsetRight, mInsetBottom);
+                    outline.setRoundRect(Math.round(rect[0]), Math.round(rect[1]),
+                        Math.round(rect[2]), Math.round(rect[3]), mCornerRadiusPx);
                 }
             });
             mRoot.setClipToOutline(true);

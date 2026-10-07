@@ -48,6 +48,19 @@ public final class GridSizeWheelPolicy {
             TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS);
     }
 
+    /** The columns this wall can hold: the settings range, tightened to {@code caps}. */
+    @NonNull
+    public static GridSizeWheelPolicy columns(@NonNull WidgetGridCaps caps) {
+        return new GridSizeWheelPolicy(TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
+            caps.maxColumns);
+    }
+
+    /** The rows this wall can hold: the settings range, tightened to {@code caps}. */
+    @NonNull
+    public static GridSizeWheelPolicy rows(@NonNull WidgetGridCaps caps) {
+        return new GridSizeWheelPolicy(TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS, caps.maxRows);
+    }
+
     public int minimum() {
         return mMinimum;
     }

@@ -7,60 +7,31 @@ import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.RuntimeShader;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
-import android.view.Choreographer;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.RequiresApi;
 import androidx.appcompat.content.res.AppCompatResources;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.chrome.ShapeTokens;
-import com.termux.shared.logger.Logger;
 
 /**
- * One slot's preview card on the wallpaper picker page: the background at the card's size, live
- * (a {@link RuntimeShader} on the hardware canvas through {@link WallpaperUniforms}, at most
- * {@link #MAX_FPS} fps) while it is the centred card, else its still. The Lock card also carries
- * the generic lock-screen cutout ({@code lock_preview_overlay}, a 360×800 viewport) and the time
- * composed from the {@code lock_digit_*} glyphs in its clock area.
- *
- * <p>A living still plays with its own effects map, as it does on Home and Lock: the card owns a
- * {@link LivingEffectsRenderer} at a quarter of the card per side (its own small ring of buffers,
- * drawn off the UI, the composite sampling the newest finished map as the lock engine does), so the
- * water refraction and mist the still carries show in the preview too. It lives only while the card
- * is live and attached.</p>
+ * One slot's preview card on the wallpaper picker page: the photo at the card's size. The Lock
+ * card also carries the generic lock-screen cutout ({@code lock_preview_overlay}, a 360x800
+ * viewport): the status bar and the home indicator.
  *
  * <p>The card's content never mirrors in RTL: it is a picture of a phone screen. Its corners are
  * the theme's Large shape.</p>
  */
 public final class WallpaperPreviewView extends View {
 
-    /** The live preview's ceiling, as the launcher's own backdrop. */
-    public static final int MAX_FPS = 30;
-    private static final long FRAME_NANOS = 1_000_000_000L / MAX_FPS;
-
-    /** The overlay's viewport, and where its clock sits in it (lock-wallpaper README). */
+    /** The overlay's viewport: the card's aspect. */
     static final float OVERLAY_W = 360f;
     static final float OVERLAY_H = 800f;
-    static final float CLOCK_X = 28f;
-    static final float CLOCK_TOP = 132f;
-    static final float DIGIT_W = 56f;
-    static final float COLON_W = 20f;
-    static final float GLYPH_H = 96f;
-    static final float GLYPH_GAP = 2f;
-
-    /** The lock look (lock-live-wallpaper.md item 3): calmer and dimmed about 20%. */
-    private static final float LOCK_ENERGY = 0.6f;
-    private static final float LOCK_DIM = 0.2f;
-
-    private static final String LOG_TAG = "WallpaperPreviewView";
 
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Rect mSrc = new Rect();
@@ -69,43 +40,12 @@ public final class WallpaperPreviewView extends View {
     private final int mFillColor;
     private final int mGlyphColor;
 
-    @Nullable private AnimatedWallpaper mWallpaper;
     @Nullable private Bitmap mStill;
     private boolean mPhoto;
     private boolean mLock;
-    private boolean mLive;
-    @NonNull private String mClock = "";
 
     @Nullable private Drawable mOverlay;
-    @Nullable private Drawable[] mDigits;
-    @Nullable private Drawable mColon;
     @Nullable private Drawable mPhotoGlyph;
-
-    /** A RuntimeShader on API 33+, held as Object so this class loads on API 26. */
-    @Nullable private Object mShader;
-    @Nullable private String mShaderFor;
-    @Nullable private int[] mPalette;
-    private boolean mShaderFailed;
-    /** A {@link LivingEffectsRenderer} on API 34+ for a living still, held as Object so this class loads on API 26. */
-    @Nullable private Object mEffects;
-    private boolean mEffectsFailed;
-    private long mStartNanos;
-    private long mLastFrameNanos;
-    private boolean mTicking;
-    private boolean mShown;
-
-    private final Choreographer.FrameCallback mTick = new Choreographer.FrameCallback() {
-        @Override
-        public void doFrame(long frameTimeNanos) {
-            mTicking = false;
-            if (!shouldAnimate()) return;
-            if (frameTimeNanos - mLastFrameNanos >= FRAME_NANOS - 2_000_000L) {
-                mLastFrameNanos = frameTimeNanos;
-                invalidate();
-            }
-            scheduleTick();
-        }
-    };
 
     public WallpaperPreviewView(@NonNull Context context) {
         super(context);
@@ -125,22 +65,10 @@ public final class WallpaperPreviewView extends View {
         setClipToOutline(true);
     }
 
-    /** What the card shows: a preshipped background (with its still, if rendered), a photo, or nothing. */
-    public void show(@Nullable AnimatedWallpaper wallpaper, @Nullable Bitmap still, boolean photo) {
-        // The same player keeps its shader; a living still read again is a new player under the same id.
-        boolean samePlayer = wallpaper != null && wallpaper == mWallpaper;
-        mWallpaper = wallpaper;
+    /** What the card shows: a photo (with its picture, if it has loaded) or nothing. */
+    public void show(@Nullable Bitmap still, boolean photo) {
         mStill = still;
-        mPhoto = photo && wallpaper == null;
-        if (!samePlayer || !wallpaper.id().equals(mShaderFor)) {
-            releaseEffects();
-            mEffectsFailed = false;
-            mShader = null;
-            mShaderFor = null;
-            mPalette = null;
-            mShaderFailed = false;
-        }
-        updateTicking();
+        mPhoto = photo;
         invalidate();
     }
 
@@ -150,7 +78,7 @@ public final class WallpaperPreviewView extends View {
         invalidate();
     }
 
-    /** The picture drawn when not live: a background's still or a photo; null while it loads. */
+    /** The picture drawn: the photo; null while it loads. */
     @Nullable
     public Bitmap still() {
         return mStill;
@@ -161,7 +89,7 @@ public final class WallpaperPreviewView extends View {
         return mPhoto;
     }
 
-    /** The Lock card: the cutout and the composed clock over the background. */
+    /** The Lock card: the cutout over the background. */
     public void setLock(boolean lock) {
         if (mLock == lock) return;
         mLock = lock;
@@ -172,164 +100,21 @@ public final class WallpaperPreviewView extends View {
         return mLock;
     }
 
-    /** The clock's glyphs, from {@link WallpaperPickerLogic#composedTime}. */
-    public void setClock(@NonNull String clock) {
-        if (clock.equals(mClock)) return;
-        mClock = clock;
-        if (mLock) invalidate();
-    }
-
-    @NonNull
-    public String clock() {
-        return mClock;
-    }
-
-    /** Only the centred card plays. Live features are API 34+. */
-    public void setLive(boolean live) {
-        boolean want = live && Build.VERSION.SDK_INT >= 34;
-        if (mLive == want) return;
-        mLive = want;
-        if (!want) releaseEffects();
-        if (want) mStartNanos = System.nanoTime();
-        updateTicking();
-        invalidate();
-    }
-
-    public boolean isLive() {
-        return mLive;
-    }
-
-    @Override
-    public void onVisibilityAggregated(boolean isVisible) {
-        super.onVisibilityAggregated(isVisible);
-        mShown = isVisible;
-        updateTicking();
-    }
-
-    @Override
-    protected void onAttachedToWindow() {
-        super.onAttachedToWindow();
-        updateTicking();
-    }
-
-    @Override
-    protected void onDetachedFromWindow() {
-        super.onDetachedFromWindow();
-        stopTicking();
-        releaseEffects();
-    }
-
-    private boolean shouldAnimate() {
-        return mLive && mShown && isAttachedToWindow() && mWallpaper != null && !mShaderFailed;
-    }
-
-    private void updateTicking() {
-        if (shouldAnimate()) scheduleTick();
-        else stopTicking();
-    }
-
-    private void scheduleTick() {
-        if (mTicking) return;
-        mTicking = true;
-        Choreographer.getInstance().postFrameCallback(mTick);
-    }
-
-    private void stopTicking() {
-        if (!mTicking) return;
-        mTicking = false;
-        Choreographer.getInstance().removeFrameCallback(mTick);
-    }
-
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         int w = getWidth();
         int h = getHeight();
         if (w <= 0 || h <= 0) return;
-        boolean drewLive = false;
-        if (mLive && mWallpaper != null && !mShaderFailed && Build.VERSION.SDK_INT >= 34
-            && canvas.isHardwareAccelerated()) {
-            drewLive = drawLive(canvas, w, h);
-        }
-        if (!drewLive) {
-            mPaint.setShader(null);
-            if (mStill != null && !mStill.isRecycled()) {
-                centreCrop(mStill.getWidth(), mStill.getHeight(), w, h);
-                canvas.drawBitmap(mStill, mSrc, mDst, mPaint);
-            } else {
-                canvas.drawColor(mFillColor);
-                if (mPhoto) drawPhotoGlyph(canvas, w, h);
-            }
+        mPaint.setShader(null);
+        if (mStill != null && !mStill.isRecycled()) {
+            centreCrop(mStill.getWidth(), mStill.getHeight(), w, h);
+            canvas.drawBitmap(mStill, mSrc, mDst, mPaint);
+        } else {
+            canvas.drawColor(mFillColor);
+            if (mPhoto) drawPhotoGlyph(canvas, w, h);
         }
         if (mLock) drawLockCutout(canvas, w, h);
     }
-
-    @RequiresApi(34)
-    private boolean drawLive(@NonNull Canvas canvas, int w, int h) {
-        AnimatedWallpaper wallpaper = mWallpaper;
-        if (wallpaper == null) return false;
-        try {
-            if (mShader == null) {
-                mShader = WallpaperUniforms.newShader(wallpaper);
-                mShaderFor = wallpaper.id();
-                mPalette = WallpaperPaletteCapture.own(wallpaper);
-            }
-            RuntimeShader shader = (RuntimeShader) mShader;
-            float period = Math.max(1f, wallpaper.periodSeconds());
-            float t = (float) (((System.nanoTime() - mStartNanos) / 1e9) % period);
-            float energy = mLock ? LOCK_ENERGY : 1f;
-            float dim = mLock ? LOCK_DIM : 0f;
-            WallpaperDirector.Frame frame = new WallpaperDirector.Frame(MAX_FPS, t, t * energy,
-                energy, dim, mPalette, NO_MOMENTS, false);
-            WallpaperUniforms.apply(shader, frame, w, h);
-            drawEffects(wallpaper, shader, frame, w, h);
-            mPaint.setShader(shader);
-            canvas.drawRect(0f, 0f, w, h, mPaint);
-            mPaint.setShader(null);
-            return true;
-        } catch (RuntimeException e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Live preview failed, showing the still", e);
-            mShaderFailed = true;
-            mShader = null;
-            releaseEffects();
-            stopTicking();
-            return false;
-        }
-    }
-
-    /**
-     * The living still's effects map for this frame: the ring is made on first use (the still's
-     * own effects program, a ring of small buffers), the next map is started off the UI, and the
-     * composite is bound to the newest one that has finished, a tick behind and never waiting on
-     * the GPU. A failure leaves the neutral map (no water, no mist) and is not retried.
-     */
-    @RequiresApi(34)
-    private void drawEffects(@NonNull AnimatedWallpaper wallpaper, @NonNull RuntimeShader composite,
-                             @NonNull WallpaperDirector.Frame frame, int w, int h) {
-        if (!(wallpaper instanceof LivingStill) || mEffectsFailed) return;
-        try {
-            LivingEffectsRenderer effects = (LivingEffectsRenderer) mEffects;
-            if (effects == null) {
-                effects = new LivingEffectsRenderer(WallpaperUniforms.newEffectsShader((LivingStill) wallpaper));
-                mEffects = effects;
-            }
-            effects.advance(frame, w, h);
-            effects.bindLatest(composite);
-        } catch (RuntimeException e) {
-            Logger.logStackTraceWithMessage(LOG_TAG, "Preview effects map failed, showing the still without it", e);
-            mEffectsFailed = true;
-            releaseEffects();
-            WallpaperUniforms.setEffects(composite, null, 1, 1);
-        }
-    }
-
-    private void releaseEffects() {
-        Object effects = mEffects;
-        mEffects = null;
-        if (effects != null && Build.VERSION.SDK_INT >= 34) ((LivingEffectsRenderer) effects).release();
-    }
-
-    private static final WallpaperDirector.Moment[] NO_MOMENTS =
-        {WallpaperDirector.Moment.NONE, WallpaperDirector.Moment.NONE};
 
     private void centreCrop(int bw, int bh, int w, int h) {
         float scale = Math.max(w / (float) bw, h / (float) bh);
@@ -356,52 +141,15 @@ public final class WallpaperPreviewView extends View {
     }
 
     private void drawLockCutout(@NonNull Canvas canvas, int w, int h) {
-        loadLockGlyphs();
-        if (mOverlay != null) {
-            mOverlay.setBounds(0, 0, w, h);
-            mOverlay.draw(canvas);
+        if (mOverlay == null) {
+            mOverlay = glyph(getContext(), R.drawable.lock_preview_overlay);
+            if (mOverlay == null) mOverlay = new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT);
         }
-        float sx = w / OVERLAY_W;
-        float sy = h / OVERLAY_H;
-        float x = CLOCK_X;
-        int top = Math.round(CLOCK_TOP * sy);
-        int bottom = Math.round((CLOCK_TOP + GLYPH_H) * sy);
-        for (int i = 0; i < mClock.length(); i++) {
-            char c = mClock.charAt(i);
-            Drawable glyph;
-            float gw;
-            if (c == ':') {
-                glyph = mColon;
-                gw = COLON_W;
-            } else if (c >= '0' && c <= '9' && mDigits != null) {
-                glyph = mDigits[c - '0'];
-                gw = DIGIT_W;
-            } else {
-                continue;
-            }
-            if (glyph != null) {
-                glyph.setBounds(Math.round(x * sx), top, Math.round((x + gw) * sx), bottom);
-                glyph.draw(canvas);
-            }
-            x += gw + GLYPH_GAP;
-        }
+        mOverlay.setBounds(0, 0, w, h);
+        mOverlay.draw(canvas);
     }
 
-    private void loadLockGlyphs() {
-        if (mOverlay != null) return;
-        Context ctx = getContext();
-        mOverlay = glyph(ctx, R.drawable.lock_preview_overlay);
-        if (mOverlay == null) mOverlay = new android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT);
-        mColon = glyph(ctx, R.drawable.lock_digit_colon);
-        int[] ids = {R.drawable.lock_digit_0, R.drawable.lock_digit_1, R.drawable.lock_digit_2,
-            R.drawable.lock_digit_3, R.drawable.lock_digit_4, R.drawable.lock_digit_5,
-            R.drawable.lock_digit_6, R.drawable.lock_digit_7, R.drawable.lock_digit_8,
-            R.drawable.lock_digit_9};
-        mDigits = new Drawable[ids.length];
-        for (int i = 0; i < ids.length; i++) mDigits[i] = glyph(ctx, ids[i]);
-    }
-
-    /** A cutout glyph, or null: a glyph that will not inflate costs the clock a digit, not the app. */
+    /** A cutout glyph, or null: a glyph that will not inflate costs the cutout, not the app. */
     @Nullable
     private static Drawable glyph(@NonNull Context ctx, int id) {
         try {

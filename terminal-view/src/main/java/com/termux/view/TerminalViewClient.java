@@ -4,6 +4,7 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
+import com.termux.terminal.TerminalLinks;
 import com.termux.terminal.TerminalSession;
 
 /**
@@ -32,11 +33,11 @@ public interface TerminalViewClient {
     default void onMouseTrackingTap(MotionEvent e) {}
 
     /**
-     * A tap with Shift held or latched while a program tracks the mouse. Nothing was sent to the
-     * program for it, and {@link #onSingleTapUp} is not called: the app's own link handling is
-     * all that is owed.
+     * A tap on a cell that carries a link: an OSC 8 hyperlink, or an address in the text when the
+     * view detects them. {@link #onSingleTapUp} is not called for it. With a mouse-tracking
+     * program the tap has also gone to the program as its click, unless Shift held it back.
      */
-    default void onMouseTrackingBypassTap(MotionEvent e) {}
+    default void onLinkTap(TerminalLinks.Link link, MotionEvent e) {}
 
     boolean shouldBackButtonBeMappedToEscape();
 

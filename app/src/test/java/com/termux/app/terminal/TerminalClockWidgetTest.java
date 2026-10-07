@@ -146,7 +146,7 @@ public class TerminalClockWidgetTest {
         widget.updateTime(1_700_000_000_000L, 1_000L);
         float density = ApplicationProvider.getApplicationContext().getResources()
             .getDisplayMetrics().density;
-        int slot = Math.round(68f * density);
+        int slot = Math.round(65f * density);
         widget.measure(
             android.view.View.MeasureSpec.makeMeasureSpec(Math.round(360f * density),
                 android.view.View.MeasureSpec.EXACTLY),
@@ -154,14 +154,49 @@ public class TerminalClockWidgetTest {
                 android.view.View.MeasureSpec.EXACTLY));
         widget.layout(0, 0, widget.getMeasuredWidth(), widget.getMeasuredHeight());
 
-        // Flip: a 35.5dp band over a 13.8dp gap and an 11.7dp date block, centred in the slot.
-        float top = (slot - 61f * density) / 2f;
+        // Flip: a 35.5dp band over the cards' 4.26dp shadow and an 11.7dp date block, centred in
+        // the slot.
+        float top = (slot - 51.46f * density) / 2f;
         assertTrue("the digits must be tappable",
             widget.isInsideTapTarget(density, top + 4f * density));
         assertTrue("the date row must not open the clock app",
-            !widget.isInsideTapTarget(density, top + 50f * density));
+            !widget.isInsideTapTarget(density, top + 45f * density));
         assertTrue("the slack above the window chips must not open the clock app",
             !widget.isInsideTapTarget(density, slot - density));
+        // The date row starts where the cards' shadow ends: band centre to rule centre is half
+        // the band, the shadow's 3.2dp blur and 1.06dp drop, and half the date row.
+        assertEquals((35.5f / 2f + 3.2f + 1.06f + 11.7f / 2f) * density,
+            widget.fullRuleCenterYPx() - widget.fullBandCenterYPx(), .01f);
+    }
+
+    @Test
+    public void fitScale_growsTheWholeColumnToTheBudgetButNeverPastTheCeiling() {
+        // 58 budget over a 48 column: the date stays and the face grows by one uniform scale.
+        float[] plan = TerminalClockWidget.fitScalePlan(58f, 400f, 48f, 34f, 150f, 130f, .65f);
+        assertEquals(58f / 48f, plan[0], 1e-4f);
+        assertEquals(1f, plan[1], 0f);
+        assertEquals(150f * plan[0], plan[2], 1e-3f);
+        // A tall budget stops at the ceiling.
+        float[] tall = TerminalClockWidget.fitScalePlan(200f, 4000f, 48f, 34f, 150f, 130f, .65f);
+        assertEquals(TerminalClockWidget.FIT_MAX_SCALE, tall[0], 0f);
+    }
+
+    @Test
+    public void fitScale_widthBudgetShrinksTheWholeFaceTogether() {
+        float[] plan = TerminalClockWidget.fitScalePlan(58f, 120f, 48f, 34f, 150f, 130f, .65f);
+        assertEquals(120f / 150f, plan[0], 1e-4f);
+        assertEquals(1f, plan[1], 0f);
+    }
+
+    @Test
+    public void fitScale_dropsTheDateWhenTheColumnFallsBelowTheFloor() {
+        // 30 over a 48 column is .625, under the .65 floor: the band alone is fitted.
+        float[] plan = TerminalClockWidget.fitScalePlan(30f, 400f, 48f, 34f, 150f, 130f, .65f);
+        assertEquals(0f, plan[1], 0f);
+        assertEquals(30f / 34f, plan[0], 1e-4f);
+        assertEquals(130f * plan[0], plan[2], 1e-3f);
+        // With no floor (the slot to itself) the date is never dropped.
+        assertEquals(1f, TerminalClockWidget.fitScalePlan(30f, 400f, 48f, 34f, 150f, 130f, 0f)[1], 0f);
     }
 
     /** The source of {@code method}, from its signature to the first line that closes it. */

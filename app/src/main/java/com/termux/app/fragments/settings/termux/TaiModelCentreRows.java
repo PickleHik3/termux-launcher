@@ -1,6 +1,9 @@
 package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
+import android.text.SpannableString;
+import android.text.Spanned;
+import android.text.style.URLSpan;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -381,6 +384,24 @@ final class TaiModelCentreRows {
         if ("sana".equals(architecture)) return "Sana";
         if ("taiyi".equals(architecture)) return "Taiyi";
         return "Stable Diffusion 1.5";
+    }
+
+    /** Where the terms live for the licenses that are more than a plain OSI id; null for any other. */
+    @Nullable
+    static String licenseUrl(@Nullable String license) {
+        if ("Gemma".equals(license)) return "https://ai.google.dev/gemma/terms";
+        if ("CC-BY-4.0".equals(license)) return "https://creativecommons.org/licenses/by/4.0/";
+        return null;
+    }
+
+    /** "License: Gemma", tappable when the terms have a page; empty when the catalogue names no license. */
+    @NonNull
+    static CharSequence licenseFact(@NonNull Context context, @Nullable String license) {
+        if (license == null || license.trim().isEmpty()) return "";
+        SpannableString fact = new SpannableString(context.getString(R.string.tai_centre_license_fact, license.trim()));
+        String url = licenseUrl(license.trim());
+        if (url != null) fact.setSpan(new URLSpan(url), 0, fact.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return fact;
     }
 
     /** Sizes the way every TAI screen writes them: binary units, one decimal from KB up. */

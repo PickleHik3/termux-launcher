@@ -1,5 +1,6 @@
 package com.termux.app.firstrun;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
@@ -47,6 +48,8 @@ public final class TaiWelcomeCard {
         /** The policy's key: {@code voice_typing}, {@code read_aloud}, {@code assistant}, ... */
         @NonNull public final String id;
         @StringRes public final int titleRes;
+        /** The leading glyph: the settings pages' mark for what the row does. */
+        @DrawableRes public final int glyphRes;
         /** The plain line under the title. */
         @StringRes public final int lineRes;
         /** The model names, e.g. "Gemma 4 E2B"; not localised, they are product names. */
@@ -65,11 +68,12 @@ public final class TaiWelcomeCard {
         /** The row's largest file would take a quarter of the RAM class or more (spec §4.4). */
         public final boolean warnsBackground;
 
-        Row(@NonNull String id, int titleRes, int lineRes, @NonNull String modelNames,
+        Row(@NonNull String id, int titleRes, int glyphRes, int lineRes, @NonNull String modelNames,
             @NonNull List<String> modelIds, @NonNull List<String> missingIds, long downloadBytes,
             boolean ticked, boolean warnsBackground) {
             this.id = id;
             this.titleRes = titleRes;
+            this.glyphRes = glyphRes;
             this.lineRes = lineRes;
             this.modelNames = modelNames;
             this.modelIds = Collections.unmodifiableList(modelIds);
@@ -189,35 +193,37 @@ public final class TaiWelcomeCard {
                 }
             }
             int titleRes;
+            int glyphRes;
             int lineRes;
             switch (policyRow.id) {
                 case "voice_typing":
                     titleRes = R.string.tai_welcome_row_voice_title;
+                    glyphRes = R.drawable.ic_symbol_mic;
                     lineRes = R.string.tai_welcome_row_voice_line;
                     break;
                 case "read_aloud":
                     titleRes = R.string.tai_welcome_row_read_aloud_title;
+                    glyphRes = R.drawable.ic_symbol_read_aloud;
                     lineRes = R.string.tai_welcome_row_read_aloud_line;
                     break;
                 case "assistant":
                     // Tier 3's E2B is only the tidy-dictation helper; its assistant is E4B.
                     titleRes = t3 ? R.string.tai_welcome_row_tidy_title : R.string.tai_welcome_row_assistant_title;
+                    glyphRes = t3 ? R.drawable.ic_symbol_edit : R.drawable.ic_symbol_ai_star;
                     lineRes = t3 ? R.string.tai_welcome_row_tidy_line : R.string.tai_welcome_row_assistant_line;
                     break;
-                case "smarter_reading":
-                    titleRes = t3 ? R.string.tai_welcome_row_smarter_assistant_title : R.string.tai_welcome_row_smarter_title;
-                    lineRes = t3 ? R.string.tai_welcome_row_smarter_assistant_line : R.string.tai_welcome_row_smarter_line;
+                case "e4b_assistant":
+                    titleRes = R.string.tai_welcome_row_e4b_assistant_title;
+                    glyphRes = R.drawable.ic_symbol_ai_star;
+                    lineRes = R.string.tai_welcome_row_e4b_assistant_line;
                     break;
-                case "search":
-                    titleRes = R.string.tai_welcome_row_search_title;
-                    lineRes = R.string.tai_welcome_row_search_line;
-                    break;
-                default: // wallpaper_creator
-                    titleRes = R.string.tai_welcome_row_wallpaper_title;
-                    lineRes = R.string.tai_welcome_row_wallpaper_line;
+                default: // dawn_notes
+                    titleRes = R.string.tai_welcome_row_dawn_title;
+                    glyphRes = R.drawable.ic_symbol_search;
+                    lineRes = R.string.tai_welcome_row_dawn_line;
                     break;
             }
-            rows.add(new Row(policyRow.id, titleRes, lineRes, modelNames(policyRow),
+            rows.add(new Row(policyRow.id, titleRes, glyphRes, lineRes, modelNames(policyRow),
                 policyRow.modelIds, missing, bytes, policyRow.preselected,
                 TaiTierPolicy.warnsBackground(env, largest)));
         }
@@ -234,12 +240,10 @@ public final class TaiWelcomeCard {
                 return "KittenTTS";
             case "assistant":
                 return "Gemma 4 E2B";
-            case "smarter_reading":
+            case "e4b_assistant":
                 return "Gemma 4 E4B";
-            case "search":
+            default: // dawn_notes
                 return "EmbeddingGemma";
-            default:
-                return "Depth and cut-out";
         }
     }
 

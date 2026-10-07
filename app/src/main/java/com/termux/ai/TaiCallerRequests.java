@@ -73,9 +73,10 @@ public final class TaiCallerRequests {
 
     /**
      * The app-category request for one app. Thinking is always off (the 24-token cap would cut a
-     * thinking answer short, whatever the global switch says), speculative decoding is on (the pong
-     * benchmark of 2026-10-05: cleanup-sized calls ran 1.9 times faster), the user's system prompt is
-     * kept out of the classification, and the context window stays Automatic.
+     * thinking answer short, whatever the global switch says) and the user's system prompt is kept out
+     * of the classification. Speculative decoding and the window are load settings the sort sets when
+     * it loads the model ({@code CategorySortLoadPolicy}); a chat on a resident model never reloads, so
+     * they are not sent here.
      *
      * @param model the local model id or {@code remote/<id>}; empty for the default
      * @param accelerator {@code gpu} or {@code cpu}, or {@code null} to leave it to the runtime
@@ -93,7 +94,6 @@ public final class TaiCallerRequests {
         request.put("max_tokens", maxTokens);
         request.put("stream", false);
         request.put("thinking", false);
-        request.put("speculative_decoding", true);
         request.put(NO_SYSTEM_PROMPT, true);
         if (accelerator != null && !accelerator.trim().isEmpty() && !isRemoteModel(model)) {
             request.put("accelerator", accelerator);

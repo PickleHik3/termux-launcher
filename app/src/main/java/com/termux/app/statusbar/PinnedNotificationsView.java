@@ -7,6 +7,7 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
@@ -23,6 +24,7 @@ import android.text.StaticLayout;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.util.AttributeSet;
+import android.util.SparseArray;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -166,6 +168,20 @@ public final class PinnedNotificationsView extends View {
     private final Map<String, Integer> mTints = new HashMap<>();
     /** Inks resolved against a tint's surface: title, body, time, chip fill, chip text, ring. */
     private final Map<Integer, int[]> mInks = new HashMap<>();
+    /** The card wash per tint, built once from 0 to 1 and stretched across each card it fills. */
+    private final SparseArray<LinearGradient> mWashShaders = new SparseArray<>();
+    private final Matrix mWashMatrix = new Matrix();
+    /** Senders and bodies fitted to their line, kept while the text and its room hold. */
+    private final FitMemo mFits = new FitMemo();
+    private final FitMemo.Fitter mFitter =
+        (text, room) -> TextUtils.ellipsize(text, mTextPaint, room, TextUtils.TruncateAt.END);
+    /** The undo row's two inks, resolved for the surface and roles they were last asked on. */
+    private int mUndoInkSurface;
+    private int mUndoInkVariantSeed;
+    private int mUndoInkTertiarySeed;
+    private int mUndoInkVariant;
+    private int mUndoInkTertiary;
+    private boolean mUndoInksValid;
     private final int mTouchSlop;
     private final int mLongPressTimeout;
     private final float mMinFlingVelocity;
@@ -218,6 +234,8 @@ public final class PinnedNotificationsView extends View {
     private int mOnSurface;
     private int mOnSurfaceVariant;
     private int mTertiary;
+    /** The STATUS_BAR band's measured surface; null until the bar has been measured. */
+    @Nullable private Integer mBandSurface;
     private int mSurface;
 
     public PinnedNotificationsView(Context context) {
@@ -250,11 +268,35 @@ public final class PinnedNotificationsView extends View {
             ContextCompat.getColor(context, R.color.termux_on_surface));
         mOnSurfaceVariant = MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorOnSurfaceVariant, mOnSurface);
-        mTertiary = MaterialColors.getColor(context, com.google.android.material.R.attr.colorTertiary,
+        mTertiary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorTertiary,
             MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
                 ContextCompat.getColor(context, R.color.termux_primary)));
-        mSurface = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel,
-            ContextCompat.getColor(context, R.color.termux_surface_panel));
+        // What the cards' inks are measured against: the band the chrome resolved once it has,
+        // the nominal panel colour only until then.
+        mSurface = mBandSurface != null ? mBandSurface
+            : MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSurfacePanel,
+                ContextCompat.getColor(context, R.color.termux_surface_panel));
+    }
+
+    /**
+     * The STATUS_BAR band's resolved surface (the activity's status-ink pass reads it once), so
+     * the card inks are measured on what the cards really stand on.
+     */
+    public void setBandSurface(@androidx.annotation.ColorInt int bandSurface) {
+        if (mBandSurface != null && mBandSurface == bandSurface) return;
+        mBandSurface = bandSurface;
+        resolveColors();
+        mInks.clear();
+        invalidate();
+    }
+
+    /** The scheme changed: resolve the roles again. */
+    public void onThemeChanged() {
+        mTints.clear();
+        mWashShaders.clear();
+        resolveColors();
+        mInks.clear();
+        invalidate();
     }
 
     public void setListener(@Nullable DismissListener listener) {
@@ -709,9 +751,7 @@ public final class PinnedNotificationsView extends View {
     private void drawCardGround(Canvas canvas, @NonNull RectF bounds, int tint, boolean pressed) {
         float radius = dp(CARD_RADIUS_DP);
         mFillPaint.setStyle(Paint.Style.FILL);
-        mFillPaint.setShader(new LinearGradient(bounds.left, 0f, bounds.right, 0f,
-            ColorUtils.setAlphaComponent(tint, WASH_START_ALPHA),
-            ColorUtils.setAlphaComponent(tint, WASH_END_ALPHA), Shader.TileMode.CLAMP));
+        mFillPaint.setShader(washShader(tint, bounds.left, bounds.right));
         canvas.drawRoundRect(bounds, radius, radius, mFillPaint);
         mFillPaint.setShader(null);
         if (pressed) {
@@ -725,6 +765,28 @@ public final class PinnedNotificationsView extends View {
         mRect.inset(dp(.5f), dp(.5f));
         canvas.drawRoundRect(mRect, radius, radius, mFillPaint);
         mFillPaint.setStyle(Paint.Style.FILL);
+    }
+
+    /**
+     * The tint's wash from {@code left} to {@code right}: one unit gradient per tint, aimed at the
+     * card with a local matrix. A card of no width has no unit to stretch and is built in place.
+     */
+    @NonNull
+    private Shader washShader(int tint, float left, float right) {
+        int start = ColorUtils.setAlphaComponent(tint, WASH_START_ALPHA);
+        int end = ColorUtils.setAlphaComponent(tint, WASH_END_ALPHA);
+        if (right == left) {
+            return new LinearGradient(left, 0f, right, 0f, start, end, Shader.TileMode.CLAMP);
+        }
+        LinearGradient shader = mWashShaders.get(tint);
+        if (shader == null) {
+            shader = new LinearGradient(0f, 0f, 1f, 0f, start, end, Shader.TileMode.CLAMP);
+            mWashShaders.put(tint, shader);
+        }
+        mWashMatrix.setScale(right - left, 1f);
+        mWashMatrix.postTranslate(left, 0f);
+        shader.setLocalMatrix(mWashMatrix);
+        return shader;
     }
 
     private void drawCard(Canvas canvas, @NonNull PinnedNotification item, int index,
@@ -779,8 +841,8 @@ public final class PinnedNotificationsView extends View {
 
         mTextPaint.setTypeface(mediumTypeface());
         mTextPaint.setTextSize(sp(TITLE_SP));
-        CharSequence sender = TextUtils.ellipsize(item.senderOrApp(), mTextPaint,
-            Math.max(0f, titleRoom), TextUtils.TruncateAt.END);
+        CharSequence sender = mFits.fit(item.senderOrApp(), false, Math.max(0f, titleRoom),
+            mTextPaint.getTypeface(), mTextPaint.getTextSize(), mFitter);
         float senderWidth = mTextPaint.measureText(sender, 0, sender.length());
 
         mTextPaint.setTypeface(Typeface.DEFAULT);
@@ -837,8 +899,8 @@ public final class PinnedNotificationsView extends View {
         mTextPaint.setTextSize(sp(TITLE_SP));
         // The sender keeps at most two thirds of the line, so some of the message always shows.
         float senderRoom = Math.max(0f, titleRoom * (item.body.isEmpty() ? 1f : .66f));
-        CharSequence sender = TextUtils.ellipsize(item.senderOrApp(), mTextPaint, senderRoom,
-            TextUtils.TruncateAt.END);
+        CharSequence sender = mFits.fit(item.senderOrApp(), false, senderRoom,
+            mTextPaint.getTypeface(), mTextPaint.getTextSize(), mFitter);
         float senderWidth = mTextPaint.measureText(sender, 0, sender.length());
         float lineTop = bounds.top + (bounds.height() - titleHeight) / 2f;
         float baseline = lineTop - titleAscent;
@@ -853,8 +915,8 @@ public final class PinnedNotificationsView extends View {
         String lead = " · ";
         float leadWidth = mTextPaint.measureText(lead);
         if (room <= leadWidth + dp(8f)) return;
-        CharSequence body = TextUtils.ellipsize(item.body.replace('\n', ' '), mTextPaint,
-            room - leadWidth, TextUtils.TruncateAt.END);
+        CharSequence body = mFits.fit(item.body, true, room - leadWidth,
+            mTextPaint.getTypeface(), mTextPaint.getTextSize(), mFitter);
         mTextPaint.setColor(inks[1]);
         float x = textLeft + used;
         canvas.drawText(lead, x, baseline, mTextPaint);
@@ -966,15 +1028,74 @@ public final class PinnedNotificationsView extends View {
         mTextPaint.setTextSize(sp(TITLE_SP));
         float baseline = bounds.centerY() - (mTextPaint.ascent() + mTextPaint.descent()) / 2f;
         float x = bounds.left + dp(10f);
-        mTextPaint.setColor(GlassInk.legible(surface, mOnSurfaceVariant, OnGlass.TARGET_BODY_TEXT));
+        resolveUndoInks(surface);
+        mTextPaint.setColor(mUndoInkVariant);
         canvas.drawText(dismissed, x, baseline, mTextPaint);
         x += mTextPaint.measureText(dismissed);
         canvas.drawText(lead, x, baseline, mTextPaint);
         x += mTextPaint.measureText(lead);
         mTextPaint.setTypeface(mediumTypeface());
-        mTextPaint.setColor(GlassInk.legible(surface, mTertiary, OnGlass.TARGET_BODY_TEXT));
+        mTextPaint.setColor(mUndoInkTertiary);
         canvas.drawText(undo, x, baseline, mTextPaint);
         canvas.restoreToCount(layer);
+    }
+
+    /** The undo row's inks on {@code surface}, re-resolved only when it or the roles move. */
+    private void resolveUndoInks(int surface) {
+        if (mUndoInksValid && mUndoInkSurface == surface
+            && mUndoInkVariantSeed == mOnSurfaceVariant && mUndoInkTertiarySeed == mTertiary) {
+            return;
+        }
+        mUndoInkSurface = surface;
+        mUndoInkVariantSeed = mOnSurfaceVariant;
+        mUndoInkTertiarySeed = mTertiary;
+        mUndoInkVariant = GlassInk.legible(surface, mOnSurfaceVariant, OnGlass.TARGET_BODY_TEXT);
+        mUndoInkTertiary = GlassInk.legible(surface, mTertiary, OnGlass.TARGET_BODY_TEXT);
+        mUndoInksValid = true;
+    }
+
+    /**
+     * Text fitted to the room its line leaves, remembered by everything the fit depends on: the
+     * text, whether its line breaks are flattened to spaces first, the room, and the paint's face
+     * and size (the only paint state this view ever changes besides colour, which a fit ignores).
+     * The cards redraw on every frame of a swipe or a reveal; their text and widths do not move.
+     */
+    static final class FitMemo {
+
+        /** Fits {@code text} into {@code room} on a paint set up for the key it is filed under. */
+        interface Fitter {
+            @NonNull
+            CharSequence fit(@NonNull String text, float room);
+        }
+
+        static final int CAPACITY = 16;
+        private final String[] mTexts = new String[CAPACITY];
+        private final boolean[] mFlattened = new boolean[CAPACITY];
+        private final float[] mRooms = new float[CAPACITY];
+        private final Object[] mFaces = new Object[CAPACITY];
+        private final float[] mSizes = new float[CAPACITY];
+        private final CharSequence[] mResults = new CharSequence[CAPACITY];
+        private int mNext;
+
+        @NonNull
+        CharSequence fit(@NonNull String text, boolean flattenLines, float room,
+                         @Nullable Object face, float size, @NonNull Fitter fitter) {
+            for (int i = 0; i < CAPACITY; i++) {
+                if (mResults[i] != null && mRooms[i] == room && mSizes[i] == size
+                    && java.util.Objects.equals(mFaces[i], face) && mFlattened[i] == flattenLines
+                    && text.equals(mTexts[i])) return mResults[i];
+            }
+            CharSequence result = fitter.fit(flattenLines ? text.replace('\n', ' ') : text, room);
+            int slot = mNext;
+            mNext = (slot + 1) % CAPACITY;
+            mTexts[slot] = text;
+            mFlattened[slot] = flattenLines;
+            mRooms[slot] = room;
+            mFaces[slot] = face;
+            mSizes[slot] = size;
+            mResults[slot] = result;
+            return result;
+        }
     }
 
     // ---- Touch ------------------------------------------------------------

@@ -37,8 +37,8 @@ public final class TaiModelSpec {
     // Text-to-image generation (mnn-diffusion packages). Image-only like speech_to_text: kept out of
     // chat catalogues, the installed chat list, /v1/models and `tai load`.
     public static final String CAPABILITY_IMAGE_GENERATION = "image_generation";
-    // Wallpaper vision graphs (depth, scene and subject segmentation, WallpaperVisionRuntime). Tool
-    // models like speech: run by the one-shot analysis job, never loaded, never chat or /v1/models.
+    // Retired vision graphs (depth, scene and subject segmentation); kept as a filter. Tool
+    // models like speech: never loaded, never chat or /v1/models.
     public static final String CAPABILITY_DEPTH_ESTIMATION = "depth_estimation";
     public static final String CAPABILITY_SCENE_SEGMENTATION = "scene_segmentation";
     public static final String CAPABILITY_SUBJECT_SEGMENTATION = "subject_segmentation";
@@ -323,8 +323,8 @@ public final class TaiModelSpec {
             || endpointCapabilities.contains(CAPABILITY_IMAGE_GENERATION);
     }
 
-    /** True for a wallpaper vision graph (depth, scene or subject): analysed on demand by the wallpaper
-     *  job, never loaded into the chat runtime or listed in chat lists, pickers and /v1/models. */
+    /** True for a retired vision tool graph (depth, scene or subject), left over on some phones:
+     *  never loaded into the chat runtime or listed in chat lists, pickers and /v1/models. */
     public boolean isVisionTool() {
         return isVisionTool(capabilities) || isVisionTool(endpointCapabilities);
     }

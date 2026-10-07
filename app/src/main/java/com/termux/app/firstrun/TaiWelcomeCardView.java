@@ -2,8 +2,10 @@ package com.termux.app.firstrun;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -11,6 +13,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -31,9 +34,9 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * Draws {@link TaiWelcomeCard}: the header, a checkbox row per download, the Wi-Fi-only switch,
- * Later and "Download selected". It decides nothing: ticks live here only as the set of row ids
- * the user has toggled, and every number and state comes from the pure class.
+ * Draws {@link TaiWelcomeCard}: the header, a row per download (glyph, words, checkbox), the
+ * Wi-Fi-only switch, Later and "Download selected". It decides nothing: ticks live here only as
+ * the set of row ids the user has toggled, and every number and state comes from the pure class.
  *
  * <p>It wears the same dress as {@link FirstRunPermissionsCardView}, and takes every touch while
  * it is up. {@link TaiWelcomeCardHost} puts it on screen and does the downloading.
@@ -54,6 +57,7 @@ public final class TaiWelcomeCardView extends FrameLayout {
     private static final float CARD_MAX_WIDTH_DP = 360f;
     private static final float CARD_SIDE_MARGIN_DP = 20f;
     private static final int SCRIM_ALPHA = 140;
+    private static final float GLYPH_WELL_DP = 40f;
 
     private final float mDensity;
     private final TerminalDress mDress;
@@ -278,7 +282,10 @@ public final class TaiWelcomeCardView extends FrameLayout {
         }
     }
 
-    /** One row: a checkbox (or "Installed"), the title with its model and size, and the lines. */
+    /**
+     * One row: the glyph in its well, the title with its model and the lines, and at the end the
+     * checkbox over the size (or "Installed").
+     */
     @NonNull
     private View rowView(@NonNull TaiWelcomeCard.Row row, boolean first) {
         Context context = getContext();
@@ -286,25 +293,24 @@ public final class TaiWelcomeCardView extends FrameLayout {
         line.setOrientation(LinearLayout.HORIZONTAL);
         line.setGravity(Gravity.TOP);
         LinearLayout.LayoutParams lineParams = matchWrap();
-        if (!first) lineParams.topMargin = dp(8);
+        if (!first) lineParams.topMargin = dp(10);
         line.setLayoutParams(lineParams);
 
-        MaterialCheckBox box = new MaterialCheckBox(context);
-        box.setChecked(row.ticked);
-        box.setEnabled(row.tickable());
-        box.setVisibility(row.installed ? INVISIBLE : VISIBLE);
-        box.setContentDescription(context.getString(row.titleRes));
-        box.setOnCheckedChangeListener((button, checked) -> {
-            if (checked) mTicked.add(row.id);
-            else mTicked.remove(row.id);
-            refreshFooter();
-        });
-        line.addView(box, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        ImageView glyph = new ImageView(context);
+        glyph.setImageResource(row.glyphRes);
+        glyph.setImageTintList(ColorStateList.valueOf(row.installed
+            ? ColorUtils.setAlphaComponent(mDress.textColor, 200) : mAccent));
+        glyph.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
+        glyph.setPadding(dp(9), dp(9), dp(9), dp(9));
+        glyph.setBackground(glyphWell());
+        glyph.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams glyphParams = new LinearLayout.LayoutParams(dp(GLYPH_WELL_DP), dp(GLYPH_WELL_DP));
+        glyphParams.topMargin = dp(8);
+        line.addView(glyph, glyphParams);
 
         LinearLayout words = new LinearLayout(context);
         words.setOrientation(LinearLayout.VERTICAL);
-        words.setPadding(0, dp(10), 0, 0);
+        words.setPadding(0, dp(8), 0, 0);
 
         TextView heading = new TextView(context);
         heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
@@ -327,16 +333,51 @@ public final class TaiWelcomeCardView extends FrameLayout {
             warning.setText(R.string.tai_welcome_background_warning);
             words.addView(warning, matchWrap());
         }
-        // The whole text block toggles too: a 48 dp box is the target, but nobody aims at it.
-        if (row.tickable()) words.setOnClickListener(view -> box.toggle());
-        line.addView(words, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        LinearLayout.LayoutParams wordsParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        wordsParams.setMarginStart(dp(14));
+        line.addView(words, wordsParams);
 
+        LinearLayout end = new LinearLayout(context);
+        end.setOrientation(LinearLayout.VERTICAL);
+        end.setGravity(Gravity.CENTER_HORIZONTAL);
         TextView size = secondaryText(12f);
-        size.setPadding(dp(8), dp(10), 0, 0);
-        size.setText(row.installed ? getContext().getString(R.string.tai_welcome_installed) : row.sizeText);
-        line.addView(size, new LinearLayout.LayoutParams(
+        size.setGravity(Gravity.CENTER_HORIZONTAL);
+        if (row.installed) {
+            size.setPadding(dp(8), dp(8), 0, 0);
+            size.setText(R.string.tai_welcome_installed);
+        } else {
+            MaterialCheckBox box = new MaterialCheckBox(context);
+            box.setChecked(row.ticked);
+            box.setContentDescription(context.getString(row.titleRes));
+            box.setOnCheckedChangeListener((button, checked) -> {
+                if (checked) mTicked.add(row.id);
+                else mTicked.remove(row.id);
+                refreshFooter();
+            });
+            end.addView(box, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            size.setPadding(dp(8), 0, 0, 0);
+            size.setText(row.sizeText);
+            // The whole text block toggles too: a 48 dp box is the target, but nobody aims at it.
+            words.setOnClickListener(view -> box.toggle());
+        }
+        end.addView(size, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout.LayoutParams endParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        endParams.setMarginStart(dp(4));
+        line.addView(end, endParams);
         return line;
+    }
+
+    /** The rounded square a glyph sits in, tinted from the dress so it reads on glass and solid alike. */
+    @NonNull
+    private GradientDrawable glyphWell() {
+        GradientDrawable well = new GradientDrawable();
+        well.setCornerRadius(dp(11));
+        well.setColor(ColorUtils.setAlphaComponent(mDress.textColor, 20));
+        well.setStroke(Math.max(1, dp(1)), ColorUtils.setAlphaComponent(mDress.textColor, 36));
+        return well;
     }
 
     @NonNull

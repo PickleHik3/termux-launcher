@@ -13,4 +13,24 @@
         <item name="android:textColor">@color/termux_editor_segment_content</item>
         <item name="iconTint">@color/termux_editor_segment_content</item>
     </style>
+
+    <!--
+      The Look editor's Custom row (M3 sliders spec, "M" size, vertical): a 28dp track with full
+      outer corners and 2dp inside corners, a 4 x 44dp handle 6dp clear of the track, a stop
+      indicator, and no value label: LegendSlider draws the legend inside the track instead. The
+      track colours are the stock ones.
+    -->
+    <dimen name="appearance_editor_slider_track">28dp</dimen>
+    <!-- Half the track again and more: a corner this large rounds the whole short side. -->
+    <dimen name="appearance_editor_slider_track_corner">40dp</dimen>
+    <dimen name="appearance_editor_slider_inside_corner">2dp</dimen>
+    <dimen name="appearance_editor_slider_thumb_width">4dp</dimen>
+    <dimen name="appearance_editor_slider_thumb_height">44dp</dimen>
+    <dimen name="appearance_editor_slider_gap">6dp</dimen>
+    <dimen name="appearance_editor_slider_stop">4dp</dimen>
+    <!-- The sliders' length: the sheet's one fixed Appearance height is the rows above plus this. -->
+    <dimen name="appearance_editor_slider_length">120dp</dimen>
+    <!-- The page bar every Appearance page wears. The editor's preview is measured from it
+      (AppearancePreviewArea.BAR_DP, which a test holds to this). -->
+    <dimen name="appearance_page_bar_height">64dp</dimen>
 </resources>

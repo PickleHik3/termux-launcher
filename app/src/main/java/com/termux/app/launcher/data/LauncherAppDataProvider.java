@@ -72,7 +72,7 @@ public final class LauncherAppDataProvider {
     private LauncherAppDataProvider(@NonNull Context context) {
         this.context = context.getApplicationContext();
         this.iconResolver = new LauncherIconResolver(this.context);
-        this.iconPackRepository = new IconPackRepository(this.context);
+        this.iconPackRepository = IconPackRepository.getInstance(this.context);
         this.hiddenAppsStore = new LauncherHiddenAppsStore(this.context);
         this.iconStore = new LauncherIconStore(
             this.context.getResources(),
@@ -226,6 +226,8 @@ public final class LauncherAppDataProvider {
         letterBuckets.clear();
         cachedLastUpdateByPackage.clear();
         pendingRefreshCallbacks.clear();
+        // A caller waiting on the abandoned load scans for itself now.
+        notifyAll();
     }
 
     /**
@@ -238,11 +240,29 @@ public final class LauncherAppDataProvider {
      * therefore kept drawing the previous pack until some unrelated gesture rebound its rows.
      */
     public void invalidateIconArtwork() {
+        invalidateIconArtwork(false);
+    }
+
+    /**
+     * {@link #invalidateIconArtwork()}, optionally keeping the parsed packs (a pack's name map,
+     * no pixels; at most two are held, and a pack whose version moved is parsed again when it is
+     * next asked for). The Icons mode parses the chosen pack off the main thread first
+     * ({@link #warmIconPack}) and then switches with this, so the dock's redraw on the main thread
+     * finds the parse waiting.
+     */
+    public void invalidateIconArtwork(boolean keepParsedPacks) {
         iconStore.invalidateAll();
-        iconResolver.clearCache();
-        iconPackRepository.clearCache();
+        // The resolver and this provider share the process-wide repository, so this one call
+        // drops the parsed packs and the pack resources, and keeping them means not calling it.
+        if (!keepParsedPacks)
+            iconResolver.clearCache();
         invalidate();
         mainHandler.post(this::notifyIconArtworkInvalidated);
+    }
+
+    /** Parses {@code packageName} so the next icon from it is quick; slow, so off the main thread. */
+    public void warmIconPack(@Nullable String packageName) {
+        iconResolver.warmPack(packageName);
     }
 
     /**
@@ -404,6 +424,7 @@ public final class LauncherAppDataProvider {
         loaded = true;
         loading = false;
         refreshing = false;
+        notifyAll();
     }
 
     /**
@@ -436,9 +457,32 @@ public final class LauncherAppDataProvider {
         return ensureLoadedBlocking();
     }
 
+    /**
+     * How long {@link #ensureLoadedBlocking} waits on a warm-up already scanning before it scans
+     * for itself, as it always did. Only a load that has wedged gets near it.
+     */
+    private static final long IN_FLIGHT_LOAD_WAIT_MS = 10_000L;
+
     @NonNull
     private List<LauncherAppEntry> ensureLoadedBlocking() {
         synchronized (this) {
+            if (loaded) {
+                return cachedApps;
+            }
+            // A warm-up is already scanning the package manager: wait for its snapshot rather
+            // than starting a second full scan beside it. applySnapshotLocked and invalidate
+            // both notify, so the wait ends as soon as the load lands or is abandoned.
+            long deadline = android.os.SystemClock.uptimeMillis() + IN_FLIGHT_LOAD_WAIT_MS;
+            while (loading && !loaded) {
+                long remaining = deadline - android.os.SystemClock.uptimeMillis();
+                if (remaining <= 0) break;
+                try {
+                    wait(remaining);
+                } catch (InterruptedException interrupted) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
             if (loaded) {
                 return cachedApps;
             }

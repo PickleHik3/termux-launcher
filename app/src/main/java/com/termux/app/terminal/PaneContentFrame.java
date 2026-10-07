@@ -7,7 +7,6 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -71,8 +70,20 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     /** The clip a square frame, which does not clip to its outline, takes the inset through. */
     private final Rect mTravelClipRect = new Rect();
 
-    private PaneRetroStyle mRetroStyle = PaneRetroStyle.NONE;
-    private final PaneRetroEffect mRetroEffect = new PaneRetroEffect();
+    /**
+     * The retro look this card is drawn through, cut to the same card the outline draws — the
+     * travel's shortened bottom included — and bent like the tube it stands for. It re-reads all of
+     * that before each frame, so a divider drag, a re-dress or a wall page needs no call here.
+     */
+    private final RetroEffectBinder mRetroEffect = new RetroEffectBinder(this, (view, rect) -> {
+        int height = Math.max(0, view.getHeight() - mTravelBottomInsetPx);
+        rect[0] = 0f;
+        rect[1] = 0f;
+        rect[2] = view.getWidth();
+        rect[3] = height;
+        return mClipToShape
+            ? PaneShape.radiusForBounds(mRequestedRadiusPx, view.getWidth(), height) : 0f;
+    }, PaneRetroEffect.CRT_BEND, PaneRetroEffect.PANE_VIGNETTE);
 
     /** Re-capped on every ask: a divider drag resizes the frame without re-dressing the pane. */
     private final ViewOutlineProvider mShapeOutline = new ViewOutlineProvider() {
@@ -158,7 +169,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         setClipToOutline(clipToShape);
         invalidateOutline();
         mBandClipPathDirty = true;
-        if (mRetroStyle != PaneRetroStyle.NONE) applyRetroEffect();
+        mRetroEffect.refresh();
         requestLayout();
     }
 
@@ -199,6 +210,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             setClipBounds(null);
         }
         fitForegroundToTravelInset();
+        mRetroEffect.refresh();
         invalidate();
     }
 
@@ -226,25 +238,13 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      * child, not here.
      */
     public void setRetroStyle(@Nullable PaneRetroStyle style) {
-        mRetroStyle = style == null ? PaneRetroStyle.NONE : style;
-        applyRetroEffect();
+        mRetroEffect.setStyle(style);
     }
 
+    /** The look the card is drawn through: NONE wherever no effect can be drawn at all. */
     @NonNull
     public PaneRetroStyle retroStyle() {
-        return mRetroStyle;
-    }
-
-    private void applyRetroEffect() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
-        if (mRetroStyle == PaneRetroStyle.NONE || !PaneRetroEffect.available()) {
-            setRenderEffect(null);
-            return;
-        }
-        float density = getResources().getDisplayMetrics().density;
-        float radius = mClipToShape
-            ? PaneShape.radiusForBounds(mRequestedRadiusPx, getWidth(), getHeight()) : 0f;
-        setRenderEffect(mRetroEffect.effectFor(mRetroStyle, getWidth(), getHeight(), density, radius));
+        return mRetroEffect.style();
     }
 
     @Override
@@ -258,7 +258,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         mBandClipPathDirty = true;
-        if (mRetroStyle != PaneRetroStyle.NONE) applyRetroEffect();
+        mRetroEffect.refresh();
         if (mTravelBottomInsetPx > 0 && !mClipToShape) {
             mTravelClipRect.set(0, 0, w, Math.max(0, h - mTravelBottomInsetPx));
             setClipBounds(mTravelClipRect);

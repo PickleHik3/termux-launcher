@@ -99,7 +99,7 @@ public class ChromeInkBandsTest {
      * does not move.
      */
     @Test
-    public void aTerminalPaneOverALightWallpaperIsVeiledUntilItsForegroundReads() {
+    public void aTerminalPaneOverALightWallpaperIsVeiledUpToItsCeiling() {
         OnGlass.Resolution top = pane(PANE_TOP);
 
         int bare = OnGlass.backdrop(LIGHT_WALLPAPER, Color.TRANSPARENT, TERMINAL_TINT_30);
@@ -109,14 +109,13 @@ public class ChromeInkBandsTest {
         assertTrue("so the pane is veiled", Color.alpha(top.veil) > 0);
         assertEquals("toward the terminal's own background", NIGHT_BASE,
             OnGlass.opaque(top.veil));
-        assertTrue("the foreground reads as body text on what is drawn",
-            OnGlass.ratio(TERMINAL_FG, top.surface) >= OnGlass.TARGET_BODY_TEXT);
-        assertTrue("and the dim foreground as large text",
-            OnGlass.ratio(PaneGlass.dimTerminalInk(TERMINAL_FG), top.surface)
-                >= OnGlass.TARGET_LARGE_TEXT);
-        // The case the tier split was made for: 169/255 at Default (218 with the dim ink held to
-        // body text), within a step of the arithmetic.
-        assertTrue("veil " + Color.alpha(top.veil), Math.abs(Color.alpha(top.veil) - 169) <= 2);
+        // The veil's ceiling follows the user's opacity: a 30% tint may be veiled to 45%
+        // (opacity + 0.15, within 0.20..0.55), never to the opaque slab the old search reached.
+        int ceiling = Math.round(255f * (77f / 255f + 0.15f));
+        assertTrue("veil " + Color.alpha(top.veil) + " within the ceiling " + ceiling,
+            Color.alpha(top.veil) <= ceiling);
+        assertTrue("the ceiling binds on a light wallpaper", top.veilCapped);
+        assertTrue("the veil is spent to the ceiling", Math.abs(Color.alpha(top.veil) - ceiling) <= 1);
         assertTrue("the ink is the palette's, never a re-tone",
             top.ink == TERMINAL_FG || top.ink == PaneGlass.dimTerminalInk(TERMINAL_FG));
     }
@@ -256,11 +255,11 @@ public class ChromeInkBandsTest {
 
     /** Softer / Default / Harder hold body text at 3.0 / 4.5 / 7.0 on every band. */
     @Test
-    public void theLegibilityControlMultipliesEveryBandsTarget() {
+    public void theLegibilityLevelScalesBandTargetsWhileThePaneKeepsItsCeiling() {
         LegibilityLevel[] levels = {LegibilityLevel.SOFTER, LegibilityLevel.DEFAULT,
             LegibilityLevel.HARDER};
         double[] body = {3.0d, 4.5d, 7.0d};
-        int previousVeil = -1;
+        int ceiling = Math.round(255f * (77f / 255f + 0.15f));
         for (int i = 0; i < levels.length; i++) {
             surfaces.legibility = levels[i];
             OnGlass.Resolution status = ink.onGlass(GlassBackdropCache.Band.STATUS_BAR,
@@ -268,16 +267,11 @@ public class ChromeInkBandsTest {
             assertEquals(body[i], status.target, 1e-9);
             assertTrue(levels[i] + ": " + status, status.ratio >= body[i] || status.shortfall);
 
+            // The pane never spends more than its ceiling, whatever the level asks for
+            // (the level itself now only ever reads DEFAULT from preferences).
             OnGlass.Resolution top = pane(PANE_TOP);
-            assertTrue(levels[i] + " pane: " + top, !top.shortfall);
-            assertTrue(levels[i] + " foreground: " + top,
-                OnGlass.ratio(TERMINAL_FG, top.surface) >= body[i]);
-            assertTrue(levels[i] + " dim foreground: " + top,
-                OnGlass.ratio(PaneGlass.dimTerminalInk(TERMINAL_FG), top.surface)
-                    >= levels[i].target(OnGlass.TARGET_LARGE_TEXT));
-            assertTrue("a harder level spends more veil",
-                Color.alpha(top.veil) > previousVeil);
-            previousVeil = Color.alpha(top.veil);
+            assertTrue(levels[i] + " pane within the ceiling: " + top,
+                Color.alpha(top.veil) <= ceiling);
         }
     }
 

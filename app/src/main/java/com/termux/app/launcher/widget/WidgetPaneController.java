@@ -19,6 +19,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
+import com.termux.app.launcher.widget.builtin.BuiltinWidgetConfigSheet;
+import com.termux.app.launcher.widget.builtin.BuiltinWidgetHost;
+import com.termux.app.launcher.widget.builtin.BuiltinWidgetKind;
+import com.termux.app.launcher.widget.builtin.BuiltinWidgetServices;
+import com.termux.app.launcher.widget.builtin.BuiltinWidgetSpan;
+import com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle;
+
 /** Production coordinator from the real picker through placement into the A-1 transaction. */
 public final class WidgetPaneController implements LauncherWidgetHostController.Listener {
     public interface Host {
@@ -44,12 +51,21 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
          * from one place rather than from each way in and out.
          */
         default void onWidgetEditSessionChanged(boolean editing) { }
+        /** How the launcher's own widgets are drawn, and on what. */
+        @NonNull default BuiltinWidgetStyle.Direction builtinWidgetDirection() {
+            return BuiltinWidgetStyle.Direction.TONAL;
+        }
+        /** True while the widgets page is glass, so built-in cards go translucent with a rim. */
+        default boolean isWidgetSurfaceGlass() { return false; }
+        /** The activity-side services the built-in widgets need; null keeps them inert. */
+        @Nullable default BuiltinWidgetServices.Host builtinWidgetHost() { return null; }
     }
 
     private final WidgetPaneView pane;
     private final LauncherWidgetHostController widgets;
     private final WidgetProviderCatalogLoader catalog;
     private final Host host;
+    @NonNull private final BuiltinWidgetHost builtins;
     private String liveOrigin;
     private boolean awaitingExternal;
     private int currentPage;
@@ -66,6 +82,19 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                          @NonNull LauncherWidgetHostController widgets,
                          @NonNull Host host, @NonNull WidgetProviderCatalogLoader catalog) {
         this.pane = pane; this.widgets = widgets; this.host = host; this.catalog = catalog;
+        BuiltinWidgetServices.Host builtinHost = host.builtinWidgetHost();
+        builtins = new BuiltinWidgetHost(pane.getContext(),
+            new BuiltinWidgetServices(pane.getContext(),
+                builtinHost != null ? builtinHost : new InertBuiltinHost()),
+            new BuiltinWidgetHost.StyleSource() {
+                @Override @NonNull public BuiltinWidgetStyle.Direction direction() {
+                    return host.builtinWidgetDirection();
+                }
+                @Override public boolean glass() { return host.isWidgetSurfaceGlass(); }
+            });
+        pane.grid().setBuiltinFactory(builtins);
+        catalog.setBuiltinSource(builtins);
+        pane.grid().addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> onWallLayout());
         pane.grid().bind(widgets); pane.picker().setReducedMotion(host.reducedMotion());
         pane.setReducedMotion(host.reducedMotion());
         pane.picker().adapter().setPreviewLoader(catalog);
@@ -112,11 +141,86 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         render();
     }
 
+    /** The grid the user asked for on this orientation, before the wall's caps; 0 until asked. */
+    private int wantedRows, wantedColumns;
+    /**
+     * The largest the wall has measured in each orientation. The caps come from this, not from
+     * the live size: the keyboard or a sheet shrinking the wall for a while must not shrink the
+     * grid and reflow the widgets, since a reflow is kept. A cap can only grow until the screen
+     * turns, and the two orientations keep their own.
+     */
+    private int portraitWallWidth, portraitWallHeight, landscapeWallWidth, landscapeWallHeight;
+    @Nullable private WidgetGridCaps appliedCaps;
+
+    /**
+     * What this wall can hold, from the largest it has been in this orientation; unbounded before
+     * its first layout. The grid is the wall as far as cells go, so this is the answer for the
+     * wheels and the apply.
+     */
+    @NonNull public WidgetGridCaps gridCaps() {
+        boolean landscape = isLandscape();
+        float density = pane.getResources().getDisplayMetrics().density;
+        return WidgetGridCaps.forWallPx(landscape ? landscapeWallWidth : portraitWallWidth,
+            landscape ? landscapeWallHeight : portraitWallHeight, density);
+    }
+
+    /**
+     * Puts the user's grid on the wall, held to what the wall can hold. The stored count is not
+     * touched: it is remembered here, and the grid is worked out again when the wall turns out
+     * larger, so a wider orientation or a smaller font later gets the full count back.
+     */
+    public void applyWantedGrid(int rows, int columns) {
+        wantedRows = rows;
+        wantedColumns = columns;
+        rememberWall();
+        WidgetGridCaps caps = gridCaps();
+        appliedCaps = caps;
+        widgets.applyGrid(caps.clampRows(rows), caps.clampColumns(columns));
+    }
+
+    private boolean isLandscape() {
+        return pane.getResources().getConfiguration().orientation
+            == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+    }
+
+    /**
+     * Folds the grid's measured size into its orientation's record. False when there is nothing
+     * to learn: unmeasured, or still the other orientation's size right after a turn.
+     */
+    private boolean rememberWall() {
+        WidgetGridView grid = pane.grid();
+        int width = grid.getWidth(), height = grid.getHeight();
+        if (width <= 0 || height <= 0) return false;
+        boolean landscape = isLandscape();
+        if (landscape != (width > height)) return false;
+        if (landscape) {
+            landscapeWallWidth = Math.max(landscapeWallWidth, width);
+            landscapeWallHeight = Math.max(landscapeWallHeight, height);
+        } else {
+            portraitWallWidth = Math.max(portraitWallWidth, width);
+            portraitWallHeight = Math.max(portraitWallHeight, height);
+        }
+        return true;
+    }
+
+    private void onWallLayout() {
+        if (wantedRows <= 0 || !rememberWall()) return;
+        if (gridCaps().equals(appliedCaps)) return;
+        // Never from inside the layout pass that reported the change.
+        pane.post(() -> { if (wantedRows > 0) applyWantedGrid(wantedRows, wantedColumns); });
+    }
+
     public void onStart() { render(); }
     /** Draw the pane again from the repository — the layout under it changed without a grid change. */
     public void redraw() { render(); }
+    /** The theme, the Look or the widget style setting changed: the built-ins redress. */
+    public void onLookChanged() { builtins.onStyleChanged(); }
+    /** The activity answered a calendar permission request. */
+    public void onCalendarPermissionChanged() { builtins.services().onCalendarPermissionChanged(); }
+    /** The built-in widgets' services, for the activity to reach a widget's sources. */
+    @NonNull public BuiltinWidgetHost builtins() { return builtins; }
     public void onStop() {
-        abortCarry();
+        abortCarry(true);
         catalog.cancel(); pane.picker().closeImmediate(); dismissPaneMenu();
     }
     public void onPackageOrProfileChanged() {
@@ -149,7 +253,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         return pane.onBackPressed();
     }
     public void destroy() {
-        abortCarry();
+        builtins.destroy();
+        abortCarry(false);
         pane.removeCallbacks(edgeFlip);
         widgets.setListener(null); catalog.cancel(); dismissPaneMenu();
     }
@@ -248,7 +353,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     public void openPicker() {
-        if (widgets.capability() != LauncherWidgetHostController.Capability.AVAILABLE) return;
+        // Built-in widgets need nothing from the platform, so the picker opens even where app
+        // widgets are unsupported; the catalogue simply lists the launcher's own.
         pane.picker().setReducedMotion(host.reducedMotion());
         pane.picker().open(); pane.picker().showLoading();
         if (pane.grid().getWidth() == 0 || pane.grid().getHeight() == 0) {
@@ -268,17 +374,21 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 @Override public void onCatalog(long generation,
                                                 @NonNull List<WidgetAppGroup> groups) {
                     if (!pane.picker().isOpen()) return;
-                    pane.picker().adapter().setFitPredicate(WidgetPaneController.this::canFit);
+                    pane.picker().adapter().setFitPredicate(WidgetPaneController.this::fitsGrid);
                     pane.picker().showCatalog(groups);
                 }
             });
     }
 
-    private boolean canFit(@NonNull WidgetProviderItem item) {
+    /**
+     * Whether the widget fits the grid at all. A page with no room left is not this: the widget can
+     * still be held and carried to another page, so its card stays live. Only a span larger than
+     * the whole grid shuts the card, since no page anywhere could take it.
+     */
+    private boolean fitsGrid(@NonNull WidgetProviderItem item) {
         if (!item.fits || item.columnSpan <= 0 || item.rowSpan <= 0) return false;
-        return WidgetGridPlacementPolicy.findPlacement(widgets.repository().gridDefinition(),
-            widgets.repository().recordsOnPage(currentPage), item.columnSpan, item.rowSpan).outcome
-            == WidgetGridPlacementPolicy.Outcome.PLACED;
+        WidgetGridDefinition grid = widgets.repository().gridDefinition();
+        return item.columnSpan <= grid.columns && item.rowSpan <= grid.rows;
     }
 
     private void selectProvider(@NonNull WidgetProviderItem item) {
@@ -288,8 +398,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         WidgetGridPlacementPolicy.Result placement = WidgetGridPlacementPolicy.findPlacement(
             repository.gridDefinition(), repository.recordsOnPage(currentPage),
             item.columnSpan, item.rowSpan);
+        if (placement.outcome == WidgetGridPlacementPolicy.Outcome.NO_CONTIGUOUS_SPACE) {
+            // It fits the grid, just not this page: the sheet stays up and says how to carry it.
+            pane.picker().showNoRoomOnPage();
+            return;
+        }
         if (placement.outcome != WidgetGridPlacementPolicy.Outcome.PLACED) {
-            pane.picker().adapter().setFitPredicate(this::canFit);
+            pane.picker().adapter().setFitPredicate(this::fitsGrid);
             pane.picker().showNoSpace(item.columnSpan, item.rowSpan, repository.gridDefinition());
             return;
         }
@@ -300,8 +415,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         } else if (result == LauncherWidgetHostController.AddResult.READY) {
             pane.picker().close(); render(); liveOrigin = null;
         } else if (result == LauncherWidgetHostController.AddResult.NO_SPACE) {
-            pane.picker().adapter().setFitPredicate(this::canFit);
-            pane.picker().showNoSpace(item.columnSpan, item.rowSpan, repository.gridDefinition());
+            // The span fitted the grid a moment ago, so it is the page that filled up.
+            pane.picker().adapter().setFitPredicate(this::fitsGrid);
+            pane.picker().showNoRoomOnPage();
         } else {
             pane.showNotice(messageFor(result)); liveOrigin = null;
         }
@@ -316,6 +432,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private LauncherWidgetHostController.AddResult beginAddAt(@NonNull WidgetProviderItem item,
                                                               @NonNull WidgetCellRect rect,
                                                               int page, long revision) {
+        if (item.info == null) {
+            // One of the launcher's own: a single durable write, no consent, no configure.
+            if (item.builtinKind == null) return LauncherWidgetHostController.AddResult.FAILED;
+            return widgets.addBuiltin(item.builtinKind, rect, page, revision, null);
+        }
         Rect bounds = pane.grid().metrics().boundsFor(rect);
         // The first options describe the same area the grid will report once the cell is laid
         // out: inside the cell's gutter and the framework's own widget padding. Sizing the bind
@@ -348,8 +469,9 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     @Override public void onWidgetRepositoryChanged(@NonNull LauncherWidgetHostController.AddResult result) {
-        // A widget arrived or left: a page with nothing on it goes with it.
-        widgets.repository().trimEmptyPages();
+        // A widget arrived or left: a page with nothing on it goes with it. A carry that has made
+        // a page for the widget in the air keeps it until the carry ends, which trims it then.
+        if (carry == null || carry.turn.createdPage < 0) widgets.repository().trimEmptyPages();
         clampCurrentPage();
         render();
         if (result == LauncherWidgetHostController.AddResult.REMOVE_FAILED) {
@@ -377,31 +499,57 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private static final class EditState {
         final int appWidgetId;
         final int minColumnSpan, minRowSpan;
+        /** The provider's own ceiling on a span, or 0 where it names none. */
+        final int maxColumnSpan, maxRowSpan;
         final boolean horizontalResizable, verticalResizable;
         float dragStartRawX, dragStartRawY;
         Rect dragStartBounds;
         WidgetEditPolicy.Candidate moveCandidate;
         WidgetEditPolicy.Candidate resizeCandidate;
-        /** The page the drag is over now: the widget's own until the finger turns it. */
-        int dragPage;
-        /** Which edge band the finger is resting in: -1 the leading one, +1 the trailing one. */
-        int edgeDirection;
+        /** The page the move is over, and the turns at the pane's edge that brought it there. */
+        final PageTurn turn = new PageTurn();
         /** True once the widget has been taken out of the grid to cross pages. */
         boolean lifted;
-        /** The page this drag made past the end of the run, or -1: one drag makes at most one. */
-        int createdPage = -1;
         float lastRawX, lastRawY;
         EditState(int appWidgetId, int minColumnSpan, int minRowSpan,
+                  int maxColumnSpan, int maxRowSpan,
                   boolean horizontalResizable, boolean verticalResizable) {
             this.appWidgetId = appWidgetId;
             this.minColumnSpan = minColumnSpan;
             this.minRowSpan = minRowSpan;
+            this.maxColumnSpan = maxColumnSpan;
+            this.maxRowSpan = maxRowSpan;
             this.horizontalResizable = horizontalResizable;
             this.verticalResizable = verticalResizable;
         }
     }
 
     private EditState edit;
+
+    /**
+     * A drag that can turn the page by resting in the pane's edge band: a widget being moved in
+     * edit mode, or one carried out of the picker. Both turn pages the same way, so both keep this.
+     */
+    private static final class PageTurn {
+        /** The page the drag is over now: where it started until the finger turns it. */
+        int page;
+        /** Which edge band the finger is resting in: -1 the leading one, +1 the trailing one. */
+        int edgeDirection;
+        /** The page this drag made past the end of the run, or -1: one drag makes at most one. */
+        int createdPage = -1;
+        /**
+         * Whether the edge bands count yet. A drag that starts inside a band (a picker card held
+         * near the pane's edge, a widget sitting at the grid's edge) arms them only once the
+         * finger has been outside a band or has travelled a band's width from where the hold
+         * began; otherwise the page turns 350 ms after the hold with the finger never having moved.
+         */
+        boolean armed;
+        float startRawX;
+
+        void start(int startPage, float rawX) {
+            page = startPage; edgeDirection = 0; createdPage = -1; armed = false; startRawX = rawX;
+        }
+    }
 
     /**
      * Neighbours currently shown pushed aside, appWidgetId to the cell they preview. One drag runs
@@ -498,8 +646,22 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         AppWidgetProviderInfo info = widgets.providerInfo(appWidgetId);
         WidgetGridMetrics metrics = pane.grid().metrics();
         int minColumns = 1, minRows = 1;
+        int maxColumns = 0, maxRows = 0;
         boolean horizontal = false, vertical = false;
-        if (info != null && record.state == LauncherWidgetRecord.State.ACTIVE) {
+        if (record.isBuiltin()) {
+            // Designed at five sizes and drawn at the largest that fits: any size the grid
+            // allows down to the smallest design, measured in pixels like an app widget's
+            // minimum, so a dense grid cannot squeeze one into a cell its text will not fit.
+            horizontal = true; vertical = true;
+            float density = pane.getResources().getDisplayMetrics().density;
+            WidgetGridMetrics.Span minSpan = metrics.spanForPixels(
+                Math.round(BuiltinWidgetSpan.ONE_BY_ONE.widthDp * density),
+                Math.round(BuiltinWidgetSpan.ONE_BY_ONE.heightDp * density));
+            minColumns = minSpan.columns > 0
+                ? Math.min(minSpan.columns, record.cell.columnSpan()) : record.cell.columnSpan();
+            minRows = minSpan.rows > 0
+                ? Math.min(minSpan.rows, record.cell.rowSpan()) : record.cell.rowSpan();
+        } else if (info != null && record.state == LauncherWidgetRecord.State.ACTIVE) {
             horizontal = (info.resizeMode
                 & AppWidgetProviderInfo.RESIZE_HORIZONTAL) != 0;
             vertical = (info.resizeMode
@@ -510,12 +672,24 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
                 ? Math.min(minSpan.columns, record.cell.columnSpan()) : record.cell.columnSpan();
             minRows = minSpan.rows > 0
                 ? Math.min(minSpan.rows, record.cell.rowSpan()) : record.cell.rowSpan();
+            // Android asks hosts not to grow a widget past the maximum it names; the span is read
+            // against the provider's content size like the minimum is, not the cell's.
+            int padWidth = cell == null || cell.getWidth() <= 0 ? 0
+                : cell.getWidth() - cell.providerContentWidth();
+            int padHeight = cell == null || cell.getHeight() <= 0 ? 0
+                : cell.getHeight() - cell.providerContentHeight();
+            WidgetGridMetrics.Span maxSpan = metrics.largestSpanWithin(
+                info.maxResizeWidth > 0 ? info.maxResizeWidth + padWidth : 0,
+                info.maxResizeHeight > 0 ? info.maxResizeHeight + padHeight : 0);
+            maxColumns = maxSpan.columns;
+            maxRows = maxSpan.rows;
         }
-        edit = new EditState(appWidgetId, minColumns, minRows, horizontal, vertical);
+        edit = new EditState(appWidgetId, minColumns, minRows, maxColumns, maxRows,
+            horizontal, vertical);
         WidgetEditOverlayView overlay = pane.widgetEditOverlay();
         overlay.setListener(overlayListener);
         overlay.show(paneBounds(record.cell), horizontal, vertical, editableOutlines(appWidgetId),
-            widgets.canReconfigure(appWidgetId));
+            record.isBuiltin() ? builtins.hasSettings(record) : widgets.canReconfigure(appWidgetId));
         syncEditSession();
         return true;
     }
@@ -527,6 +701,21 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * would be wrong if the provider resized itself.
      */
     private void openWidgetSettings(int appWidgetId) {
+        LauncherWidgetRecord builtin = widgets.repository().get(appWidgetId);
+        if (builtin != null && builtin.isBuiltin()) {
+            // The launcher's own sheet, over the page: nothing leaves, the session simply ends.
+            exitEditMode();
+            BuiltinWidgetKind kind = BuiltinWidgetKind.fromId(builtin.builtinKind);
+            CharSequence title = pane.getResources().getString(
+                R.string.builtin_widget_settings_title,
+                kind == null ? builtin.builtinKind : pane.getResources().getString(kind.label));
+            builtins.services().host().onSystemImeRequested();
+            BuiltinWidgetConfigSheet.show(pane.getContext(), title, builtins.configFields(builtin),
+                builtin.sizeOptions(), config -> {
+                    if (widgets.updateBuiltinConfig(appWidgetId, config)) render();
+                }, () -> builtins.services().host().onSystemImeReleased());
+            return;
+        }
         exitEditMode();
         host.captureWidgetSurfaceOrigin();
         LauncherWidgetHostController.AddResult result = widgets.reconfigureWidget(appWidgetId);
@@ -618,9 +807,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         edit.dragStartRawY = rawY;
         edit.dragStartBounds = pane.grid().metrics().boundsFor(record.cell);
         edit.moveCandidate = null;
-        edit.dragPage = record.page;
-        edit.edgeDirection = 0;
-        edit.createdPage = -1;
+        edit.turn.start(record.page, rawX);
         edit.lastRawX = rawX;
         edit.lastRawY = rawY;
         pane.removeCallbacks(edgeFlip);
@@ -657,13 +844,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             cell.setTranslationY(translationY);
             cell.setTranslationZ(dp(8));
         }
-        watchPageEdge(rawX);
+        watchPageEdge(edit.turn, rawX);
         updateDragCandidate(record);
     }
 
     /**
      * Where the widget would land on the page it is over, and what that page would have to shuffle
-     * to take it. The page is {@link EditState#dragPage}, which is the widget's own until a turn
+     * to take it. The page is {@link PageTurn#page}, which is the widget's own until a turn
      * at the edge moves it on, so the same ghost and the same neighbour preview serve both.
      */
     private void updateDragCandidate(@NonNull LauncherWidgetRecord record) {
@@ -673,12 +860,12 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             Math.round(edit.lastRawY - edit.dragStartRawY));
         WidgetGridMetrics metrics = pane.grid().metrics();
         edit.moveCandidate = WidgetEditPolicy.snapMove(metrics,
-            widgets.repository().recordsOnPage(edit.dragPage), edit.appWidgetId, record.cell,
+            widgets.repository().recordsOnPage(edit.turn.page), edit.appWidgetId, record.cell,
             dragged);
         WidgetEditOverlayView overlay = pane.widgetEditOverlay();
         if (edit.moveCandidate.valid) {
             overlay.setGhostBounds(paneBounds(edit.moveCandidate.rect), true);
-        } else if (edit.dragPage != record.page) {
+        } else if (edit.turn.page != record.page) {
             // Nowhere on this page to put it: the ghost stays under the finger and says so in red.
             WidgetEditPolicy.Candidate nearest = WidgetEditPolicy.snapMove(metrics,
                 Collections.emptyList(), edit.appWidgetId, record.cell, dragged);
@@ -696,7 +883,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * page going back. Past the last page there is one more turn: a page is made for the widget,
      * and it is the drop that keeps it.
      */
-    private void watchPageEdge(float rawX) {
+    private void watchPageEdge(@NonNull PageTurn turn, float rawX) {
         pane.getLocationOnScreen(paneLocation);
         float x = rawX - paneLocation[0];
         float band = dp(EDGE_BAND_DP);
@@ -705,9 +892,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             if (x <= band) direction = -1;
             else if (x >= pane.getWidth() - band) direction = 1;
         }
-        if (direction != 0 && !canTurnTo(edit.dragPage + direction, direction)) direction = 0;
-        if (direction == edit.edgeDirection) return;
-        edit.edgeDirection = direction;
+        if (!turn.armed) {
+            if (direction != 0 && Math.abs(rawX - turn.startRawX) < band) return;  // Still where the hold began.
+            turn.armed = true;
+        }
+        if (direction != 0 && !canTurnTo(turn, turn.page + direction, direction)) direction = 0;
+        if (direction == turn.edgeDirection) return;
+        turn.edgeDirection = direction;
         pane.removeCallbacks(edgeFlip);
         if (direction != 0) pane.postDelayed(edgeFlip, EDGE_FLIP_DELAY_MS);
     }
@@ -716,42 +907,54 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * Whether the drag can turn onto that page: one that is there, or the one page past the end
      * this drag is allowed to make. Never past the first page, and never a second new one.
      */
-    private boolean canTurnTo(int target, int direction) {
+    private boolean canTurnTo(@NonNull PageTurn turn, int target, int direction) {
         if (target < 0) return false;
         int pages = widgets.repository().pageCount();
         if (target < pages) return true;
-        return direction > 0 && target == pages && edit.createdPage < 0;
+        return direction > 0 && target == pages && turn.createdPage < 0;
     }
 
     /** The pause elapsed with the widget still in the band: the neighbouring page comes in. */
     private void flipDragPage() {
-        if (edit == null || edit.edgeDirection == 0 || edit.dragStartBounds == null) return;
-        int direction = edit.edgeDirection;
-        int target = edit.dragPage + direction;
-        if (!canTurnTo(target, direction)) {
-            edit.edgeDirection = 0;
-            return;
-        }
+        if (carry != null) { flipCarryPage(carry); return; }
+        if (edit == null || edit.dragStartBounds == null || !mayTurn(edit.turn)) return;
         LauncherWidgetRecord record = widgets.repository().get(edit.appWidgetId);
         if (record == null) return;
-        if (!liftDraggedWidget(record)) { edit.edgeDirection = 0; return; }
-        // Past the last page: the page the widget is being carried onto is made here. It is an
-        // ordinary empty page, so the trim at the end of the drag takes it away again unless the
-        // widget is dropped on it.
-        if (target >= widgets.repository().pageCount()) {
-            int appended = widgets.repository().addPage();
-            if (appended < 0) { edit.edgeDirection = 0; return; }
-            edit.createdPage = appended;
-            target = appended;
-        }
-        clearDisplacementPreview(false);
-        edit.dragPage = target;
-        currentPage = target;
-        render();
-        pane.slideInFrom(direction);
+        if (!liftDraggedWidget(record)) { edit.turn.edgeDirection = 0; return; }
+        if (!turnPage(edit.turn)) return;
         updateDragCandidate(record);
         // Still in the band: the next page follows after the same pause.
         pane.postDelayed(edgeFlip, EDGE_FLIP_DELAY_MS);
+    }
+
+    /** Whether the band the finger rests in still leads somewhere; it stops watching if not. */
+    private boolean mayTurn(@NonNull PageTurn turn) {
+        int direction = turn.edgeDirection;
+        if (direction != 0 && canTurnTo(turn, turn.page + direction, direction)) return true;
+        turn.edgeDirection = 0;
+        return false;
+    }
+
+    /**
+     * Turns the pane one page in the direction of the band, sliding the page in as a swipe does.
+     * Past the last page the page being turned onto is made here. It is an ordinary empty page,
+     * so the trim at the end of the drag takes it away again unless the widget is dropped on it.
+     */
+    private boolean turnPage(@NonNull PageTurn turn) {
+        int direction = turn.edgeDirection;
+        int target = turn.page + direction;
+        if (target >= widgets.repository().pageCount()) {
+            int appended = widgets.repository().addPage();
+            if (appended < 0) { turn.edgeDirection = 0; return false; }
+            turn.createdPage = appended;
+            target = appended;
+        }
+        clearDisplacementPreview(false);
+        turn.page = target;
+        currentPage = target;
+        render();
+        pane.slideInFrom(direction);
+        return true;
     }
 
     /**
@@ -844,14 +1047,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
 
     private void endMoveDrag(boolean canceled) {
         pane.removeCallbacks(edgeFlip);
-        edit.edgeDirection = 0;
+        edit.turn.edgeDirection = 0;
         int appWidgetId = edit.appWidgetId;
         boolean lifted = edit.lifted;
         SafeLauncherAppWidgetHostView hostView = safeHostViewFor(appWidgetId);
         if (hostView != null) hostView.endDeferringUpdates();
         LauncherWidgetRecord record = widgets.repository().get(appWidgetId);
         WidgetEditPolicy.Candidate candidate = edit.moveCandidate;
-        int target = edit.dragPage;
+        int target = edit.turn.page;
         edit.moveCandidate = null;
         edit.dragStartBounds = null;
         boolean crossed = record != null && target != record.page;
@@ -876,8 +1079,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         }
         int backwards = 0;
         if (crossed && !committed) backwards = record.page > target ? 1 : -1;
-        boolean created = edit.createdPage >= 0;
-        edit.createdPage = -1;
+        boolean created = edit.turn.createdPage >= 0;
+        edit.turn.createdPage = -1;
         // The drag is over: a page it made and did not land on goes again, and so does a page the
         // widget it carried away was the last thing on.
         if (committed || created) widgets.repository().trimEmptyPages();
@@ -888,7 +1091,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             if (settled != null) currentPage = settled.page;
         }
         clampCurrentPage();
-        edit.dragPage = currentPage;
+        edit.turn.page = currentPage;
         if (committed || crossed || created) {
             render();
             if (backwards != 0) pane.slideInFrom(backwards);
@@ -937,16 +1140,22 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     /** A widget on its way from a picker card to the cell the finger is choosing for it. */
     private static final class CarryState {
         @NonNull final WidgetProviderItem item;
-        /** The page it was picked for: the one that was on screen when the card was held. */
-        final int page;
+        /**
+         * The page under the finger: the one on screen when the card was held, until a rest in
+         * the pane's edge band turns it, making one past the last page if it has to.
+         */
+        final PageTurn turn = new PageTurn();
         @NonNull final WidgetCellRect span;
         /** The picture's size in grid pixels — the cell the widget will occupy, not the card. */
         final int width, height;
         @Nullable WidgetEditPolicy.Candidate candidate;
+        /** Where the finger last was, so a page turn can measure the new page under it. */
+        float lastRawX, lastRawY;
         CarryState(@NonNull WidgetProviderItem item, int page, @NonNull WidgetCellRect span,
-                   int width, int height) {
-            this.item = item; this.page = page; this.span = span;
+                   int width, int height, float rawX) {
+            this.item = item; this.span = span;
             this.width = width; this.height = height;
+            turn.start(page, rawX);
         }
     }
 
@@ -964,19 +1173,20 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
      * the card's own, drawn at the size the widget will be on the grid, so what the finger carries
      * and what the target under it outlines are the same shape.
      *
-     * <p>A card the grid has no room for is greyed out and does not answer a tap; it does not
-     * answer a hold either, so the one rule about space is stated in one place.
+     * <p>A page with no room is no reason to refuse: resting the widget in the pane's trailing
+     * edge band turns to the next page, and makes one past the last. Only a widget larger than the whole grid is refused, as its greyed card
+     * refuses the tap, so the one rule about space is stated in one place.
      */
     void beginCarry(@NonNull WidgetProviderItem item, @NonNull View card, float rawX, float rawY) {
         if (carry != null || edit != null || awaitingExternal) return;
-        if (!canFit(item)) return;
+        if (!fitsGrid(item)) return;
         WidgetCellRect span = new WidgetCellRect(0, 0, item.columnSpan, item.rowSpan);
         Rect cell = pane.grid().metrics().boundsFor(span);
         if (cell.width() <= 0 || cell.height() <= 0) return;
         // The slot is the card's picture of the widget; the card around it is a list row.
         View picture = card.findViewWithTag("slot");
         if (picture == null) picture = card;
-        CarryState state = new CarryState(item, currentPage, span, cell.width(), cell.height());
+        CarryState state = new CarryState(item, currentPage, span, cell.width(), cell.height(), rawX);
         if (!pane.widgetDragLayer().lift(picture, carriedBounds(state, rawX, rawY))) return;
         carry = state;
         pane.beginCarry(carryListener);
@@ -1002,8 +1212,19 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private void carryTo(float rawX, float rawY) {
         CarryState state = carry;
         if (state == null) return;
-        Rect picture = carriedBounds(state, rawX, rawY);
-        pane.widgetDragLayer().moveTo(picture);
+        state.lastRawX = rawX;
+        state.lastRawY = rawY;
+        pane.widgetDragLayer().moveTo(carriedBounds(state, rawX, rawY));
+        watchPageEdge(state.turn, rawX);
+        updateCarryCandidate(state);
+    }
+
+    /**
+     * The cell the carried widget would take on the page under it, and what that page would have
+     * to shuffle to give it; red where the page has no room, as an edit-mode move shows it.
+     */
+    private void updateCarryCandidate(@NonNull CarryState state) {
+        Rect picture = carriedBounds(state, state.lastRawX, state.lastRawY);
         if (!overGrid(picture.centerX(), picture.centerY())) {
             // Off the page: nothing is being offered a cell, so nothing is outlined or pushed.
             state.candidate = null;
@@ -1014,11 +1235,24 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         Rect dragged = new Rect(picture);
         dragged.offset(-pane.grid().getLeft(), -pane.grid().getTop());
         WidgetEditPolicy.Candidate candidate = WidgetEditPolicy.snapMove(pane.grid().metrics(),
-            widgets.repository().recordsOnPage(state.page), CARRIED_APP_WIDGET_ID, state.span,
+            widgets.repository().recordsOnPage(state.turn.page), CARRIED_APP_WIDGET_ID,
+            state.span,
             dragged);
         state.candidate = candidate;
         pane.widgetDragLayer().setGhost(paneBounds(candidate.rect), candidate.valid);
         previewDisplacement(candidate.valid ? candidate.displaced : Collections.emptyMap());
+    }
+
+    /**
+     * The carried widget rested in the edge band: the next page comes in under it, exactly as it
+     * does for a widget moved in edit mode. The picture is already in the drag layer, so nothing
+     * has to be lifted first.
+     */
+    private void flipCarryPage(@NonNull CarryState state) {
+        if (!mayTurn(state.turn) || !turnPage(state.turn)) return;
+        updateCarryCandidate(state);
+        // Still in the band: the next page follows after the same pause.
+        pane.postDelayed(edgeFlip, EDGE_FLIP_DELAY_MS);
     }
 
     /** Whether a point in pane coordinates is over the page's grid. */
@@ -1038,6 +1272,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         CarryState state = carry;
         carry = null;
         if (state == null) return;
+        pane.removeCallbacks(edgeFlip);
+        state.turn.edgeDirection = 0;
         Rect picture = carriedBounds(state, rawX, rawY);
         WidgetEditPolicy.Candidate candidate = state.candidate;
         boolean over = !canceled && overGrid(picture.centerX(), picture.centerY());
@@ -1049,7 +1285,24 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         clearDisplacementPreview(!placed);
         pane.widgetDragLayer().drop(placed ? paneBounds(candidate.rect) : null,
             !host.reducedMotion());
+        trimCarryPage(state, true);
         if (refused) pane.showNotice(pane.getContext().getString(R.string.widget_no_room_on_page));
+    }
+
+    /**
+     * The carry is over: a page it made and left empty goes again, as it does after an edit-mode
+     * move. A page the widget landed on, or is waiting on a bind for, is kept by the trim itself.
+     */
+    private void trimCarryPage(@NonNull CarryState state, boolean redraw) {
+        if (state.turn.createdPage < 0) return;
+        state.turn.createdPage = -1;
+        int before = currentPage;
+        widgets.repository().trimEmptyPages();
+        clampCurrentPage();
+        if (!redraw) return;
+        render();
+        // The page on screen was the one taken away: the one before it comes back in.
+        if (currentPage < before) pane.slideInFrom(-1);
     }
 
     /**
@@ -1059,6 +1312,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     private boolean placeCarried(@NonNull CarryState state,
                                  @NonNull WidgetEditPolicy.Candidate candidate) {
         LauncherWidgetRepository repository = widgets.repository();
+        // The page under the finger was taken away while the widget was in the air.
+        if (state.turn.page < 0 || state.turn.page >= repository.pageCount()) return false;
         List<LauncherWidgetRecord> restore = Collections.emptyList();
         if (!candidate.displaced.isEmpty()) {
             List<LauncherWidgetRecord> batch = new ArrayList<>();
@@ -1072,7 +1327,7 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             if (!repository.putRecords(batch)) return false;
         }
         LauncherWidgetHostController.AddResult result = beginAddAt(state.item, candidate.rect,
-            state.page, repository.revision());
+            state.turn.page, repository.revision());
         if (result == LauncherWidgetHostController.AddResult.STARTED) {
             awaitingExternal = true;
             render();
@@ -1092,14 +1347,20 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         return false;
     }
 
-    /** Lets go of a carry that the pane is no longer in a position to finish. */
-    private void abortCarry() {
-        if (carry == null) return;
+    /**
+     * Lets go of a carry that the pane is no longer in a position to finish. Nothing is placed, so
+     * a page the carry made goes again; {@code redraw} is false once the pane is being torn down.
+     */
+    private void abortCarry(boolean redraw) {
+        CarryState state = carry;
+        if (state == null) return;
         carry = null;
+        pane.removeCallbacks(edgeFlip);
         pane.endCarry();
         pane.widgetDragLayer().setGhost(null, true);
         clearDisplacementPreview(false);
         pane.releaseWidgetDragLayer();
+        trimCarryPage(state, redraw);
     }
 
     /**
@@ -1120,7 +1381,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             : desiredEdgePx - pane.grid().getTop();
         edit.resizeCandidate = WidgetEditPolicy.resize(pane.grid().metrics(),
             widgets.repository().recordsOnPage(record.page), edit.appWidgetId, record.cell,
-            handle, gridEdgePx, edit.minColumnSpan, edit.minRowSpan);
+            handle, gridEdgePx, edit.minColumnSpan, edit.minRowSpan,
+            edit.maxColumnSpan, edit.maxRowSpan);
         pane.widgetEditOverlay().setFrameBounds(paneBounds(edit.resizeCandidate.rect));
         previewDisplacement(edit.resizeCandidate.displaced);
     }
@@ -1159,6 +1421,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         currentPage = Math.max(0, Math.min(widgets.repository().pageCount() - 1, currentPage));
         pane.setReducedMotion(host.reducedMotion());
         pane.render(widgets.repository(), widgets.capability(), currentPage);
+        // Built-in views outlive their page so a return draws them as they were; only a widget
+        // gone from the whole wall lets its view go.
+        java.util.Set<Integer> live = new java.util.HashSet<>();
+        for (LauncherWidgetRecord record : widgets.repository().records()) live.add(record.appWidgetId);
+        builtins.retainOnly(live);
         // A render hides the edit chrome. While a session is open and its widget is still on the
         // page - after a commit, a grid resize from the page's own tab, another widget arriving -
         // the chrome comes straight back at the widget's new bounds, and the host never hears the
@@ -1200,5 +1467,13 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             case WALL_RESET: return pane.getContext().getString(R.string.widget_wall_reset);
             default: return pane.getContext().getString(R.string.widget_add_failed);
         }
+    }
+
+    /** What the built-ins get when the host offers nothing: no permission, no window, no face. */
+    private static final class InertBuiltinHost implements BuiltinWidgetServices.Host {
+        @Override public void requestCalendarPermission() { }
+        @Override public boolean openCommandWindow(@NonNull List<String> command,
+                                                   @Nullable String title) { return false; }
+        @Override @Nullable public android.graphics.Typeface monoTypeface() { return null; }
     }
 }

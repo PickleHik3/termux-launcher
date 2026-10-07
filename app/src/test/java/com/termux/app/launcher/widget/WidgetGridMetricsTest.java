@@ -51,4 +51,24 @@ public class WidgetGridMetricsTest {
         assertEquals(1, one.columns); assertEquals(2, two.columns); assertTrue(two.fits);
         assertFalse(metrics.spanForPixels(10000, 1).fits);
     }
+
+    @Test public void largestSpanWithinReadsTheSamePixelRectanglesAsTheMinimum() {
+        WidgetGridMetrics metrics = new WidgetGridMetrics(new Rect(0, 0, 403, 607),
+            0, 4, 3, new WidgetGridDefinition(6, 4), false);
+        int oneWidth = metrics.boundsFor(new WidgetCellRect(0, 0, 1, 1)).width();
+        int twoWidth = metrics.boundsFor(new WidgetCellRect(0, 0, 2, 1)).width();
+        assertEquals(2, metrics.largestSpanWithin(twoWidth, 0).columns);
+        assertEquals(1, metrics.largestSpanWithin(twoWidth - 1, 0).columns);
+        assertEquals(0, metrics.largestSpanWithin(oneWidth - 1, 0).columns);
+        assertEquals("unset is no limit", 0, metrics.largestSpanWithin(0, 0).columns);
+        assertEquals(4, metrics.largestSpanWithin(100000, 0).columns);
+        assertEquals(6, metrics.largestSpanWithin(0, 100000).rows);
+    }
+
+    @Test public void aMaximumUnderTheMinimumOrUnsetIsNoCap() {
+        assertEquals(6, WidgetGridMetrics.effectiveMaxSpan(0, 1, 6));
+        assertEquals(6, WidgetGridMetrics.effectiveMaxSpan(1, 2, 6));
+        assertEquals(3, WidgetGridMetrics.effectiveMaxSpan(3, 2, 6));
+        assertEquals(6, WidgetGridMetrics.effectiveMaxSpan(9, 2, 6));
+    }
 }

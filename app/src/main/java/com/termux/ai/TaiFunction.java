@@ -26,11 +26,7 @@ public enum TaiFunction {
     READ_ALOUD(null, Store.TAI, TaiTierPolicy.WithoutModel.NONE),
     /** Sorting apps into categories. */
     APP_CATEGORIES(null, Store.TAI, TaiTierPolicy.WithoutModel.OFF),
-    /** The wallpaper creator's reader, which looks at the photo (a {@code -vision} model). API 34+. */
-    WALLPAPER_READER(null, Store.TAI, TaiTierPolicy.WithoutModel.RULES_ONLY),
-    /** The wallpaper creator's depth model. API 34+. */
-    WALLPAPER_DEPTH(TaiVisionModels.PREF_DEPTH_MODEL, Store.TAI, TaiTierPolicy.WithoutModel.NONE),
-    /** Search and memory: the embedder. */
+    /** Dawn notes integration: the embedder (Dawn notes is the only app that uses it). */
     EMBEDDINGS(null, Store.TAI, TaiTierPolicy.WithoutModel.NONE);
 
     /** Which preference file holds the pick. */
@@ -52,13 +48,8 @@ public enum TaiFunction {
         this.withoutModel = withoutModel;
     }
 
-    /** The wallpaper functions need API 34 (the renderer is HardwareBufferRenderer) and are removed below it. */
-    public boolean needsApi34() {
-        return this == WALLPAPER_READER || this == WALLPAPER_DEPTH;
-    }
-
     /** True for the functions that run a chat model and so choose GPU or CPU. */
     public boolean usesChatModel() {
-        return this == ASSISTANT || this == TIDY_DICTATION || this == APP_CATEGORIES || this == WALLPAPER_READER;
+        return this == ASSISTANT || this == TIDY_DICTATION || this == APP_CATEGORIES;
     }
 }

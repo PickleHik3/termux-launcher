@@ -21,8 +21,12 @@ public final class TopPaneSlotBudget {
     public static final float SINGLE_CARD_DP = 48f;
     /** The gap the contention column wants between the card and the media strip. */
     public static final float CONTENTION_GAP_DP = 6f;
-    /** The least that gap may shrink to before the card itself gives way. */
-    public static final float CONTENTION_GAP_MIN_DP = 4f;
+    /**
+     * The least that gap may shrink to before the card itself gives way. In the 65dp slot it is
+     * what the card's body line rides on: 55dp inside the air, less the strip and this gap,
+     * leaves the card 32dp, and its padding, title and one body line need about 31.5dp.
+     */
+    public static final float CONTENTION_GAP_MIN_DP = 3f;
 
     /** Tops and heights in px; a height of 0 means that part is not shown. */
     public static final class Column {

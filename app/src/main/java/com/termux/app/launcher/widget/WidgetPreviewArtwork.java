@@ -50,7 +50,7 @@ public final class WidgetPreviewArtwork {
         return new WidgetPreviewArtwork(tier, remoteViews, null);
     }
 
-    @NonNull static WidgetPreviewArtwork image(@Nullable Drawable image) {
+    @NonNull public static WidgetPreviewArtwork image(@Nullable Drawable image) {
         return image == null ? NONE : new WidgetPreviewArtwork(TIER_IMAGE, null, image);
     }
 

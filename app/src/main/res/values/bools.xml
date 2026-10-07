@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <!-- The lock-screen live wallpaper (LockLiveWallpaperService) exists from API 34; values-v34 turns it on. -->
-    <bool name="lock_live_wallpaper_enabled">false</bool>
-</resources>

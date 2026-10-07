@@ -430,4 +430,73 @@ public class ChromeRendererTest {
 
         assertEquals(1, surfaces.terminalGlassFrostUpdates);
     }
+
+    /** Dispatches the root's pre-draw until a frame is let through, as a traversal would. */
+    private static void drawFirstFrame(View root) {
+        for (int i = 0; i < 3; i++) {
+            if (root.getViewTreeObserver().dispatchOnPreDraw()) return;
+        }
+    }
+
+    /**
+     * A cold start asked for the top-pane frost nine times before its first frame. The first runs
+     * at once (it asks for the blur frames), the rest fold into one pass in that frame's pre-draw.
+     */
+    @Test
+    public void topPaneFrostBeforeTheFirstFrameFoldsIntoOnePassAtItsPreDraw() {
+        View root = new View(RuntimeEnvironment.getApplication());
+        surfaces.views.put(com.termux.R.id.activity_termux_root_view, root);
+
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertEquals("the first pass runs at once", 1, surfaces.terminalGlassFrostUpdates);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST | ChromeRenderer.SCOPE_BACKDROPS);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertEquals("the rest wait for the first frame", 1, surfaces.terminalGlassFrostUpdates);
+        assertTrue(chrome.isFrostHeldForFirstFrame());
+
+        drawFirstFrame(root);
+
+        assertEquals("one pass for all of them", 2, surfaces.terminalGlassFrostUpdates);
+        assertFalse(chrome.isFrostHeldForFirstFrame());
+
+        // After the first frame every pass runs when it is asked for, as before.
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertEquals(3, surfaces.terminalGlassFrostUpdates);
+        assertFalse(chrome.isFrostHeldForFirstFrame());
+    }
+
+    /** The commit the first frame owes runs before the held frost, so the frost sees its result. */
+    @Test
+    public void theFirstFramesCommitRunsBeforeTheHeldFrost() {
+        View root = new View(RuntimeEnvironment.getApplication());
+        surfaces.views.put(com.termux.R.id.activity_termux_root_view, root);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertTrue(chrome.isCommitPending());
+
+        drawFirstFrame(root);
+
+        assertEquals(1, surfaces.applied.size());
+        assertFalse(chrome.isCommitPending());
+        assertEquals(2, surfaces.terminalGlassFrostUpdates);
+        // The plain post the detached root fell back to finds nothing left to do.
+        mainLooper().idle();
+        assertEquals(1, surfaces.applied.size());
+    }
+
+    /** A held pass is never lost: tearing the renderer down drops it, and nothing runs after. */
+    @Test
+    public void destroyingBeforeTheFirstFrameRunsNothingHeld() {
+        View root = new View(RuntimeEnvironment.getApplication());
+        surfaces.views.put(com.termux.R.id.activity_termux_root_view, root);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+
+        chrome.onDestroy();
+        root.getViewTreeObserver().dispatchOnPreDraw();
+
+        assertEquals(1, surfaces.terminalGlassFrostUpdates);
+        assertFalse(chrome.isFrostHeldForFirstFrame());
+    }
 }

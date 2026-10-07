@@ -47,7 +47,7 @@ public class TaiRuntimeServiceClientIdleExitTest {
 
     @Before
     public void connectToAFakeRuntime() throws Exception {
-        client = new TaiRuntimeServiceClient(context);
+        client = new TaiRuntimeServiceClient(context, Looper.getMainLooper());
         connection = (ServiceConnection) field(client, "connection");
         incoming = (Messenger) field(client, "incoming");
         // Stands in for the bound service: a Messenger on this process's main looper that answers

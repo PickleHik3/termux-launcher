@@ -28,10 +28,17 @@ public final class VoiceWordDiff {
     public static final class Op {
         @NonNull public final Kind kind;
         @NonNull public final String word;
+        /** Line breaks (0 to 2) the cleaned text has before this word; a newline is whitespace for the diff itself. */
+        public final int breaks;
 
         Op(@NonNull Kind kind, @NonNull String word) {
+            this(kind, word, 0);
+        }
+
+        Op(@NonNull Kind kind, @NonNull String word, int breaks) {
             this.kind = kind;
             this.word = word;
+            this.breaks = breaks;
         }
 
         @Override
@@ -67,9 +74,10 @@ public final class VoiceWordDiff {
     public static List<Op> diff(@NonNull String raw, @NonNull String cleaned) {
         List<String> before = split(raw);
         List<String> after = split(cleaned);
+        int[] breaks = breaksBefore(cleaned, after.size());
         if (before.size() > MAX_WORDS || after.size() > MAX_WORDS) {
             List<Op> plain = new ArrayList<>(after.size());
-            for (String word : after) plain.add(new Op(Kind.SAME, word));
+            for (int k = 0; k < after.size(); k++) plain.add(new Op(Kind.SAME, after.get(k), breaks[k]));
             return plain;
         }
         String[] a = keys(before);
@@ -87,18 +95,44 @@ public final class VoiceWordDiff {
         while (i < n && j < m) {
             if (a[i].equals(b[j])) {
                 String word = after.get(j);
-                ops.add(new Op(word.equals(before.get(i)) ? Kind.SAME : Kind.CHANGED, word));
+                ops.add(new Op(word.equals(before.get(i)) ? Kind.SAME : Kind.CHANGED, word, breaks[j]));
                 i++;
                 j++;
             } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
                 ops.add(new Op(Kind.REMOVED, before.get(i++)));
             } else {
-                ops.add(new Op(Kind.ADDED, after.get(j++)));
+                ops.add(new Op(Kind.ADDED, after.get(j), breaks[j]));
+                j++;
             }
         }
         while (i < n) ops.add(new Op(Kind.REMOVED, before.get(i++)));
-        while (j < m) ops.add(new Op(Kind.ADDED, after.get(j++)));
+        while (j < m) {
+            ops.add(new Op(Kind.ADDED, after.get(j), breaks[j]));
+            j++;
+        }
         return ops;
+    }
+
+    /** For each word of {@code text}, the line breaks (capped at 2) in the whitespace before it. */
+    @NonNull
+    private static int[] breaksBefore(@NonNull String text, int words) {
+        int[] breaks = new int[words];
+        int index = 0;
+        int newlines = 0;
+        boolean inWord = false;
+        for (int k = 0; k < text.length() && index < words; k++) {
+            char c = text.charAt(k);
+            if (Character.isWhitespace(c)) {
+                inWord = false;
+                if (c == '\n') newlines++;
+            } else if (!inWord) {
+                inWord = true;
+                breaks[index] = index == 0 ? 0 : Math.min(2, newlines);
+                index++;
+                newlines = 0;
+            }
+        }
+        return breaks;
     }
 
     @NonNull

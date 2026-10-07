@@ -27,14 +27,15 @@ import java.util.Set;
  * wide picture. Newest first, deduplicated by content (SHA-256), trimmed to {@link #MAX}.
  *
  * <p>Plain Java over {@link File}, no Android, so it is a unit test. The order lives in a small
- * index file ({@code index}, one {@code <file name> <hash>} line per entry, newest first); an entry
+ * index file ({@code index}, one {@code <file name> <hash>} line per entry, newest first; an older index may carry a
+ * third token, which is read past); an entry
  * whose file has gone is skipped when listing and dropped on the next write. Blocking file work:
  * call it off the main thread, except {@link #list}, which reads only the index.</p>
  */
 public final class RecentWallpapers {
 
     /** How many photos are kept. */
-    public static final int MAX = 3;
+    public static final int MAX = 5;
 
     static final String INDEX = "index";
 
@@ -102,14 +103,21 @@ public final class RecentWallpapers {
 
     // --- internals ---
 
-    private static final class Entry {
-        @NonNull final String name;
-        @NonNull final String hash;
+    /** One kept photo: its file name and content hash. */
+    public static final class Entry {
+        @NonNull public final String name;
+        @NonNull public final String hash;
 
         Entry(@NonNull String name, @NonNull String hash) {
             this.name = name;
             this.hash = hash;
         }
+    }
+
+    /** The kept photos with their hash, newest first; missing files are skipped. */
+    @NonNull
+    public synchronized List<Entry> entries() {
+        return live(readIndex());
     }
 
     @NonNull
@@ -149,7 +157,9 @@ public final class RecentWallpapers {
         String name = t.substring(0, space);
         // Names are ours (<digits>.png): never a path.
         if (name.contains("/") || name.contains("\\") || name.startsWith(".") || name.equals(INDEX)) return null;
-        return new Entry(name, t.substring(space + 1).trim());
+        String[] rest = t.substring(space + 1).trim().split("\\s+");
+        if (rest.length == 0 || rest[0].isEmpty()) return null;
+        return new Entry(name, rest[0]);
     }
 
     private void writeIndex(@NonNull List<Entry> entries) throws IOException {

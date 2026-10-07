@@ -1,24 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   The Appearance editor (appearance-layout-editor SPEC §3): the frame's tap targets, the bottom
-  area's mode pill, Look slider, Custom row 2, Layout mode's Style toggle and Corners / Margin
-  sliders, and the doors that open it. Kept in their own file so the editor's copy travels
+  area's mode pill, Look slider, the Custom row's vertical sliders, Layout mode's Style toggle and
+  Corners / Margin sliders, and the doors that open it. Kept in their own file so the editor's copy travels
   together.
 -->
 <resources>
     <string name="appearance_editor_undo">Undo</string>
     <string name="appearance_editor_done">Done</string>
+    <!-- The page bar's title over the scaled frame, by mode. -->
+    <string name="appearance_page_wallpaper">Wallpaper</string>
+    <string name="appearance_page_look">Look</string>
+    <string name="appearance_page_layout">Layout</string>
 
     <string name="appearance_editor_mode_description">Editor mode</string>
     <string name="appearance_editor_look_description">Look</string>
     <!-- Row B's sliders before an element names them; the label text replaces it in code. -->
     <string name="appearance_editor_control_description">Element setting</string>
-    <string name="appearance_editor_legibility_description">Contrast</string>
     <string name="appearance_editor_style_description">Style</string>
     <string name="appearance_editor_style_docked">Docked</string>
     <string name="appearance_editor_style_floating">Floating</string>
 
-    <string name="appearance_editor_custom_replaced">Your custom look was replaced</string>
 
     <!-- The elements a tap in the frame selects; row 2's heading and the targets' descriptions. -->
     <string name="appearance_editor_target_status">Status bar</string>
@@ -31,30 +33,33 @@
     <string name="appearance_editor_target_description">Tune %1$s</string>
 
     <!-- Row 2's controls; the number is the control's own read-out. -->
-    <string name="appearance_editor_darkness">Opacity · %1$d%%</string>
     <string name="appearance_editor_blur">Blur · %1$d dp</string>
-    <string name="appearance_editor_legibility_low">Contrast · Low</string>
-    <string name="appearance_editor_legibility_unavailable">Contrast · needs wallpaper colors</string>
-    <string name="appearance_editor_key_corners">Key radius · %1$d dp</string>
-    <string name="appearance_editor_soft">Soften wallpaper</string>
-    <string name="appearance_editor_dim">Dim · %1$d%%</string>
-    <string name="appearance_editor_legibility_normal">Contrast · Normal</string>
-    <string name="appearance_editor_legibility_high">Contrast · High</string>
-    <!-- The terminal's Trail and Effect menus: a label over a button naming the chosen option. -->
-    <string name="appearance_editor_trail_label">Trail</string>
+    <string name="appearance_editor_legibility_low">Contrast · Softer</string>
+    <string name="appearance_editor_legibility_unavailable">Contrast · off</string>
+    <string name="appearance_editor_key_corners">Radius · %1$d dp</string>
+    <string name="appearance_editor_legibility_normal">Contrast · Default</string>
+    <string name="appearance_editor_legibility_high">Contrast · Harder</string>
+    <!-- The terminal's two menu pills: the heading over the chosen option. -->
+    <string name="appearance_editor_trail_title">Cursor trail</string>
+    <string name="appearance_editor_effect_title">Terminal effect</string>
+    <!-- The status bar's button: opens the clock face and position popup. -->
+    <string name="appearance_editor_clock">Clock</string>
+    <!-- The Custom row's own legends; the number is the slider's read-out. -->
+    <string name="appearance_editor_dock_size">Size · %1$d%%</string>
+    <string name="appearance_editor_app_icons">Icons · %1$d</string>
+    <string name="appearance_editor_key_spacing">Spacing · %1$s</string>
     <string name="appearance_editor_trail_description">Cursor trail, %1$s</string>
-    <string name="appearance_editor_effect_label">Effect</string>
     <string name="appearance_editor_effect_description">Terminal effect, %1$s</string>
-    <string name="appearance_editor_soft_off">Off</string>
-    <string name="appearance_editor_soft_on">On</string>
     <!-- The global row (layout editor v2): the base values every surface follows. -->
     <string name="appearance_editor_opacity">Opacity · %1$d%%</string>
     <string name="appearance_editor_grain">Grain · %1$d%%</string>
+    <string name="appearance_editor_tint">Tint · %1$d%%</string>
+    <string name="appearance_editor_tint_name">Tint</string>
     <!-- The keyboard's door to its theme page in Settings; also that page's title. -->
     <string name="appearance_editor_keyboard_theme">Keyboard theme</string>
 
     <!-- Layout mode's global shape: no Look sets these. -->
-    <string name="appearance_editor_corners">Corner radius · %1$d dp</string>
+    <string name="appearance_editor_corners">Corners · %1$d dp</string>
     <string name="appearance_editor_corners_description">Corner radius</string>
     <string name="appearance_editor_margin">Margin · %1$d dp</string>
     <string name="appearance_editor_margin_description">Margin</string>

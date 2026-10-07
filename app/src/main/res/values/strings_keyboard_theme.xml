@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="keyboard_theme_title">Keyboard theme</string>
-    <string name="keyboard_theme_summary">Theme, colors and typeface</string>
-    <string name="keyboard_theme_section_colors">Colors</string>
+    <string name="keyboard_theme_summary">Colors and typeface</string>
 </resources>

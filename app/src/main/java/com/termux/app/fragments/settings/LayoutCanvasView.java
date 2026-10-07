@@ -41,6 +41,7 @@ import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.ReducedMotion;
 import com.termux.app.Spring;
+import com.termux.app.launcher.widget.WidgetGridCaps;
 import com.termux.app.place.ChromeShape;
 import com.termux.app.place.ChromeShape.Box;
 import com.termux.app.place.ChromeShape.Card;
@@ -458,6 +459,12 @@ public final class LayoutCanvasView extends View {
     private final RectF mExternalTray = new RectF();
     /** The outline's corner in px set by a frame-filling host; negative draws the artwork's. */
     private float mFrameRadiusOverridePx = -1f;
+    /**
+     * Whether the phone model drawn is not the view's own shape (the landscape model in a portrait
+     * host, or the other way round): it then stands centred inside the view at its own radius.
+     */
+    private boolean mModelResized;
+    @Nullable private Runnable mModelResizedListener;
     /** What {@link OnCanvasEditListener#onTrayOfferChanged} last said. */
     private boolean mToldTrayOffered;
     private boolean mToldTrayHovered;
@@ -1067,7 +1074,12 @@ public final class LayoutCanvasView extends View {
         mLegendRects.clear();
         boolean landscape = mOrientation == PlaceOrientation.LANDSCAPE;
         boolean viewLandscape = viewWidth > viewHeight;
-        if (landscape == viewLandscape) {
+        boolean resized = landscape != viewLandscape;
+        if (resized != mModelResized) {
+            mModelResized = resized;
+            if (mModelResizedListener != null) mModelResizedListener.run();
+        }
+        if (!resized) {
             mFrameRect.set(0f, 0f, viewWidth, viewHeight);
         } else {
             float aspect = landscape ? LANDSCAPE_ASPECT : PORTRAIT_ASPECT;
@@ -1103,7 +1115,16 @@ public final class LayoutCanvasView extends View {
         invalidate();
     }
 
-    /** Whether the phone outline is the view's own bounds. */
+    /** Whether the phone model is smaller than, and centred in, the view (the other orientation). */
+    public boolean isModelResized() {
+        return mFillsView && mModelResized;
+    }
+
+    /** Told when {@link #isModelResized} may have changed. */
+    public void setOnModelResizedListener(@Nullable Runnable listener) {
+        mModelResizedListener = listener;
+    }
+
     public void setOnTrashTapListener(@Nullable Runnable listener) {
         mTrashTapListener = listener;
     }
@@ -1722,12 +1743,11 @@ public final class LayoutCanvasView extends View {
                 RectF area = gridArea();
                 if (area == null) return;
                 float gap = 6f * mUnit;
+                WidgetGridCaps caps = widgetGridCaps();
                 int columns = cellsFor(area.left, area.width(), mHandleStartRect.centerX() + dx,
-                    gap, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
-                    TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS);
+                    gap, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS, caps.maxColumns);
                 int rows = cellsFor(area.top, area.height(), mHandleStartRect.centerY() + dy,
-                    gap, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
-                    TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS);
+                    gap, TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS, caps.maxRows);
                 if (columns == mHandleLastColumns && rows == mHandleLastRows) return;
                 mHandleLastColumns = columns;
                 mHandleLastRows = rows;
@@ -2274,6 +2294,13 @@ public final class LayoutCanvasView extends View {
         if (mFillsView && mFrameRadiusOverridePx >= 0f
             && mFrameRect.width() >= getWidth() && mFrameRect.height() >= getHeight())
             return mFrameRadiusOverridePx;
+        if (mFillsView && mModelResized && mFrameRadiusOverridePx >= 0f && getWidth() > 0) {
+            // The device's own corner at the model's scale: the host's radius is for the
+            // host's width, the model's short side is the host's width in the other orientation.
+            float short1 = Math.min(getWidth(), getHeight());
+            return mFrameRadiusOverridePx * Math.min(mFrameRect.width(), mFrameRect.height())
+                / Math.max(1f, short1);
+        }
         return u(FRAME_RADIUS_U);
     }
 
@@ -4335,14 +4362,28 @@ public final class LayoutCanvasView extends View {
 
     private int steppedColumns(int step) {
         return LayoutCanvasA11yPolicy.stepInt(mLayout == null ? 0 : mLayout.widgetColumns, 1,
-            TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS,
-            TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_COLUMNS, step);
+            TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_COLUMNS, widgetGridCaps().maxColumns, step);
     }
 
     private int steppedRows(int step) {
         return LayoutCanvasA11yPolicy.stepInt(mLayout == null ? 0 : mLayout.widgetRows, 1,
-            TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS,
-            TERMUX_APP.MAX_APP_LAUNCHER_WIDGET_GRID_ROWS, step);
+            TERMUX_APP.MIN_APP_LAUNCHER_WIDGET_GRID_ROWS, widgetGridCaps().maxRows, step);
+    }
+
+    /**
+     * What the wall on the canvas can hold. The canvas draws the pane's opening to scale
+     * ({@code mCanvasScale} pixels per real dp, for the orientation it shows), so the opening's
+     * size over that scale is the wall in dp, from the same geometry the miniature already models
+     * for the chrome around it. That is the real pane's measured size to within the miniature's
+     * rounding, which {@link WidgetGridCaps} absorbs.
+     */
+    @NonNull
+    private WidgetGridCaps widgetGridCaps() {
+        RectF rect = mBlockRects.get(Block.CANVAS);
+        if (rect == null || rect.isEmpty() || mCanvasScale <= 0f) {
+            return WidgetGridCaps.unbounded();
+        }
+        return WidgetGridCaps.forWall(rect.width() / mCanvasScale, rect.height() / mCanvasScale);
     }
 
     private boolean canStepGrid(int columnStep, int rowStep) {

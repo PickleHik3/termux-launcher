@@ -317,6 +317,17 @@ public class OnGlassTest {
     private static final int TERMINAL_DIM = 0xFF999699;
     private static final int TERMINAL_BG = 0xFF1C1B1F;
 
+    /** A thin 10% pane over a pale wallpaper never gets more veil than its ceiling. */
+    @Test
+    public void aFixedInkVeilNeverExceedsTheCeiling() {
+        int backdrop = OnGlass.backdrop(0xFFE8E4DA, Color.TRANSPARENT,
+            OnGlass.withAlpha(TERMINAL_BG, 26));
+        OnGlass.Resolution r = OnGlass.resolveFixedInk(backdrop, Color.TRANSPARENT, TERMINAL_FG,
+            OnGlass.TARGET_BODY_TEXT, TERMINAL_DIM, OnGlass.TARGET_LARGE_TEXT, TERMINAL_BG, 64);
+        assertTrue(r.toString(), Color.alpha(r.veil) <= 64);
+        assertTrue("the ceiling was reached before the target", r.veilCapped);
+    }
+
     /** The ink never moves: only a veil is bought, and past the chrome's cap when it must be. */
     @Test
     public void aFixedInkIsReachedByVeilAloneEvenPastTheChromesCap() {
@@ -425,5 +436,29 @@ public class OnGlassTest {
         assertEquals(where, measured, resolution.ratio, 0.0001d);
         assertEquals(where, measured < target, resolution.shortfall);
         assertFalse("nothing in this sweep should be unsolvable: " + where, resolution.shortfall);
+    }
+
+    // ------------------------------------------------------------------ opacity-based ceiling
+
+    @Test
+    public void aTenPercentBandOverALightWallpaperIsVeiledAtMostItsCeilingAndTheInkReTones() {
+        int pale = 0xFFB8C7FF;
+        int darkBase = 0xFF1C1B1F;
+        int lightWallpaper = 0xFFE8E4DA;
+        int tint = OnGlass.withAlpha(darkBase, 26);
+        int ceiling = ChromeInk.veilCeiling255(tint);
+        assertEquals(Math.round(255f * 0.25f), ceiling);
+        int backdrop = OnGlass.backdrop(lightWallpaper, Color.TRANSPARENT, tint);
+
+        OnGlass.Resolution resolution = OnGlass.resolve(backdrop, pale, pale, darkBase,
+            OnGlass.TARGET_BODY_TEXT, Boolean.FALSE, ceiling);
+
+        assertTrue("veil within the ceiling: " + resolution, Color.alpha(resolution.veil) <= ceiling);
+        assertTrue(resolution.veilCapped);
+        assertNotEquals("the ink moved instead", pale, resolution.ink);
+        assertTrue("toward the dark side",
+            SchemeTone.tone(resolution.ink) < SchemeTone.tone(resolution.surface));
+        assertEquals(Math.round(255f * (77f / 255f + 0.15f)),
+            ChromeInk.veilCeiling255(OnGlass.withAlpha(darkBase, 77)));
     }
 }

@@ -89,6 +89,35 @@ public final class IconPackChoices {
     }
 
     /**
+     * Stores {@code value} for {@code key} and has the launcher's artwork follow at once (the
+     * icon cache drops the old pack's drawings and the dock redraws), without the activity's full
+     * restyle: for a surface that is open over the launcher, which owes the restyle when it
+     * closes. The parsed packs are kept, so a pack parsed beforehand ({@link #warm}) is not
+     * parsed again on the main thread.
+     */
+    public static void applyLive(@NonNull Context context, @Nullable TermuxAppSharedPreferences prefs,
+                                 @NonNull String key, @NonNull String value) {
+        if (prefs == null) return;
+        store(prefs, key, value);
+        LauncherAppDataProvider.getInstance(context).invalidateIconArtwork(true);
+    }
+
+    /** Parses {@code pack} ahead of its first use. Slow: off the main thread. */
+    public static void warm(@NonNull Context context, @NonNull String pack) {
+        if (pack.isEmpty()) return;
+        LauncherAppDataProvider.getInstance(context).warmIconPack(pack);
+    }
+
+    private static void store(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key,
+                              @NonNull String value) {
+        if (KEY_PINNED.equals(key)) {
+            prefs.setAppLauncherPinnedIconPackPackage(value);
+        } else {
+            prefs.setAppLauncherIconPackPackage(value);
+        }
+    }
+
+    /**
      * Stores {@code value} for {@code key} and has the launcher pick the new artwork up: the
      * icon cache drops the old pack's drawings and the activity restyles (at once when it is in
      * front, else on its next resume).
@@ -96,11 +125,7 @@ public final class IconPackChoices {
     public static void apply(@NonNull Context context, @Nullable TermuxAppSharedPreferences prefs,
                              @NonNull String key, @NonNull String value) {
         if (prefs == null) return;
-        if (KEY_PINNED.equals(key)) {
-            prefs.setAppLauncherPinnedIconPackPackage(value);
-        } else {
-            prefs.setAppLauncherIconPackPackage(value);
-        }
+        store(prefs, key, value);
         // Not invalidate(): that resets catalogue state only, and the artwork the launcher is
         // still holding is the previous pack's.
         LauncherAppDataProvider.getInstance(context).invalidateIconArtwork();
