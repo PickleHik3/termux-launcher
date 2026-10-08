@@ -24,6 +24,7 @@ import androidx.core.graphics.ColorUtils;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.termux.R;
 import com.termux.app.FocusOutlineRenderer;
+import com.termux.app.chrome.ActionButtonRow;
 import com.termux.app.material.M3;
 import com.termux.app.notice.TerminalDress;
 import com.termux.app.statusbar.WeatherGeocoder;
@@ -163,20 +164,16 @@ public final class FirstRunPermissionsCardView extends FrameLayout {
         scrollParams.topMargin = dp(10);
         mCard.addView(mScroll, scrollParams);
 
-        LinearLayout buttonRow = new LinearLayout(context);
-        buttonRow.setOrientation(LinearLayout.HORIZONTAL);
-        buttonRow.setGravity(Gravity.END);
+        // Continue keeps the trailing edge, inside the card's own padding like everything else.
+        ActionButtonRow buttonRow = new ActionButtonRow(context);
         mContinue = textButton(context, view -> {
             if (mCallbacks != null) mCallbacks.onFirstRunContinueTapped();
         });
         mContinue.setText(R.string.first_run_permissions_continue);
-        mContinue.setMinHeight(dp(48));
         mContinue.setMinWidth(dp(48));
-        buttonRow.addView(mContinue, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        buttonRow.addView(mContinue);
         LinearLayout.LayoutParams buttonRowParams = matchWrap();
         buttonRowParams.topMargin = dp(6);
-        buttonRowParams.setMarginEnd(-dp(4));
         mCard.addView(buttonRow, buttonRowParams);
 
         FrameLayout.LayoutParams cardParams = new FrameLayout.LayoutParams(

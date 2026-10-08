@@ -30,6 +30,7 @@ import androidx.core.graphics.ColorUtils;
 
 import com.termux.R;
 import com.termux.app.FocusOutlineRenderer;
+import com.termux.app.chrome.ActionButtonRow;
 import com.termux.app.notice.TerminalDress;
 
 import java.util.ArrayList;
@@ -126,7 +127,7 @@ public final class TourOverlayView extends FrameLayout {
     private final ScrollView mBodyScroll;
     private final LinearLayout mSections;
     private final TextView mDocsLink;
-    private final LinearLayout mButtonRow;
+    private final ActionButtonRow mButtonRow;
     /** The card's action buttons, rebuilt whenever the card offers a different set. */
     private final List<TextView> mActionButtons = new ArrayList<>();
     /** What the buttons currently on the card stand for, in the order they are read. */
@@ -268,21 +269,20 @@ public final class TourOverlayView extends FrameLayout {
         bodyParams.topMargin = dp(8);
         mCard.addView(mBodyScroll, bodyParams);
 
-        mButtonRow = new LinearLayout(context);
-        mButtonRow.setOrientation(LinearLayout.HORIZONTAL);
-        mButtonRow.setGravity(Gravity.END);
+        // The card's actions share one row while they fit across the card and stack when they do
+        // not; the row measures that itself, at whatever width and font scale the card has.
+        mButtonRow = new ActionButtonRow(context);
 
-        // The docs link shares the button row: it leads, takes the slack, and Start using keeps
-        // the trailing edge, so the closing card ends on one row of buttons.
+        // The docs link shares the closing card's row: it leads, and Start using keeps the
+        // trailing edge. When the two do not fit side by side the link goes under the action.
         mDocsLink = textButton(context, view -> {
             if (mCallbacks != null) mCallbacks.onTourDocsTapped();
         });
         mDocsLink.setVisibility(GONE);
-        addDocsLink(false);
+        mButtonRow.setLeading(mDocsLink);
 
         LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        buttonParams.gravity = Gravity.END;
         buttonParams.topMargin = dp(8);
         mCard.addView(mButtonRow, buttonParams);
 
@@ -901,67 +901,25 @@ public final class TourOverlayView extends FrameLayout {
     }
 
     /**
-     * The card's buttons, rebuilt only when the set actually changed. They share a row while
-     * their labels fit across the card; the usage card's three answers, each a phrase, would run
-     * off it on a phone, so they stand one under another.
+     * The card's buttons, rebuilt only when the set actually changed. Whether they share a row or
+     * stand one under another — the usage card's three answers, each a phrase, do not fit across
+     * a phone — is the row's own measurement, not this.
      */
     private void applyActions(@NonNull List<TourAction> actions) {
         if (!mActions.equals(actions)) {
             mActions.clear();
             mActions.addAll(actions);
-            boolean stacked = !labelsFitOneRow(mActions);
-            mButtonRow.setOrientation(stacked ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
-            mButtonRow.removeAllViews();
-            addDocsLink(stacked);
+            for (TextView button : mActionButtons) mButtonRow.removeView(button);
             mActionButtons.clear();
             for (TourAction action : mActions) {
                 TextView button = textButton(getContext(), view -> onActionTapped(action));
                 button.setText(action.labelRes);
                 button.setContentDescription(getContext().getString(action.labelRes));
-                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-                    stacked ? ViewGroup.LayoutParams.MATCH_PARENT : ViewGroup.LayoutParams.WRAP_CONTENT,
-                    ViewGroup.LayoutParams.WRAP_CONTENT);
-                if (stacked) {
-                    params.topMargin = dp(4f);
-                } else {
-                    params.setMarginStart(dp(8f));
-                }
-                mButtonRow.addView(button, params);
+                mButtonRow.addView(button);
                 mActionButtons.add(button);
             }
         }
         mButtonRow.setVisibility(mActions.isEmpty() ? GONE : VISIBLE);
-    }
-
-    /**
-     * The docs link leads the row as a pill of its own size, and an empty spacer takes the
-     * slack, so the action buttons keep the trailing edge without the link stretching to meet
-     * them. A stacked column gets no spacer: there the weight would be a height weight, and the
-     * spacer would stretch the card down to the gesture bar.
-     */
-    private void addDocsLink(boolean stacked) {
-        LinearLayout.LayoutParams linkParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        linkParams.gravity = Gravity.CENTER_VERTICAL;
-        mButtonRow.addView(mDocsLink, linkParams);
-        if (stacked) return;
-        View spacer = new View(getContext());
-        mButtonRow.addView(spacer, new LinearLayout.LayoutParams(0, 0, 1f));
-    }
-
-    /** Whether the labels, as {@link #textButton} pads and spaces them, fit the widest card. */
-    private boolean labelsFitOneRow(@NonNull List<TourAction> actions) {
-        Paint paint = new Paint();
-        paint.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 13f,
-            getResources().getDisplayMetrics()));
-        paint.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        float row = 0f;
-        for (TourAction action : actions) {
-            float label = paint.measureText(getContext().getString(action.labelRes));
-            row += Math.max(dp(48f), label + dp(24f)) + dp(8f);
-        }
-        int maxWidth = Math.min(dp(CARD_MAX_WIDTH_DP), getResources().getDisplayMetrics().widthPixels - dp(32f));
-        return row <= maxWidth - dp(28f);
     }
 
     private void onActionTapped(@NonNull TourAction action) {
