@@ -46,4 +46,14 @@ public class TaiFeatureCheckSearchBatchesTest {
     public void aSizeOfZeroIsOneBatch() {
         assertEquals(Arrays.asList(10), sizes(TaiFeatureCheckRunner.searchBatches(notes(10), 0)));
     }
+
+    @Test
+    public void theEmbeddingsWaitGrowsWithTheBatch() {
+        assertEquals(125_000L, TaiManager.embeddingsTimeoutMs(1));
+        assertEquals(160_000L, TaiManager.embeddingsTimeoutMs(8));
+        assertEquals(440_000L, TaiManager.embeddingsTimeoutMs(64));
+        assertEquals(120_000L, TaiManager.embeddingsTimeoutMs(0));
+        // Past the batch cap the runtime refuses the request at once; the wait stops growing there.
+        assertEquals(440_000L, TaiManager.embeddingsTimeoutMs(1_000));
+    }
 }
