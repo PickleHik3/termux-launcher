@@ -264,9 +264,10 @@ public final class LocalTaiVoiceTextPolisher implements VoiceTextPolisher {
     /**
      * The cleanup request. A local one names the feature, so TAI loads by cleanup's plan (accelerator,
      * speculative decoding, window), and turns thinking off; a remote one carries none of TAI's own fields.
+     * The feature check sends this same request ({@code TaiFeatureCheckRunner}).
      */
     @NonNull
-    static JSONObject request(@NonNull String model, @Nullable String level, @NonNull String text) throws JSONException {
+    public static JSONObject request(@NonNull String model, @Nullable String level, @NonNull String text) throws JSONException {
         JSONObject system = new JSONObject();
         system.put("role", "system");
         system.put("content", VoicePolishRules.instructions(level, text));

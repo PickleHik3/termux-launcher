@@ -56,7 +56,6 @@ public final class LauncherCategorySortService extends Service {
      */
     private static final int NOTIFICATION_ID = 24112;
     private static final int RESULT_NOTIFICATION_ID = 24113;
-    private static final int MAX_TOKENS = 24;
     private static final long NOTIFICATION_INTERVAL_MS = 750L;
 
     /**
@@ -336,7 +335,7 @@ public final class LauncherCategorySortService extends Service {
         try {
             // Thinking off, no user system prompt, and the feature named: see categoryBody.
             JSONObject request = TaiCallerRequests.categoryBody(modelId,
-                LauncherCategorySortPrompt.singleAppPrompt(label, packageName), MAX_TOKENS);
+                LauncherCategorySortPrompt.singleAppPrompt(label, packageName), LauncherCategorySortPrompt.MAX_TOKENS);
 
             JSONObject response = manager.openAiChatCompletions(request.toString());
             JSONArray choices = response.optJSONArray("choices");
