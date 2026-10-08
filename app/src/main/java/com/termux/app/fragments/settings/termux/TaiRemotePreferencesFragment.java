@@ -297,10 +297,8 @@ public class TaiRemotePreferencesFragment extends MaterialPreferenceFragment {
                 showUrlNote(context, note, value, true);
                 return;
             }
-            // Typed here, the address is Custom's even when it matches a provider's. Stored first,
-            // so the new address is never read as a provider switch.
-            settings.choosePreset(TaiRemotePresets.CUSTOM);
-            settings.setBaseUrl(value);
+            // Typed here, the address is Custom's even when it matches a provider's; unchanged, it is left alone.
+            settings.saveTypedBaseUrl(value);
             testSummary = null;
             dialog.dismiss();
             refresh();

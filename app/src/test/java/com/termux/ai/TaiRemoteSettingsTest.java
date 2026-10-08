@@ -134,6 +134,23 @@ public class TaiRemoteSettingsTest {
     }
 
     @Test
+    public void saveTypedBaseUrl_unchangedKeepsModelAndKey() {
+        settings.choosePreset(TaiRemotePresets.GOOGLE);
+        settings.setModelId("gemini-flash-lite-latest");
+        assertTrue(settings.setApiKey("AIza-test-key"));
+
+        settings.saveTypedBaseUrl(TaiRemotePresets.GOOGLE.baseUrl);
+        assertEquals(TaiRemotePresets.GOOGLE, settings.preset());
+        assertEquals("gemini-flash-lite-latest", settings.modelId());
+        assertTrue(settings.hasApiKey());
+
+        settings.saveTypedBaseUrl("https://example.org/v1");
+        assertEquals(TaiRemotePresets.CUSTOM, settings.preset());
+        assertEquals("", settings.modelId());
+        assertFalse(settings.hasApiKey());
+    }
+
+    @Test
     public void preset_removeForgetsTheChoice() {
         settings.choosePreset(TaiRemotePresets.MISTRAL);
         settings.clearAll();
