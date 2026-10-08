@@ -41,6 +41,7 @@ shell prompts:
   the copy toolbar at the first haptic, and a drag before it scrolls.
 - **Pinch to zoom** changes the focused pane's font size, with jitter filtering so two-finger
   scrolling does not zoom by accident.
+- **Two-finger flick on a split pane** swaps it with the pane across that edge.
 
 **Mouse mode** turns every touch into the mouse for programs that take one — a full-screen editor,
 a file manager, a TUI with clickable panes. A finger down is the left button at that cell, held as

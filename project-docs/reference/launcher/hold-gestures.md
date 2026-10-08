@@ -133,6 +133,8 @@ through untouched.
 9. Plain shell: hold → selection after one buzz; a fast drag still scrolls.
 10. Two-finger scroll and pinch still work in vim and the shell, including with one finger already
     resting.
+10b. Split panes: a brisk two-finger flick swaps the pane with its neighbour across that edge; a
+     slow two-finger drag still scrolls and a pinch still zooms.
 11. Accessibility → Touch & hold delay = Long: corners and holds slow down with it. Restore.
 12. Tour lesson 1 and Help → Pane corners → Try it complete on a hold.
 
