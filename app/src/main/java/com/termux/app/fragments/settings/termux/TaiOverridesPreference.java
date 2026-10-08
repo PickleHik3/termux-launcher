@@ -70,15 +70,26 @@ public class TaiOverridesPreference extends Preference {
         notifyChanged();
     }
 
+    /** How many cells the grid holds; a page that never fed it shows an empty strip. */
+    public int itemCount() {
+        return mItems.size();
+    }
+
     @Override
     public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
         holder.itemView.setClickable(false);
         holder.itemView.setFocusable(false);
 
+        // The layout's root is the container; found by id for safety, the item view itself otherwise.
         View root = holder.findViewById(R.id.tai_overrides_container);
-        if (!(root instanceof LinearLayout)) return;
+        if (!(root instanceof LinearLayout)) root = holder.itemView;
+        if (!(root instanceof LinearLayout)) {
+            android.util.Log.w("TaiOverrides", "no container to fill: " + holder.itemView);
+            return;
+        }
         LinearLayout container = (LinearLayout) root;
+        if (mItems.isEmpty()) android.util.Log.w("TaiOverrides", "bound with no items");
         container.removeAllViews();
 
         LayoutInflater inflater = LayoutInflater.from(getContext());

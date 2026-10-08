@@ -1124,6 +1124,28 @@ public class TaiModelCentreFragment extends Fragment
 
     // ---- installed models ----
 
+    /** The row's Delete button: the confirmation the row's kind needs, as its menu's Delete opens. */
+    @Override
+    public void onModelDelete(@NonNull TaiModelCentreAdapter.ModelRow row) {
+        Context context = getContext();
+        TaiModelSpec spec = row.installed;
+        if (context == null || spec == null) return;
+        confirmDelete(context, row, spec);
+    }
+
+    private void confirmDelete(@NonNull Context context, @NonNull TaiModelCentreAdapter.ModelRow row,
+                               @NonNull TaiModelSpec spec) {
+        if (row.voiceOutput) {
+            confirmDeleteVoice(context, spec);
+        } else if (row.speech) {
+            confirmDeleteSpeech(context, spec);
+        } else if (!row.image && !isEmbedder(spec) && spec.id.equals(loadedId)) {
+            AppNotice.show(context, R.string.termux_ai_model_delete_loaded_warning, true);
+        } else {
+            confirmDeleteChat(context, spec);
+        }
+    }
+
     @Override
     public void onModelMenu(@NonNull TaiModelCentreAdapter.ModelRow row, @NonNull View anchor) {
         Context context = getContext();

@@ -118,10 +118,27 @@
                     </com.google.android.material.chip.ChipGroup>
                 </LinearLayout>
 
-                <FrameLayout
+                <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp">
+                    android:layout_marginStart="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                <!-- Installed rows: Delete in the open, beside the menu that also offers it. -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/tai_centre_delete"
+                    style="?attr/materialIconButtonStyle"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:contentDescription="@string/termux_ai_model_delete_action"
+                    android:visibility="gone"
+                    app:icon="@drawable/ic_symbol_delete"
+                    app:iconTint="?attr/colorError" />
+
+                <FrameLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content">
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/tai_centre_install"
@@ -148,6 +165,7 @@
                         android:visibility="gone"
                         app:icon="@drawable/ic_tai_more" />
                 </FrameLayout>
+                </LinearLayout>
             </LinearLayout>
 
             <TextView

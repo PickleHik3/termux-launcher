@@ -2,7 +2,7 @@
 <!-- The "What runs on this phone" welcome card (tai-device-tiers spec section 5). No tier
      jargon beyond the header and no parameter counts in the copy. -->
 <resources>
-    <string name="tai_welcome_title">What runs on this phone</string>
+    <string name="tai_welcome_title">Models for this phone</string>
     <!-- 1: tier number, 2: RAM in GB, 3: chip name, 4: Android version -->
     <string name="tai_welcome_header">Tier %1$d · %2$d GB · %3$s · Android %4$s</string>
     <!-- 1: tier number, 2: RAM in GB, 3: Android version -->
@@ -35,6 +35,6 @@
     <string name="tai_welcome_need_wifi">Connect to Wi-Fi to download, or switch Wi-Fi only off.</string>
     <string name="tai_welcome_started">Downloads started. Progress is in the Model Centre.</string>
 
-    <string name="tai_welcome_pref_title">What runs on this phone</string>
-    <string name="tai_welcome_pref_summary">See what this phone can run on-device and download it.</string>
+    <string name="tai_welcome_pref_title">Models for this phone</string>
+    <string name="tai_welcome_pref_summary">Pick the models this phone can run and download them.</string>
 </resources>

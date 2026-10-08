@@ -2,15 +2,17 @@
 <!-- The feature check: the "Your features" section of the benchmark's Home, its run, and the Model
      Centre's one-time offer. -->
 <resources>
-    <string name="tai_check_section_title">Your features</string>
-    <string name="tai_check_section_summary">How each one runs on this phone.</string>
-    <string name="tai_check_action">Check my features</string>
+    <string name="tai_check_section_title">Feature benchmarks</string>
+    <string name="tai_check_section_summary">How each feature runs on this phone. Tap one to run it on its own.</string>
+    <string name="tai_check_action">Run all</string>
     <string name="tai_check_not_checked">Not checked yet</string>
     <string name="tai_check_older_version">From an older version</string>
     <string name="tai_check_wrong_answers">Answers looked wrong</string>
     <string name="tai_check_could_not_run">Couldn\'t run on this phone</string>
     <string name="tai_check_stopped">Stopped before it finished</string>
-    <string name="tai_check_row_desc">%1$s: %2$s</string>
+    <string name="tai_check_row_desc">%1$s: %2$s. Tap to run it again.</string>
+    <string name="tai_check_row_run">Run</string>
+    <string name="tai_check_row_run_again">Run again</string>
 
     <string name="tai_check_name_cleanup">Tidy dictation</string>
     <string name="tai_check_name_sorting">App categories</string>
@@ -29,7 +31,7 @@
         <item quantity="one">Runs %d feature the way you use it.</item>
         <item quantity="other">Runs %d features the way you use them.</item>
     </plurals>
-    <string name="tai_check_run_label">Your features</string>
+    <string name="tai_check_run_label">Feature benchmarks</string>
     <string name="tai_check_phase_feature">real use</string>
     <string name="tai_check_now">Checking %1$s</string>
 

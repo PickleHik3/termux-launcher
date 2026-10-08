@@ -20,7 +20,7 @@ Open **Settings → On-device AI**. It sits in the **Workspace** group, after **
 summary "Models, voice and local API". The page has five groups:
 
 - **Runtime**: **Runtime status**, with the loaded model and quick actions.
-- **Models**: **Model centre**, **What runs on this phone**, **Benchmark** ("Which models this
+- **Models**: **Model centre**, **Models for this phone**, **Benchmark** ("Which models this
   phone runs well") and **Hugging Face token**.
 - **Remote model**: a model on OpenAI, OpenRouter or your own server. See [Remote model](#remote-model).
 - **Server**: **Model autoload**, **OpenAI endpoint**, **Require API token** and **LAN access**.
@@ -28,11 +28,11 @@ summary "Models, voice and local API". The page has five groups:
   default), **Memory limits** and **Share diagnostics log**. See
   [Memory](On_Device_AI_Models.md#memory).
 
-## What runs on this phone
+## Models for this phone
 
-The **What runs on this phone** card shows what fits this phone and downloads it in one go. It
+The **Models for this phone** card shows what fits this phone and downloads it in one go. It
 appears once on the home screen, after the tour or on a later quiet moment; reopen it any time from
-the **What runs on this phone** row.
+the **Models for this phone** row.
 
 - The header names the phone: "Tier 2 · 12 GB · chip · Android 15" (see
   [Device tiers](#device-tiers-and-what-automatic-picks)).

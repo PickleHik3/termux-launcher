@@ -860,7 +860,7 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS =
             "keyboard_voice_silence_timeout_ms";
 
-        public static final int DEFAULT_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS = 10_000;
+        public static final int DEFAULT_IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS = 5_000;
 
         /** 0 is "Until tap": no timeout. */
         public static final int[] IN_APP_KEYBOARD_VOICE_SILENCE_TIMEOUT_MS_CHOICES =

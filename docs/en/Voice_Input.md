@@ -15,7 +15,7 @@ phone's own recognizer, which types its result straight away. Until you choose, 
 1. Open **Settings → On-device AI → Model centre → Get models → Speech** (or the **Voice typing**
    row on the **Functions** segment) and install a speech model. See [Speech models](#speech-models).
 2. Swipe up on the built-in keyboard's Enter key and speak. Allow the microphone the first time.
-3. Tap **Pause** on the card, or just stop talking; after **Stop after silence** (10 s by default)
+3. Tap **Pause** on the card, or just stop talking; after **Stop after silence** (5 s by default)
    the dictation stops by itself.
 4. Tap **Insert** to type the text at the cursor, or **Copy**.
 
@@ -168,7 +168,7 @@ In the **Listening** group of **Settings → Keyboard → Voice input**:
 | --- | --- | --- |
 | **Phrase pause** | 400 ms, 600 ms, 800 ms, 1.2 s: how long a pause closes a phrase | 600 ms |
 | **Mic sensitivity** | **Normal: ignores background talk** or **High: for soft speech; may hear others** | Normal |
-| **Stop after silence** | 5 s, 10 s, 30 s, **Until tap** | 10 s |
+| **Stop after silence** | 5 s, 10 s, 30 s, **Until tap** | 5 s |
 | **Listening sounds** | A sound when listening starts or stops | on |
 
 Speech detection uses Silero VAD, a small bundled model, so fans and keyboard clicks are not taken

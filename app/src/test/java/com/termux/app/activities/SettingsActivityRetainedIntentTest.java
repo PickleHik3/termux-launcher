@@ -207,6 +207,14 @@ public class SettingsActivityRetainedIntentTest {
             PAGES + "X11DisplayPreferencesFragment", "x11_display_autostart"));
         assertEquals(PAGES + "LauncherLockPreferencesFragment", SettingsActivity.redirectLegacyPage(
             PAGES + "LauncherPreferencesFragment", "app_launcher_az_lock_method"));
+        assertEquals(PAGES + "TaiRuntimePreferencesFragment", SettingsActivity.redirectLegacyPage(
+            PAGES + "TaiPreferencesFragment", "tai_runtime_unload"));
+        assertEquals(PAGES + "TaiApiPreferencesFragment", SettingsActivity.redirectLegacyPage(
+            PAGES + "TaiPreferencesFragment", "tai_lan_enabled"));
+        assertEquals(PAGES + "TaiAdvancedPreferencesFragment", SettingsActivity.redirectLegacyPage(
+            PAGES + "TaiPreferencesFragment", "tai_memory_limits"));
+        assertEquals("the remote model row stays on the overview", PAGES + "TaiPreferencesFragment",
+            SettingsActivity.redirectLegacyPage(PAGES + "TaiPreferencesFragment", "tai_remote_provider"));
     }
 
     @Test

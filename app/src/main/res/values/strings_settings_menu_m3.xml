@@ -106,4 +106,41 @@
     <string name="settings_voice_details_off_summary">The text waits exactly as heard.</string>
     <string name="settings_voice_details_shell_title">Shell commands</string>
     <string name="settings_voice_details_shell_summary">Shell commands are formatted by fixed rules instead of the model (ls dash la becomes ls -la).</string>
+
+    <!-- On-device AI: runtime status card -->
+    <string name="termux_ai_status_unavailable">Runtime unavailable</string>
+    <string name="termux_ai_status_loading">Loading model</string>
+    <string name="termux_ai_status_generating">Writing a reply</string>
+    <string name="termux_ai_status_stopping">Stopping</string>
+    <string name="termux_ai_status_loaded">Model loaded</string>
+    <string name="termux_ai_status_none">No model loaded</string>
+
+    <!-- On-device AI: overview -->
+    <string name="termux_ai_runtime_controls_title">Runtime controls</string>
+    <string name="termux_ai_runtime_controls_summary">Stop, unload and inspect logs</string>
+    <string name="termux_ai_developer_title">Developer access</string>
+    <string name="termux_ai_local_api_title">Local API</string>
+    <string name="termux_ai_local_api_summary">Endpoint, token and network access</string>
+    <string name="termux_ai_advanced_summary">Model parameters, overrides and memory</string>
+
+    <!-- On-device AI: Runtime page -->
+    <string name="termux_ai_runtime_screen_title">Runtime</string>
+    <string name="termux_ai_controls_header">Controls</string>
+    <string name="termux_ai_runtime_row_stop_title">Stop current run</string>
+    <string name="termux_ai_runtime_row_stop_summary">Cancel the reply being written</string>
+    <string name="termux_ai_runtime_row_stop_disabled">No run is active</string>
+    <string name="termux_ai_runtime_row_unload_title">Unload model</string>
+    <string name="termux_ai_runtime_row_unload_summary">Free the memory the model holds</string>
+    <string name="termux_ai_runtime_row_unload_disabled">No model is loaded</string>
+    <string name="termux_ai_runtime_row_logs_title">Runtime logs</string>
+    <string name="termux_ai_runtime_row_logs_summary">Inspect the runtime\'s diagnostic output</string>
+
+    <!-- On-device AI: Local API page -->
+    <string name="termux_ai_endpoint_header">Endpoint</string>
+    <string name="termux_ai_access_header">Access</string>
+    <string name="termux_ai_lan_note">LAN access needs the API token. Requests travel as plain HTTP, and access turns itself off after 12 hours.</string>
+
+    <!-- On-device AI: Advanced page -->
+    <string name="termux_ai_model_tuning_header">Model tuning</string>
+    <string name="termux_ai_support_header">Support</string>
 </resources>

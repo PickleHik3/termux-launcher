@@ -106,7 +106,7 @@ public class KeyboardPreferencesFragmentTest {
         assertEquals("system", store.getString("keyboard_voice_engine", null));
         assertEquals("auto", store.getString("keyboard_voice_language", null));
         assertEquals("600", store.getString("keyboard_voice_pause_ms", null));
-        assertEquals("10000", store.getString("keyboard_voice_silence_timeout_ms", null));
+        assertEquals("5000", store.getString("keyboard_voice_silence_timeout_ms", null));
         assertTrue(store.getBoolean("keyboard_voice_sounds", false));
         assertTrue(store.getBoolean("keyboard_voice_polish", false));
         assertEquals("polished", store.getString("keyboard_voice_polish_level", null));
@@ -172,7 +172,7 @@ public class KeyboardPreferencesFragmentTest {
         store.putString("keyboard_voice_pause_ms", "999");
         assertEquals("600", store.getString("keyboard_voice_pause_ms", null));
         store.putString("keyboard_voice_silence_timeout_ms", "2500");
-        assertEquals("10000", store.getString("keyboard_voice_silence_timeout_ms", null));
+        assertEquals("5000", store.getString("keyboard_voice_silence_timeout_ms", null));
         store.putString("keyboard_voice_engine", "cloud");
         assertEquals("system", store.getString("keyboard_voice_engine", null));
 

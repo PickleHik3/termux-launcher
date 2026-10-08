@@ -57,9 +57,9 @@ unless you have a backup: Android deletes the app's private data on uninstall.
    Allow what you want, then tap **Continue**. Everything here can be changed later in Settings.
 3. A welcome card offers **Take the tour** or **Not now**. The tour runs over the real home screen;
    [Learn the launcher](Learn_The_Launcher.md#the-tour) lists its steps.
-4. After the tour, an On-device AI card, **What runs on this phone**, shows what your phone can run
+4. After the tour, an On-device AI card, **Models for this phone**, shows what your phone can run
    offline and offers downloads. Tick what you want and tap **Download selected**, or tap **Later**.
-   You can reopen it from **Settings → On-device AI → What runs on this phone**. See
+   You can reopen it from **Settings → On-device AI → Models for this phone**. See
    [On-device AI](On_Device_AI.md).
 
 Then run these in your first terminal:
