@@ -29,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.function.LongSupplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -234,7 +235,6 @@ public final class TaiRemoteClient {
         try {
             int bodyRetries = 0;
             int rateLimitRetries = 0;
-            long waited = 0L;
             while (true) {
                 connection = open("POST", endpoint(baseUrl, "chat/completions"), timeoutMs);
                 write(connection, outgoing.toString());
@@ -250,10 +250,9 @@ public final class TaiRemoteClient {
                     bodyRetries++;
                     continue;
                 }
-                long wait = rateLimitWaitMs(status, retryAfter, errorBody, rateLimitRetries, timeoutMs - waited,
-                    System.currentTimeMillis());
+                long wait = rateLimitWaitMs(status, retryAfter, errorBody, rateLimitRetries,
+                    timeoutMs - (System.currentTimeMillis() - started), System.currentTimeMillis());
                 if (wait >= 0 && pause(DEFAULT_SLEEPER, wait)) {
-                    waited += wait;
                     rateLimitRetries++;
                     continue;
                 }
@@ -464,7 +463,7 @@ public final class TaiRemoteClient {
      * 429 earns one, at most {@link #MAX_RATE_LIMIT_RETRIES} times. The wait is the server's
      * {@code Retry-After} (seconds or a date), else Gemini's {@code retryDelay} in the body, else a
      * doubling backoff. A wait over {@link #MAX_RATE_LIMIT_WAIT_MS}, or over what is left of the
-     * caller's {@code budgetMs}, is no retry: the caller hears the 429 now.
+     * caller's {@code budgetMs} (what is left of its timeout since the request began), is no retry: the caller hears the 429 now.
      */
     static long rateLimitWaitMs(int status, @Nullable String retryAfter, @Nullable String body, int retriesSoFar,
                                 long budgetMs, long nowMs) {
@@ -735,16 +734,25 @@ public final class TaiRemoteClient {
     /**
      * Sends {@code outgoing} and retries what may be retried: a 400 that names a field
      * ({@link #retryBody}) with the fixed body, a 429 after its wait ({@link #rateLimitWaitMs}).
-     * The 429 waits together stay within {@code timeoutMs}. Returns the last reply.
+     * The whole exchange, posts and waits alike, is bounded by {@code timeoutMs} from its start: a wait
+     * that would end past that deadline is not taken. A wait ends at once on {@link Thread#interrupt()},
+     * and the request is then abandoned with the last reply; the caller owns the thread, so a cancel
+     * reaches it only if the caller interrupts. Returns the last reply.
      */
     @NonNull
     static Reply exchange(@NonNull JSONObject outgoing, long timeoutMs, @NonNull Transport transport,
                           @NonNull Sleeper sleeper) throws IOException, JSONException {
+        return exchange(outgoing, timeoutMs, transport, sleeper, System::currentTimeMillis);
+    }
+
+    @NonNull
+    static Reply exchange(@NonNull JSONObject outgoing, long timeoutMs, @NonNull Transport transport,
+                          @NonNull Sleeper sleeper, @NonNull LongSupplier clock) throws IOException, JSONException {
+        long started = clock.getAsLong();
         JSONObject body = outgoing;
         Reply reply = transport.post(body.toString());
         int bodyRetries = 0;
         int rateLimitRetries = 0;
-        long waited = 0L;
         while (true) {
             JSONObject retry = bodyRetries < MAX_BODY_RETRIES ? retryBody(body, reply.status, reply.body) : null;
             if (retry != null) {
@@ -752,9 +760,8 @@ public final class TaiRemoteClient {
                 bodyRetries++;
             } else {
                 long wait = rateLimitWaitMs(reply.status, reply.retryAfter, reply.body, rateLimitRetries,
-                    timeoutMs - waited, System.currentTimeMillis());
+                    timeoutMs - (clock.getAsLong() - started), System.currentTimeMillis());
                 if (wait < 0 || !pause(sleeper, wait)) return reply;
-                waited += wait;
                 rateLimitRetries++;
             }
             reply = transport.post(body.toString());
