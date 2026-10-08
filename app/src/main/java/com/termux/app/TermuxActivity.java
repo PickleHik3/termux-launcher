@@ -2868,6 +2868,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mHelpController != null && mHelpController.isShowing();
         }
 
+        @Override public PlaceLayout.Edge appsEdge() {
+            PlaceLayout layout = currentPlaceLayout();
+            return PlaceChromePolicy.appsShown(layout) ? PlaceChromePolicy.appsEdge(layout)
+                : PlaceLayout.Edge.BOTTOM;
+        }
+
         @Override public boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
             return mPaneController != null && mPaneController.helpButtonRectOnScreen(out);
         }

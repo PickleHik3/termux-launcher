@@ -36,6 +36,10 @@ public class TourRunTest {
     private static final TourRun.RunContext NO_DISPLAY =
         new TourRun.RunContext(false, true, false, false);
 
+    private static TourRun.RunContext appsOn(com.termux.app.place.PlaceLayout.Edge edge) {
+        return new TourRun.RunContext(false, true, false, true, false, edge);
+    }
+
     private static TourStep step(String id) {
         return step(GUEST, id);
     }
@@ -236,6 +240,23 @@ public class TourRunTest {
             for (int stage = 0; stage < step.signalCount(); stage++)
                 assertNotEquals(step.id + " still asks for the scrub",
                     TourSignals.APP_LAUNCHED_FROM_SCRUB, step.signalAt(stage));
+    }
+
+    @Test
+    public void theDrawerLessonSwipesDownOnARowAndInwardOnARail() {
+        com.termux.app.place.PlaceLayout.Edge top = com.termux.app.place.PlaceLayout.Edge.TOP;
+        TourStep bottom = step(GUEST, TourRun.FIND_APPS);
+        TourStep topRow = step(appsOn(top), TourRun.FIND_APPS);
+        TourStep left = step(appsOn(com.termux.app.place.PlaceLayout.Edge.LEFT), TourRun.FIND_APPS);
+        TourStep right =
+            step(appsOn(com.termux.app.place.PlaceLayout.Edge.RIGHT), TourRun.FIND_APPS);
+        assertEquals(bottom.copyResAt(0), topRow.copyResAt(0));
+        assertEquals(TourGesture.DRAG_DOWN, topRow.gestureAt(0));
+        assertEquals(com.termux.R.string.tour_card_find_apps_left_rail, left.copyResAt(0));
+        assertEquals(TourGesture.SWIPE_RIGHT, left.gestureAt(0));
+        assertEquals(com.termux.R.string.tour_card_find_apps_right_rail, right.copyResAt(0));
+        assertEquals(TourGesture.SWIPE_LEFT, right.gestureAt(0));
+        assertEquals(TourTargets.DOCK, left.targetIdAt(0));
     }
 
     @Test
