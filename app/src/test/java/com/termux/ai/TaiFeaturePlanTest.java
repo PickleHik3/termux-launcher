@@ -229,6 +229,27 @@ public class TaiFeaturePlanTest {
     }
 
     @Test
+    public void aStoredSpeculativeValueNeverAsksForWhatTheFileOrTheCheckRuledOut() throws Exception {
+        // A file that does not declare it: off, whatever is stored.
+        install(E2B, TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        TaiFeaturePlan undeclared = planWith(TaiFunction.TIDY_DICTATION, stored(null, Boolean.TRUE));
+        assertEquals(Boolean.FALSE, undeclared.speculative);
+        assertEquals(Reason.DEFAULT, undeclared.speculativeReason);
+
+        // A check that asked for it and found it never ran: off, whatever is stored.
+        installE2b();
+        evidence.check(checked(GPU, true, 12.0, 40.0, Boolean.FALSE, NOW_KEY));
+        TaiFeaturePlan neverRan = planWith(TaiFunction.TIDY_DICTATION, stored(null, Boolean.TRUE));
+        assertEquals(Boolean.FALSE, neverRan.speculative);
+        assertEquals(Reason.MEASURED, neverRan.speculativeReason);
+
+        // Otherwise the stored value is a pick, over the default.
+        TaiFeaturePlan picked = planWith(TaiFunction.APP_CATEGORIES, stored(null, Boolean.FALSE));
+        assertEquals(Boolean.FALSE, picked.speculative);
+        assertEquals(Reason.PICK, picked.speculativeReason);
+    }
+
+    @Test
     public void theFunctionsOwnPickBeatsTheParametersValueAndNothingStoredIsNoPick() {
         installE2b();
         prefs.put(TaiFunction.TIDY_DICTATION.modelKey, E2B);
@@ -294,6 +315,34 @@ public class TaiFeaturePlanTest {
     }
 
     @Test
+    public void aFailedVerdictKeepsTheCpuEvenWhenTheCpuHasFailed() {
+        installE2b();
+        evidence.verdict(TaiGpuVerdict.State.FAILED).failure(E2B, LITERT, CPU);
+        TaiFeaturePlan plan = pong(TaiFunction.APP_CATEGORIES);
+        assertEquals(CPU, plan.accelerator);
+        assertEquals(Reason.DEFAULT, plan.acceleratorReason);
+        // The same on a phone the platform already runs CPU-first.
+        TaiEvidence.InMemory cpuFailed = new TaiEvidence.InMemory().failure(E2B, LITERT, CPU);
+        TaiFeaturePlan cpuFirst = TaiFeaturePlan.of(TaiFunction.APP_CATEGORIES, models(env(12, GpuPath.CPU_FIRST)),
+            cpuFailed, Collections.<TaiResidency.Entry>emptyList(), NOW, false);
+        assertEquals(CPU, cpuFirst.accelerator);
+        assertEquals(Reason.DEFAULT, cpuFirst.acceleratorReason);
+    }
+
+    @Test
+    public void aGpuPickOnAFailedVerdictClaimsNoSpeedAndOffersNothing() {
+        installE2b();
+        prefs.put(TaiFunction.ASSISTANT.modelKey, E2B);
+        prefs.put(TaiFunction.ASSISTANT.accelKey, GPU);
+        evidence.verdict(TaiGpuVerdict.State.FAILED).chat(chat(GPU, false, 30.0)).chat(chat(CPU, false, 10.0));
+        TaiFeaturePlan plan = pong(TaiFunction.ASSISTANT);
+        assertEquals(GPU, plan.accelerator);
+        assertEquals(Reason.PICK, plan.acceleratorReason);
+        assertEquals(0.0, plan.speedup, 0.0);
+        assertNull(plan.faster);
+    }
+
+    @Test
     public void speculativeDecodingIsMeasuredOnDecodeSpeed() {
         installE2b();
         evidence.chat(chat(GPU, false, 20.0)).chat(chat(GPU, true, 15.0));
@@ -306,6 +355,28 @@ public class TaiFeaturePlanTest {
             Collections.<TaiResidency.Entry>emptyList(), NOW, false);
         assertEquals(Boolean.TRUE, plan.speculative);
         assertEquals(Reason.MEASURED, plan.speculativeReason);
+    }
+
+    @Test
+    public void speculativeDecodingIsTurnedOffOnlyWhenClearlySlower() {
+        installE2b();
+        Object[][] table = {
+            // decode speed with it on, with it off, plan speculative, its reason
+            {15.0, 20.0, Boolean.FALSE, Reason.MEASURED},
+            {19.0, 20.0, Boolean.TRUE, Reason.DEFAULT},
+            {20.0, 20.0, Boolean.TRUE, Reason.DEFAULT},
+            {21.0, 20.0, Boolean.TRUE, Reason.DEFAULT},
+            {30.0, 20.0, Boolean.TRUE, Reason.MEASURED},
+        };
+        for (Object[] row : table) {
+            TaiEvidence.InMemory measured = new TaiEvidence.InMemory()
+                .chat(chat(GPU, true, (Double) row[0])).chat(chat(GPU, false, (Double) row[1]));
+            TaiFeaturePlan plan = TaiFeaturePlan.of(TaiFunction.ASSISTANT, models(env(12, GpuPath.YES)), measured,
+                Collections.<TaiResidency.Entry>emptyList(), NOW, false);
+            String name = Arrays.toString(row);
+            assertEquals(name, row[2], plan.speculative);
+            assertEquals(name, row[3], plan.speculativeReason);
+        }
     }
 
     @Test

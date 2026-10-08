@@ -33,7 +33,6 @@ import com.termux.ai.TaiFeatureCheckStore;
 import com.termux.ai.TaiFeaturePlan;
 import com.termux.ai.TaiFeaturePlans;
 import com.termux.ai.TaiFunction;
-import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
@@ -83,24 +82,21 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         @Nullable final JSONObject record;
         /** The record was measured on another model file or runtime version. */
         final boolean stale;
-        /** The model file does not declare speculative decoding, or a check found it never ran. */
-        final boolean speculativeUnavailable;
 
         FeatureRow(@NonNull TaiFunction feature, @NonNull String modelId, @NonNull String modelName,
-                   @Nullable String accelerator, @Nullable JSONObject record, boolean stale, boolean speculativeUnavailable) {
+                   @Nullable String accelerator, @Nullable JSONObject record, boolean stale) {
             this.feature = feature;
             this.modelId = modelId;
             this.modelName = modelName;
             this.accelerator = accelerator;
             this.record = record;
             this.stale = stale;
-            this.speculativeUnavailable = speculativeUnavailable;
         }
 
         @NonNull
         String signature() {
             return feature + "|" + modelId + "|" + accelerator + "|" + (record == null ? "" : record.optString("id", "")
-                + record.optLong("timestamp", 0L)) + "|" + stale + "|" + speculativeUnavailable;
+                + record.optLong("timestamp", 0L)) + "|" + stale;
         }
     }
 
@@ -317,20 +313,8 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
                 JSONObject record = latestFor(latest, feature, spec, plan);
                 String current = TaiFeatureCheckStore.stalenessKey(spec);
                 boolean stale = record != null && TaiFeatureCheck.isStale(record.optString("staleKey", ""), current);
-                TaiFunctionModels.Resolution resolution = plans.models().resolve(feature);
-                boolean declares = resolution.info != null && resolution.info.speculative;
-                boolean neverRan = false;
-                for (JSONObject candidate : latest) {
-                    if (sameModel(candidate, feature, spec) && candidate.optBoolean("speculative", false)
-                        && candidate.has("speculativeRan") && !candidate.isNull("speculativeRan")
-                        && !candidate.optBoolean("speculativeRan", true)
-                        && !TaiFeatureCheck.isStale(candidate.optString("staleKey", ""), current)) {
-                        neverRan = true;
-                    }
-                }
                 rows.add(new FeatureRow(feature, spec.id, labels.modelName(spec.id),
-                    feature.usesChatModel() ? plan.accelerator : null, record, stale,
-                    feature.usesChatModel() && (!declares || neverRan)));
+                    feature.usesChatModel() ? plan.accelerator : null, record, stale));
             }
         } catch (RuntimeException ignored) {
             // No section rather than a broken one; the bench below still reads.
@@ -716,9 +700,6 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         String figure = figureText(row);
         middle.addView(TaiBenchViews.body(context, figure), TaiBenchViews.block(context, 3));
         if (row.stale) middle.addView(TaiBenchViews.body(context, getString(R.string.tai_check_older_version)), TaiBenchViews.block(context, 3));
-        if (row.speculativeUnavailable) {
-            middle.addView(TaiBenchViews.body(context, getString(R.string.tai_check_speculative_unavailable)), TaiBenchViews.block(context, 3));
-        }
         line.addView(middle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         String verdict = row.record == null || row.stale || row.record.isNull("verdict") ? "" : row.record.optString("verdict", "");
         String label = TaiBenchViews.verdictLabel(context, verdict);

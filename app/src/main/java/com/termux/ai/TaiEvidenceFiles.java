@@ -16,7 +16,8 @@ import java.util.Map;
 
 /**
  * {@link TaiEvidence} from this phone's files: the runtime history's failure records and the crash
- * marker, the GPU verdict file, the bench results file and the feature check's. Reads files: not for
+ * marker, the GPU verdict file, the bench results file (rows of this build's runtime versions only) and
+ * the feature check's. Reads files: not for
  * the main thread. The two results files are parsed once per change of their size or modification time,
  * so a plan per request costs a stat; a feature check's staleness is judged against the model store, read
  * once per instance.
@@ -69,15 +70,26 @@ public final class TaiEvidenceFiles implements TaiEvidence {
         }
     }
 
+    /** The bench's results of this model file, without those of another runtime version than this build's. */
     @NonNull
     @Override
     public List<ChatResult> chatBench(@NonNull String modelId, @NonNull String backend) {
         String base = TaiModelVariants.baseModelId(modelId);
+        String runtime = benchRuntimeVersion(backend);
         List<ChatResult> out = new ArrayList<>();
         for (ChatResult result : benchRows()) {
-            if (backend.equals(result.backend) && base.equals(TaiModelVariants.baseModelId(result.modelId))) out.add(result);
+            if (!backend.equals(result.backend) || !base.equals(TaiModelVariants.baseModelId(result.modelId))) continue;
+            // The feature check's rule: unknown or another version is stale, and the plan does not read it.
+            if (TaiFeatureCheck.isStale(result.runtimeVersion, runtime)) continue;
+            out.add(result);
         }
         return out;
+    }
+
+    /** {@code backend}'s runtime version as the bench records it on a row: the bare version, e.g. {@code 3.6.1}. */
+    @NonNull
+    static String benchRuntimeVersion(@NonNull String backend) {
+        return TaiModelSpec.BACKEND_MNN_LLM.equals(backend) ? MnnTaiRuntime.RUNTIME_VERSION : com.termux.BuildConfig.LITERT_LM_VERSION;
     }
 
     /** The feature check's latest result of each setup ({@link TaiFeatureCheckStore}), stale ones flagged. */

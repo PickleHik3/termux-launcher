@@ -187,7 +187,9 @@ public final class TaiFeaturePlan {
 
     /**
      * As above, with the user's Parameters values: a stored accelerator or speculative decoding is a pick,
-     * below the function's own accelerator pick and above anything measured or defaulted.
+     * below the function's own accelerator pick and above anything measured or defaulted. Speculative
+     * decoding is the exception: a file that does not declare it, or a check that found it never ran,
+     * turns it off whatever is stored.
      */
     @NonNull
     public static TaiFeaturePlan of(@NonNull TaiFunction feature, @NonNull TaiFunctionModels models,
@@ -243,11 +245,13 @@ public final class TaiFeaturePlan {
             accelerator = gpuGone ? TaiTierPolicy.ACCEL_CPU : pick;
             acceleratorReason = gpuGone ? Reason.DEFAULT : Reason.PICK;
         } else {
-            String fallback = path == TaiPlatformCaps.GpuPath.YES || path == TaiPlatformCaps.GpuPath.UNKNOWN
-                ? TaiTierPolicy.ACCEL_GPU : TaiTierPolicy.ACCEL_CPU;
+            boolean gpuAllowed = path == TaiPlatformCaps.GpuPath.YES || path == TaiPlatformCaps.GpuPath.UNKNOWN;
+            String fallback = gpuAllowed ? TaiTierPolicy.ACCEL_GPU : TaiTierPolicy.ACCEL_CPU;
+            // CPU-first (a failed verdict) or no GPU: the plan names the CPU, even when the CPU has failed
+            // here; the preflight still moves a load off a failed accelerator, and the plan does not call
+            // that measured.
             List<String> usable = new ArrayList<>();
-            for (String option : path == TaiPlatformCaps.GpuPath.NO
-                    ? new String[] {TaiTierPolicy.ACCEL_CPU} : new String[] {fallback, other(fallback)}) {
+            for (String option : gpuAllowed ? new String[] {fallback, other(fallback)} : new String[] {TaiTierPolicy.ACCEL_CPU}) {
                 if (!evidence.failed(info.id, info.backend, option)) usable.add(option);
             }
             String fastest = fastest(plain, usable);
@@ -267,23 +271,30 @@ public final class TaiFeaturePlan {
         Boolean speculative;
         Reason speculativeReason;
         Boolean storedSpeculative = parameters.speculative(info.id, info.backend);
-        if (storedSpeculative != null) {
-            speculative = storedSpeculative;
-            speculativeReason = Reason.PICK;
-        } else if (!info.speculative) {
+        // Never asked for on a file that does not declare it, or where a check found it never ran
+        // (decision 4.2), whatever the user stored: only then is a stored value a pick.
+        if (!info.speculative) {
             speculative = Boolean.FALSE;
             speculativeReason = Reason.DEFAULT;
         } else if (neverRan(feature, info, evidence, accelerator)) {
             speculative = Boolean.FALSE;
             speculativeReason = Reason.MEASURED;
+        } else if (storedSpeculative != null) {
+            speculative = storedSpeculative;
+            speculativeReason = Reason.PICK;
         } else {
             Double on = decodeSpeeds(feature, info, evidence, true).get(accelerator);
             Double off = decodeSpeeds(feature, info, evidence, false).get(accelerator);
-            if (on != null && off != null) {
-                // On unless measured slower (decision 4); judged on decode speed, never first token.
-                speculative = on >= off;
+            if (on != null && off != null && off / on >= MEASURED_MARGIN) {
+                // On unless measured slower (decision 4), by the same margin as the accelerator;
+                // judged on decode speed, never first token.
+                speculative = Boolean.FALSE;
+                speculativeReason = Reason.MEASURED;
+            } else if (on != null && off != null && on / off >= MEASURED_MARGIN) {
+                speculative = Boolean.TRUE;
                 speculativeReason = Reason.MEASURED;
             } else {
+                // Not measured, or within noise: on, as the default would have it.
                 speculative = Boolean.TRUE;
                 speculativeReason = Reason.DEFAULT;
             }

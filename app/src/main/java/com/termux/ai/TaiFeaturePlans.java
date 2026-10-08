@@ -41,14 +41,25 @@ public final class TaiFeaturePlans {
             new TaiEvidenceFiles(context));
     }
 
+    /** One stored Parameters value, as {@link TaiSettings#storedParameter} answers it; {@code null} when not stored. */
+    interface StoredParameters {
+        @Nullable
+        Object get(@NonNull String backend, @NonNull String modelId, @NonNull String field);
+    }
+
     /** The user's stored Parameters values, as the plan reads them. */
     @NonNull
     static TaiFeaturePlan.Parameters parametersOf(@NonNull TaiSettings settings) {
+        return parametersOf(settings::storedParameter);
+    }
+
+    @NonNull
+    static TaiFeaturePlan.Parameters parametersOf(@NonNull StoredParameters settings) {
         return new TaiFeaturePlan.Parameters() {
             @Nullable
             @Override
             public String accelerator(@NonNull String modelId, @NonNull String backend) {
-                Object stored = settings.storedParameter(backend, modelId, TaiSettings.FIELD_ACCELERATOR);
+                Object stored = settings.get(backend, modelId, TaiSettings.FIELD_ACCELERATOR);
                 // MNN stores OpenCL, which is its GPU.
                 String value = stored == null ? null : TaiLoadPreflight.normalizeAccelerator(String.valueOf(stored));
                 return TaiTierPolicy.ACCEL_GPU.equals(value) || TaiTierPolicy.ACCEL_CPU.equals(value) ? value : null;
@@ -57,7 +68,7 @@ public final class TaiFeaturePlans {
             @Nullable
             @Override
             public Boolean speculative(@NonNull String modelId, @NonNull String backend) {
-                Object stored = settings.storedParameter(backend, modelId, TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING);
+                Object stored = settings.get(backend, modelId, TaiSettings.FIELD_ENABLE_SPECULATIVE_DECODING);
                 return stored instanceof Boolean ? (Boolean) stored : null;
             }
         };
