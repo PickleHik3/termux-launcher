@@ -73,6 +73,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
                               @NonNull View source);
         void onInstall(@NonNull ModelRow row, @NonNull View source);
         void onModelMenu(@NonNull ModelRow row, @NonNull View anchor);
+        /** The row's Delete button: the same confirmation its menu's Delete opens. */
+        void onModelDelete(@NonNull ModelRow row);
         /** The speed pill was tapped: open that model's benchmark result. */
         void onModelBenchmark(@NonNull ModelRow row);
         /** "Add token" under a catalogue row's note: open the token dialog for that model. */
@@ -669,6 +671,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         final TextView install;
         final CircularProgressIndicator ring;
         final MaterialButton more;
+        final MaterialButton delete;
         final TextView extra;
         final TextView note;
         final TextView noteAction;
@@ -687,6 +690,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             install = view.findViewById(R.id.tai_centre_install);
             ring = view.findViewById(R.id.tai_centre_install_ring);
             more = view.findViewById(R.id.tai_centre_more);
+            delete = view.findViewById(R.id.tai_centre_delete);
             extra = view.findViewById(R.id.tai_centre_extra);
             note = view.findViewById(R.id.tai_centre_note);
             noteAction = view.findViewById(R.id.tai_centre_note_action);
@@ -704,6 +708,9 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             });
             more.setOnClickListener(v -> {
                 if (row != null) callbacks.onModelMenu(row, v);
+            });
+            delete.setOnClickListener(v -> {
+                if (row != null && row.installed != null) callbacks.onModelDelete(row);
             });
             core.setOnClickListener(v -> {
                 if (row == null) return;
@@ -742,6 +749,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             install.setContentDescription(context.getString(R.string.tai_centre_action_install) + " " + next.title);
             ring.setVisibility(next.installing ? View.VISIBLE : View.GONE);
             more.setVisibility(next.installed != null ? View.VISIBLE : View.GONE);
+            delete.setVisibility(next.installed != null ? View.VISIBLE : View.GONE);
             more.setContentDescription(context.getString(R.string.tai_centre_action_more, next.title));
             if (core instanceof MaterialCardView) {
                 MaterialCardView card = (MaterialCardView) core;
