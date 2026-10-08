@@ -282,7 +282,9 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         int total = state.total();
         int finished = 0;
         for (TaiBenchRunState.Entry entry : state.entries) if (entry.finished()) finished++;
-        String label = state.featureCheck() ? getString(R.string.tai_check_run_label) : TaiBenchViews.presetLabel(context, preset);
+        // One feature run on its own is headed by its name; the whole set by the card's name.
+        String label = !state.featureCheck() ? TaiBenchViews.presetLabel(context, preset)
+            : state.planned.size() == 1 ? state.planned.get(0).displayName : getString(R.string.tai_check_run_label);
         String sub = getString(R.string.tai_bench_headline_sub, label, finished, total);
         String title;
         boolean over = state.finished();

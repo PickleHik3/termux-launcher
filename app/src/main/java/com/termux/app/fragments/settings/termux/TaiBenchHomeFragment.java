@@ -736,10 +736,33 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             params.setMarginStart(TaiBenchViews.dp(context, 10));
             line.addView(pill, params);
         }
+        // Tapping a row runs that one feature again, so a redo never means the whole set.
+        TextView run = TaiBenchViews.body(context, getString(row.record == null
+            ? R.string.tai_check_row_run : R.string.tai_check_row_run_again));
+        run.setTextColor(resolveColor(context, com.termux.shared.R.attr.termuxColorPrimary));
+        LinearLayout.LayoutParams runParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        runParams.setMarginStart(TaiBenchViews.dp(context, 10));
+        line.addView(run, runParams);
+        android.util.TypedValue ripple = new android.util.TypedValue();
+        context.getTheme().resolveAttribute(android.R.attr.selectableItemBackground, ripple, true);
+        line.setBackgroundResource(ripple.resourceId);
+        int pad = TaiBenchViews.dp(context, 4);
+        line.setPadding(pad, pad, pad, pad);
+        line.setClickable(true);
+        line.setFocusable(true);
+        line.setOnClickListener(v -> {
+            TaiMotion.tick(v);
+            showCheckSheet(java.util.Collections.singletonList(row.feature));
+        });
         // A result from an older model file or runtime is greyed: the plan no longer reads it.
         line.setAlpha(row.stale ? STALE_ALPHA : 1f);
         line.setContentDescription(getString(R.string.tai_check_row_desc, TaiBenchViews.featureName(context, row.feature), figure));
         return line;
+    }
+
+    private static int resolveColor(@NonNull Context context, int attr) {
+        android.util.TypedValue value = new android.util.TypedValue();
+        return context.getTheme().resolveAttribute(attr, value, true) ? value.data : 0;
     }
 
     /** How faint a stale row is drawn. */

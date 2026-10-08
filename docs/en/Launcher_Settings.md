@@ -81,7 +81,7 @@ resolution, Linux apps, startup and troubleshooting pages. See
 
 ## On-device AI
 
-"Models, voice and local API": the runtime, the **Model centre**, **What runs on this phone**,
+"Models, voice and local API": the runtime, the **Model centre**, **Models for this phone**,
 benchmark and the local server. See [On-device AI](On_Device_AI.md).
 
 ## App behavior
