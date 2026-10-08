@@ -279,11 +279,16 @@ public final class TaiFeaturePlan {
         } else {
             Double on = decodeSpeeds(feature, info, evidence, true).get(accelerator);
             Double off = decodeSpeeds(feature, info, evidence, false).get(accelerator);
-            if (on != null && off != null) {
-                // On unless measured slower (decision 4); judged on decode speed, never first token.
-                speculative = on >= off;
+            if (on != null && off != null && off / on >= MEASURED_MARGIN) {
+                // On unless measured slower (decision 4), by the same margin as the accelerator;
+                // judged on decode speed, never first token.
+                speculative = Boolean.FALSE;
+                speculativeReason = Reason.MEASURED;
+            } else if (on != null && off != null && on / off >= MEASURED_MARGIN) {
+                speculative = Boolean.TRUE;
                 speculativeReason = Reason.MEASURED;
             } else {
+                // Not measured, or within noise: on, as the default would have it.
                 speculative = Boolean.TRUE;
                 speculativeReason = Reason.DEFAULT;
             }

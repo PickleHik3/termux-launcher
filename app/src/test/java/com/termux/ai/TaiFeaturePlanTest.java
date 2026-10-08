@@ -309,6 +309,28 @@ public class TaiFeaturePlanTest {
     }
 
     @Test
+    public void speculativeDecodingIsTurnedOffOnlyWhenClearlySlower() {
+        installE2b();
+        Object[][] table = {
+            // decode speed with it on, with it off, plan speculative, its reason
+            {15.0, 20.0, Boolean.FALSE, Reason.MEASURED},
+            {19.0, 20.0, Boolean.TRUE, Reason.DEFAULT},
+            {20.0, 20.0, Boolean.TRUE, Reason.DEFAULT},
+            {21.0, 20.0, Boolean.TRUE, Reason.DEFAULT},
+            {30.0, 20.0, Boolean.TRUE, Reason.MEASURED},
+        };
+        for (Object[] row : table) {
+            TaiEvidence.InMemory measured = new TaiEvidence.InMemory()
+                .chat(chat(GPU, true, (Double) row[0])).chat(chat(GPU, false, (Double) row[1]));
+            TaiFeaturePlan plan = TaiFeaturePlan.of(TaiFunction.ASSISTANT, models(env(12, GpuPath.YES)), measured,
+                Collections.<TaiResidency.Entry>emptyList(), NOW, false);
+            String name = Arrays.toString(row);
+            assertEquals(name, row[2], plan.speculative);
+            assertEquals(name, row[3], plan.speculativeReason);
+        }
+    }
+
+    @Test
     public void aFeatureCheckDecidesItsOwnFeatureOnly() {
         installE2b();
         evidence.check(new TaiEvidence.FeatureResult(TaiFunction.TIDY_DICTATION, E2B, LITERT, GPU, false, 5.0, true, null))
