@@ -63,6 +63,12 @@ Coding agents add a dot before the label: **Working**, **Needs you** or **Idle**
 
 When the bar is open, the clock keeps its full face and scales to the room left beside any cards.
 
+## Media
+
+While an app is playing, the open bar shows a media row: the album art next to the play controls,
+and the title. Tap the art or the title to open the app that is playing. The row needs
+**Notification access**; see [Permissions and Shizuku](Shizuku.md#permissions).
+
 ## Indicators
 
 Under **Settings → Status bar → Indicators**:

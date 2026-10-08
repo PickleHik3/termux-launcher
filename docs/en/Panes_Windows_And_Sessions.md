@@ -68,6 +68,19 @@ Hold a corner of a split pane to bring out its tab:
 A pane that is alone in its window keeps the general tab instead: minimal mode, **Turn on
 automatic tiling** / **Turn off automatic tiling**, settings and help.
 
+### Swap panes with a two-finger flick
+
+Instead of **Move**, flick two fingers briskly across a split pane towards one of its edges. Its
+shell swaps with the pane across that edge, and both panes slide into place. The layout's shape
+and sizes stay the same, under `dwindle` too. In a T layout, flicking a lower column up swaps it
+with the full-width row, and the row's shell drops into the lower cell.
+
+- The flick has to be quick and mostly in one direction: about 48dp within 300ms.
+- Nothing happens on a slow drag, with a third finger, if a finger lifts early, on a pane that is
+  alone, maximised or floating, while text is selected, or towards an edge with no pane beyond it.
+- The flick does not bring out the corner tab, and puts it away if it is out.
+- Pinch to zoom and two-finger scroll work as before.
+
 ## Resize panes and text
 
 - **Drag the gap between two panes** to move that divider. It snaps to whole character cells when

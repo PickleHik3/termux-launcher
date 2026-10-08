@@ -8,7 +8,9 @@ Termux Launcher is an Android home screen with a real Termux shell at its centre
 
 These pages describe **v1.0.0** and were checked against the standard arm64 build on a physical Android 16 phone. The Nix and VAJ editions use the same interface under a different package name.
 
-Each page covers one job and reads in a few minutes. The short version of this guide lives on the website at [picklehik3.github.io/termux-launcher-site/docs](https://picklehik3.github.io/termux-launcher-site/docs/); these pages hold the detail.
+The same guide, on one page: [picklehik3.github.io/termux-launcher-site/docs](https://picklehik3.github.io/termux-launcher-site/docs/).
+
+Each page covers one job and reads in a few minutes.
 
 ## New here?
 

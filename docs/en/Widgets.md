@@ -40,7 +40,7 @@ wallpaper colours and glass:
 | **Analog clock**, **Digital clock** | The time; up to two more cities or time zones. |
 | **Agenda** | Your next calendar events. |
 | **Calendar** | A month view. |
-| **Weather** | The weather for the location set in [Status bar](Status_Bar.md#weather). |
+| **Weather** | The weather for the location set in [Status bar](Status_Bar.md#weather). It updates as soon as you come back from picking a place. |
 | **Battery** | Charge and charging state. |
 | **System** | CPU, RAM and storage. |
 | **Media** | What is playing, with play, pause, previous and next. |

@@ -20,6 +20,9 @@ Touch is tuned for full-screen programs, not only for a shell prompt.
   first haptic, and a drag before it scrolls.
 - **Two fingers** scroll or pinch. **Pinch** changes the focused pane's text size, with filtering
   so a two-finger scroll does not zoom by accident.
+- **A brisk two-finger flick** on a split pane swaps it with the pane across the edge you flick
+  towards. See
+  [Panes, windows and sessions](Panes_Windows_And_Sessions.md#swap-panes-with-a-two-finger-flick).
 
 Ctrl, Alt and Shift go along with a mouse click, from the extra-keys row or a hardware keyboard,
 the way xterm sends them. A latched Ctrl covers one click, so **Ctrl+tap** lets a program open its

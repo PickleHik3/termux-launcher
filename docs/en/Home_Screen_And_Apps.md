@@ -49,9 +49,12 @@ tap on the A–Z row: **Off** (the default), **Shizuku** (keeps the normal scree
 
 ## App drawer
 
-With the apps row at the bottom, swipe down on it to open the full-screen app drawer. With the row
-on another edge, pull it away from its edge. The switch is **Settings → Apps → Swipe down for app
-drawer**, on by default.
+Swipe down on the apps row to open the full-screen app drawer, whether the row is at the top or the
+bottom. On a side rail, swipe right on a left rail or left on a right rail. The switch is
+**Settings → Apps → Swipe down for app drawer**, on by default.
+
+You can also put an **App drawer** key on the extra-keys row; see
+[Extra keys](Extra_Keys.md).
 
 **Settings → Apps → Drawer layout** opens the drawer's own page:
 

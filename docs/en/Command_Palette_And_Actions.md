@@ -177,6 +177,7 @@ The old id `appearance.glass_lab` still runs **Surface editor**.
 | `app.open_look_and_feel` | Look and feel settings (opens **Theme & fonts**) | | |
 | `app.open_apps_bar` | Apps bar settings | | |
 | `app.key_inspector` | Key inspector | | |
+| `app.open_app_drawer` | App drawer | | |
 | `app.open_drawer` | Open sessions | | `Ctrl+Alt+Right` (off) |
 | `app.close_drawer` | Close sessions | | `Ctrl+Alt+Left` (off) |
 | `app.launch` | Launch app | `query`: a package name, app label or stable id (required) | |

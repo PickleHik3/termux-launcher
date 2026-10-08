@@ -13,7 +13,8 @@ Open **Appearance** in any of these ways, then tap **Layout** in the pill at the
 - Long-press the terminal and choose **Appearance**.
 
 Home, Terminal and Display share one layout, so whatever you arrange lands on all three. The canvas
-shows the place you opened it from. Portrait and landscape each have their own layout.
+shows the place you opened it from. Portrait and landscape each have their own layout, and the
+canvas draws the other orientation in your device's real shape, so a tablet looks like a tablet.
 
 ## The editor
 
@@ -22,6 +23,10 @@ The canvas fills the editor. Under it is a sheet with two rows:
 - **Row A**: the Portrait/Landscape toggle, **Style: Docked / Floating**, and the eye-off **Hidden
   elements** button.
 - **Row B**: **Corners** and **Margin**, or the keyboard's tools while the keyboard is selected.
+
+On a tablet in landscape the sheet becomes a side pane on the right, as on the other Appearance
+tabs (see [Look and themes](Look_And_Themes.md#appearance)), and the **Move** button beside a
+selected bar stops at the pane's left edge.
 
 **Undo** and **Done** are in the top bar. **Done** applies everything you changed on any Appearance
 tab. Back with nothing changed closes at once; with changes it asks whether to keep editing,

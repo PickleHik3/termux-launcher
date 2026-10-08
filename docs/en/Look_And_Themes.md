@@ -14,11 +14,20 @@ hour.
 Home with a wallpaper not yet applied asks whether to keep editing, discard or save. The Layout tab
 is described on [Layout and full screen](Layout_And_Full_Screen.md).
 
+**On a tablet in landscape** (smallest width 600dp or more), the controls sit in a side pane on the
+right instead of a sheet at the bottom, and the preview fits and centres to its left. The
+**Wallpaper | Look | Layout | Icon pack** pill stays on top, tall pages scroll inside the pane, and
+the clock face popup opens inside it. Turn the tablet to portrait for the bottom sheet. Phones keep
+the bottom sheet in both orientations.
+
 ## Wallpaper
 
 The Wallpaper tab has a **Lock screen** card and a **Home screen** card.
 
 - Tap a card, then **Choose photo** to pick an image. It is previewed before anything is applied.
+- While your current wallpaper was set by another app, a small grey line under **Choose photo**
+  reads "Set your wallpaper here to see fancier glass." It goes away once you apply a wallpaper from
+  Appearance.
 - Recent photos stay in a strip for quick reuse.
 - Set Lock to **Same as Home** to have it follow Home.
 - If another app set your lock-screen wallpaper, applying Home leaves it alone.

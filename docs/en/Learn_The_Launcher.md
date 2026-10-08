@@ -120,7 +120,8 @@ wants you to try, and **Skip** is on every card. In order:
 4. Swipe up and down on the bottom border for the keyboard.
 5. Swipe down and up on the top border for the status bar.
 6. Hold an empty spot in the apps row to pin apps.
-7. Pull the apps row away from its edge to open the app drawer.
+7. Swipe down on the apps row to open the app drawer (on a side rail, swipe right on a left rail
+   or left on a right rail).
 8. Swipe up on the space bar for the command palette.
 9. After an update only: an offer of the new extra-keys row.
 10. Use the launcher as your home screen.

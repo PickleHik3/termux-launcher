@@ -41,11 +41,16 @@ unless you have a backup: Android deletes the app's private data on uninstall.
 ## First launch
 
 1. The Termux bootstrap installs. Wait for it to finish.
-2. A **Before you start** card lists what the launcher can use, one row each, with an **Allow**
-   button on each row:
+2. A **Before you start** card lists what the launcher can use, one row each. The **Wallpaper** and
+   **Linux display** rows have an **Allow** button:
    - **Wallpaper**: lets the launcher colour itself after your wallpaper.
-   - **Weather**: shows the weather for where you are in the status bar. This row appears only
-     while the weather card is on.
+   - **Weather**: "Shows the weather for a place you pick, or for where you are." Type a city in
+     the search field under the row and pick a place; the row then says "Now:" with the place name
+     and asks for no permission. It is the same search as **Settings → Status bar → Weather →
+     Location**, and Open-Meteo answers it. Or tap
+     **Use my location** under the field: it clears the picked place and asks for the location
+     permission (after two refusals it opens Android settings), and the row then reads **Allowed**.
+     This row appears whenever the weather widget or readout is on.
    - **Linux display**: runs graphical Linux apps beside the terminal. This row appears only in
      builds that have the display.
 
