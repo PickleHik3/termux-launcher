@@ -1240,7 +1240,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * Places the frame and sizes the bottom area by the shared preview contract
      * ({@link AppearancePreviewArea}): the frame's visible top {@code GAP_DP} under the page bar,
      * its bottom {@code GAP_DP} over the one sheet reserve, so Look (at any stop, Custom
-     * included), Layout and Icon pack show the launcher on the same rect.
+     * included), Layout and Icon pack show the launcher on the same rect. On a tablet in landscape
+     * ({@link EditorFormFactor}) the sheet is a side pane on the right instead, and the frame is
+     * fit to and centred in the column left of it; a rotation comes back here and re-arranges.
      */
     private void layoutFrame(boolean animate) {
         AppearanceEditorFrame frame = mFrame;
@@ -1272,10 +1274,26 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         int pageInsetTop = AppearancePreviewArea.pageInsetTopPx(
             insets == null ? mHost.statusBarInsetTop() : sides.top, contentInWindow[1]);
         int decorWidth = content.getRootView().getWidth();
-        panel.setSideInsets(
-            Math.max(0, sides.left - contentInWindow[0]),
-            Math.max(0, sides.right - (decorWidth - (contentInWindow[0] + content.getWidth()))));
-        mPanelWidthPx = content.getWidth();
+        int leftInset = Math.max(0, sides.left - contentInWindow[0]);
+        int rightInset = Math.max(0,
+            sides.right - (decorWidth - (contentInWindow[0] + content.getWidth())));
+        mSidePane = EditorFormFactor.tabletLandscape(
+            mHost.context().getResources().getConfiguration());
+        if (mSidePane) {
+            // The pane stands against the right edge: only the right inset is under it, and the
+            // left one is the preview column's.
+            int paneLeft = AppearancePreviewArea.sidePaneLeftPx(content.getWidth(), rightInset,
+                density());
+            panel.setSideInsets(0, rightInset);
+            mPanelWidthPx = content.getWidth() - paneLeft;
+            int[] column = AppearancePreviewArea.sideColumnPx(leftInset, paneLeft, density());
+            mColumnLeftPx = column[0];
+            mColumnRightPx = column[1];
+        } else {
+            panel.setSideInsets(leftInset, rightInset);
+            mPanelWidthPx = content.getWidth();
+        }
+        placePanel(panel.view());
         int[] parentOffset = new int[2];
         if (!AppearanceEditorFrame.offsetIn((View) root.getParent(), content, parentOffset))
             return;
@@ -1306,15 +1324,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         } finally {
             mInLayoutFrame = false;
         }
-        int frameBottom = AppearancePreviewArea.bottomPx(windowHeight, sheetHeightPx(panel),
-            density());
-        float scale = AppearancePreviewArea.scale(root.getHeight(), mRevealTopPx,
-            mDisplayInsetBottomPx, frameTop, frameBottom);
-        float ty = AppearancePreviewArea.translationY(frameTop, containerTop, mRevealTopPx, scale);
-        frame.show(scale, ty, animate);
+        int bottom = previewBottomPx(sheetHeightPx(panel));
+        float scale = previewScale(root, bottom);
+        float tx = previewTranslationX(root, scale);
+        float ty = previewTranslationY(root, frameTop, containerTop, bottom, scale);
+        frame.show(scale, tx, ty, animate);
         mTargetScale = scale;
+        mTargetTx = tx;
         mTargetTy = ty;
-        setFrameRect(scale, ty);
+        setFrameRect(scale, tx, ty);
         positionLayoutFrame();
         // A rotation moved the decor around the container: the picture is cropped to it again.
         if (mEditorWallpaper != null)
@@ -1432,6 +1450,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * stand taller than it; the Look page's Custom row may, and then scrolls inside it.
      */
     private int sheetHeightPx(@NonNull AppearanceEditorPanel panel) {
+        // Beside the preview the pane is one height on every page: the top line to the foot.
+        // Row B scrolls inside it where it is taller, as it does in a bottom sheet.
+        if (mSidePane)
+            return AppearancePreviewArea.sidePaneHeightPx(mWindowHeightPx, mFrameTopPx);
         int content = panel.measureFor(mode(), mPanelWidthPx);
         if (mode() == EditorMode.LOOK)
             content = Math.min(content, mSheetReservePx);
@@ -1440,6 +1462,64 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private float density() {
         return mHost.context().getResources().getDisplayMetrics().density;
+    }
+
+    /**
+     * The preview's bottom line: {@code GAP_DP} over a bottom sheet {@code sheetPx} tall, or,
+     * beside a side pane, over the navigation bar alone.
+     */
+    private int previewBottomPx(int sheetPx) {
+        return AppearancePreviewArea.bottomPx(mWindowHeightPx, mSidePane ? mNavInsetPx : sheetPx,
+            density());
+    }
+
+    /** The frame's scale between the top line and {@code bottomPx}; held to the side column too. */
+    private float previewScale(@NonNull View root, int bottomPx) {
+        if (!mSidePane)
+            return AppearancePreviewArea.scale(root.getHeight(), mRevealTopPx,
+                mDisplayInsetBottomPx, mFrameTopPx, bottomPx);
+        return AppearancePreviewArea.sideScale(root.getWidth(), root.getHeight(), mRevealTopPx,
+            mDisplayInsetBottomPx, mDisplayInsetLeftPx, mDisplayInsetRightPx, mFrameTopPx,
+            bottomPx, mColumnLeftPx, mColumnRightPx);
+    }
+
+    /**
+     * The frame's translation down: the top line, as on a phone, and beside a side pane also the
+     * slack that centres a miniature the column's width left shorter than the lines.
+     */
+    private float previewTranslationY(@NonNull View root, int topPx, int containerTopPx,
+                                      int bottomPx, float scale) {
+        float ty = AppearancePreviewArea.translationY(topPx, containerTopPx, mRevealTopPx, scale);
+        if (!mSidePane)
+            return ty;
+        return ty + AppearancePreviewArea.sideCentreOffsetPx(root.getHeight(), mRevealTopPx,
+            mDisplayInsetBottomPx, topPx, bottomPx, scale);
+    }
+
+    /** The frame's translation across: 0 over a bottom sheet, the column's centre beside a pane. */
+    private float previewTranslationX(@NonNull View root, float scale) {
+        if (!mSidePane)
+            return 0f;
+        return AppearancePreviewArea.translationX(mColumnLeftPx, mColumnRightPx,
+            mContainerLeftPx, root.getWidth(), mDisplayInsetLeftPx, mDisplayInsetRightPx, scale);
+    }
+
+    /**
+     * The sheet docked full width at the foot, or, beside the preview, the side pane's width
+     * against the right edge. Compared before it is set: this runs from the layout listener.
+     */
+    private void placePanel(@NonNull View view) {
+        ViewGroup.LayoutParams raw = view.getLayoutParams();
+        if (!(raw instanceof FrameLayout.LayoutParams))
+            return;
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) raw;
+        int width = mSidePane ? mPanelWidthPx : ViewGroup.LayoutParams.MATCH_PARENT;
+        int gravity = mSidePane ? Gravity.BOTTOM | Gravity.RIGHT : Gravity.BOTTOM;
+        if (params.width == width && params.gravity == gravity)
+            return;
+        params.width = width;
+        params.gravity = gravity;
+        view.setLayoutParams(params);
     }
 
     // ---- the frame follows the sheet -------------------------------------------------------------
@@ -1451,7 +1531,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private int mContainerTopPx;
     private int mContainerLeftPx;
     private float mTargetScale = -1f;
+    private float mTargetTx;
     private float mTargetTy;
+    /**
+     * The sheet is a side pane on the right and the preview stands in the column left of it,
+     * {@link #mColumnLeftPx}..{@link #mColumnRightPx} in the content view: a tablet in landscape
+     * ({@link EditorFormFactor}). Decided again on every {@link #layoutFrame}.
+     */
+    private boolean mSidePane;
+    private int mColumnLeftPx;
+    private int mColumnRightPx;
     @Nullable private android.animation.ValueAnimator mFrameAnimator;
     /** The layout canvas host reaches this far past the scaled launcher, so no seam shows. */
     private static final int RING_PX = 1;
@@ -1464,16 +1553,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     /**
-     * The scaled container's rect in the content view at {@code scale} and {@code translationY},
-     * widened to whole pixels: the layout canvas's host. It starts the shown band below the
-     * preview's top line.
+     * The scaled container's rect in the content view at {@code scale}, {@code translationX} and
+     * {@code translationY}, widened to whole pixels: the layout canvas's host. It starts the shown
+     * band below the preview's top line.
      */
-    private void setFrameRect(float scale, float translationY) {
+    private void setFrameRect(float scale, float translationX, float translationY) {
         AppearanceEditorFrame frame = mFrame;
         if (frame == null)
             return;
         View root = frame.root();
-        float scaledLeft = mContainerLeftPx + root.getWidth() * (1f - scale) / 2f;
+        float scaledLeft = mContainerLeftPx + translationX + root.getWidth() * (1f - scale) / 2f;
         float top = mContainerTopPx + translationY;
         mFrameRectInContent = new int[] {(int) Math.floor(scaledLeft), (int) Math.floor(top),
             (int) Math.ceil(scaledLeft + root.getWidth() * scale),
@@ -1495,34 +1584,36 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         View root = frame.root();
         if (root.getHeight() <= 0)
             return;
-        int bottom = AppearancePreviewArea.bottomPx(mWindowHeightPx, sheetPx, density());
-        float scale = AppearancePreviewArea.scale(root.getHeight(), mRevealTopPx,
-            mDisplayInsetBottomPx, mFrameTopPx, bottom);
-        float ty = AppearancePreviewArea.translationY(mFrameTopPx, mContainerTopPx, mRevealTopPx,
-            scale);
-        if (scale == mTargetScale && ty == mTargetTy)
+        int bottom = previewBottomPx(sheetPx);
+        float scale = previewScale(root, bottom);
+        float tx = previewTranslationX(root, scale);
+        float ty = previewTranslationY(root, mFrameTopPx, mContainerTopPx, bottom, scale);
+        if (scale == mTargetScale && tx == mTargetTx && ty == mTargetTy)
             return;
         mTargetScale = scale;
+        mTargetTx = tx;
         mTargetTy = ty;
         cancelFrameAnimator();
         if (!mFramed) {
             // Still arriving: the opening hop re-aims at the new pose.
-            frame.show(scale, ty, !ReducedMotion.isEnabled(mHost.context()));
-            setFrameRect(scale, ty);
+            frame.show(scale, tx, ty, !ReducedMotion.isEnabled(mHost.context()));
+            setFrameRect(scale, tx, ty);
             positionLayoutFrame();
             return;
         }
         if (!animate || ReducedMotion.isEnabled(mHost.context())) {
-            frame.show(scale, ty, false);
-            setFrameRect(scale, ty);
+            frame.show(scale, tx, ty, false);
+            setFrameRect(scale, tx, ty);
             positionLayoutFrame();
             positionTargets();
             return;
         }
         root.animate().cancel();
         final float fromScale = root.getScaleX();
+        final float fromTx = root.getTranslationX();
         final float fromTy = root.getTranslationY();
         final float toScale = scale;
+        final float toTx = tx;
         final float toTy = ty;
         android.animation.ValueAnimator animator = android.animation.ValueAnimator.ofFloat(0f, 1f);
         animator.setDuration(PANEL_MS);
@@ -1530,9 +1621,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         animator.addUpdateListener(a -> {
             float f = (Float) a.getAnimatedValue();
             float s = fromScale + (toScale - fromScale) * f;
+            float x = fromTx + (toTx - fromTx) * f;
             float y = fromTy + (toTy - fromTy) * f;
-            frame.setPose(s, y);
-            setFrameRect(s, y);
+            frame.setPose(s, x, y);
+            setFrameRect(s, x, y);
             positionLayoutFrame();
         });
         animator.addListener(new android.animation.AnimatorListenerAdapter() {
@@ -1547,8 +1639,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     mFrameAnimator = null;
                 if (mCancelled || !mOpen)
                     return;
-                frame.setPose(toScale, toTy);
-                setFrameRect(toScale, toTy);
+                frame.setPose(toScale, toTx, toTy);
+                setFrameRect(toScale, toTx, toTy);
                 positionLayoutFrame();
                 positionTargets();
             }
@@ -2869,14 +2961,21 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         popup.setModal(true);
         int windowWidth = Math.min(anchor.getRootView().getWidth(),
             getResources().getDisplayMetrics().widthPixels);
-        popup.setWidth(windowWidth * 3 / 4);
+        // Beside the preview the sheet is the side pane: the popup takes its share of the pane,
+        // not of the window, so it stands over the pane rather than across the preview.
+        popup.setWidth((mSidePane ? Math.min(windowWidth, mPanelWidthPx) : windowWidth) * 3 / 4);
         popup.setDropDownGravity(Gravity.END);
         int[] anchorAt = new int[2];
         anchor.getLocationInWindow(anchorAt);
-        int room = Math.max(dp(CLOCK_POPUP_MIN_HEIGHT_DP), anchorAt[1] - dp(FRAME_GAP_DP));
+        // The bottom sheet's button is near the foot: the popup opens upward from its top edge.
+        // The side pane's stands near the top of a tall pane: it opens downward under it.
+        int roomAbove = anchorAt[1] - dp(FRAME_GAP_DP);
+        int roomBelow = anchor.getRootView().getHeight() - mNavInsetPx
+            - (anchorAt[1] + anchor.getHeight()) - dp(FRAME_GAP_DP);
+        int room = Math.max(dp(CLOCK_POPUP_MIN_HEIGHT_DP), mSidePane ? roomBelow : roomAbove);
         int height = Math.min(dp(CLOCK_POPUP_HEIGHT_DP), room);
         popup.setHeight(height);
-        popup.setVerticalOffset(-(anchor.getHeight() + height));
+        popup.setVerticalOffset(mSidePane ? 0 : -(anchor.getHeight() + height));
         popup.setOnDismissListener(() -> mClockDropdown = null);
         popup.setAdapter(new ClockDropdownAdapter(prefs().getTopPaneClockStyle()));
         popup.setOnItemClickListener((parent, view, position, id) -> {

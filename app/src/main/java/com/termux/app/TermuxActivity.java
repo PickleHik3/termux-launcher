@@ -1756,6 +1756,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyDockImeOffset(0);
             applyDisplayImeRoom(displayImeRoomPx(insetsCompat));
             applyTerminalOverlayInsets(insetsCompat);
+            applyFirstRunCardInsets(insetsCompat);
             // The drawer plane pins itself above a system keyboard; guarded on the field so a
             // keyboard rising over the terminal never builds a drawer that was never opened.
             if (mAppDrawerController != null) {
@@ -1888,7 +1889,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!com.termux.app.firstrun.FirstRunPermissionsCard.shouldResume(
                     mPreferences.isFirstRunChainDone(),
                     mPreferences.isFirstRunPermissionsCardSeen(),
-                    firstRunWallpaperState(), firstRunWeatherState(),
+                    firstRunWallpaperState(), firstRunWeatherToAsk(),
                     mFirstRunPermissionsCard != null)) {
                 return;
             }
@@ -1929,7 +1930,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         if (!com.termux.app.firstrun.FirstRunPermissionsCard.shouldShow(
                 mPreferences.isFirstRunChainDone(), mPreferences.isFirstRunPermissionsCardSeen(),
-                firstRunWallpaperState(), firstRunWeatherState(), replay)) {
+                firstRunWallpaperState(), firstRunWeatherToAsk(), replay)) {
             finishFirstRunChain();
             return;
         }
@@ -1964,16 +1965,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Where the weather's location stands, or null when the weather widget is switched off — a
-     * permission for a feature the user is not running is exactly the row that gets refused out of
-     * hand, so it is left off the card entirely. Null too when a place is picked in Settings: the
-     * weather then never reads the device's location, so there is nothing to ask for.
+     * row for a feature the user is not running is exactly the row that gets refused out of hand,
+     * so it is left off the card entirely.
      */
     @Nullable
     private com.termux.app.firstrun.FirstRunPermissionsCard.State firstRunWeatherState() {
         if (mPreferences == null || !mPreferences.isStatusWidgetWeatherEnabled()) return null;
-        if (weatherFollowsPickedPlace()) return null;
         return firstRunPermissionState(android.Manifest.permission.ACCESS_COARSE_LOCATION,
             mFirstRunWeatherAsked);
+    }
+
+    /** The place the weather follows, or empty while it follows the device. */
+    @NonNull
+    private String firstRunWeatherPlace() {
+        return mPreferences == null ? "" : mPreferences.getStatusWidgetWeatherLocation();
+    }
+
+    /**
+     * What the weather still asks of the user when deciding whether the card comes up at all:
+     * nothing once a place is picked, since the weather then never reads the device's location.
+     */
+    @Nullable
+    private com.termux.app.firstrun.FirstRunPermissionsCard.State firstRunWeatherToAsk() {
+        return com.termux.app.firstrun.FirstRunPermissionsCard.weatherToAsk(
+            firstRunWeatherState(), firstRunWeatherPlace());
     }
 
     /** A place is picked in Settings, so the weather needs no location permission. */
@@ -2012,6 +2027,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override
+            public void onFirstRunWeatherPlacePicked(@NonNull String label, double latitude,
+                                                     double longitude) {
+                if (mPreferences == null) return;
+                mPreferences.setStatusWidgetWeatherPlace(label, latitude, longitude);
+                ensureWeatherController().forceRefresh();
+                refreshFirstRunPermissionsCard();
+            }
+
+            @Override
+            public void onFirstRunPlaceSearchFocusChanged(@NonNull EditText field,
+                                                          boolean focused) {
+                if (focused) beginFirstRunPlaceSearch(field);
+                // Posted, and on the window rather than on the field: focus is given up while
+                // the card is being taken off the content view, and moving it to the terminal in
+                // the middle of that removal would leave the content view's focus chain pointing
+                // at a view it no longer holds.
+                else if (getWindow() != null)
+                    getWindow().getDecorView().post(() -> endFirstRunPlaceSearch(field));
+            }
+
+            @Override
             public void onFirstRunDisplayToggled(boolean enabled) {
                 setEmbeddedDisplayEnabled(enabled);
             }
@@ -2022,33 +2058,80 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 finishFirstRunChain();
             }
         });
-        card.setOnApplyWindowInsetsListener((view, insets) -> {
-            androidx.core.graphics.Insets bars =
-                androidx.core.view.WindowInsetsCompat.toWindowInsetsCompat(insets, view)
-                    .getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
-            card.setSystemBarInsets(bars.top, bars.bottom);
-            return insets;
-        });
         content.addView(card, com.termux.app.firstrun.FirstRunPermissionsCardView.buildLayoutParams());
         mFirstRunPermissionsCard = card;
         mFirstRunPermissionsCardHost = content;
-        android.view.WindowInsets current = card.getRootWindowInsets();
+        // Fed from the content view's own insets listener rather than a listener of its own: the
+        // activity's root view, a sibling before it, consumes the insets, so a dispatch never
+        // reaches the card and it would only ever hear the bars it was born with.
+        android.view.WindowInsets current = content.getRootWindowInsets();
         if (current != null) {
-            androidx.core.graphics.Insets bars =
-                androidx.core.view.WindowInsetsCompat.toWindowInsetsCompat(current, card)
-                    .getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars());
-            card.setSystemBarInsets(bars.top, bars.bottom);
+            applyFirstRunCardInsets(
+                androidx.core.view.WindowInsetsCompat.toWindowInsetsCompat(current, content));
         }
         refreshFirstRunPermissionsCard();
         card.animateIn();
+    }
+
+    /**
+     * The card keeps clear of the system bars and of the system keyboard: the weather row's search
+     * brings the keyboard up, and the card has to sit above it rather than under it.
+     */
+    private void applyFirstRunCardInsets(@NonNull WindowInsetsCompat insets) {
+        if (mFirstRunPermissionsCard == null) return;
+        androidx.core.graphics.Insets bars = insets.getInsets(Type.systemBars());
+        int imeBottom = insets.isVisible(Type.ime()) ? insets.getInsets(Type.ime()).bottom : 0;
+        mFirstRunPermissionsCard.setSystemBarInsets(bars.top, Math.max(bars.bottom, imeBottom));
     }
 
     /** Rebuilds the card's rows from where the permissions and the display setting stand now. */
     private void refreshFirstRunPermissionsCard() {
         if (mFirstRunPermissionsCard == null) return;
         mFirstRunPermissionsCard.bind(com.termux.app.firstrun.FirstRunPermissionsCard.rows(
-            firstRunWallpaperState(), firstRunWeatherState(),
+            firstRunWallpaperState(), firstRunWeatherState(), firstRunWeatherPlace(),
             mFirstRunCardOffersDisplay, isX11DisplayEnabled()));
+    }
+
+    /**
+     * The weather row's search took focus: the embedded keyboard steps aside, the system
+     * keyboard's insets are owned by this activity, and the system keyboard comes up for it —
+     * the drawer search's order.
+     */
+    private void beginFirstRunPlaceSearch(@NonNull EditText field) {
+        if (mInAppKeyboard != null && mInAppKeyboard.isEnabled()) {
+            mInAppKeyboard.beginExternalTextInput(true);
+        }
+        onSystemImeRequested();
+        field.post(() -> {
+            if (mFirstRunPermissionsCard == null || !field.hasFocus()) return;
+            KeyboardUtils.showSoftKeyboard(TermuxActivity.this, field);
+        });
+    }
+
+    /** The search gave up focus: the system keyboard goes, and the terminal and its keyboard return. */
+    private void endFirstRunPlaceSearch(@NonNull EditText field) {
+        if (field.hasFocus()) return;
+        if (getWindow() != null) {
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .hide(Type.ime());
+        }
+        returnFocusToTerminalQuietly();
+        if (mInAppKeyboard != null) mInAppKeyboard.endExternalTextInput();
+    }
+
+    /**
+     * Gives the terminal focus back after a text field had it. Quietly: the terminal's own focus
+     * listener would re-show the system keyboard 500ms later for a terminal nobody is typing into.
+     */
+    private void returnFocusToTerminalQuietly() {
+        if (mTerminalView == null || mTerminalView.hasFocus()) return;
+        View.OnFocusChangeListener listener = mTerminalView.getOnFocusChangeListener();
+        mTerminalView.setOnFocusChangeListener(null);
+        try {
+            mTerminalView.requestFocus();
+        } finally {
+            mTerminalView.setOnFocusChangeListener(listener);
+        }
     }
 
     /**
@@ -2075,11 +2158,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * A row's Allow button. The system stops raising its own dialog after the second refusal, so
-     * past that point the button opens this app's settings page rather than doing nothing at all.
+     * A row's Allow button, or the weather row's Use my location. The system stops raising its own
+     * dialog after the second refusal, so past that point the button opens this app's settings
+     * page rather than doing nothing at all.
+     *
+     * <p>Use my location is also the way back from a picked place: the place is cleared first, so
+     * the weather follows the device whatever the permission dialog is answered.
      */
     private void onFirstRunPermissionRowTapped(
             @NonNull com.termux.app.firstrun.FirstRunPermissionsCard.Item item) {
+        if (item == com.termux.app.firstrun.FirstRunPermissionsCard.Item.WEATHER
+                && weatherFollowsPickedPlace()) {
+            mPreferences.clearStatusWidgetWeatherPlace();
+            ensureWeatherController().forceRefresh();
+            refreshFirstRunPermissionsCard();
+        }
         String permission = item == com.termux.app.firstrun.FirstRunPermissionsCard.Item.WEATHER
             ? android.Manifest.permission.ACCESS_COARSE_LOCATION
             : android.Manifest.permission.READ_EXTERNAL_STORAGE;
@@ -2866,6 +2959,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean isHelpUp() {
             return mHelpController != null && mHelpController.isShowing();
+        }
+
+        @Override public PlaceLayout.Edge appsEdge() {
+            PlaceLayout layout = currentPlaceLayout();
+            return PlaceChromePolicy.appsShown(layout) ? PlaceChromePolicy.appsEdge(layout)
+                : PlaceLayout.Edge.BOTTOM;
         }
 
         @Override public boolean helpButtonRectOnScreen(@NonNull android.graphics.Rect out) {
@@ -14966,18 +15065,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     .hide(Type.ime());
             }
             if (field.hasFocus()) field.clearFocus();
-            if (mTerminalView != null && !mTerminalView.hasFocus()) {
-                // Focus goes back quietly: the terminal's own focus listener would re-show the IME
-                // 500ms later for a terminal nobody is typing into. A keyboard that was up before
-                // the drawer is brought back by restoreSystemKeyboard, not by this.
-                View.OnFocusChangeListener listener = mTerminalView.getOnFocusChangeListener();
-                mTerminalView.setOnFocusChangeListener(null);
-                try {
-                    mTerminalView.requestFocus();
-                } finally {
-                    mTerminalView.setOnFocusChangeListener(listener);
-                }
-            }
+            // A keyboard that was up before the drawer is brought back by restoreSystemKeyboard,
+            // not by this.
+            returnFocusToTerminalQuietly();
             if (mInAppKeyboard != null) mInAppKeyboard.endExternalTextInput();
         }
 
@@ -24188,6 +24278,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void openAppsBar() {
             TermuxActivity.this.openAppsBar();
+        }
+
+        @Override public void openAppDrawer() {
+            if (mPreferences == null || !mPreferences.isAppLauncherDrawerEnabled()) return;
+            // The same edge choice the pinned apps row's own pull makes, so the plane grows out
+            // of the row wherever it lies.
+            PlaceLayout.Edge edge = PlaceChromePolicy.appsEdge(currentPlaceLayout());
+            getAppDrawerController().open(AppDrawerPullGeometry.pullFor(edge),
+                AppDrawerPullGeometry.seedFor(edge));
         }
 
         @Override public void showCommandPalette() {

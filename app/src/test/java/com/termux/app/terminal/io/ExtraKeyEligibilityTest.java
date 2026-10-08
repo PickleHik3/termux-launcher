@@ -116,6 +116,7 @@ public class ExtraKeyEligibilityTest {
             LauncherToolRegistry.TOOL_APP_OPEN_SETTINGS,
             LauncherToolRegistry.TOOL_APP_COMMAND_PALETTE,
             LauncherToolRegistry.TOOL_APP_LAUNCH,
+            LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER,
             LauncherToolRegistry.TOOL_APPEARANCE_SET_WALLPAPER,
             LauncherToolRegistry.TOOL_APPEARANCE_SURFACE_EDITOR,
             LauncherToolRegistry.TOOL_KEYBOARD_CYCLE_FORM,
@@ -251,9 +252,9 @@ public class ExtraKeyEligibilityTest {
             Band band = ExtraKeyEligibility.bandOfTool(tool);
             counts.put(band, counts.get(band) + 1);
         }
-        assertEquals(93, declared);
+        assertEquals(94, declared);
         assertEquals(Integer.valueOf(0), counts.get(Band.TERMINAL_INPUT));
-        assertEquals(Integer.valueOf(28), counts.get(Band.LAUNCHER));
+        assertEquals(Integer.valueOf(29), counts.get(Band.LAUNCHER));
         assertEquals(Integer.valueOf(4), counts.get(Band.SESSION_OVERLAY));
         assertEquals(Integer.valueOf(41), counts.get(Band.MULTIPLEX));
         assertEquals(Integer.valueOf(20), counts.get(Band.TERMINAL_TOOL));

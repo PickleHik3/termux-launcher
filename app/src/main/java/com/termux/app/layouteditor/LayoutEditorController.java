@@ -817,7 +817,12 @@ public final class LayoutEditorController {
         if (sheetParent instanceof View && ((View) sheetParent).isShown()) {
             int[] sheetAt = new int[2];
             ((View) sheetParent).getLocationInWindow(sheetAt);
-            bottom = Math.min(bottom, sheetAt[1]);
+            // A sheet docked across the foot ends the room at its top; a side pane, which starts
+            // right of the room's left edge (a tablet in landscape), ends it at its left.
+            if (sheetAt[0] > left)
+                right = Math.min(right, sheetAt[0]);
+            else
+                bottom = Math.min(bottom, sheetAt[1]);
         }
         if (right <= left || bottom <= top) {
             canvas.setMoveControlRoom(null);

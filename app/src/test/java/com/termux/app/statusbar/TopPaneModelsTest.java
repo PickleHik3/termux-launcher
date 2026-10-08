@@ -89,4 +89,15 @@ public class TopPaneModelsTest {
             "Marconi Union", "YouTube Music", null, 30L, 100L, true, 5L)));
         assertFalse(base.equals(null));
     }
+
+    @Test
+    public void theMediaRowStandsOnTheDigitsLineWithinTheAir() {
+        // Slot 96 tall at density 1, row 44 tall: anchored on a digit line at 40 it starts at 18.
+        assertEquals(18, TopPaneSlotBudget.anchoredTop(96, 44, 40f, 1f));
+        // A line too high for the air pins the row to the air (5), too low to the foot (96-5-44).
+        assertEquals(5, TopPaneSlotBudget.anchoredTop(96, 44, 10f, 1f));
+        assertEquals(47, TopPaneSlotBudget.anchoredTop(96, 44, 90f, 1f));
+        // No line (a compact face): the slot's centre, as before.
+        assertEquals(26, TopPaneSlotBudget.anchoredTop(96, 44, -1f, 1f));
+    }
 }

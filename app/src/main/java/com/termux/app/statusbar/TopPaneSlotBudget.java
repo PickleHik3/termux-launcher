@@ -45,6 +45,21 @@ public final class TopPaneSlotBudget {
 
     private TopPaneSlotBudget() {}
 
+    /**
+     * Where a row {@code heightPx} tall stands so its centre meets {@code anchorCenterYPx} — the
+     * clock's digit line, for the media row beside a full face, which reads lower than the digits
+     * when it is centred on the slot instead — held within the slot's air. With no anchor
+     * (negative), the slot's centre, as before.
+     */
+    public static int anchoredTop(int slotHeight, int heightPx, float anchorCenterYPx,
+                                  float density) {
+        if (anchorCenterYPx < 0f) return Math.max(0, (slotHeight - heightPx) / 2);
+        int air = Math.round(AIR_DP * density);
+        int top = Math.round(anchorCenterYPx - heightPx / 2f);
+        int lowest = Math.max(0, slotHeight - air - heightPx);
+        return Math.max(Math.min(air, lowest), Math.min(top, lowest));
+    }
+
     @NonNull
     public static Column layout(@NonNull TopPaneSlotMode mode, int pinnedCount, int slotHeight,
                                 float density) {

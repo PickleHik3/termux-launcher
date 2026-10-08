@@ -460,6 +460,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_APP_LAUNCH = "app.launch";
     public static final String TOOL_APP_KEY_INSPECTOR = "app.key_inspector";
     public static final String TOOL_APP_OPEN_DRAWER = "app.open_drawer";
+    public static final String TOOL_APP_OPEN_APP_DRAWER = "app.open_app_drawer";
     public static final String TOOL_APP_CLOSE_DRAWER = "app.close_drawer";
     public static final String TOOL_TERMINAL_ACTION_SHEET = "terminal.action_sheet";
     public static final String TOOL_SESSION_ACTIVATE_BY_INDEX = "session.activate_by_index";
@@ -1050,6 +1051,12 @@ public final class LauncherToolRegistry {
             Binding.all("ctrl+alt+m"), REQUIRES_SESSION);
         // Ctrl+Alt+left/right reach the sessions browser only with split panes off; with them
         // on the multiplexer claims the arrows for pane focus.
+        addUi(map, TOOL_APP_OPEN_APP_DRAWER,
+            "Open the app drawer.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_APP, R.string.tool_app_open_app_drawer, R.string.tool_desc_app_open_app_drawer,
+            Collections.emptyList());
         addUi(map, TOOL_APP_OPEN_DRAWER,
             "Open the sessions browser.",
             schemaEmpty(),

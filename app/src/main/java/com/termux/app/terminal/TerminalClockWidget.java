@@ -77,6 +77,18 @@ public final class TerminalClockWidget extends View {
      */
     private static final float FLIP_SHADOW_BLUR_DP = 3.2f;
     private static final float FLIP_SHADOW_DROP_DP = 1.06f;
+    /** The full flip card; see drawFullFlipDigit for why it is 26dp and not the handoff's 22. */
+    private static final float FULL_FLIP_CARD_DP = 26f;
+    /** The gap between the two cards of the hour, and between the two of the minutes. */
+    private static final float FULL_FLIP_DIGIT_GAP_DP = 5.7f;
+    private static final float COMPACT_FLIP_CARD_DP = 15f;
+    private static final float COMPACT_FLIP_DIGIT_GAP_DP = 1.5f;
+    /**
+     * The hour pair stands off the minute pair by this many digit gaps, in every flip form: enough
+     * to read as two groups, close enough that the time reads as one.
+     */
+    @VisibleForTesting
+    static final float FLIP_PAIR_GAP_RATIO = 1.5f;
     /**
      * The band Slab and Minimal centre their digits' cap height in: Roboto's caps at those sizes
      * (27–27.7dp) with about 1.5dp of air each side. Centring the ascent-to-descent box instead
@@ -528,8 +540,8 @@ public final class TerminalClockWidget extends View {
                 return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 39f, -.045f) + dp(6f)
                     + stackedMetaWidth(11f, mediumTypeface());
             default:
-                // 26dp cards x4 + 5.7dp intra-pair gaps x2 + 13.5dp inter-pair gap.
-                return dp(128.9f + 6.7f) + fullFlipMetaWidth();
+                return dp(flipRowWidthDp(FULL_FLIP_CARD_DP, FULL_FLIP_DIGIT_GAP_DP) + 6.7f)
+                    + fullFlipMetaWidth();
         }
     }
 
@@ -551,9 +563,9 @@ public final class TerminalClockWidget extends View {
                 return spacedTextWidth(timeText(), Typeface.DEFAULT_BOLD, 27f, -.045f) + dp(5f)
                     + stackedMetaWidth(9f, mediumTypeface());
             default:
-                // 15dp cards x4 + 1.5dp intra-pair gaps x2 + 4dp hour/minute gap, then the meta
-                // column plus the ink that glyphs and the card shadow carry past their advance.
-                return dp(67f) + dp(4f)
+                // The cards, then the meta column plus the ink that glyphs and the card shadow
+                // carry past their advance.
+                return dp(flipRowWidthDp(COMPACT_FLIP_CARD_DP, COMPACT_FLIP_DIGIT_GAP_DP)) + dp(4f)
                     + stackedMetaWidth(9.5f, Typeface.DEFAULT) + dp(2f);
         }
     }
@@ -810,11 +822,16 @@ public final class TerminalClockWidget extends View {
      * the slot's. -1 in any other form.
      */
     public float fullBandCenterYPx() {
-        if (mForm != TopPaneClockForm.FULL || getHeight() <= 0) return -1f;
+        return fullBandCenterYPx(getHeight());
+    }
+
+    /** The same for a face {@code heightPx} tall: what the slot asks while it is still measuring. */
+    public float fullBandCenterYPx(int heightPx) {
+        if (mForm != TopPaneClockForm.FULL || heightPx <= 0) return -1f;
         float bandDp = fullBandHeightDp();
         float columnDp = fullColumnDp();
         float scale = fullScale();
-        float translate = Math.max(0f, (getHeight() - dp(columnDp) * scale) / 2f);
+        float translate = Math.max(0f, (heightPx - dp(columnDp) * scale) / 2f);
         return translate + dp(bandDp / 2f) * scale;
     }
 
@@ -1069,18 +1086,33 @@ public final class TerminalClockWidget extends View {
         float x = 0f;
         for (int digit = 0; digit < 4; digit++) {
             x = drawFullFlipDigit(canvas, digit, x, digitBaseline, now);
-            if (digit == 0 || digit == 2) x += dp(5.7f);
-            else if (digit == 1) x += dp(13.5f);
+            x += dp(flipGapAfterDp(digit, FULL_FLIP_DIGIT_GAP_DP));
         }
         return x;
+    }
+
+    /** What follows card {@code digit} (0-3): a digit gap inside a pair, the pair gap after it. */
+    private static float flipGapAfterDp(int digit, float digitGapDp) {
+        if (digit == 0 || digit == 2) return digitGapDp;
+        return digit == 1 ? flipPairGapDp(digitGapDp) : 0f;
+    }
+
+    @VisibleForTesting
+    static float flipPairGapDp(float digitGapDp) {
+        return digitGapDp * FLIP_PAIR_GAP_RATIO;
+    }
+
+    /** Four cards, the two digit gaps and the pair gap: the width the flip time row paints. */
+    @VisibleForTesting
+    static float flipRowWidthDp(float cardDp, float digitGapDp) {
+        return 4f * cardDp + 2f * digitGapDp + flipPairGapDp(digitGapDp);
     }
 
     private float drawFullFlipDigit(Canvas canvas, int digit, float x, float digitBaseline,
                                     long now) {
         // Wider than the handoff's 22dp: at 30.5dp the widest digits reach the hinge clips at the
-        // seam, so the card carries 2dp more clearance per side. Keep in step with the 128.9dp
-        // row width in fullTimeRowWidth().
-        float w = dp(26f), h = dp(35.5f);
+        // seam, so the card carries 2dp more clearance per side.
+        float w = dp(FULL_FLIP_CARD_DP), h = dp(35.5f);
         RectF card = mRect;
         card.set(x, 0f, x + w, h);
         float p = progress(digit, now, FLIP_DURATION_MS);
@@ -1300,15 +1332,14 @@ public final class TerminalClockWidget extends View {
         float x = 0f;
         for (int digit = 0; digit < 4; digit++) {
             x = drawCompactFlipDigit(canvas, digit, x, digitBaseline, now);
-            if (digit == 0 || digit == 2) x += dp(1.5f);
-            else if (digit == 1) x += dp(4f);
+            x += dp(flipGapAfterDp(digit, COMPACT_FLIP_DIGIT_GAP_DP));
         }
         return x;
     }
 
     private float drawCompactFlipDigit(Canvas canvas, int digit, float x, float digitBaseline,
                                        long now) {
-        float w = dp(15f), h = dp(24f);
+        float w = dp(COMPACT_FLIP_CARD_DP), h = dp(24f);
         RectF card = mRect;
         card.set(x, 0f, x + w, h);
         float p = progress(digit, now, FLIP_DURATION_MS);

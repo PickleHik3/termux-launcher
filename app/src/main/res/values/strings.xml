@@ -735,13 +735,16 @@
     <string name="first_run_permissions_wallpaper_title">Wallpaper</string>
     <string name="first_run_permissions_wallpaper_copy">Lets the launcher colour itself after your wallpaper.</string>
     <string name="first_run_permissions_weather_title">Weather</string>
-    <string name="first_run_permissions_weather_copy">Shows the weather for where you are in the status bar.</string>
+    <string name="first_run_permissions_weather_copy">Shows the weather for a place you pick, or for where you are.</string>
     <string name="first_run_permissions_display_title">Linux display</string>
     <string name="first_run_permissions_display_copy">Runs graphical Linux apps beside the terminal.</string>
     <string name="first_run_permissions_allow">Allow</string>
     <string name="first_run_permissions_allowed">Allowed</string>
     <string name="first_run_permissions_denied">Not allowed</string>
     <string name="first_run_permissions_continue">Continue</string>
+    <string name="first_run_permissions_use_location">Use my location</string>
+    <!-- Credit for the place search on the first-run card, which Open-Meteo answers. -->
+    <string name="first_run_permissions_weather_search_credit">Search by Open-Meteo.</string>
     <string name="status_widget_needs_shizuku_title">Shizuku isn\'t connected</string>
     <string name="status_widget_needs_shizuku_message">%1$s reads far better with the privileged backend: per-core CPU, detailed memory and the top-process list all come from it. Without it the CPU figure is a best-effort /proc estimate that some ROMs refuse outright, and the widget can end up blank. Set Shizuku up, or turn the widget on anyway and take the unprivileged reading.</string>
     <string name="status_widget_needs_shizuku_guide">Read the guide</string>
@@ -2132,6 +2135,7 @@
     <string name="tool_app_open_apps_bar">Apps bar settings</string>
     <string name="tool_app_command_palette">Command palette</string>
     <string name="tool_app_launch">Launch app</string>
+    <string name="tool_app_open_app_drawer">App drawer</string>
     <string name="tool_app_open_drawer">Open sessions</string>
     <string name="tool_app_close_drawer">Close sessions</string>
     <string name="tool_terminal_action_sheet">Terminal actions</string>
@@ -2248,6 +2252,7 @@
         <item quantity="one">Ignored %1$d terminal font configuration error; using safe fallbacks</item>
         <item quantity="other">Ignored %1$d terminal font configuration errors; using safe fallbacks</item>
     </plurals>
+    <string name="tool_desc_app_open_app_drawer">Open the app drawer.</string>
     <string name="tool_desc_app_open_drawer">Open the sessions drawer.</string>
     <string name="tool_desc_app_close_drawer">Close the sessions drawer.</string>
     <string name="tool_desc_window_rename_prompt">Name the current window — the tab it occupies in the window bar.</string>
@@ -2543,7 +2548,9 @@
     <string name="tour_card_find_help_close">Close help to continue.</string>
     <string name="tour_card_pin_apps_hold">Hold an empty spot in the apps row to choose your apps.</string>
     <string name="tour_card_pin_apps_choose">Pick an app to pin, then tap Done.</string>
-    <string name="tour_card_find_apps_dock">Pull the apps row away from its edge to open the app drawer.</string>
+    <string name="tour_card_find_apps_dock">Swipe down on the apps row to open the app drawer.</string>
+    <string name="tour_card_find_apps_left_rail">Swipe right on the apps rail to open the app drawer.</string>
+    <string name="tour_card_find_apps_right_rail">Swipe left on the apps rail to open the app drawer.</string>
     <string name="tour_card_find_apps_open">Tap an app to open it.</string>
     <string name="tour_card_find_apps_back_home">Press Home to come back.</string>
     <string name="tour_card_find_apps_back_switch">Switch back to Termux to continue.</string>
@@ -2642,7 +2649,7 @@
     <string name="help_key_keyboard">Keyboard</string>
     <string name="help_key_secondary">↑ %1$s</string>
     <string name="help_topic_dock_purpose">The dock holds your pinned apps, the A–Z index and the extra keys.</string>
-    <string name="help_topic_dock_action">Pull down to open the app drawer, or away from the edge if the apps row is anywhere but the bottom.</string>
+    <string name="help_topic_dock_action">Swipe down on the apps row to open the app drawer.</string>
     <string name="help_topic_dock_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
     <string name="help_topic_az_purpose">The A–Z index picks an app by its first letter.</string>
     <string name="help_topic_az_action">Slide along it, then drag up to the app you want.</string>

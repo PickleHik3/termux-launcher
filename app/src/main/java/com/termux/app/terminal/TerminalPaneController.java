@@ -1602,6 +1602,79 @@ public class TerminalPaneController {
         return true;
     }
 
+    /**
+     * Slack beyond the divider gap when looking for the pane across an edge, so rounding in the
+     * laid-out positions never hides a neighbour.
+     */
+    private static final float SWAP_EDGE_SLACK_DP = 2f;
+
+    /**
+     * Swap the active pane's shell with the pane across its edge in {@code dir}, both sliding to
+     * their new places; the tree's shape and weights stay as they are, under every layout. Focus
+     * follows the moved shell. Returns false, changing nothing, for a lone, maximized or floating
+     * pane, or when nothing borders that edge.
+     */
+    public boolean swapActivePaneTowards(@NonNull PaneSwapPolicy.Direction dir) {
+        Leaf target = swapNeighbourOfActive(dir);
+        if (target == null) return false;
+        mInteractionOverlay.dismissControls();
+        swapSessions(mActiveWindow.active, target);
+        mHost.onActivePaneChanged();
+        mHost.onTreesChanged();
+        return true;
+    }
+
+    /** The tiled pane across the active pane's edge in {@code dir}, or null when it cannot swap. */
+    @Nullable
+    private Leaf swapNeighbourOfActive(@NonNull PaneSwapPolicy.Direction dir) {
+        if (mActiveWindow == null || mMaximizedLeaf != null) return null;
+        Leaf source = mActiveWindow.active;
+        if (source == null || mActiveWindow.floating.contains(source)) return null;
+        List<Leaf> leaves = leavesOf(mActiveWindow.root);
+        if (leaves.size() < 2 || !leaves.contains(source)) return null;
+        RectF sourceRect = tiledPaneRect(source);
+        if (sourceRect == null) return null;
+        List<RectF> rects = new ArrayList<>(leaves.size());
+        for (Leaf leaf : leaves) rects.add(leaf == source ? null : tiledPaneRect(leaf));
+        int index = PaneSwapPolicy.neighbourAcross(sourceRect, rects, dir,
+            dp(paneGapDp()) + dp(SWAP_EDGE_SLACK_DP));
+        return index < 0 ? null : leaves.get(index);
+    }
+
+    /**
+     * A tiled pane's frame where the layout put it, in host coordinates and without any slide
+     * still carrying it there, so a flick during a swap's motion finds the settled neighbours.
+     * Null when the frame is not laid out on the host.
+     */
+    @Nullable
+    private RectF tiledPaneRect(@NonNull Leaf leaf) {
+        FrameLayout frame = mPaneFrames.get(leaf.session);
+        if (frame == null || frame.getWidth() <= 0 || frame.getHeight() <= 0) return null;
+        float left = frame.getLeft();
+        float top = frame.getTop();
+        android.view.ViewParent parent = frame.getParent();
+        while (parent instanceof View && parent != mHostView) {
+            View view = (View) parent;
+            left += view.getLeft() - view.getScrollX();
+            top += view.getTop() - view.getScrollY();
+            parent = view.getParent();
+        }
+        if (parent != mHostView) return null;
+        return new RectF(left, top, left + frame.getWidth(), top + frame.getHeight());
+    }
+
+    /**
+     * Exchange two tiled panes' shells and re-render; the frames are keyed by shell, so each one
+     * slides from its old cell to its new one. The moved shell keeps focus.
+     */
+    private void swapSessions(@NonNull Leaf source, @NonNull Leaf target) {
+        TerminalSession moved = source.session;
+        source.session = target.session;
+        target.session = moved;
+        mActiveWindow.active = target;
+        render();
+    }
+
     /** Resize the split enclosing the active pane along the arrow axis. */
     public boolean resizeActive(int keyCode) {
         if (mActiveWindow == null || mActiveWindow.active == null) return true;
@@ -3297,37 +3370,43 @@ public class TerminalPaneController {
                 vertical ? match : 0, vertical ? 0 : match, split.weightB));
         } else {
             View oldA = ll.getChildAt(0);
+            View divider = ll.getChildAt(1);
             View oldB = ll.getChildAt(2);
-            // Reconciling a child may pull a frame out of this container into a new nested one,
-            // so both are resolved before either slot is touched.
+            // Reconciling a child may pull a frame out of this container — into a new nested one,
+            // or into this container's other slot when two siblings trade shells — so both are
+            // resolved before either slot is touched, and the slots are then set by identity.
             View newA = reconcile(oldA, split.a);
             View newB = reconcile(oldB, split.b);
-            placeSplitChild(ll, oldA, newA, 0, vertical, split.weightA);
-            placeSplitChild(ll, oldB, newB, 2, vertical, split.weightB);
-            ViewGroup.LayoutParams dividerParams = ll.getChildAt(1).getLayoutParams();
+            arrangeSplitChildren(ll, newA, divider, newB);
+            ll.getChildAt(0).setLayoutParams(new LinearLayout.LayoutParams(
+                vertical ? match : 0, vertical ? 0 : match, split.weightA));
+            ll.getChildAt(2).setLayoutParams(new LinearLayout.LayoutParams(
+                vertical ? match : 0, vertical ? 0 : match, split.weightB));
+            ViewGroup.LayoutParams dividerParams = divider.getLayoutParams();
             dividerParams.width = vertical ? match : gapPx;
             dividerParams.height = vertical ? gapPx : match;
-            ll.getChildAt(1).setLayoutParams(dividerParams);
+            divider.setLayoutParams(dividerParams);
         }
         mSplitLayouts.put(split, ll);
         return ll;
     }
 
-    /** Puts {@code child} into slot {@code index} of a reused split container, with its weight. */
-    private static void placeSplitChild(@NonNull LinearLayout ll, @Nullable View old,
-                                        @NonNull View child, int index, boolean vertical,
-                                        float weight) {
-        int match = LinearLayout.LayoutParams.MATCH_PARENT;
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            vertical ? match : 0, vertical ? 0 : match, weight);
-        if (child == old) {
-            child.setLayoutParams(params);
-            return;
+    /**
+     * Makes a reused split container hold exactly {@code [a, divider, b]}, wherever each of them
+     * currently is: a view already in its slot stays attached, one sitting elsewhere (another
+     * container, or this one's other slot) is moved in, and anything left over is dropped.
+     */
+    private static void arrangeSplitChildren(@NonNull LinearLayout ll, @NonNull View a,
+                                             @NonNull View divider, @NonNull View b) {
+        View[] slots = {a, divider, b};
+        for (int i = 0; i < slots.length; i++) {
+            View child = slots[i];
+            if (i < ll.getChildCount() && ll.getChildAt(i) == child) continue;
+            if (child.getParent() instanceof ViewGroup)
+                ((ViewGroup) child.getParent()).removeView(child);
+            ll.addView(child, i);
         }
-        int oldIndex = old == null ? -1 : ll.indexOfChild(old);
-        if (oldIndex >= 0) ll.removeViewAt(oldIndex);
-        if (child.getParent() instanceof ViewGroup) ((ViewGroup) child.getParent()).removeView(child);
-        ll.addView(child, Math.min(index, ll.getChildCount()), params);
+        while (ll.getChildCount() > slots.length) ll.removeViewAt(slots.length);
     }
 
     private FrameLayout paneFrameFor(TerminalSession session) {
@@ -3340,12 +3419,15 @@ public class TerminalPaneController {
             view.adoptFontFrom(anyFontInitializedPaneView());
             mHost.configurePaneView(view);
             frame.setRetroStyle(PaneRetroStyle.fromId(mRetroEffectId));
+            PaneFlick flick = new PaneFlick(new PaneSwapPolicy.TwoFingerSwipe(
+                view.getResources().getDisplayMetrics().density,
+                ViewConfiguration.get(view.getContext()).getScaledTouchSlop()));
             view.setOnTouchListener((v, ev) -> {
                 if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
                     TerminalSession s = ((TerminalView) v).getCurrentSession();
                     if (s != null) focusSession(s);
                 }
-                return false;
+                return onPaneTouchForSwap((TerminalView) v, ev, flick);
             });
             view.attachSession(session);
             view.setCursorTrailListener(mCursorTrailListener);
@@ -3365,6 +3447,77 @@ public class TerminalPaneController {
         }
         refreshAttachedPaneView(session);
         return frame;
+    }
+
+    /** One pane view's two-finger flick watch: the classifier, and whether its stream is taken. */
+    private static final class PaneFlick {
+        final PaneSwapPolicy.TwoFingerSwipe swipe;
+        /** A flick swapped the pane: the rest of this stream is no longer the terminal's. */
+        boolean swallowing;
+
+        PaneFlick(@NonNull PaneSwapPolicy.TwoFingerSwipe swipe) { this.swipe = swipe; }
+    }
+
+    /**
+     * Watches a pane's touches for a brisk two-finger flick and swaps the pane with its neighbour
+     * across that edge the moment one is seen. Until then every event stays the terminal's, so its
+     * pinch and two-finger scroll are untouched; once it swaps, the terminal is told its gesture is
+     * over and the rest of the stream is swallowed. Returns whether {@code ev} was consumed.
+     */
+    private boolean onPaneTouchForSwap(@NonNull TerminalView view, @NonNull MotionEvent ev,
+                                       @NonNull PaneFlick flick) {
+        int action = ev.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            flick.swallowing = false;
+            flick.swipe.reset();
+            return false;
+        }
+        boolean ending = action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL;
+        if (flick.swallowing) {
+            if (ending) flick.swallowing = false;
+            return true;
+        }
+        if (ending) {
+            flick.swipe.reset();
+            return false;
+        }
+        int lifting = action == MotionEvent.ACTION_POINTER_UP ? ev.getActionIndex() : -1;
+        int down = ev.getPointerCount() - (lifting >= 0 ? 1 : 0);
+        float sumX = 0f, sumY = 0f;
+        float firstX = 0f, firstY = 0f, spread = 0f;
+        int counted = 0;
+        for (int i = 0; i < ev.getPointerCount(); i++) {
+            if (i == lifting) continue;
+            float x = ev.getX(i), y = ev.getY(i);
+            sumX += x;
+            sumY += y;
+            if (counted == 0) {
+                firstX = x;
+                firstY = y;
+            } else if (counted == 1) {
+                spread = (float) Math.hypot(x - firstX, y - firstY);
+            }
+            counted++;
+        }
+        if (counted == 0) return false;
+        PaneSwapPolicy.TwoFingerSwipe.State state =
+            flick.swipe.update(down, sumX / counted, sumY / counted, spread, ev.getEventTime());
+        if (state != PaneSwapPolicy.TwoFingerSwipe.State.SWIPED) return false;
+        PaneSwapPolicy.Direction direction = flick.swipe.direction();
+        TerminalSession session = view.getCurrentSession();
+        if (direction == null || session == null || session != getActiveSession()
+            || view.isSelectingText() || swapNeighbourOfActive(direction) == null) {
+            return false;
+        }
+        // The cancel passes back through this listener before the stream is marked taken, so it
+        // reaches the terminal: no scroll fling, no zoom and no mouse report survives the swap.
+        long now = SystemClock.uptimeMillis();
+        MotionEvent cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, 0f, 0f, 0);
+        view.dispatchTouchEvent(cancel);
+        cancel.recycle();
+        flick.swallowing = true;
+        swapActivePaneTowards(direction);
+        return true;
     }
 
     /** Any live pane view whose fonts are set, to seed a new pane's renderer from; null if none. */
@@ -4178,12 +4331,8 @@ public class TerminalPaneController {
 
         private void swapPanePositions(@NonNull Leaf source, @NonNull Leaf target,
                                        float dropX, float dropY) {
-            TerminalSession moved = source.session;
-            source.session = target.session;
-            target.session = moved;
-            mActiveWindow.active = target;
             mControlLeaf = target;
-            render();
+            swapSessions(source, target);
             showControls(target, dropX, dropY);
             mHost.onActivePaneChanged();
             mHost.onTreesChanged();

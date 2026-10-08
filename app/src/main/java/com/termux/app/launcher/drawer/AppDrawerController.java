@@ -415,6 +415,28 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         kick();
     }
 
+    /**
+     * Opens the plane without a finger, for a key or a tool: the cold-open half of
+     * {@link #beginDrag} followed by a settle open. Does nothing when the plane is already up.
+     * The caller names the pull and seed the same way the pinned apps row's own drag does.
+     */
+    public void open(@NonNull AppDrawerGestureArbiter.Pull pull,
+                     @NonNull AppDrawerPullGeometry.Seed seed) {
+        if (!bindViews()) return;
+        if (mEngaged || mOpen) return;
+        if (!captureGeometry(pull, seed)) return;
+        mDirection = AppDrawerCommitPolicy.Direction.OPENING;
+        mProgress.reset(0f);
+        prepareOverlay();
+        mDragging = false;
+        mGrabProgress = 0f;
+        mCloseTimeAnim = false;
+        mEngaged = true;
+        mHost.hideSystemKeyboard();
+        applyFrame(0f);
+        settle(true, 0f);
+    }
+
     /** Every {@code ACTION_MOVE} of a claimed drag. The plane tracks this 1:1, unsmoothed. */
     public void updateDrag(float rawY) {
         if (!mDragging) return;

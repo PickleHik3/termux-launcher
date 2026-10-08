@@ -10,6 +10,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.R;
+
 import org.junit.Test;
 
 import java.util.List;
@@ -33,6 +35,9 @@ public class FirstRunPermissionsCardTest {
     /** Whether the card is already on the screen when a restart asks whether to raise one. */
     private static final boolean CARD_UP = true;
     private static final boolean NO_CARD = false;
+    /** The weather following the device rather than a place picked by name. */
+    private static final String NO_PLACE = "";
+    private static final String SALMIYA = "Salmiya, Hawalli";
 
     @Test
     public void aFreshInstallAlwaysOpensOnTheCard() {
@@ -130,8 +135,8 @@ public class FirstRunPermissionsCardTest {
 
     @Test
     public void everyRowCarriesATitleAndASentence() {
-        List<Row> rows = FirstRunPermissionsCard.rows(State.NOT_ASKED, State.NOT_ASKED, true,
-            false);
+        List<Row> rows = FirstRunPermissionsCard.rows(State.NOT_ASKED, State.NOT_ASKED,
+            NO_PLACE, true, false);
         assertEquals(3, rows.size());
         assertEquals(Item.WALLPAPER, rows.get(0).item);
         assertEquals(Item.WEATHER, rows.get(1).item);
@@ -144,21 +149,22 @@ public class FirstRunPermissionsCardTest {
 
     @Test
     public void aRowIsLeftOutRatherThanShownDead() {
-        List<Row> noWeather = FirstRunPermissionsCard.rows(State.NOT_ASKED, null, true, false);
+        List<Row> noWeather = FirstRunPermissionsCard.rows(State.NOT_ASKED, null, NO_PLACE,
+            true, false);
         assertEquals(2, noWeather.size());
         assertEquals(Item.DISPLAY, noWeather.get(1).item);
 
-        List<Row> noDisplay = FirstRunPermissionsCard.rows(State.NOT_ASKED, State.NOT_ASKED,
+        List<Row> noDisplay = FirstRunPermissionsCard.rows(State.NOT_ASKED, State.NOT_ASKED, NO_PLACE,
             false, false);
         assertEquals(2, noDisplay.size());
         assertEquals(Item.WEATHER, noDisplay.get(1).item);
 
-        assertEquals(1, FirstRunPermissionsCard.rows(State.NOT_ASKED, null, false, false).size());
+        assertEquals(1, FirstRunPermissionsCard.rows(State.NOT_ASKED, null, NO_PLACE, false, false).size());
     }
 
     @Test
     public void onlyAnUnansweredPermissionRowCarriesAButton() {
-        List<Row> rows = FirstRunPermissionsCard.rows(State.GRANTED, State.DENIED, true, false);
+        List<Row> rows = FirstRunPermissionsCard.rows(State.GRANTED, State.DENIED, NO_PLACE, true, false);
         Row wallpaper = rows.get(0);
         Row weather = rows.get(1);
         assertFalse(wallpaper.hasButton());
@@ -166,25 +172,25 @@ public class FirstRunPermissionsCardTest {
         // A refused row keeps its button, so a second tap can ask again.
         assertTrue(weather.hasButton());
         assertNotEquals(0, weather.buttonRes());
-        assertTrue(FirstRunPermissionsCard.rows(State.NOT_ASKED, null, false, false)
+        assertTrue(FirstRunPermissionsCard.rows(State.NOT_ASKED, null, NO_PLACE, false, false)
             .get(0).hasButton());
     }
 
     @Test
     public void anAnsweredPermissionRowSaysWhereItStands() {
-        List<Row> rows = FirstRunPermissionsCard.rows(State.GRANTED, State.DENIED, false, false);
+        List<Row> rows = FirstRunPermissionsCard.rows(State.GRANTED, State.DENIED, NO_PLACE, false, false);
         assertNotEquals(0, rows.get(0).statusRes());
         assertNotEquals(0, rows.get(1).statusRes());
         assertNotEquals(rows.get(0).statusRes(), rows.get(1).statusRes());
         // Never asked has nothing to report yet: the button is the whole of the row's state.
-        assertEquals(0, FirstRunPermissionsCard.rows(State.NOT_ASKED, null, false, false)
+        assertEquals(0, FirstRunPermissionsCard.rows(State.NOT_ASKED, null, NO_PLACE, false, false)
             .get(0).statusRes());
     }
 
     @Test
     public void theDisplayRowIsASwitchAndNeverAButton() {
-        Row off = FirstRunPermissionsCard.rows(State.GRANTED, null, true, false).get(1);
-        Row on = FirstRunPermissionsCard.rows(State.GRANTED, null, true, true).get(1);
+        Row off = FirstRunPermissionsCard.rows(State.GRANTED, null, NO_PLACE, true, false).get(1);
+        Row on = FirstRunPermissionsCard.rows(State.GRANTED, null, NO_PLACE, true, true).get(1);
         assertTrue(off.isSwitch);
         assertTrue(on.isSwitch);
         assertFalse(off.hasButton());
@@ -202,5 +208,65 @@ public class FirstRunPermissionsCardTest {
         assertEquals(Tap.OPEN_SETTINGS, FirstRunPermissionsCard.tapFor(State.DENIED, false));
         assertEquals(Tap.NONE, FirstRunPermissionsCard.tapFor(State.GRANTED, true));
         assertEquals(Tap.NONE, FirstRunPermissionsCard.tapFor(State.GRANTED, false));
+    }
+
+    @Test
+    public void aPickedPlaceKeepsTheWeatherRowAndAsksForNothing() {
+        for (State weather : State.values()) {
+            Row row = FirstRunPermissionsCard.rows(State.GRANTED, weather, SALMIYA, false, false)
+                .get(1);
+            assertEquals(Item.WEATHER, row.item);
+            assertTrue(row.searchesPlace());
+            assertTrue(row.followsPlace());
+            assertEquals(SALMIYA, row.place);
+            // The place is the row's status; no permission word competes with it.
+            assertEquals(0, row.statusRes());
+            // The way back to the device stays, whatever the permission says.
+            assertTrue(weather.toString(), row.hasButton());
+            assertEquals(R.string.first_run_permissions_use_location, row.buttonRes());
+        }
+    }
+
+    @Test
+    public void theWeatherRowOffersUseMyLocationUntilTheLocationIsAllowed() {
+        Row asked = FirstRunPermissionsCard.rows(State.GRANTED, State.NOT_ASKED, NO_PLACE, false,
+            false).get(1);
+        assertTrue(asked.searchesPlace());
+        assertFalse(asked.followsPlace());
+        assertEquals(R.string.first_run_permissions_use_location, asked.buttonRes());
+
+        Row allowed = FirstRunPermissionsCard.rows(State.GRANTED, State.GRANTED, NO_PLACE, false,
+            false).get(1);
+        // Allowed shows as today; the search itself stays on the row.
+        assertFalse(allowed.hasButton());
+        assertEquals(R.string.first_run_permissions_allowed, allowed.statusRes());
+        assertTrue(allowed.searchesPlace());
+
+        // The wallpaper row still asks with Allow, and carries no search.
+        Row wallpaper = FirstRunPermissionsCard.rows(State.NOT_ASKED, State.GRANTED, NO_PLACE,
+            false, false).get(0);
+        assertFalse(wallpaper.searchesPlace());
+        assertEquals(R.string.first_run_permissions_allow, wallpaper.buttonRes());
+    }
+
+    @Test
+    public void aPickedPlaceIsNothingLeftToAskForOnAnUpdate() {
+        assertEquals(null, FirstRunPermissionsCard.weatherToAsk(State.DENIED, SALMIYA));
+        assertEquals(State.DENIED, FirstRunPermissionsCard.weatherToAsk(State.DENIED, NO_PLACE));
+        assertEquals(null, FirstRunPermissionsCard.weatherToAsk(null, NO_PLACE));
+        assertFalse(FirstRunPermissionsCard.shouldShow(UPDATER, UNSEEN, State.GRANTED,
+            FirstRunPermissionsCard.weatherToAsk(State.NOT_ASKED, SALMIYA), OPENED));
+        assertTrue(FirstRunPermissionsCard.shouldShow(UPDATER, UNSEEN, State.GRANTED,
+            FirstRunPermissionsCard.weatherToAsk(State.NOT_ASKED, NO_PLACE), OPENED));
+    }
+
+    @Test
+    public void rowsAnsweredTheSameWayAreEqualSoTheCardIsNotRebuilt() {
+        assertEquals(FirstRunPermissionsCard.rows(State.DENIED, State.NOT_ASKED, SALMIYA, true,
+            false), FirstRunPermissionsCard.rows(State.DENIED, State.NOT_ASKED, SALMIYA, true,
+            false));
+        assertNotEquals(FirstRunPermissionsCard.rows(State.DENIED, State.NOT_ASKED, SALMIYA, true,
+            false), FirstRunPermissionsCard.rows(State.DENIED, State.NOT_ASKED, NO_PLACE, true,
+            false));
     }
 }

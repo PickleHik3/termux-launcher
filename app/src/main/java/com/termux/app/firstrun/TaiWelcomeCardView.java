@@ -27,6 +27,7 @@ import com.google.android.material.checkbox.MaterialCheckBox;
 import com.google.android.material.materialswitch.MaterialSwitch;
 import com.termux.R;
 import com.termux.app.FocusOutlineRenderer;
+import com.termux.app.chrome.ActionButtonRow;
 import com.termux.app.notice.TerminalDress;
 
 import java.util.LinkedHashSet;
@@ -144,30 +145,24 @@ public final class TaiWelcomeCardView extends FrameLayout {
         mFooterReason.setTextColor(mAccent);
         mCard.addView(mFooterReason, matchWrap());
 
-        LinearLayout buttons = new LinearLayout(context);
-        buttons.setOrientation(LinearLayout.HORIZONTAL);
-        buttons.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        // Later and Download selected share a row while they fit, and stack with Download on top
+        // when a narrow phone or a large font scale says they do not.
+        ActionButtonRow buttons = new ActionButtonRow(context);
         MaterialButton later = new MaterialButton(context, null,
             androidx.appcompat.R.attr.borderlessButtonStyle);
         later.setText(R.string.tai_welcome_later);
         later.setAllCaps(false);
-        later.setMinHeight(dp(48));
         later.setOnClickListener(view -> {
             if (mCallbacks != null) mCallbacks.onWelcomeLater();
         });
-        buttons.addView(later, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        buttons.addView(later);
         mDownload = new MaterialButton(context);
         mDownload.setText(R.string.tai_welcome_download);
         mDownload.setAllCaps(false);
-        mDownload.setMinHeight(dp(48));
         mDownload.setOnClickListener(view -> {
             if (mCallbacks != null) mCallbacks.onWelcomeDownload(new LinkedHashSet<>(mTicked), mWifiOnly.isChecked());
         });
-        LinearLayout.LayoutParams downloadParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        downloadParams.setMarginStart(dp(8));
-        buttons.addView(mDownload, downloadParams);
+        buttons.addView(mDownload);
         LinearLayout.LayoutParams buttonsParams = matchWrap();
         buttonsParams.topMargin = dp(6);
         mCard.addView(buttons, buttonsParams);

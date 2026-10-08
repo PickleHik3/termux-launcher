@@ -81,6 +81,14 @@ public final class WallpaperPickerLogic {
     }
 
     /**
+     * Whether the Overview says that setting the wallpaper here gives fancier glass: while the
+     * Home slot holds no picture of the launcher's own, the in-app wallpaper is not on screen.
+     */
+    public static boolean showsGlassHint(@NonNull WallpaperSlots.State stored) {
+        return stored.home.photoFile == null;
+    }
+
+    /**
      * How many tiles the strip holds: Same as Home (it shows for Lock only, but is always built)
      * and the recently applied photos, at most {@code maxRecents}. There are no other tiles.
      */

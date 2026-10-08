@@ -56,7 +56,10 @@ import org.robolectric.annotation.Config;
 
 /** The layout canvas follows the rows: a new arrangement at the same size redraws. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
+// A 19.5:9 phone, 320 x 693 dp: the canvas takes the shape of the screen it runs on, and
+// Robolectric's default screen is not a phone's.
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class,
+    qualifiers = "w320dp-h693dp")
 public class LayoutCanvasViewTest {
 
     /** A parent that remembers being told to keep its hands off the rest of the gesture. */
@@ -1636,7 +1639,42 @@ public class LayoutCanvasViewTest {
     private static float screenHeightDp(LayoutCanvasView view, boolean landscape) {
         android.util.DisplayMetrics metrics = view.getResources().getDisplayMetrics();
         float shortDp = Math.min(metrics.widthPixels, metrics.heightPixels) / metrics.density;
-        return landscape ? shortDp : shortDp * 19.5f / 9f;
+        float longDp = Math.max(metrics.widthPixels, metrics.heightPixels) / metrics.density;
+        return landscape ? shortDp : longDp;
+    }
+
+    // ---- The canvas is this screen's shape -------------------------------------------------------
+
+    /** A 16:10 tablet: either orientation of the phone frame is 16:10, not a phone's 19.5:9. */
+    @Test
+    @Config(qualifiers = "w800dp-h1280dp-mdpi")
+    public void theFrameIsThisScreensShapeInBothOrientations() {
+        LayoutCanvasView view = sized(1000, 800);
+        view.setLegendVisible(false);
+        view.setLayout(bottomBars(), PlaceOrientation.PORTRAIT, PaneWallPage.TERMINAL);
+        RectF portrait = view.frameRect();
+        assertNotNull(portrait);
+        assertEquals("portrait: 800 wide over 1280 tall", 800f / 1280f,
+            portrait.width() / portrait.height(), 0.01f);
+        assertEquals("one real dp of the 800dp width", portrait.width() / 800f,
+            view.canvasScalePx(), 0.001f);
+
+        view.setLayout(bottomBars(), PlaceOrientation.LANDSCAPE, PaneWallPage.TERMINAL);
+        RectF landscape = view.frameRect();
+        assertNotNull(landscape);
+        assertEquals("landscape: 1280 wide over 800 tall", 1280f / 800f,
+            landscape.width() / landscape.height(), 0.01f);
+        assertEquals("one real dp of the 1280dp width", landscape.width() / 1280f,
+            view.canvasScalePx(), 0.001f);
+    }
+
+    @Test
+    public void theShapeFallsBackToAPhoneOnlyWhereTheScreenIsUnknown() {
+        assertEquals(19.5f / 9f, LayoutCanvasView.longOverShort(0, 0), 0f);
+        assertEquals(19.5f / 9f, LayoutCanvasView.longOverShort(1080, 0), 0f);
+        assertEquals(2400f / 1080f, LayoutCanvasView.longOverShort(1080, 2400), 0f);
+        assertEquals(2400f / 1080f, LayoutCanvasView.longOverShort(2400, 1080), 0f);
+        assertEquals(4f / 3f, LayoutCanvasView.longOverShort(1536, 2048), 0.0001f);
     }
 
     @Test
