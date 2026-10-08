@@ -735,13 +735,16 @@
     <string name="first_run_permissions_wallpaper_title">Wallpaper</string>
     <string name="first_run_permissions_wallpaper_copy">Lets the launcher colour itself after your wallpaper.</string>
     <string name="first_run_permissions_weather_title">Weather</string>
-    <string name="first_run_permissions_weather_copy">Shows the weather for where you are in the status bar.</string>
+    <string name="first_run_permissions_weather_copy">Shows the weather for a place you pick, or for where you are.</string>
     <string name="first_run_permissions_display_title">Linux display</string>
     <string name="first_run_permissions_display_copy">Runs graphical Linux apps beside the terminal.</string>
     <string name="first_run_permissions_allow">Allow</string>
     <string name="first_run_permissions_allowed">Allowed</string>
     <string name="first_run_permissions_denied">Not allowed</string>
     <string name="first_run_permissions_continue">Continue</string>
+    <string name="first_run_permissions_use_location">Use my location</string>
+    <!-- Credit for the place search on the first-run card, which Open-Meteo answers. -->
+    <string name="first_run_permissions_weather_search_credit">Search by Open-Meteo.</string>
     <string name="status_widget_needs_shizuku_title">Shizuku isn\'t connected</string>
     <string name="status_widget_needs_shizuku_message">%1$s reads far better with the privileged backend: per-core CPU, detailed memory and the top-process list all come from it. Without it the CPU figure is a best-effort /proc estimate that some ROMs refuse outright, and the widget can end up blank. Set Shizuku up, or turn the widget on anyway and take the unprivileged reading.</string>
     <string name="status_widget_needs_shizuku_guide">Read the guide</string>
