@@ -822,11 +822,16 @@ public final class TerminalClockWidget extends View {
      * the slot's. -1 in any other form.
      */
     public float fullBandCenterYPx() {
-        if (mForm != TopPaneClockForm.FULL || getHeight() <= 0) return -1f;
+        return fullBandCenterYPx(getHeight());
+    }
+
+    /** The same for a face {@code heightPx} tall: what the slot asks while it is still measuring. */
+    public float fullBandCenterYPx(int heightPx) {
+        if (mForm != TopPaneClockForm.FULL || heightPx <= 0) return -1f;
         float bandDp = fullBandHeightDp();
         float columnDp = fullColumnDp();
         float scale = fullScale();
-        float translate = Math.max(0f, (getHeight() - dp(columnDp) * scale) / 2f);
+        float translate = Math.max(0f, (heightPx - dp(columnDp) * scale) / 2f);
         return translate + dp(bandDp / 2f) * scale;
     }
 
