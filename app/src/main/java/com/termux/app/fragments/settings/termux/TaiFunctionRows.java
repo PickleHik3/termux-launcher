@@ -3,10 +3,10 @@ package com.termux.app.fragments.settings.termux;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.TaiFeaturePlan;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiFunctionModels.ModelInfo;
-import com.termux.ai.TaiFunctionModels.Resolution;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiTierPolicy;
 
@@ -23,8 +23,8 @@ import java.util.Set;
 
 /**
  * What the Model Centre's Functions, Installed and Get models segments say, decided from the
- * policy and the resolver alone (tai-device-tiers spec §4.2): the device header, one row per
- * function with its pick and where it runs, "Used by" and the delete warning, the fit line and the
+ * policy, the resolver and each function's {@link TaiFeaturePlan} (tai-device-tiers spec §4.2): the
+ * device header, one row per function with how it runs and why, "Used by" and the delete warning, the fit line and the
  * grouping of the catalogue. No Android types, so the wording rules are unit tested; the words
  * themselves come through {@link Labels}, which the fragment backs with string resources.
  */
@@ -63,7 +63,13 @@ final class TaiFunctionRows {
         DELETE_IN_USE,
         /** "%1$s: %2$s". */
         DELETE_LINE,
-        LEVEL_LIGHT, LEVEL_POLISHED
+        LEVEL_LIGHT, LEVEL_POLISHED,
+        /** The feature load plan's line: "%1$s× faster". */
+        PLAN_FASTER,
+        /** Why the plan is what it is: "Your choice", "Measured on this phone", "Suggested for this phone", "Remote · your provider". */
+        PLAN_REASON_PICK, PLAN_REASON_MEASURED, PLAN_REASON_DEFAULT, PLAN_REASON_REMOTE,
+        /** The one-tap offer of a faster setup than the pick: "Use %1$s: %2$s× faster on this phone". */
+        PLAN_OFFER
     }
 
     /** Words for the rows. {@code args} fill the {@code %s} slots of the message. */
@@ -102,73 +108,123 @@ final class TaiFunctionRows {
         final boolean warnBackground;
         /** Tidy dictation's level ("Polished"), else empty; shown at the end of the title. */
         @NonNull final String badge;
+        /** Why the plan is what it is: "Your choice", "Measured on this phone", .... */
+        @NonNull final String reason;
+        /** "Check how it runs on this phone": the feature's model was never checked and the offer not yet taken. */
+        final boolean offerCheck;
 
         FunctionRow(@NonNull TaiFunction function, @NonNull String name, @NonNull String summary,
-                    boolean warnBackground, @NonNull String badge) {
+                    boolean warnBackground, @NonNull String badge, @NonNull String reason) {
+            this(function, name, summary, warnBackground, badge, reason, false);
+        }
+
+        private FunctionRow(@NonNull TaiFunction function, @NonNull String name, @NonNull String summary,
+                            boolean warnBackground, @NonNull String badge, @NonNull String reason, boolean offerCheck) {
             this.function = function;
             this.name = name;
             this.summary = summary;
             this.warnBackground = warnBackground;
             this.badge = badge;
+            this.reason = reason;
+            this.offerCheck = offerCheck;
+        }
+
+        /** This row with the feature check offer shown or not. */
+        @NonNull
+        FunctionRow withOffer(boolean offer) {
+            return offer == offerCheck ? this : new FunctionRow(function, name, summary, warnBackground, badge, reason, offer);
         }
 
         @NonNull
         String signature() {
-            return function + "|" + name + "|" + summary + "|" + warnBackground + "|" + badge;
+            return function + "|" + name + "|" + summary + "|" + warnBackground + "|" + badge + "|" + reason + "|" + offerCheck;
         }
     }
 
     /**
-     * The rows for the functions; image generation has none (spec §3.6). {@code tidyLevel} is the stored cleanup level ({@code light} or
-     * {@code polished}).
+     * Each function's {@link TaiFeaturePlan} over a set of picks: the live plans in the fragment
+     * ({@code TaiFeaturePlans::plan}), plans without evidence in tests.
+     */
+    interface Planner {
+        @NonNull TaiFeaturePlan plan(@NonNull TaiFunction function, @NonNull TaiFunctionModels models);
+    }
+
+    /**
+     * The rows for the functions, each read from its feature load plan, so a row says what a load
+     * does; image generation has none (spec §3.6). {@code tidyLevel} is the stored cleanup level
+     * ({@code light} or {@code polished}).
      */
     @NonNull
-    static List<FunctionRow> functionRows(@NonNull TaiFunctionModels models, @NonNull Labels labels,
-                                          @Nullable String tidyLevel) {
+    static List<FunctionRow> functionRows(@NonNull TaiFunctionModels models, @NonNull Planner planner,
+                                          @NonNull Labels labels, @Nullable String tidyLevel) {
         List<FunctionRow> rows = new ArrayList<>();
         for (TaiFunction function : ROW_FUNCTIONS) {
-            Resolution resolution = models.resolve(function);
-            String summary = summary(resolution, labels);
+            TaiFeaturePlan plan = planner.plan(function, models);
             String badge = "";
             if (function == TaiFunction.TIDY_DICTATION) {
                 badge = labels.text("light".equals(tidyLevel) ? Msg.LEVEL_LIGHT : Msg.LEVEL_POLISHED);
             }
-            rows.add(new FunctionRow(function, labels.functionName(function), summary, resolution.warnBackground, badge));
+            rows.add(new FunctionRow(function, labels.functionName(function), summary(plan, labels),
+                plan.warnBackground, badge, reason(plan, labels)));
         }
         return rows;
     }
 
     /**
-     * What a resolution reads as: "Automatic (Gemma 4 E2B) · GPU", "Gemma 4 E4B · CPU" for a pick,
-     * "Remote · gpt-x", "Rules only", "Raw text", "Off", or "Not set · Add a model" when nothing is usable.
+     * What a plan reads as: "Automatic (Gemma 4 E2B) · GPU", "Gemma 4 E4B · CPU · 1.6× faster" for a
+     * pick, "Remote · gpt-x", "Rules only", "Raw text", "Off", or "Not set · Add a model" when nothing
+     * is usable. Where it runs is said for the chat functions; the others always run on the CPU.
      */
     @NonNull
-    static String summary(@NonNull Resolution resolution, @NonNull Labels labels) {
-        if (resolution.source == TaiFunctionModels.Source.NONE) return labels.text(Msg.NOT_SET);
-        String id = resolution.modelId;
-        if (id == null) {
-            switch (resolution.without) {
+    static String summary(@NonNull TaiFeaturePlan plan, @NonNull Labels labels) {
+        String id = plan.requestModel();
+        if (plan.isRemote() && id != null) {
+            return labels.text(Msg.REMOTE, id.substring(TaiFunctionModels.REMOTE_PREFIX.length()));
+        }
+        if (plan.where != TaiFeaturePlan.Where.ON_DEVICE || id == null) {
+            switch (plan.without) {
                 case RULES_ONLY: return labels.text(Msg.RULES_ONLY);
                 case RAW_TEXT: return labels.text(Msg.RAW_TEXT);
                 case OFF: return labels.text(Msg.OFF);
                 default: return labels.text(Msg.NOT_SET);
             }
         }
-        if (TaiFunctionModels.isRemote(id)) {
-            return labels.text(Msg.REMOTE, id.substring(TaiFunctionModels.REMOTE_PREFIX.length()));
-        }
         String name = labels.modelName(id);
-        boolean explicit = resolution.source == TaiFunctionModels.Source.PICK;
-        String head = explicit ? name : labels.text(Msg.AUTOMATIC, name);
-        String where = whereLine(resolution.accelerator, labels);
-        return where.isEmpty() ? head : head + " · " + where;
+        List<String> parts = new ArrayList<>();
+        parts.add(plan.modelReason == TaiFeaturePlan.Reason.PICK ? name : labels.text(Msg.AUTOMATIC, name));
+        if (plan.feature.usesChatModel()) {
+            if (TaiTierPolicy.ACCEL_GPU.equals(plan.accelerator)) parts.add(labels.text(Msg.GPU));
+            else if (TaiTierPolicy.ACCEL_CPU.equals(plan.accelerator)) parts.add(labels.text(Msg.CPU));
+        }
+        if (plan.speedup > 0.0) parts.add(labels.text(Msg.PLAN_FASTER, ratio(plan.speedup)));
+        return join(parts, " · ");
     }
 
+    /**
+     * Why the plan is what it is (decision 10): the user's pick ("Your choice"), a measurement on this
+     * phone, the phone's default ("Suggested for this phone"), or the remote routing.
+     */
     @NonNull
-    private static String whereLine(@Nullable String accelerator, @NonNull Labels labels) {
-        if (TaiTierPolicy.ACCEL_GPU.equals(accelerator)) return labels.text(Msg.GPU);
-        if (TaiTierPolicy.ACCEL_CPU.equals(accelerator)) return labels.text(Msg.CPU);
-        return "";
+    static String reason(@NonNull TaiFeaturePlan plan, @NonNull Labels labels) {
+        Msg reason;
+        if (plan.isRemote()) {
+            reason = plan.whereReason == TaiFeaturePlan.Reason.PICK ? Msg.PLAN_REASON_PICK : Msg.PLAN_REASON_REMOTE;
+        } else if (plan.acceleratorReason == TaiFeaturePlan.Reason.PICK) {
+            reason = Msg.PLAN_REASON_PICK;
+        } else if (plan.isMeasured()) {
+            reason = Msg.PLAN_REASON_MEASURED;
+        } else if (plan.modelReason == TaiFeaturePlan.Reason.PICK) {
+            reason = Msg.PLAN_REASON_PICK;
+        } else {
+            reason = Msg.PLAN_REASON_DEFAULT;
+        }
+        return labels.text(reason);
+    }
+
+    /** "1.6": one decimal, as a speed-up reads. */
+    @NonNull
+    static String ratio(double ratio) {
+        return String.format(Locale.getDefault(), "%.1f", ratio);
     }
 
     // ------------------------------------------------------------------------------ fit and use
@@ -231,6 +287,7 @@ final class TaiFunctionRows {
     static List<TaiFunction> servedBy(@NonNull TaiTierPolicy.Env env, @NonNull ModelInfo info) {
         List<TaiFunction> out = new ArrayList<>();
         for (TaiFunction function : TaiFunction.values()) {
+            if (function.sharesAnotherPick()) continue; // picked through the feature it shares
             if (TaiTierPolicy.platformAllows(env, function) && TaiFunctionModels.canServe(function, info)) out.add(function);
         }
         return out;
@@ -253,18 +310,20 @@ final class TaiFunctionRows {
     // ------------------------------------------------------------------------------ delete warning
 
     /**
-     * What deleting {@code modelId} costs: the functions that use it and what each falls back to
-     * ({@link TaiFunctionModels#resolveWithout}). Empty when no function uses it, and the plain
-     * confirmation stands.
+     * What deleting {@code modelId} costs: the functions that use it and how each would then run, by its
+     * plan over the picks {@link TaiFunctionModels#without} the model. Empty when no function uses it,
+     * and the plain confirmation stands.
      */
     @NonNull
-    static String deleteWarning(@NonNull TaiFunctionModels models, @NonNull String modelId, @NonNull Labels labels) {
+    static String deleteWarning(@NonNull TaiFunctionModels models, @NonNull Planner planner, @NonNull String modelId,
+                                @NonNull Labels labels) {
         List<TaiFunction> users = models.usedBy(modelId);
         if (users.isEmpty()) return "";
+        TaiFunctionModels after = models.without(modelId);
         StringBuilder text = new StringBuilder(labels.text(Msg.DELETE_IN_USE, join(functionNames(users, labels), ", ")));
         for (TaiFunction function : users) {
-            Resolution after = models.resolveWithout(function, modelId);
-            text.append('\n').append(labels.text(Msg.DELETE_LINE, labels.functionName(function), summary(after, labels)));
+            text.append('\n').append(labels.text(Msg.DELETE_LINE, labels.functionName(function),
+                summary(planner.plan(function, after), labels)));
         }
         return text.toString();
     }

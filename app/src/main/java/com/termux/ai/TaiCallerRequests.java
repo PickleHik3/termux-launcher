@@ -10,8 +10,9 @@ import org.json.JSONObject;
 /**
  * The pure rules the feature callers share when they talk to {@link TaiManager} (tai-device-tiers
  * spec §4.5): which requests go to the remote provider, the private flag that keeps the user's
- * system prompt out of a request, the body the app-category sort sends, and when a sort must load
- * its model. Kept apart from {@code TaiManager} so each rule is a plain function to test.
+ * system prompt out of a request, the field that names a request's feature, the body the
+ * app-category sort sends, and what a sort leaves loaded. How anything loads is the feature's
+ * {@link TaiFeaturePlan}. Kept apart from {@code TaiManager} so each rule is a plain function to test.
  */
 public final class TaiCallerRequests {
     private TaiCallerRequests() {}
@@ -23,8 +24,33 @@ public final class TaiCallerRequests {
      */
     public static final String NO_SYSTEM_PROMPT = "_tai_no_system_prompt";
 
+    /**
+     * The request field that names the feature ({@link TaiFunction#id()}): TAI then loads by that
+     * feature's {@link TaiFeaturePlan}. Dawn and the CLI may send it too.
+     */
+    public static final String FUNCTION = "function";
+
     /** The TAI-local extensions a remote server has no use for. */
-    private static final String[] LOCAL_ONLY_KEYS = {"accelerator", "speculative_decoding", "thinking", "load_class"};
+    private static final String[] LOCAL_ONLY_KEYS = {"accelerator", "speculative_decoding", "thinking", "load_class", FUNCTION};
+
+    /** The feature a request names, or {@code null} when it names none. */
+    @Nullable
+    public static TaiFunction featureOf(@Nullable JSONObject request) {
+        return request == null ? null : TaiFunction.fromId(request.optString(FUNCTION, ""));
+    }
+
+    /**
+     * The feature a request loads by: the one it names; on a chat, completion, load or keep-warm route
+     * ({@code chatRoute}) one that names none is the assistant, so the assistant's pick and plan reach
+     * the {@code /v1} endpoint. A momentary load (a background job's) names no feature and keeps the
+     * settings' options; so do the embedding, speech and voice routes. {@code null} for those.
+     */
+    @Nullable
+    public static TaiFunction featureFor(@Nullable JSONObject request, boolean chatRoute) {
+        TaiFunction named = featureOf(request);
+        if (named != null || !chatRoute || request == null) return named;
+        return "momentary".equals(request.optString("load_class", "").trim()) ? null : TaiFunction.ASSISTANT;
+    }
 
     /** True for a model name in the remote provider's namespace ({@code remote/<id>}). */
     public static boolean isRemoteModel(@Nullable String model) {
@@ -74,16 +100,13 @@ public final class TaiCallerRequests {
     /**
      * The app-category request for one app. Thinking is always off (the 24-token cap would cut a
      * thinking answer short, whatever the global switch says) and the user's system prompt is kept out
-     * of the classification. Speculative decoding and the window are load settings the sort sets when
-     * it loads the model ({@code CategorySortLoadPolicy}); a chat on a resident model never reloads, so
-     * they are not sent here.
+     * of the classification. A local request names the feature, so TAI loads by app sorting's plan
+     * (accelerator, speculative decoding, the 1024 window); none of that is sent here.
      *
-     * @param model the local model id or {@code remote/<id>}; empty for the default
-     * @param accelerator {@code gpu} or {@code cpu}, or {@code null} to leave it to the runtime
+     * @param model the local model id or {@code remote/<id>}; empty for the plan's
      */
     @NonNull
-    public static JSONObject categoryBody(@Nullable String model, @Nullable String accelerator,
-                                          @NonNull String prompt, int maxTokens) throws JSONException {
+    public static JSONObject categoryBody(@Nullable String model, @NonNull String prompt, int maxTokens) throws JSONException {
         JSONObject message = new JSONObject();
         message.put("role", "user");
         message.put("content", prompt);
@@ -95,36 +118,24 @@ public final class TaiCallerRequests {
         request.put("stream", false);
         request.put("thinking", false);
         request.put(NO_SYSTEM_PROMPT, true);
-        if (accelerator != null && !accelerator.trim().isEmpty() && !isRemoteModel(model)) {
-            request.put("accelerator", accelerator);
-        }
+        if (!isRemoteModel(model)) request.put(FUNCTION, TaiFunction.APP_CATEGORIES.id());
         return request;
     }
 
     /**
-     * Whether a sort has to load its model: not when the resident chat model is the very one it
-     * wants. {@code TaiManager.loadModel} always reloads, which for a model already warm costs
-     * seconds and a second memory peak.
+     * What a sort does with the runtime once done (the feature load plan's residency, decision 7):
+     * {@code UNLOAD} the model it loaded, {@code KEEP} when it loaded none. The model that was resident
+     * before is never reloaded; the next feature loads what it needs.
      */
-    public static boolean needsLoad(@Nullable String residentModelId, @Nullable String wantedModelId) {
-        if (wantedModelId == null || wantedModelId.trim().isEmpty()) return false;
-        return !wantedModelId.equals(residentModelId);
-    }
+    public enum Restore { KEEP, UNLOAD }
 
     /**
-     * What a sort does with the runtime once done: {@code UNLOAD} when nothing was resident before,
-     * {@code RELOAD} when another model was, {@code KEEP} when the resident model was the sort's own.
-     */
-    public enum Restore { KEEP, UNLOAD, RELOAD }
-
-    /**
-     * {@code sortModel} {@code null} means a remote sort, which never touched the runtime: keep.
-     * A sort that found its own model resident keeps it; the sort cannot tell it loaded it.
+     * {@code sortModel} {@code null} means a remote sort, which never touched the runtime: keep. A sort
+     * that found its own model resident borrowed someone else's load, and leaves it to them.
      */
     @NonNull
     public static Restore restoreAfterSort(@Nullable String residentBefore, @Nullable String sortModel) {
         if (sortModel == null || sortModel.trim().isEmpty() || isRemoteModel(sortModel)) return Restore.KEEP;
-        if (residentBefore == null) return Restore.UNLOAD;
-        return residentBefore.equals(sortModel) ? Restore.KEEP : Restore.RELOAD;
+        return sortModel.equals(residentBefore) ? Restore.KEEP : Restore.UNLOAD;
     }
 }

@@ -56,6 +56,12 @@ final class TaiFunctionLabels implements TaiFunctionRows.Labels {
             case DELETE_IN_USE: return R.string.tai_fn_delete_in_use;
             case DELETE_LINE: return R.string.tai_fn_delete_line;
             case LEVEL_LIGHT: return R.string.tai_fn_level_light;
+            case PLAN_FASTER: return R.string.tai_fn_plan_faster;
+            case PLAN_REASON_PICK: return R.string.tai_fn_plan_reason_pick;
+            case PLAN_REASON_MEASURED: return R.string.tai_fn_plan_reason_measured;
+            case PLAN_REASON_DEFAULT: return R.string.tai_fn_plan_reason_default;
+            case PLAN_REASON_REMOTE: return R.string.tai_fn_plan_reason_remote;
+            case PLAN_OFFER: return R.string.tai_fn_plan_offer;
             default: return R.string.tai_fn_level_polished;
         }
     }
@@ -64,7 +70,9 @@ final class TaiFunctionLabels implements TaiFunctionRows.Labels {
     @Override
     public String functionName(@NonNull TaiFunction function) {
         switch (function) {
-            case ASSISTANT: return context.getString(R.string.tai_fn_name_assistant);
+            case ASSISTANT:
+            case DAWN_CHAT: // runs on the assistant's pick and is never listed on its own
+                return context.getString(R.string.tai_fn_name_assistant);
             case VOICE_TYPING: return context.getString(R.string.tai_fn_name_voice_typing);
             case TIDY_DICTATION: return context.getString(R.string.tai_fn_name_tidy_dictation);
             case READ_ALOUD: return context.getString(R.string.tai_fn_name_read_aloud);

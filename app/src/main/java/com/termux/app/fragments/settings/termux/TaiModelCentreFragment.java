@@ -33,6 +33,9 @@ import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiDownloadEngine;
 import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiDownloadQueue;
+import com.termux.ai.TaiFeatureCheckRunner;
+import com.termux.ai.TaiFeatureCheckStore;
+import com.termux.ai.TaiFeaturePlans;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiManager;
@@ -148,6 +151,10 @@ public class TaiModelCentreFragment extends Fragment
     @NonNull private List<TaiFunctionRows.FunctionRow> functionRows = Collections.emptyList();
     /** "Used by: ..." per installed model id, empty text for a model no function uses. */
     @NonNull private Map<String, String> usedBy = Collections.emptyMap();
+    /** What deleting each installed model would leave each function on; see {@link TaiFunctionRows#deleteWarning}. */
+    @NonNull private Map<String, String> deleteWarnings = Collections.emptyMap();
+    /** Bumped per {@link #loadFunctions}, so only the newest read is applied. */
+    private int functionsGeneration;
     @NonNull private String tidyLevel = "polished";
     /** A model row a deep link asked for: scrolled to and ringed on the next {@link #rebuild}, then cleared. */
     @Nullable private String pendingScrollKey;
@@ -332,24 +339,46 @@ public class TaiModelCentreFragment extends Fragment
     }
 
     /**
-     * The Functions rows, the device line and the "Used by" lines: resolved once per change of what is
-     * installed (a resolve reads the model store), never on a progress tick.
+     * The Functions rows, the device line, the "Used by" lines and the delete warnings: resolved once
+     * per change of what is installed, never on a progress tick. Each row and warning is the function's
+     * feature load plan, so the Centre says what a load does; the plans read the model store, the
+     * settings and the evidence files, so this runs off the main thread and the newest read wins.
      */
     private void loadFunctions(@NonNull Context context) {
-        TaiFunctionModels models = TaiFunctionModels.forContext(context);
-        functionModels = models;
-        TaiFunctionLabels labels = new TaiFunctionLabels(context, installedAll);
-        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, true);
-        tidyLevel = prefs == null ? "polished" : prefs.getInAppKeyboardVoicePolishLevel();
-        functionRows = TaiFunctionRows.functionRows(models, labels, tidyLevel);
-        TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(context);
-        String soc = capabilities.socModel == null || capabilities.socModel.trim().isEmpty() ? capabilities.model : capabilities.socModel;
-        deviceLine = TaiFunctionRows.deviceLine(models.env(), soc, Build.VERSION.RELEASE);
-        Map<String, String> used = new HashMap<>();
-        for (String id : installedAll.keySet()) {
-            used.put(id, TaiFunctionRows.usedByLine(models.usedBy(id), labels));
-        }
-        usedBy = used;
+        if (executor.isShutdown()) return;
+        Context app = context.getApplicationContext();
+        Map<String, TaiModelSpec> installed = installedAll;
+        int generation = ++functionsGeneration;
+        executor.execute(() -> {
+            TaiFunctionModels models = TaiFunctionModels.forContext(app);
+            TaiFeaturePlans plans = TaiFeaturePlans.forContext(app, models);
+            TaiFunctionRows.Planner planner = plans::plan;
+            TaiFunctionLabels labels = new TaiFunctionLabels(app, installed);
+            TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, true);
+            String level = prefs == null ? "polished" : prefs.getInAppKeyboardVoicePolishLevel();
+            List<TaiFunctionRows.FunctionRow> rows = withCheckOffers(app, plans,
+                TaiFunctionRows.functionRows(models, planner, labels, level));
+            TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(app);
+            String soc = capabilities.socModel == null || capabilities.socModel.trim().isEmpty() ? capabilities.model : capabilities.socModel;
+            String device = TaiFunctionRows.deviceLine(models.env(), soc, Build.VERSION.RELEASE);
+            Map<String, String> used = new HashMap<>();
+            Map<String, String> warnings = new HashMap<>();
+            for (String id : installed.keySet()) {
+                used.put(id, TaiFunctionRows.usedByLine(models.usedBy(id), labels));
+                String warning = TaiFunctionRows.deleteWarning(models, planner, id, labels);
+                if (!warning.isEmpty()) warnings.put(id, warning);
+            }
+            handler.post(() -> {
+                if (!isAdded() || generation != functionsGeneration) return;
+                functionModels = models;
+                tidyLevel = level;
+                functionRows = rows;
+                deviceLine = device;
+                usedBy = used;
+                deleteWarnings = warnings;
+                rebuild();
+            });
+        });
     }
 
     /** The runtime status is a blocking IPC; read it off the main thread for the "In use" pill. */
@@ -1204,6 +1233,54 @@ public class TaiModelCentreFragment extends Fragment
             .show();
     }
 
+    /**
+     * The feature check's one-time offer (decision 5) on each row whose feature runs a model on this phone
+     * that has never been checked for it, until the offer is taken. Reads the results file: off the main thread.
+     */
+    @NonNull
+    private static List<TaiFunctionRows.FunctionRow> withCheckOffers(@NonNull Context app, @NonNull TaiFeaturePlans plans,
+                                                                     @NonNull List<TaiFunctionRows.FunctionRow> rows) {
+        List<TaiFunctionRows.FunctionRow> out = new ArrayList<>(rows.size());
+        try {
+            List<TaiFunction> inUse = TaiFeatureCheckRunner.featuresInUse(plans);
+            List<org.json.JSONObject> records = TaiFeatureCheckStore.in(app.getFilesDir()).records();
+            TaiSettings settings = new TaiSettings(app);
+            for (TaiFunctionRows.FunctionRow row : rows) {
+                String model = inUse.contains(row.function) ? plans.plan(row.function).modelId : null;
+                boolean offer = model != null && !settings.isFeatureCheckOffered(row.function, model)
+                    && !checked(records, row.function, model);
+                out.add(row.withOffer(offer));
+            }
+        } catch (RuntimeException e) {
+            return rows;
+        }
+        return out;
+    }
+
+    /** Whether any check of {@code feature} on {@code modelId} is on file. */
+    private static boolean checked(@NonNull List<org.json.JSONObject> records, @NonNull TaiFunction feature, @NonNull String modelId) {
+        String base = com.termux.ai.TaiFeatureCheck.baseModelId(modelId);
+        for (org.json.JSONObject record : records) {
+            if (feature.id().equals(record.optString("feature", ""))
+                && base.equals(com.termux.ai.TaiFeatureCheck.baseModelId(record.optString("modelId", "")))) return true;
+        }
+        return false;
+    }
+
+    /** "Check how it runs on this phone": taken once, then the benchmark opens with that feature's check ready. */
+    @Override
+    public void onFunctionCheckOffer(@NonNull TaiFunction function) {
+        Context context = getContext();
+        TaiFunctionModels models = functionModels;
+        if (context == null || models == null) return;
+        Context app = context.getApplicationContext();
+        executor.execute(() -> {
+            String model = TaiFeaturePlans.forContext(app, models).plan(function).modelId;
+            if (model != null) new TaiSettings(app).markFeatureCheckOffered(function, model);
+        });
+        TaiBenchHomeFragment.openFeatureCheck(getActivity(), function);
+    }
+
     @Override
     public void onFunctionClicked(@NonNull TaiFunction function) {
         TaiFunctionPickerSheet.show(this, function, changed -> onFunctionChanged());
@@ -1329,10 +1406,9 @@ public class TaiModelCentreFragment extends Fragment
      */
     @NonNull
     private String deleteMessage(@NonNull Context context, @NonNull String plain, @NonNull String modelId) {
-        TaiFunctionModels models = functionModels;
-        if (models == null) return plain;
-        String warning = TaiFunctionRows.deleteWarning(models, modelId, new TaiFunctionLabels(context, installedAll));
-        return warning.isEmpty() ? plain : plain + "\n\n" + warning;
+        // Worked out with the rows, off the main thread: see loadFunctions.
+        String warning = deleteWarnings.get(modelId);
+        return warning == null || warning.isEmpty() ? plain : plain + "\n\n" + warning;
     }
 
     /** The voice picker lives with the speech settings (Keyboard > Voice input > Speech model). */

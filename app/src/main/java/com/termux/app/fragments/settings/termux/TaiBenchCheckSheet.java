@@ -49,6 +49,17 @@ final class TaiBenchCheckSheet {
 
     static void show(@NonNull Context context, @NonNull TaiBenchSuite.Preset preset, boolean compare,
                      @NonNull List<TaiBenchSession.Model> models, @NonNull OnStart onStart) {
+        show(context, context.getString(R.string.tai_bench_check_summary, models.size(), TaiBenchViews.presetLabel(context, preset)),
+            preset.id, compare, models, onStart);
+    }
+
+    /**
+     * The same sheet for any run of the session: {@code summary} is the line under the title, and Start
+     * hands {@code onStart} a plan of {@code presetId}. The feature check passes its installed models, so
+     * the sheet shows the phone's lines and no downloads.
+     */
+    static void show(@NonNull Context context, @NonNull String summary, @NonNull String presetId, boolean compare,
+                     @NonNull List<TaiBenchSession.Model> models, @NonNull OnStart onStart) {
         BottomSheetDialog sheet = new BottomSheetDialog(context);
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -58,8 +69,7 @@ final class TaiBenchCheckSheet {
         TextView title = TaiBenchViews.figure(context, context.getString(R.string.tai_bench_check_title),
             com.google.android.material.R.attr.textAppearanceTitleLarge);
         content.addView(title);
-        content.addView(TaiBenchViews.body(context, context.getString(R.string.tai_bench_check_summary,
-            models.size(), TaiBenchViews.presetLabel(context, preset))), TaiBenchViews.block(context, 4));
+        content.addView(TaiBenchViews.body(context, summary), TaiBenchViews.block(context, 4));
 
         Line battery = new Line(context, R.drawable.ic_symbol_battery_saver);
         Line heat = new Line(context, R.drawable.ic_symbol_info);
@@ -169,7 +179,7 @@ final class TaiBenchCheckSheet {
             if (blocked[0]) return;
             TaiMotion.tick(v);
             sheet.dismiss();
-            onStart.start(new TaiBenchSession.Plan(preset.id, compare, models, remove[0]));
+            onStart.start(new TaiBenchSession.Plan(presetId, compare, models, remove[0]));
         });
         sheet.setOnDismissListener(dialog -> {
             handler.removeCallbacksAndMessages(null);

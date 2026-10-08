@@ -19,6 +19,8 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
+import com.termux.ai.TaiFeaturePlans;
+import com.termux.ai.TaiFeaturePlan;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiGpuVerdict;
@@ -149,15 +151,16 @@ public final class TaiFunctionPickerSheet {
         List<TaiFunctionRows.CatalogItem> catalogue = catalogue();
         // A download started here stays listed, marked Downloading; once it lands it moves to On this phone.
         Set<String> busy = new HashSet<>();
-        loaded.main = TaiFunctionPickerModel.build(function, models, remote, catalogue, busy, loaded.labels);
+        // The plan as a load has it: the picks, the Parameters values, and this phone's measurements.
+        TaiFeaturePlan plan = TaiFeaturePlans.forContext(app, models).plan(function);
+        loaded.main = TaiFunctionPickerModel.build(function, models, remote, catalogue, busy, loaded.labels, plan);
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, true);
         if (prefs != null) loaded.tidyLevel = prefs.getInAppKeyboardVoicePolishLevel();
         TaiSettings settings = new TaiSettings(app);
         loaded.ttsVoice = settings.getTtsVoice();
         loaded.ttsSpeed = settings.getTtsSpeed();
         if (function == TaiFunction.VOICE_TYPING) {
-            TaiFunctionModels.Resolution resolution = models.resolve(TaiFunction.VOICE_TYPING);
-            TaiModelSpec spec = resolution.modelId == null ? null : installed.get(resolution.modelId);
+            TaiModelSpec spec = plan.modelId == null ? null : installed.get(plan.modelId);
             if (spec != null && TaiSpeechActions.isWhisper(spec.id) && TaiSpeechActions.otherWindow(spec) > 0) {
                 loaded.windowSpec = spec;
                 loaded.otherWindow = TaiSpeechActions.otherWindow(spec);
@@ -247,6 +250,7 @@ public final class TaiFunctionPickerSheet {
         ((TextView) view.findViewById(R.id.tai_fn_sheet_subtitle)).setText(R.string.tai_fn_sheet_subtitle);
         LinearLayout body = view.findViewById(R.id.tai_fn_sheet_body);
         body.removeAllViews();
+        addPlan(body, loaded.main.plan);
         renderModel(body, loaded.main, loaded);
 
         TextView chain = view.findViewById(R.id.tai_fn_sheet_chain);
@@ -278,6 +282,37 @@ public final class TaiFunctionPickerSheet {
                 addAccelerator(into, model.accelerator);
             }
         }
+    }
+
+    /**
+     * How the function runs now (its feature load plan): one line, the reason under it, and when this
+     * phone measured a faster setup than the pick, a one-tap offer of it. The texts wrap, so a large
+     * font scale never clips them.
+     */
+    private void addPlan(@NonNull LinearLayout into, @NonNull TaiFunctionPickerModel.PlanLine plan) {
+        addHeader(into, R.string.tai_fn_plan_header);
+        LinearLayout box = new LinearLayout(activity);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(16), dp(4), dp(16), dp(8));
+        TextView line = text(com.google.android.material.R.attr.textAppearanceBodyLarge,
+            com.google.android.material.R.attr.colorOnSurface);
+        line.setText(plan.line);
+        box.addView(line);
+        TextView reason = text(com.google.android.material.R.attr.textAppearanceBodySmall,
+            com.google.android.material.R.attr.colorOnSurfaceVariant);
+        reason.setText(plan.reason);
+        reason.setPadding(0, dp(2), 0, 0);
+        box.addView(reason);
+        String offerAccelerator = plan.offerAccelerator;
+        if (plan.offer != null && offerAccelerator != null) {
+            MaterialButton offer = new MaterialButton(activity, null, androidx.appcompat.R.attr.borderlessButtonStyle);
+            offer.setAllCaps(false);
+            offer.setText(plan.offer);
+            offer.setOnClickListener(v -> applyAccelerator(offerAccelerator));
+            box.addView(offer, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+        into.addView(box);
     }
 
     private void addAccelerator(@NonNull LinearLayout into, @NonNull TaiFunctionPickerModel.Accelerator accelerator) {

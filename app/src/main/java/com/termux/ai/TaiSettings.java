@@ -231,6 +231,23 @@ public final class TaiSettings {
         edit.apply();
     }
 
+    /** The {@code feature|model} pairs the Model Centre has already offered a feature check for. */
+    private static final String KEY_FEATURE_CHECK_OFFERED = "tai_feature_check_offered";
+
+    /** Whether "Check how it runs on this phone" was already taken up for this feature on this model (decision 5). */
+    public boolean isFeatureCheckOffered(@NonNull TaiFunction feature, @NonNull String modelId) {
+        java.util.Set<String> offered = preferences.getStringSet(KEY_FEATURE_CHECK_OFFERED, null);
+        return offered != null && offered.contains(feature.id() + "|" + TaiModelVariants.baseModelId(modelId));
+    }
+
+    /** Remembers that the offer for this feature and model was taken up, so it is made only once. */
+    public void markFeatureCheckOffered(@NonNull TaiFunction feature, @NonNull String modelId) {
+        java.util.Set<String> stored = preferences.getStringSet(KEY_FEATURE_CHECK_OFFERED, null);
+        java.util.Set<String> offered = stored == null ? new java.util.HashSet<>() : new java.util.HashSet<>(stored);
+        offered.add(feature.id() + "|" + TaiModelVariants.baseModelId(modelId));
+        preferences.edit().putStringSet(KEY_FEATURE_CHECK_OFFERED, offered).apply();
+    }
+
     @NonNull
     static String migrateBuiltInModelId(@NonNull String modelId) {
         if (OLD_MODEL_GEMMA_4_E2B_IT.equals(modelId)) return TaiModelRegistry.MODEL_GEMMA_4_E2B_IT;
@@ -600,6 +617,16 @@ public final class TaiSettings {
         String value = bindMode.trim().toLowerCase();
         if (BIND_MODE_LAN.equals(value)) return BIND_MODE_LAN;
         return BIND_MODE_LOCALHOST;
+    }
+
+    /**
+     * The value the user stored in Parameters for {@code field}: the model's own, else the backend's
+     * global, else the legacy global; {@code null} when none was stored. A schema default is never
+     * returned, so a non-null answer is the user's choice (the feature load plan counts it as a pick).
+     */
+    @Nullable
+    public Object storedParameter(@Nullable String backend, @Nullable String modelId, @NonNull String field) {
+        return resolveParameter(getParameterSchema(backend), field, modelId);
     }
 
     @Nullable

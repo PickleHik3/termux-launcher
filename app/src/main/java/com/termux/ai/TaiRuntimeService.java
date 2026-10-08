@@ -642,7 +642,7 @@ public final class TaiRuntimeService extends Service {
             queuePressureAction(() -> releaseAll("pressure tier 3 (" + source + "): lowMemory, " + reading));
             return;
         }
-        TaiResidency.Entry victim = TaiPressureWatch.nextVictim(residents, tier);
+        TaiResidency.Entry victim = TaiPressureWatch.nextVictim(residents, tier, System.currentTimeMillis());
         if (victim == null) return;
         int number = tier == TaiPressureWatch.Tier.CHAT ? 2 : 1;
         queuePressureAction(() -> evict(Collections.singletonList(victim),

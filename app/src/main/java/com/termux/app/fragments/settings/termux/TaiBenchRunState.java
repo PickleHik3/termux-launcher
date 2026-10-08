@@ -6,6 +6,8 @@ import androidx.annotation.Nullable;
 import com.termux.ai.TaiBenchGuardRules;
 import com.termux.ai.TaiBenchStore;
 import com.termux.ai.TaiBenchSuite;
+import com.termux.ai.TaiFeatureCheckRunner;
+import com.termux.ai.TaiFunction;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -120,10 +122,16 @@ public final class TaiBenchRunState {
         public int rank;
         public boolean newBest;
         public boolean cacheRebuilt;
+        /** A feature check's run: the feature it measures; {@code null} for a bench entry. */
+        @Nullable public final TaiFunction feature;
+        /** A feature check's speed once its record landed ({@code TaiFeatureCheck}'s unit), and whether its answers were right. */
+        public double featureSpeed;
+        public boolean featurePassed;
 
         Entry(int index, int total, @NonNull JSONObject plan, @NonNull String displayName) {
             this.index = index;
             this.total = total;
+            this.feature = TaiFunction.fromId(plan.optString("feature", ""));
             this.modelId = plan.optString("modelId", "");
             this.backend = plan.optString("backend", "");
             this.accelerator = plan.optString("accelerator", "");
@@ -288,7 +296,8 @@ public final class TaiBenchRunState {
         for (Planned model : planned) {
             boolean seen = false;
             for (Entry entry : entries) {
-                if (entry.modelId.equals(model.modelId)) {
+                // A feature check plans its features, and its entries name the feature they measure.
+                if (entry.modelId.equals(model.modelId) || (entry.feature != null && entry.feature.id().equals(model.modelId))) {
                     seen = true;
                     break;
                 }
@@ -382,7 +391,10 @@ public final class TaiBenchRunState {
         JSONObject plan = event.optJSONObject("entry");
         if (plan == null) return;
         String modelId = plan.optString("modelId", "");
-        Entry entry = new Entry(event.optInt("index", entries.size()), event.optInt("total", 0), plan, displayName(modelId));
+        // A feature check names its model itself; its plan lists features, not models.
+        String named = plan.optString("displayName", "");
+        Entry entry = new Entry(event.optInt("index", entries.size()), event.optInt("total", 0), plan,
+            named.isEmpty() ? displayName(modelId) : named);
         entries.add(entry);
         wait = null;
         live.active = false;
@@ -643,6 +655,8 @@ public final class TaiBenchRunState {
         if (record != null) {
             String verdict = record.optString("verdict", "");
             entry.verdict = verdict.isEmpty() || record.isNull("verdict") ? null : verdict;
+            entry.featureSpeed = record.optDouble("speed", 0.0);
+            entry.featurePassed = record.optBoolean("passed", false);
             JSONObject phases = record.optJSONObject("phases");
             JSONObject chat = phases == null ? null : phases.optJSONObject("chat");
             JSONObject longInput = phases == null ? null : phases.optJSONObject("longInput");
@@ -713,5 +727,17 @@ public final class TaiBenchRunState {
     public static List<String> phasesFor() {
         return Arrays.asList(TaiBenchSuite.PHASE_LOAD, TaiBenchSuite.PHASE_WARMUP, TaiBenchSuite.PHASE_CHAT,
             TaiBenchSuite.PHASE_LONG_INPUT);
+    }
+
+    /** {@link #phasesFor()} for a bench entry; a feature check's run is its load and its workload. */
+    @NonNull
+    public static List<String> phasesFor(@NonNull Entry entry) {
+        if (entry.feature == null) return phasesFor();
+        return Arrays.asList(TaiBenchSuite.PHASE_LOAD, TaiFeatureCheckRunner.PHASE_FEATURE);
+    }
+
+    /** Whether this state is a feature check's rather than a bench run's. */
+    public boolean featureCheck() {
+        return TaiFeatureCheckRunner.PRESET_ID.equals(presetId);
     }
 }

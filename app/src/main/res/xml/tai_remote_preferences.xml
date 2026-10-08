@@ -7,13 +7,27 @@
         app:key="tai_remote_server"
         app:title="@string/tai_remote_server_header">
         <Preference
+            app:key="tai_remote_provider_row"
+            app:title="@string/tai_remote_provider_title"
+            app:persistent="false"/>
+        <!-- Shown only for Custom; a preset brings its own address. -->
+        <Preference
             app:key="tai_remote_base_url"
             app:title="@string/tai_remote_base_url_title"
+            app:persistent="false"/>
+        <Preference
+            app:key="tai_remote_get_key"
+            app:title="@string/tai_remote_get_key_title"
             app:persistent="false"/>
         <Preference
             app:key="tai_remote_api_key"
             app:title="@string/tai_remote_api_key_title"
             app:persistent="false"/>
+        <Preference
+            app:key="tai_remote_free_plan"
+            app:summary="@string/tai_remote_free_plan_note"
+            app:persistent="false"
+            app:selectable="false"/>
         <Preference
             app:key="tai_remote_consent"
             app:summary="@string/tai_remote_consent"

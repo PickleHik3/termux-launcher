@@ -32,11 +32,10 @@ import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiFunction;
-import com.termux.ai.TaiFunctionModels;
+import com.termux.ai.TaiFeaturePlans;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
-import com.termux.app.launcher.data.CategorySortLoadPolicy;
 import com.termux.app.launcher.data.LauncherCategoryCatalogue;
 import com.termux.app.launcher.data.LauncherCategoryPasteImporter;
 import com.termux.app.launcher.data.LauncherCategoryPasteNotification;
@@ -75,14 +74,39 @@ final class CategorySortDialogs {
     }
 
     /**
-     * @return what a sort would ask: the APP_CATEGORIES function's resolution ({@link
-     *     TaiFunctionModels}: the user's pick, else the tier's Automatic, else its chain), a local
-     *     model on an accelerator or the remote provider's model. Reads the model store and
-     *     settings. Availability is a separate question, see {@link #unavailableReason}.
+     * @return what a sort would ask: app sorting's feature load plan ({@link TaiFeaturePlans}), a local
+     *     model on an accelerator or the remote provider's model. Reads the model store, settings and
+     *     the evidence files: not for the main thread. Availability is a separate question, see
+     *     {@link #unavailableReason}.
      */
     @NonNull
     static LauncherCategorySortPlan resolvePlan(@NonNull Context context) {
-        return LauncherCategorySortPlan.of(TaiFunctionModels.forContext(context).resolve(TaiFunction.APP_CATEGORIES));
+        return LauncherCategorySortPlan.of(TaiFeaturePlans.forContext(context).plan(TaiFunction.APP_CATEGORIES));
+    }
+
+    /** Everything the chooser shows, read together off the main thread by {@link #preview}. */
+    static final class Preview {
+        @NonNull final List<LauncherCategorySortPrompt.AppEntry> apps;
+        @NonNull final LauncherCategorySortPlan plan;
+        /** The installed spec of a local plan's model; null for a remote plan or a missing model. */
+        @Nullable final TaiModelSpec model;
+        /** Why the on-device row is disabled, or null when it can run. */
+        @Nullable final String unavailable;
+
+        Preview(@NonNull List<LauncherCategorySortPrompt.AppEntry> apps, @NonNull LauncherCategorySortPlan plan,
+                @Nullable TaiModelSpec model, @Nullable String unavailable) {
+            this.apps = apps;
+            this.plan = plan;
+            this.model = model;
+            this.unavailable = unavailable;
+        }
+    }
+
+    /** The apps, the plan and whether it can run here. Blocking: the package manager, the model store, the device. */
+    @NonNull
+    static Preview preview(@NonNull Context context) {
+        LauncherCategorySortPlan plan = resolvePlan(context);
+        return new Preview(loadApps(context), plan, specFor(context, plan), unavailableReason(context, plan));
     }
 
     /** The installed spec for a local plan's model, or null (and always null for a remote plan). */
@@ -146,13 +170,14 @@ final class CategorySortDialogs {
      * @param onPasteApplied run after a pasted reply has been written, so the caller can refresh.
      */
     static void showChooser(@NonNull Context context,
-                            @NonNull List<LauncherCategorySortPrompt.AppEntry> apps,
+                            @NonNull Preview preview,
                             @NonNull Runnable onDeviceChosen,
                             @Nullable Runnable onChangeModel,
                             @Nullable Runnable onPasteApplied) {
-        LauncherCategorySortPlan plan = resolvePlan(context);
-        TaiModelSpec model = specFor(context, plan);
-        String unavailable = unavailableReason(context, plan);
+        List<LauncherCategorySortPrompt.AppEntry> apps = preview.apps;
+        LauncherCategorySortPlan plan = preview.plan;
+        TaiModelSpec model = preview.model;
+        String unavailable = preview.unavailable;
         boolean onDeviceEnabled = unavailable == null && plan.hasModel();
 
         float density = context.getResources().getDisplayMetrics().density;
@@ -175,32 +200,22 @@ final class CategorySortDialogs {
                 ? R.string.tai_callers_category_remote_summary
                 : R.string.settings_app_drawer_category_sort_on_device_summary, modelName)
             : unavailable;
-        // What the sort will really load with: the accelerator its speed test chose, else the CPU.
-        CategorySortLoadPolicy.Decision load = onDeviceEnabled && !plan.remote && plan.model != null
-            ? CategorySortLoadPolicy.forContext(context, plan.model, plan.accelerator, 0) : null;
+        // What the sort will really load with: the plan's accelerator, the one the load is told.
         String onDeviceNote = onDeviceEnabled
             ? context.getString(R.string.settings_app_drawer_category_sort_on_device_warning,
-                plan.estimatedMinutes(apps.size(), load == null ? plan.accelerator : load.accelerator))
+                plan.estimatedMinutes(apps.size()))
             : null;
         // A large model may make Android close cached background apps (tai-device-tiers spec section 4.4).
         if (onDeviceNote != null && plan.warnBackground) {
             onDeviceNote += "\n" + context.getString(R.string.tai_warn_background_apps);
         }
-        // The row's one way forward, when it has one: a speed test when it runs unmeasured (a
-        // suggestion, never a gate: the row still starts the sort without it), or the Model centre
-        // when there is no model to run. A device that cannot run the model gets neither.
+        // The row's one way forward, when it has one: the Model centre when there is no model to
+        // run. A device that cannot run the model gets none.
         boolean missingModel = !plan.remote && model == null;
         String suggestion = null;
         String link = null;
         Runnable onSuggestion = null;
-        if (load != null && !load.benchmarked) {
-            link = context.getString(R.string.settings_app_drawer_category_sort_speed_test_link);
-            suggestion = context.getString(R.string.settings_app_drawer_category_sort_speed_test_hint, link);
-            onSuggestion = () -> {
-                dialog.dismiss();
-                TaiBenchHomeFragment.open(activityOf(context), plan.model);
-            };
-        } else if (missingModel) {
+        if (missingModel) {
             link = context.getString(R.string.tai_model_centre_title);
             suggestion = context.getString(R.string.settings_app_drawer_category_sort_get_model_hint, link);
             onSuggestion = () -> {

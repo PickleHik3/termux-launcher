@@ -64,6 +64,14 @@
     <string name="tai_fn_section_extras">Settings</string>
     <string name="tai_fn_nothing_on_phone">No installed model serves this yet.</string>
     <string name="tai_fn_runs_on">Runs on</string>
+    <!-- The feature load plan: how this function runs now, and why. -->
+    <string name="tai_fn_plan_header">How it runs</string>
+    <string name="tai_fn_plan_faster">%1$s× faster</string>
+    <string name="tai_fn_plan_reason_pick">Your choice</string>
+    <string name="tai_fn_plan_reason_measured">Measured on this phone</string>
+    <string name="tai_fn_plan_reason_default">Suggested for this phone</string>
+    <string name="tai_fn_plan_reason_remote">Remote · your provider</string>
+    <string name="tai_fn_plan_offer">Use %1$s: %2$s× faster on this phone</string>
     <string name="tai_fn_gpu_wrong">Answers look wrong? Use the CPU</string>
     <string name="tai_fn_gpu_retry">Try the GPU again</string>
     <string name="tai_fn_get_action">Get</string>

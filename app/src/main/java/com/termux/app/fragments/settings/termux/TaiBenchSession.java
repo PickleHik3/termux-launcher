@@ -12,6 +12,8 @@ import androidx.annotation.Nullable;
 import com.termux.ai.TaiBenchGuardRules;
 import com.termux.ai.TaiDeviceConditions;
 import com.termux.ai.TaiDownloadHub;
+import com.termux.ai.TaiFeatureCheckRunner;
+import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelStore;
 
@@ -46,6 +48,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <p>Models that were downloaded for the run are deleted afterwards when the plan says so; their
  * results stay in the store, marked not installed by {@link TaiManager#benchmarks}.
+ *
+ * <p>The feature check ({@link #startFeatureCheck}) is a run of this same session: its runner sends
+ * events of the harness's shape, so the Run screen, Stop, "Skip the wait" and the hold on leaving
+ * all work on it unchanged.
  */
 public final class TaiBenchSession {
     /** Told on the main thread after every state change. */
@@ -110,6 +116,8 @@ public final class TaiBenchSession {
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean stopRequested = new AtomicBoolean();
     @Nullable private volatile ScheduledFuture<?> sampling;
+    /** The feature check in progress, which runs in this process; {@code null} during a bench run. */
+    @Nullable private volatile TaiFeatureCheckRunner featureCheck;
     /** The ids of the models this run downloaded, to delete afterwards; the last finished run's until the next starts. */
     @NonNull private volatile List<String> downloadedIds = Collections.emptyList();
 
@@ -188,13 +196,56 @@ public final class TaiBenchSession {
         return true;
     }
 
+    /**
+     * Starts a feature check of {@code features}, named {@code labels} on the Run screen; ignored (returns
+     * {@code false}) while a run is active.
+     */
+    @MainThread
+    public boolean startFeatureCheck(@NonNull Context context, @NonNull List<TaiFunction> features,
+                                     @NonNull List<String> labels) {
+        if (!running.compareAndSet(false, true)) return false;
+        stopRequested.set(false);
+        List<TaiBenchRunState.Planned> planned = new ArrayList<>();
+        for (int i = 0; i < features.size(); i++) {
+            planned.add(new TaiBenchRunState.Planned(features.get(i).id(), i < labels.size() ? labels.get(i) : features.get(i).id(), false));
+        }
+        state.begin(TaiFeatureCheckRunner.PRESET_ID, planned, 0.0, System.currentTimeMillis());
+        notifyListeners();
+        Context app = context.getApplicationContext();
+        startSampling(app);
+        List<TaiFunction> chosen = new ArrayList<>(features);
+        worker.execute(() -> {
+            TaiFeatureCheckRunner runner = new TaiFeatureCheckRunner(app, this::post);
+            featureCheck = runner;
+            // A Stop that came before the runner existed reached no one: pass it on.
+            if (stopRequested.get()) runner.requestStop("cancelled");
+            try {
+                if (!stopRequested.get()) runner.run(chosen, false);
+            } catch (RuntimeException e) {
+                String message = e.getMessage() == null || e.getMessage().isEmpty() ? e.getClass().getSimpleName() : e.getMessage();
+                post(synthetic("error").put("code", "check_failed").put("message", message));
+            } finally {
+                featureCheck = null;
+                stopSampling();
+                running.set(false);
+                post(synthetic("session_end").put("reason", stopRequested.get() ? "cancelled" : "ended"));
+            }
+        });
+        return true;
+    }
+
     /** Stops the run after the current generation; downloads in progress are cancelled. */
     public void stop(@NonNull Context context) {
         if (!running.get()) return;
         stopRequested.set(true);
         post(synthetic("stop_requested"));
         Context app = context.getApplicationContext();
+        TaiFeatureCheckRunner check = featureCheck;
         control.execute(() -> {
+            if (check != null) {
+                check.requestStop("cancelled");
+                return;
+            }
             try {
                 TaiManager.getInstance(app).cancelRuntime();
             } catch (JSONException | RuntimeException ignored) {
@@ -205,6 +256,11 @@ public final class TaiBenchSession {
     /** "Skip the wait": ends the cool-down in progress; that entry is marked warm start. */
     public void skipWait(@NonNull Context context) {
         if (!running.get()) return;
+        TaiFeatureCheckRunner check = featureCheck;
+        if (check != null) {
+            check.skipCooldown();
+            return;
+        }
         Context app = context.getApplicationContext();
         control.execute(() -> {
             try {
@@ -221,6 +277,11 @@ public final class TaiBenchSession {
      */
     public void hold(@NonNull Context context, boolean held) {
         if (!running.get()) return;
+        TaiFeatureCheckRunner check = featureCheck;
+        if (check != null) {
+            check.setHeld(held);
+            return;
+        }
         Context app = context.getApplicationContext();
         control.execute(() -> {
             try {

@@ -3,13 +3,13 @@ package com.termux.app.launcher.data;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.TaiFeaturePlan;
 import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiModelRegistry;
 
 /**
- * What an app-category sort asks, as the APP_CATEGORIES function resolves it ({@link
- * TaiFunctionModels}): a local model on an accelerator, or the remote provider's model. Replaces the
- * dialog's own E4B-or-E2B rule. Pure: no Android, no I/O.
+ * What an app-category sort asks, as app sorting's {@link TaiFeaturePlan} has it: a local model on
+ * an accelerator, or the remote provider's model. Pure: no Android, no I/O.
  */
 public final class LauncherCategorySortPlan {
     /** Measured on-device throughput, used only for the "takes about N minutes" estimate. */
@@ -37,14 +37,15 @@ public final class LauncherCategorySortPlan {
         return model != null;
     }
 
-    /** The pure mapping from the function's resolution. */
+    /** The pure mapping from app sorting's feature load plan. */
     @NonNull
-    public static LauncherCategorySortPlan of(@NonNull TaiFunctionModels.Resolution resolution) {
-        if (resolution.isRemote()) return new LauncherCategorySortPlan(resolution.remoteModel, null, true, false);
-        return new LauncherCategorySortPlan(resolution.modelId, resolution.accelerator, false, resolution.warnBackground);
+    public static LauncherCategorySortPlan of(@NonNull TaiFeaturePlan feature) {
+        if (feature.isRemote()) return new LauncherCategorySortPlan(feature.requestModel(), null, true, false);
+        if (feature.where != TaiFeaturePlan.Where.ON_DEVICE) return new LauncherCategorySortPlan(null, null, false, false);
+        return new LauncherCategorySortPlan(feature.modelId, feature.accelerator, false, feature.warnBackground);
     }
 
-    /** The estimate on the plan's own accelerator, as the tier policy would pick it. */
+    /** The estimate on the plan's own accelerator. */
     public int estimatedMinutes(int appCount) {
         return estimatedMinutes(appCount, accelerator);
     }
@@ -52,7 +53,7 @@ public final class LauncherCategorySortPlan {
     /**
      * Rounded up and never zero: "about 0 minutes" would read as instant. The per-app figures were
      * measured on the GPU; the CPU is not measured and is assumed twice as slow, so a sort that will
-     * run on the CPU (no speed test yet) is not promised at GPU speed.
+     * run on the CPU is not promised at GPU speed.
      */
     public int estimatedMinutes(int appCount, @Nullable String onAccelerator) {
         int secondsPerApp = model != null && model.startsWith(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT)

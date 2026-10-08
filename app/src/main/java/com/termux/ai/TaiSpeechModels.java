@@ -81,8 +81,8 @@ public final class TaiSpeechModels {
     }
 
     /**
-     * The model voice input uses: the VOICE_TYPING function's resolution ({@link TaiFunctionModels}:
-     * the pick, else the tier's Automatic, else its chain), and when none of those is installed the
+     * The model voice input uses: voice typing's {@link TaiFeaturePlan} (its model resolved by {@link
+     * TaiFunctionModels}: the pick, else the tier's Automatic, else its chain), and when none of those is installed the
      * first installed speech model, as {@link #chooseActive} has always done.
      *
      * <p>The voice key asks twice per tap, on the main thread, and an answer from scratch parses
@@ -107,7 +107,8 @@ public final class TaiSpeechModels {
 
     @Nullable
     private static TaiModelSpec resolveActive(@NonNull Context app, @NonNull List<TaiModelSpec> installed) {
-        String resolved = TaiFunctionModels.forContext(app).resolve(TaiFunction.VOICE_TYPING).modelId;
+        // Voice typing's plan: its model, on the CPU as every speech model runs.
+        String resolved = TaiFeaturePlans.forContext(app).plan(TaiFunction.VOICE_TYPING).modelId;
         if (resolved != null) {
             for (TaiModelSpec spec : installed) {
                 if (resolved.equals(spec.id)) return spec;

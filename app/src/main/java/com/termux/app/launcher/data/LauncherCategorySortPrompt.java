@@ -35,6 +35,8 @@ import java.util.regex.Pattern;
 public final class LauncherCategorySortPrompt {
 
     private static final Map<String, String> DESCRIPTION_BY_SLUG = buildDescriptions();
+    /** The reply cap of one app's answer: a category id, with room for a model that prefixes it with filler. */
+    public static final int MAX_TOKENS = 24;
 
     private LauncherCategorySortPrompt() {
     }

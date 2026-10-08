@@ -20,6 +20,8 @@ import java.net.SocketTimeoutException;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -27,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -41,6 +44,8 @@ import java.util.regex.Pattern;
  *   <li>{@link #sanitize}: the outgoing body loses {@code context_window} and every {@code _tai*}
  *   key; {@link #retryBody} decides the one retry after a 400 ({@code max_tokens} →
  *   {@code max_completion_tokens}, or without {@code response_format}).</li>
+ *   <li>{@link #rateLimitWaitMs}: a 429 waits for the server's {@code Retry-After} (or a short
+ *   backoff) and asks again, a few times at most; {@link #exchange} runs both retries.</li>
  *   <li>{@link #redact}: the key and any {@code Authorization} value never reach a log line.</li>
  * </ul>
  * Errors come back in {@link TaiManager#openAiError}'s shape, so callers handle a remote failure
@@ -55,6 +60,12 @@ public final class TaiRemoteClient {
     private static final int CONNECT_TIMEOUT_CAP_MS = 15_000;
     private static final int MAX_ERROR_BODY_CHARS = 400;
     private static final long PROBE_TIMEOUT_MS = 60_000L;
+    /** Waits on a 429 per request; free plans count requests per minute, so a few is enough. */
+    static final int MAX_RATE_LIMIT_RETRIES = 3;
+    /** The longest wait honoured. A longer {@code Retry-After} is a daily cap: fail now, not later. */
+    static final long MAX_RATE_LIMIT_WAIT_MS = 60_000L;
+    /** The first wait when the server names none, doubled on each retry. */
+    static final long RATE_LIMIT_BACKOFF_MS = 2_000L;
     /** A 2×2 solid red PNG, for the "does this model see images" probe. */
     static final String PROBE_IMAGE_DATA_URL = "data:image/png;base64,"
         + "iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEElEQVR4nGP4z8AARAwQCgAf7gP9i18U1AAAAABJRU5ErkJggg==";
@@ -221,21 +232,34 @@ public final class TaiRemoteClient {
         long started = System.currentTimeMillis();
         HttpURLConnection connection = null;
         try {
-            for (int attempt = 0; ; attempt++) {
+            int bodyRetries = 0;
+            int rateLimitRetries = 0;
+            long waited = 0L;
+            while (true) {
                 connection = open("POST", endpoint(baseUrl, "chat/completions"), timeoutMs);
                 write(connection, outgoing.toString());
                 int status = connection.getResponseCode();
                 if (status >= 200 && status < 300) break;
+                String retryAfter = connection.getHeaderField("Retry-After");
                 String errorBody = readAll(connection.getErrorStream());
                 connection.disconnect();
                 connection = null;
-                JSONObject retry = attempt < 2 ? retryBody(outgoing, status, errorBody) : null;
-                if (retry == null) {
-                    logExchange("POST", "chat/completions (stream)", status, System.currentTimeMillis() - started);
-                    emitError(sink, source(status, errorCode(status, errorBody), errorMessage(status, errorBody)));
-                    return;
+                JSONObject retry = bodyRetries < MAX_BODY_RETRIES ? retryBody(outgoing, status, errorBody) : null;
+                if (retry != null) {
+                    outgoing = retry;
+                    bodyRetries++;
+                    continue;
                 }
-                outgoing = retry;
+                long wait = rateLimitWaitMs(status, retryAfter, errorBody, rateLimitRetries, timeoutMs - waited,
+                    System.currentTimeMillis());
+                if (wait >= 0 && pause(DEFAULT_SLEEPER, wait)) {
+                    waited += wait;
+                    rateLimitRetries++;
+                    continue;
+                }
+                logExchange("POST", "chat/completions (stream)", status, System.currentTimeMillis() - started);
+                emitError(sink, source(status, errorCode(status, errorBody), errorMessage(status, errorBody)));
+                return;
             }
             SseReader reader = new SseReader();
             try (BufferedReader lines = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
@@ -436,6 +460,54 @@ public final class TaiRemoteClient {
     }
 
     /**
+     * How long to wait before asking again after {@code status}, or {@code -1} for no retry: only a
+     * 429 earns one, at most {@link #MAX_RATE_LIMIT_RETRIES} times. The wait is the server's
+     * {@code Retry-After} (seconds or a date), else Gemini's {@code retryDelay} in the body, else a
+     * doubling backoff. A wait over {@link #MAX_RATE_LIMIT_WAIT_MS}, or over what is left of the
+     * caller's {@code budgetMs}, is no retry: the caller hears the 429 now.
+     */
+    static long rateLimitWaitMs(int status, @Nullable String retryAfter, @Nullable String body, int retriesSoFar,
+                                long budgetMs, long nowMs) {
+        if (status != 429 || retriesSoFar >= MAX_RATE_LIMIT_RETRIES) return -1L;
+        long wait = parseRetryAfterMs(retryAfter, nowMs);
+        if (wait < 0) wait = parseRetryDelayMs(body);
+        if (wait < 0) wait = RATE_LIMIT_BACKOFF_MS << retriesSoFar;
+        if (wait > MAX_RATE_LIMIT_WAIT_MS || wait > budgetMs) return -1L;
+        return wait;
+    }
+
+    /** {@code Retry-After} as delay-seconds or an HTTP date; {@code -1} when absent or unreadable. */
+    static long parseRetryAfterMs(@Nullable String value, long nowMs) {
+        if (value == null || value.trim().isEmpty()) return -1L;
+        String text = value.trim();
+        try {
+            double seconds = Double.parseDouble(text);
+            return seconds < 0 || Double.isNaN(seconds) ? -1L : (long) Math.ceil(seconds * 1000d);
+        } catch (NumberFormatException ignored) {
+        }
+        try {
+            SimpleDateFormat format = new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US);
+            return Math.max(0L, format.parse(text).getTime() - nowMs);
+        } catch (ParseException | RuntimeException ignored) {
+            return -1L;
+        }
+    }
+
+    /** Gemini names its wait in the body ({@code "retryDelay": "17s"}); {@code -1} when it does not. */
+    static long parseRetryDelayMs(@Nullable String body) {
+        if (body == null) return -1L;
+        Matcher matcher = RETRY_DELAY.matcher(body);
+        if (!matcher.find()) return -1L;
+        try {
+            return (long) Math.ceil(Double.parseDouble(matcher.group(1)) * 1000d);
+        } catch (NumberFormatException e) {
+            return -1L;
+        }
+    }
+
+    private static final Pattern RETRY_DELAY = Pattern.compile("\"retryDelay\"\\s*:\\s*\"(\\d+(?:\\.\\d+)?)s\"");
+
+    /**
      * {@code data[].id} from an OpenAI {@code /models} reply; {@code models[].id|name} is also
      * read for servers that answer in Ollama's shape. Order kept, duplicates and blanks dropped.
      */
@@ -626,28 +698,78 @@ public final class TaiRemoteClient {
 
     // ---------------------------------------------------------------- transport
 
-    private static final class Reply {
+    /** One for max_tokens, one for response_format; each removes its key, so two is all there are. */
+    private static final int MAX_BODY_RETRIES = 2;
+
+    static final class Reply {
         final int status;
         @NonNull final String body;
+        /** The {@code Retry-After} header, when the server sent one. */
+        @Nullable final String retryAfter;
 
-        Reply(int status, @NonNull String body) {
+        Reply(int status, @NonNull String body, @Nullable String retryAfter) {
             this.status = status;
             this.body = body;
+            this.retryAfter = retryAfter;
         }
     }
 
+    /** One POST of a body; the seam {@link #exchange} retries through. */
+    interface Transport {
+        @NonNull Reply post(@NonNull String body) throws IOException;
+    }
+
+    /** The wait between a 429 and the next try; tests pass one that does not sleep. */
+    interface Sleeper {
+        void sleep(long ms) throws InterruptedException;
+    }
+
+    private static final Sleeper DEFAULT_SLEEPER = Thread::sleep;
+
     @NonNull
     private Reply sendWithRetries(@NonNull JSONObject outgoing, long timeoutMs) throws IOException, JSONException {
+        String url = endpoint(baseUrl, "chat/completions");
+        return exchange(outgoing, timeoutMs, body -> send("POST", url, body, timeoutMs), DEFAULT_SLEEPER);
+    }
+
+    /**
+     * Sends {@code outgoing} and retries what may be retried: a 400 that names a field
+     * ({@link #retryBody}) with the fixed body, a 429 after its wait ({@link #rateLimitWaitMs}).
+     * The 429 waits together stay within {@code timeoutMs}. Returns the last reply.
+     */
+    @NonNull
+    static Reply exchange(@NonNull JSONObject outgoing, long timeoutMs, @NonNull Transport transport,
+                          @NonNull Sleeper sleeper) throws IOException, JSONException {
         JSONObject body = outgoing;
-        Reply reply = send("POST", endpoint(baseUrl, "chat/completions"), body.toString(), timeoutMs);
-        // At most two retries: one for max_tokens, one for response_format; each removes its key.
-        for (int attempt = 0; attempt < 2; attempt++) {
-            JSONObject retry = retryBody(body, reply.status, reply.body);
-            if (retry == null) break;
-            body = retry;
-            reply = send("POST", endpoint(baseUrl, "chat/completions"), body.toString(), timeoutMs);
+        Reply reply = transport.post(body.toString());
+        int bodyRetries = 0;
+        int rateLimitRetries = 0;
+        long waited = 0L;
+        while (true) {
+            JSONObject retry = bodyRetries < MAX_BODY_RETRIES ? retryBody(body, reply.status, reply.body) : null;
+            if (retry != null) {
+                body = retry;
+                bodyRetries++;
+            } else {
+                long wait = rateLimitWaitMs(reply.status, reply.retryAfter, reply.body, rateLimitRetries,
+                    timeoutMs - waited, System.currentTimeMillis());
+                if (wait < 0 || !pause(sleeper, wait)) return reply;
+                waited += wait;
+                rateLimitRetries++;
+            }
+            reply = transport.post(body.toString());
         }
-        return reply;
+    }
+
+    /** False when the wait was interrupted: the request is being abandoned, so do not ask again. */
+    private static boolean pause(@NonNull Sleeper sleeper, long ms) {
+        try {
+            sleeper.sleep(ms);
+            return true;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
     }
 
     @NonNull
@@ -657,7 +779,7 @@ public final class TaiRemoteClient {
             if (body != null) write(connection, body);
             int status = connection.getResponseCode();
             InputStream stream = status >= 200 && status < 300 ? connection.getInputStream() : connection.getErrorStream();
-            return new Reply(status, readAll(stream));
+            return new Reply(status, readAll(stream), connection.getHeaderField("Retry-After"));
         } finally {
             connection.disconnect();
         }

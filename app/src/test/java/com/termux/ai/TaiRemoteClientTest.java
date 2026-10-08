@@ -96,6 +96,149 @@ public class TaiRemoteClientTest {
         assertEquals("https://x.example/v1/models", TaiRemoteClient.endpoint("https://x.example/v1/", "models"));
     }
 
+    @Test
+    public void presetAddresses_buildTheirEndpointsWithoutDoubleSlashOrAddedVersion() {
+        assertEquals("https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+            TaiRemoteClient.endpoint(TaiRemotePresets.GOOGLE.baseUrl, "chat/completions"));
+        assertEquals("https://generativelanguage.googleapis.com/v1beta/openai/models",
+            TaiRemoteClient.endpoint(TaiRemotePresets.GOOGLE.baseUrl + "/", "models"));
+        assertEquals("https://openrouter.ai/api/v1/chat/completions",
+            TaiRemoteClient.endpoint(TaiRemotePresets.OPENROUTER.baseUrl, "chat/completions"));
+        assertEquals("https://api.groq.com/openai/v1/models",
+            TaiRemoteClient.endpoint(TaiRemotePresets.GROQ.baseUrl, "models"));
+        assertEquals("https://api.mistral.ai/v1/chat/completions",
+            TaiRemoteClient.endpoint(TaiRemotePresets.MISTRAL.baseUrl, "chat/completions"));
+        for (TaiRemotePresets.Preset preset : TaiRemotePresets.ALL) {
+            if (preset.isCustom()) continue;
+            for (String path : Arrays.asList("chat/completions", "models")) {
+                String url = TaiRemoteClient.endpoint(preset.baseUrl, path);
+                assertFalse(url, url.substring("https://".length()).contains("//"));
+                assertTrue(url, url.endsWith(preset.baseUrl + "/" + path));
+            }
+        }
+    }
+
+    @Test
+    public void presetHosts_areAllowedOverHttpsOnly() {
+        for (TaiRemotePresets.Preset preset : TaiRemotePresets.ALL) {
+            if (preset.isCustom()) continue;
+            assertEquals(preset.id, TaiRemoteClient.UrlVerdict.OK_ENCRYPTED, TaiRemoteClient.checkUrl(preset.baseUrl));
+            String http = "http://" + preset.baseUrl.substring("https://".length());
+            assertEquals(preset.id, TaiRemoteClient.UrlVerdict.PUBLIC_HTTP, TaiRemoteClient.checkUrl(http));
+        }
+    }
+
+    // ---------------------------------------------------------------- 429
+
+    @Test
+    public void rateLimit_honoursRetryAfterSecondsUpToTheCap() {
+        assertEquals(7_000L, TaiRemoteClient.rateLimitWaitMs(429, "7", null, 0, 120_000L, 0L));
+        assertEquals(1_500L, TaiRemoteClient.rateLimitWaitMs(429, " 1.5 ", null, 0, 120_000L, 0L));
+        assertEquals(60_000L, TaiRemoteClient.rateLimitWaitMs(429, "60", null, 0, 120_000L, 0L));
+        // A daily cap names hours: fail now rather than hold the caller.
+        assertEquals(-1L, TaiRemoteClient.rateLimitWaitMs(429, "3600", null, 0, 600_000L, 0L));
+    }
+
+    @Test
+    public void rateLimit_readsAnHttpDate() {
+        long now = 1_760_000_000_000L; // 2025-10-09T08:53:20Z
+        assertEquals(10_000L, TaiRemoteClient.parseRetryAfterMs("Thu, 09 Oct 2025 08:53:30 GMT", now));
+        assertEquals(0L, TaiRemoteClient.parseRetryAfterMs("Thu, 09 Oct 2025 08:00:00 GMT", now));
+        assertEquals(-1L, TaiRemoteClient.parseRetryAfterMs("soon", now));
+        assertEquals(-1L, TaiRemoteClient.parseRetryAfterMs(null, now));
+    }
+
+    @Test
+    public void rateLimit_readsGeminisRetryDelayWhenNoHeader() {
+        String body = "[{\"error\":{\"code\":429,\"details\":[{\"@type\":\"type.googleapis.com/google.rpc.RetryInfo\","
+            + "\"retryDelay\": \"17s\"}]}}]";
+        assertEquals(17_000L, TaiRemoteClient.rateLimitWaitMs(429, null, body, 0, 120_000L, 0L));
+        // The header wins over the body.
+        assertEquals(2_000L, TaiRemoteClient.rateLimitWaitMs(429, "2", body, 0, 120_000L, 0L));
+    }
+
+    @Test
+    public void rateLimit_backsOffWithoutAHintAndStopsAfterAFewTries() {
+        assertEquals(2_000L, TaiRemoteClient.rateLimitWaitMs(429, null, "{}", 0, 120_000L, 0L));
+        assertEquals(4_000L, TaiRemoteClient.rateLimitWaitMs(429, null, "{}", 1, 120_000L, 0L));
+        assertEquals(8_000L, TaiRemoteClient.rateLimitWaitMs(429, null, "{}", 2, 120_000L, 0L));
+        assertEquals(-1L, TaiRemoteClient.rateLimitWaitMs(429, null, "{}", TaiRemoteClient.MAX_RATE_LIMIT_RETRIES,
+            120_000L, 0L));
+    }
+
+    @Test
+    public void rateLimit_onlyFor429AndWithinTheCallersBudget() {
+        assertEquals(-1L, TaiRemoteClient.rateLimitWaitMs(503, "5", null, 0, 120_000L, 0L));
+        assertEquals(-1L, TaiRemoteClient.rateLimitWaitMs(400, "5", null, 0, 120_000L, 0L));
+        // A voice rewrite gives itself seconds: a longer wait is not taken.
+        assertEquals(-1L, TaiRemoteClient.rateLimitWaitMs(429, "5", null, 0, 4_000L, 0L));
+    }
+
+    @Test
+    public void exchange_waitsOutA429ThenSucceeds() throws Exception {
+        FakeTransport transport = new FakeTransport(
+            new TaiRemoteClient.Reply(429, "{}", "3"),
+            new TaiRemoteClient.Reply(200, chatReply("ok"), null));
+        List<Long> slept = new ArrayList<>();
+        TaiRemoteClient.Reply reply = TaiRemoteClient.exchange(new JSONObject().put("model", "m"), 120_000L,
+            transport, slept::add);
+        assertEquals(200, reply.status);
+        assertEquals(2, transport.sent.size());
+        assertEquals(Collections.singletonList(3_000L), slept);
+    }
+
+    @Test
+    public void exchange_givesUpAfterTheLastRetryAndReturnsThe429() throws Exception {
+        TaiRemoteClient.Reply limited = new TaiRemoteClient.Reply(429, "{}", null);
+        FakeTransport transport = new FakeTransport(limited, limited, limited, limited, limited);
+        List<Long> slept = new ArrayList<>();
+        TaiRemoteClient.Reply reply = TaiRemoteClient.exchange(new JSONObject().put("model", "m"), 120_000L,
+            transport, slept::add);
+        assertEquals(429, reply.status);
+        assertEquals(1 + TaiRemoteClient.MAX_RATE_LIMIT_RETRIES, transport.sent.size());
+        assertEquals(Arrays.asList(2_000L, 4_000L, 8_000L), slept);
+    }
+
+    @Test
+    public void exchange_waitsStayWithinTheTimeout() throws Exception {
+        TaiRemoteClient.Reply limited = new TaiRemoteClient.Reply(429, "{}", null);
+        FakeTransport transport = new FakeTransport(limited, limited, limited);
+        List<Long> slept = new ArrayList<>();
+        // 2 s fits in 5 s; the next 4 s does not fit in the 3 s left.
+        TaiRemoteClient.Reply reply = TaiRemoteClient.exchange(new JSONObject().put("model", "m"), 5_000L,
+            transport, slept::add);
+        assertEquals(429, reply.status);
+        assertEquals(2, transport.sent.size());
+        assertEquals(Collections.singletonList(2_000L), slept);
+    }
+
+    @Test
+    public void exchange_keepsTheBodyFixAcrossARateLimit() throws Exception {
+        FakeTransport transport = new FakeTransport(
+            new TaiRemoteClient.Reply(400, "{\"error\":{\"message\":\"Unsupported parameter: 'max_tokens'\"}}", null),
+            new TaiRemoteClient.Reply(429, "{}", "1"),
+            new TaiRemoteClient.Reply(200, chatReply("ok"), null));
+        TaiRemoteClient.Reply reply = TaiRemoteClient.exchange(
+            new JSONObject().put("model", "m").put("max_tokens", 64), 120_000L, transport, ms -> { });
+        assertEquals(200, reply.status);
+        assertEquals(3, transport.sent.size());
+        JSONObject last = new JSONObject(transport.sent.get(2));
+        assertFalse(last.has("max_tokens"));
+        assertEquals(64, last.getInt("max_completion_tokens"));
+    }
+
+    @Test
+    public void exchange_anInterruptedWaitStopsAsking() throws Exception {
+        FakeTransport transport = new FakeTransport(
+            new TaiRemoteClient.Reply(429, "{}", "1"),
+            new TaiRemoteClient.Reply(200, chatReply("ok"), null));
+        TaiRemoteClient.Reply reply = TaiRemoteClient.exchange(new JSONObject().put("model", "m"), 120_000L,
+            transport, ms -> { throw new InterruptedException(); });
+        assertEquals(429, reply.status);
+        assertEquals(1, transport.sent.size());
+        assertTrue(Thread.interrupted()); // also clears the flag for the next test
+    }
+
     // ---------------------------------------------------------------- body sanitiser
 
     @Test
@@ -319,6 +462,24 @@ public class TaiRemoteClientTest {
                 .put("message", new JSONObject().put("role", "assistant").put("content", content)))).toString();
         } catch (Exception e) {
             throw new AssertionError(e);
+        }
+    }
+
+    /** Answers each POST with the next scripted reply and records the bodies it was sent. */
+    private static final class FakeTransport implements TaiRemoteClient.Transport {
+        final List<String> sent = new ArrayList<>();
+        private final List<TaiRemoteClient.Reply> replies;
+
+        FakeTransport(TaiRemoteClient.Reply... replies) {
+            this.replies = new ArrayList<>(Arrays.asList(replies));
+        }
+
+        @NonNull
+        @Override
+        public TaiRemoteClient.Reply post(@NonNull String body) {
+            sent.add(body);
+            if (replies.isEmpty()) throw new AssertionError("more requests than scripted replies");
+            return replies.remove(0);
         }
     }
 

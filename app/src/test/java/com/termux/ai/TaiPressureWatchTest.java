@@ -205,6 +205,28 @@ public class TaiPressureWatchTest {
         return TaiPressureWatch.tier(availMem, HOLD, PEAK, lowMemory);
     }
 
+    /**
+     * Feature groups (decision 8): a member used within two minutes is passed over by both eviction
+     * tiers; past that, or with no group, the order is as before.
+     */
+    @Test
+    public void theEvictionTiersPassOverAGroupInUse() {
+        TaiResidency.Entry dictating = stt("whisper", NOW - 60_000L, false);
+        TaiResidency.Entry search = embedding("embedding-gemma", NOW - 30_000L);
+        TaiResidency.Entry assistant = chat("gemma", NOW - 10_000L, false);
+        List<TaiResidency.Entry> residents = Arrays.asList(search, dictating, assistant, runtime());
+        assertSame(assistant, TaiPressureWatch.nextVictim(residents, TaiPressureWatch.Tier.CHAT, NOW));
+        assertNull(TaiPressureWatch.nextVictim(residents, TaiPressureWatch.Tier.AUXILIARY, NOW));
+        // Three minutes on, the group is no longer in use.
+        assertSame(search, TaiPressureWatch.nextVictim(residents, TaiPressureWatch.Tier.AUXILIARY, NOW + 180_000L));
+        // The plain overload keeps no group.
+        assertSame(search, TaiPressureWatch.nextVictim(residents, TaiPressureWatch.Tier.AUXILIARY));
+        // Cleanup's chat model is a group member too, once a request named it.
+        TaiResidency.Entry cleanup = new TaiResidency.Entry("gemma", TaiResidency.Kind.CHAT, "litert-lm", "gpu", 2048,
+            3000L * MB, null, NOW - 10_000L, false, TaiFunction.TIDY_DICTATION);
+        assertNull(TaiPressureWatch.nextVictim(Arrays.asList(cleanup, runtime()), TaiPressureWatch.Tier.CHAT, NOW));
+    }
+
     private static TaiResidency.Entry embedding(String id, long lastUsedMs) {
         return new TaiResidency.Entry(id, TaiResidency.Kind.EMBEDDING, TaiModelSpec.BACKEND_LITERT_LM, "cpu", 1024,
             227L * MB, null, lastUsedMs, false);

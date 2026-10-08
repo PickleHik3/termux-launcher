@@ -21,6 +21,13 @@ public final class TaiRuntimeOptions {
     @Nullable public final Integer idleUnloadMinutes;
     /** A load the caller will unload within a minute; the memory budget gives it a smaller reserve. */
     @Nullable public final Boolean momentary;
+    /**
+     * For an automatic accelerator: the one the feature load plan chose (the GPU verdict, or what this
+     * phone measured), tried first unless it has a failure record. {@code null} keeps the model's own order.
+     */
+    @Nullable public final String preferredAccelerator;
+    /** The feature the request named ({@link TaiFunction#id()}); {@code null} for a request that named none. */
+    @Nullable public final String feature;
 
     public TaiRuntimeOptions(
         @Nullable Integer maxTokens,
@@ -84,6 +91,27 @@ public final class TaiRuntimeOptions {
         @Nullable Integer idleUnloadMinutes,
         @Nullable Boolean momentary
     ) {
+        this(maxTokens, topK, topP, temperature, accelerator, contextWindow, threadCount, precision,
+            memoryMode, thinkingEnabled, speculativeDecodingEnabled, idleUnloadMinutes, momentary, null, null);
+    }
+
+    private TaiRuntimeOptions(
+        @Nullable Integer maxTokens,
+        @Nullable Integer topK,
+        @Nullable Double topP,
+        @Nullable Double temperature,
+        @Nullable String accelerator,
+        @Nullable Integer contextWindow,
+        @Nullable Integer threadCount,
+        @Nullable String precision,
+        @Nullable String memoryMode,
+        @Nullable Boolean thinkingEnabled,
+        @Nullable Boolean speculativeDecodingEnabled,
+        @Nullable Integer idleUnloadMinutes,
+        @Nullable Boolean momentary,
+        @Nullable String preferredAccelerator,
+        @Nullable String feature
+    ) {
         this.maxTokens = maxTokens;
         this.topK = topK;
         this.topP = topP;
@@ -97,6 +125,8 @@ public final class TaiRuntimeOptions {
         this.speculativeDecodingEnabled = speculativeDecodingEnabled;
         this.idleUnloadMinutes = idleUnloadMinutes;
         this.momentary = momentary;
+        this.preferredAccelerator = preferredAccelerator;
+        this.feature = feature;
     }
 
     @NonNull
@@ -115,6 +145,8 @@ public final class TaiRuntimeOptions {
         putNullable(json, "speculativeDecodingEnabled", speculativeDecodingEnabled);
         putNullable(json, "idleUnloadMinutes", idleUnloadMinutes);
         putNullable(json, "momentary", momentary);
+        putNullable(json, "preferredAccelerator", preferredAccelerator);
+        putNullable(json, "feature", feature);
         json.put("usesGalleryGenerationDefaultsForNulls", true);
         return json;
     }
@@ -134,67 +166,56 @@ public final class TaiRuntimeOptions {
             nullableBoolean(json, "thinkingEnabled"),
             nullableBoolean(json, "speculativeDecodingEnabled"),
             nullableInteger(json, "idleUnloadMinutes"),
-            nullableBoolean(json, "momentary")
+            nullableBoolean(json, "momentary"),
+            nullableString(json, "preferredAccelerator"),
+            nullableString(json, "feature")
         );
     }
 
     /** The window the memory budget settled on; it sizes the engine for this load. */
     @NonNull
     public TaiRuntimeOptions withContextWindow(@Nullable Integer overrideContextWindow) {
-        return new TaiRuntimeOptions(
-            maxTokens,
-            topK,
-            topP,
-            temperature,
-            accelerator,
-            overrideContextWindow,
-            threadCount,
-            precision,
-            memoryMode,
-            thinkingEnabled,
-            speculativeDecodingEnabled,
-            idleUnloadMinutes,
-            momentary
-        );
+        return new TaiRuntimeOptions(maxTokens, topK, topP, temperature, accelerator, overrideContextWindow,
+            threadCount, precision, memoryMode, thinkingEnabled, speculativeDecodingEnabled, idleUnloadMinutes,
+            momentary, preferredAccelerator, feature);
     }
 
     /** Declares this load momentary (or not): the budget keeps a smaller reserve for a load that ends within a minute. */
     @NonNull
     public TaiRuntimeOptions withMomentary(@Nullable Boolean overrideMomentary) {
-        return new TaiRuntimeOptions(
-            maxTokens,
-            topK,
-            topP,
-            temperature,
-            accelerator,
-            contextWindow,
-            threadCount,
-            precision,
-            memoryMode,
-            thinkingEnabled,
-            speculativeDecodingEnabled,
-            idleUnloadMinutes,
-            overrideMomentary
-        );
+        return new TaiRuntimeOptions(maxTokens, topK, topP, temperature, accelerator, contextWindow,
+            threadCount, precision, memoryMode, thinkingEnabled, speculativeDecodingEnabled, idleUnloadMinutes,
+            overrideMomentary, preferredAccelerator, feature);
     }
 
     @NonNull
     public TaiRuntimeOptions withAccelerator(@Nullable String overrideAccelerator) {
-        return new TaiRuntimeOptions(
-            maxTokens,
-            topK,
-            topP,
-            temperature,
-            overrideAccelerator,
-            contextWindow,
-            threadCount,
-            precision,
-            memoryMode,
-            thinkingEnabled,
-            speculativeDecodingEnabled,
-            idleUnloadMinutes,
-            momentary
-        );
+        return new TaiRuntimeOptions(maxTokens, topK, topP, temperature, overrideAccelerator, contextWindow,
+            threadCount, precision, memoryMode, thinkingEnabled, speculativeDecodingEnabled, idleUnloadMinutes,
+            momentary, preferredAccelerator, feature);
+    }
+
+    /** The automatic load's first choice; see {@link #preferredAccelerator}. */
+    @NonNull
+    public TaiRuntimeOptions withPreferredAccelerator(@Nullable String preferred) {
+        return new TaiRuntimeOptions(maxTokens, topK, topP, temperature, accelerator, contextWindow,
+            threadCount, precision, memoryMode, thinkingEnabled, speculativeDecodingEnabled, idleUnloadMinutes,
+            momentary, preferred, feature);
+    }
+
+    @NonNull
+    public TaiRuntimeOptions withSpeculativeDecoding(@Nullable Boolean enabled) {
+        return new TaiRuntimeOptions(maxTokens, topK, topP, temperature, accelerator, contextWindow,
+            threadCount, precision, memoryMode, thinkingEnabled, enabled, idleUnloadMinutes,
+            momentary, preferredAccelerator, feature);
+    }
+
+    /** The feature this request names; see {@link #feature}. */
+    @NonNull
+    public TaiRuntimeOptions withFeature(@Nullable String featureId) {
+        return new TaiRuntimeOptions(maxTokens, topK, topP, temperature, accelerator, contextWindow,
+            threadCount, precision, memoryMode, thinkingEnabled, speculativeDecodingEnabled, idleUnloadMinutes,
+            momentary, preferredAccelerator, featureId);
     }
 
     @NonNull
@@ -224,7 +245,10 @@ public final class TaiRuntimeOptions {
             overrideThinkingEnabled != null ? overrideThinkingEnabled : thinkingEnabled,
             overrideSpeculativeDecodingEnabled != null ? overrideSpeculativeDecodingEnabled : speculativeDecodingEnabled,
             idleUnloadMinutes,
-            momentary
+            momentary,
+            // An accelerator the caller names is theirs; the plan's preference no longer applies.
+            overrideAccelerator != null && !"auto".equalsIgnoreCase(overrideAccelerator) ? null : preferredAccelerator,
+            feature
         );
     }
 

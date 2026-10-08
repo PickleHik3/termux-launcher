@@ -110,6 +110,10 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
     private String loadingModelId;
     /** MemAvailable drop of the last native init that returned; see {@link #createAndInitializeEngineWithCrashMarker}. */
     private long lastLoadDropBytes = -1L;
+    /** What the last native init that returned did about speculative decoding; see {@link #speculativeRan}. Loading thread only. */
+    @Nullable private Boolean lastInitSpeculativeRan;
+    /** {@link #lastInitSpeculativeRan} of the engine that is loaded now; {@code null} with none. Guarded by {@code this}. */
+    @Nullable private Boolean loadedSpeculativeRan;
     /** The meter of that init, still sampling for the first request's first token; loading thread only. */
     @Nullable private TaiLoadMeter lastLoadMeter;
     /** The loaded model's meter waiting for its first request; taken by the next generation. Guarded by {@code this}. */
@@ -148,12 +152,18 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         );
     }
 
-    /** The window the loaded engine was sized with, as the memory budget settled it. */
+    /**
+     * The window the loaded engine was sized with, as the memory budget settled it, and whether it
+     * runs speculative decoding ({@code speculativeRan}, left out when unknown).
+     */
     @Nullable
     private JSONObject loadedWindowJson() {
-        if (engine == null || loadedOptions == null || loadedOptions.contextWindow == null) return null;
+        if (engine == null) return null;
         try {
-            return new JSONObject().put("contextWindow", loadedOptions.contextWindow);
+            JSONObject json = new JSONObject();
+            if (loadedOptions != null && loadedOptions.contextWindow != null) json.put("contextWindow", loadedOptions.contextWindow);
+            if (loadedSpeculativeRan != null) json.put("speculativeRan", loadedSpeculativeRan.booleanValue());
+            return json.length() == 0 ? null : json;
         } catch (JSONException e) {
             return null;
         }
@@ -761,6 +771,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 loadedModelId = modelSpec.id;
                 loadedModelPath = modelFile.getAbsolutePath();
                 loadedOptions = effectiveOptions;
+                loadedSpeculativeRan = lastInitSpeculativeRan;
                 loadedProfile = profile;
                 loadedDeviceCapabilities = deviceCapabilities;
                 loadedAtMs = System.currentTimeMillis();
@@ -807,6 +818,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
                 data.put("options", effectiveOptions.toJson());
                 data.put("effectiveOptions", effectiveOptionsJson(effectiveOptions, profile));
                 if (measured >= 0L) data.put("measuredLoadBytes", measured);
+                data.put("speculativeRan", loadedSpeculativeRan == null ? JSONObject.NULL : loadedSpeculativeRan);
                 data.put("modelProfile", profile.toJson());
                 data.put("device", deviceCapabilities.toJson());
                 JSONArray compatibilityWarnings = new JSONArray();
@@ -987,12 +999,14 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             cacheDir
         );
         Boolean speculativeDecoding = speculativeDecodingFlag(options, modelPath);
+        lastInitSpeculativeRan = null;
         synchronized (EXPERIMENTAL_FLAGS_LOCK) {
             ExperimentalFlags.INSTANCE.setConvertCamelToSnakeCaseInToolDescription(false);
             Engine loadedEngine = new Engine(config);
             try {
                 ExperimentalFlags.INSTANCE.setEnableSpeculativeDecoding(speculativeDecoding);
                 loadedEngine.initialize();
+                lastInitSpeculativeRan = speculativeRan(options.speculativeDecodingEnabled, speculativeDecoding);
                 return loadedEngine;
             } catch (RuntimeException e) {
                 try {
@@ -1131,6 +1145,19 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         if (value.contains("gpu")) return "gpu";
         if (value.contains("cpu")) return "cpu";
         return fallback == null ? "auto" : fallback;
+    }
+
+    /**
+     * Whether an engine that initialized runs speculative decoding, from what it was created with:
+     * LiteRT-LM reports nothing after the fact, but the engine flag is set only when the request asked
+     * and the file declares support ({@link LlmCapability#hasSpeculativeDecodingSupport}), and an engine
+     * that initialized with the flag on decodes with the drafter. Asked and not set (a file without
+     * support) is {@code false}; not asked is {@code null}, since the engine's own default is not known.
+     */
+    @Nullable
+    static Boolean speculativeRan(@Nullable Boolean asked, @Nullable Boolean flagSet) {
+        if (!Boolean.TRUE.equals(asked)) return null;
+        return Boolean.TRUE.equals(flagSet);
     }
 
     @Nullable
@@ -1362,6 +1389,7 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
         loadedModelId = null;
         loadedModelPath = null;
         loadedOptions = null;
+        loadedSpeculativeRan = null;
         loadedProfile = null;
         loadedDeviceCapabilities = null;
         backendName = "none";

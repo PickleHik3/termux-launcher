@@ -275,6 +275,46 @@ public class TaiResidencyTest {
         assertNull(find(residency, TaiResidency.Kind.CHAT, "e4b").measuredBytes);
     }
 
+    /**
+     * Feature groups (decision 8): another feature's load does not close a group member used in the
+     * last two minutes; the feature's own load, an older member and a non-member are candidates as before.
+     */
+    @Test
+    public void anotherFeaturesLoadLeavesAGroupInUse() {
+        long now = 1_700_000_000_000L;
+        TaiResidency.Entry dictation = new TaiResidency.Entry("whisper", TaiResidency.Kind.STT, TaiModelSpec.BACKEND_LITERT_LM,
+            "cpu", 30, 500L << 20, null, now - 60_000L, false);
+        TaiResidency.Entry search = new TaiResidency.Entry("embedding-gemma", TaiResidency.Kind.EMBEDDING,
+            TaiModelSpec.BACKEND_LITERT_LM, "cpu", 1024, EMBEDDING_GEMMA, null, now - 600_000L, false);
+        List<TaiResidency.Entry> residents = new ArrayList<>();
+        residents.add(dictation);
+        residents.add(search);
+
+        List<TaiResidency.Entry> forSorting = TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT,
+            TaiModelSpec.BACKEND_LITERT_LM, TaiFunction.APP_CATEGORIES, now);
+        assertEquals(1, forSorting.size());
+        assertSame(search, forSorting.get(0));
+        // The plain query keeps no group.
+        assertEquals(2, TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, TaiModelSpec.BACKEND_LITERT_LM).size());
+    }
+
+    @Test
+    public void aFeaturedUseIsRecordedOnTheResident() throws Exception {
+        TaiResidency residency = new TaiResidency();
+        residency.register(chatEntry("e2b", "gpu", 2048));
+        assertNull(find(residency, TaiResidency.Kind.CHAT, "e2b").feature);
+        residency.markUsedBy(TaiResidency.Kind.CHAT, "e2b", TaiFunction.TIDY_DICTATION);
+        assertSame(TaiFunction.TIDY_DICTATION, find(residency, TaiResidency.Kind.CHAT, "e2b").feature);
+        // Busy and idle keep it.
+        residency.setBusy(TaiResidency.Kind.CHAT, "e2b", true);
+        assertSame(TaiFunction.TIDY_DICTATION, find(residency, TaiResidency.Kind.CHAT, "e2b").feature);
+        assertEquals("tidy_dictation", residency.toJson().getJSONObject(0).getString("feature"));
+        // Unknown ids and no feature change nothing.
+        residency.markUsedBy(TaiResidency.Kind.CHAT, "nope", TaiFunction.ASSISTANT);
+        residency.markUsedBy(TaiResidency.Kind.CHAT, "e2b", null);
+        assertSame(TaiFunction.TIDY_DICTATION, find(residency, TaiResidency.Kind.CHAT, "e2b").feature);
+    }
+
     private static TaiLoadBudget.Request request(long available) {
         return new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E4B, false, PONG_TOTAL, available,
             Collections.singletonList("gpu"), 4096, null, 0);

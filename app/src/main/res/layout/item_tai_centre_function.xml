@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Model centre Functions row: one filled card per function. The name (with a quiet badge such as
      "Polished"), the pick and where it runs, the background-apps note when the model is big, and a
-     chevron: the whole card opens the function's picker sheet. -->
+     chevron: the whole card opens the function's picker sheet. Under the summary, why it runs that way. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
@@ -65,6 +65,16 @@
                     android:textAppearance="?attr/textAppearanceBodyMedium"
                     android:textColor="?attr/colorOnSurfaceVariant" />
 
+                <!-- Why it runs that way: the feature load plan's reason. -->
+                <TextView
+                    android:id="@+id/tai_fn_reason"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textAppearance="?attr/textAppearanceBodySmall"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:visibility="gone" />
+
                 <TextView
                     android:id="@+id/tai_fn_warning"
                     android:layout_width="match_parent"
@@ -73,6 +83,19 @@
                     android:text="@string/tai_fn_background_warning"
                     android:textAppearance="?attr/textAppearanceBodySmall"
                     android:textColor="?attr/colorTertiary"
+                    android:visibility="gone" />
+
+                <!-- The feature check's one-time offer, once the feature's model is installed and unchecked. -->
+                <Button
+                    android:id="@+id/tai_fn_offer"
+                    style="@style/Widget.Material3.Button.TextButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:minWidth="0dp"
+                    android:paddingStart="0dp"
+                    android:paddingEnd="0dp"
+                    android:text="@string/tai_fn_check_offer"
                     android:visibility="gone" />
             </LinearLayout>
 

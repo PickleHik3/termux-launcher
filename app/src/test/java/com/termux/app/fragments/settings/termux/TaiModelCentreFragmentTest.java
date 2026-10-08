@@ -79,6 +79,8 @@ public class TaiModelCentreFragmentTest {
         assertNotNull(list);
         RecyclerView.Adapter<?> adapter = list.getAdapter();
         assertNotNull(adapter);
+        // The function rows are each feature's load plan, read on the fragment's worker and posted back.
+        awaitItems(adapter, 3);
         assertEquals(TaiModelCentreAdapter.TYPE_HEADER, adapter.getItemViewType(0));
         assertEquals(TaiModelCentreAdapter.TYPE_SEGMENTS, adapter.getItemViewType(1));
         assertEquals(TaiModelCentreAdapter.TYPE_FUNCTION, adapter.getItemViewType(2));
@@ -87,6 +89,21 @@ public class TaiModelCentreFragmentTest {
             assertTrue(adapter.getItemViewType(i) != TaiModelCentreAdapter.TYPE_LINK);
             assertTrue(adapter.getItemViewType(i) != TaiModelCentreAdapter.TYPE_SETTING);
         }
+    }
+
+    /** Idles the main looper until {@code adapter} holds at least {@code count} items, or five seconds pass. */
+    private static void awaitItems(RecyclerView.Adapter<?> adapter, int count) {
+        long deadline = System.currentTimeMillis() + 5_000L;
+        while (adapter.getItemCount() < count && System.currentTimeMillis() < deadline) {
+            ShadowLooper.idleMainLooper();
+            try {
+                Thread.sleep(20L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+        ShadowLooper.idleMainLooper();
     }
 
     @Test

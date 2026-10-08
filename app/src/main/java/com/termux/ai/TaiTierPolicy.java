@@ -222,6 +222,7 @@ public final class TaiTierPolicy {
         boolean t1 = tier == TaiDeviceTier.TIER_1;
         switch (function) {
             case ASSISTANT:
+            case DAWN_CHAT:
                 if (t1) return Choice.NOTHING;
                 // No GPU path: E2B on the CPU even on Tier 3 (spec §2.2); E4B stays selectable.
                 if (tier == TaiDeviceTier.TIER_3 && !env.noGpu()) return Choice.model(E4B, accel);
@@ -260,6 +261,7 @@ public final class TaiTierPolicy {
         boolean t1 = tier == TaiDeviceTier.TIER_1;
         switch (function) {
             case ASSISTANT:
+            case DAWN_CHAT:
                 if (tier == TaiDeviceTier.TIER_3 && !env.noGpu()) chain.add(Choice.model(E2B, accel));
                 break;
             case VOICE_TYPING:

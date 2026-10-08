@@ -6,6 +6,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.ai.TaiDeviceTier;
+import com.termux.ai.TaiEvidence;
+import com.termux.ai.TaiFeaturePlan;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiFunctionModels.ModelInfo;
@@ -13,6 +15,7 @@ import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelRegistry;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiPlatformCaps.GpuPath;
+import com.termux.ai.TaiResidency;
 import com.termux.ai.TaiTierPolicy;
 import com.termux.ai.TaiTierPolicy.Env;
 
@@ -55,6 +58,14 @@ public class TaiFunctionRowsTest {
             return TaiFunctionRows.stripVision(modelId);
         }
     };
+
+    /** The rows' plans with no measurements on this phone. */
+    static final TaiFunctionRows.Planner PLANNER = (function, models) -> TaiFeaturePlan.of(function, models,
+        TaiEvidence.NONE, Collections.<TaiResidency.Entry>emptyList(), 0L, false);
+
+    private static TaiFeaturePlan plan(TaiFunctionModels models, TaiFunction function) {
+        return PLANNER.plan(function, models);
+    }
 
     private final Map<String, String> prefs = new HashMap<>();
     private final Map<String, ModelInfo> installed = new LinkedHashMap<>();
@@ -135,10 +146,10 @@ public class TaiFunctionRowsTest {
     public void anAutomaticModelNamesItselfAndWhereItRuns() {
         installGemma();
         assertEquals("AUTOMATIC[" + E2B + "] · GPU",
-            TaiFunctionRows.summary(models(env(12, 34, GpuPath.YES)).resolve(TaiFunction.ASSISTANT), LABELS));
+            TaiFunctionRows.summary(plan(models(env(12, 34, GpuPath.YES)), TaiFunction.ASSISTANT), LABELS));
         // No GPU path at all: the CPU.
         assertEquals("AUTOMATIC[" + E2B + "] · CPU",
-            TaiFunctionRows.summary(models(env(12, 34, GpuPath.NO)).resolve(TaiFunction.ASSISTANT), LABELS));
+            TaiFunctionRows.summary(plan(models(env(12, 34, GpuPath.NO)), TaiFunction.ASSISTANT), LABELS));
     }
 
     @Test
@@ -147,27 +158,27 @@ public class TaiFunctionRowsTest {
         TaiFunctionModels models = models(env(12, 34, GpuPath.YES));
         models.set(TaiFunction.ASSISTANT, E4B);
         models.setAcceleratorPick(TaiFunction.ASSISTANT, "cpu");
-        assertEquals(E4B + " · CPU", TaiFunctionRows.summary(models.resolve(TaiFunction.ASSISTANT), LABELS));
+        assertEquals(E4B + " · CPU", TaiFunctionRows.summary(plan(models, TaiFunction.ASSISTANT), LABELS));
     }
 
     @Test
     public void aFunctionWithoutAModelSaysRawTextOrOff() {
         TaiFunctionModels tier1 = models(env(6, 34, GpuPath.YES));
-        assertEquals("RAW_TEXT", TaiFunctionRows.summary(tier1.resolve(TaiFunction.TIDY_DICTATION), LABELS));
-        assertEquals("OFF", TaiFunctionRows.summary(tier1.resolve(TaiFunction.APP_CATEGORIES), LABELS));
+        assertEquals("RAW_TEXT", TaiFunctionRows.summary(plan(tier1, TaiFunction.TIDY_DICTATION), LABELS));
+        assertEquals("OFF", TaiFunctionRows.summary(plan(tier1, TaiFunction.APP_CATEGORIES), LABELS));
         // A pick of "off" reads the same way.
         TaiFunctionModels pong = models(env(12, 34, GpuPath.YES));
         installGemma();
         pong.set(TaiFunction.APP_CATEGORIES, TaiFunctionModels.VALUE_OFF);
-        assertEquals("OFF", TaiFunctionRows.summary(pong.resolve(TaiFunction.APP_CATEGORIES), LABELS));
+        assertEquals("OFF", TaiFunctionRows.summary(plan(pong, TaiFunction.APP_CATEGORIES), LABELS));
     }
 
     @Test
     public void aFunctionWithNothingUsableSaysNotSet() {
         // Tier 1 has no assistant by default, and nothing is installed.
-        assertEquals("NOT_SET", TaiFunctionRows.summary(models(env(6, 34, GpuPath.YES)).resolve(TaiFunction.ASSISTANT), LABELS));
+        assertEquals("NOT_SET", TaiFunctionRows.summary(plan(models(env(6, 34, GpuPath.YES)), TaiFunction.ASSISTANT), LABELS));
         // Tier 2 with no model installed: Automatic's model is missing, the chain too.
-        assertEquals("NOT_SET", TaiFunctionRows.summary(models(env(12, 34, GpuPath.YES)).resolve(TaiFunction.EMBEDDINGS), LABELS));
+        assertEquals("NOT_SET", TaiFunctionRows.summary(plan(models(env(12, 34, GpuPath.YES)), TaiFunction.EMBEDDINGS), LABELS));
     }
 
     @Test
@@ -176,7 +187,7 @@ public class TaiFunctionRowsTest {
         remoteConfigured = true;
         TaiFunctionModels models = models(env(12, 34, GpuPath.YES));
         models.set(TaiFunction.ASSISTANT, "remote/gpt-x");
-        assertEquals("REMOTE[gpt-x]", TaiFunctionRows.summary(models.resolve(TaiFunction.ASSISTANT), LABELS));
+        assertEquals("REMOTE[gpt-x]", TaiFunctionRows.summary(plan(models, TaiFunction.ASSISTANT), LABELS));
     }
 
     // ------------------------------------------------------------------------------ the rows
@@ -184,7 +195,7 @@ public class TaiFunctionRowsTest {
     @Test
     public void thereIsOneRowPerFunctionAndNoneForImageGeneration() {
         installGemma();
-        List<TaiFunctionRows.FunctionRow> rows = TaiFunctionRows.functionRows(models(env(12, 34, GpuPath.YES)), LABELS, "polished");
+        List<TaiFunctionRows.FunctionRow> rows = TaiFunctionRows.functionRows(models(env(12, 34, GpuPath.YES)), PLANNER, LABELS, "polished");
         List<TaiFunction> functions = new ArrayList<>();
         for (TaiFunctionRows.FunctionRow row : rows) functions.add(row.function);
         assertEquals(Arrays.asList(TaiFunction.ASSISTANT, TaiFunction.VOICE_TYPING, TaiFunction.TIDY_DICTATION,
@@ -195,21 +206,59 @@ public class TaiFunctionRowsTest {
     public void theBackgroundWarningFollowsTheResolvedModelsSize() {
         installGemma();
         // E2B (assistant, categories) is 21 % of 12 GB: does not warn; at 8 GB it is 32 %: warns.
-        List<TaiFunctionRows.FunctionRow> rows = TaiFunctionRows.functionRows(models(env(12, 34, GpuPath.YES)), LABELS, "polished");
+        List<TaiFunctionRows.FunctionRow> rows = TaiFunctionRows.functionRows(models(env(12, 34, GpuPath.YES)), PLANNER, LABELS, "polished");
         assertFalse(row(rows, TaiFunction.APP_CATEGORIES).warnBackground);
         assertFalse(row(rows, TaiFunction.ASSISTANT).warnBackground);
-        List<TaiFunctionRows.FunctionRow> eight = TaiFunctionRows.functionRows(models(env(8, 34, GpuPath.YES)), LABELS, "polished");
+        List<TaiFunctionRows.FunctionRow> eight = TaiFunctionRows.functionRows(models(env(8, 34, GpuPath.YES)), PLANNER, LABELS, "polished");
         assertTrue(row(eight, TaiFunction.ASSISTANT).warnBackground);
     }
 
     @Test
     public void tidyDictationCarriesItsLevelAsABadgeAndNoOtherRowDoes() {
         installGemma();
-        List<TaiFunctionRows.FunctionRow> rows = TaiFunctionRows.functionRows(models(env(12, 34, GpuPath.YES)), LABELS, "light");
+        List<TaiFunctionRows.FunctionRow> rows = TaiFunctionRows.functionRows(models(env(12, 34, GpuPath.YES)), PLANNER, LABELS, "light");
         assertEquals("LEVEL_LIGHT", row(rows, TaiFunction.TIDY_DICTATION).badge);
         assertEquals("", row(rows, TaiFunction.ASSISTANT).badge);
-        assertEquals("LEVEL_POLISHED", row(TaiFunctionRows.functionRows(models(env(12, 34, GpuPath.YES)), LABELS, "polished"),
+        assertEquals("LEVEL_POLISHED", row(TaiFunctionRows.functionRows(models(env(12, 34, GpuPath.YES)), PLANNER, LABELS, "polished"),
             TaiFunction.TIDY_DICTATION).badge);
+    }
+
+    /**
+     * A row says what a load does: the plan's accelerator and its reason, so a measurement on this
+     * phone shows in the Centre exactly as in the picker, not the tier's default.
+     */
+    @Test
+    public void aRowReadsTheFeatureLoadPlan() {
+        installGemma();
+        TaiFunctionModels models = models(env(12, 34, GpuPath.YES));
+        List<TaiFunctionRows.FunctionRow> rows = TaiFunctionRows.functionRows(models, PLANNER, LABELS, "polished");
+        assertEquals("AUTOMATIC[" + E2B + "] · GPU", row(rows, TaiFunction.APP_CATEGORIES).summary);
+        assertEquals("PLAN_REASON_DEFAULT", row(rows, TaiFunction.APP_CATEGORIES).reason);
+        // Voice typing and the others run on the CPU and say only their model.
+        install(TaiTierPolicy.WHISPER_SMALL, 300L << 20, TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT);
+        rows = TaiFunctionRows.functionRows(models, PLANNER, LABELS, "polished");
+        assertEquals("AUTOMATIC[" + TaiTierPolicy.WHISPER_SMALL + "]", row(rows, TaiFunction.VOICE_TYPING).summary);
+
+        // The GPU failed to load E2B on this phone: the row says CPU, measured, as a load would run.
+        TaiEvidence.InMemory failed = new TaiEvidence.InMemory().failure(E2B, TaiModelSpec.BACKEND_LITERT_LM, "gpu");
+        TaiFunctionRows.Planner measured = (function, picks) -> TaiFeaturePlan.of(function, picks, failed,
+            Collections.<TaiResidency.Entry>emptyList(), 0L, false);
+        TaiFunctionRows.FunctionRow sorting = row(TaiFunctionRows.functionRows(models, measured, LABELS, "polished"),
+            TaiFunction.APP_CATEGORIES);
+        assertEquals("AUTOMATIC[" + E2B + "] · CPU", sorting.summary);
+        assertEquals("PLAN_REASON_MEASURED", sorting.reason);
+
+        // A pick reads as the user's choice; a measured speed-up joins the line.
+        models.set(TaiFunction.ASSISTANT, E2B);
+        models.setAcceleratorPick(TaiFunction.ASSISTANT, "cpu");
+        assertEquals("PLAN_REASON_PICK", row(TaiFunctionRows.functionRows(models, PLANNER, LABELS, "polished"),
+            TaiFunction.ASSISTANT).reason);
+        models.setAcceleratorPick(TaiFunction.ASSISTANT, "");
+        TaiEvidence.InMemory bench = new TaiEvidence.InMemory()
+            .chat(new TaiEvidence.ChatResult(E2B, TaiModelSpec.BACKEND_LITERT_LM, "gpu", false, 20.0, true))
+            .chat(new TaiEvidence.ChatResult(E2B, TaiModelSpec.BACKEND_LITERT_LM, "cpu", false, 10.0, true));
+        assertEquals(E2B + " · GPU · PLAN_FASTER[2.0]", TaiFunctionRows.summary(TaiFeaturePlan.of(TaiFunction.ASSISTANT,
+            models, bench, Collections.<TaiResidency.Entry>emptyList(), 0L, false), LABELS));
     }
 
     private static TaiFunctionRows.FunctionRow row(List<TaiFunctionRows.FunctionRow> rows, TaiFunction function) {
@@ -231,7 +280,7 @@ public class TaiFunctionRowsTest {
         installGemma();
         TaiFunctionModels models = models(env(12, 34, GpuPath.YES));
         models.set(TaiFunction.ASSISTANT, E4B);
-        String warning = TaiFunctionRows.deleteWarning(models, E4B, LABELS);
+        String warning = TaiFunctionRows.deleteWarning(models, PLANNER, E4B, LABELS);
         // E4B is the pick for the assistant only (categories use E2B on Tier 2).
         assertTrue(warning, warning.startsWith("DELETE_IN_USE["));
         assertTrue(warning, warning.contains("DELETE_LINE[ASSISTANT, AUTOMATIC[" + E2B + "] · GPU]"));
@@ -242,7 +291,7 @@ public class TaiFunctionRowsTest {
     public void aFunctionWithNoFallbackSaysNotSetInTheDeleteWarning() {
         install(E2B, E2B_BYTES, TaiModelSpec.CAPABILITY_TEXT_CHAT);
         TaiFunctionModels models = models(env(12, 34, GpuPath.YES));
-        String warning = TaiFunctionRows.deleteWarning(models, E2B, LABELS);
+        String warning = TaiFunctionRows.deleteWarning(models, PLANNER, E2B, LABELS);
         assertTrue(warning, warning.contains("DELETE_LINE[ASSISTANT, NOT_SET]"));
     }
 
@@ -251,7 +300,7 @@ public class TaiFunctionRowsTest {
         install("imported", GIB, TaiModelSpec.CAPABILITY_TEXT_CHAT);
         installGemma();
         // Imported chat models serve the chat functions only when picked; nothing is picked here.
-        assertEquals("", TaiFunctionRows.deleteWarning(models(env(12, 34, GpuPath.YES)), "imported", LABELS));
+        assertEquals("", TaiFunctionRows.deleteWarning(models(env(12, 34, GpuPath.YES)), PLANNER, "imported", LABELS));
     }
 
     // ------------------------------------------------------------------------------------- fit

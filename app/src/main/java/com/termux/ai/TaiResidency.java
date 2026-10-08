@@ -113,9 +113,21 @@ public final class TaiResidency {
         public final long lastUsedMs;
         /** Generating, embedding or transcribing right now. */
         public final boolean busy;
+        /**
+         * The feature that last used this resident, as its request named it; {@code null} when none did.
+         * Speech, voice and embedding models serve one feature each, which {@link TaiFeaturePlan#featureOf} reads off the kind.
+         */
+        @Nullable public final TaiFunction feature;
 
         public Entry(@NonNull String modelId, @NonNull Kind kind, @NonNull String backend, @NonNull String accelerator,
                      int window, long estimatedBytes, @Nullable Long measuredBytes, long lastUsedMs, boolean busy) {
+            this(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, lastUsedMs, busy, null);
+        }
+
+        public Entry(@NonNull String modelId, @NonNull Kind kind, @NonNull String backend, @NonNull String accelerator,
+                     int window, long estimatedBytes, @Nullable Long measuredBytes, long lastUsedMs, boolean busy,
+                     @Nullable TaiFunction feature) {
+            this.feature = feature;
             this.modelId = modelId;
             this.kind = kind;
             this.backend = backend;
@@ -189,13 +201,19 @@ public final class TaiResidency {
 
         @NonNull
         Entry withBusy(boolean nowBusy, long nowMs) {
-            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, nowMs, nowBusy);
+            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, nowMs, nowBusy, feature);
         }
 
         /** The same resident with the MemAvailable drop its load measured; {@code null} leaves it unmeasured. */
         @NonNull
         public Entry withMeasured(@Nullable Long nowMeasuredBytes) {
-            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, nowMeasuredBytes, lastUsedMs, busy);
+            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, nowMeasuredBytes, lastUsedMs, busy, feature);
+        }
+
+        /** The same resident, just used by {@code usedBy}. */
+        @NonNull
+        Entry withFeature(@NonNull TaiFunction usedBy, long nowMs) {
+            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, nowMs, busy, usedBy);
         }
 
         boolean matches(@NonNull Kind otherKind, @NonNull String otherModelId) {
@@ -214,6 +232,8 @@ public final class TaiResidency {
             json.put("measuredBytes", measuredBytes == null ? JSONObject.NULL : measuredBytes);
             json.put("busy", busy);
             json.put("lastUsedMs", lastUsedMs);
+            TaiFunction served = TaiFeaturePlan.featureOf(this);
+            json.put("feature", served == null ? JSONObject.NULL : served.id());
             return json;
         }
     }
@@ -261,6 +281,26 @@ public final class TaiResidency {
         for (Entry existing : entries) {
             if (existing.matches(kind, modelId)) {
                 next.add(existing.withBusy(busy, now));
+                changed = true;
+            } else {
+                next.add(existing);
+            }
+        }
+        if (changed) entries = Collections.unmodifiableList(next);
+    }
+
+    /**
+     * Records that {@code feature} just used the resident of {@code kind} with this id, and stamps its
+     * last use: what feature groups and window reuse read. A no-op for an unregistered id.
+     */
+    public synchronized void markUsedBy(@NonNull Kind kind, @Nullable String modelId, @Nullable TaiFunction feature) {
+        if (modelId == null || feature == null) return;
+        long now = System.currentTimeMillis();
+        ArrayList<Entry> next = new ArrayList<>(entries.size());
+        boolean changed = false;
+        for (Entry existing : entries) {
+            if (existing.matches(kind, modelId)) {
+                next.add(existing.withFeature(feature, now));
                 changed = true;
             } else {
                 next.add(existing);
@@ -354,6 +394,18 @@ public final class TaiResidency {
      */
     @NonNull
     public static List<Entry> evictionCandidates(@NonNull List<Entry> residents, @NonNull Kind kind, @Nullable String backend) {
+        return evictionCandidates(residents, kind, backend, null, Long.MIN_VALUE);
+    }
+
+    /**
+     * {@link #evictionCandidates(List, Kind, String)} for a load by {@code loading}, which also leaves out
+     * every resident that stays for its feature group ({@link TaiFeaturePlan#keptForItsGroup}): a member
+     * of a group used within the last two minutes is not closed by another feature's load.
+     * {@code nowMs} of {@link Long#MIN_VALUE} keeps no group (the plain overload).
+     */
+    @NonNull
+    public static List<Entry> evictionCandidates(@NonNull List<Entry> residents, @NonNull Kind kind, @Nullable String backend,
+                                                 @Nullable TaiFunction loading, long nowMs) {
         ArrayList<Entry> ordered = new ArrayList<>();
         for (Kind victimKind : new Kind[] {Kind.EMBEDDING, Kind.TTS, Kind.IMAGE, Kind.STT, Kind.CHAT}) {
             if (victimKind == Kind.CHAT && kind != Kind.STT && kind != Kind.IMAGE) continue;
@@ -365,6 +417,7 @@ public final class TaiResidency {
                 if (entry.kind != victimKind || entry.busy) continue;
                 if (kind == Kind.EMBEDDING && victimKind == Kind.EMBEDDING
                         && backend != null && backend.equals(entry.backend)) continue;
+                if (nowMs != Long.MIN_VALUE && TaiFeaturePlan.keptForItsGroup(entry, loading, nowMs)) continue;
                 ofKind.add(entry);
             }
             Collections.sort(ofKind, (a, b) -> Long.compare(a.lastUsedMs, b.lastUsedMs));
