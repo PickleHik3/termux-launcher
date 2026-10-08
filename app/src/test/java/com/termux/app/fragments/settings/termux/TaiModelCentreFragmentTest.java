@@ -1,6 +1,7 @@
 package com.termux.app.fragments.settings.termux;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -117,6 +118,31 @@ public class TaiModelCentreFragmentTest {
         assertEquals(TaiModelCentreAdapter.TYPE_SEGMENTS, adapter.getItemViewType(1));
         assertEquals(TaiModelCentreAdapter.TYPE_LINK, adapter.getItemViewType(2));
         assertEquals(TaiModelCentreAdapter.TYPE_SETTING, adapter.getItemViewType(adapter.getItemCount() - 1));
+    }
+
+    @Test
+    public void onlyTheFirstFeatureCheckOfferShowsAtATime() {
+        java.util.List<TaiFunctionRows.FunctionRow> rows = java.util.Arrays.asList(
+            row(com.termux.ai.TaiFunction.VOICE_TYPING, false),
+            row(com.termux.ai.TaiFunction.values()[1], true),
+            row(com.termux.ai.TaiFunction.values()[2], true));
+        java.util.List<TaiFunctionRows.FunctionRow> shown = TaiModelCentreFragment.firstOfferOnly(rows);
+        assertFalse(shown.get(0).offerCheck);
+        assertTrue(shown.get(1).offerCheck);
+        assertFalse(shown.get(2).offerCheck);
+    }
+
+    @Test
+    public void aHandledFeatureCheckOfferIsNotMadeAgain() {
+        TaiSettings settings = new TaiSettings(context);
+        com.termux.ai.TaiFunction feature = com.termux.ai.TaiFunction.VOICE_TYPING;
+        assertFalse(settings.isFeatureCheckOffered(feature, "some-model"));
+        settings.markFeatureCheckOffered(feature, "some-model");
+        assertTrue(settings.isFeatureCheckOffered(feature, "some-model"));
+    }
+
+    private static TaiFunctionRows.FunctionRow row(com.termux.ai.TaiFunction function, boolean offer) {
+        return new TaiFunctionRows.FunctionRow(function, "name", "summary", false, "", "").withOffer(offer);
     }
 
     @Test

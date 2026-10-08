@@ -86,6 +86,18 @@ public final class TaiRemoteSettings {
         secrets.clear(SECRET_API_KEY);
     }
 
+    /**
+     * Saves an address typed by hand. The same address as now changes nothing, so saving an unedited
+     * dialog never forgets the model and key; a different one is Custom's, stored before the address
+     * so it is never read as a provider switch.
+     */
+    public void saveTypedBaseUrl(@NonNull String typed) {
+        String value = TaiRemoteClient.normalizeBaseUrl(typed);
+        if (value.equals(baseUrl())) return;
+        choosePreset(TaiRemotePresets.CUSTOM);
+        setBaseUrl(value);
+    }
+
     @NonNull
     public String modelId() {
         String value = prefs.getString(KEY_MODEL, "");
