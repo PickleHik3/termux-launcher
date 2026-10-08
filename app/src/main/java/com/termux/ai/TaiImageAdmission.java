@@ -12,7 +12,8 @@ import java.util.List;
  * <p>Modes are the engine's own: 1 keeps every module resident (fastest), 2 is the balance, 0 is
  * memory saving. Left to choose, the fastest mode that fits wins: mode 1 when the whole-model
  * estimate fits with the evictable residents (idle embeddings, speech, chat) closed, else mode 2,
- * else mode 0, else the load is refused. A request that forces a mode is judged for that mode only.
+ * else mode 0, else the load is refused, or, with unrestricted memory limits, runs in mode 0
+ * anyway. A request that forces a mode is judged for that mode only.
  */
 final class TaiImageAdmission {
     /** Fastest first. */
@@ -41,11 +42,12 @@ final class TaiImageAdmission {
      * @param peakBytes     {@link TaiDiffusionPackage.Result#peakBytes}
      * @param requestedMode 0, 1 or 2 to force a mode; {@link TaiImageRequest#MEMORY_MODE_AUTO} to choose
      * @param availableBytes free memory already credited with the image model a new load replaces
+     * @param conditions     the memory limits; unrestricted, the last mode tried goes ahead when none fits
      */
     @NonNull
     static Decision decide(long peakBytes, int requestedMode, @NonNull String accelerator, long physicalBytes,
-                           long availableBytes, long thresholdBytes, @NonNull List<TaiResidency.Entry> evictable,
-                           @NonNull Measured measured) {
+                           long availableBytes, @NonNull List<TaiResidency.Entry> evictable,
+                           @NonNull Measured measured, @NonNull TaiLoadBudget.Conditions conditions) {
         int[] order = requestedMode >= 0 ? new int[] {requestedMode} : AUTO_ORDER;
         TaiLoadBudget.Plan last = null;
         int lastMode = order[0];
@@ -54,12 +56,13 @@ final class TaiImageAdmission {
             TaiLoadBudget.Estimate estimate = worst > 0L ? TaiLoadBudget.Estimate.measured(worst)
                 : TaiLoadBudget.Estimate.ratio(TaiResidency.imageEstimateBytes(peakBytes, mode), 0L);
             TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, accelerator, physicalBytes, availableBytes,
-                thresholdBytes, evictable);
+                evictable, conditions);
             last = plan;
             lastMode = mode;
-            if (plan.fits) return new Decision(true, mode, plan);
+            // An overcommitted plan fits only because nothing else would: a cheaper mode may still fit outright.
+            if (plan.fits && !plan.overcommitted) return new Decision(true, mode, plan);
         }
-        return new Decision(false, lastMode, last);
+        return new Decision(last.fits, lastMode, last);
     }
 
     /** Only mode 1 keeps the engine's modules loaded between runs, and only for Stable Diffusion/Taiyi. */

@@ -10,6 +10,11 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.security.SecureRandom;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -139,6 +144,76 @@ public final class TaiSettings {
         else edit.putString(KEY_TIER_OVERRIDE, Integer.toString(tier.number()));
         edit.apply();
         TaiDeviceTier.rememberOverride(tier);
+    }
+
+    /** The memory limits file, beside the runtime history under {@code files/tai}; absent means relaxed. */
+    static final String MEMORY_MODE_FILE = "memory-mode";
+    private static final Object MEMORY_MODE_LOCK = new Object();
+    /** The file's modification time and length when {@link #memoryModeCached} was read; a change in either rereads it. */
+    private static long memoryModeStampMs = Long.MIN_VALUE;
+    private static long memoryModeLength = -1L;
+    @NonNull private static TaiLoadBudget.MemoryMode memoryModeCached = TaiLoadBudget.MemoryMode.RELAXED;
+
+    @NonNull
+    public TaiLoadBudget.MemoryMode getMemoryMode() {
+        return memoryMode(appContext);
+    }
+
+    /**
+     * Stores the memory limits for the load budget and the runtime's memory watch. Relaxed removes
+     * the file rather than writing it, so absent and relaxed are one state.
+     */
+    public void setMemoryMode(@NonNull TaiLoadBudget.MemoryMode mode) {
+        File file = memoryModeFile(appContext);
+        synchronized (MEMORY_MODE_LOCK) {
+            try {
+                if (mode == TaiLoadBudget.MemoryMode.RELAXED) {
+                    Files.deleteIfExists(file.toPath());
+                } else {
+                    File dir = file.getParentFile();
+                    if (dir != null && !dir.isDirectory() && !dir.mkdirs() && !dir.isDirectory()) return;
+                    File temp = new File(dir, MEMORY_MODE_FILE + ".tmp");
+                    Files.write(temp.toPath(), mode.id.getBytes(StandardCharsets.UTF_8));
+                    Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
+            } catch (IOException | RuntimeException ignored) {
+                // A failed write keeps the previous limits; the row reads the file back and shows them.
+            }
+            memoryModeStampMs = Long.MIN_VALUE;
+        }
+    }
+
+    /**
+     * The memory limits, for any process. A file, not these preferences: the runtime runs in
+     * {@code :tai_runtime}, and SharedPreferences are cached per process, so a change made in
+     * Settings would not reach its memory watch until it restarted, and the watch would unload what
+     * the gate had just admitted. The watch asks every 250 ms to 2 s, so the read is a stat until the
+     * file changes. Missing or unreadable: {@link TaiLoadBudget.MemoryMode#RELAXED}.
+     */
+    @NonNull
+    public static TaiLoadBudget.MemoryMode memoryMode(@Nullable Context context) {
+        if (context == null) return TaiLoadBudget.MemoryMode.RELAXED;
+        File file = memoryModeFile(context.getApplicationContext() != null ? context.getApplicationContext() : context);
+        synchronized (MEMORY_MODE_LOCK) {
+            try {
+                long stamp = file.lastModified();
+                long length = file.length();
+                if (stamp == memoryModeStampMs && length == memoryModeLength) return memoryModeCached;
+                TaiLoadBudget.MemoryMode mode = stamp == 0L ? TaiLoadBudget.MemoryMode.RELAXED
+                    : TaiLoadBudget.MemoryMode.fromId(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+                memoryModeStampMs = stamp;
+                memoryModeLength = length;
+                memoryModeCached = mode;
+                return mode;
+            } catch (IOException | RuntimeException e) {
+                return TaiLoadBudget.MemoryMode.RELAXED;
+            }
+        }
+    }
+
+    @NonNull
+    private static File memoryModeFile(@NonNull Context context) {
+        return new File(new File(context.getFilesDir(), "tai"), MEMORY_MODE_FILE);
     }
 
     /** One function's stored pick or accelerator ({@link TaiFunctionModels}); {@code ""} when unset. */

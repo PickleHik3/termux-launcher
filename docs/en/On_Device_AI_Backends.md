@@ -148,13 +148,13 @@ embeddings, tools, or other requests.
 
 ### Context Window Sizing
 
-`_endpoint_context_window` is sized per device, not fixed per model. The catalog carries a
-conservative floor for each model (4096 for LiteRT-LM chat models, 8192 or 16384 for MNN packages)
-and the model's own limit in `_source_context_window`. On a device whose RAM is known, On-device AI
-raises the endpoint window to the RAM tier's cap — 4096 below 5.5 GiB, 8192 below 7.5 GiB, 16384
-below 11.5 GiB, 32768 above — never above the model's own limit and never below the catalog floor.
-The **Context window** setting (global under **Settings → On-device AI → Advanced → Parameters**,
-or per model in the model's own **Parameters**) overrides the tier. The same value sizes the LiteRT-LM engine budget and MNN's `max_all_tokens`, gates the
+`_endpoint_context_window` is sized per device, not fixed per model; the model's own limit is
+`_source_context_window`. Without a setting the window is 4096 tokens on phones with 8 GB of RAM or
+more and 2048 on 6 GB or less, on every backend and whatever window the catalog or an imported
+package states, and never above the model's own limit. The **Context window** setting (global
+under **Settings → On-device AI → Advanced → Parameters**, or per model in the model's own
+**Parameters**) goes above it, up to 4096 on 8 GB and under, 8192 on 10 to 12 GB and 16384 from
+16 GB. The same value sizes the LiteRT-LM engine budget and MNN's `max_all_tokens`, gates the
 automatic-tool compatibility rule, and is what `/v1/models` advertises, so a client can trust it.
 
 ### Conversation Reuse

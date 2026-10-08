@@ -12,13 +12,16 @@ public class TaiContextWindowPolicyTest {
     private static final long GIB = 1L << 30;
 
     @Test
-    public void unknownMemory_keepsTheCatalogFloor() {
+    public void unknownMemory_getsTheAutomaticMaximum() {
         TaiModelSpec gemma = liteRt("gemma-4-e2b-it-litert-lm", 4096, 32_768);
         assertEquals(4096, TaiContextWindowPolicy.effectiveEndpointContextWindow(gemma, 0L, null));
         assertSame(gemma, TaiContextWindowPolicy.apply(gemma, 0L, null));
+        // A catalog window above it is not taken on trust either.
+        TaiModelSpec coder = mnn("qwen2.5-coder-1.5b-instruct-mnn", 16_384, 32_768);
+        assertEquals(4096, TaiContextWindowPolicy.effectiveEndpointContextWindow(coder, 0L, null));
     }
 
-    /** Auto: 2048 up to 6 GB, 4096 from 8 GB; the catalog floor of 4096 still holds, so a 4096-floor model never drops below it. */
+    /** Auto: 2048 up to 6 GB, 4096 from 8 GB, whatever window the catalog states. */
     @Test
     public void ramClasses_capTheAutomaticWindow() {
         assertEquals(0, TaiContextWindowPolicy.tierCap(0L));
@@ -31,10 +34,13 @@ public class TaiContextWindowPolicyTest {
         assertEquals(4096, TaiContextWindowPolicy.tierCap(24L * GIB));
 
         TaiModelSpec gemma = liteRt("gemma-4-e2b-it-litert-lm", 4096, 32_768);
-        for (long gib : new long[] {4, 6, 8, 12, 24}) {
+        for (long gib : new long[] {4, 6}) {
+            assertEquals("gib=" + gib, 2048, TaiContextWindowPolicy.effectiveEndpointContextWindow(gemma, gib * GIB, null));
+        }
+        for (long gib : new long[] {8, 12, 24}) {
             assertEquals("gib=" + gib, 4096, TaiContextWindowPolicy.effectiveEndpointContextWindow(gemma, gib * GIB, null));
         }
-        // A model whose catalog floor is lower is capped to the class: 2048 up to 6 GB.
+        // A model whose catalog window is lower gets the class's window too: 2048 up to 6 GB.
         TaiModelSpec small = liteRt("small-model", 1024, 32_768);
         assertEquals(2048, TaiContextWindowPolicy.effectiveEndpointContextWindow(small, 4L * GIB, null));
         assertEquals(2048, TaiContextWindowPolicy.effectiveEndpointContextWindow(small, 6L * GIB, null));
@@ -86,11 +92,23 @@ public class TaiContextWindowPolicyTest {
         assertEquals(4096, TaiContextWindowPolicy.mostCap(7_782L * GIB / 1024L));
     }
 
+    /**
+     * An automatic window never exceeds 4096, however large the catalog or an import says the
+     * model's window is (MNN's default endpoint window is 8192), and never the model's own limit.
+     * A setting still goes past it, up to what the RAM class allows.
+     */
     @Test
-    public void neverBelowTheCatalogFloor_andNeverAboveTheSourceWindow() {
+    public void anAutomaticWindowNeverExceeds4096_norTheModelsOwnLimit() {
         TaiModelSpec coder = mnn("qwen2.5-coder-1.5b-instruct-mnn", 16_384, 32_768);
-        assertEquals(16_384, TaiContextWindowPolicy.effectiveEndpointContextWindow(coder, 4L * GIB, null));
-        assertEquals(16_384, TaiContextWindowPolicy.effectiveEndpointContextWindow(coder, 16L * GIB, null));
+        assertEquals(2048, TaiContextWindowPolicy.effectiveEndpointContextWindow(coder, 4L * GIB, null));
+        assertEquals(4096, TaiContextWindowPolicy.effectiveEndpointContextWindow(coder, 16L * GIB, null));
+        assertEquals(16_384, TaiContextWindowPolicy.effectiveEndpointContextWindow(coder, 16L * GIB, 16_384));
+
+        TaiModelSpec mnnDefault = mnn("imported-mnn", TaiModelSpec.defaultEndpointContextWindowFor("imported-mnn",
+            TaiModelSpec.BACKEND_MNN_LLM), 32_768);
+        assertEquals(4096, TaiContextWindowPolicy.effectiveEndpointContextWindow(mnnDefault, 12L * GIB, null));
+        assertEquals(4096, TaiContextWindowPolicy.effectiveEndpointContextWindow(mnnDefault, 32L * GIB, null));
+        assertEquals(8192, TaiContextWindowPolicy.effectiveEndpointContextWindow(mnnDefault, 12L * GIB, 8192));
 
         TaiModelSpec tiny = liteRt("functiongemma-270m-mobile-actions-litert-lm", 1024, 1024);
         assertEquals(1024, TaiContextWindowPolicy.effectiveEndpointContextWindow(tiny, 16L * GIB, null));

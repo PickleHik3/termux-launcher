@@ -612,17 +612,17 @@ public final class TaiRuntimeService extends Service {
      * Reads the phone once and acts on the tier it is in. From Android 14 the running trim levels
      * are no longer delivered, so the watch asks instead of waiting to be told. Free memory is
      * {@link TaiMemInfo}'s (MemAvailable on every release) and the floors are the budget's
-     * ({@link TaiLoadBudget#floorBytes}), so the watch starts reclaiming at the line a load stops
-     * being admitted: the hold floor for tier 1, the lower peak floor for tier 2.
+     * ({@link TaiLoadBudget#floorBytes}, under the memory limits the gate read too), so the watch
+     * starts reclaiming at the line a load stops being admitted: the hold floor for tier 1, the
+     * lower peak floor for tier 2. Unrestricted, both are {@code 0} and only {@code lowMemory} acts.
      */
     private void evaluatePressure(@NonNull List<TaiResidency.Entry> residents) {
         ActivityManager.MemoryInfo info = memoryInfo();
         if (info == null) return;
         TaiMemInfo.Reading memory = TaiMemInfo.read(this);
-        TaiLoadBudget.Conditions conditions = TaiMemInfo.conditions(this, memory);
-        long ramClass = TaiLoadBudget.ramClassBytes(info.totalMem);
-        long hold = TaiLoadBudget.floorBytes(ramClass, false, conditions);
-        long peak = TaiLoadBudget.floorBytes(ramClass, true, conditions);
+        TaiLoadBudget.Conditions conditions = TaiMemInfo.conditions(this);
+        long hold = TaiLoadBudget.floorBytes(false, conditions);
+        long peak = TaiLoadBudget.floorBytes(true, conditions);
         TaiPressureWatch.Tier tier = TaiPressureWatch.tier(memory.availBytes, hold, peak, info.lowMemory);
         applyTier(tier, residents, memory.availBytes, hold, peak, "poll");
     }

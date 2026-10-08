@@ -44,13 +44,23 @@ import java.util.List;
  *       x 2 x 2 bytes, when {@code config.json} says what they are.</li>
  * </ul>
  *
- * <p><b>The floor.</b> What stays free for everything else is a policy value by RAM class, not a
- * derived limit (see {@link #floorBytes}): a hold floor for what stays resident, a lower peak
- * floor for a momentary load the runtime itself unloads within {@link #MOMENTARY_DEADLINE_MS},
- * plus a penalty when swap is nearly full or unknown below Android 16 and, for the hold floor, a
- * smaller one while the launcher is not in front. A seed estimate carries a margin of a quarter
- * of itself on top of the floor; a measured one does not. {@code MemoryInfo.threshold} no longer
- * sets the floor; it only says whether the margin applies.
+ * <p><b>The floor.</b> What stays free for everything else is the user's choice of memory limits
+ * ({@link MemoryMode}, carried on {@link Conditions}; see {@link #floorBytes}):
+ * <ul>
+ *   <li>{@link MemoryMode#RELAXED}, the default: a hold floor of {@link #HOLD_FLOOR_BYTES} for a
+ *       load that stays resident and a peak floor of {@link #PEAK_FLOOR_BYTES} for a momentary one
+ *       the runtime itself unloads within {@link #MOMENTARY_DEADLINE_MS}, the same on every RAM
+ *       class. The 2026-10-04 E4B GPU director run on pong was admitted at an effective 512 MiB
+ *       and did not freeze. The strict table this replaced (1 to 2 GiB by RAM class, swap and
+ *       background penalties on top, a quarter margin on every seed estimate) refused E4B on the
+ *       GPU on pong with "needs 5160 MB, 3552 available", where it was measured at ~3.2 GB.</li>
+ *   <li>{@link MemoryMode#UNRESTRICTED}: no floor. The ladder still runs, so idle residents are
+ *       evicted and the window shrinks first; where nothing fits, the load goes ahead anyway on the
+ *       first accelerator tried at the floor window, and Android closes background apps to make
+ *       room.</li>
+ * </ul>
+ * Neither mode adds a margin to the estimate beyond a measured one's 10% headroom. Android's own
+ * low-memory signal (the runtime's watch) and the preflight's low-memory block apply in both.
  *
  * <p><b>The ladder.</b> At each step — first the requested accelerator at the wanted window, then
  * halving down to a 4k floor, then the next accelerator at the floor only — a load that fits with
@@ -81,30 +91,18 @@ public final class TaiLoadBudget {
     /** The largest window an automatic GPU load gets; an explicit setting may go above it. */
     public static final int GPU_AUTO_CONTEXT = 4096;
     /**
-     * Peak floor: what a momentary load (the director, the reader, a cleanup pass) keeps free. The
-     * runtime unloads it within {@link #MOMENTARY_DEADLINE_MS}, so it holds its memory for about
-     * forty seconds and never grows. The 2026-10-04 E4B GPU director run was admitted at an
-     * effective 512 MiB and did not freeze; 0.75 GiB adds a quarter gigabyte for the gap between a
-     * 100 ms sample and a fast allocation. On 16 GB and up, 1 GiB keeps the same share of RAM.
+     * Relaxed peak floor: what a momentary load (the director, the reader, a cleanup pass) keeps
+     * free. The runtime unloads it within {@link #MOMENTARY_DEADLINE_MS}, so it holds its memory for
+     * about forty seconds and never grows; the 2026-10-04 E4B GPU director run was admitted at
+     * an effective 512 MiB and did not freeze.
      */
-    public static final long PEAK_FLOOR_BYTES = 768L * MIB;
-    public static final long PEAK_FLOOR_LARGE_BYTES = GIB;
-    /** Hold floors by RAM class: 4 GB and under, 6, 8, 10-12, 16 and up. */
-    public static final long HOLD_FLOOR_SMALL_BYTES = GIB;
-    public static final long HOLD_FLOOR_6_BYTES = 1280L * MIB;
-    public static final long HOLD_FLOOR_8_BYTES = 1280L * MIB;
-    public static final long HOLD_FLOOR_12_BYTES = 1536L * MIB;
-    public static final long HOLD_FLOOR_LARGE_BYTES = 2L * GIB;
-    /** Added to either floor when swap is nearly full, or not known below Android 16. */
-    public static final long SWAP_LOW_PENALTY_BYTES = 512L * MIB;
-    /** Added to the hold floor only, while the launcher is not the app in front. */
-    public static final long BACKGROUND_PENALTY_BYTES = 256L * MIB;
+    public static final long PEAK_FLOOR_BYTES = 512L * MIB;
+    /** Relaxed hold floor: what a load that stays resident keeps free, a quarter gigabyte above the peak floor. */
+    public static final long HOLD_FLOOR_BYTES = 768L * MIB;
     /** How long the runtime lets a momentary load live, counted from its start, before it unloads it itself. */
     public static final long MOMENTARY_DEADLINE_MS = 3L * 60L * 1000L;
     /** A LiteRT file larger than this is not taken to the CPU as a fallback accelerator. */
     public static final long LITERT_CPU_FALLBACK_MAX_FILE_BYTES = 3L * GIB;
-    /** Added to a seed estimate on top of the floor; a measured estimate carries none. */
-    public static final int RATIO_MARGIN_PERCENT = 25;
     /** Added to the largest measured drop before it is used as the estimate. */
     public static final int MEASURED_HEADROOM_PERCENT = 10;
     /** File bytes per context token of KV cache. */
@@ -129,61 +127,50 @@ public final class TaiLoadBudget {
 
     public static final History NO_HISTORY = (accelerator, contextTokens) -> 0L;
 
-    /** The conditions a floor depends on beyond the RAM class; see {@link #floorBytes}. */
-    public static final class Conditions {
-        /** Normal conditions: swap not low, the launcher in front. */
-        public static final Conditions NORMAL = new Conditions(false, true);
+    /** The user's memory limits (Settings, TAI, Advanced); see the class comment. */
+    public enum MemoryMode {
+        RELAXED("relaxed"),
+        UNRESTRICTED("unrestricted");
 
-        final boolean swapLow;
-        final boolean launcherInFront;
+        /** How the mode is stored and reported. */
+        @NonNull public final String id;
 
-        Conditions(boolean swapLow, boolean launcherInFront) {
-            this.swapLow = swapLow;
-            this.launcherInFront = launcherInFront;
+        MemoryMode(@NonNull String id) {
+            this.id = id;
+        }
+
+        /** The mode {@code id} names; anything else, {@code null} included, is {@link #RELAXED}. */
+        @NonNull
+        public static MemoryMode fromId(@Nullable String id) {
+            return id != null && UNRESTRICTED.id.equals(id.trim()) ? UNRESTRICTED : RELAXED;
         }
     }
 
-    /** 0 for 4 GB and under, then 1 (6 GB), 2 (8 GB), 3 (10-12 GB), 4 (16 GB and up). */
-    private static int ramClassIndex(long ramClassBytes) {
-        if (ramClassBytes <= 4L * GIB) return 0;
-        if (ramClassBytes <= 6L * GIB) return 1;
-        if (ramClassBytes <= 8L * GIB) return 2;
-        if (ramClassBytes <= 12L * GIB) return 3;
-        return 4;
-    }
+    /** What a floor depends on, read by the caller; see {@link #floorBytes}. */
+    public static final class Conditions {
+        public static final Conditions RELAXED = new Conditions(MemoryMode.RELAXED);
+        public static final Conditions UNRESTRICTED = new Conditions(MemoryMode.UNRESTRICTED);
 
-    /** The peak floor for a RAM class ({@link #ramClassBytes}); unknown RAM counts as the smallest class. */
-    public static long peakFloorBytes(long ramClassBytes) {
-        return ramClassIndex(ramClassBytes) == 4 ? PEAK_FLOOR_LARGE_BYTES : PEAK_FLOOR_BYTES;
-    }
+        @NonNull final MemoryMode mode;
 
-    /** The hold floor for a RAM class ({@link #ramClassBytes}); unknown RAM counts as the smallest class. */
-    public static long holdFloorBytes(long ramClassBytes) {
-        switch (ramClassIndex(ramClassBytes)) {
-            case 1:
-                return HOLD_FLOOR_6_BYTES;
-            case 2:
-                return HOLD_FLOOR_8_BYTES;
-            case 3:
-                return HOLD_FLOOR_12_BYTES;
-            case 4:
-                return HOLD_FLOOR_LARGE_BYTES;
-            default:
-                return HOLD_FLOOR_SMALL_BYTES;
+        private Conditions(@NonNull MemoryMode mode) {
+            this.mode = mode;
+        }
+
+        @NonNull
+        public static Conditions of(@NonNull MemoryMode mode) {
+            return mode == MemoryMode.UNRESTRICTED ? UNRESTRICTED : RELAXED;
         }
     }
 
     /**
-     * What stays free for the rest of the phone: the peak floor for a momentary load, the hold floor
-     * for everything else, plus {@link #SWAP_LOW_PENALTY_BYTES} when swap is low and, on the hold
-     * floor only, {@link #BACKGROUND_PENALTY_BYTES} while the launcher is not in front. These are
-     * policy values to be corrected on the device by the low-memory-kill record, not derived limits.
+     * What stays free for the rest of the phone: in {@link MemoryMode#RELAXED} the peak floor for a
+     * momentary load and the hold floor for everything else; in {@link MemoryMode#UNRESTRICTED}
+     * nothing. Policy values, not derived limits.
      */
-    public static long floorBytes(long ramClassBytes, boolean momentary, @NonNull Conditions conditions) {
-        long floor = momentary ? peakFloorBytes(ramClassBytes) : holdFloorBytes(ramClassBytes);
-        if (conditions.swapLow) floor += SWAP_LOW_PENALTY_BYTES;
-        if (!momentary && !conditions.launcherInFront) floor += BACKGROUND_PENALTY_BYTES;
-        return floor;
+    public static long floorBytes(boolean momentary, @NonNull Conditions conditions) {
+        if (conditions.mode == MemoryMode.UNRESTRICTED) return 0L;
+        return momentary ? PEAK_FLOOR_BYTES : HOLD_FLOOR_BYTES;
     }
 
     /** The cost of one load: what it adds to memory pressure, what it maps reclaimably, and where the figure came from. */
@@ -341,12 +328,11 @@ public final class TaiLoadBudget {
         @Nullable final String crashedAccelerator;
         final int crashedContext;
         final boolean explicitContext;
-        final long thresholdBytes;
         @NonNull final History history;
         @NonNull final List<TaiResidency.Entry> evictable;
         /** The runtime unloads this load itself within {@link #MOMENTARY_DEADLINE_MS}, so it keeps the peak floor. */
         final boolean momentary;
-        /** Swap and foreground state, which move the floors; {@link Conditions#NORMAL} unless the caller read them. */
+        /** The memory limits, which set the floors; {@link Conditions#RELAXED} unless the caller read them. */
         @NonNull final Conditions conditions;
         /** The architecture's KV bytes per token for an MNN model; {@code 0} keeps the file-size slope. */
         final long kvBytesPerToken;
@@ -365,14 +351,12 @@ public final class TaiLoadBudget {
                        long availableBytes, @NonNull List<String> accelerators, int capContext,
                        @Nullable String crashedAccelerator, int crashedContext) {
             this(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
-                crashedAccelerator, crashedContext, false, 0L, NO_HISTORY, Collections.<TaiResidency.Entry>emptyList());
+                crashedAccelerator, crashedContext, false, NO_HISTORY, Collections.<TaiResidency.Entry>emptyList());
         }
 
         /**
          * @param explicitContext whether the user or the request set the window; an automatic one
          *                        is capped at {@link #GPU_AUTO_CONTEXT} on the GPU
-         * @param thresholdBytes  Android's {@code MemoryInfo.threshold}; {@code 0} means unknown and
-         *                        a seed estimate then carries no margin
          * @param history         measured load costs for this model on this device
          * @param evictable       idle residents this load may close, in eviction order; the caller
          *                        leaves out what the load replaces anyway (already credited to
@@ -381,26 +365,25 @@ public final class TaiLoadBudget {
         public Request(@NonNull String backend, long fileBytes, boolean encoders, long physicalBytes,
                        long availableBytes, @NonNull List<String> accelerators, int capContext,
                        @Nullable String crashedAccelerator, int crashedContext, boolean explicitContext,
-                       long thresholdBytes, @NonNull History history, @NonNull List<TaiResidency.Entry> evictable) {
+                       @NonNull History history, @NonNull List<TaiResidency.Entry> evictable) {
             this(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
-                crashedAccelerator, crashedContext, explicitContext, thresholdBytes, history, evictable, false);
+                crashedAccelerator, crashedContext, explicitContext, history, evictable, false);
         }
 
         /** @param momentary whether the runtime unloads this load within {@link #MOMENTARY_DEADLINE_MS}, so it keeps the peak floor */
         public Request(@NonNull String backend, long fileBytes, boolean encoders, long physicalBytes,
                        long availableBytes, @NonNull List<String> accelerators, int capContext,
                        @Nullable String crashedAccelerator, int crashedContext, boolean explicitContext,
-                       long thresholdBytes, @NonNull History history, @NonNull List<TaiResidency.Entry> evictable,
-                       boolean momentary) {
+                       @NonNull History history, @NonNull List<TaiResidency.Entry> evictable, boolean momentary) {
             this(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
-                crashedAccelerator, crashedContext, explicitContext, thresholdBytes, history, evictable, momentary,
-                Conditions.NORMAL, 0L, false);
+                crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
+                Conditions.RELAXED, 0L, false);
         }
 
         private Request(@NonNull String backend, long fileBytes, boolean encoders, long physicalBytes,
                         long availableBytes, @NonNull List<String> accelerators, int capContext,
                         @Nullable String crashedAccelerator, int crashedContext, boolean explicitContext,
-                        long thresholdBytes, @NonNull History history, @NonNull List<TaiResidency.Entry> evictable,
+                        @NonNull History history, @NonNull List<TaiResidency.Entry> evictable,
                         boolean momentary, @NonNull Conditions conditions, long kvBytesPerToken, boolean gpuless) {
             this.momentary = momentary;
             this.backend = backend;
@@ -413,7 +396,6 @@ public final class TaiLoadBudget {
             this.crashedAccelerator = crashedAccelerator;
             this.crashedContext = crashedContext;
             this.explicitContext = explicitContext;
-            this.thresholdBytes = thresholdBytes;
             this.history = history;
             this.evictable = Collections.unmodifiableList(evictable);
             this.conditions = conditions;
@@ -421,11 +403,11 @@ public final class TaiLoadBudget {
             this.gpuless = gpuless;
         }
 
-        /** This request with the swap and foreground state the caller read, which move the floors. */
+        /** This request with the memory limits the caller read ({@link TaiMemInfo#conditions}), which set the floors. */
         @NonNull
         public Request withConditions(@NonNull Conditions newConditions) {
             return new Request(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
-                crashedAccelerator, crashedContext, explicitContext, thresholdBytes, history, evictable, momentary,
+                crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
                 newConditions, kvBytesPerToken, gpuless);
         }
 
@@ -433,7 +415,7 @@ public final class TaiLoadBudget {
         @NonNull
         public Request withKvBytesPerToken(long newKvBytesPerToken) {
             return new Request(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
-                crashedAccelerator, crashedContext, explicitContext, thresholdBytes, history, evictable, momentary,
+                crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
                 conditions, newKvBytesPerToken, gpuless);
         }
 
@@ -441,7 +423,7 @@ public final class TaiLoadBudget {
         @NonNull
         public Request withGpuless(boolean newGpuless) {
             return new Request(backend, fileBytes, encoders, physicalBytes, availableBytes, accelerators, capContext,
-                crashedAccelerator, crashedContext, explicitContext, thresholdBytes, history, evictable, momentary,
+                crashedAccelerator, crashedContext, explicitContext, history, evictable, momentary,
                 conditions, kvBytesPerToken, newGpuless);
         }
     }
@@ -458,35 +440,40 @@ public final class TaiLoadBudget {
         @NonNull public final String estimateSource;
         /** File-backed bytes the load maps that the kernel can reclaim; not counted against the floor. */
         public final long reclaimableBytes;
-        /** The safety margin on a seed estimate; {@code 0} for a measured one. */
-        public final long marginBytes;
         public final long availableBytes;
-        /** What stays free for the rest of the phone: the peak or hold floor with its penalties. */
+        /** What stays free for the rest of the phone: the peak or hold floor, {@code 0} when unrestricted. */
         public final long reserveBytes;
         /** Whether free memory was known; without it the plan is the floor, unmeasured. */
         public final boolean measured;
         /** Idle residents to close before this load, in order; empty when it fits as is. */
         @NonNull public final List<TaiResidency.Entry> evicted;
+        /** It goes ahead only because the limits are unrestricted: free memory and evictions do not cover it. */
+        public final boolean overcommitted;
 
         Plan(boolean fits, @Nullable String accelerator, int contextWindow, @NonNull Estimate estimate,
-             long marginBytes, long availableBytes, long reserveBytes, boolean measured,
-             @NonNull List<TaiResidency.Entry> evicted) {
+             long availableBytes, long reserveBytes, boolean measured, @NonNull List<TaiResidency.Entry> evicted) {
+            this(fits, accelerator, contextWindow, estimate, availableBytes, reserveBytes, measured, evicted, false);
+        }
+
+        Plan(boolean fits, @Nullable String accelerator, int contextWindow, @NonNull Estimate estimate,
+             long availableBytes, long reserveBytes, boolean measured, @NonNull List<TaiResidency.Entry> evicted,
+             boolean overcommitted) {
             this.fits = fits;
             this.accelerator = accelerator;
             this.contextWindow = contextWindow;
             this.estimatedBytes = estimate.nonReclaimableBytes;
             this.estimateSource = estimate.source;
             this.reclaimableBytes = estimate.reclaimableBytes;
-            this.marginBytes = marginBytes;
             this.availableBytes = availableBytes;
             this.reserveBytes = reserveBytes;
             this.measured = measured;
             this.evicted = Collections.unmodifiableList(evicted);
+            this.overcommitted = overcommitted;
         }
 
-        /** Free memory a load of {@link #estimatedBytes} would need with nothing evicted: margin and floor included. */
+        /** Free memory a load of {@link #estimatedBytes} would need with nothing evicted: the floor included. */
         public long neededFreeBytes() {
-            return estimatedBytes + marginBytes + reserveBytes;
+            return estimatedBytes + reserveBytes;
         }
 
         /** Bytes the chosen evictions give back. */
@@ -502,29 +489,24 @@ public final class TaiLoadBudget {
         return capContext > 0 ? Math.min(FLOOR_CONTEXT, capContext) : FLOOR_CONTEXT;
     }
 
-    /** The margin a seed estimate carries when the threshold is known; none for a measured one. */
-    static long marginBytes(@NonNull Estimate estimate, long thresholdBytes) {
-        if (thresholdBytes <= 0L || estimate.isMeasured()) return 0L;
-        return estimate.nonReclaimableBytes * RATIO_MARGIN_PERCENT / 100L;
-    }
-
     @NonNull
     public static Plan plan(@NonNull Request r) {
         int floor = floor(r.capContext);
         int cap = Math.max(floor, r.capContext);
-        long reserve = floorBytes(ramClassBytes(r.physicalBytes), r.momentary, r.conditions);
+        long reserve = floorBytes(r.momentary, r.conditions);
         String first = r.accelerators.isEmpty() ? null : r.accelerators.get(0);
         List<TaiResidency.Entry> none = Collections.emptyList();
         if (r.availableBytes <= 0L || r.physicalBytes <= 0L || r.fileBytes <= 0L) {
             Estimate estimate = first == null ? Estimate.ratio(0L, 0L)
                 : estimate(r.backend, first, r.fileBytes, r.encoders, floor, r.history, r.kvBytesPerToken);
-            return new Plan(first != null, first, floor, estimate, marginBytes(estimate, r.thresholdBytes),
-                r.availableBytes, reserve, false, none);
+            return new Plan(first != null, first, floor, estimate, r.availableBytes, reserve, false, none);
         }
         long spendable = r.availableBytes - reserve;
         // What the previous accelerator needed at its smallest window; the next one is held to beat it.
         long refusedNeed = Long.MAX_VALUE;
         boolean previousCrashed = false;
+        // The first accelerator the ladder actually tried: where an unrestricted load goes when nothing fits.
+        String firstTried = null;
         for (int i = 0; i < r.accelerators.size(); i++) {
             String accelerator = r.accelerators.get(i);
             if (i > 0 && !otherAcceleratorAllowed(r, accelerator, floor, refusedNeed, previousCrashed)) continue;
@@ -544,16 +526,16 @@ public final class TaiLoadBudget {
                     continue;
                 }
             }
+            if (firstTried == null) firstTried = accelerator;
             for (int context = limit; ; context = Math.max(floor, context / 2)) {
                 Estimate estimate = estimate(r.backend, accelerator, r.fileBytes, r.encoders, context, r.history, r.kvBytesPerToken);
-                long margin = marginBytes(estimate, r.thresholdBytes);
-                long need = estimate.nonReclaimableBytes + margin;
+                long need = estimate.nonReclaimableBytes;
                 if (need <= spendable) {
-                    return new Plan(true, accelerator, context, estimate, margin, r.availableBytes, reserve, true, none);
+                    return new Plan(true, accelerator, context, estimate, r.availableBytes, reserve, true, none);
                 }
                 List<TaiResidency.Entry> evicted = evictions(need - spendable, r.evictable);
                 if (evicted != null) {
-                    return new Plan(true, accelerator, context, estimate, margin, r.availableBytes, reserve, true, evicted);
+                    return new Plan(true, accelerator, context, estimate, r.availableBytes, reserve, true, evicted);
                 }
                 if (context == floor) {
                     refusedNeed = need;
@@ -561,9 +543,16 @@ public final class TaiLoadBudget {
                 }
             }
         }
+        // Unrestricted: nothing fits, so every idle resident goes and Android makes the rest of the room.
+        // A crash record still holds: a load killed at the floor is not repeated, and with every
+        // accelerator held back by one the load is refused.
+        if (r.conditions.mode == MemoryMode.UNRESTRICTED && firstTried != null) {
+            Estimate estimate = estimate(r.backend, firstTried, r.fileBytes, r.encoders, floor, r.history, r.kvBytesPerToken);
+            return new Plan(true, firstTried, floor, estimate, r.availableBytes, reserve, true, allIdle(r.evictable), true);
+        }
         Estimate smallest = first == null ? Estimate.ratio(0L, 0L)
             : estimate(r.backend, cheapest(r), r.fileBytes, r.encoders, floor, r.history, r.kvBytesPerToken);
-        return new Plan(false, first, floor, smallest, marginBytes(smallest, r.thresholdBytes), r.availableBytes, reserve, true, none);
+        return new Plan(false, first, floor, smallest, r.availableBytes, reserve, true, none);
     }
 
     /**
@@ -581,46 +570,40 @@ public final class TaiLoadBudget {
         }
         if (r.gpuless || previousCrashed) return true;
         Estimate candidate = estimate(r.backend, accelerator, r.fileBytes, r.encoders, floor, r.history, r.kvBytesPerToken);
-        long need = candidate.nonReclaimableBytes + marginBytes(candidate, r.thresholdBytes);
-        return candidate.isMeasured() && need < refusedNeed;
+        return candidate.isMeasured() && candidate.nonReclaimableBytes < refusedNeed;
     }
 
     /**
      * The plan for a load with no window to shrink and no accelerator ladder — an embedding
-     * interpreter, later an STT model: it fits when its whole estimate leaves the hold floor free,
-     * with idle residents evicted if that is what it takes, and is refused otherwise. Unknown free
-     * memory gives the same unmeasured go-ahead as {@link #plan}.
+     * interpreter, a speech model, an image run: it fits when its whole estimate leaves the hold
+     * floor free, with idle residents evicted if that is what it takes. Otherwise it is refused, or,
+     * unrestricted, goes ahead with every idle resident evicted. Unknown free memory gives the same unmeasured
+     * go-ahead as {@link #plan}.
      */
     @NonNull
     public static Plan planFixed(@NonNull Estimate estimate, @NonNull String accelerator, long physicalBytes,
-                                 long availableBytes, long thresholdBytes, @NonNull List<TaiResidency.Entry> evictable) {
-        return planFixed(estimate, accelerator, physicalBytes, availableBytes, thresholdBytes, evictable, Conditions.NORMAL);
-    }
-
-    /** {@link #planFixed(Estimate, String, long, long, long, List)} with the swap and foreground state the caller read. */
-    @NonNull
-    public static Plan planFixed(@NonNull Estimate estimate, @NonNull String accelerator, long physicalBytes,
-                                 long availableBytes, long thresholdBytes, @NonNull List<TaiResidency.Entry> evictable,
+                                 long availableBytes, @NonNull List<TaiResidency.Entry> evictable,
                                  @NonNull Conditions conditions) {
-        long reserve = floorBytes(ramClassBytes(physicalBytes), false, conditions);
-        long margin = marginBytes(estimate, thresholdBytes);
+        long reserve = floorBytes(false, conditions);
         List<TaiResidency.Entry> none = Collections.emptyList();
         if (availableBytes <= 0L || physicalBytes <= 0L) {
-            return new Plan(true, accelerator, 0, estimate, margin, availableBytes, reserve, false, none);
+            return new Plan(true, accelerator, 0, estimate, availableBytes, reserve, false, none);
         }
-        long need = estimate.nonReclaimableBytes + margin;
+        long need = estimate.nonReclaimableBytes;
         long spendable = availableBytes - reserve;
-        if (need <= spendable) return new Plan(true, accelerator, 0, estimate, margin, availableBytes, reserve, true, none);
+        if (need <= spendable) return new Plan(true, accelerator, 0, estimate, availableBytes, reserve, true, none);
         List<TaiResidency.Entry> evicted = evictions(need - spendable, evictable);
-        return new Plan(evicted != null, accelerator, 0, estimate, margin, availableBytes, reserve, true,
-            evicted == null ? none : evicted);
+        if (evicted != null) return new Plan(true, accelerator, 0, estimate, availableBytes, reserve, true, evicted);
+        boolean unrestricted = conditions.mode == MemoryMode.UNRESTRICTED;
+        return new Plan(unrestricted, accelerator, 0, estimate, availableBytes, reserve, true,
+            unrestricted ? allIdle(evictable) : none, unrestricted);
     }
 
-    /** {@link #planFixed} with a seed estimate and nothing to evict. */
+    /** {@link #planFixed} with a seed estimate, nothing to evict and relaxed limits. */
     @NonNull
     public static Plan planFixed(long needBytes, @NonNull String accelerator, long physicalBytes, long availableBytes) {
-        return planFixed(Estimate.ratio(needBytes, 0L), accelerator, physicalBytes, availableBytes, 0L,
-            Collections.<TaiResidency.Entry>emptyList());
+        return planFixed(Estimate.ratio(needBytes, 0L), accelerator, physicalBytes, availableBytes,
+            Collections.<TaiResidency.Entry>emptyList(), Conditions.RELAXED);
     }
 
     /**
@@ -639,6 +622,16 @@ public final class TaiLoadBudget {
             if (reclaimed >= shortfall) return chosen;
         }
         return null;
+    }
+
+    /** Every resident in {@code evictable} that may be closed: what an unrestricted load past the budget gives up first. */
+    @NonNull
+    static List<TaiResidency.Entry> allIdle(@NonNull List<TaiResidency.Entry> evictable) {
+        ArrayList<TaiResidency.Entry> idle = new ArrayList<>();
+        for (TaiResidency.Entry entry : evictable) {
+            if (!entry.busy && entry.kind != TaiResidency.Kind.RUNTIME) idle.add(entry);
+        }
+        return idle;
     }
 
     /** The accelerator whose floor load costs least, for telling the user how much would be needed. */

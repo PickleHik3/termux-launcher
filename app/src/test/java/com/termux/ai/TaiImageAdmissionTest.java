@@ -14,19 +14,24 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * Memory-mode choice and the image kind's place in the residency table. Sizes are the published
- * packages': Stable Diffusion 1.5 is 1.15 GB; the phone is pong (12 GB class, 600 MB low-memory threshold).
+ * packages': Stable Diffusion 1.5 is 1.15 GB; the phone is pong (12 GB class).
  */
 @RunWith(RobolectricTestRunner.class)
 public class TaiImageAdmissionTest {
     private static final long PONG_TOTAL = 11_530_736L * 1024L;
-    private static final long THRESHOLD = 600L * 1024L * 1024L;
     private static final long SD15 = 1_150_000_000L;
     private static final long GB = 1024L * 1024L * 1024L;
     private static final TaiImageAdmission.Measured UNKNOWN = mode -> 0L;
 
     private static TaiImageAdmission.Decision decide(long peak, int requested, long available,
                                                       List<TaiResidency.Entry> evictable, TaiImageAdmission.Measured measured) {
-        return TaiImageAdmission.decide(peak, requested, "opencl", PONG_TOTAL, available, THRESHOLD, evictable, measured);
+        return decide(peak, requested, available, evictable, measured, TaiLoadBudget.Conditions.RELAXED);
+    }
+
+    private static TaiImageAdmission.Decision decide(long peak, int requested, long available,
+                                                      List<TaiResidency.Entry> evictable, TaiImageAdmission.Measured measured,
+                                                      TaiLoadBudget.Conditions conditions) {
+        return TaiImageAdmission.decide(peak, requested, "opencl", PONG_TOTAL, available, evictable, measured, conditions);
     }
 
     @Test
@@ -55,13 +60,13 @@ public class TaiImageAdmissionTest {
         assertEquals(Collections.singletonList(chat), d.plan.evicted);
     }
 
-    /** What the budget asks free memory to cover for a ratio estimate: the estimate plus the 25% margin. */
+    /** What the budget asks free memory to cover for a ratio estimate above the floor: the estimate itself. */
     private static long need(int mode) {
-        return TaiResidency.imageEstimateBytes(SD15, mode) * 125L / 100L;
+        return TaiResidency.imageEstimateBytes(SD15, mode);
     }
 
     private static long reserve() {
-        return TaiLoadBudget.holdFloorBytes(TaiLoadBudget.ramClassBytes(PONG_TOTAL));
+        return TaiLoadBudget.HOLD_FLOOR_BYTES;
     }
 
     @Test
@@ -83,6 +88,26 @@ public class TaiImageAdmissionTest {
         TaiImageAdmission.Decision d = decide(SD15, TaiImageRequest.MEMORY_MODE_AUTO, 400L * 1024L * 1024L, Collections.emptyList(), UNKNOWN);
         assertFalse(d.fits);
         assertEquals(0, d.memoryMode);
+    }
+
+    /** Unrestricted, nothing fitting runs in the memory-saving mode rather than being refused. */
+    @Test
+    public void unrestrictedLimitsRunTheSavingModeWhenNoModeFits() {
+        TaiImageAdmission.Decision d = decide(SD15, TaiImageRequest.MEMORY_MODE_AUTO, 400L * 1024L * 1024L,
+            Collections.emptyList(), UNKNOWN, TaiLoadBudget.Conditions.UNRESTRICTED);
+        assertTrue(d.fits);
+        assertEquals(0, d.memoryMode);
+        assertTrue(d.plan.overcommitted);
+    }
+
+    /** Unrestricted is not a reason to take the dearest mode: one that fits outright still wins over mode 1. */
+    @Test
+    public void unrestrictedLimitsStillPreferAModeThatFitsOutright() {
+        TaiImageAdmission.Decision d = decide(SD15, TaiImageRequest.MEMORY_MODE_AUTO, need(2) + 1L,
+            Collections.emptyList(), UNKNOWN, TaiLoadBudget.Conditions.UNRESTRICTED);
+        assertTrue(d.fits);
+        assertEquals(2, d.memoryMode);
+        assertFalse(d.plan.overcommitted);
     }
 
     @Test

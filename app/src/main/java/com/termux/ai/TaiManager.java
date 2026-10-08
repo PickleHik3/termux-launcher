@@ -1469,7 +1469,8 @@ public final class TaiManager {
             long fileBytes = TaiResidency.fileBytes(spec);
             TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, fileBytes, false,
                 device.physicalMemoryBytes, availableMemory(device),
-                Collections.singletonList(params.accelerator), params.prefillTokens + params.decodeTokens, null, 0));
+                Collections.singletonList(params.accelerator), params.prefillTokens + params.decodeTokens, null, 0)
+                .withConditions(gateConditions()));
             if (!plan.fits) {
                 JSONObject refusal = insufficientMemory(spec.displayName, plan);
                 refusal.put("hint", "Pass force=true to skip this budget check. Google AI Edge Gallery's Benchmark "
@@ -2922,7 +2923,7 @@ public final class TaiManager {
             if (entry.kind == TaiResidency.Kind.EMBEDDING) candidates.add(entry);
         }
         TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
-            device.memoryThresholdBytes, candidates, gateConditions());
+            candidates, gateConditions());
         if (!plan.fits) return openAiError(insufficientMemory(spec.displayName, plan));
         evict(plan);
         return null;
@@ -3196,10 +3197,10 @@ public final class TaiManager {
                 TaiResidency.Kind.CHAT, spec.backend);
             return TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, TaiResidency.fileBytes(spec), encoders,
                 device.physicalMemoryBytes, available, accelerators, cap,
-                null, 0, options.contextWindow != null, device.memoryThresholdBytes,
+                null, 0, options.contextWindow != null,
                 measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend),
                 true)
-                .withConditions(TaiMemInfo.conditions(appContext, memory))
+                .withConditions(gateConditions())
                 .withKvBytesPerToken(kvBytesPerToken(spec))
                 .withGpuless(!device.supportsAccelerator("gpu")));
         } catch (Exception | LinkageError e) {
@@ -3246,10 +3247,10 @@ public final class TaiManager {
             TaiResidency.Kind.CHAT, spec.backend);
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, fileBytes, encoders,
             device.physicalMemoryBytes, available, accelerators, cap,
-            crashedAccelerator, crashedContext, options.contextWindow != null, device.memoryThresholdBytes,
+            crashedAccelerator, crashedContext, options.contextWindow != null,
             measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend),
             options.momentary == Boolean.TRUE)
-            .withConditions(TaiMemInfo.conditions(appContext, memory))
+            .withConditions(gateConditions())
             .withKvBytesPerToken(kvBytesPerToken(spec))
             .withGpuless(!device.supportsAccelerator("gpu")));
         if (!plan.fits) {
@@ -3258,6 +3259,12 @@ public final class TaiManager {
                 "load refused: needs " + plan.neededFreeBytes() / (1024L * 1024L) + " MB free, "
                     + plan.availableBytes / (1024L * 1024L) + " MB available");
             return new LoadDecision(null, insufficientMemory(spec.displayName, plan), plan, Collections.<String>emptyList());
+        }
+        if (plan.overcommitted) {
+            TaiEventLog.log(appContext, TaiEventLog.OOM_GUARD, spec.id, spec.backend, plan.accelerator,
+                plan.contextWindow, 0L, plan.neededFreeBytes(),
+                "load past the budget (unrestricted): needs " + plan.neededFreeBytes() / (1024L * 1024L) + " MB free, "
+                    + plan.availableBytes / (1024L * 1024L) + " MB available");
         }
         String fallbackReason = acceleratorFallbackReason(spec, device, preflight, plan, fileBytes, encoders, available,
             options.momentary == Boolean.TRUE);
@@ -3310,8 +3317,7 @@ public final class TaiManager {
         // not the chat floor of 4096): the figure in the event must be the one that was refused.
         TaiLoadBudget.Estimate estimate = TaiLoadBudget.estimate(spec.backend, first, fileBytes, encoders,
             plan.contextWindow, measuredHistory(spec, device), kvBytesPerToken(spec));
-        long needed = estimate.nonReclaimableBytes + TaiLoadBudget.marginBytes(estimate, device.memoryThresholdBytes)
-            + plan.reserveBytes;
+        long needed = estimate.nonReclaimableBytes + plan.reserveBytes;
         return (momentary ? "budget(momentary): needs " : "budget: needs ") + needed / (1024L * 1024L) + " MB free, "
             + available / (1024L * 1024L) + " MB available";
     }
@@ -3335,7 +3341,7 @@ public final class TaiManager {
         TaiLoadBudget.Estimate estimate = worst > 0L ? TaiLoadBudget.Estimate.measured(worst)
             : TaiLoadBudget.Estimate.ratio(TaiResidency.embeddingEstimateBytes(spec), 0L);
         TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
-            device.memoryThresholdBytes, TaiResidency.evictionCandidates(residents, TaiResidency.Kind.EMBEDDING, spec.backend), gateConditions());
+            TaiResidency.evictionCandidates(residents, TaiResidency.Kind.EMBEDDING, spec.backend), gateConditions());
         if (!plan.fits) {
             JSONObject envelope = openAiError(embeddingMemoryRefusal(spec.displayName, plan));
             envelope.put("_retryAfterSeconds", EMBEDDING_MEMORY_RETRY_AFTER_SECONDS);
@@ -3661,10 +3667,10 @@ public final class TaiManager {
         long available = TaiResidency.creditedAvailable(availableMemory(device), residents, TaiResidency.Kind.IMAGE,
             TaiModelSpec.BACKEND_MNN_DIFFUSION);
         TaiImageAdmission.Decision decision = TaiImageAdmission.decide(pkg.peakBytes, request.memoryMode, request.backend,
-            device.physicalMemoryBytes, available, device.memoryThresholdBytes,
+            device.physicalMemoryBytes, available,
             TaiResidency.evictionCandidates(residents, TaiResidency.Kind.IMAGE, TaiModelSpec.BACKEND_MNN_DIFFUSION),
             mode -> TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device, TaiModelSpec.BACKEND_MNN_DIFFUSION,
-                request.backend, mode + 1));
+                request.backend, mode + 1), gateConditions());
         if (!decision.fits) return new ImageLoadDecision(openAiError(insufficientMemory(spec.displayName, decision.plan)), decision.memoryMode,
             Collections.<String>emptyList());
         return new ImageLoadDecision(null, decision.memoryMode, evict(decision.plan));
@@ -3698,7 +3704,7 @@ public final class TaiManager {
         TaiLoadBudget.Estimate estimate = worst > 0L ? TaiLoadBudget.Estimate.measured(worst)
             : TaiLoadBudget.Estimate.ratio(TaiResidency.sttEstimateBytes(spec), 0L);
         TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
-            device.memoryThresholdBytes, TaiResidency.evictionCandidates(residents, TaiResidency.Kind.STT, spec.backend), gateConditions());
+            TaiResidency.evictionCandidates(residents, TaiResidency.Kind.STT, spec.backend), gateConditions());
         if (!plan.fits) return openAiError(insufficientMemory(spec.displayName, plan));
         evict(plan);
         return null;
@@ -3740,10 +3746,10 @@ public final class TaiManager {
         return availableMemory(TaiMemInfo.read(appContext), device);
     }
 
-    /** Swap and foreground state for the fixed-size loads' hold floor. */
+    /** The memory limits every plan in this process is made under; the runtime's watch reads the same file. */
     @NonNull
     private TaiLoadBudget.Conditions gateConditions() {
-        return TaiMemInfo.conditions(appContext, TaiMemInfo.read(appContext));
+        return TaiMemInfo.conditions(appContext);
     }
 
     /** Carries out a plan's evictions through the router; the ids actually closed, in order. */
@@ -3795,11 +3801,11 @@ public final class TaiManager {
         json.put("estimatedBytes", plan.estimatedBytes);
         json.put("estimateSource", plan.estimateSource);
         json.put("reclaimableBytes", plan.reclaimableBytes);
-        json.put("marginBytes", plan.marginBytes);
         json.put("availableBytes", plan.availableBytes);
         json.put("reserveBytes", plan.reserveBytes);
         json.put("neededFreeBytes", plan.neededFreeBytes());
         json.put("measured", plan.measured);
+        json.put("overcommitted", plan.overcommitted);
         JSONArray evicted = new JSONArray();
         for (TaiResidency.Entry entry : plan.evicted) evicted.put(entry.modelId);
         json.put("evicted", evicted);
@@ -3973,8 +3979,9 @@ public final class TaiManager {
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, TaiResidency.fileBytes(spec),
             false, device.physicalMemoryBytes, available,
             TaiLoadPreflight.autoAccelerators(appContext, spec, device, TaiModelProfile.forModel(spec)),
-            spec.endpointContextWindow, null, 0, explicitContext, device.memoryThresholdBytes,
-            measuredHistory(spec, device), Collections.<TaiResidency.Entry>emptyList()));
+            spec.endpointContextWindow, null, 0, explicitContext,
+            measuredHistory(spec, device), Collections.<TaiResidency.Entry>emptyList())
+            .withConditions(gateConditions()));
         return spec.withEndpointContextWindow(Math.min(spec.endpointContextWindow, plan.contextWindow));
     }
 

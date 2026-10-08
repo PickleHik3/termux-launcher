@@ -151,7 +151,7 @@ public class TaiLoadMeasurementTest {
         TaiLoadBudget.History history = (accelerator, contextTokens) -> TaiRuntimeHistory.measuredLoadBytes(
             context, spec, device, TaiModelSpec.BACKEND_LITERT_LM, accelerator, contextTokens);
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E4B, false,
-            11_530_736L * 1024L, 9_000_000_000L, Arrays.asList("gpu", "cpu"), 4096, null, 0, false, 315_000_000L, history,
+            11_530_736L * 1024L, 9_000_000_000L, Arrays.asList("gpu", "cpu"), 4096, null, 0, false, history,
             Collections.<TaiResidency.Entry>emptyList()));
         assertEquals(TaiLoadBudget.SOURCE_MEASURED, plan.estimateSource);
         assertEquals(3_520_000_000L, plan.estimatedBytes);

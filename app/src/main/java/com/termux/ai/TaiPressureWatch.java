@@ -16,8 +16,9 @@ import java.util.concurrent.TimeUnit;
  * decisions out; nothing here evicts anything.
  *
  * <p>Tiers, against the budget's floors ({@link TaiLoadBudget#floorBytes}: the hold floor for what
- * stays resident, the lower peak floor for a momentary load; each carries the swap penalty, and
- * the hold floor the launcher-not-in-front one). Free memory is {@link TaiMemInfo}'s: MemAvailable.
+ * stays resident, the lower peak floor for a momentary load, under the same memory limits the gate
+ * read; unrestricted, both are {@code 0} and only {@code lowMemory} acts). Free memory is
+ * {@link TaiMemInfo}'s: MemAvailable.
  *
  * <pre>
  *   lowMemory                         → RELEASE_ALL: cancel in-flight work, unload everything
@@ -77,7 +78,7 @@ final class TaiPressureWatch {
 
     /**
      * The tier for one reading of free memory, against the budget's floors
-     * ({@link TaiLoadBudget#floorBytes}, with the swap and foreground penalties already in):
+     * ({@link TaiLoadBudget#floorBytes}, under the memory limits the gate read):
      * below the hold floor the watch gives up idle auxiliaries; below the lower peak floor it gives
      * up idle chat too; {@code lowMemory} releases everything. Unknown free memory ({@code <= 0})
      * selects nothing on its own, and a floor of {@code 0} means that line is unknown.

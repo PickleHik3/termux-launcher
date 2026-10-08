@@ -95,6 +95,11 @@
             app:key="tai_runtime_overrides"
             app:persistent="false"
             app:selectable="false"/>
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="tai_memory_limits"
+            app:title="@string/termux_ai_memory_limits_title"
+            app:summary="@string/termux_ai_memory_limits_relaxed_summary"
+            app:persistent="false"/>
         <Preference
             app:key="tai_share_diagnostics"
             app:title="@string/termux_ai_share_diagnostics_title"
