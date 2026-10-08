@@ -42,7 +42,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *       500-word dictation ({@code assets/tai/check}).</li>
  *   <li>App sorting: {@link LauncherCategorySortPrompt} for ten installed apps at the sort's window.</li>
  *   <li>Assistant and Dawn chat: the bench's chat and long-input prompts.</li>
- *   <li>Dawn search: 64 short notes in one embeddings batch.</li>
+ *   <li>Dawn search: 64 short notes in Dawn's own embeddings batches of {@link #SEARCH_BATCH}.</li>
  *   <li>Read aloud: one sentence, timed to its first sound (synthesised, not played).</li>
  * </ul>
  *
@@ -66,6 +66,8 @@ public final class TaiFeatureCheckRunner {
     static final String DICTATION_SHORT_ASSET = "tai/check/dictation_150.txt";
     static final String DICTATION_LONG_ASSET = "tai/check/dictation_500.txt";
     static final String NOTES_ASSET = "tai/check/notes_64.txt";
+    /** Dawn's own batch ({@code EMBED_BATCH} in dawn's {@code src/dawn_embed.c}): the check sends notes the way Dawn does. */
+    static final int SEARCH_BATCH = 8;
     /** Read aloud's workload: one ordinary sentence. */
     static final String READ_SENTENCE = "The weather will be dry this afternoon, with a light breeze from the west.";
     private static final String CRASH_CODE = TaiBenchCrashRecovery.CRASH_CODE;
@@ -503,28 +505,54 @@ public final class TaiFeatureCheckRunner {
         for (String line : asset(NOTES_ASSET).split("\n")) {
             if (!line.trim().isEmpty()) notes.add(line.trim());
         }
-        startFeaturePhase(1, notes.get(0));
-        emit(event("run_start").put("phase", PHASE_FEATURE).put("run", 1).put("runs", 1));
-        long started = System.nanoTime();
-        JSONObject result = manager.embeddings(featureBody(run).put("input", new JSONArray(notes)).toString());
-        long elapsedMs = (System.nanoTime() - started) / 1_000_000L;
-        String code = errorCode(result);
-        if (code != null) {
-            failed(m, code, result);
-            return false;
+        List<List<String>> batches = searchBatches(notes, SEARCH_BATCH);
+        startFeaturePhase(batches.size(), notes.get(0));
+        long totalElapsedMs = 0L;
+        boolean correct = true;
+        for (int i = 0; i < batches.size(); i++) {
+            List<String> batch = batches.get(i);
+            emit(event("run_start").put("phase", PHASE_FEATURE).put("run", i + 1).put("runs", batches.size()));
+            long started = System.nanoTime();
+            JSONObject result = manager.embeddings(featureBody(run).put("input", new JSONArray(batch)).toString());
+            totalElapsedMs += (System.nanoTime() - started) / 1_000_000L;
+            String code = errorCode(result);
+            if (code != null) {
+                failed(m, code, result);
+                return false;
+            }
+            JSONArray data = result.optJSONArray("data");
+            boolean batchCorrect = data != null && data.length() == batch.size();
+            for (int j = 0; batchCorrect && j < data.length(); j++) {
+                JSONObject item = data.optJSONObject(j);
+                JSONArray vector = item == null ? null : item.optJSONArray("embedding");
+                // A base64 answer is a string; this request asks for floats, so anything else is wrong.
+                batchCorrect = vector != null && vector.length() > 0 && !Double.isNaN(vector.optDouble(0, Double.NaN));
+            }
+            correct &= batchCorrect;
+            // A batch in flight cannot be cancelled, so a stop takes effect between batches.
+            if (stopReason != null) {
+                failed(m, "cancelled", new JSONObject());
+                return false;
+            }
         }
-        JSONArray data = result.optJSONArray("data");
-        boolean correct = data != null && data.length() == notes.size();
-        for (int i = 0; correct && i < data.length(); i++) {
-            JSONObject item = data.optJSONObject(i);
-            JSONArray vector = item == null ? null : item.optJSONArray("embedding");
-            // A base64 answer is a string; this request asks for floats, so anything else is wrong.
-            correct = vector != null && vector.length() > 0 && !Double.isNaN(vector.optDouble(0, Double.NaN));
-        }
-        m.speed = TaiFeatureCheck.perSecond(notes.size(), elapsedMs);
+        m.speed = TaiFeatureCheck.perSecond(notes.size(), totalElapsedMs);
         Totals totals = new Totals();
-        totals.elapsedMs = elapsedMs;
+        totals.elapsedMs = totalElapsedMs;
         return done(m, totals, correct);
+    }
+
+    /** Splits {@code notes} in order into consecutive batches of at most {@code size}; {@code size <= 0} is one batch. */
+    @NonNull
+    static List<List<String>> searchBatches(@NonNull List<String> notes, int size) {
+        List<List<String>> batches = new ArrayList<>();
+        if (size <= 0) {
+            batches.add(new ArrayList<>(notes));
+            return batches;
+        }
+        for (int from = 0; from < notes.size(); from += size) {
+            batches.add(new ArrayList<>(notes.subList(from, Math.min(notes.size(), from + size))));
+        }
+        return batches;
     }
 
     private boolean readAloud(@NonNull Planned run, @NonNull TaiFeatureCheck.Measurement m) throws JSONException {
