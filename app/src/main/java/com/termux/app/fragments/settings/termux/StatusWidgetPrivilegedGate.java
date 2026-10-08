@@ -33,7 +33,7 @@ final class StatusWidgetPrivilegedGate {
 
     /** The Permissions page of the project wiki, which is where Shizuku setup is written up. */
     private static final String SHIZUKU_GUIDE_URL =
-        "https://picklehik3.github.io/termux-launcher-site/#wiki/launcherctl";
+        "https://picklehik3.github.io/termux-launcher-site/docs/#wiki/launcherctl";
 
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 

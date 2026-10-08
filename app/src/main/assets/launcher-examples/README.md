@@ -64,10 +64,10 @@ sessions opened after the reload.
 
 ## Full web guides
 
-- Keybindings and multiplexer: https://picklehik3.github.io/termux-launcher-site/#wiki/keybindings
-- Complete action and argument reference: https://picklehik3.github.io/termux-launcher-site/#wiki/action-reference
-- In-app keyboard layout schema: https://picklehik3.github.io/termux-launcher-site/#wiki/keyboard-layout
-- Termux Extra Keys recipes: https://picklehik3.github.io/termux-launcher-site/#wiki/extra-keys
+- Keybindings and multiplexer: https://picklehik3.github.io/termux-launcher-site/docs/#wiki/keybindings
+- Complete action and argument reference: https://picklehik3.github.io/termux-launcher-site/docs/#wiki/action-reference
+- In-app keyboard layout schema: https://picklehik3.github.io/termux-launcher-site/docs/#wiki/keyboard-layout
+- Termux Extra Keys recipes: https://picklehik3.github.io/termux-launcher-site/docs/#wiki/extra-keys
 
 ## Starting over
 
