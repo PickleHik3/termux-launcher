@@ -230,7 +230,7 @@ public final class TaiFeaturePlan {
             String stored = parameters.accelerator(info.id, info.backend);
             if (TaiTierPolicy.ACCEL_GPU.equals(stored) || TaiTierPolicy.ACCEL_CPU.equals(stored)) pick = stored;
         }
-        Map<String, Double> measured = speeds(feature, info, evidence, false);
+        Map<String, Double> measured = comparableSpeeds(feature, info, evidence);
         Map<String, Double> plain = new HashMap<>(measured);
         // A measured GPU never promotes a GPU whose verdict is that it answers wrongly.
         if (path == TaiPlatformCaps.GpuPath.CPU_FIRST || path == TaiPlatformCaps.GpuPath.NO) {
@@ -277,8 +277,8 @@ public final class TaiFeaturePlan {
             speculative = Boolean.FALSE;
             speculativeReason = Reason.MEASURED;
         } else {
-            Double on = speeds(feature, info, evidence, true).get(accelerator);
-            Double off = measured.get(accelerator);
+            Double on = decodeSpeeds(feature, info, evidence, true).get(accelerator);
+            Double off = decodeSpeeds(feature, info, evidence, false).get(accelerator);
             if (on != null && off != null) {
                 // On unless measured slower (decision 4); judged on decode speed, never first token.
                 speculative = on >= off;
@@ -393,17 +393,58 @@ public final class TaiFeaturePlan {
     /**
      * Measured speeds of this model file by accelerator, larger is faster, with speculative decoding on
      * or off: the feature's own checks, else for the assistant and Dawn chat the generic chat bench's
-     * decode speed. Only passing results count; the best of each accelerator wins.
+     * decode speed. Only passing, fresh results count; the best of each accelerator wins.
      */
     @NonNull
     private static Map<String, Double> speeds(@NonNull TaiFunction feature, @NonNull TaiFunctionModels.ModelInfo info,
                                               @NonNull TaiEvidence evidence, boolean speculative) {
         Map<String, Double> out = new HashMap<>();
         for (TaiEvidence.FeatureResult result : evidence.featureChecks(feature, info.id, info.backend)) {
-            if (!result.passed || result.speculative != speculative || result.speed <= 0.0) continue;
+            if (!result.passed || result.stale || result.speculative != speculative || result.speed <= 0.0) continue;
+            // Asked for and never ran: not a measurement of speculative decoding.
+            if (speculative && Boolean.FALSE.equals(result.speculativeRan)) continue;
             put(out, result.accelerator, result.speed);
         }
         if (!out.isEmpty() || !chatBenchCounts(feature)) return out;
+        for (TaiEvidence.ChatResult result : evidence.chatBench(info.id, info.backend)) {
+            if (!result.passed || result.speculative != speculative || result.decodeTps <= 0.0) continue;
+            put(out, result.accelerator, result.decodeTps);
+        }
+        return out;
+    }
+
+    /**
+     * Speeds to compare the two accelerators on, both with speculative decoding the same way: on when both
+     * were measured with it (the feature check runs both accelerators at the plan's own setting, which is on
+     * for a file that declares it), else off.
+     */
+    @NonNull
+    private static Map<String, Double> comparableSpeeds(@NonNull TaiFunction feature, @NonNull TaiFunctionModels.ModelInfo info,
+                                                        @NonNull TaiEvidence evidence) {
+        Map<String, Double> on = speeds(feature, info, evidence, true);
+        if (on.containsKey(TaiTierPolicy.ACCEL_GPU) && on.containsKey(TaiTierPolicy.ACCEL_CPU)) return on;
+        return speeds(feature, info, evidence, false);
+    }
+
+    /**
+     * Measured decode speeds by accelerator with speculative decoding on or off, the only figure speculative
+     * decoding is judged on (never the wait for the first token): the feature's own fresh, passing checks
+     * that decoded, else for the chat features the chat bench.
+     */
+    @NonNull
+    private static Map<String, Double> decodeSpeeds(@NonNull TaiFunction feature, @NonNull TaiFunctionModels.ModelInfo info,
+                                                    @NonNull TaiEvidence evidence, boolean speculative) {
+        Map<String, Double> out = new HashMap<>();
+        boolean checked = false;
+        for (TaiEvidence.FeatureResult result : evidence.featureChecks(feature, info.id, info.backend)) {
+            if (!result.passed || result.stale) continue;
+            // Checked at all: both sides then come from the check, never one from the chat bench.
+            checked = true;
+            if (result.speculative != speculative || result.decodeTps <= 0.0) continue;
+            if (speculative && Boolean.FALSE.equals(result.speculativeRan)) continue;
+            put(out, result.accelerator, result.decodeTps);
+        }
+        if (checked || !chatBenchCounts(feature)) return out;
         for (TaiEvidence.ChatResult result : evidence.chatBench(info.id, info.backend)) {
             if (!result.passed || result.speculative != speculative || result.decodeTps <= 0.0) continue;
             put(out, result.accelerator, result.decodeTps);
@@ -426,6 +467,7 @@ public final class TaiFeaturePlan {
     private static boolean neverRan(@NonNull TaiFunction feature, @NonNull TaiFunctionModels.ModelInfo info,
                                     @NonNull TaiEvidence evidence, @NonNull String accelerator) {
         for (TaiEvidence.FeatureResult result : evidence.featureChecks(feature, info.id, info.backend)) {
+            if (result.stale) continue;
             if (result.speculative && accelerator.equals(result.accelerator) && Boolean.FALSE.equals(result.speculativeRan)) {
                 return true;
             }

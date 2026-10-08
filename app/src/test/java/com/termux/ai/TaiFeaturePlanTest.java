@@ -469,4 +469,111 @@ public class TaiFeaturePlanTest {
         assertEquals(TaiFunction.ASSISTANT.modelKey, TaiFunction.DAWN_CHAT.modelKey);
         assertEquals(TaiFunction.ASSISTANT.accelKey, TaiFunction.DAWN_CHAT.accelKey);
     }
+
+    // ---------------------------------------------------------------- the feature check (step 2)
+
+    /** The file and runtime on the phone now; a check measured under another key is stale. */
+    private static final String NOW_KEY = "size:1:mtime:2|litert-lm 0.18.0";
+
+    /**
+     * A cleanup check of E2B, stored as {@link TaiFeatureCheck#record} writes it and read back as the evidence
+     * files read it, against the phone's key now ({@code currentKey}).
+     */
+    private static TaiEvidence.FeatureResult checked(String accelerator, boolean speculative, double speed, double decodeTps,
+                                                     Boolean ran, String currentKey) throws Exception {
+        TaiFeatureCheck.Measurement m = TaiFeatureCheckTest.measurement(accelerator, speculative, speed);
+        m.decodeTps = decodeTps;
+        m.speculativeRan = speculative ? ran : null;
+        m.staleKey = NOW_KEY;
+        return TaiFeatureCheck.resultOf(TaiFeatureCheck.record(m), currentKey);
+    }
+
+    private TaiFeaturePlan cleanupOn(TaiEvidence measured) {
+        return TaiFeaturePlan.of(TaiFunction.TIDY_DICTATION, models(env(12, GpuPath.YES)), measured,
+            Collections.<TaiResidency.Entry>emptyList(), NOW, false);
+    }
+
+    @Test
+    public void aCheckedFasterAcceleratorIsMeasured() throws Exception {
+        installE2b();
+        // The check runs both accelerators at the plan's own setting: speculative decoding on.
+        evidence.check(checked(GPU, true, 6.0, 30.0, Boolean.TRUE, NOW_KEY))
+            .check(checked(CPU, true, 12.0, 25.0, Boolean.TRUE, NOW_KEY));
+        TaiFeaturePlan cleanup = pong(TaiFunction.TIDY_DICTATION);
+        assertEquals(CPU, cleanup.accelerator);
+        assertEquals(Reason.MEASURED, cleanup.acceleratorReason);
+        assertEquals(2.0, cleanup.speedup, 1e-9);
+        // Only cleanup was checked: app sorting stays on its default.
+        assertEquals(GPU, pong(TaiFunction.APP_CATEGORIES).accelerator);
+        assertEquals(Reason.DEFAULT, pong(TaiFunction.APP_CATEGORIES).acceleratorReason);
+    }
+
+    @Test
+    public void speculativeDecodingIsJudgedOnTheChecksDecodeSpeedNotItsFigure() throws Exception {
+        installE2b();
+        // With it on the whole cleanup was quicker (a shorter wait for the first word), but it decoded slower: off.
+        TaiFeaturePlan slower = cleanupOn(new TaiEvidence.InMemory()
+            .check(checked(GPU, true, 12.0, 18.0, Boolean.TRUE, NOW_KEY))
+            .check(checked(GPU, false, 10.0, 24.0, null, NOW_KEY)));
+        assertEquals(Boolean.FALSE, slower.speculative);
+        assertEquals(Reason.MEASURED, slower.speculativeReason);
+
+        TaiFeaturePlan faster = cleanupOn(new TaiEvidence.InMemory()
+            .check(checked(GPU, true, 9.0, 40.0, Boolean.TRUE, NOW_KEY))
+            .check(checked(GPU, false, 10.0, 24.0, null, NOW_KEY)));
+        assertEquals(Boolean.TRUE, faster.speculative);
+        assertEquals(Reason.MEASURED, faster.speculativeReason);
+    }
+
+    @Test
+    public void speculativeDecodingThatNeverRanIsNoLongerAskedFor() throws Exception {
+        installE2b();
+        TaiFeaturePlan cleanup = cleanupOn(new TaiEvidence.InMemory()
+            .check(checked(GPU, true, 12.0, 40.0, Boolean.FALSE, NOW_KEY))
+            .check(checked(GPU, false, 10.0, 24.0, null, NOW_KEY)));
+        assertEquals(Boolean.FALSE, cleanup.speculative);
+        assertEquals(Reason.MEASURED, cleanup.speculativeReason);
+    }
+
+    @Test
+    public void aStaleCheckIsIgnored() throws Exception {
+        installE2b();
+        // Measured on another file or runtime than the phone has now: the plan is its default again.
+        String newer = "size:1:mtime:2|litert-lm 0.19.0";
+        TaiFeaturePlan cleanup = cleanupOn(new TaiEvidence.InMemory()
+            .check(checked(GPU, true, 6.0, 30.0, Boolean.FALSE, newer))
+            .check(checked(CPU, true, 12.0, 25.0, Boolean.TRUE, newer)));
+        assertEquals(GPU, cleanup.accelerator);
+        assertEquals(Reason.DEFAULT, cleanup.acceleratorReason);
+        assertEquals(Boolean.TRUE, cleanup.speculative);
+        assertEquals(Reason.DEFAULT, cleanup.speculativeReason);
+        assertFalse(cleanup.isMeasured());
+    }
+
+    @Test
+    public void aPickTheCheckMeasuredSlowerStaysWithTheFasterSetupOffered() throws Exception {
+        installE2b();
+        prefs.put(TaiFunction.TIDY_DICTATION.modelKey, E2B);
+        prefs.put(TaiFunction.TIDY_DICTATION.accelKey, CPU);
+        evidence.check(checked(GPU, true, 15.0, 30.0, Boolean.TRUE, NOW_KEY))
+            .check(checked(CPU, true, 6.0, 20.0, Boolean.TRUE, NOW_KEY));
+        TaiFeaturePlan cleanup = pong(TaiFunction.TIDY_DICTATION);
+        assertEquals(CPU, cleanup.accelerator);
+        assertEquals(Reason.PICK, cleanup.acceleratorReason);
+        assertNotNull(cleanup.faster);
+        assertEquals(GPU, cleanup.faster.accelerator);
+        assertEquals(2.5, cleanup.faster.ratio, 1e-9);
+    }
+
+    @Test
+    public void aRunWithWrongAnswersDecidesNothing() throws Exception {
+        installE2b();
+        TaiFeatureCheck.Measurement wrong = TaiFeatureCheckTest.measurement(CPU, true, 50.0);
+        wrong.passed = false;
+        TaiFeaturePlan cleanup = cleanupOn(new TaiEvidence.InMemory()
+            .check(TaiFeatureCheck.resultOf(TaiFeatureCheck.record(wrong), NOW_KEY))
+            .check(checked(GPU, true, 6.0, 30.0, Boolean.TRUE, NOW_KEY)));
+        assertEquals(GPU, cleanup.accelerator);
+        assertEquals(Reason.DEFAULT, cleanup.acceleratorReason);
+    }
 }

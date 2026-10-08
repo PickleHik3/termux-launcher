@@ -139,25 +139,7 @@ public final class TaiBenchStore {
      * speculative, preset, benchVersion, timestamp, appVersion, device}}.
      */
     synchronized void markInProgress(@NonNull JSONObject marker) throws IOException {
-        File parent = file.getParentFile();
-        if (parent != null && !parent.isDirectory() && !parent.mkdirs() && !parent.isDirectory()) {
-            throw new IOException("Could not create " + parent);
-        }
-        File target = markerFile();
-        File temp = new File(parent, target.getName() + ".tmp");
-        try (FileOutputStream output = new FileOutputStream(temp)) {
-            output.write(marker.toString().getBytes(StandardCharsets.UTF_8));
-            output.getFD().sync();
-        }
-        try {
-            Files.move(temp.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        } catch (IOException | UnsupportedOperationException atomicUnsupported) {
-            if (!temp.renameTo(target)) {
-                //noinspection ResultOfMethodCallIgnored
-                temp.delete();
-                throw new IOException("Could not replace " + target);
-            }
-        }
+        writeAtomically(markerFile(), marker.toString());
     }
 
     /** The entry marked in progress, or {@code null} when none is (or the marker does not parse). */
@@ -468,10 +450,6 @@ public final class TaiBenchStore {
     }
 
     private void write(@NonNull List<JSONObject> records) throws IOException {
-        File parent = file.getParentFile();
-        if (parent != null && !parent.isDirectory() && !parent.mkdirs() && !parent.isDirectory()) {
-            throw new IOException("Could not create " + parent);
-        }
         JSONArray array = new JSONArray();
         for (JSONObject record : records) array.put(record);
         String payload;
@@ -480,18 +458,31 @@ public final class TaiBenchStore {
         } catch (JSONException e) {
             throw new IOException(e);
         }
-        File temp = new File(parent, file.getName() + ".tmp");
+        writeAtomically(file, payload);
+    }
+
+    /**
+     * Writes {@code payload} to a sibling temp file, syncs it and renames it over {@code target}, so a
+     * reader never sees half a file and a crash mid-write leaves the previous one intact. The feature
+     * check's store ({@link TaiFeatureCheckStore}) writes the same way.
+     */
+    static void writeAtomically(@NonNull File target, @NonNull String payload) throws IOException {
+        File parent = target.getParentFile();
+        if (parent != null && !parent.isDirectory() && !parent.mkdirs() && !parent.isDirectory()) {
+            throw new IOException("Could not create " + parent);
+        }
+        File temp = new File(parent, target.getName() + ".tmp");
         try (FileOutputStream output = new FileOutputStream(temp)) {
             output.write(payload.getBytes(StandardCharsets.UTF_8));
             output.getFD().sync();
         }
         try {
-            Files.move(temp.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(temp.toPath(), target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException | UnsupportedOperationException atomicUnsupported) {
-            if (!temp.renameTo(file)) {
+            if (!temp.renameTo(target)) {
                 //noinspection ResultOfMethodCallIgnored
                 temp.delete();
-                throw new IOException("Could not replace " + file);
+                throw new IOException("Could not replace " + target);
             }
         }
     }

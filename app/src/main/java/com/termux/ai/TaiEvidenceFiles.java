@@ -10,13 +10,16 @@ import org.json.JSONObject;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * {@link TaiEvidence} from this phone's files: the runtime history's failure records and the crash
- * marker, the GPU verdict file, and the bench results file. Reads files: not for the main thread.
- * The bench file is parsed once per change of its size or modification time, so a plan per request
- * costs a stat.
+ * marker, the GPU verdict file, the bench results file and the feature check's. Reads files: not for
+ * the main thread. The two results files are parsed once per change of their size or modification time,
+ * so a plan per request costs a stat; a feature check's staleness is judged against the model store, read
+ * once per instance.
  */
 public final class TaiEvidenceFiles implements TaiEvidence {
 
@@ -25,9 +28,17 @@ public final class TaiEvidenceFiles implements TaiEvidence {
     private static long benchStamp = Long.MIN_VALUE;
     private static long benchLength = -1L;
     @NonNull private static List<ChatResult> benchRows = Collections.emptyList();
+    /** The same for the feature check's file: its latest record of each run. */
+    private static final Object CHECKS_LOCK = new Object();
+    private static long checksStamp = Long.MIN_VALUE;
+    private static long checksLength = -1L;
+    @NonNull private static List<JSONObject> checkRows = Collections.emptyList();
 
     @NonNull private final Context context;
     @Nullable private TaiDeviceCapabilities device;
+    /** The installed models, for each result's staleness; read on first use. */
+    @Nullable private Map<String, TaiModelSpec> installed;
+    private final Map<String, String> currentKeys = new HashMap<>();
 
     public TaiEvidenceFiles(@NonNull Context context) {
         this.context = context.getApplicationContext();
@@ -69,12 +80,68 @@ public final class TaiEvidenceFiles implements TaiEvidence {
         return out;
     }
 
-    /** Step 2 (the feature check) stores its results and reads them back here; until then there are none. */
+    /** The feature check's latest result of each setup ({@link TaiFeatureCheckStore}), stale ones flagged. */
     @NonNull
     @Override
     public List<FeatureResult> featureChecks(@NonNull TaiFunction feature, @NonNull String modelId,
                                              @NonNull String backend) {
-        return Collections.emptyList();
+        String base = TaiModelVariants.baseModelId(modelId);
+        String current = currentKey(base);
+        List<FeatureResult> out = new ArrayList<>();
+        for (JSONObject record : checkRows()) {
+            if (!feature.id().equals(record.optString("feature", "")) || !backend.equals(record.optString("backend", ""))) continue;
+            if (!base.equals(TaiModelVariants.baseModelId(record.optString("modelId", "")))) continue;
+            FeatureResult result = TaiFeatureCheck.resultOf(record, current);
+            if (result != null) out.add(result);
+        }
+        return out;
+    }
+
+    /** The staleness key of the installed file of {@code baseId} now; {@code null} when it is not installed. */
+    @Nullable
+    private String currentKey(@NonNull String baseId) {
+        if (currentKeys.containsKey(baseId)) return currentKeys.get(baseId);
+        String key = null;
+        try {
+            if (installed == null) {
+                TaiModelStore store = new TaiModelStore(context);
+                Map<String, TaiModelSpec> specs = new HashMap<>(store.getDownloadedReadableModels());
+                specs.putAll(store.getInstalledUserModels());
+                installed = specs;
+            }
+            TaiModelSpec spec = installed.get(baseId);
+            if (spec == null) {
+                for (TaiModelSpec candidate : installed.values()) {
+                    if (baseId.equals(TaiModelVariants.baseModelId(candidate.id))) spec = candidate;
+                }
+            }
+            if (spec != null) key = TaiFeatureCheckStore.stalenessKey(spec);
+        } catch (RuntimeException ignored) {
+            // Unknown reads as stale: the plan ignores the result rather than trusting it.
+        }
+        currentKeys.put(baseId, key);
+        return key;
+    }
+
+    @NonNull
+    private List<JSONObject> checkRows() {
+        TaiFeatureCheckStore store = TaiFeatureCheckStore.in(context.getFilesDir());
+        File file = store.file();
+        long stamp = file.lastModified();
+        long length = file.length();
+        synchronized (CHECKS_LOCK) {
+            if (stamp == checksStamp && length == checksLength) return checkRows;
+            List<JSONObject> rows;
+            try {
+                rows = TaiFeatureCheckStore.latest(store.records());
+            } catch (RuntimeException e) {
+                rows = Collections.emptyList();
+            }
+            checkRows = Collections.unmodifiableList(rows);
+            checksStamp = stamp;
+            checksLength = length;
+            return checkRows;
+        }
     }
 
     @NonNull

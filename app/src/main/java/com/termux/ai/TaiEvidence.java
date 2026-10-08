@@ -23,9 +23,9 @@ import java.util.Set;
  * <p>Every result is matched on the backend as well as the model id: an MNN and a LiteRT-LM file
  * of the same model are different files on different runtimes.
  *
- * <p>Step 2 of the feature load plan (the feature check) plugs its results in at
- * {@link #featureChecks}: until it ships every adapter answers an empty list there, and launcher
- * features run on their defaults (spec decision 11).
+ * <p>Step 2 of the feature load plan, the feature check ({@link TaiFeatureCheck}), plugs its results
+ * in at {@link #featureChecks}; until a feature has been checked, launcher features run on their
+ * defaults (spec decision 11).
  */
 public interface TaiEvidence {
 
@@ -55,7 +55,9 @@ public interface TaiEvidence {
     /**
      * One feature check of one setup (step 2): the feature's own workload, so it may change that
      * feature's plan. {@link #speed} is the check's figure with larger meaning faster, whatever unit the
-     * feature measures in; only results of one feature are ever compared.
+     * feature measures in; only results of one feature are ever compared. Speculative decoding is judged
+     * on {@link #decodeTps}, never on the wait for the first token. A {@link #stale} result was measured
+     * on another model file or runtime version: it is shown, greyed, and the plan ignores it.
      */
     final class FeatureResult {
         @NonNull public final TaiFunction feature;
@@ -64,21 +66,33 @@ public interface TaiEvidence {
         @NonNull public final String accelerator;
         public final boolean speculative;
         public final double speed;
+        /** Decode speed across the run's replies, tokens per second; {@code 0} when nothing was decoded. */
+        public final double decodeTps;
         public final boolean passed;
         /** Speculative decoding was asked for and the runtime said it ran; {@code null} when not asked or not said. */
         @Nullable public final Boolean speculativeRan;
+        public final boolean stale;
 
+        /** A fresh result whose speed is its decode speed: a chat feature's figure. */
         public FeatureResult(@NonNull TaiFunction feature, @NonNull String modelId, @NonNull String backend,
                              @NonNull String accelerator, boolean speculative, double speed, boolean passed,
                              @Nullable Boolean speculativeRan) {
+            this(feature, modelId, backend, accelerator, speculative, speed, speed, passed, speculativeRan, false);
+        }
+
+        public FeatureResult(@NonNull TaiFunction feature, @NonNull String modelId, @NonNull String backend,
+                             @NonNull String accelerator, boolean speculative, double speed, double decodeTps,
+                             boolean passed, @Nullable Boolean speculativeRan, boolean stale) {
             this.feature = feature;
             this.modelId = modelId;
             this.backend = backend;
             this.accelerator = accelerator.toLowerCase(Locale.ROOT);
             this.speculative = speculative;
             this.speed = speed;
+            this.decodeTps = decodeTps;
             this.passed = passed;
             this.speculativeRan = speculativeRan;
+            this.stale = stale;
         }
     }
 
@@ -96,7 +110,7 @@ public interface TaiEvidence {
     @NonNull
     List<ChatResult> chatBench(@NonNull String modelId, @NonNull String backend);
 
-    /** The feature check's results for this feature and model file; empty until step 2 ships. */
+    /** The feature check's latest result of each setup of this feature and model file, stale ones flagged. */
     @NonNull
     List<FeatureResult> featureChecks(@NonNull TaiFunction feature, @NonNull String modelId, @NonNull String backend);
 
