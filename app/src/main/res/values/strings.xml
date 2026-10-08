@@ -524,8 +524,6 @@
     <string name="settings_app_drawer_category_sort_on_device">On this device</string>
     <string name="settings_app_drawer_category_sort_on_device_summary">%1$s · nothing leaves your phone</string>
     <string name="settings_app_drawer_category_sort_on_device_warning">Takes about %1$d minutes. Keep the phone plugged in.</string>
-    <string name="settings_app_drawer_category_sort_speed_test_hint">Run a quick %1$s to sort faster on this phone.</string>
-    <string name="settings_app_drawer_category_sort_speed_test_link">speed test</string>
     <string name="settings_app_drawer_category_sort_paste">Copy a prompt for an AI chat</string>
     <string name="settings_app_drawer_category_sort_paste_summary">Paste it into any AI chat, then paste the answer back</string>
     <string name="settings_app_drawer_category_sort_paste_warning">Sends your installed-app list to that service</string>

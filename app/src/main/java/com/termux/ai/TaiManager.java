@@ -2375,7 +2375,7 @@ public final class TaiManager {
     static final int EMBEDDINGS_MAX_BATCH = 64;
 
     /**
-     * {@code body} with the embedder the EMBEDDINGS function resolves to as its {@code model} when it
+     * {@code body} with the embedder Dawn search's feature load plan names as its {@code model} when it
      * names none; unchanged when it names one, is not JSON, or nothing resolves.
      */
     @NonNull
@@ -2384,7 +2384,7 @@ public final class TaiManager {
         try {
             JSONObject request = new JSONObject(body);
             if (!request.optString("model", "").trim().isEmpty()) return body;
-            String id = TaiFunctionModels.forContext(appContext).resolve(TaiFunction.EMBEDDINGS).modelId;
+            String id = TaiFeaturePlans.forContext(appContext).plan(TaiFunction.EMBEDDINGS).modelId;
             if (id == null || id.isEmpty()) return body;
             return request.put("model", id).toString();
         } catch (JSONException | RuntimeException e) {
@@ -2394,7 +2394,7 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject embeddings(@NonNull String body) throws JSONException {
-        // No model in the request: the embedder the EMBEDDINGS function resolves to, not the chat
+        // No model in the request: the embedder Dawn search's plan names, not the chat
         // assistant. Resolved before the runtime hand-off so both processes see the same model.
         body = withEmbeddingModel(body);
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_EMBEDDINGS, delegatedRuntimeBody(body));

@@ -24,7 +24,6 @@ import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.launcher.data.LauncherCategoryPasteNotification;
 import com.termux.app.launcher.data.LauncherCategorySortPlan;
 import com.termux.app.launcher.data.LauncherCategorySortProgress;
-import com.termux.app.launcher.data.LauncherCategorySortPrompt;
 import com.termux.app.launcher.data.LauncherCategorySortService;
 import com.termux.app.launcher.data.LauncherCategorySortState;
 
@@ -161,17 +160,20 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
         if (refresh != null) refresh.setVisible(categories);
     }
 
-    /** Loads the catalogue off the main thread — it is a blocking package-manager walk. */
+    /**
+     * Reads the chooser's apps and app sorting's plan off the main thread — a blocking package-manager
+     * walk, the model store and the evidence files — then shows it.
+     */
     private void openChooser(@NonNull Context context) {
         requestNotificationPermissionIfNeeded(context);
         appListExecutor.execute(() -> {
-            List<LauncherCategorySortPrompt.AppEntry> apps = CategorySortDialogs.loadApps(context);
+            CategorySortDialogs.Preview preview = CategorySortDialogs.preview(context);
             handler.post(() -> {
                 if (!isAdded()) return;
                 Context current = getContext();
                 if (current == null) return;
-                CategorySortDialogs.showChooser(current, apps,
-                    () -> startSort(current, CategorySortDialogs.resolvePlan(current)),
+                CategorySortDialogs.showChooser(current, preview,
+                    () -> startSort(current, preview.plan),
                     // The old model choice is an entry to the function's picker sheet.
                     () -> TaiFunctionPickerSheet.show(this, TaiFunction.APP_CATEGORIES),
                     () -> updateRefreshSummary(current));
@@ -181,15 +183,21 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
 
     /**
      * Re-running is the common case, so it skips the chooser — unless no usable model is installed,
-     * in which case the chooser is the screen that explains why and offers the paste route.
+     * in which case the chooser is the screen that explains why and offers the paste route. The plan
+     * is read off the main thread.
      */
     private void startRefresh(@NonNull Context context) {
-        LauncherCategorySortPlan plan = CategorySortDialogs.resolvePlan(context);
-        if (!plan.hasModel() || CategorySortDialogs.unavailableReason(context, plan) != null) {
-            openChooser(context);
-            return;
-        }
-        startSort(context, plan);
+        appListExecutor.execute(() -> {
+            LauncherCategorySortPlan plan = CategorySortDialogs.resolvePlan(context);
+            boolean runnable = plan.hasModel() && CategorySortDialogs.unavailableReason(context, plan) == null;
+            handler.post(() -> {
+                if (!isAdded()) return;
+                Context current = getContext();
+                if (current == null) return;
+                if (runnable) startSort(current, plan);
+                else openChooser(current);
+            });
+        });
     }
 
     private void startSort(@NonNull Context context, @NonNull LauncherCategorySortPlan plan) {
@@ -200,7 +208,6 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
         Intent intent = new Intent(context, LauncherCategorySortService.class);
         intent.setAction(LauncherCategorySortService.ACTION_SORT);
         intent.putExtra(LauncherCategorySortService.EXTRA_MODEL_ID, plan.model);
-        if (plan.accelerator != null) intent.putExtra(LauncherCategorySortService.EXTRA_ACCELERATOR, plan.accelerator);
         ContextCompat.startForegroundService(context, intent);
         updateRefreshSummary(context);
         handler.removeCallbacks(refreshRunnable);

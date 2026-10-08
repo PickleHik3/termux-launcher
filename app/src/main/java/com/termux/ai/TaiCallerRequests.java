@@ -10,8 +10,9 @@ import org.json.JSONObject;
 /**
  * The pure rules the feature callers share when they talk to {@link TaiManager} (tai-device-tiers
  * spec §4.5): which requests go to the remote provider, the private flag that keeps the user's
- * system prompt out of a request, the body the app-category sort sends, and when a sort must load
- * its model. Kept apart from {@code TaiManager} so each rule is a plain function to test.
+ * system prompt out of a request, the field that names a request's feature, the body the
+ * app-category sort sends, and what a sort leaves loaded. How anything loads is the feature's
+ * {@link TaiFeaturePlan}. Kept apart from {@code TaiManager} so each rule is a plain function to test.
  */
 public final class TaiCallerRequests {
     private TaiCallerRequests() {}
@@ -86,16 +87,13 @@ public final class TaiCallerRequests {
     /**
      * The app-category request for one app. Thinking is always off (the 24-token cap would cut a
      * thinking answer short, whatever the global switch says) and the user's system prompt is kept out
-     * of the classification. Speculative decoding and the window are load settings the sort sets when
-     * it loads the model ({@code CategorySortLoadPolicy}); a chat on a resident model never reloads, so
-     * they are not sent here.
+     * of the classification. A local request names the feature, so TAI loads by app sorting's plan
+     * (accelerator, speculative decoding, the 1024 window); none of that is sent here.
      *
-     * @param model the local model id or {@code remote/<id>}; empty for the default
-     * @param accelerator {@code gpu} or {@code cpu}, or {@code null} to leave it to the runtime
+     * @param model the local model id or {@code remote/<id>}; empty for the plan's
      */
     @NonNull
-    public static JSONObject categoryBody(@Nullable String model, @Nullable String accelerator,
-                                          @NonNull String prompt, int maxTokens) throws JSONException {
+    public static JSONObject categoryBody(@Nullable String model, @NonNull String prompt, int maxTokens) throws JSONException {
         JSONObject message = new JSONObject();
         message.put("role", "user");
         message.put("content", prompt);
@@ -107,20 +105,8 @@ public final class TaiCallerRequests {
         request.put("stream", false);
         request.put("thinking", false);
         request.put(NO_SYSTEM_PROMPT, true);
-        if (accelerator != null && !accelerator.trim().isEmpty() && !isRemoteModel(model)) {
-            request.put("accelerator", accelerator);
-        }
+        if (!isRemoteModel(model)) request.put(FUNCTION, TaiFunction.APP_CATEGORIES.id());
         return request;
-    }
-
-    /**
-     * Whether a sort has to load its model: not when the resident chat model is the very one it
-     * wants. {@code TaiManager.loadModel} always reloads, which for a model already warm costs
-     * seconds and a second memory peak.
-     */
-    public static boolean needsLoad(@Nullable String residentModelId, @Nullable String wantedModelId) {
-        if (wantedModelId == null || wantedModelId.trim().isEmpty()) return false;
-        return !wantedModelId.equals(residentModelId);
     }
 
     /**

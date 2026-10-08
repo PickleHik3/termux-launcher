@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat;
 
 import com.termux.R;
 import com.termux.ai.TaiCallerRequests;
+import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiRuntimePresence;
 import com.termux.app.activities.SettingsActivity;
@@ -43,10 +44,8 @@ import java.util.function.UnaryOperator;
  */
 public final class LauncherCategorySortService extends Service {
     public static final String ACTION_SORT = "com.termux.app.launcher.action.SORT_CATEGORIES";
-    /** The local model id, or {@code remote/<id>} for the remote provider. */
+    /** The local model id, or {@code remote/<id>} for the remote provider: app sorting's plan. */
     public static final String EXTRA_MODEL_ID = "model_id";
-    /** {@code gpu} or {@code cpu}, the APP_CATEGORIES function's resolved accelerator; absent for a remote model. */
-    public static final String EXTRA_ACCELERATOR = "accelerator";
 
     private static final String CHANNEL_ID = "termux_launcher_category_sort";
     /**
@@ -158,10 +157,9 @@ public final class LauncherCategorySortService extends Service {
 
         update(s -> Snapshot.IDLE.withRunning(true));
         String modelId = intent.getStringExtra(EXTRA_MODEL_ID);
-        String accelerator = intent.getStringExtra(EXTRA_ACCELERATOR);
         executor.execute(() -> {
             try {
-                runSort(modelId, accelerator);
+                runSort(modelId);
             } catch (Throwable t) {
                 String error = t.getMessage() == null ? t.toString() : t.getMessage();
                 update(s -> s.withErrorMessage(error).withOutcome(
@@ -186,8 +184,7 @@ public final class LauncherCategorySortService extends Service {
         super.onDestroy();
     }
 
-    private void runSort(@Nullable String modelId, @Nullable String tierAccelerator) throws Exception {
-        String accelerator = tierAccelerator;
+    private void runSort(@Nullable String modelId) throws Exception {
         LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(this);
         // Excludes x11:linux (every Linux app's shared package) as well as work/private twins; see
         // LauncherCategoryCatalogue for why the categoriser must never see that one as an "app".
@@ -233,21 +230,7 @@ public final class LauncherCategorySortService extends Service {
         // phase the user can see.
         update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_LOADING_MODEL));
         updateProgressNotification(true);
-        // What the load needs depends on the prompts it will serve and on the user's speed test (if any);
-        // an already-resident model is used as it is, so none of this applies to it.
-        CategorySortLoadPolicy.Decision load = null;
-        if (modelId != null && !modelId.trim().isEmpty() && !TaiCallerRequests.isRemoteModel(modelId)
-                && TaiCallerRequests.needsLoad(residentBefore, modelId)) {
-            int longestPrompt = 0;
-            for (String packageName : pending) {
-                String label = labelByPackage.get(packageName);
-                longestPrompt = Math.max(longestPrompt, LauncherCategorySortPrompt.singleAppPrompt(
-                    label == null ? packageName : label, packageName).length());
-            }
-            load = CategorySortLoadPolicy.forContext(this, modelId, accelerator, longestPrompt);
-            accelerator = load.accelerator;
-        }
-        String loadFailure = loadModel(manager, modelId, load, residentBefore);
+        String loadFailure = loadModel(manager, modelId);
         if (loadFailure != null) {
             // Every app would retry the same load on its own and fail the same way; under memory
             // pressure that is a reload per app. One clear stop instead.
@@ -256,13 +239,13 @@ public final class LauncherCategorySortService extends Service {
             return;
         }
         try {
-            sortPending(manager, modelId, accelerator, pending, labelByPackage, merged, file, provider);
+            sortPending(manager, modelId, pending, labelByPackage, merged, file, provider);
         } finally {
             restoreRuntime(manager, modelId, residentBefore);
         }
     }
 
-    private void sortPending(@NonNull TaiManager manager, @Nullable String modelId, @Nullable String accelerator,
+    private void sortPending(@NonNull TaiManager manager, @Nullable String modelId,
                              @NonNull List<String> pending, @NonNull Map<String, String> labelByPackage,
                              @NonNull LinkedHashMap<String, List<String>> merged, @NonNull File file,
                              @NonNull LauncherAppDataProvider provider) throws Exception {
@@ -271,7 +254,7 @@ public final class LauncherCategorySortService extends Service {
         for (String packageName : pending) {
             if (state.cancelRequested) break;
             String label = labelByPackage.get(packageName);
-            String slug = classify(manager, modelId, accelerator, label == null ? packageName : label, packageName);
+            String slug = classify(manager, modelId, label == null ? packageName : label, packageName);
             update(s -> s.withProcessed(s.processed + 1));
             updateProgressNotification(false);
             // An unparseable reply leaves the app out of the file entirely so the drawer's built-in
@@ -307,31 +290,23 @@ public final class LauncherCategorySortService extends Service {
     }
 
     /**
-     * Loads the model up front, unless the runtime already holds that very model (a reload costs
-     * seconds and a second memory peak) or the model is the remote provider's (nothing to load, and
-     * the runtime process stays asleep).
-     *
-     * <p>The load carries only the window the sort needs and the accelerator and speculative decoding
-     * the {@link CategorySortLoadPolicy} chose; with no speed test that is CPU, off, 1024.
+     * Loads the model up front, unless the model is the remote provider's (nothing to load, and the
+     * runtime process stays asleep). The load names the feature, so it follows app sorting's plan
+     * (its accelerator, speculative decoding and 1024 window), and a resident model whose window
+     * serves the sort is used as it is rather than reloaded.
      *
      * @return null when it loaded, otherwise the runtime's own sentence for why it did not. An
      *     explicit load only fails on something the per-app requests would hit too (not enough free
      *     memory, a missing file), so a failure here ends the run.
      */
     @Nullable
-    private String loadModel(@NonNull TaiManager manager, @Nullable String modelId,
-                             @Nullable CategorySortLoadPolicy.Decision load, @Nullable String residentBefore) {
+    private String loadModel(@NonNull TaiManager manager, @Nullable String modelId) {
         if (modelId == null || modelId.trim().isEmpty()) return null;
         if (TaiCallerRequests.isRemoteModel(modelId)) return null;
-        if (!TaiCallerRequests.needsLoad(residentBefore, modelId) || load == null) return null;
         try {
             JSONObject request = new JSONObject();
             request.put("model", modelId);
-            request.put("accelerator", load.accelerator);
-            request.put("context_window", load.contextWindow);
-            // One-word answers gain nothing from speculative decoding (pong benchmark 2026-10-05), so it
-            // is on only when the user's own speed test measured it winning here.
-            request.put("speculative_decoding", load.speculative);
+            request.put(TaiCallerRequests.FUNCTION, TaiFunction.APP_CATEGORIES.id());
             JSONObject result = manager.loadModel(request.toString());
             if (result.optBoolean("ok", false)) return null;
             String message = result.optString("message", "").trim();
@@ -356,11 +331,11 @@ public final class LauncherCategorySortService extends Service {
     }
 
     @Nullable
-    private String classify(@NonNull TaiManager manager, @Nullable String modelId, @Nullable String accelerator,
+    private String classify(@NonNull TaiManager manager, @Nullable String modelId,
                             @NonNull String label, @NonNull String packageName) {
         try {
-            // Thinking off, no user system prompt; the model is already loaded, so no load options: see categoryBody.
-            JSONObject request = TaiCallerRequests.categoryBody(modelId, accelerator,
+            // Thinking off, no user system prompt, and the feature named: see categoryBody.
+            JSONObject request = TaiCallerRequests.categoryBody(modelId,
                 LauncherCategorySortPrompt.singleAppPrompt(label, packageName), MAX_TOKENS);
 
             JSONObject response = manager.openAiChatCompletions(request.toString());

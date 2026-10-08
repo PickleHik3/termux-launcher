@@ -50,13 +50,13 @@ public final class TaiTtsModels {
     }
 
     /**
-     * The model that speaks: the READ_ALOUD function's resolution ({@link TaiFunctionModels}), and
-     * when it is not installed the {@link #chooseActive} rule over what is.
+     * The model that speaks: read aloud's {@link TaiFeaturePlan} (on the CPU, as every voice model
+     * runs), and when it names none installed the {@link #chooseActive} rule over what is.
      */
     @Nullable
     public static TaiModelSpec resolveActive(@NonNull android.content.Context context, @NonNull TaiModelStore store) {
         List<TaiModelSpec> installed = installed(store);
-        String resolved = TaiFunctionModels.forContext(context).resolve(TaiFunction.READ_ALOUD).modelId;
+        String resolved = TaiFeaturePlans.forContext(context).plan(TaiFunction.READ_ALOUD).modelId;
         if (resolved != null) {
             for (TaiModelSpec spec : installed) {
                 if (resolved.equals(spec.id)) return spec;

@@ -6,6 +6,7 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /** The rules the feature callers share: remote routing, the private flag, the category body, the load decision. */
@@ -54,14 +55,16 @@ public class TaiCallerRequestsTest {
     }
 
     @Test
-    public void theCategoryBodyTurnsThinkingOffSendsNoLoadSettingsAndKeepsTheUserPromptOut() throws Exception {
-        JSONObject body = TaiCallerRequests.categoryBody("gemma-4-e2b-it-litert-lm", "gpu", "Assign this app", 24);
+    public void theCategoryBodyTurnsThinkingOffNamesTheFeatureAndKeepsTheUserPromptOut() throws Exception {
+        JSONObject body = TaiCallerRequests.categoryBody("gemma-4-e2b-it-litert-lm", "Assign this app", 24);
         assertEquals("gemma-4-e2b-it-litert-lm", body.getString("model"));
         assertFalse(body.getBoolean("thinking"));
         assertFalse(body.has("speculative_decoding"));
         assertFalse(body.has("context_window"));
         assertTrue(body.getBoolean(TaiCallerRequests.NO_SYSTEM_PROMPT));
-        assertEquals("gpu", body.getString("accelerator"));
+        assertFalse(body.has("accelerator"));
+        assertEquals("app_categories", body.getString(TaiCallerRequests.FUNCTION));
+        assertSame(TaiFunction.APP_CATEGORIES, TaiCallerRequests.featureOf(body));
         assertEquals(24, body.getInt("max_tokens"));
         assertEquals(0, body.getInt("temperature"));
         assertFalse(body.getBoolean("stream"));
@@ -70,23 +73,17 @@ public class TaiCallerRequestsTest {
     }
 
     @Test
-    public void theCategoryBodyForARemoteModelSendsNoAcceleratorAndNoModelWhenNoneIsGiven() throws Exception {
-        JSONObject remote = TaiCallerRequests.categoryBody("remote/big", "gpu", "p", 24);
-        assertFalse(remote.has("accelerator"));
+    public void theCategoryBodyForARemoteModelNamesNoFeatureAndNoModelWhenNoneIsGiven() throws Exception {
+        JSONObject remote = TaiCallerRequests.categoryBody("remote/big", "p", 24);
+        assertFalse(remote.has(TaiCallerRequests.FUNCTION));
         assertTrue(TaiCallerRequests.isRemoteRequest(remote));
-        JSONObject none = TaiCallerRequests.categoryBody(null, null, "p", 24);
+        JSONObject none = TaiCallerRequests.categoryBody(null, "p", 24);
         assertFalse(none.has("model"));
-        assertFalse(none.has("accelerator"));
+        assertEquals("app_categories", none.getString(TaiCallerRequests.FUNCTION));
         assertFalse(none.getBoolean("thinking"));
-    }
-
-    @Test
-    public void aSortDoesNotReloadAModelThatIsAlreadyResident() {
-        assertFalse(TaiCallerRequests.needsLoad("gemma-4-e2b-it-litert-lm", "gemma-4-e2b-it-litert-lm"));
-        assertTrue(TaiCallerRequests.needsLoad("gemma-4-e4b-it-litert-lm", "gemma-4-e2b-it-litert-lm"));
-        assertTrue(TaiCallerRequests.needsLoad(null, "gemma-4-e2b-it-litert-lm"));
-        assertFalse(TaiCallerRequests.needsLoad(null, null));
-        assertFalse(TaiCallerRequests.needsLoad("x", ""));
+        // The feature field never reaches the remote provider.
+        assertFalse(new JSONObject(TaiCallerRequests.remoteBody(none)).has(TaiCallerRequests.FUNCTION));
+        assertNull(TaiCallerRequests.featureOf(new JSONObject().put(TaiCallerRequests.FUNCTION, "nonsense")));
     }
 
     @Test

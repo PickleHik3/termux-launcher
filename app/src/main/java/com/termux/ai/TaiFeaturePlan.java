@@ -182,13 +182,13 @@ public final class TaiFeaturePlan {
         }
 
         TaiFunctionModels.ModelInfo info = resolution.info;
-        TaiPlatformCaps.GpuPath path = TaiGpuVerdict.apply(models.env().gpuPath, evidence.gpuVerdict());
         if (!feature.usesChatModel()) {
             // Voice typing, read aloud and Dawn search run their models on the CPU, always.
             return new TaiFeaturePlan(feature, Where.ON_DEVICE, Reason.DEFAULT, info.id, modelReason, info.backend,
                 TaiTierPolicy.ACCEL_CPU, Reason.DEFAULT, null, Reason.DEFAULT, 0, Reason.DEFAULT,
                 residency, Reason.DEFAULT, TaiTierPolicy.WithoutModel.NONE, null, resolution.warnBackground, 0.0, null);
         }
+        TaiPlatformCaps.GpuPath path = TaiGpuVerdict.apply(models.env().gpuPath, evidence.gpuVerdict());
 
         String pick = resolution.source == TaiFunctionModels.Source.PICK ? models.acceleratorPick(feature) : "";
         Map<String, Double> measured = speeds(feature, info, evidence, false);
