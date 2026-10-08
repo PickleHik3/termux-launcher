@@ -1,7 +1,12 @@
 # Ship the release build type, not debug APKs
 
-Status: **experiment, untested on a real device.** Nothing in CI or on any release branch has
-changed. Test on a phone before the next release; decide then.
+Status: **adopted for 1.0.0 (2026-10-09).** The proguard rules are on `dev`, and
+`attach_debug_apks_to_release.yml` builds `:app:assembleRelease` with per-ABI splits, signs with
+`app/testkey_untrusted.jks` when no release secrets are set, refuses any APK that `aapt2` reports
+as debuggable, and uploads from `app/build/outputs/apk/release`. A fresh install of the local
+release build on Waydroid (API 33 x86_64) reached the terminal, completed the tour including the
+border drag, ran `tlstore`, and survived a restart; `pkgFlags` had no DEBUGGABLE and the signer
+was `b6da0148…`. The phone checklist below is still owed before the tag.
 
 ## What we ship today
 
