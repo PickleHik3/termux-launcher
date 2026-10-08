@@ -522,7 +522,7 @@ public class TaiLoadBudgetTest {
             Collections.singletonList(small), TaiLoadBudget.Conditions.UNRESTRICTED);
         assertTrue(past.fits);
         assertTrue(past.overcommitted);
-        assertTrue(past.evicted.isEmpty());
+        assertEquals(Collections.singletonList(small), past.evicted);
     }
 
     @Test
@@ -630,6 +630,14 @@ public class TaiLoadBudgetTest {
         assertEquals(TaiLoadBudget.FLOOR_CONTEXT, plan.contextWindow);
         assertEquals(0L, plan.reserveBytes);
         assertTrue(plan.evicted.isEmpty());
+
+        // Past the budget, every idle resident is given up first; a busy one stays.
+        TaiResidency.Entry idle = resident("emb", TaiResidency.Kind.EMBEDDING, 50_000_000L, false);
+        TaiResidency.Entry busy = resident("whisper", TaiResidency.Kind.STT, 200_000_000L, true);
+        TaiLoadBudget.Plan clearing = TaiLoadBudget.plan(request(E4B, PONG_TOTAL, 3_000_000_000L, GPU_THEN_CPU, 32_768,
+            true, TaiLoadBudget.NO_HISTORY, Arrays.asList(idle, busy)).withConditions(TaiLoadBudget.Conditions.UNRESTRICTED));
+        assertTrue(clearing.overcommitted);
+        assertEquals(Collections.singletonList(idle), clearing.evicted);
     }
 
     /** Before going past the budget, an unrestricted load still closes idle residents, then shrinks its window. */

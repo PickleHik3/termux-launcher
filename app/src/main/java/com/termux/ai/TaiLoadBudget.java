@@ -543,11 +543,12 @@ public final class TaiLoadBudget {
                 }
             }
         }
-        // Unrestricted: nothing fits, so Android makes room. A crash record still holds: a load killed
-        // at the floor is not repeated, and with every accelerator held back by one the load is refused.
+        // Unrestricted: nothing fits, so every idle resident goes and Android makes the rest of the room.
+        // A crash record still holds: a load killed at the floor is not repeated, and with every
+        // accelerator held back by one the load is refused.
         if (r.conditions.mode == MemoryMode.UNRESTRICTED && firstTried != null) {
             Estimate estimate = estimate(r.backend, firstTried, r.fileBytes, r.encoders, floor, r.history, r.kvBytesPerToken);
-            return new Plan(true, firstTried, floor, estimate, r.availableBytes, reserve, true, none, true);
+            return new Plan(true, firstTried, floor, estimate, r.availableBytes, reserve, true, allIdle(r.evictable), true);
         }
         Estimate smallest = first == null ? Estimate.ratio(0L, 0L)
             : estimate(r.backend, cheapest(r), r.fileBytes, r.encoders, floor, r.history, r.kvBytesPerToken);
@@ -576,7 +577,7 @@ public final class TaiLoadBudget {
      * The plan for a load with no window to shrink and no accelerator ladder — an embedding
      * interpreter, a speech model, an image run: it fits when its whole estimate leaves the hold
      * floor free, with idle residents evicted if that is what it takes. Otherwise it is refused, or,
-     * unrestricted, goes ahead with nothing evicted. Unknown free memory gives the same unmeasured
+     * unrestricted, goes ahead with every idle resident evicted. Unknown free memory gives the same unmeasured
      * go-ahead as {@link #plan}.
      */
     @NonNull
@@ -594,7 +595,8 @@ public final class TaiLoadBudget {
         List<TaiResidency.Entry> evicted = evictions(need - spendable, evictable);
         if (evicted != null) return new Plan(true, accelerator, 0, estimate, availableBytes, reserve, true, evicted);
         boolean unrestricted = conditions.mode == MemoryMode.UNRESTRICTED;
-        return new Plan(unrestricted, accelerator, 0, estimate, availableBytes, reserve, true, none, unrestricted);
+        return new Plan(unrestricted, accelerator, 0, estimate, availableBytes, reserve, true,
+            unrestricted ? allIdle(evictable) : none, unrestricted);
     }
 
     /** {@link #planFixed} with a seed estimate, nothing to evict and relaxed limits. */
@@ -620,6 +622,16 @@ public final class TaiLoadBudget {
             if (reclaimed >= shortfall) return chosen;
         }
         return null;
+    }
+
+    /** Every resident in {@code evictable} that may be closed: what an unrestricted load past the budget gives up first. */
+    @NonNull
+    static List<TaiResidency.Entry> allIdle(@NonNull List<TaiResidency.Entry> evictable) {
+        ArrayList<TaiResidency.Entry> idle = new ArrayList<>();
+        for (TaiResidency.Entry entry : evictable) {
+            if (!entry.busy && entry.kind != TaiResidency.Kind.RUNTIME) idle.add(entry);
+        }
+        return idle;
     }
 
     /** The accelerator whose floor load costs least, for telling the user how much would be needed. */
