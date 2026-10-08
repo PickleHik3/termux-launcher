@@ -251,13 +251,22 @@ public final class TaiFunctionModels {
                 return TaiFunction.TIDY_DICTATION.modelKey.equals(key);
             }
         };
+        // Read once per instance: the store parses its records and inspects every model package on
+        // each read (about 0.7 s on a phone with two dozen models), and a screen build resolves every
+        // function and plans each one several times. An instance is made per screen build or request,
+        // so what is installed cannot change under it in a way it should see.
+        final Map<String, ModelInfo>[] cached = new Map[1];
         Installed installed = () -> {
-            // Downloads and imports, as the speech and voice-output models read them.
-            LinkedHashMap<String, TaiModelSpec> specs = new LinkedHashMap<>(models.getDownloadedReadableModels());
-            specs.putAll(models.getInstalledUserModels());
-            Map<String, ModelInfo> out = new LinkedHashMap<>();
-            for (TaiModelSpec spec : specs.values()) out.put(spec.id, ModelInfo.of(spec));
-            return out;
+            synchronized (cached) {
+                if (cached[0] != null) return cached[0];
+                // Downloads and imports, as the speech and voice-output models read them.
+                LinkedHashMap<String, TaiModelSpec> specs = new LinkedHashMap<>(models.getDownloadedReadableModels());
+                specs.putAll(models.getInstalledUserModels());
+                Map<String, ModelInfo> out = new LinkedHashMap<>();
+                for (TaiModelSpec spec : specs.values()) out.put(spec.id, ModelInfo.of(spec));
+                cached[0] = Collections.unmodifiableMap(out);
+                return cached[0];
+            }
         };
         final TaiRemoteProvider provider = new TaiRemoteProvider(app);
         Remote remote = new Remote() {
