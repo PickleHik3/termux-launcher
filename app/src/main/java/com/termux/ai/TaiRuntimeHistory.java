@@ -230,6 +230,24 @@ public final class TaiRuntimeHistory {
     }
 
     /**
+     * {@link #failedEntry} by ids, for a model the caller knows only as installed (the evidence view):
+     * the unexpired failure of {@code modelId}'s file on {@code accelerator}, written by {@code backend}.
+     */
+    public static boolean hasFailure(
+        @NonNull Context context,
+        @NonNull TaiDeviceCapabilities device,
+        @NonNull String modelId,
+        @NonNull String backend,
+        @NonNull String accelerator
+    ) {
+        JSONObject entry = history(context).optJSONObject(key(modelId, device, accelerator));
+        if (entry == null || entry.optBoolean("success", false)) return false;
+        if (!backend.equals(entry.optString("backend", backend))) return false;
+        if (isStaleFileMissingRecord(entry)) return false;
+        return !isExpired(entry, System.currentTimeMillis(), appVersionCode(context));
+    }
+
+    /**
      * Whether a failure record no longer counts: older than {@link #FAILURE_TTL_MS}, or written by a
      * different app version (a new build may well have fixed it). Records without an
      * {@code appVersionCode} field, and an unknown running version ({@code 0}), follow the time rule
@@ -797,11 +815,16 @@ public final class TaiRuntimeHistory {
 
     @NonNull
     private static String key(@NonNull TaiModelSpec model, @NonNull TaiDeviceCapabilities device, @NonNull String accelerator) {
+        return key(model.id, device, accelerator);
+    }
+
+    @NonNull
+    private static String key(@NonNull String modelId, @NonNull TaiDeviceCapabilities device, @NonNull String accelerator) {
         // Key by the underlying model, not the per-modality virtual variant (…-vision/…-audio):
         // GPU load stability is a property of the model file + device and is shared across modalities.
         // Otherwise a vision request can never auto-load because the variant id has no GPU history,
         // even after the base model has loaded successfully on GPU.
-        return TaiModelVariants.baseModelId(model.id) + "|" + deviceKey(device) + "|" + normalizeAccelerator(accelerator);
+        return TaiModelVariants.baseModelId(modelId) + "|" + deviceKey(device) + "|" + normalizeAccelerator(accelerator);
     }
 
     @NonNull

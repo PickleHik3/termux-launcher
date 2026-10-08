@@ -113,9 +113,21 @@ public final class TaiResidency {
         public final long lastUsedMs;
         /** Generating, embedding or transcribing right now. */
         public final boolean busy;
+        /**
+         * The feature that last used this resident, as its request named it; {@code null} when none did.
+         * Speech, voice and embedding models serve one feature each, which {@link TaiFeaturePlan#featureOf} reads off the kind.
+         */
+        @Nullable public final TaiFunction feature;
 
         public Entry(@NonNull String modelId, @NonNull Kind kind, @NonNull String backend, @NonNull String accelerator,
                      int window, long estimatedBytes, @Nullable Long measuredBytes, long lastUsedMs, boolean busy) {
+            this(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, lastUsedMs, busy, null);
+        }
+
+        public Entry(@NonNull String modelId, @NonNull Kind kind, @NonNull String backend, @NonNull String accelerator,
+                     int window, long estimatedBytes, @Nullable Long measuredBytes, long lastUsedMs, boolean busy,
+                     @Nullable TaiFunction feature) {
+            this.feature = feature;
             this.modelId = modelId;
             this.kind = kind;
             this.backend = backend;
@@ -189,13 +201,19 @@ public final class TaiResidency {
 
         @NonNull
         Entry withBusy(boolean nowBusy, long nowMs) {
-            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, nowMs, nowBusy);
+            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, nowMs, nowBusy, feature);
         }
 
         /** The same resident with the MemAvailable drop its load measured; {@code null} leaves it unmeasured. */
         @NonNull
         public Entry withMeasured(@Nullable Long nowMeasuredBytes) {
-            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, nowMeasuredBytes, lastUsedMs, busy);
+            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, nowMeasuredBytes, lastUsedMs, busy, feature);
+        }
+
+        /** The same resident, just used by {@code usedBy}. */
+        @NonNull
+        Entry withFeature(@NonNull TaiFunction usedBy, long nowMs) {
+            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, nowMs, busy, usedBy);
         }
 
         boolean matches(@NonNull Kind otherKind, @NonNull String otherModelId) {
@@ -214,6 +232,8 @@ public final class TaiResidency {
             json.put("measuredBytes", measuredBytes == null ? JSONObject.NULL : measuredBytes);
             json.put("busy", busy);
             json.put("lastUsedMs", lastUsedMs);
+            TaiFunction served = TaiFeaturePlan.featureOf(this);
+            json.put("feature", served == null ? JSONObject.NULL : served.id());
             return json;
         }
     }
@@ -261,6 +281,26 @@ public final class TaiResidency {
         for (Entry existing : entries) {
             if (existing.matches(kind, modelId)) {
                 next.add(existing.withBusy(busy, now));
+                changed = true;
+            } else {
+                next.add(existing);
+            }
+        }
+        if (changed) entries = Collections.unmodifiableList(next);
+    }
+
+    /**
+     * Records that {@code feature} just used the resident of {@code kind} with this id, and stamps its
+     * last use: what feature groups and window reuse read. A no-op for an unregistered id.
+     */
+    public synchronized void markUsedBy(@NonNull Kind kind, @Nullable String modelId, @Nullable TaiFunction feature) {
+        if (modelId == null || feature == null) return;
+        long now = System.currentTimeMillis();
+        ArrayList<Entry> next = new ArrayList<>(entries.size());
+        boolean changed = false;
+        for (Entry existing : entries) {
+            if (existing.matches(kind, modelId)) {
+                next.add(existing.withFeature(feature, now));
                 changed = true;
             } else {
                 next.add(existing);

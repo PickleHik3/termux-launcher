@@ -59,19 +59,32 @@ public final class TaiFunctionModels {
         @NonNull public final Set<String> capabilities;
         /** {@link TaiModelSpec#backend}, e.g. {@code litert-lm} or {@code mnn-llm}. */
         @NonNull public final String backend;
+        /**
+         * The file declares speculative decoding and its runtime can use it: the spec's endpoint
+         * capability, which for a LiteRT-LM package is the file's own probe, not the catalogue's word.
+         */
+        public final boolean speculative;
 
+        /** {@link #speculative} read from {@code capabilities}, for a model whose file has not been probed. */
         public ModelInfo(@NonNull String id, long sizeBytes, @NonNull Set<String> capabilities, @NonNull String backend) {
+            this(id, sizeBytes, capabilities, backend, capabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING));
+        }
+
+        public ModelInfo(@NonNull String id, long sizeBytes, @NonNull Set<String> capabilities, @NonNull String backend,
+                         boolean speculative) {
             this.id = id;
             this.sizeBytes = sizeBytes;
             this.capabilities = Collections.unmodifiableSet(new LinkedHashSet<>(capabilities));
             this.backend = backend;
+            this.speculative = speculative;
         }
 
         @NonNull
         static ModelInfo of(@NonNull TaiModelSpec spec) {
             Set<String> caps = new LinkedHashSet<>(spec.capabilities);
             caps.addAll(spec.sourceCapabilities);
-            return new ModelInfo(spec.id, spec.sizeBytes, caps, spec.backend);
+            return new ModelInfo(spec.id, spec.sizeBytes, caps, spec.backend,
+                spec.endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPECULATIVE_DECODING));
         }
     }
 
@@ -129,7 +142,10 @@ public final class TaiFunctionModels {
     public static final class Resolution {
         /** The model to load {@code null} without one. */
         @Nullable public final String modelId;
-        /** {@code "gpu"} or {@code "cpu"} for a chat function with a model, else {@code null}. */
+        /**
+         * {@code "gpu"} or {@code "cpu"} for a chat function with a model, else {@code null}: the pick, or
+         * the tier's default. What a load asks for is the {@link TaiFeaturePlan}'s accelerator.
+         */
         @Nullable public final String accelerator;
         @NonNull public final Source source;
         /** What the function does with no model: rules only, raw text, off; {@code NONE} when a model is set or the function has no such mode. */
@@ -143,6 +159,8 @@ public final class TaiFunctionModels {
          * then carries this as its {@code model} and no local model loads ({@link #modelId} is {@code null}).
          */
         @Nullable public final String remoteModel;
+        /** The installed model behind {@link #modelId}; {@code null} without a local model. */
+        @Nullable public final ModelInfo info;
 
         Resolution(@Nullable String modelId, @Nullable String accelerator, @NonNull Source source,
                    @NonNull TaiTierPolicy.WithoutModel without, @NonNull List<TaiTierPolicy.Choice> chain,
@@ -153,7 +171,14 @@ public final class TaiFunctionModels {
         public Resolution(@Nullable String modelId, @Nullable String accelerator, @NonNull Source source,
                    @NonNull TaiTierPolicy.WithoutModel without, @NonNull List<TaiTierPolicy.Choice> chain,
                    boolean warnBackground, @Nullable String remoteModel) {
+            this(modelId, accelerator, source, without, chain, warnBackground, remoteModel, null);
+        }
+
+        public Resolution(@Nullable String modelId, @Nullable String accelerator, @NonNull Source source,
+                   @NonNull TaiTierPolicy.WithoutModel without, @NonNull List<TaiTierPolicy.Choice> chain,
+                   boolean warnBackground, @Nullable String remoteModel, @Nullable ModelInfo info) {
             this.remoteModel = remoteModel;
+            this.info = info;
             this.modelId = modelId;
             this.accelerator = accelerator;
             this.source = source;
@@ -247,6 +272,18 @@ public final class TaiFunctionModels {
     @NonNull
     public TaiTierPolicy.Env env() {
         return env;
+    }
+
+    /** The remote provider and its routing setting, as this instance sees them. */
+    @NonNull
+    public Remote remote() {
+        return remote;
+    }
+
+    /** {@code remote/<id>} when the provider is set up and {@code function} can run on it, else {@code null}. */
+    @Nullable
+    public String remoteModelFor(@NonNull TaiFunction function) {
+        return remoteUsable(function) ? REMOTE_PREFIX + remote.modelId() : null;
     }
 
     // ------------------------------------------------------------------------------------ pick
@@ -360,7 +397,7 @@ public final class TaiFunctionModels {
         // A GPU pick on a phone with no GPU path runs on the CPU.
         if (TaiTierPolicy.ACCEL_GPU.equals(accel) && env.noGpu()) accel = TaiTierPolicy.ACCEL_CPU;
         return new Resolution(info.id, accel, source, TaiTierPolicy.WithoutModel.NONE, chain,
-            TaiTierPolicy.warnsBackground(env, info.sizeBytes));
+            TaiTierPolicy.warnsBackground(env, info.sizeBytes), null, info);
     }
 
     // ------------------------------------------------------------------------------ usedBy / candidates
@@ -375,6 +412,8 @@ public final class TaiFunctionModels {
         String base = baseId(modelId);
         List<TaiFunction> users = new ArrayList<>();
         for (TaiFunction function : TaiFunction.values()) {
+            // A feature on another's pick is a use of that feature's model, not a second user of it.
+            if (function.sharesAnotherPick()) continue;
             Resolution resolution = resolve(function, models);
             if (resolution.modelId != null && baseId(resolution.modelId).equals(base)) users.add(function);
         }

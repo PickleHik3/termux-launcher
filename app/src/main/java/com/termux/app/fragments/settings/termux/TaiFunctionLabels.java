@@ -64,7 +64,9 @@ final class TaiFunctionLabels implements TaiFunctionRows.Labels {
     @Override
     public String functionName(@NonNull TaiFunction function) {
         switch (function) {
-            case ASSISTANT: return context.getString(R.string.tai_fn_name_assistant);
+            case ASSISTANT:
+            case DAWN_CHAT: // runs on the assistant's pick and is never listed on its own
+                return context.getString(R.string.tai_fn_name_assistant);
             case VOICE_TYPING: return context.getString(R.string.tai_fn_name_voice_typing);
             case TIDY_DICTATION: return context.getString(R.string.tai_fn_name_tidy_dictation);
             case READ_ALOUD: return context.getString(R.string.tai_fn_name_read_aloud);

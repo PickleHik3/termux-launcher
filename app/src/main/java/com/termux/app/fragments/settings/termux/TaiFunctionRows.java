@@ -231,6 +231,7 @@ final class TaiFunctionRows {
     static List<TaiFunction> servedBy(@NonNull TaiTierPolicy.Env env, @NonNull ModelInfo info) {
         List<TaiFunction> out = new ArrayList<>();
         for (TaiFunction function : TaiFunction.values()) {
+            if (function.sharesAnotherPick()) continue; // picked through the feature it shares
             if (TaiTierPolicy.platformAllows(env, function) && TaiFunctionModels.canServe(function, info)) out.add(function);
         }
         return out;
