@@ -23,7 +23,7 @@ public class VoiceSilenceTimeoutTest {
     }
 
     @Test
-    public void theDefaultIsTenSeconds() {
-        assertEquals(10_000, VoiceSilenceTimeout.DEFAULT_MS);
+    public void theDefaultIsFiveSeconds() {
+        assertEquals(5_000, VoiceSilenceTimeout.DEFAULT_MS);
     }
 }

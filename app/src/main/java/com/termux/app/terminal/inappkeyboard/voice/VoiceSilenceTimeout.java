@@ -13,7 +13,7 @@ public final class VoiceSilenceTimeout {
 
     public static final int[] CHOICES_MS = {5_000, 10_000, 30_000, UNTIL_TAP};
 
-    public static final int DEFAULT_MS = 10_000;
+    public static final int DEFAULT_MS = 5_000;
 
     private VoiceSilenceTimeout() {
     }
