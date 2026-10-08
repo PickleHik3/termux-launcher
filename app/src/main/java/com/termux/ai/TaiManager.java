@@ -790,7 +790,10 @@ public final class TaiManager {
         result.put("preflight", preflight.toJson());
         decision.describe(result);
         recordRuntimeResult(spec, preflight, result);
-        if (result.optBoolean("ok", false)) markUsedByFeature(spec, options);
+        if (result.optBoolean("ok", false)) {
+            markLoadedAsking(spec, options);
+            markUsedByFeature(spec, options);
+        }
         return result;
     }
 
@@ -3201,6 +3204,7 @@ public final class TaiManager {
         decision.describe(load);
         recordRuntimeResult(spec, preflight, load);
         if (!load.optBoolean("ok", false)) return load;
+        markLoadedAsking(spec, options);
         markUsedByFeature(spec, options);
         return null;
     }
@@ -4052,13 +4056,17 @@ public final class TaiManager {
     private boolean residentServes(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) {
         if (options.feature == null) return true;
         TaiResidency.Entry resident = residency().find(TaiResidency.Kind.CHAT, spec.id);
-        if (resident == null || resident.window <= 0) return true;
+        if (resident == null) return true;
         long memory = TaiDeviceCapabilities.detect(appContext).memoryBytes;
         int wanted = TaiContextWindowPolicy.effectiveEndpointContextWindow(spec, memory, options.contextWindow);
-        if (resident.window >= wanted) return true;
-        if (resident.feature == null) return false;
-        int asked = TaiFeaturePlan.windowFor(resident.feature);
-        return TaiContextWindowPolicy.effectiveEndpointContextWindow(spec, memory, asked > 0 ? asked : null) >= wanted;
+        return TaiResidency.serves(resident, wanted,
+            asked -> TaiContextWindowPolicy.effectiveEndpointContextWindow(spec, memory, asked > 0 ? asked : null));
+    }
+
+    /** Records the window a successful load asked for on the resident it produced; later uses never change it. */
+    private void markLoadedAsking(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) {
+        Integer asked = options.contextWindow;
+        residency().markLoadedAsking(TaiResidency.Kind.CHAT, spec.id, asked == null ? 0 : asked);
     }
 
     /** Records which feature used the resident chat model, for its groups and the next window check. */
