@@ -3370,37 +3370,43 @@ public class TerminalPaneController {
                 vertical ? match : 0, vertical ? 0 : match, split.weightB));
         } else {
             View oldA = ll.getChildAt(0);
+            View divider = ll.getChildAt(1);
             View oldB = ll.getChildAt(2);
-            // Reconciling a child may pull a frame out of this container into a new nested one,
-            // so both are resolved before either slot is touched.
+            // Reconciling a child may pull a frame out of this container — into a new nested one,
+            // or into this container's other slot when two siblings trade shells — so both are
+            // resolved before either slot is touched, and the slots are then set by identity.
             View newA = reconcile(oldA, split.a);
             View newB = reconcile(oldB, split.b);
-            placeSplitChild(ll, oldA, newA, 0, vertical, split.weightA);
-            placeSplitChild(ll, oldB, newB, 2, vertical, split.weightB);
-            ViewGroup.LayoutParams dividerParams = ll.getChildAt(1).getLayoutParams();
+            arrangeSplitChildren(ll, newA, divider, newB);
+            ll.getChildAt(0).setLayoutParams(new LinearLayout.LayoutParams(
+                vertical ? match : 0, vertical ? 0 : match, split.weightA));
+            ll.getChildAt(2).setLayoutParams(new LinearLayout.LayoutParams(
+                vertical ? match : 0, vertical ? 0 : match, split.weightB));
+            ViewGroup.LayoutParams dividerParams = divider.getLayoutParams();
             dividerParams.width = vertical ? match : gapPx;
             dividerParams.height = vertical ? gapPx : match;
-            ll.getChildAt(1).setLayoutParams(dividerParams);
+            divider.setLayoutParams(dividerParams);
         }
         mSplitLayouts.put(split, ll);
         return ll;
     }
 
-    /** Puts {@code child} into slot {@code index} of a reused split container, with its weight. */
-    private static void placeSplitChild(@NonNull LinearLayout ll, @Nullable View old,
-                                        @NonNull View child, int index, boolean vertical,
-                                        float weight) {
-        int match = LinearLayout.LayoutParams.MATCH_PARENT;
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            vertical ? match : 0, vertical ? 0 : match, weight);
-        if (child == old) {
-            child.setLayoutParams(params);
-            return;
+    /**
+     * Makes a reused split container hold exactly {@code [a, divider, b]}, wherever each of them
+     * currently is: a view already in its slot stays attached, one sitting elsewhere (another
+     * container, or this one's other slot) is moved in, and anything left over is dropped.
+     */
+    private static void arrangeSplitChildren(@NonNull LinearLayout ll, @NonNull View a,
+                                             @NonNull View divider, @NonNull View b) {
+        View[] slots = {a, divider, b};
+        for (int i = 0; i < slots.length; i++) {
+            View child = slots[i];
+            if (i < ll.getChildCount() && ll.getChildAt(i) == child) continue;
+            if (child.getParent() instanceof ViewGroup)
+                ((ViewGroup) child.getParent()).removeView(child);
+            ll.addView(child, i);
         }
-        int oldIndex = old == null ? -1 : ll.indexOfChild(old);
-        if (oldIndex >= 0) ll.removeViewAt(oldIndex);
-        if (child.getParent() instanceof ViewGroup) ((ViewGroup) child.getParent()).removeView(child);
-        ll.addView(child, Math.min(index, ll.getChildCount()), params);
+        while (ll.getChildCount() > slots.length) ll.removeViewAt(slots.length);
     }
 
     private FrameLayout paneFrameFor(TerminalSession session) {
