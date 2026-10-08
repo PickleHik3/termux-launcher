@@ -87,6 +87,9 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         /** A Functions row's "Check how it runs on this phone" was tapped. */
         default void onFunctionCheckOffer(@NonNull TaiFunction function) {
         }
+        /** A Functions row's offer was dismissed with "Not now". */
+        default void onFunctionCheckOfferDismissed(@NonNull TaiFunction function) {
+        }
     }
 
     /** One entry of the list. {@link #signature} is what DiffUtil compares for "same content". */
@@ -768,6 +771,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         final TextView summary;
         final TextView reason;
         final TextView warning;
+        final View offerBar;
         final TextView offer;
         @Nullable TaiFunctionRows.FunctionRow row;
 
@@ -779,7 +783,11 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             summary = view.findViewById(R.id.tai_fn_summary);
             reason = view.findViewById(R.id.tai_fn_reason);
             warning = view.findViewById(R.id.tai_fn_warning);
+            offerBar = view.findViewById(R.id.tai_fn_offer_bar);
             offer = view.findViewById(R.id.tai_fn_offer);
+            view.findViewById(R.id.tai_fn_offer_dismiss).setOnClickListener(v -> {
+                if (row != null) callbacks.onFunctionCheckOfferDismissed(row.function);
+            });
             core.setOnClickListener(v -> {
                 if (row != null) callbacks.onFunctionClicked(row.function);
             });
@@ -795,7 +803,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             setText(summary, next.summary);
             setText(reason, next.reason);
             warning.setVisibility(next.warnBackground ? View.VISIBLE : View.GONE);
-            offer.setVisibility(next.offerCheck ? View.VISIBLE : View.GONE);
+            offerBar.setVisibility(next.offerCheck ? View.VISIBLE : View.GONE);
             core.setContentDescription(itemView.getContext().getString(R.string.tai_fn_row_desc, next.name, next.summary));
         }
     }

@@ -34,4 +34,5 @@
     <string name="tai_check_now">Checking %1$s</string>
 
     <string name="tai_fn_check_offer">Check how it runs on this phone</string>
+    <string name="tai_fn_check_offer_dismiss">Not now</string>
 </resources>

@@ -1234,8 +1234,10 @@ public class TaiModelCentreFragment extends Fragment
     }
 
     /**
-     * The feature check's one-time offer (decision 5) on each row whose feature runs a model on this phone
-     * that has never been checked for it, until the offer is taken. Reads the results file: off the main thread.
+     * The feature check's one-time offer (decision 5) on the first row whose feature runs a model on this phone
+     * that has never been checked for it, until the offer is taken or dismissed; the next row's offer follows
+     * once this one is handled, so an upgrade never shows them all at once. Reads the results file: off the
+     * main thread.
      */
     @NonNull
     private static List<TaiFunctionRows.FunctionRow> withCheckOffers(@NonNull Context app, @NonNull TaiFeaturePlans plans,
@@ -1254,6 +1256,18 @@ public class TaiModelCentreFragment extends Fragment
         } catch (RuntimeException e) {
             return rows;
         }
+        return firstOfferOnly(out);
+    }
+
+    /** The rows with only the first offer left on: one offer at a time, the next after this one is handled. */
+    @NonNull
+    static List<TaiFunctionRows.FunctionRow> firstOfferOnly(@NonNull List<TaiFunctionRows.FunctionRow> rows) {
+        List<TaiFunctionRows.FunctionRow> out = new ArrayList<>(rows.size());
+        boolean offered = false;
+        for (TaiFunctionRows.FunctionRow row : rows) {
+            out.add(row.withOffer(row.offerCheck && !offered));
+            offered |= row.offerCheck;
+        }
         return out;
     }
 
@@ -1270,15 +1284,29 @@ public class TaiModelCentreFragment extends Fragment
     /** "Check how it runs on this phone": taken once, then the benchmark opens with that feature's check ready. */
     @Override
     public void onFunctionCheckOffer(@NonNull TaiFunction function) {
+        if (markCheckOfferHandled(function, false)) TaiBenchHomeFragment.openFeatureCheck(getActivity(), function);
+    }
+
+    /** "Not now" on the offer: it is not made again for this feature, and the next feature's offer shows. */
+    @Override
+    public void onFunctionCheckOfferDismissed(@NonNull TaiFunction function) {
+        markCheckOfferHandled(function, true);
+    }
+
+    /** Remembers the offer as handled off the main thread; {@code reload} then redraws the rows. False without a context. */
+    private boolean markCheckOfferHandled(@NonNull TaiFunction function, boolean reload) {
         Context context = getContext();
         TaiFunctionModels models = functionModels;
-        if (context == null || models == null) return;
+        if (context == null || models == null || executor.isShutdown()) return false;
         Context app = context.getApplicationContext();
         executor.execute(() -> {
             String model = TaiFeaturePlans.forContext(app, models).plan(function).modelId;
             if (model != null) new TaiSettings(app).markFeatureCheckOffered(function, model);
+            if (reload) handler.post(() -> {
+                if (isAdded()) loadFunctions(app);
+            });
         });
-        TaiBenchHomeFragment.openFeatureCheck(getActivity(), function);
+        return true;
     }
 
     @Override

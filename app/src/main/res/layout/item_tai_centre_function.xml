@@ -86,17 +86,35 @@
                     android:visibility="gone" />
 
                 <!-- The feature check's one-time offer, once the feature's model is installed and unchecked. -->
-                <Button
-                    android:id="@+id/tai_fn_offer"
-                    style="@style/Widget.Material3.Button.TextButton"
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:id="@+id/tai_fn_offer_bar"
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:minWidth="0dp"
-                    android:paddingStart="0dp"
-                    android:paddingEnd="0dp"
-                    android:text="@string/tai_fn_check_offer"
-                    android:visibility="gone" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <Button
+                        android:id="@+id/tai_fn_offer"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="start|center_vertical"
+                        android:minWidth="0dp"
+                        android:paddingStart="0dp"
+                        android:paddingEnd="8dp"
+                        android:text="@string/tai_fn_check_offer" />
+
+                    <Button
+                        android:id="@+id/tai_fn_offer_dismiss"
+                        style="@style/Widget.Material3.Button.TextButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:minWidth="0dp"
+                        android:text="@string/tai_fn_check_offer_dismiss" />
+                </LinearLayout>
             </LinearLayout>
 
             <ImageView
