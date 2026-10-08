@@ -3082,4 +3082,11 @@
     <string name="termux_ai_share_diagnostics_summary">Loads, evictions and failures, the runtime history and the last crash, as one text file. No prompts or replies.</string>
     <string name="termux_ai_share_diagnostics_chooser">Share AI diagnostics</string>
     <string name="termux_ai_share_diagnostics_failed">Could not prepare the diagnostics log</string>
+
+    <!-- On-device AI: how much memory a model load leaves for the rest of the phone. -->
+    <string name="termux_ai_memory_limits_title">Memory limits</string>
+    <string name="termux_ai_memory_limits_relaxed">Relaxed</string>
+    <string name="termux_ai_memory_limits_unrestricted">Unrestricted</string>
+    <string name="termux_ai_memory_limits_relaxed_summary">Keeps enough memory free for the phone to stay responsive while a model loads.</string>
+    <string name="termux_ai_memory_limits_unrestricted_summary">Loads larger models by letting Android close apps in the background. The phone may slow down while a model loads.</string>
 </resources>

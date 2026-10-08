@@ -25,7 +25,8 @@ summary "Models, voice and local API". The page has five groups:
 - **Remote model**: a model on OpenAI, OpenRouter or your own server. See [Remote model](#remote-model).
 - **Server**: **Model autoload**, **OpenAI endpoint**, **Require API token** and **LAN access**.
 - **Advanced**: **Parameters**, the global overrides (such as **Idle unload**, 10 minutes by
-  default) and **Share diagnostics log**.
+  default), **Memory limits** and **Share diagnostics log**. See
+  [Memory](On_Device_AI_Models.md#memory).
 
 ## What runs on this phone
 

@@ -186,7 +186,10 @@ and the apps you are using.
 - If a GPU load does not fit even at 4096 tokens, the CPU is used instead: slower, but about half
   the memory.
 - If neither fits, the load is refused with a short message. Close some apps and try again.
-- About 1.5 GB, or 15% of the RAM if that is more, is always left free.
+- **Memory limits** (in **Advanced**) sets how much is left free. **Relaxed**, the default, keeps
+  enough free for the phone to stay responsive while a model loads. **Unrestricted** loads a model
+  that does not fit anyway and lets Android close apps in the background to make room; the phone
+  may slow down while it loads.
 - If the phone runs low on memory while a model is loaded, it is unloaded; the next request loads
   it again.
 - `/v1/models` reports the window a load would get right now; `tai --json runtime` shows the

@@ -33,11 +33,13 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.StatusCardPreference;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiDiagnostics;
 import com.termux.ai.TaiDownloadHub;
+import com.termux.ai.TaiLoadBudget;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
@@ -368,6 +370,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
     }
 
     private void configureAdvancedSection(Context context) {
+        configureMemoryLimits(context);
         Preference diagnostics = findPreference("tai_share_diagnostics");
         if (diagnostics != null) {
             diagnostics.setOnPreferenceClickListener(preference -> {
@@ -382,6 +385,32 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
                 return true;
             });
         }
+    }
+
+    /**
+     * Relaxed / Unrestricted, backed by {@link TaiSettings#setMemoryMode} (a file both processes
+     * read) rather than the page's preferences, which the runtime process would not see change.
+     */
+    private void configureMemoryLimits(Context context) {
+        SegmentedPillPreference limits = findPreference("tai_memory_limits");
+        if (limits == null) return;
+        limits.setSegments(
+            new String[] {TaiLoadBudget.MemoryMode.RELAXED.id, TaiLoadBudget.MemoryMode.UNRESTRICTED.id},
+            new int[] {R.string.termux_ai_memory_limits_relaxed, R.string.termux_ai_memory_limits_unrestricted});
+        TaiLoadBudget.MemoryMode current = new TaiSettings(context).getMemoryMode();
+        limits.setValue(current.id);
+        limits.setSummary(memoryLimitsSummary(current));
+        limits.setOnPreferenceChangeListener((preference, newValue) -> {
+            TaiLoadBudget.MemoryMode mode = TaiLoadBudget.MemoryMode.fromId(String.valueOf(newValue));
+            new TaiSettings(context).setMemoryMode(mode);
+            preference.setSummary(memoryLimitsSummary(mode));
+            return true;
+        });
+    }
+
+    private static int memoryLimitsSummary(@NonNull TaiLoadBudget.MemoryMode mode) {
+        return mode == TaiLoadBudget.MemoryMode.UNRESTRICTED
+            ? R.string.termux_ai_memory_limits_unrestricted_summary : R.string.termux_ai_memory_limits_relaxed_summary;
     }
 
     /**

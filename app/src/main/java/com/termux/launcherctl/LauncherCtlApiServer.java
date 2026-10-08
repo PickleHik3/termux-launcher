@@ -3346,6 +3346,8 @@ public class LauncherCtlApiServer {
         JSONObject response = new JSONObject();
         response.put("ok", true);
         response.put("tierOverride", settings.getTierOverrideValue());
+        // Read-only here: Settings, TAI, Advanced, Memory limits is where it changes.
+        response.put("memoryMode", settings.getMemoryMode().id);
         response.put("tier", com.termux.ai.TaiDeviceTier.forDevice(context).number());
         return response;
     }

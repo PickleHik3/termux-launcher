@@ -704,7 +704,7 @@ These routes are used by the `tai` CLI and the Settings UI. They share the same 
 | DELETE | `/v1/ai/benchmarks` | Forget results, for one model or all (`tai benchmark --clear`) |
 | POST | `/v1/ai/benchmarks/skip-wait` | End the running benchmark's cool-down now; the next result is marked "warm start" (`tai benchmark --skip-wait`) |
 | POST | `/v1/ai/runtime/benchmark` | LiteRT-LM's own benchmark() (`tai benchmark --native`) |
-| POST | `/v1/ai/tier` | Developer override of the RAM tier: `{"tier": "1\|2\|3\|auto"}`; no `tai` flag |
+| POST | `/v1/ai/tier` | Developer override of the RAM tier: `{"tier": "1\|2\|3\|auto"}`; no `tai` flag. The reply also carries `memoryMode` (`relaxed` or `unrestricted`, read-only) |
 | POST | `/v1/auth/rotate` | Rotate the API token and rewrite discovery files |
 
 `POST /v1/ai/runtime/preflight` checks ABI, API level, bundled native libraries, model package readability/format, memory, accelerator policy, and known backend history without touching native LiteRT-LM/MNN runtime code.
