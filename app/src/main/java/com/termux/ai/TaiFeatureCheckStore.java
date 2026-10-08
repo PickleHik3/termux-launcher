@@ -67,16 +67,25 @@ public final class TaiFeatureCheckStore {
         return readRecords();
     }
 
-    /** The newest record of each key, in the order each key was last written. */
+    /**
+     * The newest record of each key, in the order each key was last written. A {@code stopped:*} record never
+     * replaces a completed or crashed one of the same key (a stop is not a measurement); the kept record keeps its place.
+     */
     @NonNull
     public static List<JSONObject> latest(@NonNull List<JSONObject> records) {
         Map<String, JSONObject> latest = new LinkedHashMap<>();
         for (JSONObject record : records) {
             String key = TaiFeatureCheck.keyOf(record);
+            JSONObject kept = latest.get(key);
+            if (kept != null && isStopped(record) && !isStopped(kept)) continue;
             latest.remove(key);
             latest.put(key, record);
         }
         return new ArrayList<>(latest.values());
+    }
+
+    private static boolean isStopped(@NonNull JSONObject record) {
+        return record.optString("status", "").startsWith("stopped:");
     }
 
     // ---- staleness ---------------------------------------------------------------------------

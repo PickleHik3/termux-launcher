@@ -291,29 +291,41 @@ public final class TaiFeatureCheck {
         public final boolean crashed;
         /** The answers passed the feature's sanity check. */
         public final boolean correct;
+        /** The run's speculative-decoding setting: a GPU run is only compared with a CPU run that had the same one. */
+        public final boolean speculative;
 
         public Outcome(@NonNull String ranOn, boolean crashed, boolean correct) {
+            this(ranOn, crashed, correct, false);
+        }
+
+        public Outcome(@NonNull String ranOn, boolean crashed, boolean correct, boolean speculative) {
             this.ranOn = ranOn.toLowerCase(Locale.ROOT);
             this.crashed = crashed;
             this.correct = correct;
+            this.speculative = speculative;
         }
     }
 
     /**
      * What one feature's runs say about the GPU (decision 8): {@code FAILED} when a GPU run crashed, or
-     * gave wrong answers while a CPU run of the same model got them right (the model is fine, the GPU is
+     * gave wrong answers while a CPU run of the same model and speculative setting got them right (the model is fine, the GPU is
      * not); {@code VERIFIED} when a GPU run answered correctly and none failed; {@code UNKNOWN} when the
      * runs say nothing (no GPU run, or the model is wrong on every processor).
      */
     @NonNull
     public static TaiGpuVerdict.State gpuOutcome(@NonNull List<Outcome> outcomes) {
-        boolean cpuCorrect = false;
+        boolean cpuCorrectSpeculative = false;
+        boolean cpuCorrectPlain = false;
         for (Outcome outcome : outcomes) {
-            if (TaiTierPolicy.ACCEL_CPU.equals(outcome.ranOn) && !outcome.crashed && outcome.correct) cpuCorrect = true;
+            if (TaiTierPolicy.ACCEL_CPU.equals(outcome.ranOn) && !outcome.crashed && outcome.correct) {
+                if (outcome.speculative) cpuCorrectSpeculative = true;
+                else cpuCorrectPlain = true;
+            }
         }
         boolean verified = false;
         for (Outcome outcome : outcomes) {
             if (!TaiTierPolicy.ACCEL_GPU.equals(outcome.ranOn)) continue;
+            boolean cpuCorrect = outcome.speculative ? cpuCorrectSpeculative : cpuCorrectPlain;
             if (outcome.crashed || (!outcome.correct && cpuCorrect)) return TaiGpuVerdict.State.FAILED;
             if (outcome.correct) verified = true;
         }

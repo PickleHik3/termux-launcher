@@ -44,6 +44,34 @@ public class TaiFeatureCheckStoreTest {
         assertEquals(9.0, latest.get(1).getDouble("speed"), 1e-9);
     }
 
+    private static JSONObject stopped(String accelerator, long timestamp) throws Exception {
+        return record(accelerator, 0.0, timestamp).put("status", "stopped:cancelled");
+    }
+
+    @Test
+    public void aStoppedRunNeverReplacesACompletedOne() throws Exception {
+        List<JSONObject> latest = TaiFeatureCheckStore.latest(java.util.Arrays.asList(
+            record("gpu", 8.0, 1L), record("cpu", 5.0, 2L), stopped("gpu", 3L)));
+        assertEquals(2, latest.size());
+        assertEquals(8.0, latest.get(0).getDouble("speed"), 1e-9);
+        assertEquals("complete", latest.get(0).getString("status"));
+        assertEquals(5.0, latest.get(1).getDouble("speed"), 1e-9);
+    }
+
+    @Test
+    public void aStoppedRunIsLatestWhenNothingBetterExists() throws Exception {
+        List<JSONObject> latest = TaiFeatureCheckStore.latest(java.util.Arrays.asList(stopped("gpu", 1L), stopped("gpu", 2L)));
+        assertEquals(1, latest.size());
+        assertEquals(2L, latest.get(0).getLong("timestamp"));
+    }
+
+    @Test
+    public void aCompletedRunReplacesAStoppedOne() throws Exception {
+        List<JSONObject> latest = TaiFeatureCheckStore.latest(java.util.Arrays.asList(stopped("gpu", 1L), record("gpu", 8.0, 2L)));
+        assertEquals(1, latest.size());
+        assertEquals("complete", latest.get(0).getString("status"));
+    }
+
     @Test
     public void eachRunKeepsOnlyItsNewestRecords() throws Exception {
         List<JSONObject> records = new ArrayList<>();
