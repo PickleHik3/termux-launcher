@@ -125,6 +125,8 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     private int lastSeenEntries = -1;
     /** "Your features"; empty until read, and when no feature runs a model on this phone. */
     @NonNull private List<FeatureRow> features = new ArrayList<>();
+    /** Whether the last rebuild had the "Your features" card, so its arrival is seen once. */
+    private boolean featuresShown;
     /** A feature whose Check sheet opens once its row is read (the Model Centre's offer). */
     @Nullable private TaiFunction pendingCheck;
 
@@ -316,8 +318,9 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
                 rows.add(new FeatureRow(feature, spec.id, labels.modelName(spec.id),
                     feature.usesChatModel() ? plan.accelerator : null, record, stale));
             }
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException e) {
             // No section rather than a broken one; the bench below still reads.
+            com.termux.shared.logger.Logger.logStackTraceWithMessage("TaiBenchHome", "Your features could not be read", e);
         }
         return rows;
     }
@@ -414,7 +417,17 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             }
         }
         String lastRun = b == null || b.lastRunMs <= 0L ? "" : getString(R.string.tai_bench_last_run, TaiBenchViews.ago(b.lastRunMs));
+        boolean featuresArrive = !features.isEmpty() && !featuresShown;
+        featuresShown = !features.isEmpty();
+        // The list keeps its first row in place across an insert, so a card arriving above it
+        // would sit off screen until the user pulls down: when the list rests at the top, stay there.
+        boolean atTop = featuresArrive && restsAtTop();
         adapter.submit(items);
+        if (atTop) {
+            View view = getView();
+            RecyclerView list = view == null ? null : view.findViewById(R.id.tai_bench_list);
+            if (list != null) list.scrollToPosition(0);
+        }
         bindBar(lastRun);
     }
 
@@ -646,6 +659,18 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         ((TextView) view.findViewById(R.id.tai_bench_title)).setText(loading ? "" : getString(R.string.tai_bench_empty_title));
         ((TextView) view.findViewById(R.id.tai_bench_text)).setText(loading ? getString(R.string.tai_bench_loading)
             : getString(R.string.tai_bench_empty_summary));
+    }
+
+    /** True when the list shows its first row from its top edge, i.e. the user has not scrolled. */
+    private boolean restsAtTop() {
+        View view = getView();
+        RecyclerView list = view == null ? null : view.findViewById(R.id.tai_bench_list);
+        if (list == null || !(list.getLayoutManager() instanceof LinearLayoutManager)) return true;
+        LinearLayoutManager manager = (LinearLayoutManager) list.getLayoutManager();
+        int first = manager.findFirstVisibleItemPosition();
+        if (first == RecyclerView.NO_POSITION) return true;
+        View child = manager.findViewByPosition(first);
+        return first == 0 && child != null && child.getTop() >= list.getPaddingTop();
     }
 
     // ---- your features ----
