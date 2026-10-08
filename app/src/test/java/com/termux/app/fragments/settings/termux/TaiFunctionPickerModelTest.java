@@ -405,4 +405,28 @@ public class TaiFunctionPickerModelTest {
         assertEquals("CHAIN[" + TaiModelCatalog.EMBEDDING_GEMMA_2_TEXT_270M_ID + " → " + TaiModelCatalog.EMBEDDING_GEMMA_300M_ID + "]",
             build(TaiFunction.EMBEDDINGS, env(12, 34, GpuPath.YES)).chainLine);
     }
+
+    private static TaiFunctionModels.Resolution resolution(TaiFunctionModels.Source source, String backend) {
+        ModelInfo info = new ModelInfo("m", 1L, Collections.emptySet(), backend);
+        return new TaiFunctionModels.Resolution("m", "cpu", source, TaiTierPolicy.WithoutModel.NONE,
+            Collections.emptyList(), false, null, info);
+    }
+
+    @Test
+    public void acceleratorTapFollowsTheResolutionSource() {
+        TaiFunctionPickerModel.AcceleratorWrite picked = TaiFunctionPickerModel.acceleratorWrite(
+            resolution(TaiFunctionModels.Source.PICK, TaiModelSpec.BACKEND_MNN_LLM), TaiTierPolicy.ACCEL_GPU);
+        assertNull(picked.modelId);
+        assertEquals(TaiTierPolicy.ACCEL_GPU, picked.value);
+
+        TaiFunctionPickerModel.AcceleratorWrite mnn = TaiFunctionPickerModel.acceleratorWrite(
+            resolution(TaiFunctionModels.Source.AUTOMATIC, TaiModelSpec.BACKEND_MNN_LLM), TaiTierPolicy.ACCEL_GPU);
+        assertEquals("m", mnn.modelId);
+        assertEquals("OpenCL", mnn.value);
+
+        assertEquals("GPU", TaiFunctionPickerModel.acceleratorWrite(
+            resolution(TaiFunctionModels.Source.AUTOMATIC, TaiModelSpec.BACKEND_LITERT_LM), TaiTierPolicy.ACCEL_GPU).value);
+        assertEquals("CPU", TaiFunctionPickerModel.acceleratorWrite(
+            resolution(TaiFunctionModels.Source.AUTOMATIC, TaiModelSpec.BACKEND_LITERT_LM), TaiTierPolicy.ACCEL_CPU).value);
+    }
 }

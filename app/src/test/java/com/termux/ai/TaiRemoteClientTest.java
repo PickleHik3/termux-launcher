@@ -205,11 +205,42 @@ public class TaiRemoteClientTest {
         FakeTransport transport = new FakeTransport(limited, limited, limited);
         List<Long> slept = new ArrayList<>();
         // 2 s fits in 5 s; the next 4 s does not fit in the 3 s left.
+        long[] now = {0L};
         TaiRemoteClient.Reply reply = TaiRemoteClient.exchange(new JSONObject().put("model", "m"), 5_000L,
-            transport, slept::add);
+            transport, ms -> { slept.add(ms); now[0] += ms; }, () -> now[0]);
         assertEquals(429, reply.status);
         assertEquals(2, transport.sent.size());
         assertEquals(Collections.singletonList(2_000L), slept);
+    }
+
+    @Test
+    public void exchange_aSlowPostLeavesNoBudgetForALongRetryAfter() throws Exception {
+        long[] now = {0L};
+        FakeTransport transport = new FakeTransport(
+            new TaiRemoteClient.Reply(429, "{}", "60"),
+            new TaiRemoteClient.Reply(200, chatReply("ok"), null));
+        // Each post takes 100 s of the 120 s.
+        TaiRemoteClient.Transport timed = body -> { now[0] += 100_000L; return transport.post(body); };
+        List<Long> slept = new ArrayList<>();
+        TaiRemoteClient.Reply reply = TaiRemoteClient.exchange(new JSONObject().put("model", "m"), 120_000L,
+            timed, slept::add, () -> now[0]);
+        assertEquals(429, reply.status);
+        assertEquals(1, transport.sent.size());
+        assertTrue(slept.isEmpty());
+    }
+
+    @Test
+    public void exchange_aShortPostWithAShortRetryAfterRetries() throws Exception {
+        long[] now = {0L};
+        FakeTransport transport = new FakeTransport(
+            new TaiRemoteClient.Reply(429, "{}", "5"),
+            new TaiRemoteClient.Reply(200, chatReply("ok"), null));
+        TaiRemoteClient.Transport timed = body -> { now[0] += 1_000L; return transport.post(body); };
+        List<Long> slept = new ArrayList<>();
+        TaiRemoteClient.Reply reply = TaiRemoteClient.exchange(new JSONObject().put("model", "m"), 120_000L,
+            timed, ms -> { slept.add(ms); now[0] += ms; }, () -> now[0]);
+        assertEquals(200, reply.status);
+        assertEquals(Collections.singletonList(5_000L), slept);
     }
 
     @Test
