@@ -149,6 +149,18 @@ final class AppearancePreviewArea {
     }
 
     /**
+     * How far down from the top line the miniature moves to stand centred between the two lines
+     * when the column's width, not the lines, set its scale ({@link #sideScale}): half the height
+     * left over, never negative. Phones never have any: their scale fills the lines.
+     */
+    static float sideCentreOffsetPx(int containerHeightPx, int revealTopPx, int revealBottomPx,
+                                    int topPx, int bottomPx, float scale) {
+        int visible = containerHeightPx + Math.max(0, revealTopPx) + Math.max(0, revealBottomPx);
+        float spare = (bottomPx - topPx) - visible * scale;
+        return Math.max(0f, spare / 2f);
+    }
+
+    /**
      * The container's horizontal translation (its pivot is its horizontal centre) that centres the
      * visible miniature, the container and the display's side bands, in the column
      * {@code columnLeftPx}..{@code columnRightPx}. Phones never translate it: 0 there.

@@ -244,4 +244,20 @@ public class AppearancePreviewAreaTest {
         assertEquals(0f, AppearancePreviewArea.translationX(0, CONTAINER_W, 0, CONTAINER_W, 0, 0,
             phone), 0f);
     }
+
+    @Test
+    public void aMiniatureTheColumnLeftShortStandsCentredBetweenTheLines() {
+        int top = 100;
+        int bottom = 900;
+        // The lines would allow 0.8, but a narrow column held the scale to half: the miniature
+        // is 500 tall between lines 800 apart, so it moves down by half the 300 left over.
+        assertEquals(150f, AppearancePreviewArea.sideCentreOffsetPx(1000, 0, 0, top, bottom, 0.5f),
+            0f);
+        // A scale that fills the lines, the phone's case, has nothing to centre.
+        assertEquals(0f, AppearancePreviewArea.sideCentreOffsetPx(1000, 0, 0, top, bottom, 0.8f),
+            0f);
+        // The display's bands above and below count as part of what is centred.
+        assertEquals(125f, AppearancePreviewArea.sideCentreOffsetPx(1000, 50, 50, top, bottom,
+            0.5f), 0f);
+    }
 }

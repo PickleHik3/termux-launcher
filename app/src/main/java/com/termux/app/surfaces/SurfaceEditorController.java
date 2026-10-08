@@ -1324,9 +1324,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         } finally {
             mInLayoutFrame = false;
         }
-        float scale = previewScale(root, previewBottomPx(sheetHeightPx(panel)));
+        int bottom = previewBottomPx(sheetHeightPx(panel));
+        float scale = previewScale(root, bottom);
         float tx = previewTranslationX(root, scale);
-        float ty = AppearancePreviewArea.translationY(frameTop, containerTop, mRevealTopPx, scale);
+        float ty = previewTranslationY(root, frameTop, containerTop, bottom, scale);
         frame.show(scale, tx, ty, animate);
         mTargetScale = scale;
         mTargetTx = tx;
@@ -1482,6 +1483,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             bottomPx, mColumnLeftPx, mColumnRightPx);
     }
 
+    /**
+     * The frame's translation down: the top line, as on a phone, and beside a side pane also the
+     * slack that centres a miniature the column's width left shorter than the lines.
+     */
+    private float previewTranslationY(@NonNull View root, int topPx, int containerTopPx,
+                                      int bottomPx, float scale) {
+        float ty = AppearancePreviewArea.translationY(topPx, containerTopPx, mRevealTopPx, scale);
+        if (!mSidePane)
+            return ty;
+        return ty + AppearancePreviewArea.sideCentreOffsetPx(root.getHeight(), mRevealTopPx,
+            mDisplayInsetBottomPx, topPx, bottomPx, scale);
+    }
+
     /** The frame's translation across: 0 over a bottom sheet, the column's centre beside a pane. */
     private float previewTranslationX(@NonNull View root, float scale) {
         if (!mSidePane)
@@ -1570,10 +1584,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         View root = frame.root();
         if (root.getHeight() <= 0)
             return;
-        float scale = previewScale(root, previewBottomPx(sheetPx));
+        int bottom = previewBottomPx(sheetPx);
+        float scale = previewScale(root, bottom);
         float tx = previewTranslationX(root, scale);
-        float ty = AppearancePreviewArea.translationY(mFrameTopPx, mContainerTopPx, mRevealTopPx,
-            scale);
+        float ty = previewTranslationY(root, mFrameTopPx, mContainerTopPx, bottom, scale);
         if (scale == mTargetScale && tx == mTargetTx && ty == mTargetTy)
             return;
         mTargetScale = scale;
