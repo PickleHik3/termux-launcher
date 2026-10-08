@@ -1305,7 +1305,15 @@ public final class TaiManager {
             }
             LoadDecision decision = decideLoad(spec, options, preflight);
             if (decision.refusal != null) return decision.refusal;
-            JSONObject result = localRuntime().load(spec, decision.options);
+            // The GPU self-test runs here as on every other load: a bench GPU load is a GPU load.
+            JSONObject result = loadWithCanary(spec, decision.options);
+            if (result.optBoolean("ok", false)
+                    && TaiGpuVerdict.REASON_FAILED.equals(result.optString("backendFallbackReason", ""))) {
+                // The self-test failed and moved the model to the CPU: this entry is the GPU's, so it is skipped
+                // rather than measured on the other processor under the GPU's name.
+                localRuntime().unload();
+                return error(409, "gpu_wrong_answers", TaiGpuVerdict.REASON_FAILED);
+            }
             result.put("preflight", preflight.toJson());
             decision.describe(result);
             recordRuntimeResult(spec, preflight, result);
