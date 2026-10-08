@@ -233,3 +233,15 @@ field.
   host's `CursorNameListener` are untouched; nothing new is resolved with `FindMethodOrDie`.
 - **Merging.** 0003 applies after 0002 and edits the same file, below the block 0002 adds. Carry
   the two forward together, and rebuild the prebuilts from the same commit as always.
+
+## A touch the Android gesture lost is ended on the X side (2026-10-08)
+
+`InputEventSender.sendTouchEvent` replaces upstream's `pointers[]` sweep with a `down[]` array of
+the ids the X server has seen begin and not end (32 long; an id outside it is ignored, never
+thrown). Upstream ended only the pointer at `getActionIndex()` on UP and CANCEL, and its
+move-time sweep never reset `pointers[]`, so after one gesture cancelled with two fingers down,
+or whose POINTER_UP was dropped, the server held a touch forever and every later finger reached
+Firefox as a second touch (a one-finger drag pinch-zoomed). Now DOWN ends every stale id before
+its Begin, MOVE ends every held id the event lacks, and UP and CANCEL end every pointer in the
+event and every held id. POINTER_UP still ends only the lifting pointer. The wire calls are
+unchanged; the native side ignores an End for an inactive id.
