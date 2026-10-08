@@ -229,6 +229,27 @@ public class TaiFeaturePlanTest {
     }
 
     @Test
+    public void aStoredSpeculativeValueNeverAsksForWhatTheFileOrTheCheckRuledOut() throws Exception {
+        // A file that does not declare it: off, whatever is stored.
+        install(E2B, TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        TaiFeaturePlan undeclared = planWith(TaiFunction.TIDY_DICTATION, stored(null, Boolean.TRUE));
+        assertEquals(Boolean.FALSE, undeclared.speculative);
+        assertEquals(Reason.DEFAULT, undeclared.speculativeReason);
+
+        // A check that asked for it and found it never ran: off, whatever is stored.
+        installE2b();
+        evidence.check(checked(GPU, true, 12.0, 40.0, Boolean.FALSE, NOW_KEY));
+        TaiFeaturePlan neverRan = planWith(TaiFunction.TIDY_DICTATION, stored(null, Boolean.TRUE));
+        assertEquals(Boolean.FALSE, neverRan.speculative);
+        assertEquals(Reason.MEASURED, neverRan.speculativeReason);
+
+        // Otherwise the stored value is a pick, over the default.
+        TaiFeaturePlan picked = planWith(TaiFunction.APP_CATEGORIES, stored(null, Boolean.FALSE));
+        assertEquals(Boolean.FALSE, picked.speculative);
+        assertEquals(Reason.PICK, picked.speculativeReason);
+    }
+
+    @Test
     public void theFunctionsOwnPickBeatsTheParametersValueAndNothingStoredIsNoPick() {
         installE2b();
         prefs.put(TaiFunction.TIDY_DICTATION.modelKey, E2B);

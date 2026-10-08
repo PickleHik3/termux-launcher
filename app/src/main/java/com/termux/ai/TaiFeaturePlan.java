@@ -187,7 +187,9 @@ public final class TaiFeaturePlan {
 
     /**
      * As above, with the user's Parameters values: a stored accelerator or speculative decoding is a pick,
-     * below the function's own accelerator pick and above anything measured or defaulted.
+     * below the function's own accelerator pick and above anything measured or defaulted. Speculative
+     * decoding is the exception: a file that does not declare it, or a check that found it never ran,
+     * turns it off whatever is stored.
      */
     @NonNull
     public static TaiFeaturePlan of(@NonNull TaiFunction feature, @NonNull TaiFunctionModels models,
@@ -267,15 +269,17 @@ public final class TaiFeaturePlan {
         Boolean speculative;
         Reason speculativeReason;
         Boolean storedSpeculative = parameters.speculative(info.id, info.backend);
-        if (storedSpeculative != null) {
-            speculative = storedSpeculative;
-            speculativeReason = Reason.PICK;
-        } else if (!info.speculative) {
+        // Never asked for on a file that does not declare it, or where a check found it never ran
+        // (decision 4.2), whatever the user stored: only then is a stored value a pick.
+        if (!info.speculative) {
             speculative = Boolean.FALSE;
             speculativeReason = Reason.DEFAULT;
         } else if (neverRan(feature, info, evidence, accelerator)) {
             speculative = Boolean.FALSE;
             speculativeReason = Reason.MEASURED;
+        } else if (storedSpeculative != null) {
+            speculative = storedSpeculative;
+            speculativeReason = Reason.PICK;
         } else {
             Double on = decodeSpeeds(feature, info, evidence, true).get(accelerator);
             Double off = decodeSpeeds(feature, info, evidence, false).get(accelerator);
