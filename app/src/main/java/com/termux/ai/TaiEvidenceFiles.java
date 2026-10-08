@@ -18,22 +18,25 @@ import java.util.Map;
  * {@link TaiEvidence} from this phone's files: the runtime history's failure records and the crash
  * marker, the GPU verdict file, the bench results file (rows of this build's runtime versions only) and
  * the feature check's. Reads files: not for
- * the main thread. The two results files are parsed once per change of their size or modification time,
- * so a plan per request costs a stat; a feature check's staleness is judged against the model store, read
- * once per instance.
+ * the main thread. Every file is read once per instance (the two results files again when their size or
+ * modification time changes), so an instance serves one screen build or one request and is then dropped.
  */
 public final class TaiEvidenceFiles implements TaiEvidence {
 
-    /** The last parse of the bench file and the stamp it was parsed at; shared by every instance. */
-    private static final Object BENCH_LOCK = new Object();
-    private static long benchStamp = Long.MIN_VALUE;
-    private static long benchLength = -1L;
-    @NonNull private static List<ChatResult> benchRows = Collections.emptyList();
+    /**
+     * The last parse of the bench file and the stamp it was parsed at. Per instance, as every other read
+     * here: a process-wide cache keyed on the file's stamp once served a screen the rows of a run that a
+     * later stop had already replaced, and an instance is made per screen build or request anyway.
+     */
+    private final Object benchLock = new Object();
+    private long benchStamp = Long.MIN_VALUE;
+    private long benchLength = -1L;
+    @NonNull private List<ChatResult> benchRows = Collections.emptyList();
     /** The same for the feature check's file: its latest record of each run. */
-    private static final Object CHECKS_LOCK = new Object();
-    private static long checksStamp = Long.MIN_VALUE;
-    private static long checksLength = -1L;
-    @NonNull private static List<JSONObject> checkRows = Collections.emptyList();
+    private final Object checksLock = new Object();
+    private long checksStamp = Long.MIN_VALUE;
+    private long checksLength = -1L;
+    @NonNull private List<JSONObject> checkRows = Collections.emptyList();
 
     @NonNull private final Context context;
     @Nullable private TaiDeviceCapabilities device;
@@ -168,7 +171,7 @@ public final class TaiEvidenceFiles implements TaiEvidence {
         File file = store.file();
         long stamp = file.lastModified();
         long length = file.length();
-        synchronized (CHECKS_LOCK) {
+        synchronized (checksLock) {
             if (stamp == checksStamp && length == checksLength) return checkRows;
             List<JSONObject> rows;
             try {
@@ -195,7 +198,7 @@ public final class TaiEvidenceFiles implements TaiEvidence {
         File file = store.file();
         long stamp = file.lastModified();
         long length = file.length();
-        synchronized (BENCH_LOCK) {
+        synchronized (benchLock) {
             if (stamp == benchStamp && length == benchLength) return benchRows;
             List<ChatResult> rows;
             try {
