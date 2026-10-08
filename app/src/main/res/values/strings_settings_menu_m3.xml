@@ -106,4 +106,12 @@
     <string name="settings_voice_details_off_summary">The text waits exactly as heard.</string>
     <string name="settings_voice_details_shell_title">Shell commands</string>
     <string name="settings_voice_details_shell_summary">Shell commands are formatted by fixed rules instead of the model (ls dash la becomes ls -la).</string>
+
+    <!-- On-device AI: runtime status card -->
+    <string name="termux_ai_status_unavailable">Runtime unavailable</string>
+    <string name="termux_ai_status_loading">Loading model</string>
+    <string name="termux_ai_status_generating">Writing a reply</string>
+    <string name="termux_ai_status_stopping">Stopping</string>
+    <string name="termux_ai_status_loaded">Model loaded</string>
+    <string name="termux_ai_status_none">No model loaded</string>
 </resources>

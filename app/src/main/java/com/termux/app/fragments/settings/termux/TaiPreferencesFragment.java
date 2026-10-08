@@ -36,7 +36,6 @@ import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.StatusCardPreference;
-import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiDiagnostics;
 import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiLoadBudget;
@@ -48,15 +47,11 @@ import com.termux.ai.TaiRemoteSettings;
 import com.termux.ai.TaiSettings;
 import com.termux.launcherctl.LauncherCtlApiServer;
 
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 @Keep
 public class TaiPreferencesFragment extends MaterialPreferenceFragment implements TaiDownloadHub.Listener {
@@ -96,38 +91,10 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
             R.array.termux_ai_idle_unload_entries, R.array.termux_ai_idle_unload_values, "10"),
     };
     private final Handler handler = new Handler(Looper.getMainLooper());
-    private final ExecutorService runtimeActionExecutor = Executors.newFixedThreadPool(2, runnable -> {
-        Thread thread = new Thread(runnable, "tai-settings-runtime");
-        thread.setDaemon(true);
-        return thread;
-    });
+    private final TaiRuntimePoll runtimePoll = new TaiRuntimePoll(this::isAdded);
     /** Model count for the Model centre row; re-read only when a download changes status. */
     private int installedCount = -1;
     @NonNull private String downloadStatuses = "";
-    private final Runnable refreshRuntimeRunnable = new Runnable() {
-        @Override
-        public void run() {
-            final Runnable self = this;
-            final Context context = getContext();
-            if (context == null || runtimeActionExecutor.isShutdown())
-                return;
-            // The runtime status is a blocking IPC; fetch it off the main thread, then apply the UI
-            // update and decide whether to keep polling back on the main thread.
-            runtimeActionExecutor.execute(() -> {
-                final JSONObject status = fetchRuntimeStatusQuietly(context);
-                handler.post(() -> {
-                    if (!isAdded()) return;
-                    Context ctx = getContext();
-                    if (ctx == null) return;
-                    applyTaiPage(ctx, status);
-                    if (shouldContinueRefreshing(ctx, status)) {
-                        handler.postDelayed(self, 2000L);
-                    }
-                });
-            });
-        }
-    };
-
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         Context context = getContext();
@@ -209,8 +176,10 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         }
         Context context = getContext();
         if (context != null) {
-            refreshTaiPage(context);
-            handler.postDelayed(refreshRuntimeRunnable, 2000L);
+            runtimePoll.start(context, status -> {
+                Context ctx = getContext();
+                if (ctx != null) applyTaiPage(ctx, status);
+            });
             refreshBenchmarkRow(context);
             refreshRemoteRow(context);
         }
@@ -218,7 +187,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
 
     @Override
     public void onPause() {
-        handler.removeCallbacks(refreshRuntimeRunnable);
+        runtimePoll.stop();
         if (getActivity() != null) {
             getActivity().getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_SECURE);
         }
@@ -227,7 +196,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
 
     @Override
     public void onDestroy() {
-        runtimeActionExecutor.shutdownNow();
+        runtimePoll.shutdown();
         super.onDestroy();
     }
 
@@ -238,38 +207,12 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         }
     }
 
-    private void refreshTaiPage(Context context) {
-        if (runtimeActionExecutor.isShutdown())
-            return;
-        // The runtime status is a blocking IPC (it can wait on the TAI runtime process). Fetch it on
-        // a background thread so the UI thread never stalls — that hang was ANR-ing the settings page.
-        runtimeActionExecutor.execute(() -> {
-            final JSONObject status = fetchRuntimeStatusQuietly(context);
-            handler.post(() -> {
-                if (!isAdded()) return;
-                Context ctx = getContext();
-                if (ctx == null) return;
-                applyTaiPage(ctx, status);
-            });
-        });
-    }
-
     /** Apply a (possibly null) pre-fetched runtime status plus the non-blocking page bits, on the UI thread. */
     private void applyTaiPage(Context context, @Nullable JSONObject runtimeStatus) {
         updateRuntimeStatus(context, runtimeStatus);
         refreshOverrides();
         refreshEndpointPreferences(context);
         refreshLanToggle(context);
-    }
-
-    /** Blocking runtime-status fetch; returns null instead of throwing/blocking the caller's UI. */
-    @Nullable
-    private JSONObject fetchRuntimeStatusQuietly(Context context) {
-        try {
-            return TaiManager.getInstance(context).runtimeStatus();
-        } catch (Exception e) {
-            return null;
-        }
     }
 
     private void configureRuntimeControls(Context context) {
@@ -418,7 +361,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
      * through the FileProvider the app already declares (the cropper's, which covers {@code files/}).
      */
     private void shareDiagnostics(Context context) {
-        runtimeActionExecutor.execute(() -> {
+        runtimePoll.run(() -> {
             Uri uri = null;
             try {
                 java.io.File file = TaiDiagnostics.write(context);
@@ -729,104 +672,19 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
     private void updateRuntimeStatus(Context context, @Nullable JSONObject runtimeStatus) {
         Preference status = findPreference("tai_runtime_status");
         TaiRuntimeActionsPreference actions = findPreference("tai_runtime_actions");
-        if (status == null && actions == null) return;
-        try {
-            if (runtimeStatus == null) throw new JSONException("runtime status unavailable");
-            JSONObject runtime = runtimeStatus.getJSONObject("runtime");
-            boolean activeGeneration = runtime.optBoolean("activeGeneration", false);
-            boolean loaded = runtime.optBoolean("loaded", false);
-            String state = runtime.optString("state", "unloaded");
-            boolean loading = "loading".equals(state);
-            boolean stopping = "stopping".equals(state);
-            if (status != null) {
-                if (status instanceof StatusCardPreference) {
-                    ((StatusCardPreference) status).setStatus(
-                        "RUNTIME · " + state.toUpperCase(Locale.US), loaded || activeGeneration);
-                }
-                status.setSummary(buildRuntimeCardBody(context, runtime, runtimeStatus));
-            }
-            if (actions != null) {
-                actions.setActionStates(
-                    activeGeneration || loading,
-                    (loaded || loading) && !activeGeneration && !stopping,
-                    true);
-            }
-        } catch (JSONException e) {
-            if (status != null) status.setSummary(R.string.termux_ai_runtime_status_summary);
+        if (status instanceof StatusCardPreference) {
+            TaiRuntimeStatusText.Headline headline = TaiRuntimeStatusText.headline(runtimeStatus);
+            ((StatusCardPreference) status).setStatus(getString(headline.label), headline.active);
         }
-    }
-
-    private String buildRuntimeCardBody(Context context, JSONObject runtime, JSONObject runtimeStatus) {
-        StringBuilder body = new StringBuilder();
-        JSONObject device = runtimeStatus.optJSONObject("device");
-        if (device != null) {
-            StringBuilder deviceLine = new StringBuilder(device.optString("model", "unknown"));
-            if (!device.isNull("memoryGiB")) {
-                deviceLine.append(" · ").append(String.format(Locale.US, "%.1f GiB", device.optDouble("memoryGiB")));
-            }
-            appendKv(body, "device", deviceLine.toString());
-            appendKv(body, "accel", join(device.optJSONArray("phase1Accelerators")));
+        String body = TaiRuntimeStatusText.full(context, runtimeStatus);
+        if (status != null) {
+            if (body.isEmpty()) status.setSummary(R.string.termux_ai_runtime_status_summary);
+            else status.setSummary(body);
         }
-        // Engine availability (folded in from the former standalone "Device & engine info" row).
-        TaiDeviceCapabilities caps = TaiDeviceCapabilities.detect(context);
-        boolean liteRtOk = caps.liteRtLmAbiSupported && caps.liteRtLmNativeLibrariesAvailable;
-        StringBuilder engine = new StringBuilder("litert-lm ")
-            .append(liteRtOk ? "ok" : "unavailable")
-            .append(" · mnn-llm ")
-            .append(caps.mnnSupported ? "ok" : "unavailable");
-        if (!caps.mnnSupported && caps.mnnUnsupportedReason != null) {
-            engine.append(" (").append(caps.mnnUnsupportedReason).append(')');
+        if (actions != null && runtimeStatus != null && runtimeStatus.optJSONObject("runtime") != null) {
+            actions.setActionStates(TaiRuntimeStatusText.stopEnabled(runtimeStatus),
+                TaiRuntimeStatusText.unloadEnabled(runtimeStatus), true);
         }
-        appendKv(body, "engine", engine.toString());
-        appendKv(body, "model", nullable(runtime, "loadedModelId", "none"));
-        appendKv(body, "backend", runtime.optString("backend", "none"));
-        String fallback = nullable(runtime, "backendFallbackReason", "");
-        if (!fallback.isEmpty()) appendKv(body, "fallback", fallback);
-        if (runtime.optBoolean("activeGeneration", false)) appendKv(body, "generate", "active");
-        String runtimeProcess = runtimeStatus.optString("runtimeProcess", "");
-        if (!runtimeProcess.isEmpty()) appendKv(body, "process", runtimeProcess);
-        long keepWarmRemaining = runtime.optLong("keepWarmRemainingMs", 0L);
-        if (keepWarmRemaining > 0L) appendKv(body, "warm", formatDuration(keepWarmRemaining));
-        long idleRemaining = runtime.optLong("idleUnloadRemainingMs", 0L);
-        if (idleRemaining > 0L) appendKv(body, "idle", formatDuration(idleRemaining));
-        String statusMessage = runtime.optString("status", "");
-        if (!statusMessage.isEmpty()) appendKv(body, "status", statusMessage);
-        JSONObject profile = runtimeStatus.optJSONObject("modelProfile");
-        if (profile != null) {
-            StringBuilder compat = new StringBuilder(join(profile.optJSONArray("compatibleAccelerators")));
-            if (!profile.isNull("minDeviceMemoryInGb")) {
-                compat.append(" · min ").append(profile.optInt("minDeviceMemoryInGb")).append(" GiB");
-            }
-            appendKv(body, "compat", compat.toString());
-        }
-        JSONArray warnings = runtimeStatus.optJSONArray("compatibilityWarnings");
-        if (warnings != null) {
-            for (int i = 0; i < warnings.length(); i++) {
-                String warning = warnings.optString(i, "");
-                if (!warning.isEmpty()) appendKv(body, "warning", warning);
-            }
-        }
-        JSONObject crash = runtimeStatus.optJSONObject("lastRuntimeCrash");
-        if (crash != null) {
-            String model = crash.optString("modelId", "");
-            String accelerator = crash.optString("accelerator", "");
-            appendKv(body, "last", "AI runtime crashed while loading " + (model.isEmpty() ? "a model" : model)
-                + (accelerator.isEmpty() ? "" : " on " + accelerator));
-            appendKv(body, "fallback", crash.optString("suggestedFallback", "Try CPU or a smaller model."));
-        }
-        try {
-            JSONObject endpoint = LauncherCtlApiServer.getInstance().endpointSettings(context);
-            String baseUrl = endpoint.optString("openAiBaseUrl", "");
-            String token = endpoint.optString("token", "");
-            if (!baseUrl.isEmpty()) appendKv(body, "endpoint", baseUrl);
-            if (!token.isEmpty()) appendKv(body, "token", TaiSettings.redactToken(token));
-        } catch (JSONException ignored) {
-        }
-        return body.toString().trim();
-    }
-
-    private void appendKv(StringBuilder builder, String key, String value) {
-        builder.append(String.format(Locale.US, "%-9s", key)).append(value).append('\n');
     }
 
     private void configureModelCentreRow() {
@@ -868,7 +726,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         Preference row = findPreference("tai_benchmark");
         if (row == null) return;
         Context appContext = context.getApplicationContext();
-        runtimeActionExecutor.execute(() -> {
+        runtimePoll.run(() -> {
             JSONObject benchmarks;
             try {
                 benchmarks = TaiManager.getInstance(appContext).benchmarks();
@@ -934,7 +792,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
     }
 
     private void runRuntimeAction(RuntimeAction action, int successResId) {
-        runtimeActionExecutor.execute(() -> {
+        runtimePoll.run(() -> {
             JSONObject result = null;
             try {
                 result = action.run();
@@ -949,7 +807,7 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
                 } else {
                     toastRuntimeResult(currentContext, finalResult, successResId);
                 }
-                refreshTaiPage(currentContext);
+                runtimePoll.refreshNow();
             });
         });
     }
@@ -1018,16 +876,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
         });
     }
 
-    private String join(JSONArray values) {
-        if (values == null || values.length() == 0) return "none";
-        StringBuilder joined = new StringBuilder();
-        for (int i = 0; i < values.length(); i++) {
-            if (i > 0) joined.append(", ");
-            joined.append(values.optString(i, ""));
-        }
-        return joined.toString();
-    }
-
     private void openParameterScreen(@Nullable TaiModelSpec model) {
         TaiParameterPreferencesFragment fragment = new TaiParameterPreferencesFragment();
         if (model != null) fragment.setArguments(TaiParameterPreferencesFragment.argumentsForModel(model));
@@ -1038,10 +886,8 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
     }
 
     private void showRuntimeLogs(Context context) {
-        if (runtimeActionExecutor.isShutdown())
-            return;
         // runtimeStatus() blocks on the runtime IPC — fetch off the main thread, show the dialog on it.
-        runtimeActionExecutor.execute(() -> {
+        runtimePoll.run(() -> {
             String status;
             try {
                 status = redactRuntimeDebugJson(context, TaiManager.getInstance(context).runtimeStatus().toString(2));
@@ -1083,32 +929,6 @@ public class TaiPreferencesFragment extends MaterialPreferenceFragment implement
             // The keystore is unavailable; the key cannot be in the text either way.
         }
         return redacted;
-    }
-
-    private boolean shouldContinueRefreshing(Context context, @Nullable JSONObject runtimeStatus) {
-        try {
-            if (runtimeStatus == null) return false;
-            JSONObject runtime = runtimeStatus.getJSONObject("runtime");
-            return runtime.optBoolean("activeGeneration", false)
-                || runtime.optBoolean("loaded", false)
-                || runtime.optLong("keepWarmRemainingMs", 0L) > 0L
-                || runtime.optLong("idleUnloadRemainingMs", 0L) > 0L;
-        } catch (JSONException e) {
-            return false;
-        }
-    }
-
-    private String formatDuration(long millis) {
-        long seconds = Math.max(0L, millis / 1000L);
-        long minutes = seconds / 60L;
-        long remainingSeconds = seconds % 60L;
-        if (minutes > 0L) return minutes + "m " + remainingSeconds + "s";
-        return remainingSeconds + "s";
-    }
-
-    private String nullable(JSONObject object, String key, String fallback) {
-        if (object == null || !object.has(key) || object.isNull(key)) return fallback;
-        return object.optString(key, fallback);
     }
 
     private void openUrl(Context context, String url) {
