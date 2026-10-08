@@ -13,6 +13,9 @@ import org.robolectric.RobolectricTestRunner;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 /** The evidence as {@link TaiEvidenceFiles} reads it from this phone's files. */
 @RunWith(RobolectricTestRunner.class)
@@ -26,6 +29,13 @@ public class TaiEvidenceFilesTest {
     @Before
     public void setUp() {
         context = ApplicationProvider.getApplicationContext();
+        TaiRuntimeCrashMarker.clear(context);
+    }
+
+    private static TaiModelSpec spec(String id, String backend, String localPath) {
+        return new TaiModelSpec(id, id, "Test model", "test", localPath, "test", 123L,
+            new java.util.LinkedHashSet<>(java.util.Collections.singleton(TaiModelSpec.CAPABILITY_TEXT_CHAT)),
+            false, null, backend, TaiModelSpec.FORMAT_MNN, null, null, 4096, 0, null);
     }
 
     private static JSONObject series(double median) throws Exception {
@@ -70,5 +80,36 @@ public class TaiEvidenceFilesTest {
         // A row that recorded no runtime version is unknown, and unknown is stale.
         bench.append(benchRecord("gpu", 25.0, ""));
         assertEquals(0, new TaiEvidenceFiles(context).chatBench(MODEL, MNN).size());
+    }
+
+    // ----------------------------------------------------------------------------- crash marker
+
+    @Test
+    public void aLoadTheRuntimeDiedInCountsAsAFailureOfThatSetupOnly() throws Exception {
+        TaiEvidenceFiles evidence = new TaiEvidenceFiles(context);
+        assertFalse(evidence.failed(MODEL, MNN, "gpu"));
+        // Written after the reader was made, as the runtime process writes it: the next read sees it.
+        TaiRuntimeCrashMarker.markLoad(context, spec(MODEL, MNN, "/models/" + MODEL + "/config.json"),
+            TaiRuntimeOptions.fromJson(new JSONObject().put("accelerator", "OpenCL")), MNN);
+        assertTrue(evidence.failed(MODEL, MNN, "gpu"));
+        assertFalse(evidence.failed(MODEL, MNN, "cpu"));
+        assertFalse(evidence.failed(MODEL, TaiModelSpec.BACKEND_LITERT_LM, "gpu"));
+        assertFalse(evidence.failed("another-model", MNN, "gpu"));
+        // Cleared once the load returned: the same reader no longer sees it.
+        TaiRuntimeCrashMarker.clear(context);
+        assertFalse(evidence.failed(MODEL, MNN, "gpu"));
+        assertNull(TaiRuntimeCrashMarker.read(context));
+    }
+
+    @Test
+    public void theMarkerIsAFileAnyProcessReads() throws Exception {
+        java.io.File file = TaiRuntimeCrashMarker.file(context);
+        TaiBenchStore.writeAtomically(file, new JSONObject().put("modelId", MODEL).put("backend", MNN)
+            .put("accelerator", "cpu").toString());
+        JSONObject marker = TaiRuntimeCrashMarker.read(context);
+        assertEquals(MODEL, marker.getString("modelId"));
+        assertTrue(new TaiEvidenceFiles(context).failed(MODEL, MNN, "cpu"));
+        assertTrue(file.delete());
+        assertNull(TaiRuntimeCrashMarker.read(context));
     }
 }
