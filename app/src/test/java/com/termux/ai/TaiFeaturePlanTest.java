@@ -315,6 +315,34 @@ public class TaiFeaturePlanTest {
     }
 
     @Test
+    public void aFailedVerdictKeepsTheCpuEvenWhenTheCpuHasFailed() {
+        installE2b();
+        evidence.verdict(TaiGpuVerdict.State.FAILED).failure(E2B, LITERT, CPU);
+        TaiFeaturePlan plan = pong(TaiFunction.APP_CATEGORIES);
+        assertEquals(CPU, plan.accelerator);
+        assertEquals(Reason.DEFAULT, plan.acceleratorReason);
+        // The same on a phone the platform already runs CPU-first.
+        TaiEvidence.InMemory cpuFailed = new TaiEvidence.InMemory().failure(E2B, LITERT, CPU);
+        TaiFeaturePlan cpuFirst = TaiFeaturePlan.of(TaiFunction.APP_CATEGORIES, models(env(12, GpuPath.CPU_FIRST)),
+            cpuFailed, Collections.<TaiResidency.Entry>emptyList(), NOW, false);
+        assertEquals(CPU, cpuFirst.accelerator);
+        assertEquals(Reason.DEFAULT, cpuFirst.acceleratorReason);
+    }
+
+    @Test
+    public void aGpuPickOnAFailedVerdictClaimsNoSpeedAndOffersNothing() {
+        installE2b();
+        prefs.put(TaiFunction.ASSISTANT.modelKey, E2B);
+        prefs.put(TaiFunction.ASSISTANT.accelKey, GPU);
+        evidence.verdict(TaiGpuVerdict.State.FAILED).chat(chat(GPU, false, 30.0)).chat(chat(CPU, false, 10.0));
+        TaiFeaturePlan plan = pong(TaiFunction.ASSISTANT);
+        assertEquals(GPU, plan.accelerator);
+        assertEquals(Reason.PICK, plan.acceleratorReason);
+        assertEquals(0.0, plan.speedup, 0.0);
+        assertNull(plan.faster);
+    }
+
+    @Test
     public void speculativeDecodingIsMeasuredOnDecodeSpeed() {
         installE2b();
         evidence.chat(chat(GPU, false, 20.0)).chat(chat(GPU, true, 15.0));

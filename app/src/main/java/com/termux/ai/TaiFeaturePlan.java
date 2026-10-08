@@ -245,11 +245,13 @@ public final class TaiFeaturePlan {
             accelerator = gpuGone ? TaiTierPolicy.ACCEL_CPU : pick;
             acceleratorReason = gpuGone ? Reason.DEFAULT : Reason.PICK;
         } else {
-            String fallback = path == TaiPlatformCaps.GpuPath.YES || path == TaiPlatformCaps.GpuPath.UNKNOWN
-                ? TaiTierPolicy.ACCEL_GPU : TaiTierPolicy.ACCEL_CPU;
+            boolean gpuAllowed = path == TaiPlatformCaps.GpuPath.YES || path == TaiPlatformCaps.GpuPath.UNKNOWN;
+            String fallback = gpuAllowed ? TaiTierPolicy.ACCEL_GPU : TaiTierPolicy.ACCEL_CPU;
+            // CPU-first (a failed verdict) or no GPU: the plan names the CPU, even when the CPU has failed
+            // here; the preflight still moves a load off a failed accelerator, and the plan does not call
+            // that measured.
             List<String> usable = new ArrayList<>();
-            for (String option : path == TaiPlatformCaps.GpuPath.NO
-                    ? new String[] {TaiTierPolicy.ACCEL_CPU} : new String[] {fallback, other(fallback)}) {
+            for (String option : gpuAllowed ? new String[] {fallback, other(fallback)} : new String[] {TaiTierPolicy.ACCEL_CPU}) {
                 if (!evidence.failed(info.id, info.backend, option)) usable.add(option);
             }
             String fastest = fastest(plain, usable);
