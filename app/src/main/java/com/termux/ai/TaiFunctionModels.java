@@ -324,14 +324,17 @@ public final class TaiFunctionModels {
     }
 
     /**
-     * What {@code function} would resolve to if {@code removedModelId} were deleted: the Model Centre's
-     * delete confirmation names it for each function that uses the model.
+     * The same picks, device and routing with {@code removedModelId} gone: what deleting it would leave.
+     * The Model Centre's delete confirmation plans each function that uses the model over it.
      */
     @NonNull
-    public Resolution resolveWithout(@NonNull TaiFunction function, @NonNull String removedModelId) {
-        Map<String, ModelInfo> rest = new LinkedHashMap<>(installed.models());
-        rest.remove(baseId(removedModelId));
-        return resolve(function, rest);
+    public TaiFunctionModels without(@NonNull String removedModelId) {
+        final String removed = baseId(removedModelId);
+        return new TaiFunctionModels(env, store, () -> {
+            Map<String, ModelInfo> rest = new LinkedHashMap<>(installed.models());
+            rest.remove(removed);
+            return rest;
+        }, remote);
     }
 
     private Resolution resolve(TaiFunction function, Map<String, ModelInfo> models) {

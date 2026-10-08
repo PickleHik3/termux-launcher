@@ -763,6 +763,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         final TextView name;
         final TextView badge;
         final TextView summary;
+        final TextView reason;
         final TextView warning;
         @Nullable TaiFunctionRows.FunctionRow row;
 
@@ -772,6 +773,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             name = view.findViewById(R.id.tai_fn_name);
             badge = view.findViewById(R.id.tai_fn_badge);
             summary = view.findViewById(R.id.tai_fn_summary);
+            reason = view.findViewById(R.id.tai_fn_reason);
             warning = view.findViewById(R.id.tai_fn_warning);
             core.setOnClickListener(v -> {
                 if (row != null) callbacks.onFunctionClicked(row.function);
@@ -783,6 +785,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             setText(name, next.name);
             setText(badge, next.badge);
             setText(summary, next.summary);
+            setText(reason, next.reason);
             warning.setVisibility(next.warnBackground ? View.VISIBLE : View.GONE);
             core.setContentDescription(itemView.getContext().getString(R.string.tai_fn_row_desc, next.name, next.summary));
         }

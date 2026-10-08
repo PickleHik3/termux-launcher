@@ -18,7 +18,6 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -219,9 +218,9 @@ final class TaiFunctionPickerModel {
         Accelerator accelerator = null;
         if (function.usesChatModel() && pickIsLocal) {
             boolean gpuOffered = TaiTierPolicy.gpuOffered(env);
-            String stored = models.acceleratorPick(function);
-            String effective = stored.isEmpty() ? TaiTierPolicy.defaultAccelerator(env) : stored;
-            boolean gpu = gpuOffered && TaiTierPolicy.ACCEL_GPU.equals(effective);
+            // The control shows what a load uses: the plan's accelerator (the pick, a Parameters value,
+            // a measurement or the GPU verdict), not the tier's default.
+            boolean gpu = gpuOffered && TaiTierPolicy.ACCEL_GPU.equals(plan.accelerator);
             accelerator = new Accelerator(gpuOffered, gpu, gpuOffered ? TaiTierPolicy.gpuNote(env) : null);
         }
         return new Model(function, sections, accelerator, TaiFunctionRows.chainLine(resolution.chain, labels),
@@ -242,24 +241,12 @@ final class TaiFunctionPickerModel {
             parts.add(labels.modelName(model));
             if (TaiTierPolicy.ACCEL_GPU.equals(plan.accelerator)) parts.add(labels.text(TaiFunctionRows.Msg.GPU));
             else if (TaiTierPolicy.ACCEL_CPU.equals(plan.accelerator)) parts.add(labels.text(TaiFunctionRows.Msg.CPU));
-            if (plan.speedup > 0.0) parts.add(labels.text(TaiFunctionRows.Msg.PLAN_FASTER, ratio(plan.speedup)));
+            if (plan.speedup > 0.0) {
+                parts.add(labels.text(TaiFunctionRows.Msg.PLAN_FASTER, TaiFunctionRows.ratio(plan.speedup)));
+            }
         } else {
             TaiFunctionRows.Msg without = withoutMessage(plan.without);
             parts.add(labels.text(without == null ? TaiFunctionRows.Msg.NOT_SET : without));
-        }
-
-        TaiFunctionRows.Msg reason;
-        if (plan.isRemote()) {
-            reason = plan.whereReason == TaiFeaturePlan.Reason.PICK
-                ? TaiFunctionRows.Msg.PLAN_REASON_PICK : TaiFunctionRows.Msg.PLAN_REASON_REMOTE;
-        } else if (plan.acceleratorReason == TaiFeaturePlan.Reason.PICK) {
-            reason = TaiFunctionRows.Msg.PLAN_REASON_PICK;
-        } else if (plan.isMeasured()) {
-            reason = TaiFunctionRows.Msg.PLAN_REASON_MEASURED;
-        } else if (plan.modelReason == TaiFeaturePlan.Reason.PICK) {
-            reason = TaiFunctionRows.Msg.PLAN_REASON_PICK;
-        } else {
-            reason = TaiFunctionRows.Msg.PLAN_REASON_DEFAULT;
         }
 
         String offer = null;
@@ -268,15 +255,9 @@ final class TaiFunctionPickerModel {
             offerAccelerator = plan.faster.accelerator;
             String where = labels.text(TaiTierPolicy.ACCEL_GPU.equals(offerAccelerator)
                 ? TaiFunctionRows.Msg.GPU : TaiFunctionRows.Msg.CPU);
-            offer = labels.text(TaiFunctionRows.Msg.PLAN_OFFER, where, ratio(plan.faster.ratio));
+            offer = labels.text(TaiFunctionRows.Msg.PLAN_OFFER, where, TaiFunctionRows.ratio(plan.faster.ratio));
         }
-        return new PlanLine(TaiFunctionRows.join(parts, " · "), labels.text(reason), offer, offerAccelerator);
-    }
-
-    /** "1.6": one decimal, as the speed-up reads. */
-    @NonNull
-    private static String ratio(double ratio) {
-        return String.format(Locale.getDefault(), "%.1f", ratio);
+        return new PlanLine(TaiFunctionRows.join(parts, " · "), TaiFunctionRows.reason(plan, labels), offer, offerAccelerator);
     }
 
     @NonNull

@@ -19,7 +19,7 @@ import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
-import com.termux.ai.TaiEvidenceFiles;
+import com.termux.ai.TaiFeaturePlans;
 import com.termux.ai.TaiFeaturePlan;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
@@ -28,7 +28,6 @@ import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
 import com.termux.ai.TaiPlatformCaps;
-import com.termux.ai.TaiResidency;
 import com.termux.ai.TaiSettings;
 import com.termux.ai.TaiSpeechModels;
 import com.termux.ai.TaiTierPolicy;
@@ -38,7 +37,6 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -153,9 +151,8 @@ public final class TaiFunctionPickerSheet {
         List<TaiFunctionRows.CatalogItem> catalogue = catalogue();
         // A download started here stays listed, marked Downloading; once it lands it moves to On this phone.
         Set<String> busy = new HashSet<>();
-        // The plan as this phone's measurements have it: failure records, the GPU verdict, the bench.
-        TaiFeaturePlan plan = TaiFeaturePlan.of(function, models, new TaiEvidenceFiles(app),
-            Collections.<TaiResidency.Entry>emptyList(), System.currentTimeMillis(), false);
+        // The plan as a load has it: the picks, the Parameters values, and this phone's measurements.
+        TaiFeaturePlan plan = TaiFeaturePlans.forContext(app, models).plan(function);
         loaded.main = TaiFunctionPickerModel.build(function, models, remote, catalogue, busy, loaded.labels, plan);
         TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, true);
         if (prefs != null) loaded.tidyLevel = prefs.getInAppKeyboardVoicePolishLevel();
@@ -163,8 +160,7 @@ public final class TaiFunctionPickerSheet {
         loaded.ttsVoice = settings.getTtsVoice();
         loaded.ttsSpeed = settings.getTtsSpeed();
         if (function == TaiFunction.VOICE_TYPING) {
-            TaiFunctionModels.Resolution resolution = models.resolve(TaiFunction.VOICE_TYPING);
-            TaiModelSpec spec = resolution.modelId == null ? null : installed.get(resolution.modelId);
+            TaiModelSpec spec = plan.modelId == null ? null : installed.get(plan.modelId);
             if (spec != null && TaiSpeechActions.isWhisper(spec.id) && TaiSpeechActions.otherWindow(spec) > 0) {
                 loaded.windowSpec = spec;
                 loaded.otherWindow = TaiSpeechActions.otherWindow(spec);
