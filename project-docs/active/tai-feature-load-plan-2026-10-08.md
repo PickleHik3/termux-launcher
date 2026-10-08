@@ -125,7 +125,7 @@ These were review candidates 4 and 5, and stay open.
    | Cleanup | the real Light/Polished prompt over a 150-word and a 500-word dictation |
    | App sorting | 10 real installed apps at window 1024 |
    | Dawn chat / assistant | today's chat and long-input tests |
-   | Dawn search | a batch of 64 notes |
+   | Dawn search | 64 notes in Dawn's batches of 8 |
    | Voice typing | a bundled 10-second clip |
    | Read aloud | one sentence |
 

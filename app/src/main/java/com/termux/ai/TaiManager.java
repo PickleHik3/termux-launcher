@@ -2425,6 +2425,22 @@ public final class TaiManager {
      *  a larger batch is refused with 413, not silently truncated or dropped. Dawn is told the
      *  number through {@code _endpoint_max_batch} on the embedder's {@code /v1/models} entry. */
     static final int EMBEDDINGS_MAX_BATCH = 64;
+    /** The wait {@link #embeddingsTimeoutMs} gives any embeddings request, before its inputs. */
+    static final long EMBEDDINGS_TIMEOUT_BASE_MS = 120_000L;
+    /** The wait {@link #embeddingsTimeoutMs} adds per input. */
+    static final long EMBEDDINGS_TIMEOUT_PER_INPUT_MS = 5_000L;
+
+    /**
+     * How long the app process waits for the runtime to answer an embeddings request of {@code inputs}
+     * inputs. A request costs one inference per input, so the wait grows with the batch; the base covers
+     * the model load and a throttled batch behind a live chat reply (embeddings run at background priority
+     * then). 64 inputs wait 440 s, one input 125 s. A batch past {@link #EMBEDDINGS_MAX_BATCH} waits
+     * as the cap does: the runtime refuses it at once, and a hung runtime should not hold it longer.
+     */
+    static long embeddingsTimeoutMs(int inputs) {
+        int counted = Math.min(Math.max(0, inputs), EMBEDDINGS_MAX_BATCH);
+        return EMBEDDINGS_TIMEOUT_BASE_MS + counted * EMBEDDINGS_TIMEOUT_PER_INPUT_MS;
+    }
 
     /**
      * {@code body} with the embedder Dawn search's feature load plan names as its {@code model} when it
@@ -2449,7 +2465,11 @@ public final class TaiManager {
         // No model in the request: the embedder Dawn search's plan names, not the chat
         // assistant. Resolved before the runtime hand-off so both processes see the same model.
         body = withEmbeddingModel(body);
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_EMBEDDINGS, delegatedRuntimeBody(body));
+        if (shouldDelegateRuntime()) {
+            List<String> counted = embeddingInputs(parseBody(body));
+            int n = counted == null ? 1 : counted.size();
+            return runtimeRequest(TaiRuntimeIpc.OP_EMBEDDINGS, delegatedRuntimeBody(body), embeddingsTimeoutMs(n));
+        }
         JSONObject request = parseBody(body);
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         String encodingFormat = request.optString("encoding_format", "float");
