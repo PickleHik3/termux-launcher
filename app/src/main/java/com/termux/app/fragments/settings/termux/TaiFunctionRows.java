@@ -63,7 +63,13 @@ final class TaiFunctionRows {
         DELETE_IN_USE,
         /** "%1$s: %2$s". */
         DELETE_LINE,
-        LEVEL_LIGHT, LEVEL_POLISHED
+        LEVEL_LIGHT, LEVEL_POLISHED,
+        /** The feature load plan's line: "%1$s× faster". */
+        PLAN_FASTER,
+        /** Why the plan is what it is: "Your choice", "Measured on this phone", "Suggested for this phone", "Remote · your provider". */
+        PLAN_REASON_PICK, PLAN_REASON_MEASURED, PLAN_REASON_DEFAULT, PLAN_REASON_REMOTE,
+        /** The one-tap offer of a faster setup than the pick: "Use %1$s: %2$s× faster on this phone". */
+        PLAN_OFFER
     }
 
     /** Words for the rows. {@code args} fill the {@code %s} slots of the message. */

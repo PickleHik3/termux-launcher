@@ -56,6 +56,12 @@ final class TaiFunctionLabels implements TaiFunctionRows.Labels {
             case DELETE_IN_USE: return R.string.tai_fn_delete_in_use;
             case DELETE_LINE: return R.string.tai_fn_delete_line;
             case LEVEL_LIGHT: return R.string.tai_fn_level_light;
+            case PLAN_FASTER: return R.string.tai_fn_plan_faster;
+            case PLAN_REASON_PICK: return R.string.tai_fn_plan_reason_pick;
+            case PLAN_REASON_MEASURED: return R.string.tai_fn_plan_reason_measured;
+            case PLAN_REASON_DEFAULT: return R.string.tai_fn_plan_reason_default;
+            case PLAN_REASON_REMOTE: return R.string.tai_fn_plan_reason_remote;
+            case PLAN_OFFER: return R.string.tai_fn_plan_offer;
             default: return R.string.tai_fn_level_polished;
         }
     }

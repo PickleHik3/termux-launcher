@@ -3,24 +3,30 @@ package com.termux.app.fragments.settings.termux;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.ai.TaiEvidence;
+import com.termux.ai.TaiFeaturePlan;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiFunctionModels.ModelInfo;
 import com.termux.ai.TaiFunctionModels.Resolution;
+import com.termux.ai.TaiResidency;
 import com.termux.ai.TaiTierPolicy;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
 /**
  * What the function picker sheet lists for one function (tai-device-tiers spec §4.3): Automatic,
  * the models on the phone, Remote, the without-a-model choice and the catalogue downloads, with
- * the current choice marked, the GPU or CPU choice for the chat functions and the fallback chain.
+ * the current choice marked, the GPU or CPU choice for the chat functions and the fallback chain,
+ * and on top how the function runs now: its {@link TaiFeaturePlan} in one line, with why.
  * Pure: the sheet only draws it, and a tap writes the entry's {@link Entry#value}.
  */
 final class TaiFunctionPickerModel {
@@ -79,6 +85,27 @@ final class TaiFunctionPickerModel {
         }
     }
 
+    /**
+     * The feature load plan in one line (decision 10): "Gemma 4 E2B · GPU · 1.6× faster" and why,
+     * plus the one-tap offer of a setup measured faster than the user's pick.
+     */
+    static final class PlanLine {
+        @NonNull final String line;
+        /** "Your choice", "Measured on this phone", "Suggested for this phone" or "Remote · your provider". */
+        @NonNull final String reason;
+        /** "Use GPU: 2.5× faster on this phone", or null when nothing measured faster than the pick. */
+        @Nullable final String offer;
+        /** The accelerator the offer sets ({@code gpu} or {@code cpu}); null without an offer. */
+        @Nullable final String offerAccelerator;
+
+        PlanLine(@NonNull String line, @NonNull String reason, @Nullable String offer, @Nullable String offerAccelerator) {
+            this.line = line;
+            this.reason = reason;
+            this.offer = offer;
+            this.offerAccelerator = offerAccelerator;
+        }
+    }
+
     /** The whole sheet body for one function. */
     static final class Model {
         @NonNull final TaiFunction function;
@@ -87,13 +114,16 @@ final class TaiFunctionPickerModel {
         @Nullable final Accelerator accelerator;
         /** "If it can't load: Gemma 4 E2B → rules only", or empty. */
         @NonNull final String chainLine;
+        /** How the function runs now, from its feature load plan. */
+        @NonNull final PlanLine plan;
 
         Model(@NonNull TaiFunction function, @NonNull Map<Section, List<Entry>> sections,
-              @Nullable Accelerator accelerator, @NonNull String chainLine) {
+              @Nullable Accelerator accelerator, @NonNull String chainLine, @NonNull PlanLine plan) {
             this.function = function;
             this.sections = sections;
             this.accelerator = accelerator;
             this.chainLine = chainLine;
+            this.plan = plan;
         }
 
         @NonNull
@@ -111,6 +141,16 @@ final class TaiFunctionPickerModel {
     static Model build(@NonNull TaiFunction function, @NonNull TaiFunctionModels models,
                        @NonNull TaiFunctionModels.Remote remote, @NonNull Collection<TaiFunctionRows.CatalogItem> catalogue,
                        @NonNull Set<String> busy, @NonNull TaiFunctionRows.Labels labels) {
+        TaiFeaturePlan plan = TaiFeaturePlan.of(function, models, TaiEvidence.NONE,
+            Collections.<TaiResidency.Entry>emptyList(), 0L, false);
+        return build(function, models, remote, catalogue, busy, labels, plan);
+    }
+
+    /** As above, with the function's feature load plan as this phone's evidence has it. */
+    @NonNull
+    static Model build(@NonNull TaiFunction function, @NonNull TaiFunctionModels models,
+                       @NonNull TaiFunctionModels.Remote remote, @NonNull Collection<TaiFunctionRows.CatalogItem> catalogue,
+                       @NonNull Set<String> busy, @NonNull TaiFunctionRows.Labels labels, @NonNull TaiFeaturePlan plan) {
         TaiTierPolicy.Env env = models.env();
         Resolution resolution = models.resolve(function);
         boolean pickIsRemote = resolution.modelId != null && TaiFunctionModels.isRemote(resolution.modelId)
@@ -184,7 +224,59 @@ final class TaiFunctionPickerModel {
             boolean gpu = gpuOffered && TaiTierPolicy.ACCEL_GPU.equals(effective);
             accelerator = new Accelerator(gpuOffered, gpu, gpuOffered ? TaiTierPolicy.gpuNote(env) : null);
         }
-        return new Model(function, sections, accelerator, TaiFunctionRows.chainLine(resolution.chain, labels));
+        return new Model(function, sections, accelerator, TaiFunctionRows.chainLine(resolution.chain, labels),
+            planLine(plan, labels));
+    }
+
+    /**
+     * The plan as one line and its reason (decision 10): the model, where it runs and the speed-up when
+     * measured; "Remote · gpt-x"; or what the function does without a model.
+     */
+    @NonNull
+    static PlanLine planLine(@NonNull TaiFeaturePlan plan, @NonNull TaiFunctionRows.Labels labels) {
+        List<String> parts = new ArrayList<>();
+        String model = plan.requestModel();
+        if (plan.isRemote() && model != null) {
+            parts.add(labels.text(TaiFunctionRows.Msg.REMOTE, model.substring(TaiFunctionModels.REMOTE_PREFIX.length())));
+        } else if (plan.where == TaiFeaturePlan.Where.ON_DEVICE && model != null) {
+            parts.add(labels.modelName(model));
+            if (TaiTierPolicy.ACCEL_GPU.equals(plan.accelerator)) parts.add(labels.text(TaiFunctionRows.Msg.GPU));
+            else if (TaiTierPolicy.ACCEL_CPU.equals(plan.accelerator)) parts.add(labels.text(TaiFunctionRows.Msg.CPU));
+            if (plan.speedup > 0.0) parts.add(labels.text(TaiFunctionRows.Msg.PLAN_FASTER, ratio(plan.speedup)));
+        } else {
+            TaiFunctionRows.Msg without = withoutMessage(plan.without);
+            parts.add(labels.text(without == null ? TaiFunctionRows.Msg.NOT_SET : without));
+        }
+
+        TaiFunctionRows.Msg reason;
+        if (plan.isRemote()) {
+            reason = plan.whereReason == TaiFeaturePlan.Reason.PICK
+                ? TaiFunctionRows.Msg.PLAN_REASON_PICK : TaiFunctionRows.Msg.PLAN_REASON_REMOTE;
+        } else if (plan.acceleratorReason == TaiFeaturePlan.Reason.PICK) {
+            reason = TaiFunctionRows.Msg.PLAN_REASON_PICK;
+        } else if (plan.isMeasured()) {
+            reason = TaiFunctionRows.Msg.PLAN_REASON_MEASURED;
+        } else if (plan.modelReason == TaiFeaturePlan.Reason.PICK) {
+            reason = TaiFunctionRows.Msg.PLAN_REASON_PICK;
+        } else {
+            reason = TaiFunctionRows.Msg.PLAN_REASON_DEFAULT;
+        }
+
+        String offer = null;
+        String offerAccelerator = null;
+        if (plan.faster != null) {
+            offerAccelerator = plan.faster.accelerator;
+            String where = labels.text(TaiTierPolicy.ACCEL_GPU.equals(offerAccelerator)
+                ? TaiFunctionRows.Msg.GPU : TaiFunctionRows.Msg.CPU);
+            offer = labels.text(TaiFunctionRows.Msg.PLAN_OFFER, where, ratio(plan.faster.ratio));
+        }
+        return new PlanLine(TaiFunctionRows.join(parts, " · "), labels.text(reason), offer, offerAccelerator);
+    }
+
+    /** "1.6": one decimal, as the speed-up reads. */
+    @NonNull
+    private static String ratio(double ratio) {
+        return String.format(Locale.getDefault(), "%.1f", ratio);
     }
 
     @NonNull

@@ -7,6 +7,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.ai.TaiDeviceTier;
+import com.termux.ai.TaiEvidence;
+import com.termux.ai.TaiFeaturePlan;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiFunctionModels.ModelInfo;
@@ -14,6 +16,7 @@ import com.termux.ai.TaiModelCatalog;
 import com.termux.ai.TaiModelRegistry;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiPlatformCaps.GpuPath;
+import com.termux.ai.TaiResidency;
 import com.termux.ai.TaiTierPolicy;
 import com.termux.ai.TaiTierPolicy.Env;
 import com.termux.app.fragments.settings.termux.TaiFunctionPickerModel.Section;
@@ -337,6 +340,59 @@ public class TaiFunctionPickerModelTest {
         List<TaiFunctionPickerModel.Entry> get = build(TaiFunction.ASSISTANT, env(12, 34, GpuPath.YES)).entries(Section.GET);
         assertFalse(values(get).contains("u2net"));
         assertFalse(values(get).contains("depth-anything-3-small"));
+    }
+
+    // ------------------------------------------------------------------------- the plan's line
+
+    private TaiFeaturePlan plan(TaiFunction function, Env env, TaiEvidence evidence) {
+        return TaiFeaturePlan.of(function, models(env), evidence, Collections.<TaiResidency.Entry>emptyList(), 0L, false);
+    }
+
+    @Test
+    public void thePlanReadsAsOneLineWithItsReason() {
+        installGemma();
+        TaiFunctionPickerModel.Model model = build(TaiFunction.APP_CATEGORIES, env(12, 34, GpuPath.YES));
+        assertEquals(E2B + " · GPU", model.plan.line);
+        assertEquals("PLAN_REASON_DEFAULT", model.plan.reason);
+        assertNull(model.plan.offer);
+
+        // Measured on this phone: the assistant's chat bench, with the speed-up.
+        TaiEvidence.InMemory bench = new TaiEvidence.InMemory()
+            .chat(new TaiEvidence.ChatResult(E2B, TaiModelSpec.BACKEND_LITERT_LM, "gpu", false, 6.0, true))
+            .chat(new TaiEvidence.ChatResult(E2B, TaiModelSpec.BACKEND_LITERT_LM, "cpu", false, 12.0, true));
+        TaiFunctionPickerModel.PlanLine measured = TaiFunctionPickerModel.planLine(
+            plan(TaiFunction.ASSISTANT, env(12, 34, GpuPath.YES), bench), LABELS);
+        assertEquals(E2B + " · CPU · PLAN_FASTER[2.0]", measured.line);
+        assertEquals("PLAN_REASON_MEASURED", measured.reason);
+    }
+
+    @Test
+    public void aPickMeasuredSlowerOffersTheFasterSetupInOneTap() {
+        installGemma();
+        prefs.put(TaiFunction.ASSISTANT.modelKey, E2B);
+        prefs.put(TaiFunction.ASSISTANT.accelKey, "cpu");
+        TaiEvidence.InMemory bench = new TaiEvidence.InMemory()
+            .chat(new TaiEvidence.ChatResult(E2B, TaiModelSpec.BACKEND_LITERT_LM, "gpu", false, 15.0, true))
+            .chat(new TaiEvidence.ChatResult(E2B, TaiModelSpec.BACKEND_LITERT_LM, "cpu", false, 10.0, true));
+        TaiFunctionPickerModel.PlanLine line = TaiFunctionPickerModel.planLine(
+            plan(TaiFunction.ASSISTANT, env(12, 34, GpuPath.YES), bench), LABELS);
+        assertEquals(E2B + " · CPU", line.line);
+        assertEquals("PLAN_REASON_PICK", line.reason);
+        assertEquals("PLAN_OFFER[GPU, 1.5]", line.offer);
+        assertEquals("gpu", line.offerAccelerator);
+    }
+
+    @Test
+    public void aRemoteOrModelLessPlanSaysSo() {
+        remoteConfigured = true;
+        remotePrefers = true;
+        TaiFunctionPickerModel.PlanLine remoteLine = build(TaiFunction.TIDY_DICTATION, env(12, 34, GpuPath.YES)).plan;
+        assertEquals("REMOTE[gpt-x]", remoteLine.line);
+        assertEquals("PLAN_REASON_REMOTE", remoteLine.reason);
+        remoteConfigured = false;
+        TaiFunctionPickerModel.PlanLine raw = build(TaiFunction.TIDY_DICTATION, env(6, 34, GpuPath.YES)).plan;
+        assertEquals("RAW_TEXT", raw.line);
+        assertEquals("PLAN_REASON_DEFAULT", raw.reason);
     }
 
     // ----------------------------------------------------------------------------- the chain
