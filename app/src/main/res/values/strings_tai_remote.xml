@@ -4,7 +4,7 @@
     <!-- The row on the On-device AI page -->
     <string name="tai_remote_zone_title">Remote model</string>
     <string name="tai_remote_row_title">Remote model</string>
-    <string name="tai_remote_row_summary_off">Use a model from OpenAI, OpenRouter or your own server</string>
+    <string name="tai_remote_row_summary_off">Use a model from Google, OpenRouter, Groq, Mistral or your own server</string>
     <string name="tai_remote_row_summary_on">%1$s on %2$s</string>
 
     <!-- The Remote model screen -->
@@ -13,12 +13,18 @@
     <string name="tai_remote_model_header">Model</string>
     <string name="tai_remote_actions_header">Manage</string>
 
+    <string name="tai_remote_provider_title">Provider</string>
+    <string name="tai_remote_provider_summary_none">Choose a provider</string>
+    <string name="tai_remote_provider_custom">Custom</string>
+    <string name="tai_remote_get_key_title">Get a key</string>
+    <string name="tai_remote_get_key_summary">Create one on %1$s</string>
+    <string name="tai_remote_free_plan_note">The free plan may use what you send to improve its models.</string>
+
     <string name="tai_remote_base_url_title">Server address</string>
     <string name="tai_remote_base_url_summary_none">Not set</string>
     <string name="tai_remote_base_url_summary_unencrypted">%1$s · Unencrypted</string>
     <string name="tai_remote_base_url_hint">https://api.openai.com/v1</string>
     <string name="tai_remote_preset_openai">OpenAI</string>
-    <string name="tai_remote_preset_openrouter">OpenRouter</string>
     <string name="tai_remote_preset_local">Server on this phone or LAN</string>
     <string name="tai_remote_url_unencrypted_note">Unencrypted. Allowed only for this phone and your own network.</string>
     <string name="tai_remote_url_bad_scheme">Use an address that starts with https:// or http://.</string>
@@ -36,6 +42,7 @@
     <string name="tai_remote_model_title">Model</string>
     <string name="tai_remote_model_summary_none">Choose a model</string>
     <string name="tai_remote_model_needs_server">Set the server address first</string>
+    <string name="tai_remote_model_needs_provider">Choose a provider first</string>
     <string name="tai_remote_model_loading">Fetching models…</string>
     <string name="tai_remote_model_search_hint">Search models</string>
     <string name="tai_remote_model_free_text_title">Model name</string>

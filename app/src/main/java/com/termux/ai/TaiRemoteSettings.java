@@ -14,6 +14,8 @@ import androidx.annotation.Nullable;
  */
 public final class TaiRemoteSettings {
     public static final String KEY_BASE_URL = "tai_remote_base_url";
+    /** The chosen {@link TaiRemotePresets} id; absent on installs from before providers existed. */
+    public static final String KEY_PRESET = "tai_remote_preset";
     public static final String KEY_MODEL = "tai_remote_model";
     /** The probe's answer; absent until a probe finished. */
     public static final String KEY_IMAGES_PROBED = "tai_remote_images_probed";
@@ -57,6 +59,31 @@ public final class TaiRemoteSettings {
         if (value.equals(baseUrl())) return;
         // Another server may serve another model under the same id; the probe no longer holds.
         prefs.edit().putString(KEY_BASE_URL, value).remove(KEY_IMAGES_PROBED).apply();
+    }
+
+    /**
+     * The chosen provider: the stored one, else the one the saved address reads as
+     * ({@link TaiRemotePresets#forBaseUrl}); {@code null} when neither says anything.
+     */
+    @Nullable
+    public TaiRemotePresets.Preset preset() {
+        TaiRemotePresets.Preset stored = TaiRemotePresets.byId(prefs.getString(KEY_PRESET, null));
+        return stored != null ? stored : TaiRemotePresets.forBaseUrl(baseUrl());
+    }
+
+    /**
+     * Stores the provider. A different provider takes its own address (Custom keeps the current
+     * one to edit) and forgets the model and the key, which belonged to the old one: a key is
+     * never sent to a provider it was not made for. The first choice keeps a key pasted before it.
+     */
+    public void choosePreset(@NonNull TaiRemotePresets.Preset preset) {
+        TaiRemotePresets.Preset current = preset();
+        prefs.edit().putString(KEY_PRESET, preset.id).apply();
+        if (current != null && current.id.equals(preset.id)) return;
+        if (!preset.isCustom()) setBaseUrl(preset.baseUrl);
+        if (current == null) return;
+        setModelId("");
+        secrets.clear(SECRET_API_KEY);
     }
 
     @NonNull
@@ -146,6 +173,7 @@ public final class TaiRemoteSettings {
         secrets.clear(SECRET_API_KEY);
         prefs.edit()
             .remove(KEY_BASE_URL)
+            .remove(KEY_PRESET)
             .remove(KEY_MODEL)
             .remove(KEY_IMAGES_PROBED)
             .remove(KEY_IMAGES_OVERRIDE)

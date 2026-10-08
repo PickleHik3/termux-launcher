@@ -1,6 +1,9 @@
 package com.termux.app.fragments.settings.termux;
 
+import android.app.Activity;
 import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -29,6 +32,7 @@ import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.ai.TaiRemoteClient;
+import com.termux.ai.TaiRemotePresets;
 import com.termux.ai.TaiRemoteSettings;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
@@ -48,6 +52,9 @@ import java.util.concurrent.Executors;
  */
 @Keep
 public class TaiRemotePreferencesFragment extends MaterialPreferenceFragment {
+    private static final String KEY_PROVIDER = "tai_remote_provider_row";
+    private static final String KEY_GET_KEY = "tai_remote_get_key";
+    private static final String KEY_FREE_PLAN = "tai_remote_free_plan";
     private static final String KEY_BASE_URL = "tai_remote_base_url";
     private static final String KEY_API_KEY = "tai_remote_api_key";
     private static final String KEY_MODEL = "tai_remote_model";
@@ -56,8 +63,8 @@ public class TaiRemotePreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_TEST = "tai_remote_test";
     private static final String KEY_REMOVE = "tai_remote_remove";
 
+    /** Address shortcuts in Custom's address dialog; the named providers are {@link TaiRemotePresets}. */
     static final String PRESET_OPENAI = "https://api.openai.com/v1";
-    static final String PRESET_OPENROUTER = "https://openrouter.ai/api/v1";
     static final String PRESET_LOCAL = "http://127.0.0.1:11434/v1";
 
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
@@ -72,6 +79,8 @@ public class TaiRemotePreferencesFragment extends MaterialPreferenceFragment {
         if (context == null) return;
         setPreferencesFromResource(R.xml.tai_remote_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
+        onClick(KEY_PROVIDER, this::showProviderDialog);
+        onClick(KEY_GET_KEY, this::openKeyPage);
         onClick(KEY_BASE_URL, this::showBaseUrlDialog);
         onClick(KEY_API_KEY, this::showApiKeyDialog);
         onClick(KEY_MODEL, this::chooseModel);
@@ -136,23 +145,41 @@ public class TaiRemotePreferencesFragment extends MaterialPreferenceFragment {
         String baseUrl = settings.baseUrl();
         boolean hasServer = TaiRemoteClient.checkUrl(baseUrl).allowed();
         String model = settings.modelId();
+        TaiRemotePresets.Preset preset = settings.preset();
+        boolean custom = preset != null && preset.isCustom();
+        boolean named = preset != null && !custom;
 
+        Preference provider = findPreference(KEY_PROVIDER);
+        if (provider != null) {
+            provider.setSummary(preset == null ? getString(R.string.tai_remote_provider_summary_none)
+                : presetLabel(preset));
+        }
+        Preference getKey = findPreference(KEY_GET_KEY);
+        if (getKey != null) {
+            getKey.setVisible(named);
+            if (named) getKey.setSummary(getString(R.string.tai_remote_get_key_summary, preset.displayName));
+        }
+        Preference freePlan = findPreference(KEY_FREE_PLAN);
+        if (freePlan != null) freePlan.setVisible(named && preset.freePlanTrains);
         Preference url = findPreference(KEY_BASE_URL);
         if (url != null) {
+            url.setVisible(custom);
             url.setSummary(baseUrl.isEmpty() ? getString(R.string.tai_remote_base_url_summary_none)
                 : TaiRemoteClient.isUnencrypted(baseUrl)
                 ? getString(R.string.tai_remote_base_url_summary_unencrypted, baseUrl) : baseUrl);
         }
         Preference key = findPreference(KEY_API_KEY);
         if (key != null) {
+            // "Usually needs none" is about a server of your own; a provider always wants its key.
             key.setSummary(settings.hasApiKey() ? R.string.tai_remote_api_key_summary_set
-                : R.string.tai_remote_api_key_summary_none);
+                : named ? R.string.tai_remote_base_url_summary_none : R.string.tai_remote_api_key_summary_none);
         }
         Preference modelRow = findPreference(KEY_MODEL);
         if (modelRow != null) {
             modelRow.setEnabled(hasServer);
             if (fetchingModels) modelRow.setSummary(R.string.tai_remote_model_loading);
-            else if (!hasServer) modelRow.setSummary(R.string.tai_remote_model_needs_server);
+            else if (!hasServer) modelRow.setSummary(preset == null ? R.string.tai_remote_model_needs_provider
+                : R.string.tai_remote_model_needs_server);
             else modelRow.setSummary(model.isEmpty() ? getString(R.string.tai_remote_model_summary_none) : model);
         }
         SwitchPreferenceCompat images = findPreference(KEY_IMAGES);
@@ -179,6 +206,53 @@ public class TaiRemotePreferencesFragment extends MaterialPreferenceFragment {
         if (remove != null) remove.setEnabled(!baseUrl.isEmpty() || !model.isEmpty() || settings.hasApiKey());
     }
 
+    // ---------------------------------------------------------------- provider
+
+    @NonNull
+    private String presetLabel(@NonNull TaiRemotePresets.Preset preset) {
+        return preset.isCustom() ? getString(R.string.tai_remote_provider_custom) : preset.displayName;
+    }
+
+    /** The four providers and Custom; a different one takes its own address and forgets model and key. */
+    private void showProviderDialog(@NonNull Context context) {
+        TaiRemoteSettings settings = new TaiRemoteSettings(context);
+        TaiRemotePresets.Preset current = settings.preset();
+        List<TaiRemotePresets.Preset> presets = TaiRemotePresets.ALL;
+        CharSequence[] labels = new CharSequence[presets.size()];
+        int checked = -1;
+        for (int i = 0; i < presets.size(); i++) {
+            labels[i] = presetLabel(presets.get(i));
+            if (presets.get(i) == current) checked = i;
+        }
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.tai_remote_provider_title)
+            .setSingleChoiceItems(labels, checked, (d, which) -> {
+                d.dismiss();
+                TaiRemotePresets.Preset picked = presets.get(which);
+                if (picked == current) return;
+                settings.choosePreset(picked);
+                testSummary = null;
+                refresh();
+                // Custom needs an address before anything else works; ask for it straight away.
+                if (picked.isCustom() && settings.baseUrl().isEmpty()) showBaseUrlDialog(context);
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
+    }
+
+    private void openKeyPage(@NonNull Context context) {
+        TaiRemotePresets.Preset preset = new TaiRemoteSettings(context).preset();
+        if (preset == null || preset.keyPageUrl.isEmpty()) return;
+        try {
+            Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(preset.keyPageUrl));
+            if (!(context instanceof Activity)) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+        } catch (Exception e) {
+            // No browser: the address itself is the next best thing.
+            AppNotice.show(context, preset.keyPageUrl, true);
+        }
+    }
+
     // ---------------------------------------------------------------- server address
 
     private void showBaseUrlDialog(@NonNull Context context) {
@@ -198,7 +272,6 @@ public class TaiRemotePreferencesFragment extends MaterialPreferenceFragment {
         ChipGroup presets = new ChipGroup(context);
         presets.setPadding(0, dp(context, 8), 0, 0);
         addPreset(context, presets, R.string.tai_remote_preset_openai, PRESET_OPENAI, input);
-        addPreset(context, presets, R.string.tai_remote_preset_openrouter, PRESET_OPENROUTER, input);
         addPreset(context, presets, R.string.tai_remote_preset_local, PRESET_LOCAL, input);
         layout.addView(presets);
 
@@ -224,6 +297,9 @@ public class TaiRemotePreferencesFragment extends MaterialPreferenceFragment {
                 showUrlNote(context, note, value, true);
                 return;
             }
+            // Typed here, the address is Custom's even when it matches a provider's. Stored first,
+            // so the new address is never read as a provider switch.
+            settings.choosePreset(TaiRemotePresets.CUSTOM);
             settings.setBaseUrl(value);
             testSummary = null;
             dialog.dismiss();
@@ -296,11 +372,17 @@ public class TaiRemotePreferencesFragment extends MaterialPreferenceFragment {
             .setView(scroll(context, layout))
             .setPositiveButton(R.string.termux_ai_dialog_save, (d, w) -> {
                 String key = input.getText().toString().trim();
-                boolean saved = new TaiRemoteSettings(context).setApiKey(key);
+                TaiRemoteSettings settings = new TaiRemoteSettings(context);
+                boolean saved = settings.setApiKey(key);
                 testSummary = null;
                 if (!saved) AppNotice.show(context, R.string.tai_remote_api_key_save_failed, true);
                 else if (!key.isEmpty()) AppNotice.show(context, R.string.tai_remote_api_key_saved, false);
                 refresh();
+                // A provider's key arrives without a model: start from the provider's own pick.
+                TaiRemotePresets.Preset preset = settings.preset();
+                if (saved && !key.isEmpty() && preset != null && !preset.model.isEmpty() && settings.modelId().isEmpty()) {
+                    fetchModels(context, preset.model);
+                }
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
@@ -308,8 +390,16 @@ public class TaiRemotePreferencesFragment extends MaterialPreferenceFragment {
 
     // ---------------------------------------------------------------- model
 
-    /** Fetches {@code /models} off the main thread, then the picker or the free-text field. */
     private void chooseModel(@NonNull Context context) {
+        fetchModels(context, null);
+    }
+
+    /**
+     * Fetches {@code /models} off the main thread, then the picker or the free-text field. With a
+     * provider's {@code preferred} model, a list that carries it stores it without asking; one
+     * that does not, or no list at all, opens the picker rather than storing a dead id.
+     */
+    private void fetchModels(@NonNull Context context, @Nullable String preferred) {
         if (fetchingModels) return;
         TaiRemoteSettings settings = new TaiRemoteSettings(context);
         if (!TaiRemoteClient.checkUrl(settings.baseUrl()).allowed()) return;
@@ -324,7 +414,9 @@ public class TaiRemotePreferencesFragment extends MaterialPreferenceFragment {
                 Context ui = getContext();
                 if (!isAdded() || ui == null) return;
                 refresh();
-                if (!list.ids.isEmpty()) showModelPicker(ui, list.ids);
+                String listed = preferred == null ? null : TaiRemotePresets.listedModel(list.ids, preferred);
+                if (listed != null) pickModel(ui, listed);
+                else if (!list.ids.isEmpty()) showModelPicker(ui, list.ids);
                 else if (list.freeText) showModelNameDialog(ui);
                 else {
                     AppNotice.show(ui, getString(R.string.tai_remote_model_list_failed,

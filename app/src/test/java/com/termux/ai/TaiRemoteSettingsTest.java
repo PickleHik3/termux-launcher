@@ -90,6 +90,57 @@ public class TaiRemoteSettingsTest {
         assertFalse(settings.isConfigured());
     }
 
+    @Test
+    public void preset_existingAddressReadsAsItsPresetOrCustom() {
+        assertNull(settings.preset());
+        settings.setBaseUrl("https://openrouter.ai/api/v1/");
+        assertEquals(TaiRemotePresets.OPENROUTER, settings.preset());
+        settings.setBaseUrl("http://192.168.1.20:11434/v1");
+        assertEquals(TaiRemotePresets.CUSTOM, settings.preset());
+    }
+
+    @Test
+    public void preset_storedChoiceWinsOverTheAddress() {
+        settings.setBaseUrl("https://openrouter.ai/api/v1");
+        settings.choosePreset(TaiRemotePresets.CUSTOM);
+        assertEquals(TaiRemotePresets.CUSTOM, settings.preset());
+        assertEquals("https://openrouter.ai/api/v1", settings.baseUrl());
+        assertEquals(TaiRemotePresets.ID_CUSTOM, prefs.getString(TaiRemoteSettings.KEY_PRESET, null));
+    }
+
+    @Test
+    public void preset_switchingTakesTheAddressAndForgetsModelAndKey() {
+        settings.choosePreset(TaiRemotePresets.GOOGLE);
+        assertEquals(TaiRemotePresets.GOOGLE.baseUrl, settings.baseUrl());
+        settings.setModelId("gemini-flash-lite-latest");
+        assertTrue(settings.setApiKey("AIza-test-key"));
+
+        settings.choosePreset(TaiRemotePresets.GOOGLE);
+        assertEquals("gemini-flash-lite-latest", settings.modelId());
+        assertTrue(settings.hasApiKey());
+
+        settings.choosePreset(TaiRemotePresets.GROQ);
+        assertEquals(TaiRemotePresets.GROQ.baseUrl, settings.baseUrl());
+        assertEquals("", settings.modelId());
+        assertFalse(settings.hasApiKey());
+    }
+
+    @Test
+    public void preset_firstChoiceKeepsAKeyPastedBeforeIt() {
+        assertTrue(settings.setApiKey("gsk-test-key"));
+        settings.choosePreset(TaiRemotePresets.GROQ);
+        assertTrue(settings.hasApiKey());
+        assertEquals(TaiRemotePresets.GROQ, settings.preset());
+    }
+
+    @Test
+    public void preset_removeForgetsTheChoice() {
+        settings.choosePreset(TaiRemotePresets.MISTRAL);
+        settings.clearAll();
+        assertNull(settings.preset());
+        assertFalse(prefs.contains(TaiRemoteSettings.KEY_PRESET));
+    }
+
     private static final class PlainKeys implements TaiSecretStore.KeySource {
         @Nullable private SecretKey key;
 
