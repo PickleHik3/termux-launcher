@@ -117,10 +117,9 @@ public final class TaiRemoteClient {
         String[] words = query == null ? new String[0] : query.toString().trim().toLowerCase(Locale.ROOT).split("\\s+");
         List<String> matches = new ArrayList<>();
         for (String id : ids) {
-            String lower = id.toLowerCase(Locale.ROOT);
             boolean all = true;
             for (String word : words) {
-                if (!word.isEmpty() && !lower.contains(word)) {
+                if (!word.isEmpty() && !containsIgnoreCase(id, word)) {
                     all = false;
                     break;
                 }
@@ -128,6 +127,15 @@ public final class TaiRemoteClient {
             if (all) matches.add(id);
         }
         return matches;
+    }
+
+    /** Whether {@code text} contains {@code word} ignoring case, without lowercasing the list on every keystroke. */
+    private static boolean containsIgnoreCase(@NonNull String text, @NonNull String word) {
+        int last = text.length() - word.length();
+        for (int at = 0; at <= last; at++) {
+            if (text.regionMatches(true, at, word, 0, word.length())) return true;
+        }
+        return false;
     }
 
     /** {@link #testConnection}'s answer: the round trip in ms, or the error message. */
