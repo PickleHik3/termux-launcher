@@ -76,6 +76,27 @@ public final class TaiFeaturePlan {
         Collections.unmodifiableSet(EnumSet.of(TaiFunction.VOICE_TYPING, TaiFunction.EMBEDDINGS,
             TaiFunction.DAWN_CHAT, TaiFunction.READ_ALOUD))));
 
+    /**
+     * The user's own Parameters values for a model file ({@link TaiSettings#storedParameter}): a value
+     * the user stored is a pick (decision 3), the model's own over the global one. A schema default the
+     * user never set is not stored, and answers {@code null}.
+     */
+    public interface Parameters {
+        /** {@code gpu} or {@code cpu} as the user stored it for this model file; {@code null} when not stored. */
+        @Nullable
+        String accelerator(@NonNull String modelId, @NonNull String backend);
+
+        /** Speculative decoding as the user stored it for this model file; {@code null} when not stored. */
+        @Nullable
+        Boolean speculative(@NonNull String modelId, @NonNull String backend);
+
+        /** Nothing stored. */
+        Parameters NONE = new Parameters() {
+            @Nullable @Override public String accelerator(@NonNull String modelId, @NonNull String backend) { return null; }
+            @Nullable @Override public Boolean speculative(@NonNull String modelId, @NonNull String backend) { return null; }
+        };
+    }
+
     /** A setup this phone measured faster than the user's pick. */
     public static final class Faster {
         /** {@code gpu} or {@code cpu}. */
@@ -161,8 +182,22 @@ public final class TaiFeaturePlan {
     public static TaiFeaturePlan of(@NonNull TaiFunction feature, @NonNull TaiFunctionModels models,
                                     @NonNull TaiEvidence evidence, @NonNull List<TaiResidency.Entry> residents,
                                     long nowMs, boolean memoryTight) {
+        return of(feature, models, Parameters.NONE, evidence, residents, nowMs, memoryTight);
+    }
+
+    /**
+     * As above, with the user's Parameters values: a stored accelerator or speculative decoding is a pick,
+     * below the function's own accelerator pick and above anything measured or defaulted.
+     */
+    @NonNull
+    public static TaiFeaturePlan of(@NonNull TaiFunction feature, @NonNull TaiFunctionModels models,
+                                    @NonNull Parameters parameters, @NonNull TaiEvidence evidence,
+                                    @NonNull List<TaiResidency.Entry> residents, long nowMs, boolean memoryTight) {
         TaiFunctionModels.Resolution resolution = models.resolve(feature);
         Reason modelReason = resolution.source == TaiFunctionModels.Source.PICK ? Reason.PICK : Reason.DEFAULT;
+        // Nothing resolved at all reads as "not set", not as the feature's model-less choice.
+        TaiTierPolicy.WithoutModel without = resolution.source == TaiFunctionModels.Source.NONE
+            ? TaiTierPolicy.WithoutModel.NONE : resolution.without;
         boolean pickedOff = resolution.source == TaiFunctionModels.Source.PICK
             && resolution.modelId == null && !resolution.isRemote();
         // "Only when no local model fits": the provider is the fallback of a local-first routing.
@@ -178,7 +213,7 @@ public final class TaiFeaturePlan {
             if (routedFallback != null) return remote(feature, routedFallback, Reason.REMOTE);
             return new TaiFeaturePlan(feature, Where.NONE, modelReason, null, modelReason, null,
                 null, Reason.DEFAULT, null, Reason.DEFAULT, 0, Reason.DEFAULT, residency, Reason.DEFAULT,
-                resolution.without, null, false, 0.0, null);
+                without, null, false, 0.0, null);
         }
 
         TaiFunctionModels.ModelInfo info = resolution.info;
@@ -191,6 +226,10 @@ public final class TaiFeaturePlan {
         TaiPlatformCaps.GpuPath path = TaiGpuVerdict.apply(models.env().gpuPath, evidence.gpuVerdict());
 
         String pick = resolution.source == TaiFunctionModels.Source.PICK ? models.acceleratorPick(feature) : "";
+        if (pick.isEmpty()) {
+            String stored = parameters.accelerator(info.id, info.backend);
+            if (TaiTierPolicy.ACCEL_GPU.equals(stored) || TaiTierPolicy.ACCEL_CPU.equals(stored)) pick = stored;
+        }
         Map<String, Double> measured = speeds(feature, info, evidence, false);
         Map<String, Double> plain = new HashMap<>(measured);
         // A measured GPU never promotes a GPU whose verdict is that it answers wrongly.
@@ -227,7 +266,11 @@ public final class TaiFeaturePlan {
 
         Boolean speculative;
         Reason speculativeReason;
-        if (!info.speculative) {
+        Boolean storedSpeculative = parameters.speculative(info.id, info.backend);
+        if (storedSpeculative != null) {
+            speculative = storedSpeculative;
+            speculativeReason = Reason.PICK;
+        } else if (!info.speculative) {
             speculative = Boolean.FALSE;
             speculativeReason = Reason.DEFAULT;
         } else if (neverRan(feature, info, evidence, accelerator)) {

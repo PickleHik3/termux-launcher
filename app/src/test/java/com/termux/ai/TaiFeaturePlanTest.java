@@ -187,6 +187,63 @@ public class TaiFeaturePlanTest {
         assertEquals(0.0, plan.speedup, 1e-9);
     }
 
+    // ------------------------------------------------------------------- the Parameters screen
+
+    /** What the user stored in Parameters, as {@code TaiSettings.storedParameter} answers it. */
+    private static TaiFeaturePlan.Parameters stored(String accelerator, Boolean speculative) {
+        return new TaiFeaturePlan.Parameters() {
+            @Override public String accelerator(String modelId, String backend) { return accelerator; }
+            @Override public Boolean speculative(String modelId, String backend) { return speculative; }
+        };
+    }
+
+    private TaiFeaturePlan planWith(TaiFunction feature, TaiFeaturePlan.Parameters parameters) {
+        return TaiFeaturePlan.of(feature, models(env(12, GpuPath.YES)), parameters, evidence,
+            Collections.<TaiResidency.Entry>emptyList(), NOW, false);
+    }
+
+    @Test
+    public void aStoredParameterIsAPickAndBeatsWhatWasMeasured() {
+        installE2b();
+        // Measured: the GPU is twice as fast, and speculative decoding faster still.
+        evidence.chat(chat(GPU, false, 20.0)).chat(chat(CPU, false, 10.0)).chat(chat(GPU, true, 30.0));
+        Object[][] table = {
+            // stored accelerator, stored speculative, plan accelerator, its reason, plan speculative, its reason
+            {null, null, GPU, Reason.MEASURED, Boolean.TRUE, Reason.MEASURED},
+            {CPU, null, CPU, Reason.PICK, Boolean.TRUE, Reason.DEFAULT},
+            {null, Boolean.FALSE, GPU, Reason.MEASURED, Boolean.FALSE, Reason.PICK},
+            {CPU, Boolean.TRUE, CPU, Reason.PICK, Boolean.TRUE, Reason.PICK},
+        };
+        for (Object[] row : table) {
+            TaiFeaturePlan plan = planWith(TaiFunction.ASSISTANT, stored((String) row[0], (Boolean) row[1]));
+            String name = java.util.Arrays.toString(row);
+            assertEquals(name, row[2], plan.accelerator);
+            assertEquals(name, row[3], plan.acceleratorReason);
+            assertEquals(name, row[4], plan.speculative);
+            assertEquals(name, row[5], plan.speculativeReason);
+        }
+        // The stored accelerator is a pick, so it goes explicit, and the faster setup is offered.
+        TaiFeaturePlan cpu = planWith(TaiFunction.ASSISTANT, stored(CPU, null));
+        assertEquals(CPU, cpu.applyTo(settings(), E2B).accelerator);
+        assertNotNull(cpu.faster);
+    }
+
+    @Test
+    public void theFunctionsOwnPickBeatsTheParametersValueAndNothingStoredIsNoPick() {
+        installE2b();
+        prefs.put(TaiFunction.TIDY_DICTATION.modelKey, E2B);
+        prefs.put(TaiFunction.TIDY_DICTATION.accelKey, GPU);
+        assertEquals(GPU, planWith(TaiFunction.TIDY_DICTATION, stored(CPU, null)).accelerator);
+        // Nothing stored (a schema default the user never set): the plan's own default.
+        TaiFeaturePlan none = planWith(TaiFunction.APP_CATEGORIES, TaiFeaturePlan.Parameters.NONE);
+        assertEquals(Reason.DEFAULT, none.acceleratorReason);
+        assertEquals(Reason.DEFAULT, none.speculativeReason);
+        // A stored GPU on a phone with no GPU at all still runs on the CPU.
+        TaiFeaturePlan noGpu = TaiFeaturePlan.of(TaiFunction.APP_CATEGORIES, models(env(12, GpuPath.NO)),
+            stored(GPU, null), evidence, Collections.<TaiResidency.Entry>emptyList(), NOW, false);
+        assertEquals(CPU, noGpu.accelerator);
+    }
+
     // ------------------------------------------------------------------------------- measured
 
     @Test

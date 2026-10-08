@@ -602,6 +602,16 @@ public final class TaiSettings {
         return BIND_MODE_LOCALHOST;
     }
 
+    /**
+     * The value the user stored in Parameters for {@code field}: the model's own, else the backend's
+     * global, else the legacy global; {@code null} when none was stored. A schema default is never
+     * returned, so a non-null answer is the user's choice (the feature load plan counts it as a pick).
+     */
+    @Nullable
+    public Object storedParameter(@Nullable String backend, @Nullable String modelId, @NonNull String field) {
+        return resolveParameter(getParameterSchema(backend), field, modelId);
+    }
+
     @Nullable
     private Object resolveParameter(@NonNull ParameterSchema schema, @NonNull String field, @Nullable String modelId) {
         ParameterSpec spec = schema.get(field);
