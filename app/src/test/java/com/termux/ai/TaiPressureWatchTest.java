@@ -13,15 +13,14 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
- * The watch's decisions from a table. The floors are pong's 12 GB class: hold 1.5 GiB (tier 1),
- * peak 0.75 GiB (tier 2), with the swap and foreground penalties on top when they apply.
+ * The watch's decisions from a table. The floors are the relaxed memory limits': hold 0.75 GiB
+ * (tier 1), peak 0.5 GiB (tier 2), the same on every RAM class; unrestricted has none.
  */
 public class TaiPressureWatchTest {
 
     private static final long MB = 1024L * 1024L;
-    private static final long PONG_RAM_CLASS = TaiLoadBudget.ramClassBytes(11_530_736L * 1024L);
-    private static final long HOLD = TaiLoadBudget.floorBytes(PONG_RAM_CLASS, false, TaiLoadBudget.Conditions.NORMAL);
-    private static final long PEAK = TaiLoadBudget.floorBytes(PONG_RAM_CLASS, true, TaiLoadBudget.Conditions.NORMAL);
+    private static final long HOLD = TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.RELAXED);
+    private static final long PEAK = TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.RELAXED);
     private static final long NOW = 1_700_000_000_000L;
 
     // --- tiers ---------------------------------------------------------------------------------
@@ -29,12 +28,13 @@ public class TaiPressureWatchTest {
     /** Tier 1 below the hold floor gives up idle auxiliaries; tier 2 below the peak floor gives up idle chat too. */
     @Test
     public void tierFollowsTheHoldAndPeakFloorsFromTheTopDown() {
-        assertEquals(1536L * MB, HOLD);
-        assertEquals(768L * MB, PEAK);
+        assertEquals(768L * MB, HOLD);
+        assertEquals(512L * MB, PEAK);
         assertEquals(TaiPressureWatch.Tier.NONE, tier(5_800L * MB, false));
+        assertEquals(TaiPressureWatch.Tier.NONE, tier(1000L * MB, false));
         assertEquals(TaiPressureWatch.Tier.NONE, tier(HOLD, false));
         assertEquals(TaiPressureWatch.Tier.AUXILIARY, tier(HOLD - 1L, false));
-        assertEquals(TaiPressureWatch.Tier.AUXILIARY, tier(1000L * MB, false));
+        assertEquals(TaiPressureWatch.Tier.AUXILIARY, tier(600L * MB, false));
         assertEquals(TaiPressureWatch.Tier.AUXILIARY, tier(PEAK, false));
         assertEquals(TaiPressureWatch.Tier.CHAT, tier(PEAK - 1L, false));
         assertEquals(TaiPressureWatch.Tier.CHAT, tier(200L * MB, false));
@@ -42,12 +42,12 @@ public class TaiPressureWatchTest {
 
     /**
      * The 1.25 x threshold line (394 MB on pong, 315 MB threshold) that used to give up chat is
-     * gone: 400 MB free is tier 2 because it is under the peak floor, and 800 MB is only tier 1.
+     * gone: 400 MB free is tier 2 because it is under the peak floor, and 700 MB is only tier 1.
      */
     @Test
     public void theOldThresholdLineIsGone() {
         assertEquals(TaiPressureWatch.Tier.CHAT, tier(400L * MB, false));
-        assertEquals(TaiPressureWatch.Tier.AUXILIARY, tier(800L * MB, false));
+        assertEquals(TaiPressureWatch.Tier.AUXILIARY, tier(700L * MB, false));
     }
 
     @Test
@@ -65,21 +65,18 @@ public class TaiPressureWatchTest {
         assertEquals(TaiPressureWatch.Tier.AUXILIARY, TaiPressureWatch.tier(100L * MB, HOLD, 0L, false));
     }
 
-    /** The penalties move the lines the watch uses: low swap raises both, the launcher out of front only the hold floor. */
+    /**
+     * Unrestricted, the gate admits loads below both relaxed floors, so the watch must not hold
+     * those lines either or it would unload what was just admitted: only lowMemory acts.
+     */
     @Test
-    public void thePenaltiesMoveTheWatchsLines() {
-        TaiLoadBudget.Conditions swapLow = new TaiLoadBudget.Conditions(true, true);
-        TaiLoadBudget.Conditions behind = new TaiLoadBudget.Conditions(false, false);
-        long hold = TaiLoadBudget.floorBytes(PONG_RAM_CLASS, false, swapLow);
-        long peak = TaiLoadBudget.floorBytes(PONG_RAM_CLASS, true, swapLow);
-        assertEquals(TaiPressureWatch.Tier.NONE, TaiPressureWatch.tier(HOLD + 1L, HOLD, PEAK, false));
-        assertEquals(TaiPressureWatch.Tier.AUXILIARY, TaiPressureWatch.tier(HOLD + 1L, hold, peak, false));
-        assertEquals(TaiPressureWatch.Tier.CHAT, TaiPressureWatch.tier(PEAK + 1L, hold, peak, false));
-        long holdBehind = TaiLoadBudget.floorBytes(PONG_RAM_CLASS, false, behind);
-        long peakBehind = TaiLoadBudget.floorBytes(PONG_RAM_CLASS, true, behind);
-        assertEquals(PEAK, peakBehind);
-        assertEquals(HOLD + 256L * MB, holdBehind);
-        assertEquals(TaiPressureWatch.Tier.AUXILIARY, TaiPressureWatch.tier(HOLD + 1L, holdBehind, peakBehind, false));
+    public void unrestrictedLimitsLeaveTheWatchOnlyLowMemory() {
+        long hold = TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.UNRESTRICTED);
+        long peak = TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.UNRESTRICTED);
+        assertEquals(0L, hold);
+        assertEquals(0L, peak);
+        assertEquals(TaiPressureWatch.Tier.NONE, TaiPressureWatch.tier(100L * MB, hold, peak, false));
+        assertEquals(TaiPressureWatch.Tier.RELEASE_ALL, TaiPressureWatch.tier(100L * MB, hold, peak, true));
     }
 
     /** 250 ms while a load or first prefill runs, 2 s otherwise. */

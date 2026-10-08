@@ -51,8 +51,8 @@ public final class TaiDeviceCapabilities {
     public final long availableMemoryBytes;
     /**
      * Android's own low-memory line, {@code MemoryInfo.threshold}: the free memory at which the
-     * system starts killing cached apps (315 MB on pong). The budget's floor is a multiple of it;
-     * {@code 0} when unavailable.
+     * system starts killing cached apps (315 MB on pong). Reported for diagnostics; the load budget
+     * does not use it. {@code 0} when unavailable.
      */
     public final long memoryThresholdBytes;
     public final boolean lowMemory;

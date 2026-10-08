@@ -10,7 +10,6 @@ import androidx.annotation.Nullable;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.List;
 
 /**
  * The phone's free memory as the gate, the load meter and the pressure watch read it.
@@ -21,17 +20,14 @@ import java.util.List;
  * this class reads {@code MemAvailable} from {@code /proc/meminfo} instead, together with
  * {@code SwapTotal} and {@code SwapFree}, which {@code MemoryInfo} does not carry at all. When the
  * file cannot be read (whether an untrusted app may read it on every release is unverified) the
- * reading falls back to {@code availMem} and swap is unknown, which below API 36 costs the swap
- * penalty of {@link TaiLoadBudget#floorBytes}.
+ * reading falls back to {@code availMem} and swap is unknown.
  *
  * <p>The parser and the choice between the two sources are pure; only {@link #read} and
- * {@link #launcherInFront} touch Android.
+ * {@link #conditions} touch Android.
  */
 final class TaiMemInfo {
     /** Android 16: the first release whose {@code availMem} is MemAvailable. */
     static final int AVAIL_MEM_IS_AVAILABLE_SDK = 36;
-    /** Swap with less than this share free is "low": lmkd's own line is 10 %, this keeps a step of cushion. */
-    static final int SWAP_LOW_PERCENT = 15;
     private static final String PROC_MEMINFO = "/proc/meminfo";
 
     private TaiMemInfo() {
@@ -57,20 +53,6 @@ final class TaiMemInfo {
             return swapTotalBytes >= 0L && swapFreeBytes >= 0L;
         }
 
-        /**
-         * Whether the gate adds its swap penalty: known swap with less than {@link #SWAP_LOW_PERCENT}
-         * free; unknown swap below API 36. A phone with no swap at all has none to run out of.
-         */
-        boolean swapLow(int sdkInt) {
-            return TaiMemInfo.swapLow(swapTotalBytes, swapFreeBytes, sdkInt < AVAIL_MEM_IS_AVAILABLE_SDK);
-        }
-    }
-
-    /** The swap rule on bare numbers; a negative figure is unknown, which counts as low only when {@code unknownCounts}. */
-    static boolean swapLow(long swapTotalBytes, long swapFreeBytes, boolean unknownCounts) {
-        if (swapTotalBytes < 0L || swapFreeBytes < 0L) return unknownCounts;
-        if (swapTotalBytes == 0L) return false;
-        return swapFreeBytes * 100L < swapTotalBytes * SWAP_LOW_PERCENT;
     }
 
     /**
@@ -156,33 +138,13 @@ final class TaiMemInfo {
         }
     }
 
-    /** The conditions the gate's floors depend on, read now. */
-    @NonNull
-    static TaiLoadBudget.Conditions conditions(@Nullable Context context, @NonNull Reading reading) {
-        return new TaiLoadBudget.Conditions(reading.swapLow(Build.VERSION.SDK_INT), launcherInFront(context));
-    }
-
     /**
-     * Whether the launcher (the app's main process) is the foreground or visible app. The runtime
-     * runs in {@code :tai_runtime}, which cannot see activities, but an app may list its own
-     * processes and their importance. Anything unknown counts as in front, so a failed read never
-     * raises the floor.
+     * The conditions the budget's floors depend on, read now: the user's memory limits
+     * ({@link TaiSettings#memoryMode}), which both the gate in the main process and the runtime's
+     * watch in {@code :tai_runtime} must see the same way.
      */
-    static boolean launcherInFront(@Nullable Context context) {
-        if (context == null) return true;
-        try {
-            ActivityManager activityManager = context.getSystemService(ActivityManager.class);
-            List<ActivityManager.RunningAppProcessInfo> processes =
-                activityManager == null ? null : activityManager.getRunningAppProcesses();
-            if (processes == null) return true;
-            String main = context.getPackageName();
-            for (ActivityManager.RunningAppProcessInfo process : processes) {
-                if (main.equals(process.processName)) {
-                    return process.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_VISIBLE;
-                }
-            }
-        } catch (RuntimeException ignored) {
-        }
-        return true;
+    @NonNull
+    static TaiLoadBudget.Conditions conditions(@Nullable Context context) {
+        return TaiLoadBudget.Conditions.of(TaiSettings.memoryMode(context));
     }
 }

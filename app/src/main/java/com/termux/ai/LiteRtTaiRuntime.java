@@ -1079,8 +1079,8 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
             appContext, modelSpec, now, TaiModelSpec.BACKEND_LITERT_LM, accelerator, contextTokens, slope, fileBytes / 10L);
         return TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, fileBytes,
             encoders, now.physicalMemoryBytes, available, Collections.singletonList("cpu"), window, null, 0,
-            true, now.memoryThresholdBytes, history, Collections.<TaiResidency.Entry>emptyList())
-            .withConditions(TaiMemInfo.conditions(appContext, memory)));
+            true, history, Collections.<TaiResidency.Entry>emptyList())
+            .withConditions(TaiMemInfo.conditions(appContext)));
     }
 
     @NonNull

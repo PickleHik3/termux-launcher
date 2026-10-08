@@ -190,7 +190,7 @@ public class TaiResidencyTest {
      */
     @Test
     public void thePlanCreditsAChatReplacementButNotAnEmbeddingResident() {
-        long reserve = TaiLoadBudget.holdFloorBytes(TaiLoadBudget.ramClassBytes(PONG_TOTAL));
+        long reserve = TaiLoadBudget.HOLD_FLOOR_BYTES;
         long e4bGpu4k = TaiLoadBudget.estimateBytes(TaiModelSpec.BACKEND_LITERT_LM, "gpu", E4B, false, 4096);
         long shortBy = 500_000_000L;
         long available = reserve + e4bGpu4k - shortBy;
@@ -222,7 +222,7 @@ public class TaiResidencyTest {
     @Test
     public void anEmbeddingThatDoesNotFitIsRefusedWithTheChatRefusal() throws Exception {
         TaiModelSpec spec = embeddingSpec("emb", TaiModelSpec.BACKEND_LITERT_LM, EMBEDDING_GEMMA);
-        long reserve = TaiLoadBudget.holdFloorBytes(TaiLoadBudget.ramClassBytes(PONG_TOTAL));
+        long reserve = TaiLoadBudget.HOLD_FLOOR_BYTES;
         TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(TaiResidency.embeddingEstimateBytes(spec), "cpu",
             PONG_TOTAL, reserve + 100_000_000L);
         assertFalse(plan.fits);
@@ -243,7 +243,7 @@ public class TaiResidencyTest {
     @Test
     public void anEmbeddingThatDoesNotFitIsRefusedWith503AndARetryAfter() throws Exception {
         TaiModelSpec spec = embeddingSpec("emb", TaiModelSpec.BACKEND_LITERT_LM, EMBEDDING_GEMMA);
-        long reserve = TaiLoadBudget.holdFloorBytes(TaiLoadBudget.ramClassBytes(PONG_TOTAL));
+        long reserve = TaiLoadBudget.HOLD_FLOOR_BYTES;
         TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(TaiResidency.embeddingEstimateBytes(spec), "cpu",
             PONG_TOTAL, reserve + 100_000_000L);
         assertFalse(plan.fits);

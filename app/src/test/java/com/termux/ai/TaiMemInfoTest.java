@@ -8,7 +8,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-/** The /proc/meminfo parser, the choice between it and {@code availMem}, and the swap rule. */
+/** The /proc/meminfo parser and the choice between it and {@code availMem}. */
 public class TaiMemInfoTest {
     private static final long KB = 1024L;
     private static final long GIB = 1024L * 1024L * KB;
@@ -93,26 +93,6 @@ public class TaiMemInfoTest {
         assertEquals(3L * GIB, reading.availBytes);
         assertFalse(reading.fromProc);
         assertFalse(reading.swapKnown());
-        // Unknown swap below API 36 counts as low; on 36 it does not.
-        assertTrue(reading.swapLow(34));
-        assertFalse(reading.swapLow(36));
         assertEquals(0L, TaiMemInfo.choose(34, null, -1L).availBytes);
-    }
-
-    @Test
-    public void swapIsLowBelowFifteenPercentFree() {
-        long total = 10L * GIB;  // 15 % of it is a whole number of bytes
-        assertFalse(TaiMemInfo.swapLow(total, total * 15L / 100L, false));
-        assertTrue(TaiMemInfo.swapLow(total, total * 15L / 100L - 1L, false));
-        assertTrue(TaiMemInfo.swapLow(total, 0L, false));
-        assertFalse(TaiMemInfo.swapLow(total, total, true));
-        // No swap at all has none to run out of; unknown swap is judged by the caller's rule.
-        assertFalse(TaiMemInfo.swapLow(0L, 0L, true));
-        assertTrue(TaiMemInfo.swapLow(-1L, -1L, true));
-        assertFalse(TaiMemInfo.swapLow(-1L, -1L, false));
-        // Pong's file: 5 GiB of 8 GiB free is not low.
-        TaiMemInfo.Reading pong = TaiMemInfo.parse(PONG);
-        assertNotNull(pong);
-        assertFalse(pong.swapLow(34));
     }
 }
