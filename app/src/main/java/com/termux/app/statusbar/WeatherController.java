@@ -48,8 +48,9 @@ import java.util.concurrent.Executors;
  * one exception, resolved by a search and cached. The place is read on every refresh and the
  * cache remembers which place it was fetched for: a changed place empties the cache and fetches
  * again, with no restart and no listener on the preference. That covers every controller at once
- * (the status bar's and the home widgets' each hold their own), since each refreshes on its way
- * back from Settings.
+ * (the status bar's and the home widgets' each hold their own), since each is refreshed on the
+ * way back from Settings: the status bar's by the activity's start, the widgets' by the widget
+ * pane's ({@code BuiltinWidgetServices.onHostStart}).
  */
 public final class WeatherController {
 
