@@ -1424,6 +1424,7 @@
         <string name="tai_centre_action_install">Install</string>
         <string name="tai_centre_action_dismiss">Dismiss</string>
         <string name="tai_centre_action_more">More actions for %1$s</string>
+        <string name="tai_centre_action_delete_for">Delete %1$s</string>
         <string name="tai_centre_pill_in_use">In use</string>
         <string name="tai_centre_pill_default">Default</string>
         <string name="tai_centre_pill_backend_litert">LiteRT</string>

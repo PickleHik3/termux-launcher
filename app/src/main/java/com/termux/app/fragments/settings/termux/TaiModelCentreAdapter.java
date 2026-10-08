@@ -751,6 +751,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             more.setVisibility(next.installed != null ? View.VISIBLE : View.GONE);
             delete.setVisibility(next.installed != null ? View.VISIBLE : View.GONE);
             more.setContentDescription(context.getString(R.string.tai_centre_action_more, next.title));
+            delete.setContentDescription(context.getString(R.string.tai_centre_action_delete_for, next.title));
             if (core instanceof MaterialCardView) {
                 MaterialCardView card = (MaterialCardView) core;
                 card.setStrokeColor(role(context, androidx.appcompat.R.attr.colorPrimary));
