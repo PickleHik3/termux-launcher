@@ -213,12 +213,13 @@ public final class LayoutCanvasView extends View {
     private static final Block[] BARS = {
         Block.STATUS_BAR, Block.APPS_ROW, Block.ALPHABETS_ROW, Block.EXTRA_KEYS};
 
-    /** Portrait: narrow and tall; landscape: wide and short — a phone silhouette either way. */
-    private static final float PORTRAIT_ASPECT = 9f / 19.5f;
-    private static final float LANDSCAPE_ASPECT = 19.5f / 9f;
     private static final float DEFAULT_HEIGHT_DP = 188f;
-    /** The shape of a real phone, which the canvas stands for: long side over short. */
-    private static final float SCREEN_LONG_OVER_SHORT = 19.5f / 9f;
+    /**
+     * A phone's long side over its short side, for when the display cannot say what its own is
+     * ({@link #screenLongOverShort}). The canvas otherwise takes this device's shape: a tablet's
+     * other orientation is 16:10 or 4:3, not a phone's.
+     */
+    private static final float FALLBACK_LONG_OVER_SHORT = 19.5f / 9f;
 
     private static final float LEGEND_TEXT_SP = 12f;
     private static final float LEGEND_MAX_FONT_SCALE = 1.3f;
@@ -633,6 +634,26 @@ public final class LayoutCanvasView extends View {
         return Math.min(metrics.widthPixels, metrics.heightPixels) / metrics.density;
     }
 
+    /**
+     * This screen's long side over its short side, from the same display metrics as
+     * {@link #screenShortSideDp}: the shape the canvas draws the phone in, either way up.
+     */
+    private float screenLongOverShort() {
+        android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
+        return longOverShort(metrics.widthPixels, metrics.heightPixels);
+    }
+
+    /**
+     * A screen's long side over its short side; {@link #FALLBACK_LONG_OVER_SHORT} where either
+     * side is unknown.
+     */
+    @VisibleForTesting
+    static float longOverShort(int widthPx, int heightPx) {
+        int shortSide = Math.min(widthPx, heightPx);
+        if (shortSide <= 0) return FALLBACK_LONG_OVER_SHORT;
+        return Math.max(widthPx, heightPx) / (float) shortSide;
+    }
+
     /** What the shape model was asked for the arrangement on the canvas; null before a layout. */
     @Nullable
     @VisibleForTesting
@@ -948,11 +969,12 @@ public final class LayoutCanvasView extends View {
     }
 
     /**
-     * The phone frame's width over its height, for one orientation. The Layout editor sizes its
-     * canvas from it, so the frame it asks for is the frame this view would draw.
+     * The phone frame's width over its height, for one orientation: this screen's own shape,
+     * wide and short in landscape, narrow and tall in portrait.
      */
-    public static float frameAspect(@NonNull PlaceOrientation orientation) {
-        return orientation == PlaceOrientation.LANDSCAPE ? LANDSCAPE_ASPECT : PORTRAIT_ASPECT;
+    public float frameAspect(@NonNull PlaceOrientation orientation) {
+        float longOverShort = screenLongOverShort();
+        return orientation == PlaceOrientation.LANDSCAPE ? longOverShort : 1f / longOverShort;
     }
 
     /**
@@ -1027,8 +1049,7 @@ public final class LayoutCanvasView extends View {
         float legendGap = mLegendVisible ? dp(LEGEND_TO_FRAME_GAP_DP) : 0f;
 
         float frameAreaWidth = Math.max(0f, availableWidth - legendWidth - legendGap);
-        float aspect = mOrientation == PlaceOrientation.LANDSCAPE
-            ? LANDSCAPE_ASPECT : PORTRAIT_ASPECT;
+        float aspect = frameAspect(mOrientation);
         float frameHeight = availableHeight;
         float frameWidth = frameHeight * aspect;
         if (frameWidth > frameAreaWidth) {
@@ -1082,7 +1103,7 @@ public final class LayoutCanvasView extends View {
         if (!resized) {
             mFrameRect.set(0f, 0f, viewWidth, viewHeight);
         } else {
-            float aspect = landscape ? LANDSCAPE_ASPECT : PORTRAIT_ASPECT;
+            float aspect = frameAspect(mOrientation);
             float gap = dp(16);
             float width = Math.max(0f, viewWidth - 2 * gap);
             float height = width / aspect;
@@ -1245,18 +1266,18 @@ public final class LayoutCanvasView extends View {
             box.right + mFrameRect.left, box.bottom + mFrameRect.top);
     }
 
-    /** The screen's width in dp in the orientation on the canvas, at the shape of a real phone. */
+    /** The screen's width in dp in the orientation on the canvas, at this screen's shape. */
     private float screenWidthDp() {
         float shortDp = screenShortSideDp();
         return mOrientation == PlaceOrientation.LANDSCAPE
-            ? shortDp * SCREEN_LONG_OVER_SHORT : shortDp;
+            ? shortDp * screenLongOverShort() : shortDp;
     }
 
     /** The screen's height in dp in the orientation on the canvas. */
     private float screenHeightDp() {
         float shortDp = screenShortSideDp();
         return mOrientation == PlaceOrientation.LANDSCAPE
-            ? shortDp : shortDp * SCREEN_LONG_OVER_SHORT;
+            ? shortDp : shortDp * screenLongOverShort();
     }
 
     /**

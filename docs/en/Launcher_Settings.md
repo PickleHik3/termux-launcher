@@ -316,7 +316,7 @@ Open-Meteo attribution.
   such as CTRL with one tap, search for any other key or launcher action, drag keys to
   reorder them, give a key a swipe-up action, a label and a colour, and start from presets
   including the classic Termux row. Page two of the row is edited on the same screen. **Go to
-  Widgets**, **Go to Terminal**, **Go to Display** and **Mouse mode** are among the actions a key
+  Widgets**, **Go to Terminal**, **Go to Display**, **App drawer** and **Mouse mode** are among the actions a key
   can carry.
 - **Key colours:** a key can be given one of eleven colours, or left with the row's own styling.
   Nine of them follow your theme, so they change with dark mode and with the colours the launcher

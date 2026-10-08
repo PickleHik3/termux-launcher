@@ -33,7 +33,9 @@ import com.termux.R;
  * single-line strip used when a pinned notification also claims the slot.
  *
  * <p>Transport glyphs are 24dp visually; their hit rects are expanded to 40dp so the controls stay
- * usable inside a 96dp bar.
+ * usable inside a 96dp bar. The full row keeps those targets clear of the neighbour place mark at
+ * the bar's end, and packs the art against the transport when no title fits; see
+ * {@link MediaWidgetLayout}.
  */
 public final class MediaWidgetView extends View {
 
@@ -66,6 +68,8 @@ public final class MediaWidgetView extends View {
     @Nullable private TopPaneMediaState mState;
     @Nullable private Drawable mAppIcon;
     private int mPressedTarget = TARGET_NONE;
+    /** What the slot leaves between this widget's end and the bar's end; see MediaWidgetLayout. */
+    private int mBarEndRoomPx;
 
     private int mOnSurface;
     private int mOnSurfaceVariant;
@@ -137,6 +141,13 @@ public final class MediaWidgetView extends View {
         return mState;
     }
 
+    /** How far this widget's end is from the bar's end, as the slot lays it out. */
+    public void setBarEndRoomPx(int px) {
+        if (mBarEndRoomPx == px) return;
+        mBarEndRoomPx = px;
+        invalidate();
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
@@ -147,18 +158,23 @@ public final class MediaWidgetView extends View {
     }
 
     private void drawFull(Canvas canvas, @NonNull TopPaneMediaState state) {
-        float art = dp(40f);
+        MediaWidgetLayout.Full layout = MediaWidgetLayout.full(getWidth(), mBarEndRoomPx,
+            getResources().getDisplayMetrics().density);
+        float art = dp(MediaWidgetLayout.ART_DP);
         float top = (getHeight() - art) / 2f;
-        drawArtwork(canvas, state, 0f, top, art, dp(4f), true);
+        if (layout.showsArt) {
+            drawArtwork(canvas, state, layout.artLeft, top, art, dp(4f), true);
+            // The art opens the owner app, and so does the title beside it when it is shown.
+            float ownerRight = layout.showsText ? layout.textRight : layout.artLeft + art;
+            mOwnerRect.set(Math.round(layout.artLeft), Math.round(top), Math.round(ownerRight),
+                Math.round(top + art));
+        } else {
+            mOwnerRect.setEmpty();
+        }
 
-        float transportWidth = dp(24f + 7f + 26f + 7f + 24f);
-        float textLeft = art + dp(8f);
-        float textRight = Math.max(textLeft, getWidth() - transportWidth - dp(8f));
-        float textWidth = textRight - textLeft;
-
-        mOwnerRect.set(0, Math.round(top), Math.round(textRight), Math.round(top + art));
-
-        if (textWidth > dp(24f)) {
+        if (layout.showsText) {
+            float textLeft = layout.textLeft;
+            float textWidth = layout.textRight - textLeft;
             // Title, subtitle and hairline share the 40dp art band with 6dp gaps.
             drawSingleLine(canvas, state.title, textLeft, top + dp(11.5f), textWidth, sp(10.5f),
                 mediumTypeface(), mOnSurface, 255);
@@ -167,8 +183,9 @@ public final class MediaWidgetView extends View {
             drawProgress(canvas, textLeft, top + dp(36.5f), textWidth, state.progress());
         }
 
-        float transportLeft = getWidth() - transportWidth;
-        drawTransport(canvas, transportLeft, getHeight() / 2f, state.playing, 24f, 26f, 7f, 14f, 255);
+        drawTransport(canvas, layout.transportLeft, getHeight() / 2f, state.playing,
+            MediaWidgetLayout.SKIP_BOX_DP, MediaWidgetLayout.PLAY_BOX_DP,
+            MediaWidgetLayout.TRANSPORT_GAP_DP, 14f, 255);
     }
 
     private void drawStrip(Canvas canvas, @NonNull TopPaneMediaState state) {
@@ -383,7 +400,7 @@ public final class MediaWidgetView extends View {
         }
     }
 
-    /** Transport rects are expanded to a 40dp minimum so the 24dp glyphs stay tappable. */
+    /** Transport rects are expanded to a minimum so the small glyphs stay tappable. */
     private int hitTarget(float x, float y) {
         if (inExpanded(mPlayPauseRect, x, y)) return TARGET_PLAY_PAUSE;
         if (inExpanded(mPreviousRect, x, y)) return TARGET_PREVIOUS;
@@ -394,7 +411,7 @@ public final class MediaWidgetView extends View {
 
     private boolean inExpanded(Rect rect, float x, float y) {
         if (rect.isEmpty()) return false;
-        float minimum = dp(40f);
+        float minimum = dp(MediaWidgetLayout.TOUCH_DP);
         float growX = Math.max(0f, (minimum - rect.width()) / 2f);
         float growY = Math.max(0f, (minimum - rect.height()) / 2f);
         return x >= rect.left - growX && x <= rect.right + growX

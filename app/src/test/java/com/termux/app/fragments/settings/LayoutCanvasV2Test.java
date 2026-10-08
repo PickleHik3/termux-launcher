@@ -43,7 +43,10 @@ import java.util.List;
  * lift (item 4), and the app icons bar is seven placeholders whatever is pinned (item 8).
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
+// A 19.5:9 phone, 320 x 693 dp: the canvas takes the shape of the screen it runs on, and
+// Robolectric's default screen is not a phone's.
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class,
+    qualifiers = "w320dp-h693dp")
 public class LayoutCanvasV2Test {
 
     /** Eye-off's highlight, below the canvas in the sheet, as the editor reports it. */

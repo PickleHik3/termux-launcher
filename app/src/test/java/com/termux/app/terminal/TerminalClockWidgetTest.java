@@ -170,6 +170,19 @@ public class TerminalClockWidgetTest {
     }
 
     @Test
+    public void flip_pairGapIsOneAndAHalfDigitGapsInEveryForm() {
+        // Full: 5.7dp between the cards of a pair, so the hour stands 8.55dp off the minutes
+        // (it was 13.5dp, which read as two separate numbers).
+        assertEquals(1.5f, TerminalClockWidget.FLIP_PAIR_GAP_RATIO, 0f);
+        assertEquals(8.55f, TerminalClockWidget.flipPairGapDp(5.7f), 1e-4f);
+        assertEquals(4f * 26f + 2f * 5.7f + 8.55f,
+            TerminalClockWidget.flipRowWidthDp(26f, 5.7f), 1e-4f);
+        // Compact: 1.5dp digit gaps, 2.25dp between the pairs.
+        assertEquals(4f * 15f + 2f * 1.5f + 2.25f,
+            TerminalClockWidget.flipRowWidthDp(15f, 1.5f), 1e-4f);
+    }
+
+    @Test
     public void fitScale_growsTheWholeColumnToTheBudgetButNeverPastTheCeiling() {
         // 58 budget over a 48 column: the date stays and the face grows by one uniform scale.
         float[] plan = TerminalClockWidget.fitScalePlan(58f, 400f, 48f, 34f, 150f, 130f, .65f);

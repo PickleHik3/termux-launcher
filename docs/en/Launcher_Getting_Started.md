@@ -44,8 +44,8 @@ Then a short tour plays over the real home screen. It opens by asking how you wi
 (Terminal, Terminal + Home, or Terminal + Home + Display), then walks through the gestures, each
 glowing the control it wants you to try: hold a corner for help, hold the page's border and drag
 to change place, swipe up from the bottom border for the keyboard and down from the top border
-for the status bar, hold an empty spot of the apps row to pin apps, pull the apps row away from
-its edge for the drawer, and swipe up on the space bar for the command palette. Skip appears on
+for the status bar, hold an empty spot of the apps row to pin apps, swipe down on the apps row for
+the drawer (inward on a side rail), and swipe up on the space bar for the command palette. Skip appears on
 every card if you would rather explore on your own, and the last card offers a **Copy commands**
 button for the extras it mentions. Play it again any time from
 **Settings → Apps → Play the tour again**.

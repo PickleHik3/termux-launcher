@@ -18,6 +18,11 @@
      nothing about where it sits changes), though the content root it is added to is pinned left
      to right.
 
+     On a tablet in landscape (EditorFormFactor) the controller stands this same sheet as a side
+     pane against the right edge instead: W = 411 (AppearancePreviewArea.SIDE_PANE_DP, the 411
+     column of the arithmetic below), from the preview's top line to the foot, one height on
+     every page. Nothing in the rows changes; Row B scrolls where the pane is shorter than it.
+
      There is no top row: the Look | Layout mode pill is the page bar's title while this sheet is
      up (appearance_page_frame, AppearanceEditorPage), and Undo and Done are the bar's end actions,
      so the sheet starts at its first row and has no top padding.

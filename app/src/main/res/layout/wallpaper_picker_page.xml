@@ -14,10 +14,15 @@
        the thumbnail strip card: Same as Home (Lock only) then up to five photos last applied
          (six tiles), in equal cells across the row (no heading, no pre-made backgrounds); each
          thumbnail is at most 112 tall and shrinks, aspect kept, so six fit the row's width
-         (WallpaperPickerLogic.stripThumbSize), never clipped; then Photo… beside More settings
-         (the old Look page).
+         (WallpaperPickerLogic.stripThumbSize), never clipped; then Choose photo; then, only
+         while the launcher's own wallpaper is not the one on screen, one line saying that setting
+         it here gives the glass more to work with (WallpaperPickerPage.applyGlassHint).
 
-     Fixed heights, dp: 4 + (4 + 12 + 112 + 4 + 48 + 4 + 16); the pager gets the rest.
+     Fixed heights, dp: 4 + (4 + 12 + 112 + 4 + 48 + [16 + 8] + 4 + 16); the bracketed hint
+     line (BodySmall, 16 at the default text size, more at a larger one) is GONE once the
+     wallpaper is set here. The pager is weighted, so it gives up whatever the strip card takes:
+     the cards are sized from the pager's height (WallpaperPickerLogic.cardSize) and never
+     overlap the card below.
      The page follows the locale's direction; the cards' content does not mirror. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
@@ -89,6 +94,24 @@
                     app:icon="@drawable/ic_symbol_photo"
                     app:iconSize="24dp" />
             </LinearLayout>
+
+            <!-- One line under Choose photo while the in-app wallpaper is not on screen. Its 8dp
+                 bottom margin and the column's 4dp bottom padding give the text the 12dp the
+                 strip has above it. -->
+            <TextView
+                android:id="@+id/wallpaper_picker_glass_hint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:ellipsize="end"
+                android:gravity="center"
+                android:maxLines="1"
+                android:paddingStart="12dp"
+                android:paddingEnd="12dp"
+                android:text="@string/wallpaper_picker_glass_hint"
+                android:textAppearance="?attr/textAppearanceBodySmall"
+                android:textColor="?attr/colorOnSurfaceVariant"
+                android:visibility="gone" />
         </LinearLayout>
     </com.google.android.material.card.MaterialCardView>
 </LinearLayout>

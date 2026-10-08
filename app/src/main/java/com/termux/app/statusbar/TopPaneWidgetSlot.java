@@ -385,8 +385,17 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
                 column.cardsTop + column.cardsHeight);
         }
         if (column.mediaHeight > 0) {
-            mMediaBounds.set(contentLeft, column.mediaTop, contentRight,
-                column.mediaTop + column.mediaHeight);
+            int mediaTop = column.mediaTop;
+            if (mMode == TopPaneSlotMode.MEDIA) {
+                // The art and the transport stand on the digits' line beside a full face, not
+                // on the slot's centre, which the date row under the digits pulls lower.
+                float band = mClock.fullBandCenterYPx(clockHeight);
+                mediaTop = TopPaneSlotBudget.anchoredTop(height, column.mediaHeight,
+                    band >= 0f ? mClockBounds.top + band : -1f,
+                    getResources().getDisplayMetrics().density);
+            }
+            mMediaBounds.set(contentLeft, mediaTop, contentRight,
+                mediaTop + column.mediaHeight);
         }
         if (contentWidth <= 0) {
             mNotificationBounds.setEmpty();
@@ -396,7 +405,12 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         if (mNotifications != null && !mNotificationBounds.isEmpty()) {
             measureExact(mNotifications, mNotificationBounds);
         }
-        if (mMedia != null && !mMediaBounds.isEmpty()) measureExact(mMedia, mMediaBounds);
+        if (mMedia != null && !mMediaBounds.isEmpty()) {
+            // The slot and the lens span the same bar, so this is the media's distance to the
+            // neighbour mark peeking past the bar's end.
+            mMedia.setBarEndRoomPx(width - mMediaBounds.right);
+            measureExact(mMedia, mMediaBounds);
+        }
     }
 
     private void measureExact(@NonNull View view, @NonNull Rect bounds) {

@@ -125,6 +125,15 @@ public final class BuiltinWidgetServices {
         return weather;
     }
 
+    /**
+     * The host activity started again. A weather controller still held by a widget refreshes if
+     * its forecast is stale or for another place than the one Settings now names; a change made
+     * there reaches the widget this way, as it reaches the status bar through its own refresh.
+     */
+    public void onHostStart() {
+        if (weather != null) weather.refreshIfStale();
+    }
+
     public void releaseWeather(@NonNull WeatherController.Listener listener) {
         weatherListeners.remove(listener);
         weatherUsers = Math.max(0, weatherUsers - 1);

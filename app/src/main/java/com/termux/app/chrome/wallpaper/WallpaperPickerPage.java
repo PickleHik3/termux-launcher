@@ -300,6 +300,8 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     private final LinearLayout mStrip;
     private final MaterialButton mPhoto;
     private final View mStripCard;
+    /** "Set your wallpaper here…": shown while the launcher's own wallpaper is not on screen. */
+    private final View mGlassHint;
     @Nullable private Drawable mBackground;
 
     @NonNull private WallpaperSlots.State mStored;
@@ -397,6 +399,8 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mPager = mRoot.findViewById(R.id.wallpaper_picker_pager);
         mStrip = mRoot.findViewById(R.id.wallpaper_picker_strip);
         mPhoto = mRoot.findViewById(R.id.wallpaper_picker_photo);
+        mGlassHint = mRoot.findViewById(R.id.wallpaper_picker_glass_hint);
+        applyGlassHint();
 
         // The bar (back, the Wallpaper | Look | Layout pill, Done) is the surface's shared frame:
         // Done applies what the cards hold; the page has nothing above or under them but the strip.
@@ -615,8 +619,26 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
         mIo.run(this::readSafe, state -> {
             if (mReleased || state == null) return;
             mStored = state;
+            applyGlassHint();
             then.run();
         });
+    }
+
+    /**
+     * The hint under Choose photo shows while the Home slot holds no picture of the launcher's
+     * own: {@link WallpaperSlots#read} names the managed copy only while the system still shows
+     * it, the same fact as {@code WallpaperSourceFacts.managedOnScreen()}. Follows every read.
+     */
+    private void applyGlassHint() {
+        int visibility = WallpaperPickerLogic.showsGlassHint(mStored) ? View.VISIBLE : View.GONE;
+        if (mGlassHint.getVisibility() != visibility) mGlassHint.setVisibility(visibility);
+    }
+
+    /** The hint line under Choose photo, for tests. */
+    @VisibleForTesting
+    @NonNull
+    View glassHint() {
+        return mGlassHint;
     }
 
     @NonNull

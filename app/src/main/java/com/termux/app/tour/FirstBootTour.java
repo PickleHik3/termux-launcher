@@ -71,6 +71,12 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         default boolean commandPaletteRectOnScreen(@NonNull android.graphics.Rect out) {
             return false;
         }
+
+        /** The edge the apps row stands on, or the bottom while the row is put away. */
+        @NonNull
+        default com.termux.app.place.PlaceLayout.Edge appsEdge() {
+            return com.termux.app.place.PlaceLayout.Edge.BOTTOM;
+        }
     }
 
     /**
@@ -332,7 +338,9 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             mHomeHost != null && mHomeHost.isLauncherHomeApp(), mSignals.isKeyboardShown(),
             hasOwnRow && !answered,
             mUsageModeHost == null || mUsageModeHost.isDisplayOffered(),
-            mSignals.isStatusBarExpanded())));
+            mSignals.isStatusBarExpanded(),
+            mChromeProbe == null ? com.termux.app.place.PlaceLayout.Edge.BOTTOM
+                : mChromeProbe.appsEdge())));
         // A terminal-only install has one place, so there is nothing to drag the border towards,
         // and no home screen to be the phone's; both are back the moment the usage card is
         // answered with a Home.

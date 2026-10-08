@@ -210,7 +210,15 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.post(() -> { if (wantedRows > 0) applyWantedGrid(wantedRows, wantedColumns); });
     }
 
-    public void onStart() { render(); }
+    /**
+     * The launcher is back in front: the pane is drawn again and the built-ins' sources catch up.
+     * The weather in particular re-reads the place picked in Settings, which the widget's own
+     * controller only hears about on a refresh, not on the pane's re-render.
+     */
+    public void onStart() {
+        render();
+        builtins.services().onHostStart();
+    }
     /** Draw the pane again from the repository — the layout under it changed without a grid change. */
     public void redraw() { render(); }
     /** The theme, the Look or the widget style setting changed: the built-ins redress. */
