@@ -2132,6 +2132,7 @@
     <string name="tool_app_open_apps_bar">Apps bar settings</string>
     <string name="tool_app_command_palette">Command palette</string>
     <string name="tool_app_launch">Launch app</string>
+    <string name="tool_app_open_app_drawer">App drawer</string>
     <string name="tool_app_open_drawer">Open sessions</string>
     <string name="tool_app_close_drawer">Close sessions</string>
     <string name="tool_terminal_action_sheet">Terminal actions</string>
@@ -2248,6 +2249,7 @@
         <item quantity="one">Ignored %1$d terminal font configuration error; using safe fallbacks</item>
         <item quantity="other">Ignored %1$d terminal font configuration errors; using safe fallbacks</item>
     </plurals>
+    <string name="tool_desc_app_open_app_drawer">Open the app drawer.</string>
     <string name="tool_desc_app_open_drawer">Open the sessions drawer.</string>
     <string name="tool_desc_app_close_drawer">Close the sessions drawer.</string>
     <string name="tool_desc_window_rename_prompt">Name the current window — the tab it occupies in the window bar.</string>

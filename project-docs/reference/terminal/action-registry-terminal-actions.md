@@ -333,6 +333,7 @@ keybind comments.
 | `app.open_settings` | `:7472` `openSettingsHome()` | action sheet: settings; settings button | none | no |
 | `app.open_look_and_feel` | `openLookAndFeelSettings()` *(unverified)* | menu id exists, not in current sheet | none | no |
 | `app.open_apps_bar` | `openAppsBarSettings()` *(unverified)* | menu id exists, not in current sheet | none | no |
+| `app.open_app_drawer` | `AppDrawerController.open()` via `TerminalHost.openAppDrawer()` | extra-keys action picker ("App drawer"); no-op while the app drawer is off | none | no |
 | `app.toggle_drawer` | sessions-indicator click listener *(unverified)* | sessions indicator tap | none | no |
 | `app.lock_screen` | `lockScreenFromAzDoubleTap()` *(unverified)* | A–Z row double-tap | none | no |
 | `app.request_storage_permission` | `requestStoragePermission(boolean)` *(unverified)* | `termux-setup-storage` broadcast | isPermissionCallback | no |
