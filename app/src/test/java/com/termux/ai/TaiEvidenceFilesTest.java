@@ -33,9 +33,10 @@ public class TaiEvidenceFilesTest {
     }
 
     private static TaiModelSpec spec(String id, String backend, String localPath) {
+        String format = TaiModelSpec.BACKEND_LITERT_LM.equals(backend) ? TaiModelSpec.FORMAT_LITERTLM : TaiModelSpec.FORMAT_MNN;
         return new TaiModelSpec(id, id, "Test model", "test", localPath, "test", 123L,
             new java.util.LinkedHashSet<>(java.util.Collections.singleton(TaiModelSpec.CAPABILITY_TEXT_CHAT)),
-            false, null, backend, TaiModelSpec.FORMAT_MNN, null, null, 4096, 0, null);
+            false, null, backend, format, null, null, 4096, 0, null);
     }
 
     private static JSONObject series(double median) throws Exception {
@@ -111,5 +112,68 @@ public class TaiEvidenceFilesTest {
         assertTrue(new TaiEvidenceFiles(context).failed(MODEL, MNN, "cpu"));
         assertTrue(file.delete());
         assertNull(TaiRuntimeCrashMarker.read(context));
+    }
+
+    // --------------------------------------------------------------------------- feature checks
+
+    private static final String LM = "user-chat-lm";
+    private static final String LITERT = TaiModelSpec.BACKEND_LITERT_LM;
+
+    /** A completed cleanup check of {@code modelId} on LiteRT-LM, stored with {@code staleKey}. */
+    private static JSONObject checkRecord(String modelId, String accelerator, String staleKey) throws Exception {
+        TaiFeatureCheck.Measurement m = TaiFeatureCheckTest.measurement(accelerator, false, 10.0);
+        m.modelId = modelId;
+        m.backend = LITERT;
+        m.staleKey = staleKey;
+        return TaiFeatureCheck.record(m);
+    }
+
+    /** Installs {@link #LM} as a user model with a real file, and returns its spec. */
+    private TaiModelSpec installLm() throws Exception {
+        java.io.File file = new java.io.File(context.getFilesDir(), "tai/models/" + LM + "/model.litertlm");
+        assertTrue(file.getParentFile().isDirectory() || file.getParentFile().mkdirs());
+        java.nio.file.Files.write(file.toPath(), new byte[] {1, 2, 3});
+        TaiModelSpec spec = spec(LM, LITERT, file.getAbsolutePath());
+        new TaiModelStore(context).upsertUserModel(spec);
+        return spec;
+    }
+
+    @Test
+    public void aCheckIsJudgedAgainstTheFileInstalledNow() throws Exception {
+        TaiModelSpec installed = installLm();
+        TaiFeatureCheckStore checks = TaiFeatureCheckStore.in(context.getFilesDir());
+        checks.append(checkRecord(LM, "gpu", TaiFeatureCheckStore.stalenessKey(installed)));
+        checks.append(checkRecord(LM, "cpu", "size:9:mtime:9|litert-lm 0.0.1"));
+        checks.append(checkRecord("not-installed", "gpu", TaiFeatureCheckStore.stalenessKey(installed)));
+        TaiEvidenceFiles evidence = new TaiEvidenceFiles(context);
+
+        List<TaiEvidence.FeatureResult> results = evidence.featureChecks(TaiFunction.TIDY_DICTATION, LM, LITERT);
+        assertEquals(2, results.size());
+        for (TaiEvidence.FeatureResult result : results) {
+            assertEquals(result.accelerator, "cpu".equals(result.accelerator), result.stale);
+        }
+        // A model that is not installed has no file to match: every check of it is stale.
+        List<TaiEvidence.FeatureResult> gone = evidence.featureChecks(TaiFunction.TIDY_DICTATION, "not-installed", LITERT);
+        assertEquals(1, gone.size());
+        assertTrue(gone.get(0).stale);
+        // Matched on the feature and the backend as well.
+        assertTrue(evidence.featureChecks(TaiFunction.APP_CATEGORIES, LM, LITERT).isEmpty());
+        assertTrue(evidence.featureChecks(TaiFunction.TIDY_DICTATION, LM, MNN).isEmpty());
+    }
+
+    @Test
+    public void aRewrittenResultsFileIsReadAgain() throws Exception {
+        TaiEvidenceFiles evidence = new TaiEvidenceFiles(context);
+        TaiBenchStore bench = TaiBenchStore.in(context.getFilesDir());
+        bench.append(benchRecord("gpu", 20.0, MnnTaiRuntime.RUNTIME_VERSION));
+        assertEquals(1, evidence.chatBench(MODEL, MNN).size());
+        bench.append(benchRecord("cpu", 30.0, MnnTaiRuntime.RUNTIME_VERSION));
+        assertEquals(2, evidence.chatBench(MODEL, MNN).size());
+
+        TaiFeatureCheckStore checks = TaiFeatureCheckStore.in(context.getFilesDir());
+        checks.append(checkRecord(LM, "gpu", "k"));
+        assertEquals(1, evidence.featureChecks(TaiFunction.TIDY_DICTATION, LM, LITERT).size());
+        checks.append(checkRecord(LM, "cpu", "k"));
+        assertEquals(2, evidence.featureChecks(TaiFunction.TIDY_DICTATION, LM, LITERT).size());
     }
 }
