@@ -396,7 +396,12 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
         if (mNotifications != null && !mNotificationBounds.isEmpty()) {
             measureExact(mNotifications, mNotificationBounds);
         }
-        if (mMedia != null && !mMediaBounds.isEmpty()) measureExact(mMedia, mMediaBounds);
+        if (mMedia != null && !mMediaBounds.isEmpty()) {
+            // The slot and the lens span the same bar, so this is the media's distance to the
+            // neighbour mark peeking past the bar's end.
+            mMedia.setBarEndRoomPx(width - mMediaBounds.right);
+            measureExact(mMedia, mMediaBounds);
+        }
     }
 
     private void measureExact(@NonNull View view, @NonNull Rect bounds) {

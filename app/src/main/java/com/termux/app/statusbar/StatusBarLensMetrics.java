@@ -98,6 +98,13 @@ public final class StatusBarLensMetrics {
     public static final float TOUCH_TARGET_DP = 48f;
     /** The air a mark keeps around itself before the minimum target is applied. */
     public static final float TOUCH_SLOP_DP = 8f;
+    /**
+     * How far in from the bar's end a peeking neighbour's own target reaches: half the largest
+     * peeking mark plus its air. The lens grows the target further, to {@link #TOUCH_TARGET_DP},
+     * but only where nothing laid over the bar claims the touch; a small target placed beside a
+     * neighbour keeps out of this reach, so a tap that just misses it never pages the wall.
+     */
+    public static final float NEIGHBOUR_REACH_DP = ICON_DP * PEEK_SHARE / 2f + TOUCH_SLOP_DP;
 
     private StatusBarLensMetrics() {}
 
