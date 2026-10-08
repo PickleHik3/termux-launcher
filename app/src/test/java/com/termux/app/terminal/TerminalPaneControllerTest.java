@@ -731,6 +731,105 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void swapTowards_exchangesSideBySidePanes_andRefusesWhereNothingBordersTheEdge() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        layoutHost(host, 600, 1000);
+        // One pane: there is nothing to swap with.
+        assertFalse(controller.swapActivePaneTowards(PaneSwapPolicy.Direction.RIGHT));
+
+        assertTrue(controller.split(LinearLayout.HORIZONTAL));
+        layoutHost(host, 600, 1000);
+        TerminalPaneController.Split root = (TerminalPaneController.Split) window.root;
+        TerminalSession leftShell = ((TerminalPaneController.Leaf) root.a).session;
+        TerminalSession rightShell = ((TerminalPaneController.Leaf) root.b).session;
+        float weightA = root.weightA, weightB = root.weightB;
+        controller.focusSession(leftShell);
+
+        assertFalse("nothing left of the left pane",
+            controller.swapActivePaneTowards(PaneSwapPolicy.Direction.LEFT));
+        assertFalse("nothing above a full-height pane",
+            controller.swapActivePaneTowards(PaneSwapPolicy.Direction.UP));
+        assertEquals(Arrays.asList(leftShell, rightShell), controller.shellsOf(window));
+
+        assertTrue(controller.swapActivePaneTowards(PaneSwapPolicy.Direction.RIGHT));
+        assertSame(root, window.root);
+        assertEquals(Arrays.asList(rightShell, leftShell), controller.shellsOf(window));
+        assertEquals(weightA, root.weightA, .001f);
+        assertEquals(weightB, root.weightB, .001f);
+        // Focus followed the moved shell into its new cell.
+        assertSame(leftShell, controller.getActiveSession());
+        assertSame(root.b, window.active);
+
+        layoutHost(host, 600, 1000);
+        assertFalse(controller.swapActivePaneTowards(PaneSwapPolicy.Direction.RIGHT));
+
+        // A maximised pane owns the whole surface: no neighbour to swap with.
+        ReflectionHelpers.setField(controller, "mMaximizedLeaf", window.active);
+        assertFalse(controller.swapActivePaneTowards(PaneSwapPolicy.Direction.LEFT));
+        assertEquals(Arrays.asList(rightShell, leftShell), controller.shellsOf(window));
+    }
+
+    @Test
+    public void swapTowards_upFromALowerColumnTakesTheFullWidthRow() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        TerminalPaneController controller = newSplittingController(host);
+        List<TerminalSession> sessions = Arrays.asList(terminal(), terminal(), terminal());
+        TerminalWorkspace.Node tree = new TerminalWorkspace.Split(
+            TerminalWorkspace.Split.VERTICAL, 1f, 1f,
+            new TerminalWorkspace.Pane("/top", null, null),
+            new TerminalWorkspace.Split(TerminalWorkspace.Split.HORIZONTAL, 1f, 1f,
+                new TerminalWorkspace.Pane("/lower-left", null, null),
+                new TerminalWorkspace.Pane("/lower-right", null, null)));
+        // Active pane 2: the lower-right one.
+        TerminalPaneController.Window window = controller.newWorkspaceWindow(
+            new TerminalWorkspace.Window(2, tree), sessions);
+        controller.showWindow(window);
+        layoutHost(host, 600, 1000);
+        TerminalPaneController.Split root = (TerminalPaneController.Split) window.root;
+        TerminalPaneController.Split lower = (TerminalPaneController.Split) root.b;
+        assertSame(sessions.get(2), controller.getActiveSession());
+
+        assertTrue(controller.swapActivePaneTowards(PaneSwapPolicy.Direction.UP));
+        assertSame(root, window.root);
+        assertSame(lower, root.b);
+        assertSame(sessions.get(2), ((TerminalPaneController.Leaf) root.a).session);
+        assertSame(sessions.get(1), ((TerminalPaneController.Leaf) lower.a).session);
+        assertSame(sessions.get(0), ((TerminalPaneController.Leaf) lower.b).session);
+        assertSame(sessions.get(2), controller.getActiveSession());
+        assertSame(root.a, window.active);
+    }
+
+    @Test
+    public void swapTowards_underDwindleSwapsShellsAndLeavesTheTilingAlone() {
+        FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
+        PaneFixture fixture = fourPaneFixture(newSplittingController(host));
+        layoutHost(host, 600, 1000);
+        assertTrue(fixture.controller.applyLayout(TerminalPaneController.LAYOUT_DWINDLE));
+        layoutHost(host, 600, 1000);
+        TerminalPaneController.Split root = (TerminalPaneController.Split) fixture.window.root;
+        TerminalPaneController.Leaf top = (TerminalPaneController.Leaf) root.a;
+        TerminalPaneController.Split lower = (TerminalPaneController.Split) root.b;
+        TerminalPaneController.Leaf lowerLeft = (TerminalPaneController.Leaf) lower.a;
+        TerminalSession movedShell = lowerLeft.session;
+        TerminalSession topShell = top.session;
+        fixture.controller.focusSession(movedShell);
+
+        assertTrue(fixture.controller.swapActivePaneTowards(PaneSwapPolicy.Direction.UP));
+        assertSame(root, fixture.window.root);
+        assertSame(top, root.a);
+        assertSame(lower, root.b);
+        assertSame(lowerLeft, lower.a);
+        assertSame(movedShell, top.session);
+        assertSame(topShell, lowerLeft.session);
+        assertEquals(4, fixture.controller.shellsOf(fixture.window).size());
+        assertSame(movedShell, fixture.controller.getActiveSession());
+        assertEquals(TerminalPaneController.LAYOUT_DWINDLE, fixture.controller.activeLayoutPolicy());
+    }
+
+    @Test
     public void splitAuto_withAutomaticTilingOffFollowsTheScreenNotThePane() {
         FrameLayout host = new FrameLayout(RuntimeEnvironment.getApplication());
         TerminalPaneController controller = newSplittingController(host);
