@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
   The wallpaper picker page: two slot previews, the shortcut row, the thumbnail strip and
-  Apply. No hint text.
+  Apply. One hint line, shown only while the launcher's own wallpaper is not on screen.
 -->
 <resources>
     <!-- The Overview's fixed heading: the entry is Appearance, not a wallpaper changer. -->
@@ -16,6 +16,8 @@
     <string name="wallpaper_picker_icon_pack_global">System</string>
     <string name="wallpaper_picker_same_as_home">Same as Home</string>
     <string name="wallpaper_picker_photo">Choose photo</string>
+    <!-- Under Choose photo, only while the wallpaper on screen was set somewhere else. -->
+    <string name="wallpaper_picker_glass_hint">Set your wallpaper here to see fancier glass.</string>
     <string name="wallpaper_picker_photo_preview">Your photo</string>
     <!-- A recent photo tile, for TalkBack: "Recent photo 1" is the newest. -->
     <string name="wallpaper_picker_recent_photo">Recent photo %1$d</string>
