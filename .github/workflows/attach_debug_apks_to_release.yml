@@ -1,4 +1,4 @@
-name: Attach Debug APKs To Release
+name: Attach APKs To Release
 
 on:
   workflow_dispatch:
@@ -72,7 +72,15 @@ jobs:
             fi
           done
           if [ "$HAS_RELEASE_SIGNING" -eq 0 ]; then
-            echo "Release signing secrets not set; continuing with debug APK attachment flow only."
+            # Published APKs are signed with the repository's test key: it is the certificate every
+            # earlier release and every companion app (…api, …styling, …boot) carries, so a release
+            # build installs over them and keeps the sharedUserId pairing. The password is the one
+            # in app/build.gradle's debug signing config.
+            echo "Release signing secrets not set; signing with app/testkey_untrusted.jks."
+            TERMUX_RELEASE_STORE_FILE="$PWD/app/testkey_untrusted.jks"
+            TERMUX_RELEASE_STORE_PASSWORD="xrj45yWGLbsO7W0v"
+            TERMUX_RELEASE_KEY_ALIAS="alias"
+            TERMUX_RELEASE_KEY_PASSWORD="xrj45yWGLbsO7W0v"
           fi
 
           RELEASE_BODY="$(gh release view "$RELEASE_VERSION_NAME" --json body --jq '.body' | tr -d '[:space:]')"
@@ -84,7 +92,7 @@ jobs:
            exit_on_error "The versionName '$RELEASE_VERSION_PLAIN' is not a valid version as per semantic version '2.0.0' spec in the format 'major.minor.patch(-prerelease)(+buildmetadata)'. https://semver.org/spec/v2.0.0.html."
           fi
 
-          APK_DIR_PATH="./app/build/outputs/apk/debug"
+          APK_DIR_PATH="./app/build/outputs/apk/release"
           # termux-app_v<versionName>_<edition>_<variant>_<abi>.apk
           APK_VERSION_TAG="v${RELEASE_VERSION_PLAIN}_${EDITION}_${PACKAGE_VARIANT}"
           APK_BASENAME_PREFIX="termux-app_$APK_VERSION_TAG"
@@ -97,6 +105,7 @@ jobs:
           echo "Building APKs for 'APK_VERSION_TAG' release"
           export TERMUX_APK_VERSION_TAG="$APK_VERSION_TAG" # Used by app/build.gradle
           export TERMUX_PACKAGE_VARIANT="$PACKAGE_VARIANT" # Used by app/build.gradle
+          export TERMUX_SPLIT_APKS_FOR_RELEASE_BUILDS=1 # Used by app/build.gradle: one APK per ABI plus universal
           if ! ./gradlew :app:verifyReleaseHardening :app:processReleaseMainManifest; then
             exit_on_error "Release hardening checks failed."
           fi
@@ -107,9 +116,20 @@ jobs:
           if grep -q 'android:debuggable="true"' "$RELEASE_MANIFEST_PATH"; then
             exit_on_error "Merged release manifest is debuggable: $RELEASE_MANIFEST_PATH"
           fi
-          if ! ./gradlew assembleDebug; then
+          if ! ./gradlew :app:assembleRelease; then
             exit_on_error "Build failed for '$APK_VERSION_TAG' release."
           fi
+
+          echo "Checking the built APKs are not debuggable"
+          AAPT2="$(find "$ANDROID_HOME/build-tools" -name aapt2 | sort -V | tail -n 1)"
+          if [ -z "$AAPT2" ]; then
+            exit_on_error "aapt2 not found under $ANDROID_HOME/build-tools."
+          fi
+          for apk in "$APK_DIR_PATH"/*.apk; do
+            if "$AAPT2" dump badging "$apk" | grep -q application-debuggable; then
+              exit_on_error "Built APK is debuggable: $apk"
+            fi
+          done
 
           echo "Validating APKs"
           for abi in universal arm64-v8a armeabi-v7a x86_64 x86; do
