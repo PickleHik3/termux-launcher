@@ -1134,12 +1134,11 @@
 
         <string name="termux_ai_preferences_title">On-device AI</string>
         <string name="termux_ai_zone_runtime_title">Runtime</string>
-        <string name="termux_ai_zone_models_title">Models</string>
-        <string name="termux_ai_zone_server_title">Server</string>
+        <string name="termux_ai_zone_models_title">Models &amp; voice</string>
         <string name="termux_ai_zone_advanced_title">Advanced</string>
         <string name="termux_ai_action_unload_sub">Release engine</string>
         <string name="termux_ai_runtime_status_title">Runtime status</string>
-        <string name="termux_ai_runtime_status_summary">LiteRT-LM is unloaded</string>
+        <string name="termux_ai_runtime_status_summary">Nothing is loaded. Models load when a feature needs them.</string>
         <string name="termux_ai_runtime_stop_title">Stop</string>
         <string name="termux_ai_runtime_stop_summary">Cancel current run</string>
         <string name="termux_ai_runtime_unload_title">Unload model</string>
@@ -1348,7 +1347,7 @@
         <string name="termux_ai_dialog_reveal">Reveal</string>
         <string name="termux_ai_dialog_hide">Hide</string>
         <string name="termux_ai_endpoint_update_failed">Endpoint setting update failed</string>
-        <string name="termux_ai_endpoint_copy_title">OpenAI endpoint</string>
+        <string name="termux_ai_endpoint_copy_title">API base URL</string>
         <string name="termux_ai_endpoint_notice_summary">OpenAI and Ollama clients use ~/.launcherctl/endpoint and ~/.launcherctl/token. Supported surfaces include /v1/models, /v1/chat/completions, /v1/responses, /api/tags, and /api/chat.</string>
         <string name="termux_ai_endpoint_notice_summary_dynamic">OpenAI base URL: %1$s\nBearer token file: %2$s</string>
         <string name="termux_ai_endpoint_access_title">Endpoint &amp; access</string>
@@ -1362,7 +1361,7 @@
         <string name="termux_ai_parameters_defaults_summary">Edit global runtime defaults used unless a model override is set</string>
         <!-- D6: the switch was "OpenAI auto-load"; it now covers every API a request can name a model
              through. The preference key stays tai_openai_auto_load so saved values survive. -->
-        <string name="termux_ai_openai_auto_load_title">Model autoload</string>
+        <string name="termux_ai_openai_auto_load_title">Load models automatically</string>
         <string name="termux_ai_openai_auto_load_summary_off">Requests get model_not_loaded until you load a model yourself.</string>
         <string name="termux_ai_openai_auto_load_summary_on">Load the model a request asks for, after a clean check.</string>
 

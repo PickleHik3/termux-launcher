@@ -118,6 +118,16 @@ public class RootPreferencesSearchIndexTest {
         assertEquals("a cleared search restores the row's own page",
             "com.termux.app.fragments.settings.termux.KeyboardPreferencesFragment",
             root.findPreference("keyboard_input").getFragment());
+        // "LAN" alone also matches the remote model's "free plan" note, a second page.
+        search.getOnQueryChangedListener().onQueryChanged("LAN access");
+        assertTrue("the Local API page is indexed under On-device AI", isVisible(root, "on_device_ai"));
+        assertEquals("a hit on one subpage opens that page",
+            "com.termux.app.fragments.settings.termux.TaiApiPreferencesFragment",
+            root.findPreference("on_device_ai").getFragment());
+        search.getOnQueryChangedListener().onQueryChanged("");
+        assertEquals("a cleared search restores the overview",
+            "com.termux.app.fragments.settings.termux.TaiPreferencesFragment",
+            root.findPreference("on_device_ai").getFragment());
     }
 
     @Test
