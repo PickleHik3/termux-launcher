@@ -565,6 +565,8 @@
     <string name="settings_app_drawer_category_sort_hint_saving">Saving the categories…</string>
     <string name="settings_app_drawer_category_sort_nothing_pending">Nothing to do — all %1$d apps are already sorted</string>
     <string name="settings_app_drawer_category_sort_cancelled">Stopped after %1$d apps</string>
+    <string name="settings_app_drawer_category_sort_stopped">Stopped after %1$d apps. %2$s</string>
+    <string name="settings_app_drawer_category_sort_remote_failed">The remote model didn\'t answer.</string>
     <string name="settings_app_drawer_category_sort_done">Sorted %1$d apps into %2$d categories</string>
     <string name="settings_app_drawer_category_sort_failed">Categorization failed: %1$s</string>
     <string name="folder_capacity_reached">Folder is full</string>
