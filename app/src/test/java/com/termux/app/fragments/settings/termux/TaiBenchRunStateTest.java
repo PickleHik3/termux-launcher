@@ -580,12 +580,15 @@ public class TaiBenchRunStateTest {
             new TaiBenchRunState.Planned("tidy_dictation", "Tidy dictation", false),
             new TaiBenchRunState.Planned("read_aloud", "Read aloud", false)), 0.0, 1_000L);
         assertTrue(check.featureCheck());
-        check.apply(event("entry_start", 1_100L).put("index", 0).put("total", 2).put("entry", new JSONObject()
+        assertEquals(2, check.total());
+        // Two features, but the check runs this one on the GPU and the CPU: the headline counts its runs.
+        check.apply(event("entry_start", 1_100L).put("index", 0).put("total", 3).put("entry", new JSONObject()
             .put("modelId", GEMMA).put("backend", TaiModelSpec.BACKEND_LITERT_LM).put("accelerator", "gpu")
             .put("speculative", true).put("feature", "tidy_dictation").put("displayName", "Gemma 4 E2B")
             .put("key", "tidy_dictation|" + GEMMA + "|litert-lm|gpu|on")));
         TaiBenchRunState.Entry entry = check.current();
         assertNotNull(entry);
+        assertEquals(3, check.total());
         assertEquals(com.termux.ai.TaiFunction.TIDY_DICTATION, entry.feature);
         assertEquals("Gemma 4 E2B", entry.displayName);
         assertEquals(Arrays.asList("load", "feature"), TaiBenchRunState.phasesFor(entry));

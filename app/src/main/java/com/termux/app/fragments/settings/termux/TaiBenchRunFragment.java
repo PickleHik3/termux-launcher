@@ -279,7 +279,7 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
 
     private void bindHeadline(@NonNull Context context, @NonNull TaiBenchRunState state) {
         TaiBenchSuite.Preset preset = TaiBenchSuite.Preset.fromId(state.presetId);
-        int total = Math.max(state.entries.size(), state.planned.size());
+        int total = state.total();
         int finished = 0;
         for (TaiBenchRunState.Entry entry : state.entries) if (entry.finished()) finished++;
         String label = state.featureCheck() ? getString(R.string.tai_check_run_label) : TaiBenchViews.presetLabel(context, preset);

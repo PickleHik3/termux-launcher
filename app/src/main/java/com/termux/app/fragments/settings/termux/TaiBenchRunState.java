@@ -289,6 +289,18 @@ public final class TaiBenchRunState {
         return last.finished() ? null : last;
     }
 
+    /**
+     * How many entries the run has, for the headline's "N of M": the count the latest entry's start
+     * named, else the planned rows or the entries so far, whichever is more. A feature check plans
+     * one row per feature and runs several entries for one, so only the event knows the true count.
+     */
+    public int total() {
+        int known = Math.max(entries.size(), planned.size());
+        if (entries.isEmpty()) return known;
+        int named = entries.get(entries.size() - 1).total;
+        return named > 0 ? Math.max(named, entries.size()) : known;
+    }
+
     /** The planned models no entry has arrived for yet, in plan order: the stepper's pending rows. */
     @NonNull
     public List<Planned> pending() {
