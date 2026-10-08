@@ -171,6 +171,8 @@ public class TaiModelCentreRowsTest {
     @Test
     public void failureReasonsMapToTheWordsTheDesignUses() {
         assertEquals(TaiModelCentreRows.Failure.TOKEN, TaiModelCentreRows.failureOf("HTTP 401"));
+        assertEquals(TaiModelCentreRows.Failure.GENERIC,
+            TaiModelCentreRows.failureOf("The tokenizer this image model needs is missing from the app."));
         assertEquals(TaiModelCentreRows.Failure.TOKEN, TaiModelCentreRows.failureOf("gated_model_requires_auth"));
         assertEquals(TaiModelCentreRows.Failure.EXPIRED, TaiModelCentreRows.failureOf("HTTP 403"));
         assertEquals(TaiModelCentreRows.Failure.EXPIRED, TaiModelCentreRows.failureOf("HTTP 404"));

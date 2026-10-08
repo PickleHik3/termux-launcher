@@ -160,7 +160,9 @@ final class TaiModelCentreRows {
     @NonNull
     static Failure failureOf(@Nullable String error) {
         String value = error == null ? "" : error.toLowerCase(Locale.ROOT);
-        if (value.contains("401") || value.contains("gated") || value.contains("auth") || value.contains("token")) {
+        // A missing tokenizer is a model-file problem, not Hugging Face asking for a token.
+        String access = value.replace("tokenizer", "");
+        if (access.contains("401") || access.contains("gated") || access.contains("auth") || access.contains("token")) {
             return Failure.TOKEN;
         }
         if (value.contains("403") || value.contains("404") || value.contains("410") || value.contains("expired")) {
