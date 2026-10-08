@@ -11,7 +11,10 @@ kept up to date by one command. The app puts `tlstore` in place for you, along w
 tlstore install fish-shell
 ```
 
-installs the whole fish setup in one go. Then:
+installs the whole fish setup in one go and makes fish the shell new sessions start in
+(`tlstore remove fish-shell` puts the default shell back). The prompt follows your wallpaper once
+Oh My Posh is ticked under Settings → Appearance → Look → Tools that follow the terminal colours.
+Then:
 
 ```sh
 tlstore install
