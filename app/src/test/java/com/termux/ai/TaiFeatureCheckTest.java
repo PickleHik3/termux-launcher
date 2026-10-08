@@ -186,6 +186,12 @@ public class TaiFeatureCheckTest {
         assertEquals(State.UNKNOWN, TaiFeatureCheck.gpuOutcome(Arrays.asList(
             new Outcome(GPU, false, false), new Outcome(CPU, false, false))));
         assertEquals(State.UNKNOWN, TaiFeatureCheck.gpuOutcome(Collections.singletonList(new Outcome("CPU", false, true))));
+        // Speculative on: CPU+spec and GPU+spec wrong, CPU-spec right. Nothing like-for-like proves the GPU.
+        assertEquals(State.UNKNOWN, TaiFeatureCheck.gpuOutcome(Arrays.asList(
+            new Outcome(CPU, false, false, true), new Outcome(GPU, false, false, true), new Outcome(CPU, false, true, false))));
+        // The same setting on both processors still convicts the GPU.
+        assertEquals(State.FAILED, TaiFeatureCheck.gpuOutcome(Arrays.asList(
+            new Outcome(CPU, false, true, true), new Outcome(GPU, false, false, true))));
         // A GPU load the self-test moved to the CPU ran on the CPU.
         assertEquals(State.UNKNOWN, TaiFeatureCheck.gpuOutcome(Collections.singletonList(new Outcome(CPU, false, false))));
     }

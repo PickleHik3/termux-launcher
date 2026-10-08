@@ -274,7 +274,7 @@ public final class TaiFeatureCheckRunner {
             // Only a run that answered, or a crash, speaks for the GPU: a stopped or refused one says nothing.
             if (crashed || TaiFeatureCheck.STATUS_COMPLETE.equals(m.status)) {
                 String ranOn = m.ranOn.isEmpty() ? m.accelerator : m.ranOn;
-                outcome.gpu = new TaiFeatureCheck.Outcome(ranOn, crashed, correct && m.passed);
+                outcome.gpu = new TaiFeatureCheck.Outcome(ranOn, crashed, correct && m.passed, m.speculative);
             }
             return outcome;
         } catch (JSONException | RuntimeException e) {
