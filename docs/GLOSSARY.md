@@ -327,6 +327,38 @@ The model On-device AI answers with when a program does not name one, chosen in 
 _Avoid_: default model, current model, loaded model (a model can be the default without being
 loaded)
 
+**Feature** (AI feature):
+A launcher task that uses a model: the assistant, cleanup, app sorting, Dawn search, Dawn chat, voice
+typing, read aloud. Each has its own model picker in the Model Centre. In code it is a `TaiFunction`.
+_Avoid_: function (in prose), role, task
+
+**Feature load plan**:
+The one answer to "how does this feature run on this phone": on-device or remote, the model, CPU or
+GPU, speculative decoding, the context window and how long the model stays loaded, each with the
+reason it was chosen (your pick, measured on this phone, or the phone's default). Requests name the
+feature and the runtime follows the plan; the Model Centre shows the same plan.
+_Avoid_: load policy, load options (those are what one load was given, not the plan)
+
+**Feature check**:
+The part of the benchmark that runs each feature's real workload on this phone, compares CPU and GPU
+and speculative decoding on and off, and records the result the feature load plan reads.
+_Avoid_: speed test, feature bench
+
+**Feature group**:
+Features that work together and stay loaded together while in use: voice typing and cleanup, Dawn
+search and Dawn chat, a spoken Dawn conversation.
+_Avoid_: session, bundle
+
+**GPU verdict**:
+Whether the phone's GPU gives fast, correct answers. It starts from a rule by GPU family and becomes a
+measurement once the self-test or a feature check has run on the GPU; "Try GPU again" clears it.
+_Avoid_: GPU path (the code's name for the family rule), GPU support
+
+**Speculative decoding**:
+Generating several tokens per step from a draft the model checks, so replies come faster. Only some
+model files support it.
+_Avoid_: Eagle, MTP, draft model (older names in code, the CLI and the bench)
+
 **Launcherctl**:
 The launcher's localhost HTTP server and its command-line tool. The server exposes the OpenAI- and
 Ollama-compatible endpoint, model management, app launch, the pane routes a shell uses to drive
