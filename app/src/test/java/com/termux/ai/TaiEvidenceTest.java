@@ -18,7 +18,7 @@ public class TaiEvidenceTest {
             throws Exception {
         return new JSONObject().put("modelId", E2B).put("backend", TaiModelSpec.BACKEND_LITERT_LM)
             .put("accelerator", accelerator).put("speculative", speculative).put("decodeTps", tps)
-            .put("checkPassed", checkPassed).put("verdict", verdict);
+            .put("checkPassed", checkPassed).put("verdict", verdict).put("runtimeVersion", "0.18.0");
     }
 
     @Test
@@ -36,6 +36,7 @@ public class TaiEvidenceTest {
         assertEquals("gpu", first.accelerator);
         assertEquals(18.5, first.decodeTps, 1e-9);
         assertTrue(first.passed);
+        assertEquals("0.18.0", first.runtimeVersion);
         assertTrue(results.get(1).speculative);
         // Wrong answers and crashes are on record, never as passing.
         assertFalse(results.get(2).passed);

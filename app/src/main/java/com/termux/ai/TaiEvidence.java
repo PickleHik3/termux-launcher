@@ -40,15 +40,23 @@ public interface TaiEvidence {
         public final double decodeTps;
         /** The answers were right, and the entry neither crashed nor was graded broken. */
         public final boolean passed;
+        /** The runtime version the bench recorded, e.g. {@code 3.6.1}; {@code ""} when it recorded none. */
+        @NonNull public final String runtimeVersion;
 
         public ChatResult(@NonNull String modelId, @NonNull String backend, @NonNull String accelerator,
                           boolean speculative, double decodeTps, boolean passed) {
+            this(modelId, backend, accelerator, speculative, decodeTps, passed, "");
+        }
+
+        public ChatResult(@NonNull String modelId, @NonNull String backend, @NonNull String accelerator,
+                          boolean speculative, double decodeTps, boolean passed, @NonNull String runtimeVersion) {
             this.modelId = modelId;
             this.backend = backend;
             this.accelerator = accelerator.toLowerCase(Locale.ROOT);
             this.speculative = speculative;
             this.decodeTps = decodeTps;
             this.passed = passed;
+            this.runtimeVersion = runtimeVersion;
         }
     }
 
@@ -106,7 +114,12 @@ public interface TaiEvidence {
     @NonNull
     TaiGpuVerdict.State gpuVerdict();
 
-    /** The generic chat bench's results for this model file; the plan lets them steer only chat features. */
+    /**
+     * The generic chat bench's results for this model file that still hold; the plan lets them steer only
+     * chat features. A result of another runtime version than the phone runs now is left out, as a stale
+     * feature check is ignored. Bench rows record no fingerprint of the model file, so a replaced file of the
+     * same runtime version still counts.
+     */
     @NonNull
     List<ChatResult> chatBench(@NonNull String modelId, @NonNull String backend);
 
@@ -137,7 +150,7 @@ public interface TaiEvidence {
                     && !TaiBenchStats.VERDICT_BROKEN.equals(verdict) && !TaiBenchStats.VERDICT_CRASHED.equals(verdict);
                 results.add(new ChatResult(row.optString("modelId", ""), row.optString("backend", ""),
                     row.optString("accelerator", ""), row.optBoolean("speculative", false),
-                    row.optDouble("decodeTps", 0.0), passed));
+                    row.optDouble("decodeTps", 0.0), passed, row.optString("runtimeVersion", "")));
             }
         }
         return results;
