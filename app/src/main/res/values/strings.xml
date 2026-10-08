@@ -2597,7 +2597,7 @@
     <string name="tour_closing_gui_apps_copy_nix">Add an app to home.nix and run nix-on-droid switch — it appears in the app drawer.</string>
     <!-- Shell commands: never translated. -->
     <string name="tour_closing_extras_command" translatable="false">tlstore install fastfetch sigye claude-code kitten</string>
-    <string name="tour_docs_url" translatable="false">https://picklehik3.github.io/termux-launcher-site/#wiki</string>
+    <string name="tour_docs_url" translatable="false">https://picklehik3.github.io/termux-launcher-site/docs/#wiki</string>
 
     <!-- Settings: replay the first-boot tour -->
     <string name="tour_replay_title">Replay tour</string>

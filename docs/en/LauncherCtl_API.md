@@ -7,7 +7,7 @@ LauncherCtl is a localhost HTTP server that exposes an OpenAI- and Ollama-compat
 - Bind mode: `localhost` (default, `127.0.0.1`) or opt-in `lan` (`0.0.0.0`).
 - Auth: bearer token from `~/.launcherctl/token`, or `X-Api-Key: <token>` header. The token can be made optional for localhost (see [Auth](#auth)).
 - Endpoint URL: `~/.launcherctl/endpoint`.
-- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>`, `launcherctl pane …`, `launcherctl notify`, `launcherctl progress`, `launcherctl clipboard`, `launcherctl notifications`, and the device commands `vibrate`, `torch`, `battery`, `volume`, `toast` and `wallpaper`. The launcher app installs both when `TermuxActivity` starts.
+- CLIs: `$PREFIX/bin/tai` for local AI and `$PREFIX/bin/launcherctl` for `launcherctl launch <app name, package, or activity>`, `launcherctl pane …`, `window open`, `agent`, `notify`, `progress`, `clipboard`, `notifications`, `keyboard`, `x11 gpu`, and the device commands `vibrate`, `torch`, `battery`, `volume`, `toast` and `wallpaper`. The launcher app installs both when `TermuxActivity` starts. The shell commands one by one: [launcherctl](LauncherCtl.md).
 - Removed helpers: `launcherctl-mcp` and `launcher-restart` are no longer installed and are deleted on upgrade.
 
 `tai` uses this authenticated server for the local On-device AI endpoint; native AI runtime work is isolated in `:tai_runtime`.
@@ -52,7 +52,7 @@ The token is a startup-generated random secret stored owner-only at `~/.launcher
 
 ### Token-optional toggle (localhost only)
 
-A setting **Require API token** (default **on**) lives under **Settings → On-device AI → Endpoint & access**. When turned **off**, requests from localhost need no token — any placeholder API key (or none) works. This is convenient for local CLI clients that cannot easily read the token file.
+A setting **Require API token** (default **on**) lives in the **Server** group of **Settings → On-device AI**, beside **LAN access** (whose summary says it "turns itself off after 12 hours"). When turned **off**, requests from localhost need no token — any placeholder API key (or none) works. This is convenient for local CLI clients that cannot easily read the token file.
 
 - `GET /` and `OPTIONS` never require auth, regardless of the toggle.
 - **LAN bind mode always requires the token**, no matter the toggle state. Anyone who can reach a LAN-exposed endpoint and does not present the token gets `401`.
@@ -76,7 +76,7 @@ remote page points its own hostname at `127.0.0.1` so the browser treats the API
 
 ## Endpoint Reference
 
-The complete route surface is below. Besides the On-device AI routes there are app launch, the pane and window routes, the on-screen keyboard, the three signal routes (notification, progress, clipboard), and the notification history routes. There are no media, resource, event, MCP, restart, or general device-control routes.
+The complete route surface is below. Besides the On-device AI routes there are app launch, the pane and window routes, the on-screen keyboard, the three signal routes (notification, progress, clipboard), the notification history routes, the device routes (vibrate, torch, battery, volume, toast, wallpaper), agent status and the display's GPU probe. There are no media, resource, event, MCP or restart routes.
 
 ### Health and discovery
 
@@ -134,7 +134,7 @@ launcherctl launch maps
 launcherctl launch com.example.maps
 ```
 
-`launcherctl`'s other commands are `pane`, `window`, `agent`, `notify`, `progress`, `clipboard`, `notifications`, `keyboard` and `x11`, below. Use `tai` for model and inference commands.
+`launcherctl`'s other commands are `pane`, `window`, `agent`, `notify`, `progress`, `clipboard`, `notifications`, `keyboard`, `x11` and the device commands, below; [launcherctl](LauncherCtl.md) lists them as the shell sees them. Use `tai` for model and inference commands.
 
 ### Panes
 
@@ -528,6 +528,16 @@ launcherctl wallpaper set ~/pics/a.jpg --lock   # --home | --lock | --both (defa
 launcherctl wallpaper get
 ```
 
+### Agent status and the display's GPU
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| POST | `/v1/panes/{id}/agent` | `{"state": "working\|blocked\|idle\|clear", "agent": "name"}`: what the coding agent in that pane is doing, shown on the window chips and in Sessions (`launcherctl agent`) |
+| POST | `/v1/agents/hooks` | Write the four Claude Code hooks that send those states into `~/.claude/settings.json`, leaving existing hooks alone (`launcherctl agent install-hooks`) |
+| GET | `/v1/x11/gpu` | Which graphics profile fits this phone for Linux apps: `gpu`, `recommended`, every `profiles` entry with `reason`, `installed`, `packages`, `env` and `server`, and `env_text`. `?format=env` answers the exports as shell lines (`launcherctl x11 gpu [--env]`) |
+
+See [Agent status](Agent_Status.md) and [The Linux display](X11_Display.md#gpu-acceleration-for-your-apps).
+
 ### OpenAI-compatible
 
 | Method | Path | Purpose |
@@ -557,6 +567,24 @@ Each entry in the standard OpenAI-shaped `data` array includes On-device AI meta
 - `_source_capabilities`: informational upstream/package capabilities. Clients should not treat these as enabled endpoint features.
 - `_default_max_output_tokens`, `_endpoint_context_window`, and `_source_context_window`: runtime default, the context window served on this device, and the model's own limit. The endpoint window grows with device RAM up to the model's limit and follows the **Context window** setting when one is set; see [On-device AI backends](On_Device_AI_Backends.md#context-window-sizing).
 - `_tool_mode`: present for tool-capable models. MNN tool support is `prompt_fallback` (the model's own chat template renders the tools when it can, the server's prompt otherwise); LiteRT tool support is native when advertised.
+- Package facts: `_format`, `_display_name`, `_architecture`, `_quantization`, `_size` (bytes), `_sha256` and `_license`.
+- Where the capabilities came from: `_capabilities_verified` (true for catalog entries), `_capability_source` (`catalog` or `import_or_user_metadata`) and `_capability_verification` (`declared` until a device probe exists).
+
+Every entry that advertises `text_embeddings` also carries the embedder fields:
+
+| Field | Meaning |
+| --- | --- |
+| `_endpoint_dimensions` | The model's native output width (recognised families only) |
+| `_endpoint_matryoshka_dims` | The only sizes `dimensions` accepts, largest first; any other value is `400 invalid_dimensions` |
+| `_endpoint_normalized` | `true`: every vector is L2-normalised |
+| `_endpoint_max_batch` | The largest `input` array `/v1/embeddings` takes, currently 64 |
+| `_revision` | A cheap hash of the model file's name, size and mtime, for knowing when to rebuild an index |
+| `_endpoint_throttle_while_generating` | `"priority"`: embeddings run at background priority while a chat generation runs |
+| `_endpoint_windows` | The `.tflite` EmbeddingGemma's installed window graphs, ascending (absent for one graph) |
+
+For an EmbeddingGemma 2 `.litertlm` embedder, `_endpoint_context_window` is `2048` and there is no `_endpoint_windows`.
+
+Besides the OpenAI `data` array, the response has a top-level `models` array in the shape Codex reads: every chat model with `tool_use` and a context window of at least 16384 tokens. Image-generation models are never listed. A model's speculative-decoding probe is cached per model file, so `/v1/models` answers in about a second rather than re-probing every file.
 
 `GET /v1/models/{id}` returns the single matching object (HTTP 404 if unknown).
 
@@ -574,7 +602,7 @@ Each `data[i]` also reports `tokens` (the token count before any truncation; bod
 
 Dawn brief items 5 and 6, useful for a client that indexes in the background: while a chat generation is running elsewhere in the process, embeddings run throttled (background thread priority) so they do not slow the live reply; every embedder's `/v1/models` entry states this policy as `_endpoint_throttle_while_generating: "priority"`, and `/v1/ai/runtime` `runtime.activeGeneration` says when it applies. A load that cannot fit in memory returns `503` with a `Retry-After` header and `code: "embedding_memory"`, distinct from the `429`/`Retry-After` a request over the 60/minute rate limit gets.
 
-LiteRT EmbeddingGemma `.tflite` installs require `sentencepiece.model` in the same model directory. New downloads fetch that sidecar automatically. Older installs that only contain the `.tflite` return `embedding_tokenizer_missing` until the model is re-downloaded or the sidecar is added.
+LiteRT EmbeddingGemma `.tflite` installs require `sentencepiece.model` in the same model directory. New downloads fetch that sidecar automatically. Older installs that only contain the `.tflite` return `409 embedding_tokenizer_missing` until the model is re-downloaded or the sidecar is added.
 
 EmbeddingGemma 2 (`embeddinggemma-2-text-vision-440m`, the recommended embedder, and `embeddinggemma-2-text-270m`) ships as a single `.litertlm` bundle served by LiteRT-LM's embedding engine. The bundle carries its own tokenizer, so there is no sidecar, and the files need LiteRT-LM 0.18.0 or later. It answers in the same shape as above with `_runtime: "litertlm-embedding"`, text input only (the 440M's image input is not served yet), 768 dimensions with the same Matryoshka sizes, and the same `input_type`/`title` prefixes. The engine is built with a 2048-token input cap, which `/v1/models` reports as `_endpoint_context_window: 2048` (no `_endpoint_windows`). A `.litertlm` import whose file name contains `embeddinggemma` is classed as `text_embeddings` when no capabilities are given.
 
@@ -625,7 +653,7 @@ calls this route (progress on stderr, the PNG saved to `--out`, default `./tai-i
 
 #### `POST /v1/tokenize`
 
-`{model, input}` in, `{tokens: n}` out: the installed embedding model's own tokenizer, with no task prefix and no BOS/EOS framing added — just the raw count, so a client can split long text on real token counts instead of estimating from characters. Only the `.tflite` EmbeddingGemma path exposes a tokenizer today; an EmbeddingGemma 2 `.litertlm` model and other backends return `501 capability_not_supported`.
+`{model, input}` in, `{tokens: n}` out: the installed embedding model's own tokenizer, with no task prefix and no BOS/EOS framing added — just the raw count, so a client can split long text on real token counts instead of estimating from characters. Only the `.tflite` EmbeddingGemma (`embeddinggemma-300m`) exposes a tokenizer; an EmbeddingGemma 2 `.litertlm` model and every other backend return `501 capability_not_supported` ("Tokenize is only available for .tflite embedding models; .litertlm models expose no tokenizer."). Rate limit: 120 a minute.
 
 ### Ollama-compatible
 
@@ -667,10 +695,36 @@ These routes are used by the `tai` CLI and the Settings UI. They share the same 
 | POST | `/v1/ai/runtime/load` | Load a model into the active runtime |
 | POST | `/v1/ai/runtime/unload` | Unload the active model |
 | POST | `/v1/ai/runtime/keep-warm` | Keep a model loaded temporarily |
-| POST | `/v1/ai/runtime/cancel` | Cancel active generation |
+| POST | `/v1/ai/runtime/cancel` | Cancel the active generation or benchmark |
+| DELETE | `/v1/ai/runtime/history` | Clear the runtime history (`tai runtime --clear-history`) |
+| GET | `/v1/ai/logs?lines=N` | The event log: loads, evictions, failures (`tai logs`; `lines` 1-5000) |
+| DELETE | `/v1/ai/logs` | Clear the event log (`tai logs --clear`) |
+| POST | `/v1/ai/benchmarks/run` | Run the benchmark (`tai benchmark`) |
+| GET | `/v1/ai/benchmarks` | The stored results and leaderboard (`tai benchmark --results`) |
+| DELETE | `/v1/ai/benchmarks` | Forget results, for one model or all (`tai benchmark --clear`) |
+| POST | `/v1/ai/benchmarks/skip-wait` | End the running benchmark's cool-down now; the next result is marked "warm start" (`tai benchmark --skip-wait`) |
+| POST | `/v1/ai/runtime/benchmark` | LiteRT-LM's own benchmark() (`tai benchmark --native`) |
+| POST | `/v1/ai/tier` | Developer override of the RAM tier: `{"tier": "1\|2\|3\|auto"}`; no `tai` flag |
 | POST | `/v1/auth/rotate` | Rotate the API token and rewrite discovery files |
 
 `POST /v1/ai/runtime/preflight` checks ABI, API level, bundled native libraries, model package readability/format, memory, accelerator policy, and known backend history without touching native LiteRT-LM/MNN runtime code.
+
+`POST /v1/ai/benchmarks/run` takes:
+
+```json
+{"models": ["gemma-4-e2b-it-litert-lm"], "preset": "standard", "processors": ["gpu"],
+ "compare": false, "eagle": false, "force": false, "stream": true}
+```
+
+- `models` — an array of ids (or a single `model`); omitted, the default assistant model. Each must be an installed chat model (`404 model_not_found`, `404 model_file_missing`, `400 capability_not_supported`).
+- `preset` — `quick` (each test once) or `standard` (twice, the median kept; the default). Anything else is `400 bad_preset`.
+- `processors` — `cpu`, `gpu` or both; omitted, the processor an automatic load would pick.
+- `compare` — run both processors where the model and phone support them, each as its own entry.
+- `eagle` — also bench MNN builds with their EAGLE-3 draft model.
+- `force` — skip the battery and heat check at the start (`409 conditions_not_met` otherwise).
+- `stream` — `true` answers with SSE events per phase; otherwise the run's summary.
+
+A run already in progress is `409 benchmark_running`; a busy runtime is `409 runtime_busy`.
 
 ## Streaming Notes
 
@@ -682,7 +736,48 @@ These routes are used by the `tai` CLI and the Settings UI. They share the same 
 
 Each protected route has its own token-bucket rate limiter. When a bucket is exhausted the server returns HTTP `429 Too Many Requests` with a `Retry-After: <seconds>` header indicating when the bucket refills. The error body uses the standard error envelope (see below).
 
-Limits are per-route, not global, so heavy generation traffic does not starve unrelated management calls.
+Limits are per-route, not global, so heavy generation traffic does not starve unrelated management calls. Requests per minute:
+
+| Route | Limit |
+| --- | ---: |
+| `POST /v1/apps/launch` | 30 |
+| `POST /v1/auth/rotate` | 5 |
+| `GET /v1/panes`, `POST /v1/panes/{id}/write`, `GET /v1/panes/{id}/text` | 240 |
+| `POST /v1/panes`, `POST /v1/windows` | 30 |
+| `POST /v1/panes/{id}/focus` | 120 |
+| `POST /v1/panes/{id}/close` | 60 |
+| `POST /v1/panes/{id}/agent` | 600 |
+| `POST /v1/agents/hooks` | 10 |
+| `POST /v1/keyboard/show`, `POST /v1/keyboard/hide` | 240 each |
+| `POST /v1/notify` | 60 |
+| `POST /v1/progress` | 600 |
+| `POST /v1/clipboard`, `GET /v1/clipboard` | 60 each |
+| `GET /v1/notifications`, `/apps`, `/active` | 120 each |
+| `POST /v1/notifications/clear` | 10 |
+| `POST /v1/vibrate`, `POST /v1/torch` | 30 each |
+| `GET /v1/battery`, `GET /v1/volume` | 120 each |
+| `POST /v1/volume`, `POST /v1/toast` | 60 each |
+| `POST /v1/wallpaper` | 6 |
+| `GET /v1/wallpaper` | 30 |
+| `GET /v1/models`, `GET /v1/ai/status`, `GET /v1/ai/runtime`, `GET /v1/ai/models`, `GET /v1/ai/models/downloads`, `GET /v1/ai/benchmarks` | 120 each |
+| `POST /v1/chat/completions`, `/v1/responses`, `/v1/completions`, `/v1/embeddings` | 60 each |
+| `POST /v1/tokenize` | 120 |
+| `POST /v1/audio/transcriptions` | 240 |
+| `POST /v1/audio/speech`, `POST /v1/ai/speak` | 60 each |
+| `POST /v1/ai/speak/stop` | 120 |
+| `POST /v1/ai/images/generations` | 12 |
+| `POST /v1/ai/images/cancel` | 60 |
+| `POST /v1/ai/models/import`, `/download`, `/download-catalog`, `/load`, `POST /v1/ai/runtime/load` | 20 each |
+| `POST /v1/ai/models/downloads/cancel`, `/pause`, `/resume`, `/prioritize`, `POST /v1/ai/models/delete` | 30 each |
+| `POST /v1/ai/models/unload`, `/v1/ai/runtime/unload`, `/preflight`, `/keep-warm`, `/cancel` | 60 each |
+| `POST /v1/ai/benchmarks/run`, `POST /v1/ai/runtime/benchmark` | 6 each |
+| `POST /v1/ai/benchmarks/skip-wait` | 60 |
+| `DELETE /v1/ai/benchmarks` | 30 |
+| `GET /v1/ai/logs` | 60 |
+| `DELETE /v1/ai/logs`, `DELETE /v1/ai/runtime/history` | 30 each |
+| `POST /v1/ai/tier` | 30 |
+| `GET /api/version`, `/api/tags`, `/api/ps`, `POST /api/show` | 120 each |
+| `POST /api/chat`, `/api/generate`, `/api/embed`, `/api/embeddings` | 60 each |
 
 ## Error Envelope
 
@@ -814,7 +909,7 @@ Inspect `/v1/models` first to confirm both `_backend == "mnn-llm"` and the endpo
 
 ### Token errors (`401`)
 - Read the current token: `cat ~/.launcherctl/token`.
-- Rotate it with `POST /v1/auth/rotate` or from **Settings → On-device AI → Endpoint & access → Recreate token**, then re-run your command.
+- Rotate it with `POST /v1/auth/rotate` or from **Settings → On-device AI → OpenAI endpoint → Recreate token**, then re-run your command.
 - If you turned **Require API token** off, confirm you are still on `localhost` bind mode — LAN mode always requires the token.
 
 ### `Connection refused`

@@ -60,11 +60,13 @@ uninstalled.
 ## 2. Install the Nix edition
 
 1. Open the [releases page](https://github.com/PickleHik3/termux-launcher/releases) and pick the
-   newest **`vX.Y.Z-nix`** tag (published as a prerelease).
+   newest **`nix-vX.Y.Z`** tag. From v1.0.0 every edition shares one version number and the
+   edition is in the tag; Nix releases before 1.0.0 are tagged `vX.Y.Z-nix`.
 2. Install the `arm64-v8a` APK, or `universal` if you are unsure of the device architecture.
-3. If you use the add-ons, install the matching **`nix-v*`** builds — TLNix:API and TLNix:Styling
-   from the [termux-api](https://github.com/PickleHik3/termux-api/releases) and
-   [termux-styling](https://github.com/PickleHik3/termux-styling/releases) forks. The `-vaj`
+3. If you use the add-ons, install the matching **`nix-v*`** builds — TLNix:API, TLNix:Styling and
+   TLNix:Boot from the [termux-api](https://github.com/PickleHik3/termux-api/releases),
+   [termux-styling](https://github.com/PickleHik3/termux-styling/releases) and
+   [termux-boot](https://github.com/PickleHik3/termux-boot/releases) forks. The `-vaj`
    companions pair with `io.vaj.tl` only; they will not talk to the Nix edition.
 
 Do not try to install one edition over another — Android treats them as different apps with

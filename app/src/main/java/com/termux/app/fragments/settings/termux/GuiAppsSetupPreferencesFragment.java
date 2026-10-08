@@ -75,7 +75,7 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
 
     /** Where nix's "Read the docs" row sends the user; nix has no command for this screen to build. */
     private static final String NIX_DOCS_URL =
-        "https://github.com/PickleHik3/termux-launcher/blob/main/docs/en/Nix_Package_Management.md";
+        "https://github.com/PickleHik3/termux-launcher/blob/dev/docs/en/Nix_Package_Management.md";
 
     /** The Intent that opens this screen from outside Settings. */
     @NonNull
