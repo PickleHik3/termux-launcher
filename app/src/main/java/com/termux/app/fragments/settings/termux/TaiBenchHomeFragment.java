@@ -19,6 +19,8 @@ import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
+
+import com.google.android.material.chip.ChipGroup;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.BuildConfig;
@@ -552,9 +554,12 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         TextView numbers = TaiBenchViews.body(context, "");
         numbers.setId(R.id.tai_bench_numbers);
         middle.addView(numbers, TaiBenchViews.block(context, 3));
-        LinearLayout marks = new LinearLayout(context);
+        // A ChipGroup flows its pills onto the next line instead of cutting the last one short.
+        ChipGroup marks = new ChipGroup(context);
         marks.setId(R.id.tai_bench_marks);
-        marks.setOrientation(LinearLayout.HORIZONTAL);
+        marks.setSingleLine(false);
+        marks.setChipSpacingHorizontal(TaiBenchViews.dp(context, 4));
+        marks.setChipSpacingVertical(TaiBenchViews.dp(context, 4));
         LinearLayout.LayoutParams marksParams = TaiBenchViews.block(context, 5);
         middle.addView(marks, marksParams);
         LinearLayout.LayoutParams middleParams = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
@@ -591,7 +596,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         if (row.speculative) sub.append(" · ").append(getString(R.string.tai_bench_mark_draft));
         sub.append(" · ").append(TaiBenchViews.ago(row.timestamp));
         ((TextView) view.findViewById(R.id.tai_bench_subtitle)).setText(sub);
-        LinearLayout marks = view.findViewById(R.id.tai_bench_marks);
+        ViewGroup marks = view.findViewById(R.id.tai_bench_marks);
         marks.removeAllViews();
         if (row.charging) addMark(marks, getString(R.string.tai_bench_mark_charging), TaiModelCentreRows.Tone.NEUTRAL);
         if (row.warmStart) addMark(marks, getString(R.string.tai_bench_mark_warm_start), TaiModelCentreRows.Tone.WARN);
@@ -618,12 +623,9 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         core.setContentDescription(getString(R.string.tai_bench_row_desc, row.displayName));
     }
 
-    private void addMark(@NonNull LinearLayout marks, @NonNull String text, @NonNull TaiModelCentreRows.Tone tone) {
-        Context context = marks.getContext();
-        TextView pill = TaiBenchViews.pill(context, text, tone);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        if (marks.getChildCount() > 0) params.setMarginStart(TaiBenchViews.dp(context, 4));
-        marks.addView(pill, params);
+    private void addMark(@NonNull ViewGroup marks, @NonNull String text, @NonNull TaiModelCentreRows.Tone tone) {
+        TextView pill = TaiBenchViews.pill(marks.getContext(), text, tone);
+        marks.addView(pill, new ViewGroup.MarginLayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
     private void bindSection(@NonNull View view, @NonNull String title) {

@@ -63,28 +63,6 @@
                         android:textColor="?attr/colorOnSurfaceVariant" />
                 </LinearLayout>
 
-                <com.google.android.material.chip.Chip
-                    android:id="@+id/tai_centre_state_pill"
-                    style="@style/Widget.Material3.Chip.Assist"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:clickable="false"
-                    android:ellipsize="end"
-                    android:focusable="false"
-                    android:maxLines="1"
-                    android:maxWidth="150dp"
-                    android:visibility="gone" />
-
-                <!-- "Start now" for a queued row, "Retry" for a failed one. -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/tai_centre_text_action"
-                    style="@style/Widget.Material3.Button.TonalButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
-                    android:visibility="gone" />
-
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/tai_centre_toggle"
                     style="?attr/materialIconButtonFilledTonalStyle"
@@ -101,6 +79,37 @@
                     android:contentDescription="@string/tai_centre_action_cancel"
                     android:visibility="gone"
                     app:icon="@drawable/ic_tai_close" />
+            </LinearLayout>
+
+            <!-- The state pill and "Start now" / "Retry" / "Add token" on their own line, so the
+                 title keeps its width and neither the pill nor the button is cut short. -->
+            <LinearLayout
+                android:id="@+id/tai_centre_status_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <com.google.android.material.chip.Chip
+                    android:id="@+id/tai_centre_state_pill"
+                    style="@style/Widget.Material3.Chip.Assist"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:clickable="false"
+                    android:ellipsize="end"
+                    android:focusable="false"
+                    android:visibility="gone" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/tai_centre_text_action"
+                    style="@style/Widget.Material3.Button.TonalButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <com.google.android.material.progressindicator.LinearProgressIndicator

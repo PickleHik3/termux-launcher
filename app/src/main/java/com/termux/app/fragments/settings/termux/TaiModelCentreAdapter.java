@@ -492,6 +492,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         final ImageView kind;
         final TextView title;
         final TextView subtitle;
+        final View statusRow;
         final TextView pill;
         final TextView textAction;
         final MaterialButton toggle;
@@ -509,6 +510,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             kind = view.findViewById(R.id.tai_centre_kind_icon);
             title = view.findViewById(R.id.tai_centre_title);
             subtitle = view.findViewById(R.id.tai_centre_subtitle);
+            statusRow = view.findViewById(R.id.tai_centre_status_row);
             pill = view.findViewById(R.id.tai_centre_state_pill);
             textAction = view.findViewById(R.id.tai_centre_text_action);
             toggle = view.findViewById(R.id.tai_centre_toggle);
@@ -553,6 +555,8 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             setText(textAction, startNow ? context.getString(R.string.tai_centre_action_start_now)
                 : retry ? context.getString(retryNeedsToken(next) ? R.string.tai_centre_action_add_token
                     : R.string.tai_centre_action_retry) : "");
+            statusRow.setVisibility(pill.getVisibility() == View.VISIBLE || textAction.getVisibility() == View.VISIBLE
+                ? View.VISIBLE : View.GONE);
 
             TaiModelCentreRows.Action toggleAction = state.actions.contains(TaiModelCentreRows.Action.PAUSE)
                 ? TaiModelCentreRows.Action.PAUSE
