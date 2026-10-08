@@ -6,6 +6,7 @@ import static org.junit.Assert.assertTrue;
 
 import com.termux.R;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
@@ -16,11 +17,15 @@ public class TaiRuntimeStatusTextTest {
         return new JSONObject().put("runtime", runtime);
     }
 
+    /** Loaded on the GPU: the processor comes from the resident table, as the runtime reports it. */
     private static JSONObject loadedOnGpu() throws JSONException {
         return status(new JSONObject()
             .put("state", "loaded").put("loaded", true).put("activeGeneration", false)
-            .put("loadedModelId", "gemma-3n-e2b").put("backend", "litert-lm").put("accelerator", "gpu")
-            .put("idleUnloadRemainingMs", 125_000L).put("status", "Model loaded."));
+            .put("loadedModelId", "gemma-3n-e2b").put("backend", "litert-lm")
+            .put("idleUnloadRemainingMs", 125_000L).put("status", "Model loaded."))
+            .put("residents", new JSONArray()
+                .put(new JSONObject().put("id", "embeddinggemma").put("kind", "embedding").put("accelerator", "cpu"))
+                .put(new JSONObject().put("id", "gemma-3n-e2b").put("kind", "chat").put("accelerator", "gpu")));
     }
 
     private static JSONObject generating() throws JSONException {
@@ -70,6 +75,11 @@ public class TaiRuntimeStatusTextTest {
         JSONObject status = loadedOnGpu();
         status.getJSONObject("runtime").put("keepWarmRemainingMs", 30_000L).remove("status");
         assertEquals("gemma-3n-e2b · litert-lm · gpu\nKept warm for 30s", TaiRuntimeStatusText.brief(status));
+    }
+
+    @Test
+    public void aModelWithNoResidentEntryShowsNoProcessor() throws JSONException {
+        assertEquals("gemma-3n-e2b · litert-lm", TaiRuntimeStatusText.brief(generating()));
     }
 
     @Test

@@ -68,8 +68,7 @@ final class TaiRuntimeStatusText {
             StringBuilder line = new StringBuilder(nullable(runtime, "loadedModelId", "model"));
             String backend = nullable(runtime, "backend", "");
             if (!backend.isEmpty()) line.append(" · ").append(backend);
-            String accelerator = nullable(runtime, "accelerator", "");
-            if (accelerator.isEmpty()) accelerator = nullable(runtime, "ranOn", "");
+            String accelerator = residentAccelerator(status, nullable(runtime, "loadedModelId", ""));
             if (!accelerator.isEmpty()) line.append(" · ").append(accelerator);
             body.append(line).append('\n');
         }
@@ -88,6 +87,24 @@ final class TaiRuntimeStatusText {
                 .append(crash.optString("suggestedFallback", "Try CPU or a smaller model.")).append('\n');
         }
         return body.toString().trim();
+    }
+
+    /**
+     * The processor the loaded chat model runs on, from the resident table ({@code residents[]} with
+     * {@code kind}, {@code id}, {@code accelerator}); the runtime object itself does not carry it.
+     */
+    @NonNull
+    static String residentAccelerator(@NonNull JSONObject status, @NonNull String modelId) {
+        JSONArray residents = status.optJSONArray("residents");
+        if (residents == null || modelId.isEmpty()) return "";
+        for (int i = 0; i < residents.length(); i++) {
+            JSONObject resident = residents.optJSONObject(i);
+            if (resident == null) continue;
+            if ("chat".equals(resident.optString("kind", "")) && modelId.equals(resident.optString("id", ""))) {
+                return resident.optString("accelerator", "");
+            }
+        }
+        return "";
     }
 
     /** Polling continues while something will change on its own: a reply, a loaded model, a countdown. */
