@@ -282,7 +282,8 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         int total = Math.max(state.entries.size(), state.planned.size());
         int finished = 0;
         for (TaiBenchRunState.Entry entry : state.entries) if (entry.finished()) finished++;
-        String sub = getString(R.string.tai_bench_headline_sub, TaiBenchViews.presetLabel(context, preset), finished, total);
+        String label = state.featureCheck() ? getString(R.string.tai_check_run_label) : TaiBenchViews.presetLabel(context, preset);
+        String sub = getString(R.string.tai_bench_headline_sub, label, finished, total);
         String title;
         boolean over = state.finished();
         switch (state.phase) {
@@ -359,10 +360,14 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
                 case STOPPED: glyph = "✗"; break;
                 default: glyph = "●"; break;
             }
-            String title = entry.displayName + " · " + TaiBenchViews.processorLabel(entry.accelerator)
-                + (entry.speculative ? " · " + getString(R.string.tai_bench_mark_draft) : "");
+            String title = entryTitle(context, entry);
             String detail;
-            if (entry.status == TaiBenchRunState.EntryStatus.SKIPPED) {
+            if (entry.feature != null && entry.status == TaiBenchRunState.EntryStatus.DONE) {
+                // A feature check's run reads as its one figure and how that feels, or that its answers were wrong.
+                String figure = TaiBenchViews.featureFigure(context, entry.feature, entry.featureSpeed);
+                detail = !entry.featurePassed ? getString(R.string.tai_check_wrong_answers)
+                    : (entry.verdict == null ? "" : TaiBenchViews.verdictLabel(context, entry.verdict) + " · ") + figure;
+            } else if (entry.status == TaiBenchRunState.EntryStatus.SKIPPED) {
                 detail = getString(R.string.tai_bench_step_skipped, entry.reason == null ? "" : entry.reason);
             } else if (entry.status == TaiBenchRunState.EntryStatus.STOPPED) {
                 detail = entry.reason == null ? getString(R.string.tai_bench_step_stopped) : entry.reason;
@@ -389,11 +394,22 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         if (rows.isEmpty()) stepper.addView(TaiBenchViews.body(context, getString(R.string.tai_bench_loading)));
     }
 
+    /**
+     * "Gemma 4 E2B · GPU · draft model" for a bench entry; a feature check's run leads with the feature,
+     * "Tidy dictation · Gemma 4 E2B · GPU".
+     */
+    @NonNull
+    private String entryTitle(@NonNull Context context, @NonNull TaiBenchRunState.Entry entry) {
+        String setup = entry.displayName + " · " + TaiBenchViews.processorLabel(entry.accelerator)
+            + (entry.speculative ? " · " + getString(R.string.tai_bench_mark_draft) : "");
+        return entry.feature == null ? setup : TaiBenchViews.featureName(context, entry.feature) + " · " + setup;
+    }
+
     /** "load ✓ · warm-up ✓ · chat 1/2 · long input", the phases in order; the sanity check stays silent. */
     @NonNull
     private String phasesLine(@NonNull Context context, @NonNull TaiBenchRunState.Entry entry) {
         StringBuilder line = new StringBuilder();
-        for (String phase : TaiBenchRunState.phasesFor()) {
+        for (String phase : TaiBenchRunState.phasesFor(entry)) {
             if (line.length() > 0) line.append(" · ");
             line.append(TaiBenchViews.phaseLabel(context, phase));
             TaiBenchRunState.Step step = entry.steps.get(phase);
@@ -492,9 +508,9 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         TaiBenchRunState.Entry entry = state.current();
         nowCard.setVisibility(entry == null ? View.GONE : View.VISIBLE);
         if (entry == null) return;
-        nowTitle.setText(TaiBenchViews.testLabel(context, entry.currentPhase));
-        nowSub.setText(entry.displayName + " · " + TaiBenchViews.processorLabel(entry.accelerator)
-            + (entry.speculative ? " · " + getString(R.string.tai_bench_mark_draft) : ""));
+        nowTitle.setText(entry.feature != null ? getString(R.string.tai_check_now, TaiBenchViews.featureName(context, entry.feature))
+            : TaiBenchViews.testLabel(context, entry.currentPhase));
+        nowSub.setText(entryTitle(context, entry));
         TaiBenchRunState.Dial dial = state.dial(System.currentTimeMillis());
         switch (dial.kind) {
             case DECODE:

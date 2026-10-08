@@ -27,8 +27,17 @@ import com.termux.ai.MnnTaiRuntime;
 import com.termux.ai.TaiBenchGuardRules;
 import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiDeviceConditions;
+import com.termux.ai.TaiFeatureCheck;
+import com.termux.ai.TaiFeatureCheckRunner;
+import com.termux.ai.TaiFeatureCheckStore;
+import com.termux.ai.TaiFeaturePlan;
+import com.termux.ai.TaiFeaturePlans;
+import com.termux.ai.TaiFunction;
+import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiManager;
+import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
+import com.termux.ai.TaiTierPolicy;
 import com.termux.app.activities.SettingsActivity;
 
 import org.json.JSONException;
@@ -36,14 +45,18 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The benchmark's Home (spec Screen 1): a device card, the one leaderboard list (ranked by
- * verdict, then decode speed, then the first reply), the broken entries apart, and a bar floating
- * over the list's foot with the "Run a benchmark" button and when the last run was. {@link #open} is the one entry point the wiring slice calls:
+ * The benchmark's Home (spec Screen 1): "Your features" on top (each feature in use with its feature
+ * check's one figure and verdict, and "Check my features"), a device card, the one leaderboard list
+ * (ranked by verdict, then decode speed, then the first reply), the broken entries apart, and a bar
+ * floating over the list's foot with the "Run a benchmark" button and when the last run was. {@link #open} is the one entry point the wiring slice calls:
  * it lands on the Run screen while a run is going, on Choose with one model preselected when
  * asked for a model, and here otherwise. Hosted by {@link SettingsActivity} like the Model centre.
  */
@@ -55,6 +68,41 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     private static final int TYPE_SECTION = 4;
     private static final int TYPE_NOTE = 5;
     private static final int TYPE_EMPTY = 6;
+    private static final int TYPE_FEATURES = 7;
+    /** The initial place that opens the Check sheet for one feature: {@code check:<feature id>}. */
+    static final String PLACE_CHECK = "check:";
+
+    /** One row of "Your features": a feature in use, its model, and its latest feature check. */
+    static final class FeatureRow {
+        @NonNull final TaiFunction feature;
+        @NonNull final String modelId;
+        @NonNull final String modelName;
+        /** The plan's accelerator for a chat feature; {@code null} for the CPU-only ones. */
+        @Nullable final String accelerator;
+        /** The latest check of the plan's setup, else of any setup of this model; {@code null} when never checked. */
+        @Nullable final JSONObject record;
+        /** The record was measured on another model file or runtime version. */
+        final boolean stale;
+        /** The model file does not declare speculative decoding, or a check found it never ran. */
+        final boolean speculativeUnavailable;
+
+        FeatureRow(@NonNull TaiFunction feature, @NonNull String modelId, @NonNull String modelName,
+                   @Nullable String accelerator, @Nullable JSONObject record, boolean stale, boolean speculativeUnavailable) {
+            this.feature = feature;
+            this.modelId = modelId;
+            this.modelName = modelName;
+            this.accelerator = accelerator;
+            this.record = record;
+            this.stale = stale;
+            this.speculativeUnavailable = speculativeUnavailable;
+        }
+
+        @NonNull
+        String signature() {
+            return feature + "|" + modelId + "|" + accelerator + "|" + (record == null ? "" : record.optString("id", "")
+                + record.optLong("timestamp", 0L)) + "|" + stale + "|" + speculativeUnavailable;
+        }
+    }
 
     /** The device card's facts, gathered off the main thread. */
     private static final class DeviceFacts {
@@ -79,6 +127,10 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     @Nullable private DeviceFacts facts;
     @Nullable private View bar;
     private int lastSeenEntries = -1;
+    /** "Your features"; empty until read, and when no feature runs a model on this phone. */
+    @NonNull private List<FeatureRow> features = new ArrayList<>();
+    /** A feature whose Check sheet opens once its row is read (the Model Centre's offer). */
+    @Nullable private TaiFunction pendingCheck;
 
     /**
      * Opens the benchmark: the Run screen while a run is going, Choose with only {@code modelId}
@@ -113,10 +165,32 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         }
     }
 
+    /** Opens the benchmark's Home with the Check sheet up for {@code feature}: the Model Centre's one-time offer. */
+    public static void openFeatureCheck(@Nullable Activity activity, @NonNull TaiFunction feature) {
+        if (activity == null) return;
+        String place = PLACE_CHECK + feature.id();
+        if (activity instanceof SettingsActivity) {
+            Bundle arguments = new Bundle();
+            arguments.putString(SettingsActivity.EXTRA_INITIAL_PLACE, place);
+            ((SettingsActivity) activity).openScreen(TaiBenchHomeFragment.class, R.string.tai_bench_title, arguments);
+        } else {
+            activity.startActivity(SettingsActivity.createFragmentIntent(activity, TaiBenchHomeFragment.class,
+                R.string.tai_bench_title, place, null));
+        }
+    }
+
     /** The versions this build is, for the "older version" mark. */
     @NonNull
     static TaiBenchLeaderboard.Versions versions() {
         return new TaiBenchLeaderboard.Versions(BuildConfig.VERSION_NAME, BuildConfig.LITERT_LM_VERSION, MnnTaiRuntime.RUNTIME_VERSION);
+    }
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        Bundle arguments = getArguments();
+        String place = arguments == null || savedInstanceState != null ? null : arguments.getString(SettingsActivity.EXTRA_INITIAL_PLACE);
+        if (place != null && place.startsWith(PLACE_CHECK)) pendingCheck = TaiFunction.fromId(place.substring(PLACE_CHECK.length()));
     }
 
     @Nullable
@@ -205,14 +279,87 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             } catch (JSONException | RuntimeException ignored) {
             }
             DeviceFacts gathered = gather(app);
+            List<FeatureRow> rows = gatherFeatures(app);
             TaiBenchLeaderboard.Board finalBoard = loaded;
             handler.post(() -> {
                 if (!isAdded()) return;
                 if (finalBoard != null) board = finalBoard;
                 facts = gathered;
+                features = rows;
                 rebuild();
+                offerPendingCheck();
             });
         });
+    }
+
+    /**
+     * "Your features": each feature the check can measure here ({@link TaiFeatureCheckRunner#featuresInUse}),
+     * with its model and its latest check. Reads the plans, the model store and the results file.
+     */
+    @NonNull
+    private static List<FeatureRow> gatherFeatures(@NonNull Context app) {
+        List<FeatureRow> rows = new ArrayList<>();
+        try {
+            TaiFeaturePlans plans = TaiFeaturePlans.forContext(app);
+            List<TaiFunction> inUse = TaiFeatureCheckRunner.featuresInUse(plans);
+            if (inUse.isEmpty()) return rows;
+            TaiModelStore store = new TaiModelStore(app);
+            Map<String, TaiModelSpec> installed = new LinkedHashMap<>(store.getDownloadedReadableModels());
+            installed.putAll(store.getInstalledUserModels());
+            TaiFunctionLabels labels = new TaiFunctionLabels(app, installed);
+            List<JSONObject> latest = TaiFeatureCheckStore.latest(TaiFeatureCheckStore.in(app.getFilesDir()).records());
+            for (TaiFunction feature : inUse) {
+                TaiFeaturePlan plan = plans.plan(feature);
+                if (plan.modelId == null) continue;
+                TaiModelSpec spec = installed.get(TaiFeatureCheck.baseModelId(plan.modelId));
+                if (spec == null) spec = installed.get(plan.modelId);
+                if (spec == null) continue;
+                JSONObject record = latestFor(latest, feature, spec, plan);
+                String current = TaiFeatureCheckStore.stalenessKey(spec);
+                boolean stale = record != null && TaiFeatureCheck.isStale(record.optString("staleKey", ""), current);
+                TaiFunctionModels.Resolution resolution = plans.models().resolve(feature);
+                boolean declares = resolution.info != null && resolution.info.speculative;
+                boolean neverRan = false;
+                for (JSONObject candidate : latest) {
+                    if (sameModel(candidate, feature, spec) && candidate.optBoolean("speculative", false)
+                        && candidate.has("speculativeRan") && !candidate.isNull("speculativeRan")
+                        && !candidate.optBoolean("speculativeRan", true)
+                        && !TaiFeatureCheck.isStale(candidate.optString("staleKey", ""), current)) {
+                        neverRan = true;
+                    }
+                }
+                rows.add(new FeatureRow(feature, spec.id, labels.modelName(spec.id),
+                    feature.usesChatModel() ? plan.accelerator : null, record, stale,
+                    feature.usesChatModel() && (!declares || neverRan)));
+            }
+        } catch (RuntimeException ignored) {
+            // No section rather than a broken one; the bench below still reads.
+        }
+        return rows;
+    }
+
+    private static boolean sameModel(@NonNull JSONObject record, @NonNull TaiFunction feature, @NonNull TaiModelSpec spec) {
+        return feature.id().equals(record.optString("feature", "")) && spec.backend.equals(record.optString("backend", ""))
+            && TaiFeatureCheck.baseModelId(spec.id).equals(TaiFeatureCheck.baseModelId(record.optString("modelId", "")));
+    }
+
+    /** The newest record of the plan's own setup, else the newest of any setup of the feature on this model. */
+    @Nullable
+    private static JSONObject latestFor(@NonNull List<JSONObject> latest, @NonNull TaiFunction feature,
+                                        @NonNull TaiModelSpec spec, @NonNull TaiFeaturePlan plan) {
+        JSONObject own = null;
+        JSONObject any = null;
+        String accelerator = plan.accelerator == null ? TaiTierPolicy.ACCEL_CPU : plan.accelerator.toLowerCase(Locale.ROOT);
+        boolean speculative = Boolean.TRUE.equals(plan.speculative);
+        for (JSONObject record : latest) {
+            if (!sameModel(record, feature, spec)) continue;
+            long at = record.optLong("timestamp", 0L);
+            if (any == null || at >= any.optLong("timestamp", 0L)) any = record;
+            boolean setup = !feature.usesChatModel() || (accelerator.equals(record.optString("accelerator", ""))
+                && speculative == record.optBoolean("speculative", false));
+            if (setup && (own == null || at >= own.optLong("timestamp", 0L))) own = record;
+        }
+        return own != null ? own : any;
     }
 
     @NonNull
@@ -253,6 +400,11 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             TaiBenchRunState state = session.state();
             String text = getString(R.string.tai_bench_banner_running, state.entries.size(), Math.max(state.entries.size(), state.planned.size()));
             items.add(new TaiBenchListAdapter.Item(TYPE_BANNER, "running", text, text));
+        }
+        if (!features.isEmpty()) {
+            StringBuilder signature = new StringBuilder().append(session.isActive());
+            for (FeatureRow row : features) signature.append('|').append(row.signature());
+            items.add(new TaiBenchListAdapter.Item(TYPE_FEATURES, "features", signature.toString(), features));
         }
         DeviceFacts d = facts;
         String deviceSignature = d == null ? "" : d.soc + '|' + d.gpu + '|' + d.ramClassBytes + '|' + d.freeRamBytes + '|' + d.freeStorageBytes
@@ -299,6 +451,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             case TYPE_ROW: return createRow(context);
             case TYPE_SECTION: return TaiBenchViews.sectionHeader(context, "", "");
             case TYPE_NOTE: return createNote(context);
+            case TYPE_FEATURES: return createFeatures(context);
             default: return createEmpty(context);
         }
     }
@@ -311,6 +464,7 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
             case TYPE_ROW: bindRow(view, (TaiBenchLeaderboard.Row) item.data); break;
             case TYPE_SECTION: bindSection(view, (String) item.data); break;
             case TYPE_NOTE: ((TextView) view.findViewById(R.id.tai_bench_text)).setText((String) item.data); break;
+            case TYPE_FEATURES: bindFeatures(view, features); break;
             default: bindEmpty(view, Boolean.TRUE.equals(item.data)); break;
         }
     }
@@ -508,6 +662,129 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
         ((TextView) view.findViewById(R.id.tai_bench_title)).setText(loading ? "" : getString(R.string.tai_bench_empty_title));
         ((TextView) view.findViewById(R.id.tai_bench_text)).setText(loading ? getString(R.string.tai_bench_loading)
             : getString(R.string.tai_bench_empty_summary));
+    }
+
+    // ---- your features ----
+
+    @NonNull
+    private View createFeatures(@NonNull Context context) {
+        TaiBenchViews.Card card = TaiBenchViews.card(context);
+        card.core.addView(TaiBenchViews.title(context, getString(R.string.tai_check_section_title)));
+        card.core.addView(TaiBenchViews.body(context, getString(R.string.tai_check_section_summary)), TaiBenchViews.block(context, 2));
+        LinearLayout rows = new LinearLayout(context);
+        rows.setId(R.id.tai_check_rows);
+        rows.setOrientation(LinearLayout.VERTICAL);
+        card.core.addView(rows, TaiBenchViews.block(context, 6));
+        TextView check = TaiBenchViews.goButton(context, getString(R.string.tai_check_action));
+        check.setId(R.id.tai_check_action);
+        check.setMinHeight(TaiBenchViews.dp(context, 44));
+        check.setOnClickListener(v -> {
+            TaiMotion.tick(v);
+            showCheckSheet(featureList(features));
+        });
+        card.core.addView(check, TaiBenchViews.block(context, 12));
+        return card.outer;
+    }
+
+    private void bindFeatures(@NonNull View view, @NonNull List<FeatureRow> rows) {
+        Context context = view.getContext();
+        LinearLayout list = view.findViewById(R.id.tai_check_rows);
+        list.removeAllViews();
+        for (FeatureRow row : rows) {
+            list.addView(featureRow(context, row), TaiBenchViews.block(context, 10));
+        }
+        TaiBenchViews.setEnabled(view.findViewById(R.id.tai_check_action), !TaiBenchSession.get().isActive());
+    }
+
+    /** One feature: its name, the model and processor, the one figure, and Smooth / Usable / Slow. */
+    @NonNull
+    private View featureRow(@NonNull Context context, @NonNull FeatureRow row) {
+        LinearLayout line = new LinearLayout(context);
+        line.setOrientation(LinearLayout.HORIZONTAL);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout middle = new LinearLayout(context);
+        middle.setOrientation(LinearLayout.VERTICAL);
+        TextView name = TaiBenchViews.title(context, TaiBenchViews.featureName(context, row.feature));
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        middle.addView(name);
+        String setup = row.modelName + (row.accelerator == null ? "" : " · " + TaiBenchViews.processorLabel(row.accelerator));
+        TextView sub = TaiBenchViews.mono(context, setup);
+        sub.setSingleLine(true);
+        sub.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        middle.addView(sub);
+        String figure = figureText(row);
+        middle.addView(TaiBenchViews.body(context, figure), TaiBenchViews.block(context, 3));
+        if (row.stale) middle.addView(TaiBenchViews.body(context, getString(R.string.tai_check_older_version)), TaiBenchViews.block(context, 3));
+        if (row.speculativeUnavailable) {
+            middle.addView(TaiBenchViews.body(context, getString(R.string.tai_check_speculative_unavailable)), TaiBenchViews.block(context, 3));
+        }
+        line.addView(middle, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        String verdict = row.record == null || row.stale || row.record.isNull("verdict") ? "" : row.record.optString("verdict", "");
+        String label = TaiBenchViews.verdictLabel(context, verdict);
+        if (!label.isEmpty()) {
+            TextView pill = TaiBenchViews.pill(context, label, TaiBenchViews.verdictTone(verdict));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            params.setMarginStart(TaiBenchViews.dp(context, 10));
+            line.addView(pill, params);
+        }
+        // A result from an older model file or runtime is greyed: the plan no longer reads it.
+        line.setAlpha(row.stale ? STALE_ALPHA : 1f);
+        line.setContentDescription(getString(R.string.tai_check_row_desc, TaiBenchViews.featureName(context, row.feature), figure));
+        return line;
+    }
+
+    /** How faint a stale row is drawn. */
+    private static final float STALE_ALPHA = 0.55f;
+
+    @NonNull
+    private String figureText(@NonNull FeatureRow row) {
+        JSONObject record = row.record;
+        if (record == null) return getString(R.string.tai_check_not_checked);
+        if (!TaiFeatureCheck.STATUS_COMPLETE.equals(record.optString("status", ""))) return getString(R.string.tai_check_could_not_run);
+        if (!record.optBoolean("passed", false)) return getString(R.string.tai_check_wrong_answers);
+        String figure = TaiBenchViews.featureFigure(requireContext(), row.feature, record.optDouble("speed", 0.0));
+        return figure.isEmpty() ? getString(R.string.tai_check_could_not_run) : figure;
+    }
+
+    @NonNull
+    private static List<TaiFunction> featureList(@NonNull List<FeatureRow> rows) {
+        List<TaiFunction> out = new ArrayList<>();
+        for (FeatureRow row : rows) out.add(row.feature);
+        return out;
+    }
+
+    /** The bench's Check sheet (battery, heat, battery saver, other downloads) for {@code chosen}; Start runs the check. */
+    private void showCheckSheet(@NonNull List<TaiFunction> chosen) {
+        Context context = getContext();
+        if (context == null || chosen.isEmpty() || TaiBenchSession.get().isActive()) return;
+        List<TaiBenchSession.Model> models = new ArrayList<>();
+        List<String> labels = new ArrayList<>();
+        for (TaiFunction feature : chosen) {
+            labels.add(TaiBenchViews.featureName(context, feature));
+            for (FeatureRow row : features) {
+                if (row.feature == feature) models.add(new TaiBenchSession.Model(row.modelId, row.modelName, true, 0L));
+            }
+        }
+        String summary = getResources().getQuantityString(R.plurals.tai_check_sheet_summary, chosen.size(), chosen.size());
+        TaiBenchCheckSheet.show(context, summary, TaiFeatureCheckRunner.PRESET_ID, false, models, plan -> {
+            if (TaiBenchSession.get().startFeatureCheck(context, chosen, labels)) openRun();
+        });
+    }
+
+    /** The Model Centre's offer opened this screen for one feature: its sheet comes up once the rows are read. */
+    private void offerPendingCheck() {
+        TaiFunction feature = pendingCheck;
+        if (feature == null) return;
+        pendingCheck = null;
+        for (FeatureRow row : features) {
+            if (row.feature == feature) {
+                List<TaiFunction> one = new ArrayList<>();
+                one.add(feature);
+                showCheckSheet(one);
+                return;
+            }
+        }
     }
 
     // ---- the floating bar ----

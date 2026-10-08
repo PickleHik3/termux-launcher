@@ -21,6 +21,9 @@ import com.google.android.material.chip.Chip;
 import com.termux.R;
 import com.termux.ai.TaiBenchStats;
 import com.termux.ai.TaiBenchSuite;
+import com.termux.ai.TaiFeatureCheck;
+import com.termux.ai.TaiFeatureCheckRunner;
+import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiModelSpec;
 
 import java.util.Locale;
@@ -253,6 +256,37 @@ final class TaiBenchViews {
         return context.getString(R.string.tai_bench_seconds, String.format(Locale.US, "%.1f", value / 1000.0));
     }
 
+    /** A feature's name as the feature check shows it: "Tidy dictation", "Dawn search". */
+    @NonNull
+    static String featureName(@NonNull Context context, @NonNull TaiFunction feature) {
+        switch (feature) {
+            case TIDY_DICTATION: return context.getString(R.string.tai_check_name_cleanup);
+            case APP_CATEGORIES: return context.getString(R.string.tai_check_name_sorting);
+            case DAWN_CHAT: return context.getString(R.string.tai_check_name_dawn_chat);
+            case EMBEDDINGS: return context.getString(R.string.tai_check_name_dawn_search);
+            case READ_ALOUD: return context.getString(R.string.tai_check_name_read_aloud);
+            default: return context.getString(R.string.tai_check_name_assistant);
+        }
+    }
+
+    /**
+     * A feature check's one plain figure from its speed: "A minute of speech tidied in 6 s", "0.9 s per
+     * app", "Writes 14 tokens a second", "Reads 40 notes a second", "Speaks in 0.3 s"; empty when not measured.
+     */
+    @NonNull
+    static String featureFigure(@NonNull Context context, @NonNull TaiFunction feature, double speed) {
+        double figure = TaiFeatureCheck.figure(feature, speed);
+        if (figure <= 0.0 || Double.isNaN(figure) || Double.isInfinite(figure)) return "";
+        String number = figure < 10.0 ? String.format(Locale.US, "%.1f", figure) : String.format(Locale.US, "%.0f", figure);
+        switch (TaiFeatureCheck.unitOf(feature)) {
+            case SECONDS_PER_MINUTE_OF_SPEECH: return context.getString(R.string.tai_check_figure_cleanup, number);
+            case SECONDS_PER_APP: return context.getString(R.string.tai_check_figure_sorting, number);
+            case NOTES_PER_SECOND: return context.getString(R.string.tai_check_figure_search, number);
+            case SECONDS_TO_FIRST_SOUND: return context.getString(R.string.tai_check_figure_read_aloud, number);
+            default: return context.getString(R.string.tai_check_figure_chat, number);
+        }
+    }
+
     /** "0.6 s", "14 s": a wait in seconds, one decimal under ten; "—" with nothing measured. */
     @NonNull
     static String waitSeconds(@NonNull Context context, double ms) {
@@ -350,6 +384,7 @@ final class TaiBenchViews {
             case TaiBenchSuite.PHASE_CHAT: return context.getString(R.string.tai_bench_phase_chat);
             case TaiBenchSuite.PHASE_LONG_INPUT: return context.getString(R.string.tai_bench_phase_long_input);
             case TaiBenchSuite.PHASE_CHECK: return context.getString(R.string.tai_bench_phase_check);
+            case TaiFeatureCheckRunner.PHASE_FEATURE: return context.getString(R.string.tai_check_phase_feature);
             default: return phase;
         }
     }

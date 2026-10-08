@@ -84,6 +84,9 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         void onParallelSelected(int parallel);
         /** A Functions row was tapped: open that function's picker sheet. */
         void onFunctionClicked(@NonNull TaiFunction function);
+        /** A Functions row's "Check how it runs on this phone" was tapped. */
+        default void onFunctionCheckOffer(@NonNull TaiFunction function) {
+        }
     }
 
     /** One entry of the list. {@link #signature} is what DiffUtil compares for "same content". */
@@ -765,6 +768,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
         final TextView summary;
         final TextView reason;
         final TextView warning;
+        final TextView offer;
         @Nullable TaiFunctionRows.FunctionRow row;
 
         FunctionHolder(@NonNull View view) {
@@ -775,8 +779,12 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             summary = view.findViewById(R.id.tai_fn_summary);
             reason = view.findViewById(R.id.tai_fn_reason);
             warning = view.findViewById(R.id.tai_fn_warning);
+            offer = view.findViewById(R.id.tai_fn_offer);
             core.setOnClickListener(v -> {
                 if (row != null) callbacks.onFunctionClicked(row.function);
+            });
+            offer.setOnClickListener(v -> {
+                if (row != null) callbacks.onFunctionCheckOffer(row.function);
             });
         }
 
@@ -787,6 +795,7 @@ final class TaiModelCentreAdapter extends RecyclerView.Adapter<RecyclerView.View
             setText(summary, next.summary);
             setText(reason, next.reason);
             warning.setVisibility(next.warnBackground ? View.VISIBLE : View.GONE);
+            offer.setVisibility(next.offerCheck ? View.VISIBLE : View.GONE);
             core.setContentDescription(itemView.getContext().getString(R.string.tai_fn_row_desc, next.name, next.summary));
         }
     }

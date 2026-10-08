@@ -110,20 +110,34 @@ final class TaiFunctionRows {
         @NonNull final String badge;
         /** Why the plan is what it is: "Your choice", "Measured on this phone", .... */
         @NonNull final String reason;
+        /** "Check how it runs on this phone": the feature's model was never checked and the offer not yet taken. */
+        final boolean offerCheck;
 
         FunctionRow(@NonNull TaiFunction function, @NonNull String name, @NonNull String summary,
                     boolean warnBackground, @NonNull String badge, @NonNull String reason) {
+            this(function, name, summary, warnBackground, badge, reason, false);
+        }
+
+        private FunctionRow(@NonNull TaiFunction function, @NonNull String name, @NonNull String summary,
+                            boolean warnBackground, @NonNull String badge, @NonNull String reason, boolean offerCheck) {
             this.function = function;
             this.name = name;
             this.summary = summary;
             this.warnBackground = warnBackground;
             this.badge = badge;
             this.reason = reason;
+            this.offerCheck = offerCheck;
+        }
+
+        /** This row with the feature check offer shown or not. */
+        @NonNull
+        FunctionRow withOffer(boolean offer) {
+            return offer == offerCheck ? this : new FunctionRow(function, name, summary, warnBackground, badge, reason, offer);
         }
 
         @NonNull
         String signature() {
-            return function + "|" + name + "|" + summary + "|" + warnBackground + "|" + badge + "|" + reason;
+            return function + "|" + name + "|" + summary + "|" + warnBackground + "|" + badge + "|" + reason + "|" + offerCheck;
         }
     }
 

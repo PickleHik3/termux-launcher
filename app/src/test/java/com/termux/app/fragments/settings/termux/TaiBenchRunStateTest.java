@@ -572,4 +572,36 @@ public class TaiBenchRunStateTest {
     public void theStepperListsLoadWarmupChatAndLongInputButNotTheSilentSanityCheck() {
         assertEquals(Arrays.asList("load", "warmup", "chat", "longInput"), TaiBenchRunState.phasesFor());
     }
+
+    @Test
+    public void aFeatureCheckRunsThroughTheSameStepper() throws JSONException {
+        TaiBenchRunState check = new TaiBenchRunState();
+        check.begin(com.termux.ai.TaiFeatureCheckRunner.PRESET_ID, Arrays.asList(
+            new TaiBenchRunState.Planned("tidy_dictation", "Tidy dictation", false),
+            new TaiBenchRunState.Planned("read_aloud", "Read aloud", false)), 0.0, 1_000L);
+        assertTrue(check.featureCheck());
+        check.apply(event("entry_start", 1_100L).put("index", 0).put("total", 2).put("entry", new JSONObject()
+            .put("modelId", GEMMA).put("backend", TaiModelSpec.BACKEND_LITERT_LM).put("accelerator", "gpu")
+            .put("speculative", true).put("feature", "tidy_dictation").put("displayName", "Gemma 4 E2B")
+            .put("key", "tidy_dictation|" + GEMMA + "|litert-lm|gpu|on")));
+        TaiBenchRunState.Entry entry = check.current();
+        assertNotNull(entry);
+        assertEquals(com.termux.ai.TaiFunction.TIDY_DICTATION, entry.feature);
+        assertEquals("Gemma 4 E2B", entry.displayName);
+        assertEquals(Arrays.asList("load", "feature"), TaiBenchRunState.phasesFor(entry));
+        // The planned feature it measures is no longer pending; the other one is.
+        assertEquals(1, check.pending().size());
+        assertEquals("read_aloud", check.pending().get(0).modelId);
+
+        check.apply(event("phase_start", 1_200L).put("phase", "feature").put("runs", 2).put("prompt", "okay so um"));
+        check.apply(event("token", 1_300L).put("phase", "feature").put("run", 1).put("runs", 2).put("text", "Okay, so")
+            .put("tokens", 3).put("tps", 20.0).put("ttftMs", 400L));
+        assertEquals("Okay, so", check.live.reply.toString());
+        check.apply(event("entry_done", 1_400L).put("record", new JSONObject().put("feature", "tidy_dictation")
+            .put("status", "complete").put("verdict", "smooth").put("speed", 10.0).put("passed", true)));
+        assertEquals(TaiBenchRunState.EntryStatus.DONE, entry.status);
+        assertEquals("smooth", entry.verdict);
+        assertEquals(10.0, entry.featureSpeed, 1e-9);
+        assertTrue(entry.featurePassed);
+    }
 }

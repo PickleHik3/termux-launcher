@@ -33,6 +33,8 @@ import com.termux.ai.TaiDeviceCapabilities;
 import com.termux.ai.TaiDownloadEngine;
 import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiDownloadQueue;
+import com.termux.ai.TaiFeatureCheckRunner;
+import com.termux.ai.TaiFeatureCheckStore;
 import com.termux.ai.TaiFeaturePlans;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
@@ -354,7 +356,8 @@ public class TaiModelCentreFragment extends Fragment
             TaiFunctionLabels labels = new TaiFunctionLabels(app, installed);
             TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(app, true);
             String level = prefs == null ? "polished" : prefs.getInAppKeyboardVoicePolishLevel();
-            List<TaiFunctionRows.FunctionRow> rows = TaiFunctionRows.functionRows(models, planner, labels, level);
+            List<TaiFunctionRows.FunctionRow> rows = withCheckOffers(app, plans,
+                TaiFunctionRows.functionRows(models, planner, labels, level));
             TaiDeviceCapabilities capabilities = TaiDeviceCapabilities.detect(app);
             String soc = capabilities.socModel == null || capabilities.socModel.trim().isEmpty() ? capabilities.model : capabilities.socModel;
             String device = TaiFunctionRows.deviceLine(models.env(), soc, Build.VERSION.RELEASE);
@@ -1228,6 +1231,54 @@ public class TaiModelCentreFragment extends Fragment
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
+    }
+
+    /**
+     * The feature check's one-time offer (decision 5) on each row whose feature runs a model on this phone
+     * that has never been checked for it, until the offer is taken. Reads the results file: off the main thread.
+     */
+    @NonNull
+    private static List<TaiFunctionRows.FunctionRow> withCheckOffers(@NonNull Context app, @NonNull TaiFeaturePlans plans,
+                                                                     @NonNull List<TaiFunctionRows.FunctionRow> rows) {
+        List<TaiFunctionRows.FunctionRow> out = new ArrayList<>(rows.size());
+        try {
+            List<TaiFunction> inUse = TaiFeatureCheckRunner.featuresInUse(plans);
+            List<org.json.JSONObject> records = TaiFeatureCheckStore.in(app.getFilesDir()).records();
+            TaiSettings settings = new TaiSettings(app);
+            for (TaiFunctionRows.FunctionRow row : rows) {
+                String model = inUse.contains(row.function) ? plans.plan(row.function).modelId : null;
+                boolean offer = model != null && !settings.isFeatureCheckOffered(row.function, model)
+                    && !checked(records, row.function, model);
+                out.add(row.withOffer(offer));
+            }
+        } catch (RuntimeException e) {
+            return rows;
+        }
+        return out;
+    }
+
+    /** Whether any check of {@code feature} on {@code modelId} is on file. */
+    private static boolean checked(@NonNull List<org.json.JSONObject> records, @NonNull TaiFunction feature, @NonNull String modelId) {
+        String base = com.termux.ai.TaiFeatureCheck.baseModelId(modelId);
+        for (org.json.JSONObject record : records) {
+            if (feature.id().equals(record.optString("feature", ""))
+                && base.equals(com.termux.ai.TaiFeatureCheck.baseModelId(record.optString("modelId", "")))) return true;
+        }
+        return false;
+    }
+
+    /** "Check how it runs on this phone": taken once, then the benchmark opens with that feature's check ready. */
+    @Override
+    public void onFunctionCheckOffer(@NonNull TaiFunction function) {
+        Context context = getContext();
+        TaiFunctionModels models = functionModels;
+        if (context == null || models == null) return;
+        Context app = context.getApplicationContext();
+        executor.execute(() -> {
+            String model = TaiFeaturePlans.forContext(app, models).plan(function).modelId;
+            if (model != null) new TaiSettings(app).markFeatureCheckOffered(function, model);
+        });
+        TaiBenchHomeFragment.openFeatureCheck(getActivity(), function);
     }
 
     @Override

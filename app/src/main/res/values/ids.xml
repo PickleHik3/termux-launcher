@@ -7,6 +7,9 @@
     <!-- The benchmark screens (Home, Choose, Run, Result), built in code: their lists and the
          views a row binds by id. -->
     <item name="tai_bench_list" type="id" />
+    <!-- Home's "Your features" card: its rows and "Check my features". -->
+    <item name="tai_check_rows" type="id" />
+    <item name="tai_check_action" type="id" />
     <item name="tai_bench_text" type="id" />
     <item name="tai_bench_title" type="id" />
     <item name="tai_bench_subtitle" type="id" />
