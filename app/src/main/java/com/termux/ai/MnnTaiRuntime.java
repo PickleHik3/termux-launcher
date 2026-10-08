@@ -66,6 +66,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
     /** The loaded package's chat template has a {@code tools} branch; see {@link #chatTemplateSupportsTools}. */
     private boolean loadedTemplateSupportsTools;
     private TaiRuntimeOptions loadedOptions;
+    /** Whether the loaded session runs speculative decoding; see {@link #speculativeRan}. {@code null} with none. */
+    @Nullable private Boolean loadedSpeculativeRan;
     private long loadedAtMs;
     private long lastUsedAtMs;
     private long keepWarmUntilMs;
@@ -112,8 +114,35 @@ public final class MnnTaiRuntime implements TaiRuntime {
             keepWarmUntilMs,
             idleUnloadAtMs,
             loadedAtMs,
-            lastUsedAtMs
+            lastUsedAtMs,
+            speculativeJson(loadedSpeculativeRan)
         );
+    }
+
+    /** {@code {speculativeRan}} for the state, or {@code null} when it is not known. */
+    @Nullable
+    private static JSONObject speculativeJson(@Nullable Boolean ran) {
+        if (ran == null) return null;
+        try {
+            return new JSONObject().put("speculativeRan", ran.booleanValue());
+        } catch (JSONException e) {
+            return null;
+        }
+    }
+
+    /**
+     * Whether a loaded session runs speculative decoding: its {@code speculative_type} survived into the
+     * config MNN loaded with. {@code effective} is MNN's own dump of that config, read first; {@code merged}
+     * is what this runtime handed it, for a dump that leaves the key out. Not asked always empties the type
+     * ({@link #applySpeculativeDecodingOverride}), so the answer is known either way; {@code null} only when
+     * neither config could be read.
+     */
+    @Nullable
+    static Boolean speculativeRan(@Nullable JSONObject effective, @Nullable JSONObject merged) {
+        JSONObject source = effective != null && effective.has("speculative_type") ? effective
+            : merged != null ? merged : effective;
+        if (source == null) return null;
+        return !source.optString("speculative_type", "").trim().isEmpty();
     }
 
     @Override
@@ -275,8 +304,9 @@ public final class MnnTaiRuntime implements TaiRuntime {
         LlmSession initialized;
         long measured;
         TaiLoadMeter loadMeter = null;
+        JSONObject mergedConfigObj;
         try {
-            JSONObject mergedConfigObj = mergedConfigJson(config, modelSpec, options);
+            mergedConfigObj = mergedConfigJson(config, modelSpec, options);
             String mergedConfig = mergedConfigObj.toString();
             String extraConfig = extraConfigJson(modelSpec, mergedConfigObj, config);
             initialized = new LlmSession();
@@ -306,8 +336,10 @@ public final class MnnTaiRuntime implements TaiRuntime {
             }
         }
 
+        JSONObject effectiveConfig = safeJson(initialized.dumpConfig());
         synchronized (this) {
             session = initialized;
+            loadedSpeculativeRan = speculativeRan(effectiveConfig.length() == 0 ? null : effectiveConfig, mergedConfigObj);
             loadedModelId = modelSpec.id;
             loadedModelPath = config.getAbsolutePath();
             loadedTemplateSupportsTools = chatTemplateSupportsTools(config);
@@ -341,7 +373,8 @@ public final class MnnTaiRuntime implements TaiRuntime {
             data.put("backend", backendName(options));
             data.put("modelPath", loadedModelPath);
             data.put("options", options.toJson());
-            data.put("effectiveConfig", safeJson(initialized.dumpConfig()));
+            data.put("effectiveConfig", effectiveConfig);
+            data.put("speculativeRan", loadedSpeculativeRan == null ? JSONObject.NULL : loadedSpeculativeRan);
             if (measured >= 0L) data.put("measuredLoadBytes", measured);
             if (keepWarmUntilMs > 0L) {
                 data.put("keepWarm", true);
@@ -737,6 +770,7 @@ public final class MnnTaiRuntime implements TaiRuntime {
         loadedModelPath = null;
         loadedTemplateSupportsTools = false;
         loadedOptions = null;
+        loadedSpeculativeRan = null;
         loadedAtMs = 0L;
         lastUsedAtMs = 0L;
         keepWarmUntilMs = 0L;
