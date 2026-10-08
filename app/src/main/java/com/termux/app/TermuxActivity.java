@@ -1756,6 +1756,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyDockImeOffset(0);
             applyDisplayImeRoom(displayImeRoomPx(insetsCompat));
             applyTerminalOverlayInsets(insetsCompat);
+            applyFirstRunCardInsets(insetsCompat);
             // The drawer plane pins itself above a system keyboard; guarded on the field so a
             // keyboard rising over the terminal never builds a drawer that was never opened.
             if (mAppDrawerController != null) {
@@ -2057,29 +2058,30 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 finishFirstRunChain();
             }
         });
-        // The system keyboard counts as a bar here: the weather row's search brings it up, and
-        // the card has to sit above it rather than under it.
-        int cardKeepOut = androidx.core.view.WindowInsetsCompat.Type.systemBars()
-            | androidx.core.view.WindowInsetsCompat.Type.ime();
-        card.setOnApplyWindowInsetsListener((view, insets) -> {
-            androidx.core.graphics.Insets bars =
-                androidx.core.view.WindowInsetsCompat.toWindowInsetsCompat(insets, view)
-                    .getInsets(cardKeepOut);
-            card.setSystemBarInsets(bars.top, bars.bottom);
-            return insets;
-        });
         content.addView(card, com.termux.app.firstrun.FirstRunPermissionsCardView.buildLayoutParams());
         mFirstRunPermissionsCard = card;
         mFirstRunPermissionsCardHost = content;
-        android.view.WindowInsets current = card.getRootWindowInsets();
+        // Fed from the content view's own insets listener rather than a listener of its own: the
+        // activity's root view, a sibling before it, consumes the insets, so a dispatch never
+        // reaches the card and it would only ever hear the bars it was born with.
+        android.view.WindowInsets current = content.getRootWindowInsets();
         if (current != null) {
-            androidx.core.graphics.Insets bars =
-                androidx.core.view.WindowInsetsCompat.toWindowInsetsCompat(current, card)
-                    .getInsets(cardKeepOut);
-            card.setSystemBarInsets(bars.top, bars.bottom);
+            applyFirstRunCardInsets(
+                androidx.core.view.WindowInsetsCompat.toWindowInsetsCompat(current, content));
         }
         refreshFirstRunPermissionsCard();
         card.animateIn();
+    }
+
+    /**
+     * The card keeps clear of the system bars and of the system keyboard: the weather row's search
+     * brings the keyboard up, and the card has to sit above it rather than under it.
+     */
+    private void applyFirstRunCardInsets(@NonNull WindowInsetsCompat insets) {
+        if (mFirstRunPermissionsCard == null) return;
+        androidx.core.graphics.Insets bars = insets.getInsets(Type.systemBars());
+        int imeBottom = insets.isVisible(Type.ime()) ? insets.getInsets(Type.ime()).bottom : 0;
+        mFirstRunPermissionsCard.setSystemBarInsets(bars.top, Math.max(bars.bottom, imeBottom));
     }
 
     /** Rebuilds the card's rows from where the permissions and the display setting stand now. */
