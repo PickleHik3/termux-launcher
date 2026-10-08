@@ -271,14 +271,16 @@ public class VoicePolishRulesTest {
 
     @Test
     public void theRequestIsDeterministicShortAndNonStreaming() throws Exception {
-        JSONObject request = LocalTaiVoiceTextPolisher.request("gemma-4-e2b-it-litert-lm", null,
+        JSONObject request = LocalTaiVoiceTextPolisher.request("gemma-4-e2b-it-litert-lm",
             VoicePolishRules.LEVEL_POLISHED, "please summarise the readme");
         assertEquals("gemma-4-e2b-it-litert-lm", request.getString("model"));
         assertEquals(0, request.getInt("temperature"));
         assertEquals(VoicePolishRules.MAX_TOKENS_FLOOR, request.getInt("max_tokens"));
         assertFalse(request.getBoolean("stream"));
         assertFalse(request.getBoolean("thinking"));
-        assertTrue(request.getBoolean("speculative_decoding"));
+        // The load is cleanup's plan, named by the feature; the request carries none of it.
+        assertEquals("tidy_dictation", request.getString("function"));
+        assertFalse(request.has("speculative_decoding"));
         assertFalse(request.has("accelerator"));
         JSONArray messages = request.getJSONArray("messages");
         assertEquals(2, messages.length());
