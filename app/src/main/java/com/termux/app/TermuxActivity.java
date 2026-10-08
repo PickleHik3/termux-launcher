@@ -24190,6 +24190,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             TermuxActivity.this.openAppsBar();
         }
 
+        @Override public void openAppDrawer() {
+            if (mPreferences == null || !mPreferences.isAppLauncherDrawerEnabled()) return;
+            // The same edge choice the pinned apps row's own pull makes, so the plane grows out
+            // of the row wherever it lies.
+            PlaceLayout.Edge edge = PlaceChromePolicy.appsEdge(currentPlaceLayout());
+            getAppDrawerController().open(AppDrawerPullGeometry.pullFor(edge),
+                AppDrawerPullGeometry.seedFor(edge));
+        }
+
         @Override public void showCommandPalette() {
             com.termux.app.terminal.TerminalCommandPalette.show(TermuxActivity.this);
             // This entry point toggles, and the space bar's swipe up is one of the four ways into

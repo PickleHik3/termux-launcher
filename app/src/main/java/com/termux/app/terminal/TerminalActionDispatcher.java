@@ -176,6 +176,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_APP_LAUNCH = "app.launch";
     public static final String TOOL_APP_KEY_INSPECTOR = "app.key_inspector";
     public static final String TOOL_APP_OPEN_DRAWER = "app.open_drawer";
+    public static final String TOOL_APP_OPEN_APP_DRAWER = "app.open_app_drawer";
     public static final String TOOL_APP_CLOSE_DRAWER = "app.close_drawer";
     public static final String TOOL_TERMINAL_ACTION_SHEET = "terminal.action_sheet";
     public static final String TOOL_SESSION_ACTIVATE_BY_INDEX = "session.activate_by_index";
@@ -361,6 +362,7 @@ public final class TerminalActionDispatcher {
             case TOOL_APP_COMMAND_PALETTE:
             case TOOL_APP_LAUNCH:
             case TOOL_APP_KEY_INSPECTOR:
+            case TOOL_APP_OPEN_APP_DRAWER:
             case TOOL_APP_OPEN_DRAWER:
             case TOOL_APP_CLOSE_DRAWER:
             case TOOL_TERMINAL_ACTION_SHEET:
@@ -1135,6 +1137,9 @@ public final class TerminalActionDispatcher {
                     return ok().put("keyInspectorOpen", host.toggleKeyInspector());
                 // The drawer these two bindings name is the sessions drawer: one panel out of the
                 // terminal's leading edge, which is what the pair always meant.
+                case TOOL_APP_OPEN_APP_DRAWER:
+                    host.openAppDrawer();
+                    return ok();
                 case TOOL_APP_OPEN_DRAWER:
                     host.showSessionBrowser();
                     return ok();

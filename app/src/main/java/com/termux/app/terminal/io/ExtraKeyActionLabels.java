@@ -68,6 +68,7 @@ public final class ExtraKeyActionLabels {
             case LauncherToolRegistry.TOOL_WALL_DISPLAY: return "\uf108";
             case LauncherToolRegistry.TOOL_MOUSE_TOGGLE: return "\uDB80\uDF7D"; // nf-md-mouse
             case LauncherToolRegistry.TOOL_KEYBOARD_CYCLE_FORM: return "\uf11c";
+            case LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER: return "\uDB80\uDC3B"; // nf-md-apps
             case LauncherToolRegistry.TOOL_VOICE_DICTATE: return "\uf130"; // nf-fa-microphone
             default: return null;
         }

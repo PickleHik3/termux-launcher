@@ -514,6 +514,9 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     void openAppsBar();
 
+    /** Opens the launcher's app drawer, the apps grid the pinned apps row pulls down. */
+    void openAppDrawer();
+
     void showCommandPalette();
 
     void showExtraKeysRowEditor();
