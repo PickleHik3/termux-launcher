@@ -21,6 +21,13 @@ package com.termux.app.surfaces;
  *   display the frame shows above and below it ({@link #topRevealPx}, and the navigation bar's),
  *   scaled to fit between the two lines, at most {@link AppearanceEditorFrame#MAX_SCALE}.</li>
  * </ul>
+ *
+ * <p>A tablet in landscape ({@link EditorFormFactor#tabletLandscape}) keeps the top line and
+ * moves the sheet beside the preview: a side pane {@link #SIDE_PANE_DP} wide against the right
+ * edge, from the top line to the foot, one height on every page. The bottom line is then
+ * {@link #GAP_DP} above the navigation bar, and the miniature, fit to the column left of the pane
+ * as well, is centred in that column ({@link #sideScale}, {@link #translationX(int, int, int, int,
+ * int, int, float)}).</p>
  */
 final class AppearancePreviewArea {
 
@@ -84,6 +91,74 @@ final class AppearancePreviewArea {
         int visible = containerHeightPx + Math.max(0, revealTopPx) + Math.max(0, revealBottomPx);
         return AppearanceEditorFrame.fitScale(visible, topPx, bottomPx,
             AppearanceEditorFrame.MAX_SCALE);
+    }
+
+    // ---- a tablet in landscape: the preview on the left, the sheet as a side pane -------------
+
+    /**
+     * The side pane's content width on a tablet in landscape ({@link EditorFormFactor}): the
+     * widest phone the sheet's width arithmetic is laid out and tested at
+     * (appearance_editor_panel's header; AppearanceEditorPanelFit411Test and its Large text
+     * twin), so every row stands in the pane exactly as it stands on that phone.
+     */
+    static final int SIDE_PANE_DP = 411;
+
+    /**
+     * The side pane's left edge in the content view: {@link #SIDE_PANE_DP} of content and the
+     * display's right inset (a cutout or a side navigation bar) its content stands clear of,
+     * against the content's right edge. The pane's fill runs to that edge.
+     */
+    static int sidePaneLeftPx(int contentWidthPx, int rightInsetPx, float density) {
+        return contentWidthPx - Math.round(SIDE_PANE_DP * density) - Math.max(0, rightInsetPx);
+    }
+
+    /**
+     * The side pane's height: from the preview's top line ({@link #topPx}), so the pane's top
+     * edge and the miniature's stand level under the bar, to the content's foot. The controller
+     * pads its bottom by the navigation inset, as it pads the bottom sheet.
+     */
+    static int sidePaneHeightPx(int windowHeightPx, int topPx) {
+        return Math.max(0, windowHeightPx - topPx);
+    }
+
+    /**
+     * The preview's column beside the side pane, {left, right} in the content view:
+     * {@link #GAP_DP} clear of the display's left inset and of the pane.
+     */
+    static int[] sideColumnPx(int leftInsetPx, int paneLeftPx, float density) {
+        int gap = Math.round(GAP_DP * density);
+        int left = Math.max(0, leftInsetPx) + gap;
+        return new int[] {left, Math.max(left, paneLeftPx - gap)};
+    }
+
+    /**
+     * The scale in the side column: the fit between the two lines, as on a phone, held to the
+     * column's width. The visible miniature is the container and the display's side bands
+     * ({@code revealLeftPx}, {@code revealRightPx}). The width is never floored at
+     * {@link AppearanceEditorFrame#MIN_SCALE}: a narrow tablet shows a smaller preview, never one
+     * that runs under the pane.
+     */
+    static float sideScale(int containerWidthPx, int containerHeightPx, int revealTopPx,
+                           int revealBottomPx, int revealLeftPx, int revealRightPx, int topPx,
+                           int bottomPx, int columnLeftPx, int columnRightPx) {
+        float byHeight = scale(containerHeightPx, revealTopPx, revealBottomPx, topPx, bottomPx);
+        int visible = containerWidthPx + Math.max(0, revealLeftPx) + Math.max(0, revealRightPx);
+        if (visible <= 0)
+            return byHeight;
+        return Math.min(byHeight, Math.max(0, columnRightPx - columnLeftPx) / (float) visible);
+    }
+
+    /**
+     * The container's horizontal translation (its pivot is its horizontal centre) that centres the
+     * visible miniature, the container and the display's side bands, in the column
+     * {@code columnLeftPx}..{@code columnRightPx}. Phones never translate it: 0 there.
+     */
+    static float translationX(int columnLeftPx, int columnRightPx, int containerLeftPx,
+                              int containerWidthPx, int revealLeftPx, int revealRightPx,
+                              float scale) {
+        float centre = (columnLeftPx + columnRightPx) / 2f;
+        return centre - containerLeftPx - containerWidthPx / 2f
+            - scale * (Math.max(0, revealRightPx) - Math.max(0, revealLeftPx)) / 2f;
     }
 
     /**

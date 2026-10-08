@@ -94,14 +94,17 @@ final class AppearanceEditorFrame {
     }
 
     /**
-     * Puts the root at {@code scale} and {@code translationYPx} now, on the frame's pivot, without
-     * touching its animations or clip: one tick of an animation the caller drives.
+     * Puts the root at {@code scale}, {@code translationXPx} and {@code translationYPx} now, on the
+     * frame's pivot, without touching its animations or clip: one tick of an animation the caller
+     * drives. The horizontal translation is 0 but on a tablet in landscape, where the preview
+     * stands in the column beside the side pane ({@link AppearancePreviewArea#translationX}).
      */
-    void setPose(float scale, float translationYPx) {
+    void setPose(float scale, float translationXPx, float translationYPx) {
         mRoot.setPivotX(mRoot.getWidth() / 2f);
         mRoot.setPivotY(0f);
         mRoot.setScaleX(scale);
         mRoot.setScaleY(scale);
+        mRoot.setTranslationX(translationXPx);
         mRoot.setTranslationY(translationYPx);
     }
 
@@ -165,10 +168,11 @@ final class AppearanceEditorFrame {
     }
 
     /**
-     * Scales the root to {@code scale}, its top edge moved down by {@code translationYPx}, and clips
-     * it to the device's corners. Called again on a rotation or a resize with the new numbers.
+     * Scales the root to {@code scale}, its top edge moved down by {@code translationYPx} and its
+     * centre across by {@code translationXPx} (0 but beside a side pane), and clips it to the
+     * device's corners. Called again on a rotation or a resize with the new numbers.
      */
-    void show(float scale, float translationYPx, boolean animate) {
+    void show(float scale, float translationXPx, float translationYPx, boolean animate) {
         ensureClipped();
         mRoot.setPivotX(mRoot.getWidth() / 2f);
         mRoot.setPivotY(0f);
@@ -176,17 +180,19 @@ final class AppearanceEditorFrame {
         if (!animate) {
             mRoot.setScaleX(scale);
             mRoot.setScaleY(scale);
+            mRoot.setTranslationX(translationXPx);
             mRoot.setTranslationY(translationYPx);
             return;
         }
-        mRoot.animate().scaleX(scale).scaleY(scale).translationY(translationYPx)
+        mRoot.animate().scaleX(scale).scaleY(scale).translationX(translationXPx)
+            .translationY(translationYPx)
             .setDuration(ENTER_MS).setInterpolator(Motion.settle()).start();
     }
 
     /**
      * Puts the root at {@code scale} and {@code translationYPx} at once, clipped, without
-     * animating: where the hop from the Overview starts, at the Home card's rect, so the next
-     * {@link #show} travels from there.
+     * animating: where the hop from the Overview starts, at the Home card's rect (centred across
+     * the page, so no horizontal translation), so the next {@link #show} travels from there.
      */
     void prime(float scale, float translationYPx) {
         ensureClipped();
@@ -195,6 +201,7 @@ final class AppearanceEditorFrame {
         mRoot.animate().cancel();
         mRoot.setScaleX(scale);
         mRoot.setScaleY(scale);
+        mRoot.setTranslationX(0f);
         mRoot.setTranslationY(translationYPx);
     }
 
@@ -211,7 +218,8 @@ final class AppearanceEditorFrame {
             if (onEnd != null) onEnd.run();
             return;
         }
-        mRoot.animate().scaleX(scale).scaleY(scale).translationY(translationYPx)
+        // The Home card is centred across the page: the side column's offset goes on the way.
+        mRoot.animate().scaleX(scale).scaleY(scale).translationX(0f).translationY(translationYPx)
             .setDuration(EXIT_MS).setInterpolator(Motion.settle())
             .withEndAction(() -> {
                 if (onEnd != null) onEnd.run();
@@ -248,6 +256,7 @@ final class AppearanceEditorFrame {
         Runnable finish = () -> {
             mRoot.setScaleX(1f);
             mRoot.setScaleY(1f);
+            mRoot.setTranslationX(0f);
             mRoot.setTranslationY(0f);
             if (mClipped) {
                 mRoot.setClipToOutline(mSavedClipToOutline);
@@ -260,7 +269,7 @@ final class AppearanceEditorFrame {
             finish.run();
             return;
         }
-        mRoot.animate().scaleX(1f).scaleY(1f).translationY(0f)
+        mRoot.animate().scaleX(1f).scaleY(1f).translationX(0f).translationY(0f)
             .setDuration(EXIT_MS).setInterpolator(Motion.settle())
             .withEndAction(finish).start();
     }
@@ -386,7 +395,8 @@ final class AppearanceEditorFrame {
     }
 
     boolean isScaled() {
-        return mRoot.getScaleX() != 1f || mRoot.getScaleY() != 1f || mRoot.getTranslationY() != 0f;
+        return mRoot.getScaleX() != 1f || mRoot.getScaleY() != 1f
+            || mRoot.getTranslationX() != 0f || mRoot.getTranslationY() != 0f;
     }
 
     /**
