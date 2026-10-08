@@ -23,8 +23,20 @@ public final class TaiCallerRequests {
      */
     public static final String NO_SYSTEM_PROMPT = "_tai_no_system_prompt";
 
+    /**
+     * The request field that names the feature ({@link TaiFunction#id()}): TAI then loads by that
+     * feature's {@link TaiFeaturePlan}. Dawn and the CLI may send it too.
+     */
+    public static final String FUNCTION = "function";
+
     /** The TAI-local extensions a remote server has no use for. */
-    private static final String[] LOCAL_ONLY_KEYS = {"accelerator", "speculative_decoding", "thinking", "load_class"};
+    private static final String[] LOCAL_ONLY_KEYS = {"accelerator", "speculative_decoding", "thinking", "load_class", FUNCTION};
+
+    /** The feature a request names, or {@code null} when it names none (it then loads as it always did). */
+    @Nullable
+    public static TaiFunction featureOf(@Nullable JSONObject request) {
+        return request == null ? null : TaiFunction.fromId(request.optString(FUNCTION, ""));
+    }
 
     /** True for a model name in the remote provider's namespace ({@code remote/<id>}). */
     public static boolean isRemoteModel(@Nullable String model) {
