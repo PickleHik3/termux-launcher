@@ -118,6 +118,11 @@ public final class TaiResidency {
          * Speech, voice and embedding models serve one feature each, which {@link TaiFeaturePlan#featureOf} reads off the kind.
          */
         @Nullable public final TaiFunction feature;
+        /**
+         * The window the load that put this resident here asked for, 0 meaning Automatic. Unlike
+         * {@link #feature} no later use changes it: it is what a reload would ask again.
+         */
+        public final int askedWindow;
 
         public Entry(@NonNull String modelId, @NonNull Kind kind, @NonNull String backend, @NonNull String accelerator,
                      int window, long estimatedBytes, @Nullable Long measuredBytes, long lastUsedMs, boolean busy) {
@@ -127,7 +132,14 @@ public final class TaiResidency {
         public Entry(@NonNull String modelId, @NonNull Kind kind, @NonNull String backend, @NonNull String accelerator,
                      int window, long estimatedBytes, @Nullable Long measuredBytes, long lastUsedMs, boolean busy,
                      @Nullable TaiFunction feature) {
+            this(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, lastUsedMs, busy, feature, 0);
+        }
+
+        public Entry(@NonNull String modelId, @NonNull Kind kind, @NonNull String backend, @NonNull String accelerator,
+                     int window, long estimatedBytes, @Nullable Long measuredBytes, long lastUsedMs, boolean busy,
+                     @Nullable TaiFunction feature, int askedWindow) {
             this.feature = feature;
+            this.askedWindow = askedWindow;
             this.modelId = modelId;
             this.kind = kind;
             this.backend = backend;
@@ -201,19 +213,26 @@ public final class TaiResidency {
 
         @NonNull
         Entry withBusy(boolean nowBusy, long nowMs) {
-            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, nowMs, nowBusy, feature);
+            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, nowMs, nowBusy, feature, askedWindow);
         }
 
         /** The same resident with the MemAvailable drop its load measured; {@code null} leaves it unmeasured. */
         @NonNull
         public Entry withMeasured(@Nullable Long nowMeasuredBytes) {
-            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, nowMeasuredBytes, lastUsedMs, busy, feature);
+            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, nowMeasuredBytes, lastUsedMs, busy, feature, askedWindow);
         }
 
         /** The same resident, just used by {@code usedBy}. */
         @NonNull
         Entry withFeature(@NonNull TaiFunction usedBy, long nowMs) {
-            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, nowMs, busy, usedBy);
+            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, nowMs, busy, usedBy, askedWindow);
+        }
+
+        /** The same resident, recorded as loaded by a request that asked {@code asked} tokens (0 = Automatic). */
+        @NonNull
+        Entry withAskedWindow(int asked) {
+            return new Entry(modelId, kind, backend, accelerator, window, estimatedBytes, measuredBytes, lastUsedMs, busy,
+                feature, Math.max(0, asked));
         }
 
         boolean matches(@NonNull Kind otherKind, @NonNull String otherModelId) {
@@ -307,6 +326,33 @@ public final class TaiResidency {
             }
         }
         if (changed) entries = Collections.unmodifiableList(next);
+    }
+
+    /** Records the window the load that put this chat resident here asked for; a no-op for an unregistered id. */
+    public synchronized void markLoadedAsking(@NonNull Kind kind, @Nullable String modelId, int askedWindow) {
+        if (modelId == null) return;
+        ArrayList<Entry> next = new ArrayList<>(entries.size());
+        boolean changed = false;
+        for (Entry existing : entries) {
+            if (existing.matches(kind, modelId)) {
+                next.add(existing.withAskedWindow(askedWindow));
+                changed = true;
+            } else {
+                next.add(existing);
+            }
+        }
+        if (changed) entries = Collections.unmodifiableList(next);
+    }
+
+    /**
+     * Whether {@code resident} serves a request whose effective window is {@code wanted}: it is large
+     * enough, or the load that put it there asked for at least {@code wanted} and the memory budget gave
+     * less, which a reload would only repeat.
+     * {@code effectiveForAsked} maps an asked window (0 = Automatic) to what the budget grants now.
+     */
+    static boolean serves(@NonNull Entry resident, int wanted, @NonNull java.util.function.IntUnaryOperator effectiveForAsked) {
+        if (resident.window <= 0 || resident.window >= wanted) return true;
+        return effectiveForAsked.applyAsInt(resident.askedWindow) >= wanted;
     }
 
     /** The table as it is right now; never blocks, never changes after it is returned. */

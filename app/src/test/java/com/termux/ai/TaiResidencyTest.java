@@ -320,6 +320,41 @@ public class TaiResidencyTest {
             Collections.singletonList("gpu"), 4096, null, 0);
     }
 
+    @Test
+    public void askedWindowSurvivesLaterUsesSoTheLoadersAskDecidesReuse() {
+        TaiResidency residency = new TaiResidency();
+        residency.register(chatEntry("e2b", "gpu", 2048));
+        residency.markLoadedAsking(TaiResidency.Kind.CHAT, "e2b", 4096);
+        residency.markUsedBy(TaiResidency.Kind.CHAT, "e2b", TaiFunction.TIDY_DICTATION);
+        TaiResidency.Entry resident = residency.find(TaiResidency.Kind.CHAT, "e2b");
+
+        assertEquals(4096, resident.askedWindow);
+        assertEquals(TaiFunction.TIDY_DICTATION, resident.feature);
+        // The next 4096 turn: a reload asking what the loader asked gives the same, so reuse.
+        assertTrue(TaiResidency.serves(resident, 4096, asked -> asked > 0 ? asked : 4096));
+    }
+
+    @Test
+    public void residentLoadedSmallReloadsWhenTheCallerNowGetsMore() {
+        TaiResidency residency = new TaiResidency();
+        residency.register(chatEntry("e2b", "gpu", 2048));
+        residency.markLoadedAsking(TaiResidency.Kind.CHAT, "e2b", 2048);
+        TaiResidency.Entry resident = residency.find(TaiResidency.Kind.CHAT, "e2b");
+
+        assertFalse(TaiResidency.serves(resident, 4096, asked -> asked > 0 ? asked : 4096));
+        assertTrue(TaiResidency.serves(resident, 2048, asked -> asked > 0 ? asked : 4096));
+    }
+
+    @Test
+    public void automaticLoadAskedForMoreThanTheBudgetGaveIsReused() {
+        TaiResidency residency = new TaiResidency();
+        residency.register(chatEntry("e2b", "gpu", 2048));
+        TaiResidency.Entry resident = residency.find(TaiResidency.Kind.CHAT, "e2b");
+
+        assertEquals(0, resident.askedWindow);
+        assertTrue(TaiResidency.serves(resident, 4096, asked -> asked > 0 ? asked : 4096));
+    }
+
     private static TaiResidency.Entry chatEntry(String id, String accelerator, int window) {
         long size = "e2b".equals(id) ? 2_588_147_712L : E4B;
         return TaiResidency.Entry.chat(chatSpec(id, TaiModelSpec.BACKEND_LITERT_LM, size), TaiModelSpec.BACKEND_LITERT_LM, accelerator, window);
