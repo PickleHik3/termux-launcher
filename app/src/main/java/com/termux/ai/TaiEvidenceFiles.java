@@ -40,6 +40,12 @@ public final class TaiEvidenceFiles implements TaiEvidence {
     /** The installed models, for each result's staleness; read on first use. */
     @Nullable private Map<String, TaiModelSpec> installed;
     private final Map<String, String> currentKeys = new HashMap<>();
+    /** The history, the crash marker and the GPU verdict, each read from disk once per instance. */
+    private final Object readLock = new Object();
+    @Nullable private JSONObject historySnapshot;
+    @Nullable private JSONObject crashMarker;
+    private boolean markerRead;
+    @Nullable private TaiGpuVerdict.State verdict;
 
     public TaiEvidenceFiles(@NonNull Context context) {
         this.context = context.getApplicationContext();
@@ -48,9 +54,25 @@ public final class TaiEvidenceFiles implements TaiEvidence {
     @Override
     public boolean failed(@NonNull String modelId, @NonNull String backend, @NonNull String accelerator) {
         try {
-            if (TaiRuntimeHistory.hasFailure(context, device(), modelId, backend, accelerator)) return true;
+            JSONObject history;
+            JSONObject marker;
+            synchronized (readLock) {
+                // Read once per instance (one screen build): each plan asks several times.
+                if (historySnapshot == null) historySnapshot = TaiRuntimeHistory.snapshot(context);
+                if (!markerRead) {
+                    try {
+                        crashMarker = TaiRuntimeCrashMarker.read(context);
+                    } catch (Exception e) {
+                        crashMarker = null;
+                    }
+                    markerRead = true;
+                }
+                history = historySnapshot;
+                marker = crashMarker;
+            }
+            if (TaiRuntimeHistory.hasFailure(history, device(), modelId, backend, accelerator,
+                System.currentTimeMillis(), TaiRuntimeHistory.appVersionCode(context))) return true;
             // A load the process died in counts as a crash of that model on that accelerator.
-            JSONObject marker = TaiRuntimeCrashMarker.read(context);
             return marker != null && TaiModelVariants.baseModelId(modelId).equals(
                     TaiModelVariants.baseModelId(marker.optString("modelId", "")))
                 && backend.equals(marker.optString("backend", backend))
@@ -63,10 +85,15 @@ public final class TaiEvidenceFiles implements TaiEvidence {
     @NonNull
     @Override
     public TaiGpuVerdict.State gpuVerdict() {
-        try {
-            return TaiGpuVerdict.current(context, TaiPlatformCaps.rawCached(context));
-        } catch (RuntimeException e) {
-            return TaiGpuVerdict.State.UNKNOWN;
+        synchronized (readLock) {
+            if (verdict == null) {
+                try {
+                    verdict = TaiGpuVerdict.current(context, TaiPlatformCaps.rawCached(context));
+                } catch (RuntimeException e) {
+                    verdict = TaiGpuVerdict.State.UNKNOWN;
+                }
+            }
+            return verdict;
         }
     }
 

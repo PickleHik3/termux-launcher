@@ -240,11 +240,31 @@ public final class TaiRuntimeHistory {
         @NonNull String backend,
         @NonNull String accelerator
     ) {
-        JSONObject entry = history(context).optJSONObject(key(modelId, device, accelerator));
+        return hasFailure(history(context), device, modelId, backend, accelerator,
+            System.currentTimeMillis(), appVersionCode(context));
+    }
+
+    /** The parsed history as of now, for a caller that asks many questions of it ({@link #hasFailure(JSONObject, TaiDeviceCapabilities, String, String, String, long, long)}); do not mutate it. */
+    @NonNull
+    public static JSONObject snapshot(@NonNull Context context) {
+        return history(context);
+    }
+
+    /** {@link #hasFailure(Context, TaiDeviceCapabilities, String, String, String)} against a given history and clock. */
+    public static boolean hasFailure(
+        @NonNull JSONObject history,
+        @NonNull TaiDeviceCapabilities device,
+        @NonNull String modelId,
+        @NonNull String backend,
+        @NonNull String accelerator,
+        long nowMs,
+        long currentVersionCode
+    ) {
+        JSONObject entry = history.optJSONObject(key(modelId, device, accelerator));
         if (entry == null || entry.optBoolean("success", false)) return false;
         if (!backend.equals(entry.optString("backend", backend))) return false;
         if (isStaleFileMissingRecord(entry)) return false;
-        return !isExpired(entry, System.currentTimeMillis(), appVersionCode(context));
+        return !isExpired(entry, nowMs, currentVersionCode);
     }
 
     /**
