@@ -180,9 +180,9 @@ one yourself with `tai load <model> --gpu` or `--cpu`, or with **Runs on** in a 
 A model is loaded to fit the memory free at that moment, so it does not crowd out the home screen
 and the apps you are using.
 
-- The context window grows with free memory. It halves until the load fits, down to 4096 tokens. A
-  larger **Context window** setting (in **Advanced → Parameters**, or a model's own **Parameters**)
-  is an upper limit, not a promise.
+- Without a **Context window** setting a model gets 4096 tokens, or 2048 on a phone with 6 GB of
+  RAM or less. A larger setting (in **Advanced → Parameters**, or a model's own **Parameters**) is
+  an upper limit, not a promise: the window halves until the load fits, down to 4096 tokens.
 - If a GPU load does not fit even at 4096 tokens, the CPU is used instead: slower, but about half
   the memory.
 - If neither fits, the load is refused with a short message. Close some apps and try again.
