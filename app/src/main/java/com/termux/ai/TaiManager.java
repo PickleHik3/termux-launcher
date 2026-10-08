@@ -159,12 +159,21 @@ public final class TaiManager {
     /** Supplies the isolated runtime with the model definition resolved by the authoritative app process. */
     @NonNull
     private String delegatedRuntimeBody(@NonNull String body) throws JSONException {
+        return delegatedRuntimeBody(body, false);
+    }
+
+    /**
+     * As above; {@code chatRoute} for the chat, completion, load and keep-warm routes, where a request
+     * that names no feature is the assistant's ({@link TaiCallerRequests#featureFor}).
+     */
+    @NonNull
+    private String delegatedRuntimeBody(@NonNull String body, boolean chatRoute) throws JSONException {
         JSONObject request = parseBody(body);
         request.remove(INTERNAL_MODEL_SPEC);
         request.remove(INTERNAL_RUNTIME_OPTIONS);
         request.remove(INTERNAL_FEATURE_PLAN);
-        // A request that names its feature loads by that feature's plan, resolved here where the picks live.
-        TaiFunction feature = TaiCallerRequests.featureOf(request);
+        // The request's feature loads by its plan, resolved here where the picks live.
+        TaiFunction feature = TaiCallerRequests.featureFor(request, chatRoute);
         TaiFeaturePlan plan = feature == null ? null : TaiFeaturePlans.forContext(appContext).plan(feature);
         if (plan != null && plan.where == TaiFeaturePlan.Where.ON_DEVICE && !namesModel(request)) {
             request.put("model", plan.requestModel());
@@ -181,18 +190,21 @@ public final class TaiManager {
     }
 
     /**
-     * App process: a request that names its feature and no model asks for the plan's model, local or
-     * {@code remote/<id>}, so the remote routing that follows sees it. Anything else is left as it is.
+     * App process, chat routes: a request that names no model and whose feature (the one it names, else
+     * the assistant) runs on the remote provider asks for the provider's model, so the remote routing
+     * that follows sees it. A local plan's model is filled in with the rest of the plan by {@link
+     * #delegatedRuntimeBody(String, boolean)}. Anything else is left as it is.
      */
     @NonNull
-    private String withFeatureModel(@NonNull String body) {
-        if (runtimeProcess || !body.contains("\"" + TaiCallerRequests.FUNCTION + "\"")) return body;
+    private String withRemoteFeatureModel(@NonNull String body) {
+        if (runtimeProcess) return body;
         try {
             JSONObject request = parseBody(body);
-            TaiFunction feature = TaiCallerRequests.featureOf(request);
-            if (feature == null || namesModel(request)) return body;
-            String model = TaiFeaturePlans.forContext(appContext).plan(feature).requestModel();
-            return model == null ? body : request.put("model", model).toString();
+            if (namesModel(request)) return body;
+            TaiFunction feature = TaiCallerRequests.featureFor(request, true);
+            if (feature == null) return body;
+            TaiFeaturePlan plan = TaiFeaturePlans.forContext(appContext).plan(feature);
+            return plan.isRemote() ? request.put("model", plan.requestModel()).toString() : body;
         } catch (JSONException | RuntimeException e) {
             return body;
         }
@@ -696,7 +708,6 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject loadModel(@NonNull String body) throws JSONException {
-        body = withFeatureModel(body);
         JSONObject request = parseBody(body);
         String modelId = requestedModelId(request, settings.getDefaultAssistantModel());
         TaiModelSpec spec = resolveModel(request, modelId);
@@ -735,11 +746,14 @@ public final class TaiManager {
         if (!requestedBackend.isEmpty() && !requestedBackend.equalsIgnoreCase(spec.backend)) {
             return error(409, "backend_mismatch", "Model " + modelId + " requires backend " + spec.backend + ".");
         }
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_LOAD_MODEL, delegatedRuntimeBody(body));
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_LOAD_MODEL, delegatedRuntimeBody(body, true));
         TaiRuntimeOptions options = runtimeOptionsFromRequest(request, spec);
-        // A feature's load reuses its model when the runtime holds it with a window as large as the plan's.
-        JSONObject reused = reuseForFeature(spec, options);
-        if (reused != null) return reused;
+        // A load that names its feature reuses its model when the runtime holds it with a window as large as
+        // the plan's. One that names none (tai load, the Model Centre's Load) still reloads, as it always did.
+        if (TaiCallerRequests.featureOf(request) != null && !request.optBoolean("clearCache", false)) {
+            JSONObject reused = reuseForFeature(spec, options);
+            if (reused != null) return reused;
+        }
         // The reset hook (tai load --fresh, or clearCache on the load routes directly): thrown away
         // before the load itself picks the fingerprinted directory, so the model always rebuilds
         // its converted-weight cache from scratch instead of trusting whatever is on disk.
@@ -785,8 +799,7 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject keepWarmRuntime(@NonNull String body) throws JSONException {
-        body = withFeatureModel(body);
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_KEEP_WARM, delegatedRuntimeBody(body));
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_KEEP_WARM, delegatedRuntimeBody(body, true));
         JSONObject request = parseBody(body);
         TaiRuntimeState state = localRuntime().getState();
         String fallbackModel = state.loadedModelId != null ? state.loadedModelId : settings.getDefaultAssistantModel();
@@ -1695,14 +1708,14 @@ public final class TaiManager {
      */
     @NonNull
     public JSONObject openAiChatCompletions(@NonNull String body, long timeoutMs) throws JSONException {
-        body = withFeatureModel(body);
+        body = withRemoteFeatureModel(body);
         // A remote/<id> model goes to the remote provider here, in the app process: the :tai_runtime
         // process is never woken for it (remote provider design, section 4.2).
         if (!runtimeProcess && TaiCallerRequests.isRemoteRequest(body)) {
             return new TaiRemoteProvider(appContext).chatCompletions(
                 TaiCallerRequests.remoteBody(parseBody(body)), timeoutMs);
         }
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_CHAT, delegatedRuntimeBody(body), timeoutMs);
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_CHAT, delegatedRuntimeBody(body, true), timeoutMs);
         JSONObject request = parseBody(body);
         JSONArray messages = request.optJSONArray("messages");
         if (messages == null || messages.length() == 0) {
@@ -1783,7 +1796,7 @@ public final class TaiManager {
 
     @NonNull
     public JSONObject openAiCompletions(@NonNull String body) throws JSONException {
-        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_COMPLETION, delegatedRuntimeBody(body));
+        if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_OPENAI_COMPLETION, delegatedRuntimeBody(body, true));
         JSONObject request = parseBody(body);
         String prompt = promptFromCompletionRequest(request);
         if (prompt.trim().isEmpty()) return openAiError(error(400, "bad_request", "Missing prompt"));
@@ -1838,7 +1851,7 @@ public final class TaiManager {
     }
 
     public void openAiChatCompletionsStream(@NonNull String body, @NonNull OpenAiStreamSink sink) throws JSONException, IOException {
-        body = withFeatureModel(body);
+        body = withRemoteFeatureModel(body);
         if (!runtimeProcess && TaiCallerRequests.isRemoteRequest(body)) {
             new TaiRemoteProvider(appContext).stream(
                 TaiCallerRequests.remoteBody(parseBody(body)), DEFAULT_CHAT_TIMEOUT_MS, sink);
@@ -1849,7 +1862,7 @@ public final class TaiManager {
                 emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "On-device AI runtime service client is unavailable."));
                 return;
             }
-            runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM, delegatedRuntimeBody(body), sink);
+            runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM, delegatedRuntimeBody(body, true), sink);
             return;
         }
         JSONObject request = parseBody(body);
@@ -2000,7 +2013,7 @@ public final class TaiManager {
                 emitOpenAiError(sink, error(503, "tai_runtime_unavailable", "On-device AI runtime service client is unavailable."));
                 return;
             }
-            runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM, delegatedRuntimeBody(body), sink);
+            runtimeClient.stream(TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM, delegatedRuntimeBody(body, true), sink);
             return;
         }
         JSONObject request = parseBody(body);

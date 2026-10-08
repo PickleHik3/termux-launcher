@@ -33,10 +33,23 @@ public final class TaiCallerRequests {
     /** The TAI-local extensions a remote server has no use for. */
     private static final String[] LOCAL_ONLY_KEYS = {"accelerator", "speculative_decoding", "thinking", "load_class", FUNCTION};
 
-    /** The feature a request names, or {@code null} when it names none (it then loads as it always did). */
+    /** The feature a request names, or {@code null} when it names none. */
     @Nullable
     public static TaiFunction featureOf(@Nullable JSONObject request) {
         return request == null ? null : TaiFunction.fromId(request.optString(FUNCTION, ""));
+    }
+
+    /**
+     * The feature a request loads by: the one it names; on a chat, completion, load or keep-warm route
+     * ({@code chatRoute}) one that names none is the assistant, so the assistant's pick and plan reach
+     * the {@code /v1} endpoint. A momentary load (a background job's) names no feature and keeps the
+     * settings' options; so do the embedding, speech and voice routes. {@code null} for those.
+     */
+    @Nullable
+    public static TaiFunction featureFor(@Nullable JSONObject request, boolean chatRoute) {
+        TaiFunction named = featureOf(request);
+        if (named != null || !chatRoute || request == null) return named;
+        return "momentary".equals(request.optString("load_class", "").trim()) ? null : TaiFunction.ASSISTANT;
     }
 
     /** True for a model name in the remote provider's namespace ({@code remote/<id>}). */

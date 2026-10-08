@@ -86,6 +86,28 @@ public class TaiCallerRequestsTest {
         assertNull(TaiCallerRequests.featureOf(new JSONObject().put(TaiCallerRequests.FUNCTION, "nonsense")));
     }
 
+    /**
+     * A chat, completion, load or keep-warm request that names no feature is the assistant's, so the
+     * assistant's pick and plan reach {@code /v1}. A momentary load, and every other route, keeps the
+     * settings' options; a named feature always wins.
+     */
+    @Test
+    public void noFeatureOnAChatRouteMeansTheAssistant() throws Exception {
+        JSONObject plain = new JSONObject().put("messages", new org.json.JSONArray());
+        assertSame(TaiFunction.ASSISTANT, TaiCallerRequests.featureFor(plain, true));
+        assertSame(TaiFunction.ASSISTANT, TaiCallerRequests.featureFor(new JSONObject().put("model", "other"), true));
+        assertNull(TaiCallerRequests.featureFor(plain, false));
+        assertNull(TaiCallerRequests.featureFor(new JSONObject().put("load_class", "momentary"), true));
+        assertSame(TaiFunction.TIDY_DICTATION,
+            TaiCallerRequests.featureFor(new JSONObject().put(TaiCallerRequests.FUNCTION, "cleanup"), true));
+        assertSame(TaiFunction.EMBEDDINGS,
+            TaiCallerRequests.featureFor(new JSONObject().put(TaiCallerRequests.FUNCTION, "dawn_search"), false));
+        // A name nobody knows is not a feature; on a chat route that is the assistant.
+        assertSame(TaiFunction.ASSISTANT,
+            TaiCallerRequests.featureFor(new JSONObject().put(TaiCallerRequests.FUNCTION, "nonsense"), true));
+        assertNull(TaiCallerRequests.featureFor(null, true));
+    }
+
     @Test
     public void aSortUnloadsWhatItLoadedAndNeverReloadsWhatWasThereBefore() {
         String e2b = "gemma-4-e2b-it-litert-lm";
