@@ -161,6 +161,19 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                     page = "X11DisplayLinuxAppsPreferencesFragment"; break;
                 default: break;
             }
+        } else if ((PAGES + "TaiPreferencesFragment").equals(className)) {
+            switch (scrollToKey) {
+                case "tai_runtime_actions": case "tai_runtime_stop": case "tai_runtime_unload":
+                case "tai_runtime_logs":
+                    page = "TaiRuntimePreferencesFragment"; break;
+                case "tai_server_category": case "tai_openai_auto_load": case "tai_endpoint_copy":
+                case "tai_api_auth_required": case "tai_lan_enabled":
+                    page = "TaiApiPreferencesFragment"; break;
+                case "tai_advanced_category": case "tai_parameters_defaults": case "tai_runtime_overrides":
+                case "tai_memory_limits": case "tai_share_diagnostics":
+                    page = "TaiAdvancedPreferencesFragment"; break;
+                default: break; // tai_remote_category and tai_remote_provider stay on the overview.
+            }
         }
         return page == null ? className : PAGES + page;
     }
@@ -608,8 +621,11 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             CHILD_XML_RESOURCES.put("app_behavior", new int[]{
                 R.xml.app_behavior_preferences});
             CHILD_XML_RESOURCES.put("services_permissions", new int[]{
-                R.xml.services_permissions_preferences, R.xml.termux_ai_preferences,
+                R.xml.services_permissions_preferences,
                 R.xml.termux_privileged_access_preferences, R.xml.termux_api_preferences});
+            CHILD_XML_RESOURCES.put("on_device_ai", new int[]{
+                R.xml.termux_ai_preferences, R.xml.tai_runtime_preferences, R.xml.tai_api_preferences,
+                R.xml.tai_advanced_preferences, R.xml.tai_remote_preferences});
             CHILD_XML_RESOURCES.put("advanced_diagnostics", new int[]{
                 R.xml.advanced_diagnostics_preferences});
             CHILD_XML_RESOURCES.put("about_support", new int[]{
@@ -640,6 +656,10 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             CHILD_XML_PAGES.put(R.xml.x11_display_linux_apps_preferences, TERMUX_PAGES + "X11DisplayLinuxAppsPreferencesFragment");
             CHILD_XML_PAGES.put(R.xml.x11_display_startup_preferences, TERMUX_PAGES + "X11DisplayStartupPreferencesFragment");
             CHILD_XML_PAGES.put(R.xml.x11_display_troubleshooting_preferences, TERMUX_PAGES + "X11DisplayTroubleshootingPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.tai_runtime_preferences, TERMUX_PAGES + "TaiRuntimePreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.tai_api_preferences, TERMUX_PAGES + "TaiApiPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.tai_advanced_preferences, TERMUX_PAGES + "TaiAdvancedPreferencesFragment");
+            CHILD_XML_PAGES.put(R.xml.tai_remote_preferences, TERMUX_PAGES + "TaiRemotePreferencesFragment");
         }
 
         /** One indexed child preference: its display title, lowercase searchable text and page. */
