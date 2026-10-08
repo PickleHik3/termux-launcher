@@ -2543,7 +2543,9 @@
     <string name="tour_card_find_help_close">Close help to continue.</string>
     <string name="tour_card_pin_apps_hold">Hold an empty spot in the apps row to choose your apps.</string>
     <string name="tour_card_pin_apps_choose">Pick an app to pin, then tap Done.</string>
-    <string name="tour_card_find_apps_dock">Pull the apps row away from its edge to open the app drawer.</string>
+    <string name="tour_card_find_apps_dock">Swipe down on the apps row to open the app drawer.</string>
+    <string name="tour_card_find_apps_left_rail">Swipe right on the apps rail to open the app drawer.</string>
+    <string name="tour_card_find_apps_right_rail">Swipe left on the apps rail to open the app drawer.</string>
     <string name="tour_card_find_apps_open">Tap an app to open it.</string>
     <string name="tour_card_find_apps_back_home">Press Home to come back.</string>
     <string name="tour_card_find_apps_back_switch">Switch back to Termux to continue.</string>
@@ -2642,7 +2644,7 @@
     <string name="help_key_keyboard">Keyboard</string>
     <string name="help_key_secondary">↑ %1$s</string>
     <string name="help_topic_dock_purpose">The dock holds your pinned apps, the A–Z index and the extra keys.</string>
-    <string name="help_topic_dock_action">Pull down to open the app drawer, or away from the edge if the apps row is anywhere but the bottom.</string>
+    <string name="help_topic_dock_action">Swipe down on the apps row to open the app drawer.</string>
     <string name="help_topic_dock_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
     <string name="help_topic_az_purpose">The A–Z index picks an app by its first letter.</string>
     <string name="help_topic_az_action">Slide along it, then drag up to the app you want.</string>

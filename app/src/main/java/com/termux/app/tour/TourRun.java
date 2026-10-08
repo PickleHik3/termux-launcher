@@ -1,5 +1,6 @@
 package com.termux.app.tour;
 
+import com.termux.app.place.PlaceLayout;
 import com.termux.R;
 
 import java.util.Arrays;
@@ -90,6 +91,9 @@ public final class TourRun {
         /** Whether the status bar is unfolded as the run is built. */
         public final boolean statusBarOpen;
 
+        /** The edge the apps row stands on; the bottom while the row is put away. */
+        public final PlaceLayout.Edge appsEdge;
+
         public RunContext(boolean launcherIsHome, boolean keyboardShown) {
             this(launcherIsHome, keyboardShown, false);
         }
@@ -105,6 +109,14 @@ public final class TourRun {
 
         public RunContext(boolean launcherIsHome, boolean keyboardShown, boolean hasOwnKeyRow,
                           boolean displayOffered, boolean statusBarOpen) {
+            this(launcherIsHome, keyboardShown, hasOwnKeyRow, displayOffered, statusBarOpen,
+                PlaceLayout.Edge.BOTTOM);
+        }
+
+        public RunContext(boolean launcherIsHome, boolean keyboardShown, boolean hasOwnKeyRow,
+                          boolean displayOffered, boolean statusBarOpen,
+                          PlaceLayout.Edge appsEdge) {
+            this.appsEdge = appsEdge;
             this.launcherIsHome = launcherIsHome;
             this.keyboardShown = keyboardShown;
             this.hasOwnKeyRow = hasOwnKeyRow;
@@ -253,22 +265,28 @@ public final class TourRun {
 
     /**
      * Lesson six. The drawer covers the dock it was pulled off and the launched app covers the
-     * launcher, so only the first stage has anything to point at. The drawer is pulled away from
-     * the apps row's edge, so the first sentence says that rather than "down", and the overlay
-     * turns the trace to the side the row is on. The last stage's sentence is the one thing in the
+     * launcher, so only the first stage has anything to point at. The drawer is pulled down off a
+     * row along the top or bottom and inward off a rail, so the first sentence and its trace
+     * follow the edge the row stands on. The last stage's sentence is the one thing in the
      * run that depends on a system setting: a phone whose home screen is another launcher has no
      * Home button that leads back here.
      */
     private static TourStep findApps(RunContext context) {
+        PlaceLayout.Edge edge = context.appsEdge;
+        int pullCopy = edge == PlaceLayout.Edge.LEFT ? R.string.tour_card_find_apps_left_rail
+            : edge == PlaceLayout.Edge.RIGHT ? R.string.tour_card_find_apps_right_rail
+            : R.string.tour_card_find_apps_dock;
+        TourGesture pull = edge == PlaceLayout.Edge.LEFT ? TourGesture.SWIPE_RIGHT
+            : edge == PlaceLayout.Edge.RIGHT ? TourGesture.SWIPE_LEFT : TourGesture.DRAG_DOWN;
         return new TourStep(FIND_APPS,
-            new int[] {R.string.tour_card_find_apps_dock, R.string.tour_card_find_apps_open,
+            new int[] {pullCopy, R.string.tour_card_find_apps_open,
                 context.launcherIsHome
                     ? R.string.tour_card_find_apps_back_home
                     : R.string.tour_card_find_apps_back_switch},
             new String[] {TourTargets.DOCK, TourTargets.NONE, TourTargets.NONE},
             new String[] {TourSignals.DRAWER_OPENED, TourSignals.APP_LAUNCHED,
                 TourSignals.LAUNCHER_RESUMED},
-            new TourGesture[] {TourGesture.DRAG_DOWN, TourGesture.TAP, TourGesture.TAP},
+            new TourGesture[] {pull, TourGesture.TAP, TourGesture.TAP},
             false, false);
     }
 
