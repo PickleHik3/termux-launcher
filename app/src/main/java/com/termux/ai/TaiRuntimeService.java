@@ -268,6 +268,7 @@ public final class TaiRuntimeService extends Service {
 
     static boolean isConcurrentControlOperation(@NonNull String operation) {
         return TaiRuntimeIpc.OP_CANCEL.equals(operation) || TaiRuntimeIpc.OP_UNLOAD_MODEL.equals(operation)
+            || TaiRuntimeIpc.OP_UNLOAD_CHAT_MODEL.equals(operation)
             || TaiRuntimeIpc.OP_TTS_STOP.equals(operation) || TaiRuntimeIpc.OP_IMAGE_CANCEL.equals(operation)
             || TaiRuntimeIpc.OP_TTS_PAUSE.equals(operation) || TaiRuntimeIpc.OP_TTS_RESUME.equals(operation)
             || TaiRuntimeIpc.OP_TTS_STATE.equals(operation)
@@ -403,6 +404,8 @@ public final class TaiRuntimeService extends Service {
                 return manager.loadModel(body);
             case TaiRuntimeIpc.OP_UNLOAD_MODEL:
                 return manager.unloadModel();
+            case TaiRuntimeIpc.OP_UNLOAD_CHAT_MODEL:
+                return manager.unloadChatModel(new JSONObject(body.trim().isEmpty() ? "{}" : body).optString("model", ""));
             case TaiRuntimeIpc.OP_KEEP_WARM:
                 return manager.keepWarmRuntime(body);
             case TaiRuntimeIpc.OP_CANCEL:

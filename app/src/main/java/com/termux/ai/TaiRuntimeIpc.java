@@ -21,6 +21,12 @@ final class TaiRuntimeIpc {
     static final String OP_RUNTIME_STATUS = "runtimeStatus";
     static final String OP_LOAD_MODEL = "loadModel";
     static final String OP_UNLOAD_MODEL = "unloadModel";
+    /**
+     * Unloads the chat model alone, and only while it is the one named: body {@code {"model":"<id>"}}.
+     * Embeddings, speech and an image model stay. On the control lane like {@link #OP_UNLOAD_MODEL};
+     * see {@link TaiManager#unloadChatModel}.
+     */
+    static final String OP_UNLOAD_CHAT_MODEL = "unloadChatModel";
     static final String OP_KEEP_WARM = "keepWarmRuntime";
     static final String OP_CANCEL = "cancelRuntime";
     static final String OP_OPENAI_CHAT = "openAiChatCompletions";

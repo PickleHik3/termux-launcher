@@ -797,6 +797,27 @@ public final class TaiManager {
         return localRuntime().unload();
     }
 
+    /**
+     * Unloads the chat model alone, and only while it is {@code modelId}: for a caller that loaded a
+     * model for itself and must give back nothing else (the app sort). Embeddings, speech and an image
+     * model stay, and a chat model another feature has loaded since is left as it is. A benchmark
+     * stops only when it is running on that model.
+     */
+    @NonNull
+    public JSONObject unloadChatModel(@Nullable String modelId) throws JSONException {
+        String requested = modelId == null ? "" : modelId.trim();
+        if (requested.isEmpty()) return error(400, "bad_request", "Missing model id");
+        TaiModelSpec spec = resolveModel(requested);
+        String id = spec != null ? spec.id : TaiSettings.migrateBuiltInModelId(requested);
+        if (shouldDelegateRuntime()) {
+            return runtimeRequest(TaiRuntimeIpc.OP_UNLOAD_CHAT_MODEL, new JSONObject().put("model", id).toString());
+        }
+        TaiRuntime local = localRuntime();
+        TaiBenchHarness bench = activeBench;
+        if (bench != null && local.isModelLoaded(id)) bench.requestStop("unloaded");
+        return local.unloadChatModel(id);
+    }
+
     @NonNull
     public JSONObject keepWarmRuntime(@NonNull String body) throws JSONException {
         if (shouldDelegateRuntime()) return runtimeRequest(TaiRuntimeIpc.OP_KEEP_WARM, delegatedRuntimeBody(body, true));

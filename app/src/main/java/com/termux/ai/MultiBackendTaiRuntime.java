@@ -140,6 +140,25 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
         }
     }
 
+    /**
+     * The chat model alone, and only while it is {@code modelId}: for a caller that loaded a model for
+     * itself and hands back nothing else (the app sort). Embeddings, speech and an image model stay;
+     * the backend's own unload deregisters the chat entry, as it does for {@link #unload()}.
+     *
+     * <p>Unlike {@link #unload()} this never cancels a load: by the time a backend loads it has
+     * closed what it held, so the model in progress is another caller's. A generation in flight is
+     * likewise someone's request and is left to finish, as {@link #evict} leaves a busy chat model.
+     */
+    @NonNull @Override public JSONObject unloadChatModel(@NonNull String modelId) throws JSONException {
+        // Read before loadLock, which a load in progress holds for as long as it runs.
+        if ("loading".equals(activeAssistant.getState().state)) return TaiRuntime.keptChatModel(this, modelId);
+        synchronized (loadLock) {
+            TaiRuntime holder = chatHolder(modelId);
+            if (holder == null || holder.getState().activeGeneration) return TaiRuntime.keptChatModel(this, modelId);
+            return holder.unload();
+        }
+    }
+
     @NonNull @Override public JSONObject keepWarm(@NonNull TaiModelSpec model, @NonNull TaiRuntimeOptions options, int minutes) throws JSONException {
         synchronized (loadLock) {
             TaiRuntime target = runtimeForModel(model);

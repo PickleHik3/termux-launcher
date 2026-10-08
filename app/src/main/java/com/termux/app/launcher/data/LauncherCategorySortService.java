@@ -344,12 +344,14 @@ public final class LauncherCategorySortService extends Service {
     /**
      * Ends the sort's hold on the runtime: the model it loaded is unloaded, and the one resident before
      * is not reloaded (the feature load plan's residency for app sorting); the next feature loads its own.
+     * Only that chat model goes, and only while it is still the sort's: speech, embeddings and a model
+     * another feature has loaded since stay.
      */
     private void restoreRuntime(@NonNull TaiManager manager, @Nullable String sortModel,
                                 @Nullable String residentBefore) {
         try {
             if (TaiCallerRequests.restoreAfterSort(residentBefore, sortModel) == TaiCallerRequests.Restore.UNLOAD) {
-                manager.unloadModel();
+                manager.unloadChatModel(sortModel);
             }
         } catch (Exception ignored) {
         }
