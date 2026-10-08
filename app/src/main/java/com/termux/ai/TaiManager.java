@@ -764,8 +764,13 @@ public final class TaiManager {
             JSONObject result = localRuntime().load(spec, options);
             return result;
         }
+        // A resident model the load cannot replace keeps serving as it is, as a generation's own load
+        // treats it (ensureModelLoadedForGeneration): the caller gets it, reused, rather than a refusal
+        // that reads as no model at all. A fresh load (clearCache) asked for a rebuild and is refused.
+        boolean fresh = request.optBoolean("clearCache", false);
         TaiLoadPreflight.Result preflight = TaiLoadPreflight.evaluate(appContext, spec, options, false);
         if (preflight.blocked) {
+            if (!fresh && localRuntime().isModelLoaded(spec.id)) return residentAsIs(spec);
             // Only a refusal that says something about the accelerator belongs in its history. Free
             // memory running short is a moment, a missing or unreadable file is the download not
             // being done yet, and a known failure is the record itself: writing any of them down
@@ -778,7 +783,9 @@ public final class TaiManager {
             return preflight.blockingError(preflightStatusCode(preflight));
         }
         LoadDecision decision = decideLoad(spec, options, preflight);
-        if (decision.refusal != null) return decision.refusal;
+        if (decision.refusal != null) {
+            return !fresh && localRuntime().isModelLoaded(spec.id) ? residentAsIs(spec) : decision.refusal;
+        }
         JSONObject result = loadWithCanary(spec, decision.options);
         result.put("preflight", preflight.toJson());
         decision.describe(result);
@@ -4068,6 +4075,15 @@ public final class TaiManager {
     private JSONObject reuseForFeature(@NonNull TaiModelSpec spec, @NonNull TaiRuntimeOptions options) throws JSONException {
         if (options.feature == null || !localRuntime().isModelLoaded(spec.id) || !residentServes(spec, options)) return null;
         markUsedByFeature(spec, options);
+        return residentAsIs(spec);
+    }
+
+    /**
+     * The answer for a load served by the resident {@code spec} as it is: the state, marked
+     * {@code reused}. Records nothing; a caller whose feature the resident serves marks that itself.
+     */
+    @NonNull
+    private JSONObject residentAsIs(@NonNull TaiModelSpec spec) throws JSONException {
         JSONObject result = new JSONObject();
         result.put("ok", true);
         result.put("reused", true);
