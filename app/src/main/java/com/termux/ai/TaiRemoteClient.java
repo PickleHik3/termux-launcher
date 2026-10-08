@@ -95,6 +95,29 @@ public final class TaiRemoteClient {
         }
     }
 
+    /**
+     * The model ids the picker's search keeps: each space-separated word of {@code query} found
+     * anywhere in the id, ignoring case, so "sonnet" finds "anthropic/claude-sonnet-5-5" and
+     * "qwen 32b" finds "Qwen/Qwen3-32B-Instruct". An empty query keeps them all, in order.
+     */
+    @NonNull
+    public static List<String> matchingModelIds(@NonNull List<String> ids, @Nullable CharSequence query) {
+        String[] words = query == null ? new String[0] : query.toString().trim().toLowerCase(Locale.ROOT).split("\\s+");
+        List<String> matches = new ArrayList<>();
+        for (String id : ids) {
+            String lower = id.toLowerCase(Locale.ROOT);
+            boolean all = true;
+            for (String word : words) {
+                if (!word.isEmpty() && !lower.contains(word)) {
+                    all = false;
+                    break;
+                }
+            }
+            if (all) matches.add(id);
+        }
+        return matches;
+    }
+
     /** {@link #testConnection}'s answer: the round trip in ms, or the error message. */
     public static final class TestResult {
         public final boolean ok;

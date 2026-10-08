@@ -14,10 +14,22 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 /** The remote client's pure rules: host rule, body sanitiser, retries, parsing, SSE, redaction. */
 public class TaiRemoteClientTest {
+
+    @Test
+    public void modelSearchMatchesAnywhereInTheIdIgnoringCase() {
+        List<String> ids = Arrays.asList("anthropic/claude-sonnet-5-5", "openai/gpt-5", "Qwen/Qwen3-32B-Instruct", "qwen/qwen3-8b");
+        assertEquals(Collections.singletonList("anthropic/claude-sonnet-5-5"), TaiRemoteClient.matchingModelIds(ids, "sonnet"));
+        assertEquals(Arrays.asList("Qwen/Qwen3-32B-Instruct", "qwen/qwen3-8b"), TaiRemoteClient.matchingModelIds(ids, "WEN3"));
+        assertEquals(Collections.singletonList("Qwen/Qwen3-32B-Instruct"), TaiRemoteClient.matchingModelIds(ids, " qwen  32b "));
+        assertEquals(ids, TaiRemoteClient.matchingModelIds(ids, ""));
+        assertEquals(ids, TaiRemoteClient.matchingModelIds(ids, null));
+        assertTrue(TaiRemoteClient.matchingModelIds(ids, "llama").isEmpty());
+    }
 
     // ---------------------------------------------------------------- host rule
 

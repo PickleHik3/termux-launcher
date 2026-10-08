@@ -364,7 +364,12 @@ public class TaiRemotePreferencesFragment extends MaterialPreferenceFragment {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) { }
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) { }
             @Override public void afterTextChanged(Editable s) {
-                adapter.getFilter().filter(s, count -> markCurrent.run());
+                // ArrayAdapter's own filter only matches the start of each word; search the whole id.
+                adapter.setNotifyOnChange(false);
+                adapter.clear();
+                adapter.addAll(TaiRemoteClient.matchingModelIds(sorted, s));
+                adapter.notifyDataSetChanged();
+                markCurrent.run();
             }
         });
 
