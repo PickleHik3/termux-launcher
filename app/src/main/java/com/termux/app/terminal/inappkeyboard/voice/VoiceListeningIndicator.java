@@ -356,8 +356,11 @@ public final class VoiceListeningIndicator {
         onSurfaceVariant = themeColor(context, com.termux.shared.R.attr.termuxColorOnSurfaceVariant);
         accent = themeColor(context, com.termux.shared.R.attr.termuxColorPrimary);
         onAccent = themeColor(context, com.termux.shared.R.attr.termuxColorOnPrimary);
-        surface = themeColor(context, com.termux.shared.R.attr.termuxColorSurfaceBase);
-        raised = themeColor(context, com.termux.shared.R.attr.termuxColorSurfacePanelHigh);
+        // The card floats over the terminal and the keyboard, both of which sit on the base
+        // tone, so it takes the raised container tone the other floating cards use; its buttons
+        // go one step higher again so they still stand off the card.
+        surface = themeColor(context, com.termux.shared.R.attr.termuxColorSurfacePanelHigh);
+        raised = themeColor(context, com.termux.shared.R.attr.termuxColorSurfacePanelHighest);
     }
 
     /**
