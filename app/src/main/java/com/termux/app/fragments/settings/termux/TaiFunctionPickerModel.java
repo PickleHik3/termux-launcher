@@ -9,6 +9,7 @@ import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiFunctionModels;
 import com.termux.ai.TaiFunctionModels.ModelInfo;
 import com.termux.ai.TaiFunctionModels.Resolution;
+import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiResidency;
 import com.termux.ai.TaiTierPolicy;
 
@@ -30,6 +31,33 @@ import java.util.Set;
  */
 final class TaiFunctionPickerModel {
     private TaiFunctionPickerModel() {}
+
+    /**
+     * Where a GPU or CPU tap is stored. The plan reads the function's pick only when the model itself
+     * was picked; with Automatic it reads the model file's Parameters value, so that is where the tap goes.
+     * {@link #modelId} is {@code null} for the function pick.
+     */
+    static final class AcceleratorWrite {
+        @Nullable final String modelId;
+        /** The value to store: the pick as is, or the Parameters option that backend names the choice. */
+        @NonNull final String value;
+
+        AcceleratorWrite(@Nullable String modelId, @NonNull String value) {
+            this.modelId = modelId;
+            this.value = value;
+        }
+    }
+
+    @NonNull
+    static AcceleratorWrite acceleratorWrite(@NonNull Resolution resolution, @NonNull String accelerator) {
+        if (resolution.source == TaiFunctionModels.Source.PICK || resolution.modelId == null || resolution.info == null) {
+            return new AcceleratorWrite(null, accelerator);
+        }
+        boolean gpu = TaiTierPolicy.ACCEL_GPU.equals(accelerator);
+        // MNN's option names its GPU OpenCL; LiteRT-LM's is GPU. Both name the CPU CPU.
+        String value = !gpu ? "CPU" : TaiModelSpec.BACKEND_MNN_LLM.equals(resolution.info.backend) ? "OpenCL" : "GPU";
+        return new AcceleratorWrite(resolution.modelId, value);
+    }
 
     /** The five sections of the sheet, in order. */
     enum Section { AUTOMATIC, ON_PHONE, REMOTE, WITHOUT, GET }

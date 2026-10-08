@@ -212,7 +212,14 @@ public final class TaiFunctionPickerSheet {
     private void applyAccelerator(@NonNull String accelerator) {
         final Context app = activity.getApplicationContext();
         WORKER.execute(() -> {
-            TaiFunctionModels.forContext(app).setAcceleratorPick(function, accelerator);
+            TaiFunctionModels models = TaiFunctionModels.forContext(app);
+            TaiFunctionPickerModel.AcceleratorWrite write =
+                TaiFunctionPickerModel.acceleratorWrite(models.resolve(function), accelerator);
+            if (write.modelId == null) {
+                models.setAcceleratorPick(function, write.value);
+            } else {
+                new TaiSettings(app).setModelParameter(write.modelId, TaiSettings.FIELD_ACCELERATOR, write.value);
+            }
             changed();
         });
     }
