@@ -225,8 +225,7 @@ public final class LauncherCategorySortService extends Service {
             merged.put(section.getKey(), new ArrayList<>(section.getValue()));
 
         TaiManager manager = TaiManager.getInstance(this);
-        // Whatever chat model the user had resident comes back when the sort is done; the sort
-        // borrows the runtime, it does not get to keep it.
+        // The sort unloads what it loads when it is done, and leaves a model it found resident.
         TaiRuntimePresence.Snapshot before = TaiRuntimePresence.read(this);
         String residentBefore = before.loaded ? before.modelId : null;
         // Loading is minutes of the run on a cold runtime, and it used to happen invisibly inside
@@ -342,21 +341,15 @@ public final class LauncherCategorySortService extends Service {
         }
     }
 
-    /** Puts the runtime back as the sort found it: the user's model reloaded, or nothing held. */
+    /**
+     * Ends the sort's hold on the runtime: the model it loaded is unloaded, and the one resident before
+     * is not reloaded (the feature load plan's residency for app sorting); the next feature loads its own.
+     */
     private void restoreRuntime(@NonNull TaiManager manager, @Nullable String sortModel,
                                 @Nullable String residentBefore) {
         try {
-            switch (TaiCallerRequests.restoreAfterSort(residentBefore, sortModel)) {
-                case UNLOAD:
-                    manager.unloadModel();
-                    break;
-                case RELOAD:
-                    JSONObject request = new JSONObject();
-                    request.put("model", residentBefore);
-                    manager.loadModel(request.toString());
-                    break;
-                default:
-                    break; // the sort's own model was resident, or a remote sort never loaded anything
+            if (TaiCallerRequests.restoreAfterSort(residentBefore, sortModel) == TaiCallerRequests.Restore.UNLOAD) {
+                manager.unloadModel();
             }
         } catch (Exception ignored) {
         }

@@ -90,11 +90,11 @@ public class TaiCallerRequestsTest {
     }
 
     @Test
-    public void restoreAfterASortFollowsWhatWasResidentBefore() {
+    public void aSortUnloadsWhatItLoadedAndNeverReloadsWhatWasThereBefore() {
         String e2b = "gemma-4-e2b-it-litert-lm";
         String e4b = "gemma-4-e4b-it-litert-lm";
         assertEquals(TaiCallerRequests.Restore.UNLOAD, TaiCallerRequests.restoreAfterSort(null, e2b));
-        assertEquals(TaiCallerRequests.Restore.RELOAD, TaiCallerRequests.restoreAfterSort(e4b, e2b));
+        assertEquals(TaiCallerRequests.Restore.UNLOAD, TaiCallerRequests.restoreAfterSort(e4b, e2b));
         assertEquals(TaiCallerRequests.Restore.KEEP, TaiCallerRequests.restoreAfterSort(e2b, e2b));
         assertEquals(TaiCallerRequests.Restore.KEEP, TaiCallerRequests.restoreAfterSort(null, "remote/x"));
         assertEquals(TaiCallerRequests.Restore.KEEP, TaiCallerRequests.restoreAfterSort(e4b, null));

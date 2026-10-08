@@ -2655,7 +2655,29 @@ public final class TaiManager {
         if (router == null) return noTtsRuntime();
         JSONObject refusal = decideTtsLoad(router, spec);
         if (refusal != null) return refusal;
-        return TaiSpeechOutput.speak(appContext, router, spec, parsed);
+        JSONObject spoken = TaiSpeechOutput.speak(appContext, router, spec, parsed);
+        closeVoiceIfItsGroupIsTight(router, spec);
+        return spoken;
+    }
+
+    /**
+     * Decision 8's second yield: while a group read aloud belongs to is in use and free memory is under
+     * the hold floor, the voice model closes after each reply ({@link TaiFeaturePlan#readAloudResidency})
+     * instead of staying for its idle limit. The chat window, which yields first, is the budget's own ladder.
+     */
+    private void closeVoiceIfItsGroupIsTight(@NonNull MultiBackendTaiRuntime router, @NonNull TaiModelSpec spec) {
+        try {
+            long hold = TaiLoadBudget.floorBytes(false, gateConditions());
+            long available = TaiMemInfo.read(appContext).availBytes;
+            boolean tight = hold > 0L && available > 0L && available < hold;
+            List<TaiResidency.Entry> residents = router.residency().snapshot();
+            if (TaiFeaturePlan.readAloudResidency(residents, System.currentTimeMillis(), tight)
+                    != TaiFeaturePlan.Residency.PER_REPLY) return;
+            TaiResidency.Entry voice = router.residency().find(TaiResidency.Kind.TTS, spec.id);
+            if (voice != null && !voice.busy) router.evict(Collections.singletonList(voice));
+        } catch (JSONException | RuntimeException ignored) {
+            // The idle limit closes it later in any case.
+        }
     }
 
     /** Stops whatever the phone is saying; answers {@code {ok, stopped}}. Never waits for synthesis. */
@@ -2959,7 +2981,8 @@ public final class TaiManager {
         TaiLoadBudget.Estimate estimate = worst > 0L ? TaiLoadBudget.Estimate.measured(worst)
             : TaiLoadBudget.Estimate.ratio(TaiResidency.ttsEstimateBytes(spec), 0L);
         List<TaiResidency.Entry> candidates = new ArrayList<>();
-        for (TaiResidency.Entry entry : TaiResidency.evictionCandidates(residents, TaiResidency.Kind.TTS, spec.backend)) {
+        for (TaiResidency.Entry entry : TaiResidency.evictionCandidates(residents, TaiResidency.Kind.TTS, spec.backend,
+                TaiFunction.READ_ALOUD, System.currentTimeMillis())) {
             if (entry.kind == TaiResidency.Kind.EMBEDDING) candidates.add(entry);
         }
         TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
@@ -3247,7 +3270,8 @@ public final class TaiManager {
             return TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, TaiResidency.fileBytes(spec), encoders,
                 device.physicalMemoryBytes, available, accelerators, cap,
                 null, 0, options.contextWindow != null,
-                measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend),
+                measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend,
+                    TaiFunction.fromId(options.feature), System.currentTimeMillis()),
                 true)
                 .withConditions(gateConditions())
                 .withKvBytesPerToken(kvBytesPerToken(spec))
@@ -3298,7 +3322,8 @@ public final class TaiManager {
         TaiLoadBudget.Plan plan = TaiLoadBudget.plan(new TaiLoadBudget.Request(spec.backend, fileBytes, encoders,
             device.physicalMemoryBytes, available, accelerators, cap,
             crashedAccelerator, crashedContext, options.contextWindow != null,
-            measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend),
+            measuredHistory(spec, device), TaiResidency.evictionCandidates(residents, TaiResidency.Kind.CHAT, spec.backend,
+                    TaiFunction.fromId(options.feature), System.currentTimeMillis()),
             options.momentary == Boolean.TRUE)
             .withConditions(gateConditions())
             .withKvBytesPerToken(kvBytesPerToken(spec))
@@ -3392,7 +3417,8 @@ public final class TaiManager {
         TaiLoadBudget.Estimate estimate = worst > 0L ? TaiLoadBudget.Estimate.measured(worst)
             : TaiLoadBudget.Estimate.ratio(TaiResidency.embeddingEstimateBytes(spec), 0L);
         TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
-            TaiResidency.evictionCandidates(residents, TaiResidency.Kind.EMBEDDING, spec.backend), gateConditions());
+            TaiResidency.evictionCandidates(residents, TaiResidency.Kind.EMBEDDING, spec.backend,
+                TaiFunction.EMBEDDINGS, System.currentTimeMillis()), gateConditions());
         if (!plan.fits) {
             JSONObject envelope = openAiError(embeddingMemoryRefusal(spec.displayName, plan));
             envelope.put("_retryAfterSeconds", EMBEDDING_MEMORY_RETRY_AFTER_SECONDS);
@@ -3719,7 +3745,8 @@ public final class TaiManager {
             TaiModelSpec.BACKEND_MNN_DIFFUSION);
         TaiImageAdmission.Decision decision = TaiImageAdmission.decide(pkg.peakBytes, request.memoryMode, request.backend,
             device.physicalMemoryBytes, available,
-            TaiResidency.evictionCandidates(residents, TaiResidency.Kind.IMAGE, TaiModelSpec.BACKEND_MNN_DIFFUSION),
+            TaiResidency.evictionCandidates(residents, TaiResidency.Kind.IMAGE, TaiModelSpec.BACKEND_MNN_DIFFUSION,
+                null, System.currentTimeMillis()),
             mode -> TaiRuntimeHistory.measuredLoadBytes(appContext, spec, device, TaiModelSpec.BACKEND_MNN_DIFFUSION,
                 request.backend, mode + 1), gateConditions());
         if (!decision.fits) return new ImageLoadDecision(openAiError(insufficientMemory(spec.displayName, decision.plan)), decision.memoryMode,
@@ -3755,7 +3782,8 @@ public final class TaiManager {
         TaiLoadBudget.Estimate estimate = worst > 0L ? TaiLoadBudget.Estimate.measured(worst)
             : TaiLoadBudget.Estimate.ratio(TaiResidency.sttEstimateBytes(spec), 0L);
         TaiLoadBudget.Plan plan = TaiLoadBudget.planFixed(estimate, "cpu", device.physicalMemoryBytes, available,
-            TaiResidency.evictionCandidates(residents, TaiResidency.Kind.STT, spec.backend), gateConditions());
+            TaiResidency.evictionCandidates(residents, TaiResidency.Kind.STT, spec.backend,
+                TaiFunction.VOICE_TYPING, System.currentTimeMillis()), gateConditions());
         if (!plan.fits) return openAiError(insufficientMemory(spec.displayName, plan));
         evict(plan);
         return null;

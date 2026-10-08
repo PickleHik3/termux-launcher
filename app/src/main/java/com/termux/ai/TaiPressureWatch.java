@@ -100,9 +100,21 @@ final class TaiPressureWatch {
      */
     @Nullable
     static TaiResidency.Entry nextVictim(@NonNull List<TaiResidency.Entry> residents, @NonNull Tier tier) {
+        return nextVictim(residents, tier, Long.MIN_VALUE);
+    }
+
+    /**
+     * {@link #nextVictim(List, Tier)} at {@code nowMs}, passing over every resident that stays for its
+     * feature group ({@link TaiFeaturePlan#keptForItsGroup}): the eviction tiers never break a group in
+     * use, and only {@link Tier#RELEASE_ALL} does. {@link Long#MIN_VALUE} keeps no group.
+     */
+    @Nullable
+    static TaiResidency.Entry nextVictim(@NonNull List<TaiResidency.Entry> residents, @NonNull Tier tier, long nowMs) {
         if (tier != Tier.AUXILIARY && tier != Tier.CHAT) return null;
-        List<TaiResidency.Entry> ordered = idleInEvictionOrder(residents, tier == Tier.CHAT);
-        return ordered.isEmpty() ? null : ordered.get(0);
+        for (TaiResidency.Entry entry : idleInEvictionOrder(residents, tier == Tier.CHAT)) {
+            if (nowMs == Long.MIN_VALUE || !TaiFeaturePlan.keptForItsGroup(entry, null, nowMs)) return entry;
+        }
+        return null;
     }
 
     /** Idle residents in the order the tiers give them up; see {@link #nextVictim}. */

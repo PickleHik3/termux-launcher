@@ -394,6 +394,18 @@ public final class TaiResidency {
      */
     @NonNull
     public static List<Entry> evictionCandidates(@NonNull List<Entry> residents, @NonNull Kind kind, @Nullable String backend) {
+        return evictionCandidates(residents, kind, backend, null, Long.MIN_VALUE);
+    }
+
+    /**
+     * {@link #evictionCandidates(List, Kind, String)} for a load by {@code loading}, which also leaves out
+     * every resident that stays for its feature group ({@link TaiFeaturePlan#keptForItsGroup}): a member
+     * of a group used within the last two minutes is not closed by another feature's load.
+     * {@code nowMs} of {@link Long#MIN_VALUE} keeps no group (the plain overload).
+     */
+    @NonNull
+    public static List<Entry> evictionCandidates(@NonNull List<Entry> residents, @NonNull Kind kind, @Nullable String backend,
+                                                 @Nullable TaiFunction loading, long nowMs) {
         ArrayList<Entry> ordered = new ArrayList<>();
         for (Kind victimKind : new Kind[] {Kind.EMBEDDING, Kind.TTS, Kind.IMAGE, Kind.STT, Kind.CHAT}) {
             if (victimKind == Kind.CHAT && kind != Kind.STT && kind != Kind.IMAGE) continue;
@@ -405,6 +417,7 @@ public final class TaiResidency {
                 if (entry.kind != victimKind || entry.busy) continue;
                 if (kind == Kind.EMBEDDING && victimKind == Kind.EMBEDDING
                         && backend != null && backend.equals(entry.backend)) continue;
+                if (nowMs != Long.MIN_VALUE && TaiFeaturePlan.keptForItsGroup(entry, loading, nowMs)) continue;
                 ofKind.add(entry);
             }
             Collections.sort(ofKind, (a, b) -> Long.compare(a.lastUsedMs, b.lastUsedMs));

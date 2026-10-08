@@ -124,19 +124,19 @@ public final class TaiCallerRequests {
     }
 
     /**
-     * What a sort does with the runtime once done: {@code UNLOAD} when nothing was resident before,
-     * {@code RELOAD} when another model was, {@code KEEP} when the resident model was the sort's own.
+     * What a sort does with the runtime once done (the feature load plan's residency, decision 7):
+     * {@code UNLOAD} the model it loaded, {@code KEEP} when it loaded none. The model that was resident
+     * before is never reloaded; the next feature loads what it needs.
      */
-    public enum Restore { KEEP, UNLOAD, RELOAD }
+    public enum Restore { KEEP, UNLOAD }
 
     /**
-     * {@code sortModel} {@code null} means a remote sort, which never touched the runtime: keep.
-     * A sort that found its own model resident keeps it; the sort cannot tell it loaded it.
+     * {@code sortModel} {@code null} means a remote sort, which never touched the runtime: keep. A sort
+     * that found its own model resident borrowed someone else's load, and leaves it to them.
      */
     @NonNull
     public static Restore restoreAfterSort(@Nullable String residentBefore, @Nullable String sortModel) {
         if (sortModel == null || sortModel.trim().isEmpty() || isRemoteModel(sortModel)) return Restore.KEEP;
-        if (residentBefore == null) return Restore.UNLOAD;
-        return residentBefore.equals(sortModel) ? Restore.KEEP : Restore.RELOAD;
+        return sortModel.equals(residentBefore) ? Restore.KEEP : Restore.UNLOAD;
     }
 }
