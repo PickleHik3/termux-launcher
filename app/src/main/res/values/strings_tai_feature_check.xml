@@ -9,6 +9,7 @@
     <string name="tai_check_older_version">From an older version</string>
     <string name="tai_check_wrong_answers">Answers looked wrong</string>
     <string name="tai_check_could_not_run">Couldn\'t run on this phone</string>
+    <string name="tai_check_stopped">Stopped before it finished</string>
     <string name="tai_check_row_desc">%1$s: %2$s</string>
 
     <string name="tai_check_name_cleanup">Tidy dictation</string>

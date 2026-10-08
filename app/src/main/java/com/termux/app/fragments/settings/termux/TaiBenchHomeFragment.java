@@ -722,10 +722,32 @@ public class TaiBenchHomeFragment extends Fragment implements TaiBenchListAdapte
     private String figureText(@NonNull FeatureRow row) {
         JSONObject record = row.record;
         if (record == null) return getString(R.string.tai_check_not_checked);
-        if (!TaiFeatureCheck.STATUS_COMPLETE.equals(record.optString("status", ""))) return getString(R.string.tai_check_could_not_run);
+        String status = record.optString("status", "");
+        if (!TaiFeatureCheck.STATUS_COMPLETE.equals(status)) {
+            return getString(wasStopped(status) ? R.string.tai_check_stopped : R.string.tai_check_could_not_run);
+        }
         if (!record.optBoolean("passed", false)) return getString(R.string.tai_check_wrong_answers);
         String figure = TaiBenchViews.featureFigure(requireContext(), row.feature, record.optDouble("speed", 0.0));
         return figure.isEmpty() ? getString(R.string.tai_check_could_not_run) : figure;
+    }
+
+    /**
+     * A run the user or the guard ended, as opposed to one that failed: the runner files both under
+     * {@code stopped:}, so the reason tells them apart (the stop button, heat, battery, leaving the screen,
+     * an unload).
+     */
+    static boolean wasStopped(@NonNull String status) {
+        switch (status) {
+            case "stopped:cancelled":
+            case "stopped:thermal":
+            case "stopped:thermal_timeout":
+            case "stopped:battery_low":
+            case "stopped:left":
+            case "stopped:unloaded":
+                return true;
+            default:
+                return false;
+        }
     }
 
     @NonNull
