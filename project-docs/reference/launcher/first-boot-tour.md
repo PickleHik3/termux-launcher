@@ -74,7 +74,7 @@ cards before it open and close a window of their own.
 
 Closing card body, three sections, each a heading, one sentence and — where there is something to
 run — the command on a monospace line with its own Copy button. Under them: Copy all, a Read the
-docs link to `https://picklehik3.github.io/termux-launcher-site/#wiki`, and Done. The card scrolls
+docs link to `https://picklehik3.github.io/termux-launcher-site/docs/#wiki`, and Done. The card scrolls
 rather than growing off a short screen at 1.3× text with the keyboard up.
 
 | Heading | Copy | Command |
