@@ -20,6 +20,8 @@ import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiRuntimePresence;
 import com.termux.app.activities.SettingsActivity;
+import com.termux.app.launcher.drawer.AppDrawerCategory;
+import com.termux.app.launcher.model.LauncherAppEntry;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -29,9 +31,10 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
@@ -192,10 +195,10 @@ public final class LauncherCategorySortService extends Service {
 
     private void runSort(@Nullable String modelId) throws Exception {
         LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(this);
+        List<LauncherAppEntry> catalogue = provider.getAllAppsBlocking();
         // Excludes x11:linux (every Linux app's shared package) as well as work/private twins; see
         // LauncherCategoryCatalogue for why the categoriser must never see that one as an "app".
-        LinkedHashMap<String, String> labelByPackage =
-            LauncherCategoryCatalogue.labelByPackage(provider.getAllAppsBlocking());
+        LinkedHashMap<String, String> labelByPackage = LauncherCategoryCatalogue.labelByPackage(catalogue);
 
         File file = LauncherCategoryFile.defaultFile();
         LauncherCategoryFile existing;
@@ -205,27 +208,26 @@ public final class LauncherCategorySortService extends Service {
             existing = LauncherCategoryFile.empty();
         }
 
-        // Only packages the file does not mention yet get classified: a re-run must stay cheap and
-        // must never overwrite hand edits or an earlier run's assignments.
+        // Only what LauncherCategoryPendingApps calls pending is asked: nothing a drag or the file
+        // already places (a re-run must stay cheap and never overwrite hand edits or an earlier
+        // run's assignments), and nothing the drawer's own classifier places surely, which costs no
+        // inference at all and is left out of the file.
         List<String> pending = new ArrayList<>();
-        for (String packageName : labelByPackage.keySet()) {
-            if (existing.categoryForPackage(packageName) == null) pending.add(packageName);
+        for (LauncherAppEntry entry : LauncherCategoryPendingApps.pending(catalogue,
+                LauncherCategoryPendingApps.placement(this))) {
+            pending.add(entry.appRef.packageName);
         }
         update(s -> s.withTotal(pending.size()));
+        Assignments assignments = new Assignments(existing);
         if (pending.isEmpty()) {
             // Nothing new to classify. Loading a model to sort zero apps would burn 10-20 seconds
             // and then flash a progress bar that was never measuring anything.
             String nothingPending = getString(
                 R.string.settings_app_drawer_category_sort_nothing_pending, labelByPackage.size());
             update(s -> s.withOutcome(nothingPending));
-            new LauncherCategorySortState(this).recordRun(System.currentTimeMillis(),
-                labelByPackage.size(), LauncherCategorySortState.modelSource(modelId), modelId);
+            recordRun(modelId, pending, labelByPackage.size(), assignments);
             return;
         }
-
-        LinkedHashMap<String, List<String>> merged = new LinkedHashMap<>();
-        for (Map.Entry<String, List<String>> section : existing.sections().entrySet())
-            merged.put(section.getKey(), new ArrayList<>(section.getValue()));
 
         TaiManager manager = TaiManager.getInstance(this);
         // The sort unloads what it loads when it is done, and leaves a model it found resident.
@@ -245,7 +247,7 @@ public final class LauncherCategorySortService extends Service {
             return;
         }
         try {
-            sortPending(manager, modelId, pending, labelByPackage, merged, file, provider);
+            sortPending(manager, modelId, pending, labelByPackage, assignments, file, provider);
         } finally {
             restoreRuntime(manager, modelId, residentBefore);
         }
@@ -253,47 +255,61 @@ public final class LauncherCategorySortService extends Service {
 
     private void sortPending(@NonNull TaiManager manager, @Nullable String modelId,
                              @NonNull List<String> pending, @NonNull Map<String, String> labelByPackage,
-                             @NonNull LinkedHashMap<String, List<String>> merged, @NonNull File file,
+                             @NonNull Assignments assignments, @NonNull File file,
                              @NonNull LauncherAppDataProvider provider) throws Exception {
         update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_SORTING));
-        int assigned = 0;
         String stopError = null;
         if (TaiCallerRequests.isRemoteModel(modelId)) {
             LauncherCategoryRemoteSort.Result result = LauncherCategoryRemoteSort.run(pending,
-                new RemoteRequests(manager, modelId, labelByPackage, merged));
-            assigned = result.assigned;
+                new RemoteRequests(manager, modelId, labelByPackage, assignments));
             stopError = result.error;
         } else {
-            assigned = sortOnDevice(manager, modelId, pending, labelByPackage, merged);
+            sortOnDevice(manager, modelId, pending, labelByPackage, assignments);
         }
+        int assigned = assignments.assigned;
 
         update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_SAVING));
         updateProgressNotification(true);
-        if (assigned > 0) LauncherCategoryFile.of(merged).write(file);
+        if (assigned > 0) LauncherCategoryFile.of(assignments.merged).write(file);
+        recordRun(modelId, pending, labelByPackage.size(), assignments);
 
-        LinkedHashSet<String> written = new LinkedHashSet<>();
-        for (List<String> packages : merged.values()) written.addAll(packages);
-        new LauncherCategorySortState(this).recordRun(
-            System.currentTimeMillis(),
-            written.size(),
-            LauncherCategorySortState.modelSource(modelId),
-            modelId
-        );
         String done = state.cancelRequested
             ? getString(R.string.settings_app_drawer_category_sort_cancelled, assigned)
             : stopError != null
             ? getString(R.string.settings_app_drawer_category_sort_stopped, assigned, stopError)
-            : getString(R.string.settings_app_drawer_category_sort_done, assigned, merged.size());
+            : getString(R.string.settings_app_drawer_category_sort_done, assigned, assignments.merged.size());
         update(s -> s.withOutcome(done));
 
         provider.invalidate();
     }
 
-    /** The on-device sort: one app per request. Returns how many apps got a category. */
-    private int sortOnDevice(@NonNull TaiManager manager, @Nullable String modelId, @NonNull List<String> pending,
-                             @NonNull Map<String, String> labelByPackage,
-                             @NonNull LinkedHashMap<String, List<String>> merged) {
-        int assigned = 0;
+    /**
+     * Records the run, and the apps it answered {@code other} for that are still unplaced (now or by
+     * an earlier run): those stay pending, so the next sort asks again, but the drawer's notice and
+     * the settings row do not count them as waiting. Anything placed since drops out of that set.
+     */
+    private void recordRun(@Nullable String modelId, @NonNull List<String> pending, int appCount,
+                           @NonNull Assignments assignments) {
+        LauncherCategorySortState sortState = new LauncherCategorySortState(this);
+        Set<String> before = sortState.getAnsweredOther();
+        Set<String> answeredOther = new HashSet<>();
+        for (String packageName : pending) {
+            String lower = packageName.toLowerCase(Locale.US);
+            if (assignments.answeredOther.contains(packageName)
+                || before.contains(lower) && !assignments.assignedPackages.contains(packageName)) {
+                answeredOther.add(lower);
+            }
+        }
+        sortState.setAnsweredOther(answeredOther);
+        // Covered: every app but those this run asked about and got no answer for.
+        int unanswered = pending.size() - assignments.assigned - assignments.answeredOther.size();
+        sortState.recordRun(System.currentTimeMillis(), appCount - Math.max(0, unanswered),
+            LauncherCategorySortState.modelSource(modelId), modelId);
+    }
+
+    /** The on-device sort: one app per request. */
+    private void sortOnDevice(@NonNull TaiManager manager, @Nullable String modelId, @NonNull List<String> pending,
+                              @NonNull Map<String, String> labelByPackage, @NonNull Assignments assignments) {
         for (String packageName : pending) {
             if (state.cancelRequested) break;
             String label = labelByPackage.get(packageName);
@@ -302,16 +318,40 @@ public final class LauncherCategorySortService extends Service {
             updateProgressNotification(false);
             // An unparseable reply leaves the app out of the file entirely so the drawer's built-in
             // classifier keeps handling it; it is a skip, never a fallback category.
-            if (slug == null) continue;
+            if (slug != null) assignments.accept(packageName, slug);
+        }
+    }
+
+    /**
+     * The file's sections with this run's answers merged in. An answer of {@code other} is not
+     * written: the drawer's classifier falls to Other by itself, and leaving the app out keeps a
+     * later curated row, platform category or a better model free to place it.
+     */
+    static final class Assignments {
+        final LinkedHashMap<String, List<String>> merged = new LinkedHashMap<>();
+        final Set<String> assignedPackages = new HashSet<>();
+        final Set<String> answeredOther = new HashSet<>();
+        int assigned;
+
+        Assignments(@NonNull LauncherCategoryFile existing) {
+            for (Map.Entry<String, List<String>> section : existing.sections().entrySet())
+                merged.put(section.getKey(), new ArrayList<>(section.getValue()));
+        }
+
+        void accept(@NonNull String packageName, @NonNull String slug) {
+            if (AppDrawerCategory.OTHER.slug.equals(slug)) {
+                answeredOther.add(packageName);
+                return;
+            }
             List<String> packages = merged.get(slug);
             if (packages == null) {
                 packages = new ArrayList<>();
                 merged.put(slug, packages);
             }
             packages.add(packageName);
+            assignedPackages.add(packageName);
             assigned++;
         }
-        return assigned;
     }
 
     /**
@@ -387,15 +427,14 @@ public final class LauncherCategorySortService extends Service {
         private final TaiManager manager;
         private final String modelId;
         private final Map<String, String> labelByPackage;
-        private final LinkedHashMap<String, List<String>> merged;
+        private final Assignments assignments;
 
         RemoteRequests(@NonNull TaiManager manager, @NonNull String modelId,
-                       @NonNull Map<String, String> labelByPackage,
-                       @NonNull LinkedHashMap<String, List<String>> merged) {
+                       @NonNull Map<String, String> labelByPackage, @NonNull Assignments assignments) {
             this.manager = manager;
             this.modelId = modelId;
             this.labelByPackage = labelByPackage;
-            this.merged = merged;
+            this.assignments = assignments;
         }
 
         @Override
@@ -425,14 +464,8 @@ public final class LauncherCategorySortService extends Service {
 
         @Override
         public void settled(@NonNull Map<String, String> assigned, int settled) {
-            for (Map.Entry<String, String> entry : assigned.entrySet()) {
-                List<String> packages = merged.get(entry.getValue());
-                if (packages == null) {
-                    packages = new ArrayList<>();
-                    merged.put(entry.getValue(), packages);
-                }
-                packages.add(entry.getKey());
-            }
+            for (Map.Entry<String, String> entry : assigned.entrySet())
+                assignments.accept(entry.getKey(), entry.getValue());
             update(s -> s.withProcessed(s.processed + settled));
             updateProgressNotification(false);
         }

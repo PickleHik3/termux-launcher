@@ -12,6 +12,12 @@ import com.termux.shared.termux.TermuxConstants;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Locale;
+import java.util.Set;
+
 /**
  * Remembers the last app-categorization run: when it happened, how many apps it covered and which
  * source produced the assignment. Sources are free-form ids rather than an enum so a future source
@@ -22,6 +28,9 @@ public final class LauncherCategorySortState {
 
     private static final String PREFS_KEY_CATEGORY_SORT_STATE_V1 =
         "app_launcher_category_sort_state_v1";
+    /** Its own key, so recording a run never has to carry it: lower-cased packages, a string set. */
+    private static final String PREFS_KEY_ANSWERED_OTHER_V1 =
+        "app_launcher_category_answered_other_v1";
 
     private static final String JSON_KEY_LAST_RUN_EPOCH_MS = "last_run_epoch_ms";
     private static final String JSON_KEY_APP_COUNT = "app_count";
@@ -101,13 +110,38 @@ public final class LauncherCategorySortState {
         return modelId;
     }
 
+    /**
+     * @return the packages (lower-cased) a model sort answered {@code other} for and that are still
+     *     unplaced. They are left out of the config file so the drawer's own classifier keeps them,
+     *     which leaves them pending: the next sort asks again, but the drawer's notice and the
+     *     settings row do not count them as waiting, or they would nag after every run.
+     */
+    @NonNull
+    public Set<String> getAnsweredOther() {
+        Set<String> stored = sharedPreferences.getStringSet(PREFS_KEY_ANSWERED_OTHER_V1, null);
+        return stored == null ? Collections.emptySet() : new HashSet<>(stored);
+    }
+
+    /** Replaces the {@link #getAnsweredOther()} set. */
+    public void setAnsweredOther(@NonNull Collection<String> packages) {
+        Set<String> lower = new HashSet<>();
+        for (String packageName : packages) {
+            if (packageName != null) lower.add(packageName.toLowerCase(Locale.US));
+        }
+        SharedPreferences.Editor editor = sharedPreferences.edit();
+        if (lower.isEmpty()) editor.remove(PREFS_KEY_ANSWERED_OTHER_V1);
+        else editor.putStringSet(PREFS_KEY_ANSWERED_OTHER_V1, lower);
+        editor.apply();
+    }
+
     public synchronized void clear() {
         ensureLoaded();
         lastRunEpochMs = 0;
         appCount = 0;
         source = null;
         modelId = null;
-        sharedPreferences.edit().remove(PREFS_KEY_CATEGORY_SORT_STATE_V1).apply();
+        sharedPreferences.edit().remove(PREFS_KEY_CATEGORY_SORT_STATE_V1)
+            .remove(PREFS_KEY_ANSWERED_OTHER_V1).apply();
     }
 
     private void ensureLoaded() {

@@ -66,6 +66,23 @@ public class LauncherCategorySortStateTest {
             LauncherCategorySortState.modelSource(null));
     }
 
+    @Test public void answeredOtherRoundTripsLowerCasedAndIsClearedWithTheRun() {
+        LauncherCategorySortState state = new LauncherCategorySortState(context);
+        assertTrue(state.getAnsweredOther().isEmpty());
+        state.setAnsweredOther(java.util.Arrays.asList("Com.Example.Odd", "com.example.weird"));
+        state.recordRun(42L, 7, LauncherCategorySortState.SOURCE_ON_DEVICE_MODEL, "m");
+
+        LauncherCategorySortState reloaded = new LauncherCategorySortState(context);
+        assertEquals(new java.util.HashSet<>(java.util.Arrays.asList("com.example.odd", "com.example.weird")),
+            reloaded.getAnsweredOther());
+        reloaded.setAnsweredOther(java.util.Collections.<String>emptyList());
+        assertTrue(new LauncherCategorySortState(context).getAnsweredOther().isEmpty());
+
+        reloaded.setAnsweredOther(java.util.Collections.singletonList("com.example.odd"));
+        reloaded.clear();
+        assertTrue(new LauncherCategorySortState(context).getAnsweredOther().isEmpty());
+    }
+
     @Test public void recordRunKeepsNullModelId() {
         new LauncherCategorySortState(context).recordRun(42L, 7,
             LauncherCategorySortState.SOURCE_PASTED, null);
