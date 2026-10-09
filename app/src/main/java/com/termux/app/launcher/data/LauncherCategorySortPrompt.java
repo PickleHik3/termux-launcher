@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -28,13 +29,22 @@ import java.util.regex.Pattern;
  *
  * <p>Category ids are derived from {@link AppDrawerCategory} rather than copied, so the taxonomy
  * has exactly one definition; synthetic categories are skipped because they are computed views
- * ("suggestions", "recently added") that no model may assign an app to. The descriptions live
+ * ("suggestions", "recently added") that no model may assign an app to, and so are the two Linux
+ * groups ({@link #NOT_OFFERED}). The descriptions live
  * here and are deliberately not string resources: they are prompt text, not UI text, and a
  * localized prompt would change model behaviour.
  */
 public final class LauncherCategorySortPrompt {
 
     private static final Map<String, String> DESCRIPTION_BY_SLUG = buildDescriptions();
+    /**
+     * Real categories no model is offered. They hold only what lives inside {@code x11:linux} (a
+     * Linux app, a whole desktop session), which the drawer files by identity and which never
+     * reaches a sort; no Android package belongs in either, so offering them only gave a model two
+     * ways to be wrong. A drag can still put an app there.
+     */
+    private static final Set<AppDrawerCategory> NOT_OFFERED =
+        Collections.unmodifiableSet(EnumSet.of(AppDrawerCategory.DESKTOPS, AppDrawerCategory.LINUX_APPS));
     /** The reply cap of one app's answer: a category id, with room for a model that prefixes it with filler. */
     public static final int MAX_TOKENS = 24;
 
@@ -58,23 +68,25 @@ public final class LauncherCategorySortPrompt {
         descriptions.put("photo_video", "camera, gallery and photo or video editing");
         descriptions.put("travel", "maps, navigation, transport and travel booking");
         descriptions.put("information_reading", "news, search, reading, books and reference");
-        // In practice the classifier assigns these two from the package alone before an app ever
-        // reaches this prompt; kept here only so the taxonomy stays exhaustive.
-        descriptions.put("desktops", "whole Linux desktop environments that take over the screen");
-        descriptions.put("linux_apps", "apps that run inside a Linux distro on the device");
         descriptions.put("other", "anything that fits none of the above");
         return Collections.unmodifiableMap(descriptions);
     }
 
-    /** @return the assignable category slugs, in enum order, synthetic categories excluded. */
+    /**
+     * @return the category slugs a model is offered and may answer with, in enum order: synthetic
+     *     categories and {@link #NOT_OFFERED} excluded.
+     */
     @NonNull
     public static List<String> categorySlugs() {
         ArrayList<String> slugs = new ArrayList<>();
         for (AppDrawerCategory category : AppDrawerCategory.values()) {
-            if (category.synthetic) continue;
-            slugs.add(category.slug);
+            if (offered(category)) slugs.add(category.slug);
         }
         return Collections.unmodifiableList(slugs);
+    }
+
+    private static boolean offered(@Nullable AppDrawerCategory category) {
+        return category != null && !category.synthetic && !NOT_OFFERED.contains(category);
     }
 
     /** @return "- slug: description" lines for every assignable category, in enum order. */
@@ -175,7 +187,7 @@ public final class LauncherCategorySortPrompt {
      * grammar, and that parser already never throws on junk lines, so stray prose around the
      * blocks degrades into ignored lines instead of a failed import.
      *
-     * <p>Two filters run on top of it. Sections naming an unknown category are dropped, and any
+     * <p>Two filters run on top of it. Sections naming a category the prompt does not offer are dropped, and any
      * package the caller did not list is dropped: fabricated package ids were the dominant failure
      * mode in benchmarking, and an invented id would otherwise land in the config file forever.
      */
@@ -201,7 +213,7 @@ public final class LauncherCategorySortPrompt {
         for (Map.Entry<String, List<String>> section : parsed.sections().entrySet()) {
             String slug = section.getKey().trim().toLowerCase(Locale.US);
             AppDrawerCategory category = AppDrawerCategory.fromSlug(slug);
-            if (category == null || category.synthetic) continue;
+            if (!offered(category)) continue;
             for (String packageName : section.getValue()) {
                 String known = knownByLowercase.get(packageName.trim().toLowerCase(Locale.US));
                 if (known == null) continue;

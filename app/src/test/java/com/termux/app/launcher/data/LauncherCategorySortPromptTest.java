@@ -36,8 +36,9 @@ public class LauncherCategorySortPromptTest {
     @Test public void singleAppPromptListsEveryAssignableCategoryAndNoSyntheticOne() {
         String prompt = LauncherCategorySortPrompt.singleAppPrompt("Signal", "org.thoughtcrime");
         for (AppDrawerCategory category : AppDrawerCategory.values()) {
-            if (category.synthetic) {
-                assertFalse("synthetic slug leaked: " + category.slug,
+            if (category.synthetic || category == AppDrawerCategory.DESKTOPS
+                || category == AppDrawerCategory.LINUX_APPS) {
+                assertFalse("slug offered that no Android app belongs in: " + category.slug,
                     prompt.contains(category.slug));
             } else {
                 assertTrue("missing slug: " + category.slug,
@@ -137,6 +138,17 @@ public class LauncherCategorySortPromptTest {
         assertEquals(1, result.size());
         assertEquals("social", result.get("com.example.chat"));
         assertFalse(result.containsKey("com.example.wizard"));
+    }
+
+    @Test public void theLinuxGroupsAreNeitherOfferedNorAccepted() {
+        assertFalse(LauncherCategorySortPrompt.categorySlugs().contains("desktops"));
+        assertFalse(LauncherCategorySortPrompt.categorySlugs().contains("linux_apps"));
+        assertNull(LauncherCategorySortPrompt.parseCategory("linux_apps"));
+        assertNull(LauncherCategorySortPrompt.parseCategory("desktops"));
+        Map<String, String> result = LauncherCategorySortPrompt.parsePastedReply(
+            "[linux_apps]\ncom.example.term\n[desktops]\ncom.example.vnc\n",
+            new HashSet<>(Arrays.asList("com.example.term", "com.example.vnc")));
+        assertTrue(result.isEmpty());
     }
 
     @Test public void parsePastedReplyDropsSyntheticSectionName() {
