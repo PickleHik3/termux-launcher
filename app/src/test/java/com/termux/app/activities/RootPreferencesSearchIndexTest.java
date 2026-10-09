@@ -161,6 +161,19 @@ public class RootPreferencesSearchIndexTest {
             isVisible(root, "wallpaper_style"));
     }
 
+    @Test
+    public void appearanceOpensItsSettingsPageBeforeAndAfterASearch() {
+        SettingsActivity.RootPreferencesFragment root = launch();
+        String page = com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment.class.getName();
+        assertEquals(page, findAnywhere(root.getPreferenceScreen(), "wallpaper_style").getFragment());
+
+        SettingsSearchPreference search = root.findPreference("settings_search");
+        search.getOnQueryChangedListener().onQueryChanged("typeface");
+        search.getOnQueryChangedListener().onQueryChanged("");
+        assertEquals("a cleared search gives the row its page back",
+            page, findAnywhere(root.getPreferenceScreen(), "wallpaper_style").getFragment());
+    }
+
     private static boolean isVisible(SettingsActivity.RootPreferencesFragment root, String key) {
         Preference preference = findAnywhere(root.getPreferenceScreen(), key);
         return preference != null && preference.isVisible();

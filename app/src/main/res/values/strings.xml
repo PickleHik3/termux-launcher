@@ -74,7 +74,9 @@
     <string name="az_pull_tab_description">A–Z index. Slide along it to find and open apps.</string>
     <!-- The one Settings row and corner button for wallpaper, Look, Layout and the icon pack. -->
     <string name="settings_destination_wallpaper_style">Appearance</string>
-    <string name="settings_destination_wallpaper_style_summary">Wallpaper, theme and layout</string>
+    <string name="settings_destination_wallpaper_style_summary">Wallpaper, theme, fonts and icons</string>
+    <string name="settings_appearance_surface_title">Wallpaper, look and layout</string>
+    <string name="settings_appearance_surface_summary">Edit them live on your home screen</string>
     <string name="settings_destination_appearance">Theme &amp; fonts</string>
     <string name="settings_destination_appearance_summary">Theme, wallpaper, terminal fonts, icons and keyboard look</string>
     <string name="settings_destination_terminal">Terminal</string>
