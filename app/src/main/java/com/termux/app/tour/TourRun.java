@@ -251,9 +251,9 @@ public final class TourRun {
      * own over the dock, so it points at nothing and asks for the save rather than for a tap it
      * cannot see.
      *
-     * <p>A sheet closed with an empty dock does not clear the card. The lesson is a pinned app, so
-     * its second sentence is written to be true whether the sheet is open or has been closed
-     * again: the way back into it is the hold the first stage just taught.
+     * <p>Closing the sheet clears the card, pinned apps or not: the lesson is the hold and the
+     * editor it raises, and its second sentence stays true whether the sheet is open or has been
+     * closed again — the way back into it is the hold the first stage just taught.
      */
     private static TourStep pinApps() {
         return new TourStep(PIN_APPS,
