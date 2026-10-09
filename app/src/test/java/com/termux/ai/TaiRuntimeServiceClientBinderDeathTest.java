@@ -70,7 +70,13 @@ public class TaiRuntimeServiceClientBinderDeathTest {
         long deadline = System.currentTimeMillis() + PROMPT_MS;
         while (pending.isEmpty() && System.currentTimeMillis() < deadline) Thread.sleep(10L);
         assertFalse("the load never registered", pending.isEmpty());
-        shadowOf(Looper.getMainLooper()).idle();
+        // The caller thread registers the request, then sends it; the fake runtime takes it on the
+        // main looper. Idle until the send has landed rather than racing the caller to it.
+        deadline = System.currentTimeMillis() + PROMPT_MS;
+        while (runtime.requests.get() == 0 && System.currentTimeMillis() < deadline) {
+            shadowOf(Looper.getMainLooper()).idle();
+            Thread.sleep(10L);
+        }
         assertEquals(1, runtime.requests.get());
 
         connection.onServiceDisconnected(name);

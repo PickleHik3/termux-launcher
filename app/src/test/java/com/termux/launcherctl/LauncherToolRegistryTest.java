@@ -69,7 +69,7 @@ public class LauncherToolRegistryTest {
         // and by keyboard.clipboard, the keyboard's clipboard panel on a key or a chord, and by
         // keyboard.toggle_enabled, which turns the keyboard off so a tap no longer raises it, and by
         // voice.dictate, the Dictate key that starts a dictation on any place.
-        assertEquals(83, registry.getUiTools().size());
+        assertEquals(84, registry.getUiTools().size());
     }
 
     @Test
