@@ -6,6 +6,7 @@ import androidx.test.core.app.ApplicationProvider;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+import org.junit.After;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
@@ -19,6 +20,13 @@ import static org.junit.Assert.fail;
 
 @RunWith(RobolectricTestRunner.class)
 public class TaiModelSchemaTest {
+
+    // The overlay these tests apply lives in a process-wide static; leaving it in place made later
+    // tests see the extra entries.
+    @After
+    public void dropRemoteOverlay() {
+        TaiModelCatalog.resetForTesting();
+    }
 
     @Test
     public void oldLiteRtJson_deserializesWithExistingBackendAndFormat() throws Exception {
@@ -61,6 +69,9 @@ public class TaiModelSchemaTest {
         assertEquals(TaiModelSpec.FORMAT_MNN, TaiModelSpec.inferFormat("https://huggingface.co/mnn-ai/test-model/config.json"));
         assertEquals(TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.inferBackend("/models/chat/model.litertlm"));
         assertEquals(TaiModelSpec.FORMAT_LITERTLM, TaiModelSpec.inferFormat("/models/chat/model.litertlm"));
+        // "mnn" in a folder name above a LiteRT file does not make it an MNN package.
+        assertEquals(TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.inferBackend("/work/tl-wt-mnn/tmp/listed.litertlm"));
+        assertEquals(TaiModelSpec.BACKEND_MNN_LLM, TaiModelSpec.inferBackend("/models/qwen3-embedding-0.6b-mnn"));
     }
 
     @Test

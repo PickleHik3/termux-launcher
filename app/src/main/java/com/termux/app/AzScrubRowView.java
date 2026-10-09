@@ -20,6 +20,7 @@ import androidx.appcompat.widget.AppCompatTextView;
 
 import com.termux.app.chrome.GlassInk;
 import com.termux.app.chrome.OnGlass;
+import com.termux.app.haptics.Haptics;
 import com.termux.app.launcher.az.AzBarFrame;
 import com.termux.app.launcher.az.AzLetterTrack;
 import com.termux.app.launcher.az.AzScrubGesture;
@@ -744,7 +745,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                 // sample is what decides whose row the finger is on. Asking first would tick a
                 // letter for the sample that just handed the gesture to the apps row.
                 if (crossedLetterBoundary && rowHapticsEnabled && !letterTicksSuspended) {
-                    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK);
+                    Haptics.tick(this, HapticFeedbackConstants.CLOCK_TICK);
                 }
                 return true;
             case MotionEvent.ACTION_UP:

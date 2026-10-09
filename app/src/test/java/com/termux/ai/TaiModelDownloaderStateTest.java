@@ -24,6 +24,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -46,18 +47,20 @@ public class TaiModelDownloaderStateTest {
     @After
     public void tearDown() {
         if (server != null) server.stop(0);
-        TaiModelDownloadService.clearCancellation("state-test");
-        TaiModelDownloadService.clearCancellation("cancel-test");
-        TaiModelDownloadService.clearCancellation("retry-test");
-        TaiModelDownloadService.clearCancellation("metadata-test");
         store.deleteUserModel("state-test");
         store.deleteUserModel("cancel-test");
+        store.deleteUserModel("pause-test");
+        store.deleteUserModel("verify-test");
+        store.deleteUserModel("verify-ok-test");
+        store.deleteUserModel("network-test");
         store.deleteUserModel("retry-test");
         store.deleteUserModel("metadata-test");
         store.deleteUserModel(TaiModelRegistry.MODEL_GEMMA_4_E2B_IT);
         store.deleteUserModel(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT);
         store.deleteUserModel("Qwen2.5-Coder-1.5B-GGUF");
         store.deleteUserModel("resolvable-test");
+        store.deleteUserModel("resume-skip-test");
+        store.deleteUserModel("resume-mismatch-test");
     }
 
     @Test
@@ -107,21 +110,140 @@ public class TaiModelDownloaderStateTest {
     }
 
     @Test
-    public void runDownload_cancelledKeepsPartForCleanup() throws Exception {
+    public void runDownload_refetchesWhenTheExistingFileSizeDiffers() throws Exception {
+        byte[] model = modelBytes('m');
+        String url = serve(new FixedBytesHandler(model));
+        File output = output("resume-mismatch-test", "model.litertlm");
+        assertTrue(output.getParentFile().mkdirs() || output.getParentFile().isDirectory());
+        java.nio.file.Files.write(output.toPath(), new byte[] {1, 2, 3});
+
+        List<String> states = new ArrayList<>();
+        TaiModelDownloader downloader = new TaiModelDownloader(context, store);
+        downloader.runDownload("download-resume-mismatch-test", "resume-mismatch-test", url, output,
+            "resume-mismatch-test", "license", capabilities(), TaiModelSpec.BACKEND_LITERT_LM,
+            TaiModelSpec.FORMAT_LITERTLM, "", "", 4096, 0, "", model.length, null, null,
+            Collections.emptyList(), new TaiModelDownloader.Control(),
+            transfer -> states.add(transfer.optString("status")));
+
+        assertTrue(states.contains(TaiModelStore.STATE_DOWNLOADING));
+        assertEquals(TaiModelStore.STATE_INSTALLED, states.get(states.size() - 1));
+        assertArrayEquals(model, java.nio.file.Files.readAllBytes(output.toPath()));
+    }
+
+    @Test
+    public void runDownload_cancelledDeletesThePartialFile() throws Exception {
+        // Cancel means "I do not want this": the partial file and its resume marker go, so the
+        // disk is not left holding a gigabyte nobody asked to keep.
         byte[] model = modelBytes('b');
         String url = serve(new FixedBytesHandler(model));
         List<String> states = new ArrayList<>();
         File output = output("cancel-test", "model.litertlm");
+        TaiModelDownloader.Control control = new TaiModelDownloader.Control();
 
-        run("cancel-test", url, output, states, transfer -> {
-            if (TaiModelStore.STATE_DOWNLOADING.equals(transfer.optString("status"))) {
-                TaiModelDownloadService.requestCancel("cancel-test");
-            }
+        run("cancel-test", url, output, states, control, transfer -> {
+            if (TaiModelStore.STATE_DOWNLOADING.equals(transfer.optString("status"))) control.requestCancel();
         });
 
         assertEquals(TaiModelStore.STATE_CANCELLED, states.get(states.size() - 1));
         assertFalse(output.exists());
-        assertTrue(new File(output.getAbsolutePath() + ".part").exists());
+        assertFalse(new File(output.getAbsolutePath() + ".part").exists());
+        assertFalse(new File(output.getAbsolutePath() + ".part.source").exists());
+    }
+
+    @Test
+    public void runDownload_pausedKeepsThePartAndResumesFromTheOffset() throws Exception {
+        // Pause keeps the partial file; the next run asks for a Range from its length and the
+        // server sees exactly that offset, so nothing restarts from zero.
+        byte[] model = modelBytes('p');
+        RangeHandler handler = new RangeHandler(model);
+        String url = serve(handler);
+        File output = output("pause-test", "model.litertlm");
+        List<String> states = new ArrayList<>();
+        TaiModelDownloader.Control control = new TaiModelDownloader.Control();
+
+        run("pause-test", url, output, states, control, transfer -> {
+            if (TaiModelStore.STATE_DOWNLOADING.equals(transfer.optString("status")) && transfer.optLong("bytesRead") > 0L) {
+                control.requestPause(TaiModelStore.PAUSED_USER);
+            }
+        });
+
+        assertEquals(TaiModelStore.STATE_PAUSED, states.get(states.size() - 1));
+        JSONObject paused = latestDownload("download-pause-test");
+        assertNotNull(paused);
+        assertEquals(TaiModelStore.PAUSED_USER, paused.getString("pausedReason"));
+        File part = new File(output.getAbsolutePath() + ".part");
+        assertTrue(part.isFile());
+        long kept = part.length();
+        assertTrue(kept > 0L && kept < model.length);
+        assertEquals(kept, paused.getLong("bytesRead"));
+
+        List<String> resumed = new ArrayList<>();
+        run("pause-test", url, output, resumed, new TaiModelDownloader.Control(), transfer -> { });
+
+        assertEquals(TaiModelStore.STATE_INSTALLED, resumed.get(resumed.size() - 1));
+        assertEquals("the second request must start where the first stopped", kept, handler.lastOffset);
+        assertEquals(model.length, output.length());
+        assertFalse(part.exists());
+        JSONObject installed = latestDownload("download-pause-test");
+        assertNotNull(installed);
+        assertFalse("a new state clears the pause reason", installed.has("pausedReason"));
+    }
+
+    @Test
+    public void runDownload_persistsVerifyingBeforeTheHashRuns() throws Exception {
+        // The "checking file" state used to be written after the hash had already been compared,
+        // so a screen never saw it while the wait was happening.
+        byte[] model = modelBytes('v');
+        String url = serve(new FixedBytesHandler(model));
+        File output = output("verify-test", "model.litertlm");
+        List<String> states = new ArrayList<>();
+        List<String> storedAtVerifying = new ArrayList<>();
+
+        new TaiModelDownloader(context, store).runDownload("download-verify-test", "verify-test", url, output,
+            "Verify Test", "license", capabilities(), TaiModelSpec.BACKEND_LITERT_LM,
+            TaiModelSpec.FORMAT_LITERTLM, "", "", 4096, 0, "0000000000000000000000000000000000000000000000000000000000000000",
+            0L, null, null, Collections.emptyList(), new TaiModelDownloader.Control(), transfer -> {
+                states.add(transfer.optString("status"));
+                if (TaiModelStore.STATE_VERIFYING.equals(transfer.optString("status"))) {
+                    JSONObject stored = latestDownload("download-verify-test");
+                    storedAtVerifying.add(stored == null ? "" : stored.optString("status"));
+                }
+            });
+
+        assertTrue(states.indexOf(TaiModelStore.STATE_VERIFYING) >= 0);
+        assertTrue(states.indexOf(TaiModelStore.STATE_VERIFYING) < states.indexOf(TaiModelStore.STATE_FAILED));
+        assertEquals(TaiModelStore.STATE_FAILED, states.get(states.size() - 1));
+        assertEquals(Collections.singletonList(TaiModelStore.STATE_VERIFYING), storedAtVerifying);
+
+        // And a matching hash installs.
+        List<String> good = new ArrayList<>();
+        File goodOutput = output("verify-ok-test", "model.litertlm");
+        new TaiModelDownloader(context, store).runDownload("download-verify-ok-test", "verify-ok-test", url, goodOutput,
+            "Verify OK", "license", capabilities(), TaiModelSpec.BACKEND_LITERT_LM,
+            TaiModelSpec.FORMAT_LITERTLM, "", "", 4096, 0, sha256Hex(model), 0L, null, null,
+            Collections.emptyList(), new TaiModelDownloader.Control(), transfer -> good.add(transfer.optString("status")));
+        assertEquals(TaiModelStore.STATE_INSTALLED, good.get(good.size() - 1));
+    }
+
+    @Test
+    public void runDownload_socketLossBecomesPausedNetworkWithThePartKept() throws Exception {
+        // The server promises the whole file and then drops the connection halfway. That is the
+        // network going away, not a bad download: the bytes on disk are good and the record pauses
+        // (network) rather than fails, so an unmetered network can pick it up again.
+        byte[] model = modelBytes('n');
+        String url = serve(new TruncatingHandler(model, model.length / 2));
+        File output = output("network-test", "model.litertlm");
+        List<String> states = new ArrayList<>();
+
+        run("network-test", url, output, states);
+
+        assertEquals(TaiModelStore.STATE_PAUSED, states.get(states.size() - 1));
+        JSONObject paused = latestDownload("download-network-test");
+        assertNotNull(paused);
+        assertEquals(TaiModelStore.PAUSED_NETWORK, paused.getString("pausedReason"));
+        assertEquals("bytes moved, so this is not a retry without progress", 0, paused.optInt("networkRetries", -1));
+        assertTrue(new File(output.getAbsolutePath() + ".part").isFile());
+        assertTrue(paused.getLong("bytesRead") > 0L);
     }
 
     @Test
@@ -254,6 +376,91 @@ public class TaiModelDownloaderStateTest {
     }
 
     @Test
+    public void speechToTextTflite_doesNotTakeTheSentencepieceEmbeddingPath() throws Exception {
+        // Before this change, requiresLiteRtEmbeddingTokenizer branched on the .tflite extension
+        // alone, so a Whisper download would hunt for sentencepiece.model/tokenizer.model/spiece.model
+        // next to the graph and fail (none of those exist in a Whisper repo). Serving only the model
+        // itself and no sentencepiece candidate must now succeed, with no tokenizer sidecar fetched.
+        byte[] model = modelBytes('w');
+        String url = serve(new FixedBytesHandler(model));
+        File output = output("whisper-branch-test", "acft_whisper_base.en_10s_drq.tflite");
+        LinkedHashSet<String> caps = new LinkedHashSet<>(Collections.singleton(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+        List<String> states = new ArrayList<>();
+
+        TaiModelDownloader downloader = new TaiModelDownloader(context, store);
+        downloader.runDownload("download-whisper-branch-test", "whisper-branch-test", url, output,
+            "Whisper Branch Test", "license", caps, TaiModelSpec.BACKEND_LITERT_LM,
+            TaiModelSpec.FORMAT_LITERTLM, "whisper-acft", "int8_drq", 128, 0, "", 0L, null,
+            transfer -> states.add(transfer.optString("status")));
+
+        assertEquals(TaiModelStore.STATE_INSTALLED, states.get(states.size() - 1));
+        assertTrue(output.isFile());
+        assertFalse("a speech_to_text .tflite must not fetch a SentencePiece sidecar",
+            new File(output.getParentFile(), "sentencepiece.model").isFile());
+        TaiModelSpec spec = store.getDownloadedReadableModels().get("whisper-branch-test");
+        assertNotNull(spec);
+        assertTrue(spec.capabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+        assertFalse(spec.capabilities.contains(TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS));
+        store.deleteUserModel("whisper-branch-test");
+    }
+
+    @Test
+    public void catalogSidecar_downloadsTokenizerAlongsideTheModelAndVerifiesHash() throws Exception {
+        byte[] model = modelBytes('x');
+        byte[] tokenizer = "{\"tokenizer\":true}".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String tokenizerSha256 = sha256Hex(tokenizer);
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/model.tflite", new FixedBytesHandler(model));
+        server.createContext("/tokenizer.json", new FixedBytesHandler(tokenizer));
+        server.start();
+        String modelUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/model.tflite";
+        String tokenizerUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/tokenizer.json";
+        File output = output("whisper-sidecar-test", "model.tflite");
+        List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars = Collections.singletonList(
+            new TaiModelCatalog.CatalogEntry.Sidecar(tokenizerUrl, "tokenizer.json", tokenizerSha256));
+        LinkedHashSet<String> caps = new LinkedHashSet<>(Collections.singleton(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+        List<String> states = new ArrayList<>();
+
+        TaiModelDownloader downloader = new TaiModelDownloader(context, store);
+        downloader.runDownload("download-whisper-sidecar-test", "whisper-sidecar-test", modelUrl, output,
+            "Whisper Sidecar Test", "license", caps, TaiModelSpec.BACKEND_LITERT_LM,
+            TaiModelSpec.FORMAT_LITERTLM, "whisper-acft", "int8_drq", 128, 0, "", 0L, null, null,
+            sidecars, transfer -> states.add(transfer.optString("status")));
+
+        assertEquals(TaiModelStore.STATE_INSTALLED, states.get(states.size() - 1));
+        File tokenizerFile = new File(output.getParentFile(), "tokenizer.json");
+        assertTrue("declared sidecar must be downloaded next to the model", tokenizerFile.isFile());
+        assertEquals(new String(tokenizer, java.nio.charset.StandardCharsets.UTF_8),
+            new String(java.nio.file.Files.readAllBytes(tokenizerFile.toPath()), java.nio.charset.StandardCharsets.UTF_8));
+        store.deleteUserModel("whisper-sidecar-test");
+    }
+
+    @Test
+    public void missingCatalogSidecar_failsTheDownloadCleanly() throws Exception {
+        byte[] model = modelBytes('y');
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/model.tflite", new FixedBytesHandler(model));
+        // No /tokenizer.json handler registered — the sidecar request 404s.
+        server.start();
+        String modelUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/model.tflite";
+        String tokenizerUrl = "http://127.0.0.1:" + server.getAddress().getPort() + "/tokenizer.json";
+        File output = output("whisper-missing-sidecar-test", "model.tflite");
+        List<TaiModelCatalog.CatalogEntry.Sidecar> sidecars = Collections.singletonList(
+            new TaiModelCatalog.CatalogEntry.Sidecar(tokenizerUrl, "tokenizer.json", null));
+        LinkedHashSet<String> caps = new LinkedHashSet<>(Collections.singleton(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT));
+        List<String> states = new ArrayList<>();
+
+        TaiModelDownloader downloader = new TaiModelDownloader(context, store);
+        downloader.runDownload("download-whisper-missing-sidecar-test", "whisper-missing-sidecar-test", modelUrl,
+            output, "Whisper Missing Sidecar Test", "license", caps, TaiModelSpec.BACKEND_LITERT_LM,
+            TaiModelSpec.FORMAT_LITERTLM, "whisper-acft", "int8_drq", 128, 0, "", 0L, null, null,
+            sidecars, transfer -> states.add(transfer.optString("status")));
+
+        assertEquals(TaiModelStore.STATE_FAILED, states.get(states.size() - 1));
+        store.deleteUserModel("whisper-missing-sidecar-test");
+    }
+
+    @Test
     public void staleInstalledE4bMetadata_isRebuiltFromCatalogFacts() throws Exception {
         File output = output(TaiModelRegistry.MODEL_GEMMA_4_E4B_IT, "gemma-4-E4B-it.litertlm");
         assertTrue(output.getParentFile().mkdirs() || output.getParentFile().isDirectory());
@@ -302,15 +509,16 @@ public class TaiModelDownloaderStateTest {
     }
 
     private void run(String modelId, String url, File output, List<String> states) {
-        run(modelId, url, output, states, transfer -> { });
+        run(modelId, url, output, states, new TaiModelDownloader.Control(), transfer -> { });
     }
 
     private void run(String modelId, String url, File output, List<String> states,
-                     TaiModelDownloader.ProgressCallback extraCallback) {
+                     TaiModelDownloader.Control control, TaiModelDownloader.ProgressCallback extraCallback) {
         TaiModelDownloader downloader = new TaiModelDownloader(context, store);
         downloader.runDownload("download-" + modelId, modelId, url, output,
             modelId, "license", capabilities(), TaiModelSpec.BACKEND_LITERT_LM,
-            TaiModelSpec.FORMAT_LITERTLM, "", "", 4096, 0, "", 0L, null,
+            TaiModelSpec.FORMAT_LITERTLM, "", "", 4096, 0, "", 0L, null, null,
+            Collections.emptyList(), control,
             transfer -> {
                 states.add(transfer.optString("status"));
                 extraCallback.onProgress(transfer);
@@ -349,6 +557,13 @@ public class TaiModelDownloaderStateTest {
         return new LinkedHashSet<>(Collections.singleton(TaiModelSpec.CAPABILITY_TEXT_CHAT));
     }
 
+    private static String sha256Hex(byte[] bytes) throws Exception {
+        java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+        StringBuilder builder = new StringBuilder();
+        for (byte value : digest.digest(bytes)) builder.append(String.format(java.util.Locale.US, "%02x", value));
+        return builder.toString();
+    }
+
     private static byte[] modelBytes(char fill) {
         byte[] bytes = new byte[1024 * 1024 + 16];
         for (int i = 0; i < bytes.length; i++) bytes[i] = (byte) fill;
@@ -371,6 +586,56 @@ public class TaiModelDownloaderStateTest {
             try (OutputStream output = exchange.getResponseBody()) {
                 output.write(bytes);
             }
+        }
+    }
+
+    /** Honours Range requests with a 206 and records the last offset asked for. */
+    private static final class RangeHandler implements HttpHandler {
+        private final byte[] bytes;
+        volatile long lastOffset = -1L;
+
+        RangeHandler(byte[] bytes) {
+            this.bytes = bytes;
+        }
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String range = exchange.getRequestHeaders().getFirst("Range");
+            long offset = 0L;
+            if (range != null && range.startsWith("bytes=")) {
+                offset = Long.parseLong(range.substring("bytes=".length(), range.indexOf('-')));
+            }
+            lastOffset = offset;
+            int remaining = bytes.length - (int) offset;
+            if (offset > 0L) {
+                exchange.getResponseHeaders().add("Content-Range", "bytes " + offset + "-" + (bytes.length - 1) + "/" + bytes.length);
+                exchange.sendResponseHeaders(206, remaining);
+            } else {
+                exchange.sendResponseHeaders(200, remaining);
+            }
+            try (OutputStream output = exchange.getResponseBody()) {
+                output.write(bytes, (int) offset, remaining);
+            }
+        }
+    }
+
+    /** Promises the whole body, sends part of it, then drops the connection. */
+    private static final class TruncatingHandler implements HttpHandler {
+        private final byte[] bytes;
+        private final int sendBytes;
+
+        TruncatingHandler(byte[] bytes, int sendBytes) {
+            this.bytes = bytes;
+            this.sendBytes = sendBytes;
+        }
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            exchange.sendResponseHeaders(200, bytes.length);
+            OutputStream output = exchange.getResponseBody();
+            output.write(bytes, 0, sendBytes);
+            output.flush();
+            exchange.close();
         }
     }
 

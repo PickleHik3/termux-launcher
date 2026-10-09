@@ -277,9 +277,13 @@ public class TerminalKeyEventHandlerTest {
                     break;
                 case SWITCH_EMOJI:
                 case SWITCH_BACK_EMOJI:
+                    assertEquals(logs + 1, mHost.logs.size());
+                    break;
                 case SWITCH_CLIPBOARD:
                 case SWITCH_BACK_CLIPBOARD:
-                    assertEquals(logs + 1, mHost.logs.size());
+                    // The clipboard key is the launcher's own panel now, not a stripped pane.
+                    assertEquals(logs, mHost.logs.size());
+                    assertEquals(hostActions + 1, mHost.totalActions());
                     break;
                 case SWITCH_VOICE_TYPING:
                 case SWITCH_VOICE_TYPING_CHOOSER:
@@ -611,6 +615,37 @@ public class TerminalKeyEventHandlerTest {
         assertTrue(call.ctrl);
     }
 
+    @Test
+    public void dispatchKeyValueUnderCtrlSendsTheControlCharacterLikeTheKeyboardDoes() {
+        // A spoken "control c" is the "c" character key with Ctrl added to the held modifiers.
+        mHandler.dispatchKeyValue(KeyValue.getKeyByName("c"), true);
+
+        assertEquals(1, mTerminal.codePointCalls.size());
+        CodePointCall call = mTerminal.codePointCalls.get(0);
+        assertEquals((int) 'c', call.codePoint);
+        assertTrue(call.ctrl);
+        assertFalse(call.alt);
+
+        // Without Ctrl the same call is plain typing, and a named key is a key event.
+        mHandler.dispatchKeyValue(KeyValue.getKeyByName("c"), false);
+        assertFalse(mTerminal.codePointCalls.get(1).ctrl);
+        mHandler.dispatchKeyValue(KeyValue.getKeyByName("enter"), false);
+        assertEquals(Collections.singletonList(KeyEvent.KEYCODE_ENTER), mTerminal.keyCodes);
+    }
+
+    @Test
+    public void dispatchKeyValueUnderCtrlGoesToTheInterceptorFirst() {
+        List<Boolean> ctrls = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            ctrls.add(ctrl);
+            return true;
+        });
+        mHandler.dispatchKeyValue(KeyValue.getKeyByName("c"), true);
+
+        assertEquals(Collections.singletonList(true), ctrls);
+        assertTrue(mTerminal.codePointCalls.isEmpty());
+    }
+
     private static final class KeyCall {
 
         private final int keyCode;
@@ -682,6 +717,7 @@ public class TerminalKeyEventHandlerTest {
         private int previousLayouts;
         private int settings;
         private int hides;
+        private int clipboardPanels;
         private int capsLocks;
         private int voiceRequests;
         private final List<Boolean> composeStates = new ArrayList<>();
@@ -751,6 +787,16 @@ public class TerminalKeyEventHandlerTest {
         }
 
         @Override
+        public void showClipboardPanel() {
+            clipboardPanels++;
+        }
+
+        @Override
+        public void hideClipboardPanel() {
+            clipboardPanels++;
+        }
+
+        @Override
         public void requestVoiceTyping(boolean chooser) {
             voiceRequests++;
         }
@@ -777,7 +823,7 @@ public class TerminalKeyEventHandlerTest {
 
         private int totalActions() {
             return pastes + copies + textLayouts + numericLayouts + greekLayouts + nextLayouts +
-                previousLayouts + settings + hides + capsLocks + voiceRequests;
+                previousLayouts + settings + hides + clipboardPanels + capsLocks + voiceRequests;
         }
     }
 }

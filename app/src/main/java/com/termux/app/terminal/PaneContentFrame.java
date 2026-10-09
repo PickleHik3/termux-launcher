@@ -1,16 +1,23 @@
 package com.termux.app.terminal;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Outline;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.Rect;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.FrameLayout;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.view.TerminalView;
 
 /**
  * One pane's frame: the single owner of the shape the pane wears and of the clearance that shape
@@ -22,43 +29,99 @@ import com.termux.R;
  * arc, which is how a prompt that paints its own background to the very edge came out clipped.
  *
  * <p>So the shape and its clearance are set together, from one radius: the glass keeps filling the
- * whole slab and the terminal is laid out inside the arc's depth. The clearance is spent as the
- * child's margin rather than as this frame's padding, because the frame's other child is the glass
- * backdrop and it must still reach the corners the terminal now stays out of.
+ * whole slab and the terminal is laid out inside the arc's depth, the same distance off every
+ * edge. The clearance is spent as the child's margin rather than as this frame's padding, because
+ * the frame's other child is the glass backdrop and it must still reach the corners the terminal
+ * now stays out of.
+ *
+ * <p>The rim a pane wears is part of the same geometry. Its stroke is painted just inside the
+ * outline, so the band this frame fills behind the terminal stops at the stroke's inner edge — the
+ * fill and the rim are both anti-aliased against the same arc, and a fill that ran out to the
+ * outline showed through as a dark hairline outside the rim wherever the two edges' coverage
+ * disagreed — and along a straight edge the stroke, not the arc, is what the text is held off.
  */
-public class PaneContentFrame extends FrameLayout {
+public class PaneContentFrame extends FrameLayout implements TerminalView.PaddingFillListener {
+
+    /** How far off the rim's inner edge the text is kept along a straight edge. */
+    private static final float EDGE_GAP_DP = 2f;
 
     private float mRequestedRadiusPx;
     private boolean mClipToShape;
+    /** Width of the border drawn on this frame's foreground, 0 while it wears none. */
+    private float mRimStrokePx;
     private View mContent;
     /** Set on a DOWN that landed in the clearance, so the rest of that gesture follows it. */
     private boolean mForwardingToContent;
+
+    /** Reused across frames; painting the band allocates nothing once this exists. */
+    private final Paint mPaddingFillPaint = new Paint();
+    /** The rim's inner edge, re-built only when the size, radius or stroke actually changes, so
+     *  clipping the band to it costs nothing on the frames it does not. */
+    private final Path mBandClipPath = new Path();
+    private boolean mBandClipPathDirty = true;
+
+    /**
+     * How far above its laid-out bottom this frame's visible bottom stands, while the wall's
+     * travel has the chrome's live edge over the room the pane still holds; 0 at rest. The shape
+     * is drawn that much shorter, corners and all, so the pane ends where the rising chrome
+     * begins ({@link #setTravelBottomInsetPx}).
+     */
+    private int mTravelBottomInsetPx;
+    /** The clip a square frame, which does not clip to its outline, takes the inset through. */
+    private final Rect mTravelClipRect = new Rect();
+
+    /**
+     * The retro look this card is drawn through, cut to the same card the outline draws — the
+     * travel's shortened bottom included — and bent like the tube it stands for. It re-reads all of
+     * that before each frame, so a divider drag, a re-dress or a wall page needs no call here.
+     */
+    private final RetroEffectBinder mRetroEffect = new RetroEffectBinder(this, (view, rect) -> {
+        int height = Math.max(0, view.getHeight() - mTravelBottomInsetPx);
+        rect[0] = 0f;
+        rect[1] = 0f;
+        rect[2] = view.getWidth();
+        rect[3] = height;
+        return mClipToShape
+            ? PaneShape.radiusForBounds(mRequestedRadiusPx, view.getWidth(), height) : 0f;
+    }, PaneRetroEffect.CRT_BEND, PaneRetroEffect.PANE_VIGNETTE);
 
     /** Re-capped on every ask: a divider drag resizes the frame without re-dressing the pane. */
     private final ViewOutlineProvider mShapeOutline = new ViewOutlineProvider() {
         @Override
         public void getOutline(View view, Outline outline) {
-            outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
-                PaneShape.radiusForBounds(mRequestedRadiusPx, view.getWidth(), view.getHeight()));
+            int height = Math.max(0, view.getHeight() - mTravelBottomInsetPx);
+            outline.setRoundRect(0, 0, view.getWidth(), height,
+                PaneShape.radiusForBounds(mRequestedRadiusPx, view.getWidth(), height));
         }
     };
 
     public PaneContentFrame(Context context) {
         super(context);
+        initPaddingFillPaint();
     }
 
     public PaneContentFrame(Context context, AttributeSet attrs) {
         super(context, attrs);
+        initPaddingFillPaint();
     }
 
     public PaneContentFrame(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
+        initPaddingFillPaint();
+    }
+
+    /** Off by default already, but stated explicitly: this band's rects share edges — with each
+     *  other and with the terminal's own in-view slack — that are snapped to whole device pixels,
+     *  and anti-aliasing would blend a translucent hairline into exactly those shared edges. */
+    private void initPaddingFillPaint() {
+        mPaddingFillPaint.setAntiAlias(false);
     }
 
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
         mContent = findViewById(R.id.terminal_view);
+        wirePaddingFillListener();
     }
 
     /**
@@ -67,8 +130,25 @@ public class PaneContentFrame extends FrameLayout {
      */
     public void setPaneContent(@Nullable View content) {
         if (mContent == content) return;
+        if (mContent instanceof TerminalView)
+            ((TerminalView) mContent).setPaddingFillListener(null);
         mContent = content;
+        wirePaddingFillListener();
         requestLayout();
+    }
+
+    /** Tell the terminal child, if this is one, to notify this frame when its edge colours move —
+     *  a child's own invalidate does not re-record this frame's display list on its own. */
+    private void wirePaddingFillListener() {
+        if (mContent instanceof TerminalView)
+            ((TerminalView) mContent).setPaddingFillListener(this);
+    }
+
+    /** {@link TerminalView.PaddingFillListener}: the terminal's edge colours moved since last
+     *  frame, so the band this frame paints around it needs to be repainted too. */
+    @Override
+    public void onPaddingFillColorsChanged() {
+        invalidate();
     }
 
     /**
@@ -88,7 +168,253 @@ public class PaneContentFrame extends FrameLayout {
         setOutlineProvider(clipToShape ? mShapeOutline : ViewOutlineProvider.BOUNDS);
         setClipToOutline(clipToShape);
         invalidateOutline();
+        mBandClipPathDirty = true;
+        mRetroEffect.refresh();
         requestLayout();
+    }
+
+    /**
+     * The width of the border this frame's foreground draws, or 0 while it draws none. The band
+     * behind the terminal stops at that border's inner edge, and along a straight edge the text is
+     * held this far plus a hair off the frame — a square pane with a rim would otherwise lay its
+     * first column under the stroke, since a square corner owes it no arc clearance.
+     */
+    public void setRimStrokePx(float strokePx) {
+        float stroke = Math.max(0f, strokePx);
+        if (mRimStrokePx == stroke)
+            return;
+        mRimStrokePx = stroke;
+        mBandClipPathDirty = true;
+        requestLayout();
+        invalidate();
+    }
+
+    /**
+     * Ends this frame's visible shape {@code insetPx} above its laid-out bottom, for as long as the
+     * wall's travel keeps the chrome's edge over the room the pane holds; 0 puts the bottom back.
+     * A transform of the outline (or, on a frame that clips to no shape, of its clip bounds), so a
+     * slide costs no layout here; the settle's own pass lays the frame out at the size the inset
+     * stood in for.
+     */
+    public void setTravelBottomInsetPx(int insetPx) {
+        int inset = Math.max(0, insetPx);
+        if (mTravelBottomInsetPx == inset)
+            return;
+        mTravelBottomInsetPx = inset;
+        if (mClipToShape) {
+            invalidateOutline();
+        } else if (inset > 0) {
+            mTravelClipRect.set(0, 0, getWidth(), Math.max(0, getHeight() - inset));
+            setClipBounds(mTravelClipRect);
+        } else {
+            setClipBounds(null);
+        }
+        fitForegroundToTravelInset();
+        mRetroEffect.refresh();
+        invalidate();
+    }
+
+    /**
+     * The rim is this frame's foreground, drawn on the frame's own bounds: while the travel
+     * shortens the shape it is drawn on the shortened bounds instead, so the pane's bottom
+     * corners close at the clip rather than under the chrome. Both rim drawables draw inside
+     * {@link Drawable#getBounds()}; the view re-applies its full bounds after a size change or a
+     * new foreground, which {@link #onDrawForeground} corrects on the next draw.
+     */
+    private void fitForegroundToTravelInset() {
+        Drawable foreground = getForeground();
+        if (foreground == null)
+            return;
+        int width = getWidth();
+        int height = Math.max(0, getHeight() - mTravelBottomInsetPx);
+        Rect bounds = foreground.getBounds();
+        if (bounds.left != 0 || bounds.top != 0 || bounds.right != width || bounds.bottom != height)
+            foreground.setBounds(0, 0, width, height);
+    }
+
+    /**
+     * The retro monitor look this card is drawn through. NONE, or a phone below API 33, clears the
+     * effect. Nothing else sets a render effect on this frame; the terminal's own frost is on the
+     * child, not here.
+     */
+    public void setRetroStyle(@Nullable PaneRetroStyle style) {
+        mRetroEffect.setStyle(style);
+    }
+
+    /** The look the card is drawn through: NONE wherever no effect can be drawn at all. */
+    @NonNull
+    public PaneRetroStyle retroStyle() {
+        return mRetroEffect.style();
+    }
+
+    @Override
+    public void onDrawForeground(Canvas canvas) {
+        if (mTravelBottomInsetPx > 0)
+            fitForegroundToTravelInset();
+        super.onDrawForeground(canvas);
+    }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        mBandClipPathDirty = true;
+        mRetroEffect.refresh();
+        if (mTravelBottomInsetPx > 0 && !mClipToShape) {
+            mTravelClipRect.set(0, 0, w, Math.max(0, h - mTravelBottomInsetPx));
+            setClipBounds(mTravelClipRect);
+        }
+    }
+
+    /**
+     * The rim's inner edge, in this frame's own bounds: the pane's rounded outline inset by the
+     * stroke, at the radius the stroke's inner side turns ({@code GlassRimRenderer} strokes the
+     * outline's radius less half its width, centred half its width in, so its inner edge is the
+     * full stroke in at the radius less the full stroke). With no rim it is the outline itself —
+     * the same shape the glass clips to, whether or not this frame is clipping. Nothing painted
+     * behind the terminal may poke past it.
+     */
+    private Path getBandClipPath() {
+        if (mBandClipPathDirty) {
+            mBandClipPath.reset();
+            float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, getWidth(), getHeight());
+            float inset = mRimStrokePx;
+            float innerRadius = Math.max(0f, radius - inset);
+            mBandClipPath.addRoundRect(inset, inset, getWidth() - inset, getHeight() - inset,
+                innerRadius, innerRadius, Path.Direction.CW);
+            mBandClipPathDirty = false;
+        }
+        return mBandClipPath;
+    }
+
+    /**
+     * Paint the arc's own clearance — the margin {@link #onMeasure} held the terminal off the edge
+     * by — with the same edge colours the terminal itself extends into its in-view slack. Drawn
+     * just before the terminal child, so it lands over the glass backdrop and under the grid.
+     *
+     * <p>A plain shell leaves every edge colour transparent (its default background is never
+     * painted), so this draws nothing and the glass or wallpaper behind the pane keeps showing.
+     *
+     * @return whether a band was painted, which is when the grid's own corners have to be held to
+     *     the same clip (see {@link #drawChild})
+     */
+    private boolean drawPaddingFillBand(Canvas canvas) {
+        if (!(mContent instanceof TerminalView)) return false;
+        TerminalView terminal = (TerminalView) mContent;
+        if (!terminal.isPaddingFillEnabled()) return false;
+        int columns = terminal.getEdgeColumnCount();
+        int rows = terminal.getEdgeRowCount();
+        if (columns <= 0 || rows <= 0) return false;
+        int contentLeft = mContent.getLeft();
+        int contentTop = mContent.getTop();
+        int contentRight = mContent.getRight();
+        int contentBottom = mContent.getBottom();
+        // A pane too small to wear any radius, or a content view that already reaches every edge,
+        // has no margin at all to fill.
+        if (contentLeft <= 0 && contentTop <= 0 && contentRight >= getWidth() && contentBottom >= getHeight())
+            return false;
+
+        int save = canvas.save();
+        canvas.clipPath(getBandClipPath());
+        // Top and bottom bands: one rect per run of equal-coloured columns, directly above/below
+        // where those columns' own cells sit, so a coloured status bar or a solid full-screen app
+        // reaches the pane's border. Edges come from getPaddingColumnLeft, the same rounding
+        // TerminalRenderer#drawCellRect snaps a cell's own left/right edge to, so a band's inner
+        // edge meets the grid with no gap and its outer neighbours meet each other the same way;
+        // coalescing equal-coloured runs means two same-coloured columns share no internal edge
+        // at all, however that rounding falls. The first run starts at this frame's own edge and
+        // the last ends at it, so the band runs past the terminal's centring slack into the
+        // corner square, in the corner cell's colour.
+        int c = 0;
+        while (c < columns) {
+            int topColor = terminal.getEdgeColumnColorTop(c);
+            int bottomColor = terminal.getEdgeColumnColorBottom(c);
+            int runEnd = c + 1;
+            while (runEnd < columns && terminal.getEdgeColumnColorTop(runEnd) == topColor
+                && terminal.getEdgeColumnColorBottom(runEnd) == bottomColor) runEnd++;
+            float left = c == 0 ? 0f : contentLeft + terminal.getPaddingColumnLeft(c);
+            float right = runEnd == columns
+                ? getWidth() : contentLeft + terminal.getPaddingColumnLeft(runEnd);
+            fillRect(canvas, left, 0f, right, contentTop, topColor);
+            fillRect(canvas, left, contentBottom, right, getHeight(), bottomColor);
+            c = runEnd;
+        }
+        // Left and right bands: one rect per run of equal-coloured rows, continuing that row's own
+        // edge colour out to the view's flush side, with the same run-coalescing and edge-rounding.
+        // The first run starts at this frame's top and the last ends at its bottom, so the band
+        // also covers the margin beside the terminal's own headroom and leftover — the notch
+        // that used to show the glass beside a full-screen program's last row — and meets the
+        // top and bottom bands in the corner square, which both paint in the one colour the
+        // corner cell has.
+        int r = 0;
+        while (r < rows) {
+            int leftColor = terminal.getEdgeRowColorLeft(r);
+            int rightColor = terminal.getEdgeRowColorRight(r);
+            int runEnd = r + 1;
+            while (runEnd < rows && terminal.getEdgeRowColorLeft(runEnd) == leftColor
+                && terminal.getEdgeRowColorRight(runEnd) == rightColor) runEnd++;
+            float top = r == 0 ? 0f : contentTop + terminal.getPaddingRowTop(r);
+            float bottom = runEnd == rows
+                ? getHeight() : contentTop + terminal.getPaddingRowTop(runEnd);
+            fillRect(canvas, 0f, top, contentLeft, bottom, leftColor);
+            fillRect(canvas, contentRight, top, getWidth(), bottom, rightColor);
+            r = runEnd;
+        }
+        canvas.restoreToCount(save);
+        return true;
+    }
+
+    private void fillRect(Canvas canvas, float left, float top, float right, float bottom, int color) {
+        if (color == 0) return;
+        mPaddingFillPaint.setColor(color);
+        canvas.drawRect(left, top, right, bottom, mPaddingFillPaint);
+    }
+
+    /**
+     * Refresh the terminal's edge colours before anything this frame draws this pass reads them —
+     * {@link #drawChild} below paints the band from them for the terminal child, and doing this
+     * first is what keeps band and grid always the same frame's colours. Without it the band, drawn
+     * before the terminal child's own {@code onDraw} had a chance to recompute them, painted with
+     * whatever the last frame left behind; a change that arrived while this pane was off screen (an
+     * alpha-faded wall page keeps drawing, so this still ran, but nothing invalidated it to catch
+     * up) then showed the new grid over the old band for one more frame after the pane returned.
+     *
+     * <p>{@link com.termux.view.TerminalView#computeEdgeColorsIfEnabled} is allocation-free and
+     * O(rows + columns); the terminal's own {@code onDraw} calls it again right after, redundantly
+     * but just as cheaply, since nothing about padding fill depends on draw order to be correct on
+     * its own account.
+     */
+    @Override
+    protected void dispatchDraw(Canvas canvas) {
+        if (mContent instanceof TerminalView) ((TerminalView) mContent).computeEdgeColorsIfEnabled();
+        super.dispatchDraw(canvas);
+    }
+
+    /**
+     * Draw the padding-fill band right before the terminal child is drawn, so it lands after the
+     * glass backdrop (drawn in an earlier call, for the child added first) and under the grid.
+     *
+     * <p>While a band is painted the grid is drawn under the band's own clip too. The terminal's
+     * box is inset to clear the outline's arc, not the stroke's inner arc, so a corner cell's own
+     * background can still reach a couple of pixels under the rim's inner half on the diagonal —
+     * fill and grid are one surface there, and cutting both at the same edge is what keeps that
+     * corner from being the one place the rim reads darker.
+     */
+    @Override
+    protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        if (child != mContent || !drawPaddingFillBand(canvas))
+            return super.drawChild(canvas, child, drawingTime);
+        int save = canvas.save();
+        canvas.clipPath(getBandClipPath());
+        try {
+            return super.drawChild(canvas, child, drawingTime);
+        } finally {
+            canvas.restoreToCount(save);
+        }
+    }
+
+    /** Where the terminal child's first row of cells starts below its own top edge, if it is one. */
+    private int contentHeadroomPx() {
+        return mContent instanceof TerminalView ? ((TerminalView) mContent).getFirstRowTopPx() : 0;
     }
 
     /**
@@ -96,23 +422,38 @@ public class PaneContentFrame extends FrameLayout {
      * measured against it — so the pane lays out once at its cleared size and the PTY is told one
      * size, not the flush one and then the inset one.
      *
-     * <p>The margin is the same on all four edges: the terminal bottom-anchors its grid
-     * ({@code TerminalView.getVerticalContentOffset()}), so its last row ends flush with the
-     * view's bottom edge and this inset is exactly the arc clearance there, just as on the sides.
-     * The integral-row leftover sits above the first row instead, where it reads as headroom.
+     * <p>Every edge gets the same clearance ({@link PaneShape#contentInsetPx}, the arc's), so the
+     * content sits the same distance off all four sides of the frame. The terminal centres its
+     * grid in its view ({@code TerminalView.getVerticalContentOffset()},
+     * {@code getHorizontalContentOffset()}), splitting the sub-cell leftover between opposite
+     * edges, so the grid's own gap from the frame is even too, to within half a cell. The top's
+     * margin is the only one that differs: the first row's cells start a fixed headroom below the
+     * view's top ({@code TerminalView.getFirstRowTopPx()}, the renderer's ascent allowance), so
+     * that much of the top's clearance is already paid and the margin only makes up the rest
+     * ({@link PaneShape#topInsetPx}) — the first cell then sits as far off the top as the last
+     * row's cells sit off the bottom.
+     *
+     * <p>Along a straight edge none of this is what holds the text off the border — the rim's
+     * stroke is, plus a hair — so every margin is floored at that; the floor only ever bites at a
+     * radius too small for its own arc to clear the stroke.
      */
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         if (mContent != null && mContent.getLayoutParams() instanceof MarginLayoutParams) {
-            int inset = PaneShape.contentInsetForBounds(mRequestedRadiusPx,
-                MeasureSpec.getSize(widthMeasureSpec), MeasureSpec.getSize(heightMeasureSpec));
+            int width = MeasureSpec.getSize(widthMeasureSpec);
+            int height = MeasureSpec.getSize(heightMeasureSpec);
+            float radius = PaneShape.radiusForBounds(mRequestedRadiusPx, width, height);
+            float edgeFloor = mRimStrokePx > 0f
+                ? mRimStrokePx + EDGE_GAP_DP * getResources().getDisplayMetrics().density : 0f;
+            int side = Math.max(PaneShape.contentInsetPx(radius), (int) Math.ceil(edgeFloor));
+            int top = PaneShape.topInsetPx(side, contentHeadroomPx());
             MarginLayoutParams params = (MarginLayoutParams) mContent.getLayoutParams();
-            if (params.leftMargin != inset || params.topMargin != inset
-                || params.rightMargin != inset || params.bottomMargin != inset) {
-                params.leftMargin = inset;
-                params.topMargin = inset;
-                params.rightMargin = inset;
-                params.bottomMargin = inset;
+            if (params.leftMargin != side || params.topMargin != top
+                || params.rightMargin != side || params.bottomMargin != side) {
+                params.leftMargin = side;
+                params.topMargin = top;
+                params.rightMargin = side;
+                params.bottomMargin = side;
             }
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);

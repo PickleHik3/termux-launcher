@@ -42,15 +42,26 @@ public final class TaiRuntimePresence {
         public final long idleUnloadAtMs;
         /** Wall-clock ms this snapshot was written, used to notice a runtime that was killed. */
         public final long publishedAtMs;
+        /** The loaded engine's context window, or 0 when unknown. */
+        public final int contextWindow;
+        /** What the resident chat model holds by the runtime's registry estimate; 0 when none. */
+        public final long residentChatBytes;
 
         Snapshot(boolean loaded, boolean loading, boolean generating, @Nullable String modelId,
                  long idleUnloadAtMs, long publishedAtMs) {
+            this(loaded, loading, generating, modelId, idleUnloadAtMs, publishedAtMs, 0, 0L);
+        }
+
+        Snapshot(boolean loaded, boolean loading, boolean generating, @Nullable String modelId,
+                 long idleUnloadAtMs, long publishedAtMs, int contextWindow, long residentChatBytes) {
             this.loaded = loaded;
             this.loading = loading;
             this.generating = generating;
             this.modelId = modelId;
             this.idleUnloadAtMs = idleUnloadAtMs;
             this.publishedAtMs = publishedAtMs;
+            this.contextWindow = contextWindow;
+            this.residentChatBytes = residentChatBytes;
         }
 
         /** True while the runtime holds a model, is pulling one in, or is mid-generation. */
@@ -69,8 +80,13 @@ public final class TaiRuntimePresence {
         return Snapshot.none();
     }
 
-    /** Writes the current runtime state and nudges the UI process. Runtime-process side. */
-    public static void publish(@NonNull Context context, @NonNull TaiRuntimeState state) {
+    /**
+     * Writes the current runtime state and nudges the UI process. Runtime-process side.
+     *
+     * @param residentChatBytes the registry's estimate for the resident chat model, so the app
+     *                          process advertises windows with the same credit the budget applies
+     */
+    public static void publish(@NonNull Context context, @NonNull TaiRuntimeState state, long residentChatBytes) {
         Context app = context.getApplicationContext();
         JSONObject json = new JSONObject();
         try {
@@ -80,6 +96,8 @@ public final class TaiRuntimePresence {
             json.put("modelId", state.loadedModelId == null ? JSONObject.NULL : state.loadedModelId);
             json.put("idleUnloadAtMs", state.idleUnloadAtMs);
             json.put("publishedAtMs", System.currentTimeMillis());
+            json.put("contextWindow", state.toJson().optInt("contextWindow", 0));
+            json.put("residentChatBytes", residentChatBytes);
         } catch (Exception ignored) {
             return;
         }
@@ -104,7 +122,9 @@ public final class TaiRuntimePresence {
                 json.optBoolean("generating", false),
                 json.isNull("modelId") ? null : json.optString("modelId", null),
                 json.optLong("idleUnloadAtMs", 0L),
-                json.optLong("publishedAtMs", 0L));
+                json.optLong("publishedAtMs", 0L),
+                json.optInt("contextWindow", 0),
+                json.optLong("residentChatBytes", 0L));
         } catch (Exception ignored) {
             return Snapshot.none();
         }

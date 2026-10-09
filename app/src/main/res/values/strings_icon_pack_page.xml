@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Icon pack page of the Appearance surface (IconPackPage). -->
+    <string name="icon_pack_page_title">Icon pack</string>
+    <string name="icon_pack_page_default_system">Default</string>
+    <string name="icon_pack_page_default_global">System</string>
+    <string name="icon_pack_page_pinned_only">Pinned app icons only</string>
+    <string name="icon_pack_page_tile_selected">%1$s, selected</string>
+</resources>

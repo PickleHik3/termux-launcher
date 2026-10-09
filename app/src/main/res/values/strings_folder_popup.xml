@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Folder popup header: the title tap action and the cog that opens the folder editor. -->
+    <string name="folder_popup_rename_action">Rename folder</string>
+    <string name="folder_popup_settings_description">Folder settings</string>
+</resources>

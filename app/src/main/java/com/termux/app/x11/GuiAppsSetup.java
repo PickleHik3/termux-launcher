@@ -49,6 +49,8 @@ public final class GuiAppsSetup {
     public static final String RECORD_FILE_NAME = "launcher-user";
     /** The X keyboard data the display server needs before it can start. */
     public static final String KEYBOARD_DATA_PACKAGE = "xkeyboard-config";
+    /** The session bus: a whole desktop needs one and XFCE starts none of its own on X11. */
+    public static final String BUS_PACKAGE = "dbus";
 
     /** Where {@code proot-distro} 5.x keeps its containers, as a Termux shell writes it. */
     private static final String CONTAINERS_PATH = "$PREFIX/var/lib/proot-distro/containers";
@@ -148,17 +150,23 @@ public final class GuiAppsSetup {
 
         DEBIAN("debian", "debian", PackageManager.APT,
             "xfonts-base fonts-dejavu-core", "libgl1 libgl1-mesa-dri",
+            // dbus-launch lives in dbus-x11 on Debian; the plain "dbus" package is only the daemon.
+            "dbus-x11",
             // Debian ships Firefox as the ESR build; plain "firefox" is not a package there.
             "firefox-esr", "pcmanfm", "mousepad", "xterm"),
 
         UBUNTU("ubuntu", "ubuntu", PackageManager.APT,
             "xfonts-base fonts-dejavu-core", "libgl1 libgl1-mesa-dri",
+            // Same split as Debian: dbus-launch is in dbus-x11, not in dbus itself.
+            "dbus-x11",
             // Not "firefox": on Ubuntu that package is a stub that installs the snap, and snaps
             // cannot run inside a proot container at all. Falkon is a real deb and a real browser.
             "falkon", "pcmanfm", "mousepad", "xterm"),
 
         ARCH("archlinux", "arch", PackageManager.PACMAN,
             "xorg-fonts-misc ttf-dejavu", "mesa",
+            // Arch does not split this: dbus-launch is in the dbus package itself.
+            "dbus",
             "firefox", "pcmanfm", "mousepad", "xterm");
 
         /** The name {@code proot-distro} installs and logs into this one by. */
@@ -171,6 +179,8 @@ public final class GuiAppsSetup {
         @NonNull public final String fontPackages;
         /** The distro's own graphics drivers, so an app is not left with no renderer. */
         @NonNull public final String graphicsPackages;
+        /** Carries {@code dbus-launch}, so a desktop that starts no session bus of its own gets one. */
+        @NonNull public final String busPackage;
 
         @NonNull private final String browser;
         @NonNull private final String fileManager;
@@ -179,6 +189,7 @@ public final class GuiAppsSetup {
 
         Distro(@NonNull String alias, @NonNull String key, @NonNull PackageManager packageManager,
                @NonNull String fontPackages, @NonNull String graphicsPackages,
+               @NonNull String busPackage,
                @NonNull String browser, @NonNull String fileManager,
                @NonNull String textEditor, @NonNull String terminal) {
             this.alias = alias;
@@ -186,6 +197,7 @@ public final class GuiAppsSetup {
             this.packageManager = packageManager;
             this.fontPackages = fontPackages;
             this.graphicsPackages = graphicsPackages;
+            this.busPackage = busPackage;
             this.browser = browser;
             this.fileManager = fileManager;
             this.textEditor = textEditor;
@@ -244,6 +256,35 @@ public final class GuiAppsSetup {
         }
     }
 
+    /**
+     * What {@code app} is called on the screen once {@code route} and {@code distro} are chosen:
+     * the name the user will see in their app drawer afterwards, not the package name.
+     *
+     * <p>The Starter Apps rows carry this as their hint (user, 2026-09-22), because "Browser"
+     * alone does not say whether the command is about to fetch Firefox or Falkon - and on Ubuntu
+     * it is Falkon, for a reason that belongs in {@link Distro} rather than in front of the user.
+     */
+    @NonNull
+    public static String starterAppName(@NonNull Route route, @NonNull Distro distro,
+                                        @NonNull StarterApp app) {
+        return prettyName(route == Route.X11_REPO
+            ? termuxPackageFor(app) : distro.packageFor(app));
+    }
+
+    /** A package name as people write it. Anything unlisted is handed back as it came. */
+    @NonNull
+    private static String prettyName(@NonNull String packageName) {
+        switch (packageName) {
+            case "firefox": return "Firefox";
+            case "firefox-esr": return "Firefox ESR";
+            case "falkon": return "Falkon";
+            case "pcmanfm": return "PCManFM";
+            case "mousepad": return "Mousepad";
+            case "xfce4-terminal": return "Xfce Terminal";
+            default: return packageName;
+        }
+    }
+
     /** Where the chosen account name is written, as a Termux shell spells it. */
     @NonNull
     public static String recordPath(@NonNull Distro distro) {
@@ -296,6 +337,9 @@ public final class GuiAppsSetup {
         // The display itself needs the keyboard data before it can start; it rides along with
         // whatever apps were ticked, so a fresh install gets a display that starts.
         packages.add(KEYBOARD_DATA_PACKAGE);
+        // A whole desktop needs a session bus and XFCE starts none of its own on X11 (D6); it
+        // rides along the same way, not as a tickable starter app.
+        packages.add(BUS_PACKAGE);
         for (StarterApp app : StarterApp.values()) {
             if (vaj && app == StarterApp.BROWSER) continue;
             if (starters.contains(app)) packages.add(termuxPackageFor(app));
@@ -368,6 +412,7 @@ public final class GuiAppsSetup {
         List<String> packages = new ArrayList<>();
         packages.addAll(Arrays.asList(distro.fontPackages.split(" ")));
         packages.addAll(Arrays.asList(distro.graphicsPackages.split(" ")));
+        packages.add(distro.busPackage);
         for (StarterApp app : StarterApp.values()) {
             if (starters.contains(app)) packages.add(distro.packageFor(app));
         }

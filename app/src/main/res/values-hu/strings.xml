@@ -100,26 +100,11 @@
     <string name="termux_crash_report_notifications_enabled_on">Az összeomlási jelentésekről szóló értesítések meg vannak jelenítve. (Alapértelmezett)</string>
     <!-- Terminal IO Preferences -->
     <!-- Keyboard Category -->
-    <string name="termux_keyboard_header">Billentyűzet</string>
     <!-- Soft Keyboard -->
-    <string name="termux_soft_keyboard_enabled_title">Szoftveres Billentyűzet Engedélyezése</string>
-    <string name="termux_soft_keyboard_enabled_off">Szoftveres billentyűzet letiltva.</string>
-    <string name="termux_soft_keyboard_enabled_on">Szoftveres billentyűzet engedélyezve. (Alapértelmezett)</string>
     <!-- Soft Keyboard Only If No Hardware-->
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_title">Szoftveres Billentyűzet Ha Nincs Hardveres</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_off">A szoftveres billentyűzet akkor is engedélyezve lesz, ha hardver billentyűzet
-                    csatlakoztatva van. (Alapértelmezett)</string>
-    <string name="termux_soft_keyboard_enabled_only_if_no_hardware_on">A szoftveres billentyűzet csak akkor lesz engedélyezve,
-                    ha nincs csatlakoztatva hardver billentyűzet.</string>
     <!-- Terminal View Preferences -->
     <!-- View Category -->
-    <string name="termux_terminal_view_view_header">Megtekintés</string>
     <!-- Terminal View Margin Adjustment -->
-    <string name="termux_terminal_view_terminal_margin_adjustment_title">Terminál margóbeállítás</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_off">A terminál margóbeállítása le lesz tiltva.</string>
-    <string name="termux_terminal_view_terminal_margin_adjustment_on">A terminál margóbeállítása engedélyezve lesz. Engedélyezni kell, hogy megpróbálja
-                    megoldani azt a problémát, hogy a lágy billentyűzet lefedi az extra billentyűk / terminálnézet egy részét. Ha ez a képernyő villogását okozza az
-                    eszközökön, akkor tiltsa le. (Alapértelmezett)</string>
     <!-- Termux:API App Preferences -->
     <!-- Termux:Float App Preferences -->
     <!-- Termux:Tasker App Preferences -->
@@ -129,8 +114,5 @@
     <string name="donate_preference_title">Adományozás</string>
     <string name="extra_keys_command_hint">Parancs beszúrása…</string>
     <string name="action_set_background_image">Háttérkép beállítása</string>
-    <string name="termux_terminal_view_activity_remove_off">Amint az összes terminál munkamenetet bezárta, &TERMUX_APP_NAME; bezáródik, és látható marad a legutóbbi alkalmazásoknál.</string>
-    <string name="termux_terminal_view_activity_remove_title">A legutóbbi alkalmazások közötti maradás megakadályozása</string>
     <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Kinézet</string>
-    <string name="termux_terminal_view_activity_remove_on">Amint az összes terminál munkamenetet bezárta, &TERMUX_APP_NAME; bezáródik, és nem marad látható a legutóbbi alkalmazásoknál. (Default)</string>
 </resources>

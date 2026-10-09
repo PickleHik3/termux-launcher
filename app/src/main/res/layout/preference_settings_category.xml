@@ -1,28 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Section header: spacing separates sections; no divider line. -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@android:id/title"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical">
-
-    <View
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:layout_marginStart="24dp"
-        android:layout_marginTop="10dp"
-        android:layout_marginEnd="24dp"
-        android:background="?attr/termuxColorOutlineVariant" />
-
-    <TextView
-        android:id="@android:id/title"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:letterSpacing="0.03"
-        android:paddingStart="24dp"
-        android:paddingTop="18dp"
-        android:paddingEnd="24dp"
-        android:paddingBottom="6dp"
-        android:textAllCaps="false"
-        android:textColor="?attr/termuxColorPrimary"
-        android:textSize="13sp"
-        android:textStyle="bold" />
-</LinearLayout>
+    android:accessibilityHeading="true"
+    android:paddingStart="@dimen/settings_gutter"
+    android:paddingTop="@dimen/settings_category_top"
+    android:paddingEnd="@dimen/settings_gutter"
+    android:paddingBottom="@dimen/settings_category_bottom"
+    android:textAppearance="?attr/textAppearanceTitleSmall"
+    android:textColor="?attr/colorPrimary" />

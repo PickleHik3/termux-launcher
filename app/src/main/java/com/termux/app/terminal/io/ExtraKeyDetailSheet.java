@@ -1,18 +1,14 @@
 package com.termux.app.terminal.io;
 
 import android.content.Context;
-import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextUtils;
 import android.text.TextWatcher;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -24,8 +20,13 @@ import androidx.core.widget.TextViewCompat;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.color.MaterialColors;
+import com.google.android.material.bottomsheet.BottomSheetDragHandleView;
+import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.shape.MaterialShapeDrawable;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.termux.R;
+import com.termux.app.material.M3;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import com.termux.shared.termux.font.NerdFontSpans;
 
@@ -54,7 +55,6 @@ public final class ExtraKeyDetailSheet {
 
     private final int colorText;
     private final int colorSubtle;
-    private final int colorOutline;
     private final int colorCap;
     private final int colorError;
 
@@ -72,22 +72,20 @@ public final class ExtraKeyDetailSheet {
         this.displayMap = displayMap;
         this.host = host;
         this.density = context.getResources().getDisplayMetrics().density;
-        this.colorText = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnSurface, Color.WHITE);
-        this.colorSubtle = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnSurfaceVariant, Color.LTGRAY);
-        this.colorOutline = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOutlineVariant, 0x33FFFFFF);
-        this.colorCap = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorSurfaceContainerHighest, 0xFF2A3140);
-        this.colorError = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorError, 0xFFF2B8B5);
+        this.colorText = M3.onSurface(context);
+        this.colorSubtle = M3.onSurfaceVariant(context);
+        this.colorCap = M3.color(context,
+            com.google.android.material.R.attr.colorSurfaceContainerHighest,
+            com.google.android.material.R.color.m3_sys_color_dark_surface_container_highest);
+        this.colorError = M3.error(context);
     }
 
     public void show() {
         dialog = new BottomSheetDialog(context);
         LinearLayout root = column();
-        root.setPadding(dp(20), dp(8), dp(20), dp(8));
+        root.setPadding(dp(20), 0, dp(20), dp(8));
+        root.addView(new BottomSheetDragHandleView(context), new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         root.addView(header());
 
@@ -112,7 +110,7 @@ public final class ExtraKeyDetailSheet {
     private View header() {
         LinearLayout header = row();
         header.setPadding(0, dp(8), 0, dp(12));
-        headerCap = cap(64, 44, 20f);
+        headerCap = cap(64, 44, 20);
         header.addView(headerCap);
 
         LinearLayout titles = column();
@@ -201,7 +199,7 @@ public final class ExtraKeyDetailSheet {
         LinearLayout actions = row();
         actions.setPadding(0, dp(12), 0, dp(8));
         MaterialButton remove = new MaterialButton(context, null,
-            com.google.android.material.R.attr.borderlessButtonStyle);
+            androidx.appcompat.R.attr.borderlessButtonStyle);
         remove.setText(R.string.settings_extra_keys_sheet_remove);
         remove.setTextColor(colorError);
         remove.setOnClickListener(v -> {
@@ -250,14 +248,14 @@ public final class ExtraKeyDetailSheet {
         LinearLayout fieldRow = row();
         fieldRow.setPadding(0, dp(4), 0, dp(4));
 
-        EditText field = new EditText(context);
+        TextInputLayout fieldLayout = new TextInputLayout(context);
+        fieldLayout.setHint(hint);
+        TextInputEditText field = new TextInputEditText(fieldLayout.getContext());
         field.setSingleLine(true);
         field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        field.setHint(hint);
         field.setContentDescription(label);
-        field.setTextColor(colorText);
-        field.setHintTextColor(colorSubtle);
-        field.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
+        fieldLayout.addView(field, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         if (target.display != null) field.setText(NerdFontSpans.span(context, target.display));
         field.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
@@ -269,9 +267,9 @@ public final class ExtraKeyDetailSheet {
                 changed(false);
             }
         });
-        field.setLayoutParams(new LinearLayout.LayoutParams(0,
+        fieldLayout.setLayoutParams(new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        fieldRow.addView(field);
+        fieldRow.addView(fieldLayout);
 
         MaterialButton glyphs = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle);
@@ -290,57 +288,54 @@ public final class ExtraKeyDetailSheet {
     /** A tappable value row with a trailing chevron, and an optional clear control before it. */
     private View selectorRow(@NonNull String value, @Nullable Runnable onClear,
                              @NonNull Runnable onClick) {
+        MaterialCardView card = M3.clickableCard(context, true);
+        card.setOnClickListener(v -> onClick.run());
         LinearLayout rowView = row();
         rowView.setMinimumHeight(dp(52));
-        rowView.setPadding(dp(14), dp(6), dp(8), dp(6));
-        GradientDrawable outline = new GradientDrawable();
-        outline.setColor(Color.TRANSPARENT);
-        outline.setStroke(Math.max(1, dp(1)), colorOutline);
-        outline.setCornerRadius(dp(14));
-        rowView.setBackground(outline);
-        rowView.setOnClickListener(v -> onClick.run());
+        rowView.setPaddingRelative(dp(14), dp(6), dp(8), dp(6));
+        card.addView(rowView);
 
         TextView valueView = new TextView(context);
         valueView.setText(value);
+        M3.textAppearance(valueView, com.google.android.material.R.attr.textAppearanceBodyLarge);
         valueView.setTextColor(colorText);
-        valueView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f);
         valueView.setMaxLines(2);
         valueView.setEllipsize(TextUtils.TruncateAt.END);
         rowView.addView(valueView, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
 
         if (onClear != null) {
-            ImageView clear = new ImageView(context);
-            clear.setImageResource(R.drawable.ic_symbol_close);
-            clear.setColorFilter(colorSubtle);
+            MaterialButton clear = new MaterialButton(context, null,
+                com.google.android.material.R.attr.materialIconButtonStyle);
+            clear.setIconResource(R.drawable.ic_symbol_close);
+            clear.setIconTint(android.content.res.ColorStateList.valueOf(colorSubtle));
             clear.setContentDescription(context.getString(
                 R.string.settings_extra_keys_sheet_clear_swipe_up));
-            clear.setPadding(dp(10), dp(10), dp(10), dp(10));
             clear.setOnClickListener(v -> onClear.run());
-            rowView.addView(clear, new LinearLayout.LayoutParams(dp(44), dp(44)));
+            rowView.addView(clear, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         }
 
         TextView chevron = new TextView(context);
         chevron.setText("›");
+        M3.textAppearance(chevron, com.google.android.material.R.attr.textAppearanceTitleLarge);
         chevron.setTextColor(colorSubtle);
-        chevron.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f);
         chevron.setPadding(dp(6), 0, dp(6), 0);
         rowView.addView(chevron);
-        return rowView;
+        return card;
     }
 
     private TextView sectionLabel(@NonNull String text) {
         TextView view = new TextView(context);
         view.setText(text);
-        view.setTextAppearance(
-            com.google.android.material.R.style.TextAppearance_Material3_LabelLarge);
+        M3.textAppearance(view, com.google.android.material.R.attr.textAppearanceLabelLarge);
         view.setTextColor(colorSubtle);
-        view.setPadding(dp(2), dp(14), 0, dp(6));
+        view.setPaddingRelative(dp(2), dp(14), 0, dp(6));
         return view;
     }
 
     /** A key cap drawn the way the list draws one, at the size the header wants. */
-    private TextView cap(int widthDp, int heightDp, float maxSp) {
+    private TextView cap(int widthDp, int heightDp, int maxSp) {
         TextView view = new TextView(context);
         view.setGravity(Gravity.CENTER);
         view.setTextColor(colorText);
@@ -348,10 +343,9 @@ public final class ExtraKeyDetailSheet {
         view.setEllipsize(TextUtils.TruncateAt.END);
         view.setPadding(dp(6), 0, dp(6), 0);
         TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(view, 10,
-            Math.round(maxSp), 1, TypedValue.COMPLEX_UNIT_SP);
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(colorCap);
-        background.setCornerRadius(dp(12));
+            maxSp, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+        MaterialShapeDrawable background = M3.surface(context,
+            com.google.android.material.R.attr.shapeAppearanceCornerMedium, colorCap);
         view.setBackground(background);
         view.setLayoutParams(new LinearLayout.LayoutParams(dp(widthDp), dp(heightDp)));
         return view;

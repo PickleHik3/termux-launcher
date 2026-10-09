@@ -149,10 +149,37 @@ public final class InputEventSender {
         mInjector.sendMouseWheelEvent(distanceX, distanceY);
     }
 
-    final boolean[] pointers = new boolean[10];
+    /**
+     * Ids whose TouchBegin the X server has seen and whose TouchEnd it has not. Android can drop
+     * a POINTER_UP or cancel a gesture with several fingers down, so this, not the event, says
+     * which touches the server still holds.
+     */
+    private static final int MAX_TOUCH_IDS = 32;
+    final boolean[] down = new boolean[MAX_TOUCH_IDS];
+
+    private void endTouch(int id, int x, int y) {
+        down[id] = false;
+        mInjector.sendTouchEvent(XI_TouchEnd, id, x, y);
+    }
+
+    /** Ends every touch still held on the X side, except those carried by {@code keep} (may be null). */
+    private void endStaleTouches(MotionEvent keep) {
+        for (int id = 0; id < MAX_TOUCH_IDS; id++) {
+            if (!down[id])
+                continue;
+            boolean present = false;
+            if (keep != null)
+                for (int p = 0; p < keep.getPointerCount() && !present; p++)
+                    present = keep.getPointerId(p) == id;
+            if (!present)
+                endTouch(id, 0, 0);
+        }
+    }
+
     /**
      * Extracts the touch point data from a MotionEvent, converts each point into a marshallable
      * object and passes the set of points to the JNI layer to be transmitted to the remote host.
+     * No X-side touch outlives the Android gesture: see UPSTREAM.md.
      *
      * @param event The event to send to the remote host for injection.  NOTE: This object must be
      *              updated to represent the remote machine's coordinate system before calling this
@@ -162,40 +189,54 @@ public final class InputEventSender {
         int action = event.getActionMasked();
 
         if (action == ACTION_MOVE || action == ACTION_HOVER_MOVE || action == ACTION_HOVER_ENTER || action == ACTION_HOVER_EXIT) {
-            // In order to process all of the events associated with an ACTION_MOVE event, we need
-            // to walk the list of historical events in order and add each event to our list, then
-            // retrieve the current move event data.
+            // Android sometimes drops ACTION_POINTER_UP, so end whatever the event no longer carries.
+            endStaleTouches(event);
+
             int pointerCount = event.getPointerCount();
-
-            for (int p = 0; p < pointerCount; p++)
-                pointers[event.getPointerId(p)] = false;
-
             for (int p = 0; p < pointerCount; p++) {
+                int id = event.getPointerId(p);
                 renderData.mapScreenPoint(event.getX(p), event.getY(p), mappedPoint);
                 int x = clamp((int) mappedPoint[0], 0, renderData.screenWidth);
                 int y = clamp((int) mappedPoint[1], 0, renderData.screenHeight);
-                pointers[event.getPointerId(p)] = true;
-                mInjector.sendTouchEvent(XI_TouchUpdate, event.getPointerId(p), x, y);
+                mInjector.sendTouchEvent(XI_TouchUpdate, id, x, y);
             }
-
-            // Sometimes Android does not send ACTION_POINTER_UP/ACTION_UP so some pointers are "stuck" in pressed state.
-            for (int p = 0; p < 10; p++) {
-                if (!pointers[p])
-                    mInjector.sendTouchEvent(XI_TouchEnd, p, 0, 0);
+        } else if (action == ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
+            // The gesture is over: every pointer in the event and every touch still held ends.
+            int pointerCount = event.getPointerCount();
+            for (int p = 0; p < pointerCount; p++) {
+                int id = event.getPointerId(p);
+                if (id < 0 || id >= MAX_TOUCH_IDS)
+                    continue;
+                renderData.mapScreenPoint(event.getX(p), event.getY(p), mappedPoint);
+                int x = clamp((int) mappedPoint[0], 0, renderData.screenWidth);
+                int y = clamp((int) mappedPoint[1], 0, renderData.screenHeight);
+                if (action == MotionEvent.ACTION_UP)
+                    mInjector.sendTouchEvent(XI_TouchUpdate, id, x, y);
+                endTouch(id, x, y);
             }
+            endStaleTouches(null);
         } else {
             // For all other events, we only want to grab the current/active pointer.  The event
             // contains a list of every active pointer but passing all of of these to the host can
             // cause confusion on the remote OS side and result in broken touch gestures.
             int activePointerIndex = event.getActionIndex();
             int id = event.getPointerId(activePointerIndex);
+            if (id < 0 || id >= MAX_TOUCH_IDS)
+                return;
+            boolean begin = action == MotionEvent.ACTION_DOWN || action == ACTION_POINTER_DOWN;
+            // A first finger means every earlier touch is stale (its up or cancel was lost).
+            if (action == MotionEvent.ACTION_DOWN)
+                endStaleTouches(null);
             renderData.mapScreenPoint(event.getX(activePointerIndex), event.getY(activePointerIndex), mappedPoint);
             int x =  clamp((int) mappedPoint[0], 0, renderData.screenWidth);
             int y =  clamp((int) mappedPoint[1], 0, renderData.screenHeight);
-            int a = (action == MotionEvent.ACTION_DOWN || action == ACTION_POINTER_DOWN) ? XI_TouchBegin : XI_TouchEnd;
-            if (a == XI_TouchEnd)
+            if (begin) {
+                down[id] = true;
+                mInjector.sendTouchEvent(XI_TouchBegin, id, x, y);
+            } else {
                 mInjector.sendTouchEvent(XI_TouchUpdate, id, x, y);
-            mInjector.sendTouchEvent(a, id, x, y);
+                endTouch(id, x, y);
+            }
         }
     }
 

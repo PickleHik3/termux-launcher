@@ -113,4 +113,77 @@ public class WallpaperBackdropViewTest {
         assertEquals(View.VISIBLE, backdrop.getVisibility());
         assertFalse(backdrop.isOpaque());
     }
+
+    /**
+     * A managed wallpaper's frame is wider than the screen by the parallax's whole travel and
+     * anchored at the screen's left edge, so it covers the view at every offset the pan reaches.
+     */
+    @Test
+    public void aWideParallaxFrameStillCoversTheViewAndFollowsTheOffset() {
+        Rect wide = new Rect(0, 0, PORTRAIT.width() * 3 / 2, PORTRAIT.height());
+        WallpaperParallax parallax = new WallpaperParallax();
+        backdrop.setParallax(parallax);
+        backdrop.showFrame(frame(wide), wide, DIM);
+        assertEquals(View.VISIBLE, backdrop.getVisibility());
+        assertTrue(backdrop.isOpaque());
+        assertTrue("an offset the pan can reach is accepted", parallax.setOffsetPx(50f));
+        assertFalse("and the same offset again is not a move", parallax.setOffsetPx(50f));
+        assertTrue(backdrop.isOpaque());
+    }
+
+    // ------------------------------------------------------------- crossfade
+
+    @Test
+    public void aCrossfadedSwapKeepsTheOldFrameAliveWhileItFades() {
+        Bitmap wallpaper = frame(PORTRAIT);
+        Bitmap replacement = frame(PORTRAIT);
+        backdrop.showFrame(wallpaper, PORTRAIT, DIM);
+
+        backdrop.showFrame(replacement, PORTRAIT, DIM, true);
+
+        assertSame("the target frame is up right away for the next obtain() to compare against",
+            replacement, backdrop.heldFrame());
+        assertSame("the previous frame is still held so the cache cannot recycle it mid-fade",
+            wallpaper, backdrop.fadingFrame());
+    }
+
+    @Test
+    public void aSwapWithoutCrossfadeNeverKeepsAPreviousFrame() {
+        Bitmap wallpaper = frame(PORTRAIT);
+        Bitmap replacement = frame(PORTRAIT);
+        backdrop.showFrame(wallpaper, PORTRAIT, DIM);
+
+        backdrop.showFrame(replacement, PORTRAIT, DIM, false);
+
+        assertSame(replacement, backdrop.heldFrame());
+        assertNull("a rotation or a radius change lands outright, nothing to fade from",
+            backdrop.fadingFrame());
+    }
+
+    @Test
+    public void aCrossfadeIsNeverOfferedAcrossAMovedFrameRect() {
+        Bitmap wallpaper = frame(PORTRAIT);
+        backdrop.showFrame(wallpaper, PORTRAIT, DIM);
+        layout(backdrop, LANDSCAPE.width(), LANDSCAPE.height());
+
+        backdrop.showFrame(frame(LANDSCAPE), LANDSCAPE, DIM, true);
+
+        assertNull("the pixels would land in the wrong place, so this still swaps outright",
+            backdrop.fadingFrame());
+    }
+
+    @Test
+    public void theFirstFrameEverShownNeverFadesFromAnything() {
+        backdrop.showFrame(frame(PORTRAIT), PORTRAIT, DIM, true);
+        assertNull(backdrop.fadingFrame());
+    }
+
+    @Test
+    public void destRectIsTheFrameRectMinusTheLaidOutOrigin() {
+        Rect dest = new Rect();
+        // The decor's rect reaches under the status bar; the view sits below it at (10, 30). The
+        // origin is the laid-out one, so a root the editor has scaled to 0.76 changes nothing.
+        WallpaperBackdropView.destFor(new Rect(0, 0, 100, 200), 10, 30, dest);
+        assertEquals(new Rect(-10, -30, 90, 170), dest);
+    }
 }

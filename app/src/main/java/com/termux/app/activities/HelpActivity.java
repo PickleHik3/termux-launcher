@@ -9,7 +9,6 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
-import android.widget.ProgressBar;
 import android.widget.RelativeLayout;
 import androidx.appcompat.app.AppCompatActivity;
 import com.termux.shared.termux.TermuxConstants;
@@ -27,7 +26,8 @@ public final class HelpActivity extends AppCompatActivity {
         final RelativeLayout progressLayout = new RelativeLayout(this);
         RelativeLayout.LayoutParams lParams = new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lParams.addRule(RelativeLayout.CENTER_IN_PARENT);
-        ProgressBar progressBar = new ProgressBar(this);
+        com.google.android.material.progressindicator.CircularProgressIndicator progressBar =
+            new com.google.android.material.progressindicator.CircularProgressIndicator(this);
         progressBar.setIndeterminate(true);
         progressBar.setLayoutParams(lParams);
         progressLayout.addView(progressBar);

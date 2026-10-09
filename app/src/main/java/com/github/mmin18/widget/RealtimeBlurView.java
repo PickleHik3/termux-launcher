@@ -310,14 +310,22 @@ public class RealtimeBlurView extends View {
         if (isVisible) mHasCapture = false;
     }
 
+    /** Scratch for the pre-draw hook, which runs on every frame of the window. */
+    private final int[] mLocations = new int[2];
+
     private final ViewTreeObserver.OnPreDrawListener mPreDrawListener = new ViewTreeObserver.OnPreDrawListener() {
         @Override
         public boolean onPreDraw() {
-            int[] locations = new int[2];
-            Bitmap oldBmp = BLUR_ON_GPU ? mBitmapToBlur : mBlurredBitmap;
             View decor = mDecorView;
             boolean stale = !mHasCapture || mDirty;
-            if (decor != null && (!mUpdatesPaused || stale) && isShown() && prepare()) {
+            // Every blur view hooks the window's pre-draw, hidden or not; a hidden one, or one
+            // resting on a capture that is still good, has nothing to do on this frame.
+            if (decor == null || (mUpdatesPaused && !stale) || getVisibility() != VISIBLE) {
+                return true;
+            }
+            int[] locations = mLocations;
+            Bitmap oldBmp = BLUR_ON_GPU ? mBitmapToBlur : mBlurredBitmap;
+            if (isShown() && prepare()) {
                 boolean redrawBitmap = (BLUR_ON_GPU ? mBitmapToBlur : mBlurredBitmap) != oldBmp;
 
                 decor.getLocationOnScreen(locations);

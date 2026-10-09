@@ -39,6 +39,8 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     int systemWallpaperId = 3;
     boolean managedSource;
     boolean blurHealthy = true;
+    /** Fancier Glass as the Activity would answer it; null is the default mode. */
+    @Nullable GlassRefraction.Look look;
     @NonNull ChromeSpec spec = new ChromeSpec(true, false, 0, true, true, false, true, 1f, 12);
 
     /**
@@ -81,6 +83,15 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     @Override
     public TermuxAppSharedPreferences preferences() {
         return null;
+    }
+
+    /** The legibility control as the preferences would answer it; Default unless a test moves it. */
+    @NonNull LegibilityLevel legibility = LegibilityLevel.DEFAULT;
+
+    @NonNull
+    @Override
+    public LegibilityLevel legibilityLevel() {
+        return legibility;
     }
 
     @Override
@@ -168,6 +179,12 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     @Override
     public void onCacheCleared() {
         cacheClearedCallbacks++;
+    }
+
+    @Nullable
+    @Override
+    public GlassRefraction.Look fancierGlassLook() {
+        return look;
     }
 
     @Override

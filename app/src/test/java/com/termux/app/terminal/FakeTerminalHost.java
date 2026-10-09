@@ -843,6 +843,10 @@ class FakeTerminalHost implements TerminalHost {
         record("openLookAndFeel");
     }
 
+    @Override public void openAppDrawer() {
+        record("openAppDrawer");
+    }
+
     @Override public void openAppsBar() {
         record("openAppsBar");
     }

@@ -141,6 +141,54 @@ public class ChromeRendererTest {
         assertEquals(1, surfaces.invariantsEnforced);
     }
 
+    /**
+     * A pre-draw gate applies against settled layout, which is the pass a pending accessory render
+     * was about to run after the draw — so it runs in that one's place and the posted one is gone.
+     * A page change with the keyboard opening paid for both (Pong, 2026-09-23).
+     */
+    @Test
+    public void aSettledApplyStandsInForThePendingRender() {
+        chrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        ChromeSpec gateSpec = new ChromeSpec(false, true, 0, true, true, false, true, 1f, 12);
+
+        chrome.applySettled(gateSpec);
+
+        assertEquals(1, surfaces.applied.size());
+        assertSame("the gate's own spec is what is applied", gateSpec, surfaces.applied.get(0));
+        assertEquals("it is the accessory render pass", 1, surfaces.invariantsEnforced);
+        assertFalse(chrome.isRenderSyncPending());
+        mainLooper().idle();
+        assertEquals("the posted pass was withdrawn", 1, surfaces.applied.size());
+    }
+
+    /** A settled apply that leaves a crop stale still earns the one follow-up a render pass does. */
+    @Test
+    public void aSettledApplyThatLeavesACropStaleBooksOneMore() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes =
+            ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_DOCK_BACKDROP;
+        surfaces.applyRequestsRemaining = 1;
+        chrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+
+        chrome.applySettled(surfaces.spec);
+        assertTrue(chrome.isRenderSyncPending());
+        mainLooper().idle();
+
+        assertEquals(2, surfaces.applied.size());
+        assertFalse(chrome.isRenderSyncPending());
+    }
+
+    /** With nothing pending a settled apply is the plain apply the gates always made. */
+    @Test
+    public void aSettledApplyWithNothingPendingIsAPlainApply() {
+        chrome.applySettled(surfaces.spec);
+
+        assertEquals(1, surfaces.applied.size());
+        assertEquals("not a render pass", 0, surfaces.invariantsEnforced);
+        mainLooper().idle();
+        assertEquals(1, surfaces.applied.size());
+    }
+
     @Test
     public void cancellingPendingWorkDropsTheBookedCommit() {
         chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
@@ -283,6 +331,25 @@ public class ChromeRendererTest {
         assertEquals(1, surfaces.applied.size());
     }
 
+    /**
+     * The surface that refills a radius a wallpaper change displaced crossfades into it; a
+     * rotation dropping the same radius never does.
+     */
+    @Test
+    public void onlyAWallpaperChangeTagsTheRadiusItRefillsForACrossfade() {
+        chrome.blurCache().obtain(0, wallpaperFrame);
+
+        chrome.onWallpaperChanged();
+        chrome.blurCache().obtain(0, wallpaperFrame);
+        assertTrue(chrome.blurCache().isCrossfadedRadius(0));
+
+        surfaces.orientation = Configuration.ORIENTATION_LANDSCAPE;
+        chrome.onConfigurationChanged();
+        chrome.blurCache().obtain(0, wallpaperFrame);
+        assertFalse("a rotation swaps outright, never fades",
+            chrome.blurCache().isCrossfadedRadius(0));
+    }
+
     @Test
     public void aMemoryTrimReleasesTheFramesAndMarksEverySurfaceDirty() {
         chrome.blurCache().obtain(0, wallpaperFrame);
@@ -362,5 +429,74 @@ public class ChromeRendererTest {
         chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
 
         assertEquals(1, surfaces.terminalGlassFrostUpdates);
+    }
+
+    /** Dispatches the root's pre-draw until a frame is let through, as a traversal would. */
+    private static void drawFirstFrame(View root) {
+        for (int i = 0; i < 3; i++) {
+            if (root.getViewTreeObserver().dispatchOnPreDraw()) return;
+        }
+    }
+
+    /**
+     * A cold start asked for the top-pane frost nine times before its first frame. The first runs
+     * at once (it asks for the blur frames), the rest fold into one pass in that frame's pre-draw.
+     */
+    @Test
+    public void topPaneFrostBeforeTheFirstFrameFoldsIntoOnePassAtItsPreDraw() {
+        View root = new View(RuntimeEnvironment.getApplication());
+        surfaces.views.put(com.termux.R.id.activity_termux_root_view, root);
+
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertEquals("the first pass runs at once", 1, surfaces.terminalGlassFrostUpdates);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST | ChromeRenderer.SCOPE_BACKDROPS);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertEquals("the rest wait for the first frame", 1, surfaces.terminalGlassFrostUpdates);
+        assertTrue(chrome.isFrostHeldForFirstFrame());
+
+        drawFirstFrame(root);
+
+        assertEquals("one pass for all of them", 2, surfaces.terminalGlassFrostUpdates);
+        assertFalse(chrome.isFrostHeldForFirstFrame());
+
+        // After the first frame every pass runs when it is asked for, as before.
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertEquals(3, surfaces.terminalGlassFrostUpdates);
+        assertFalse(chrome.isFrostHeldForFirstFrame());
+    }
+
+    /** The commit the first frame owes runs before the held frost, so the frost sees its result. */
+    @Test
+    public void theFirstFramesCommitRunsBeforeTheHeldFrost() {
+        View root = new View(RuntimeEnvironment.getApplication());
+        surfaces.views.put(com.termux.R.id.activity_termux_root_view, root);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertTrue(chrome.isCommitPending());
+
+        drawFirstFrame(root);
+
+        assertEquals(1, surfaces.applied.size());
+        assertFalse(chrome.isCommitPending());
+        assertEquals(2, surfaces.terminalGlassFrostUpdates);
+        // The plain post the detached root fell back to finds nothing left to do.
+        mainLooper().idle();
+        assertEquals(1, surfaces.applied.size());
+    }
+
+    /** A held pass is never lost: tearing the renderer down drops it, and nothing runs after. */
+    @Test
+    public void destroyingBeforeTheFirstFrameRunsNothingHeld() {
+        View root = new View(RuntimeEnvironment.getApplication());
+        surfaces.views.put(com.termux.R.id.activity_termux_root_view, root);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+
+        chrome.onDestroy();
+        root.getViewTreeObserver().dispatchOnPreDraw();
+
+        assertEquals(1, surfaces.terminalGlassFrostUpdates);
+        assertFalse(chrome.isFrostHeldForFirstFrame());
     }
 }

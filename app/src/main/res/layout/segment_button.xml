@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One text segment of a code-built MaterialButtonToggleGroup, carrying Widget.Termux.Button.Segment
+     (the checked icon). Inflated so the style applies; callers set id, text and weight. -->
+<com.google.android.material.button.MaterialButton
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.Termux.Button.Segment"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content" />

@@ -29,7 +29,7 @@ import java.util.Locale;
 public enum ExtraKeyColorRole {
 
     PRIMARY("primary",
-        com.google.android.material.R.attr.colorPrimary,
+        androidx.appcompat.R.attr.colorPrimary,
         com.google.android.material.R.attr.colorOnPrimary,
         0xFF4F6BED, 0xFFFFFFFF),
     SECONDARY("secondary",
@@ -41,7 +41,7 @@ public enum ExtraKeyColorRole {
         com.google.android.material.R.attr.colorOnTertiary,
         0xFF7A5375, 0xFFFFFFFF),
     ERROR("error",
-        com.google.android.material.R.attr.colorError,
+        androidx.appcompat.R.attr.colorError,
         com.google.android.material.R.attr.colorOnError,
         0xFFBA1A1A, 0xFFFFFFFF),
     PRIMARY_CONTAINER("primary_container",

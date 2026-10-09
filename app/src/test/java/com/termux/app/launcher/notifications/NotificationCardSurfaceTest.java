@@ -61,6 +61,8 @@ public class NotificationCardSurfaceTest {
     @Before
     public void setUp() {
         context = RuntimeEnvironment.getApplication();
+        // The cards are Material buttons now, which need a Material theme to inflate.
+        context.setTheme(com.termux.R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         host = new RecordingHost(context);
         listener = new RecordingListener();
         surface = new NotificationCardSurface(host, listener);

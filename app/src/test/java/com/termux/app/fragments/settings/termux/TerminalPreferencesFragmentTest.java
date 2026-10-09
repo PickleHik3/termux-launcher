@@ -25,7 +25,7 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
 /**
- * Phase 6: the Terminal page carries panes, lazy mode, full screen, system keyboard
+ * Phase 6: the Terminal page carries panes, full screen, system keyboard
  * compatibility, and Recents visibility — the terminal half of the old combined
  * "Terminal & status" page. The clock/status-widget half is {@link StatusBarPreferencesFragment}.
  */
@@ -54,13 +54,17 @@ public class TerminalPreferencesFragmentTest {
 
         assertTrue(screen.findPreference("fullscreen") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("terminal_margin_adjustment") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("show_in_recents_when_not_default") instanceof SwitchPreferenceCompat);
+        org.junit.Assert.assertNull("Recents moved to App behavior",
+            screen.findPreference("show_in_recents_when_not_default"));
         assertTrue(screen.findPreference("split_pane_controls") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("show_key_hints") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("pane_dwindle_default") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("pane_focus_grows") instanceof SwitchPreferenceCompat);
         assertTrue(screen.findPreference("pane_agent_api") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("lazy_mode") instanceof SwitchPreferenceCompat);
+
+        // Moved to the Appearance page.
+        org.junit.Assert.assertNull(screen.findPreference("lazy_mode"));
+        org.junit.Assert.assertNull(screen.findPreference("fancier_glass"));
 
         // Moved to the Status bar page: not reachable here any more.
         org.junit.Assert.assertNull(screen.findPreference("top_pane_clock_style"));

@@ -132,7 +132,7 @@ public class ExtraKeysEditorFragment extends Fragment {
         colorCap = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorSurfaceContainerHighest, 0xFF2A3140);
         colorError = MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorError, 0xFFF2B8B5);
+            androidx.appcompat.R.attr.colorError, 0xFFF2B8B5);
         loadDraft(context);
 
         LinearLayout root = column(context);
@@ -517,7 +517,7 @@ public class ExtraKeysEditorFragment extends Fragment {
         header.addView(title, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         MaterialButton addRow = new MaterialButton(context, null,
-            com.google.android.material.R.attr.borderlessButtonStyle);
+            androidx.appcompat.R.attr.borderlessButtonStyle);
         addRow.setText(R.string.settings_extra_keys_add_row);
         addRow.setIconResource(R.drawable.ic_symbol_add);
         addRow.setOnClickListener(v -> {

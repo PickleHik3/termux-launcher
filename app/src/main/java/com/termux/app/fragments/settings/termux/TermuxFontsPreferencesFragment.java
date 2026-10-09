@@ -6,7 +6,6 @@ import android.graphics.Typeface;
 import android.net.Uri;
 import android.os.Bundle;
 import android.widget.LinearLayout;
-import android.widget.SeekBar;
 import android.widget.TextView;
 
 import androidx.annotation.Keep;
@@ -18,6 +17,7 @@ import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
 
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
+import com.google.android.material.slider.Slider;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fonts.FontCatalog;
@@ -106,11 +106,22 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
 
     // ------------------------------------------------------------------ wiring
 
+    private static final String[] LIGATURE_VALUES = {FontInstaller.LIGATURES_NEVER,
+        FontInstaller.LIGATURES_CURSOR, FontInstaller.LIGATURES_ALWAYS};
+
     private void configureStaticRows(@NonNull Context context) {
-        Preference ligatures = findPreference("fonts_ligatures");
+        com.termux.app.fragments.settings.SegmentedPillPreference ligatures = findPreference("fonts_ligatures");
         if (ligatures != null) {
-            ligatures.setOnPreferenceClickListener(preference -> {
-                showLigatureDialog(context);
+            CharSequence[] labels = new CharSequence[LIGATURE_VALUES.length];
+            for (int i = 0; i < LIGATURE_VALUES.length; i++) labels[i] = ligatureLabel(LIGATURE_VALUES[i]);
+            ligatures.setSegments(LIGATURE_VALUES, labels);
+            // Not preference-store-backed (app:persistent="false"): the value lives on the active
+            // font family's own options, so the listener applies it there instead of relying on
+            // the pill's own persistString, which is a no-op for a non-persistent preference.
+            ligatures.setOnPreferenceChangeListener((preference, value) -> {
+                FontCatalog.Family active = activeFamily(context);
+                if (active == null) return false;
+                reapply(context, active, options(context, active).withLigatures(String.valueOf(value)));
                 return true;
             });
         }
@@ -178,12 +189,13 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
 
         FontInstaller.Options options = active == null
             ? null : new FontSettings(context).getOptions(active);
-        Preference ligatures = findPreference("fonts_ligatures");
+        com.termux.app.fragments.settings.SegmentedPillPreference ligatures = findPreference("fonts_ligatures");
         if (ligatures != null) {
             ligatures.setEnabled(tunable);
+            ligatures.setValue(options == null ? FontInstaller.LIGATURES_NEVER : options.ligatures);
             ligatures.setSummary(options == null
                 ? getString(R.string.termux_fonts_ligatures_none_summary)
-                : ligatureLabel(options.ligatures));
+                : null);
         }
         Preference weight = findPreference("fonts_weight");
         if (weight != null) {
@@ -423,28 +435,6 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
         builder.show();
     }
 
-    private void showLigatureDialog(@NonNull Context context) {
-        FontCatalog.Family active = activeFamily(context);
-        if (active == null) return;
-        String[] values = {FontInstaller.LIGATURES_NEVER, FontInstaller.LIGATURES_CURSOR,
-            FontInstaller.LIGATURES_ALWAYS};
-        CharSequence[] labels = new CharSequence[values.length];
-        FontInstaller.Options options = options(context, active);
-        int checked = 0;
-        for (int i = 0; i < values.length; i++) {
-            labels[i] = ligatureLabel(values[i]);
-            if (values[i].equals(options.ligatures)) checked = i;
-        }
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(R.string.termux_fonts_ligatures_title)
-            .setSingleChoiceItems(labels, checked, (dialog, which) -> {
-                reapply(context, active, options(context, active).withLigatures(values[which]));
-                dialog.dismiss();
-            })
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
     private void showWeightDialog(@NonNull Context context) {
         FontCatalog.Family active = activeFamily(context);
         if (active == null || active.weightAxis == null) return;
@@ -452,29 +442,24 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
         FontInstaller.Options options = options(context, active);
         int current = options.weight > 0 ? axis.clamp(options.weight) : axis.regularWeight;
 
-        int padding = Math.round(24 * context.getResources().getDisplayMetrics().density);
+        int padding = Math.round(16 * context.getResources().getDisplayMetrics().density);
         LinearLayout layout = new LinearLayout(context);
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(padding, padding / 2, padding, 0);
         TextView label = new TextView(context);
         label.setText(String.valueOf(current));
-        SeekBar seekBar = new SeekBar(context);
-        seekBar.setMax(axis.max - axis.min);
-        seekBar.setProgress(current - axis.min);
+        Slider slider = new Slider(context);
+        slider.setValueFrom(axis.min);
+        slider.setValueTo(Math.max(axis.max, axis.min + 1));
+        slider.setStepSize(1f);
+        slider.setValue(Math.max(axis.min, Math.min(axis.max, current)));
         final int[] picked = {current};
-        seekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
-                picked[0] = axis.clamp(axis.min + value);
-                label.setText(String.valueOf(picked[0]));
-            }
-
-            @Override public void onStartTrackingTouch(SeekBar bar) {}
-
-            @Override public void onStopTrackingTouch(SeekBar bar) {}
+        slider.addOnChangeListener((changed, value, fromUser) -> {
+            picked[0] = axis.clamp(Math.round(value));
+            label.setText(String.valueOf(picked[0]));
         });
         layout.addView(label);
-        layout.addView(seekBar);
+        layout.addView(slider);
 
         new MaterialAlertDialogBuilder(context)
             .setTitle(getString(R.string.termux_fonts_weight_dialog_title, axis.min, axis.max))

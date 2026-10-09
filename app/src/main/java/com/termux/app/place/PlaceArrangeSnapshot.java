@@ -2,36 +2,44 @@ package com.termux.app.place;
 
 import androidx.annotation.NonNull;
 
-import com.termux.app.wall.PaneWallPage;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Every place's arrangement, in both orientations, as one immutable value: what the surface editor
- * took a copy of on entry, what its revert puts back, and — folded to a string — how it knows a bar
- * has been moved since. The three sizes ride along, so a dragged dock, keyboard or chin is exactly
- * as unsaved as a moved bar.
+ * One variant's arrangement (the normal layout, or the one minimal mode stands in), in both
+ * orientations, as one immutable value: what the Layout editor took
+ * a copy of on entry, what its revert puts back, and — folded to a string — how it knows a bar has
+ * been moved since. The three sizes ride along, so a dragged dock, keyboard or chin is exactly as
+ * unsaved as a moved bar, and so does the keyboard element's on/off switch.
  *
  * <p>Read and written through {@link PlaceLayoutStore}'s own accessors rather than the raw keys, so
- * a restore writes the value the place was resolving to whether or not it had a scoped key of its
- * own. That materialises a key the shared layer was answering for, at the value it was answering
- * with: the same arrangement, spelled out.
+ * a restore writes the value the layout was resolving to whether or not it had a key of its own.
+ * That materialises a key the global value was answering for, at the value it was answering with:
+ * the same arrangement, spelled out.
+ *
+ * <p>A snapshot remembers its variant and restores onto it, whatever the store is on by then, so a
+ * Discard puts back the layout that was being edited and never the other one.
  *
  * <p>Pure: a store in, a value out, no views, so revert and dirtiness are testable without a window.
  */
 public final class PlaceArrangeSnapshot {
 
-    /** One place and orientation's arrangement, exactly as the store answers for it. */
+    /** One orientation's arrangement, exactly as the store answers for it. */
     private static final class Entry {
-        final PaneWallPage place;
         final PlaceOrientation orientation;
-        final PlaceLayout.Edge statusBarEdge;
-        final PlaceLayout.RowPlacement appsRow;
-        final boolean azRowShown;
-        final PlaceLayout.Edge azBarEdge;
-        final PlaceLayout.RowPlacement extraKeys;
+        /**
+         * Every element's slot — edge, order, hidden, under the keyboard — by
+         * {@link Element#ordinal()}, read and written whole through {@link PlaceLayoutStore#slot}
+         * and {@link PlaceLayoutStore#setSlot}.
+         *
+         * <p>It used to be spelled field by field, with the pinned apps and the extra keys read
+         * as the old three-way {@code RowPlacement}. That spelling has no top row, so a bar on the
+         * top edge was captured as the bottom: Undo and Discard put it back on the wrong edge, and
+         * the signature could not tell a move between the two apart. The slot is the whole truth
+         * about where an element stands, so it is what is kept.
+         */
+        final Slot[] slots;
         final PlaceLayout.KeyboardMode keyboardMode;
         final PlaceLayout.KeyboardForm keyboardForm;
         final int widgetColumns;
@@ -39,107 +47,95 @@ public final class PlaceArrangeSnapshot {
         final float dockHeightScale;
         final float keyboardHeightScale;
         final int keyboardChinDp;
-        /** Each element's position in its edge's stack, by {@link Element#ordinal()}. */
-        final int[] slotOrders;
 
-        Entry(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
-              @NonNull PlaceOrientation orientation) {
-            this.place = place;
+        Entry(@NonNull PlaceLayoutStore places, @NonNull PlaceOrientation orientation) {
             this.orientation = orientation;
-            statusBarEdge = places.statusBarEdge(place, orientation);
-            appsRow = places.appsRow(place, orientation);
-            azRowShown = places.azRowShown(place, orientation);
-            azBarEdge = places.azBarEdge(place, orientation);
-            extraKeys = places.extraKeys(place, orientation);
-            keyboardMode = places.keyboardMode(place, orientation);
-            keyboardForm = places.keyboardForm(place, orientation);
-            widgetColumns = places.widgetColumns(place, orientation);
-            widgetRows = places.widgetRows(place, orientation);
-            dockHeightScale = places.dockHeightScale(place, orientation);
-            keyboardHeightScale = places.keyboardHeightScale(place, orientation);
-            keyboardChinDp = places.keyboardChinDp(place, orientation);
-            slotOrders = new int[Element.values().length];
+            slots = new Slot[Element.values().length];
             for (Element element : Element.values())
-                slotOrders[element.ordinal()] = places.slotOrder(place, orientation, element);
+                slots[element.ordinal()] = places.slot(orientation, element);
+            keyboardMode = places.keyboardMode(orientation);
+            keyboardForm = places.keyboardForm(orientation);
+            widgetColumns = places.widgetColumns(orientation);
+            widgetRows = places.widgetRows(orientation);
+            dockHeightScale = places.dockHeightScale(orientation);
+            keyboardHeightScale = places.keyboardHeightScale(orientation);
+            keyboardChinDp = places.keyboardChinDp(orientation);
         }
 
         void restore(@NonNull PlaceLayoutStore places) {
-            places.setStatusBarEdge(place, orientation, statusBarEdge);
-            places.setAppsRow(place, orientation, appsRow);
-            places.setAzRowShown(place, orientation, azRowShown);
-            places.setAzBarEdge(place, orientation, azBarEdge);
-            places.setExtraKeys(place, orientation, extraKeys);
-            places.setKeyboardMode(place, orientation, keyboardMode);
-            places.setKeyboardForm(place, orientation, keyboardForm);
-            places.setWidgetColumns(place, orientation, widgetColumns);
-            places.setWidgetRows(place, orientation, widgetRows);
-            places.setDockHeightScale(place, orientation, dockHeightScale);
-            places.setKeyboardHeightScale(place, orientation, keyboardHeightScale);
-            places.setKeyboardChinDp(place, orientation, keyboardChinDp);
             for (Element element : Element.values())
-                places.setSlotOrder(place, orientation, element, slotOrders[element.ordinal()]);
+                places.setSlot(orientation, element, slots[element.ordinal()]);
+            places.setKeyboardMode(orientation, keyboardMode);
+            places.setKeyboardForm(orientation, keyboardForm);
+            places.setWidgetColumns(orientation, widgetColumns);
+            places.setWidgetRows(orientation, widgetRows);
+            places.setDockHeightScale(orientation, dockHeightScale);
+            places.setKeyboardHeightScale(orientation, keyboardHeightScale);
+            places.setKeyboardChinDp(orientation, keyboardChinDp);
         }
 
         void appendTo(@NonNull StringBuilder out) {
-            out.append(place.name()).append('.').append(orientation.storageValue()).append(':')
-                .append(statusBarEdge).append(',')
-                .append(appsRow).append(',')
-                .append(azRowShown).append(',')
-                .append(azBarEdge).append(',')
-                .append(extraKeys).append(',')
-                .append(keyboardMode).append(',')
+            out.append(orientation.storageValue()).append(':');
+            for (Slot slot : slots) out.append(slot).append(',');
+            out.append(keyboardMode).append(',')
                 .append(keyboardForm).append(',')
                 .append(widgetColumns).append('x').append(widgetRows).append(',')
                 .append(dockHeightScale).append(',')
                 .append(keyboardHeightScale).append(',')
-                .append(keyboardChinDp).append(',');
-            for (int order : slotOrders) out.append(order).append(';');
+                .append(keyboardChinDp);
             out.append('|');
         }
     }
 
+    @NonNull private final LayoutVariant mVariant;
     @NonNull private final List<Entry> mEntries;
-    /** What each place remembers once, rather than per orientation: how it wants its keyboard. */
-    @NonNull private final List<PaneWallPage> mPlaces;
-    @NonNull private final List<KeyboardOnEnter> mKeyboardOnEnter;
+    /** The keyboard element, on or off: one switch for both orientations, captured once. */
+    private final boolean mKeyboardShown;
 
-    private PlaceArrangeSnapshot(@NonNull List<Entry> entries, @NonNull List<PaneWallPage> places,
-                                 @NonNull List<KeyboardOnEnter> keyboardOnEnter) {
+    private PlaceArrangeSnapshot(@NonNull LayoutVariant variant, @NonNull List<Entry> entries,
+                                 boolean keyboardShown) {
+        mVariant = variant;
         mEntries = Collections.unmodifiableList(entries);
-        mPlaces = Collections.unmodifiableList(places);
-        mKeyboardOnEnter = Collections.unmodifiableList(keyboardOnEnter);
+        mKeyboardShown = keyboardShown;
     }
 
-    /** Every place, both orientations: a rotation mid-edit moves which one the editor writes. */
+    /** The layout the store is on, in both orientations. */
     @NonNull
     public static PlaceArrangeSnapshot capture(@NonNull PlaceLayoutStore places) {
-        List<Entry> entries = new ArrayList<>();
-        List<PaneWallPage> pages = new ArrayList<>();
-        List<KeyboardOnEnter> onEnter = new ArrayList<>();
-        for (PaneWallPage place : PaneWallPage.values()) {
-            pages.add(place);
-            onEnter.add(places.keyboardOnEnter(place));
-            for (PlaceOrientation orientation : PlaceOrientation.values())
-                entries.add(new Entry(places, place, orientation));
-        }
-        return new PlaceArrangeSnapshot(entries, pages, onEnter);
+        return capture(places, places.activeVariant());
     }
 
-    /** Puts every place's arrangement back the way {@link #capture} found it. */
+    /** Both orientations of one variant: a rotation mid-edit moves which one the editor writes. */
+    @NonNull
+    public static PlaceArrangeSnapshot capture(@NonNull PlaceLayoutStore places,
+                                               @NonNull LayoutVariant variant) {
+        PlaceLayoutStore layout = places.forVariant(variant);
+        List<Entry> entries = new ArrayList<>();
+        for (PlaceOrientation orientation : PlaceOrientation.values())
+            entries.add(new Entry(layout, orientation));
+        return new PlaceArrangeSnapshot(variant, entries, places.isKeyboardShown());
+    }
+
+    /** The variant this snapshot was taken of, and restores onto. */
+    @NonNull
+    public LayoutVariant variant() {
+        return mVariant;
+    }
+
+    /** Puts the arrangement back the way {@link #capture} found it. */
     public void restore(@NonNull PlaceLayoutStore places) {
-        for (Entry entry : mEntries) entry.restore(places);
-        for (int i = 0; i < mPlaces.size(); i++)
-            places.setKeyboardOnEnter(mPlaces.get(i), mKeyboardOnEnter.get(i));
+        PlaceLayoutStore layout = places.forVariant(mVariant);
+        for (Entry entry : mEntries) entry.restore(layout);
+        places.setKeyboardShown(mKeyboardShown);
     }
 
     /** The whole arrangement as one string, for the editor's unsaved-changes comparison. */
     @NonNull
     public String signature() {
-        StringBuilder out = new StringBuilder(256);
+        StringBuilder out = new StringBuilder(128);
+        out.append(mVariant).append('/');
         for (Entry entry : mEntries) entry.appendTo(out);
-        for (int i = 0; i < mPlaces.size(); i++)
-            out.append(mPlaces.get(i).name()).append('=')
-                .append(mKeyboardOnEnter.get(i).storageValue()).append('|');
+        out.append("keyboard:").append(mKeyboardShown);
         return out.toString();
     }
 }

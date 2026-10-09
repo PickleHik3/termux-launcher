@@ -679,6 +679,40 @@ public class MaterialTerminalColorSchemeTest {
         return palette;
     }
 
+    private static double meanAccentChroma(Properties p) {
+        double sum = 0d;
+        for (int slot = 1; slot <= 6; slot++) sum += Hct.fromInt(color(p, "color" + slot)).getChroma();
+        return sum / 6d;
+    }
+
+    /** Softer is pastel, Harder punchier: the recipe's chroma band orders the accent slots. */
+    @Test
+    public void accentChromaOrdersSofterDefaultHarder() {
+        Properties softer = MaterialTerminalColorScheme.ansiSlots(220d, 40d, 25d, 260d, 4d, true,
+            TerminalContrastLevel.SOFTER);
+        Properties dflt = MaterialTerminalColorScheme.ansiSlots(220d, 40d, 25d, 260d, 4d, true,
+            TerminalContrastLevel.DEFAULT);
+        Properties harder = MaterialTerminalColorScheme.ansiSlots(220d, 40d, 25d, 260d, 4d, true,
+            TerminalContrastLevel.HARDER);
+        assertTrue(meanAccentChroma(softer) < meanAccentChroma(dflt));
+        assertTrue(meanAccentChroma(dflt) < meanAccentChroma(harder));
+    }
+
+    /** The background tone is the recipe's: Harder is not darker than tone 6 in the dark. */
+    @Test
+    public void surfaceToneFollowsTheRecipe() {
+        int dark = Hct.from(260d, 4d, 10d).toInt();
+        int light = Hct.from(260d, 4d, 90d).toInt();
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+            assertEquals(level.bgToneDark,
+                Hct.fromInt(MaterialTerminalColorScheme.surfaceTone(dark, level)).getTone(), 1.0d);
+            assertEquals(level.bgToneLight,
+                Hct.fromInt(MaterialTerminalColorScheme.surfaceTone(light, level)).getTone(), 1.0d);
+        }
+        assertTrue(Hct.fromInt(MaterialTerminalColorScheme.surfaceTone(dark,
+            TerminalContrastLevel.HARDER)).getTone() >= 5.0d);
+    }
+
     private static int color(Properties properties, String key) {
         return Color.parseColor(properties.getProperty(key));
     }

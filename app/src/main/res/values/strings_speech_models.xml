@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Speech model names and warnings shared by the Model centre and the Keyboard's speech model
+     picker. The rest of their strings live in strings.xml. -->
+<resources>
+    <string name="speech_model_engine_whisper">Whisper</string>
+    <string name="speech_model_engine_parakeet_ram_warning">This phone has %1$s of RAM: Parakeet may fail to load, or push other apps out of memory.</string>
+</resources>

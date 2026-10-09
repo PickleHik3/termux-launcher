@@ -6,17 +6,16 @@ import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
 import androidx.preference.PreferenceGroup;
 import androidx.preference.PreferenceScreen;
-import androidx.preference.SeekBarPreference;
 import androidx.preference.SwitchPreferenceCompat;
 import androidx.preference.TwoStatePreference;
 
 import com.termux.R;
 import com.termux.app.fragments.settings.termux.CategorySortProgressPreference;
-import com.termux.app.fragments.settings.termux.TaiCatalogControlsPreference;
+import com.termux.app.fragments.settings.termux.SpeechModelCardPreference;
 import com.termux.app.fragments.settings.termux.TaiCatalogFilterPreference;
+import com.termux.app.fragments.settings.termux.TaiModelCentreRowPreference;
 import com.termux.app.fragments.settings.termux.TaiModelPreference;
 import com.termux.app.fragments.settings.termux.TaiOverridesPreference;
-import com.termux.app.fragments.settings.termux.TaiRuntimeActionsPreference;
 
 import java.util.Collections;
 import java.util.Set;
@@ -70,20 +69,16 @@ public final class SettingsLayoutUtils {
 
         // Preferences that fully own their layout.
         if (preference instanceof SegmentedPillPreference
+            || preference instanceof SliderPreference
             || preference instanceof CategorySortProgressPreference
             || preference instanceof StatusActionPreference
             || preference instanceof SettingsSearchPreference
             || preference instanceof StatusCardPreference
-            || preference instanceof TaiRuntimeActionsPreference
             || preference instanceof TaiOverridesPreference
             || preference instanceof TaiCatalogFilterPreference
-            || preference instanceof TaiCatalogControlsPreference
+            || preference instanceof TaiModelCentreRowPreference
+            || preference instanceof SpeechModelCardPreference
             || preference instanceof TaiModelPreference) {
-            return;
-        }
-
-        if (preference instanceof SeekBarPreference) {
-            preference.setLayoutResource(R.layout.preference_settings_seekbar);
             return;
         }
 
@@ -136,5 +131,7 @@ public final class SettingsLayoutUtils {
      * navigation, so these keep a bare row.
      */
     private static final Set<String> ACTION_ROW_KEYS = new java.util.HashSet<>(java.util.Arrays.asList(
-        "app_launcher_category_refresh", "gui_apps_copy"));
+        "app_launcher_category_refresh", "gui_apps_copy",
+        "tai_welcome_card", "tai_huggingface_token", "tai_endpoint_copy", "tai_share_diagnostics",
+        "tai_runtime_stop", "tai_runtime_unload", "tai_runtime_logs"));
 }

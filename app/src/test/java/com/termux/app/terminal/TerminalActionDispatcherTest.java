@@ -40,6 +40,7 @@ public class TerminalActionDispatcherTest {
     public void detach() {
         if (attachedHost != null) dispatcher.detach(attachedHost);
         attachedHost = null;
+        KeyboardHoldTracker.getInstance().clear();
     }
 
     private FakeTerminalHost attachedHost;
@@ -58,7 +59,7 @@ public class TerminalActionDispatcherTest {
             "clipboard.paste", "window.select", "window.rename", "session.rename",
             "session.rename_at_index", "terminal.reset",
             "appearance.set_wallpaper", "appearance.toggle_wallpaper", "appearance.surface_editor", "appearance.glass_lab",
-            "app.command_palette", "app.open_drawer", "app.close_drawer", "terminal.action_sheet",
+            "app.command_palette", "app.open_drawer", "app.open_app_drawer", "app.close_drawer", "terminal.action_sheet",
             "session.activate_by_index", "window.rename_prompt", "session.rename_prompt",
             "terminal.share_selected", "clipboard.copy_selected",
             "app.open_settings", "app.open_look_and_feel", "app.open_apps_bar",
@@ -67,6 +68,7 @@ public class TerminalActionDispatcherTest {
             "pane.next_layout", "pane.toggle_float",
             "keyboard.cycle_layout", "keyboard.select_layout",
             "keyboard.cycle_form", "keyboard.set_form", "keyboard.show", "keyboard.hide",
+            "keyboard.clipboard", "keyboard.toggle_enabled", "voice.dictate",
             "pane.open", "pane.list", "pane.focus", "pane.close", "pane.write", "pane.read", "pane.split"};
         for (String name : handled) {
             assertTrue(name, TerminalActionDispatcher.handles(name));
@@ -107,14 +109,15 @@ public class TerminalActionDispatcherTest {
             "terminal.font_size_decrease", "terminal.select_url", "terminal.share_transcript",
             "clipboard.paste", "window.select", "window.rename", "session.rename", "terminal.reset",
             "appearance.set_wallpaper", "appearance.toggle_wallpaper", "appearance.surface_editor", "appearance.glass_lab",
-            "app.command_palette", "app.open_drawer", "app.close_drawer", "terminal.action_sheet",
+            "app.command_palette", "app.open_drawer", "app.open_app_drawer", "app.close_drawer", "terminal.action_sheet",
             "session.activate_by_index", "window.rename_prompt", "session.rename_prompt",
             "terminal.share_selected", "clipboard.copy_selected",
             "app.open_settings", "app.open_look_and_feel", "app.open_apps_bar",
             "workspace.save", "workspace.load", "workspace.list", "workspace.delete",
             "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge",
             "pane.next_layout", "pane.toggle_float",
-            "keyboard.cycle_form", "keyboard.set_form", "keyboard.show", "keyboard.hide"};
+            "keyboard.cycle_form", "keyboard.set_form", "keyboard.show", "keyboard.hide",
+            "keyboard.clipboard", "keyboard.toggle_enabled", "voice.dictate"};
         for (String name : tools) {
             JSONObject result = dispatcher.execute(name, new JSONObject());
             assertFalse(name, result.getBoolean("ok"));
@@ -226,6 +229,68 @@ public class TerminalActionDispatcherTest {
         assertFalse(hidden.getBoolean("keyboardShown"));
         assertFalse(host.inAppKeyboardShown);
         assertTrue(host.calls.contains("hideInAppKeyboard:focus"));
+    }
+
+    @Test
+    public void hideWithHoldRecordsTheCallingSessionAndShowAlwaysReleasesIt() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+        TerminalSession session = session();
+        host.currentSession = session;
+
+        JSONObject hidden = dispatcher.execute("keyboard.hide", new JSONObject().put("hold", true));
+        assertTrue(hidden.getBoolean("ok"));
+        assertTrue(hidden.getBoolean("held"));
+        assertTrue(KeyboardHoldTracker.getInstance().isHeldBy(session.mHandle));
+
+        JSONObject shown = dispatcher.execute("keyboard.show", new JSONObject());
+        assertTrue(shown.getBoolean("ok"));
+        assertFalse("show always releases a hold, whoever calls it", shown.getBoolean("held"));
+        assertFalse(KeyboardHoldTracker.getInstance().isHeld());
+    }
+
+    @Test
+    public void aPlainHideWithoutHoldRecordsNoHold() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+        host.currentSession = session();
+
+        JSONObject hidden = dispatcher.execute("keyboard.hide", new JSONObject());
+
+        assertTrue(hidden.getBoolean("ok"));
+        assertFalse(hidden.getBoolean("held"));
+        assertFalse(KeyboardHoldTracker.getInstance().isHeld());
+    }
+
+    @Test
+    public void aSessionThatWasHoldingTheKeyboardDownShowsItAgainWhenItFinishes() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+        TerminalSession session = session();
+        host.currentSession = session;
+        dispatcher.execute("keyboard.hide", new JSONObject().put("hold", true));
+        assertFalse(host.inAppKeyboardShown);
+
+        dispatcher.onSessionFinished(session);
+
+        assertTrue("nobody else was ever going to show it again", host.inAppKeyboardShown);
+        assertTrue(host.calls.contains("showInAppKeyboard:focus"));
+        assertFalse(KeyboardHoldTracker.getInstance().isHeld());
+    }
+
+    @Test
+    public void anUnrelatedSessionFinishingLeavesAnotherSessionsHoldAlone() throws Exception {
+        FakeTerminalHost host = attach();
+        host.inAppKeyboardEnabled = true;
+        TerminalSession holder = session();
+        host.currentSession = holder;
+        dispatcher.execute("keyboard.hide", new JSONObject().put("hold", true));
+
+        dispatcher.onSessionFinished(session());
+
+        assertFalse("only the holding session's own end restores the keyboard",
+            host.inAppKeyboardShown);
+        assertTrue(KeyboardHoldTracker.getInstance().isHeldBy(holder.mHandle));
     }
 
     /**
@@ -437,6 +502,7 @@ public class TerminalActionDispatcherTest {
             {"app.open_settings", "openSettings"},
             {"app.open_look_and_feel", "openLookAndFeel"},
             {"app.open_apps_bar", "openAppsBar"},
+            {"app.open_app_drawer", "openAppDrawer"},
             {"app.command_palette", "showCommandPalette"},
             // The retired sessions drawer's own binding, kept pointed at its replacement.
             {"app.open_drawer", "showSessionBrowser"},

@@ -131,6 +131,13 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
 
     private static final String LOG_TAG = "TermuxService";
 
+    /**
+     * Marks the styling broadcast sent for the first shell, so the activity can tell it from a
+     * reload asked for by Settings, launcherctl or Termux:Styling and skip it when nothing it
+     * styled from can have changed.
+     */
+    static final String EXTRA_FIRST_SESSION_RESTYLE = "first_session_restyle";
+
     @Override
     public void onCreate() {
         Logger.logVerbose(LOG_TAG, "onCreate");
@@ -702,8 +709,16 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         // screen: its pane view is configured by the pane host and its emulator takes the current
         // colour scheme. Broadcasting for those re-inflated the extra keys, the keyboard and the
         // accessory chrome (~300 ms of main thread) right under the split's reveal animation.
-        // No need to recreate the activity since it likely just started and theme should already have applied
-        if (firstSession) TermuxActivity.updateTermuxActivityStyling(this, false);
+        // No need to recreate the activity since it likely just started and theme should already have applied.
+        // Marked, so an activity that styled itself moments ago and has installed nothing since
+        // (every cold start: it is the activity that asked for this shell) does not restyle again.
+        if (firstSession) {
+            Intent stylingIntent = new Intent(TERMUX_ACTIVITY.ACTION_RELOAD_STYLE);
+            stylingIntent.putExtra(TERMUX_ACTIVITY.EXTRA_RECREATE_ACTIVITY, false);
+            stylingIntent.putExtra(EXTRA_FIRST_SESSION_RESTYLE, true);
+            stylingIntent.setPackage(getPackageName());
+            sendBroadcast(stylingIntent);
+        }
         return newTermuxSession;
     }
 

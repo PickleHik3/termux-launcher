@@ -81,6 +81,7 @@ public final class AboutSupportPreferencesFragment extends MaterialPreferenceFra
         click("open_source_licenses", preference -> {
             new Thread(() -> {
                 StringBuilder text = new StringBuilder(readRaw(context, R.raw.third_party_notices));
+                append(text, "Additional third-party license notices", readRaw(context, R.raw.third_party_licenses));
                 append(text, "GNU General Public License v3", readRaw(context, R.raw.license_gpl_3));
                 append(text, "Apache License 2.0", readRaw(context, R.raw.license_apache_2));
                 append(text, "MIT License", readRaw(context, R.raw.license_mit));

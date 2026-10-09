@@ -15,6 +15,8 @@
     <attr name="termuxColorOnAccentContainer" format="color" />
     <attr name="termuxColorPrimaryContainer" format="color" />
     <attr name="termuxColorOnPrimaryContainer" format="color" />
+    <attr name="termuxColorTertiary" format="color" />
+    <attr name="termuxColorOnTertiary" format="color" />
     <attr name="termuxColorTertiaryContainer" format="color" />
     <attr name="termuxColorOnTertiaryContainer" format="color" />
     <attr name="termuxColorError" format="color" />
@@ -22,6 +24,8 @@
     <attr name="termuxColorOnErrorContainer" format="color" />
     <attr name="termuxColorScrollbar" format="color" />
 
+    <!-- Material 1.14 declares ExtraSmall..ExtraLarge but not Full, so the token is declared here. -->
+    <attr name="shapeAppearanceCornerFull" format="reference" />
     <attr name="extraKeysButtonTextColor" format="reference" />
     <attr name="extraKeysButtonActiveTextColor" format="reference" />
     <attr name="extraKeysButtonBackgroundColor" format="reference" />

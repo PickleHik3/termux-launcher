@@ -53,10 +53,12 @@ public final class TourFingerPainter {
         TourGlowGeometry.clampPoint(scratchPoint, cueBounds);
         float radius = RADIUS_DP * density;
         int opaque = opaque(accent);
-        if (gesture == TourGesture.HOLD) {
+        if (gesture == TourGesture.HOLD || gesture == TourGesture.HOLD_DRAG) {
             // A press that stays down: the halo closes onto the finger and holds there, where a
             // tap's ring would already have expanded away. It is what tells the two apart.
-            float press = TourFingerTrace.holdPress(progress);
+            float press = gesture == TourGesture.HOLD_DRAG
+                ? Math.min(1f, TourFingerTrace.holdPress(Math.min(progress, 0.5f)))
+                : TourFingerTrace.holdPress(progress);
             paint.setStyle(Paint.Style.FILL);
             paint.setColor(ColorUtils.setAlphaComponent(opaque, Math.round(38f * press)));
             canvas.drawCircle(scratchPoint[0], scratchPoint[1], radius * (1f + (0.9f * press)),
@@ -66,6 +68,18 @@ public final class TourFingerPainter {
             paint.setColor(ColorUtils.setAlphaComponent(opaque, Math.round(120f * press)));
             canvas.drawCircle(scratchPoint[0], scratchPoint[1], radius * (1f + (0.9f * press)),
                 paint);
+            if (gesture == TourGesture.HOLD_DRAG) {
+                // Held, then dragged: the trail the finger leaves once it has given way.
+                TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, 0f,
+                    scratchTrail);
+                TourGlowGeometry.clampPoint(scratchTrail, cueBounds);
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeCap(Paint.Cap.ROUND);
+                paint.setStrokeWidth(TRAIL_WIDTH_DP * density);
+                paint.setColor(ColorUtils.setAlphaComponent(opaque, 46));
+                canvas.drawLine(scratchTrail[0], scratchTrail[1], scratchPoint[0], scratchPoint[1],
+                    paint);
+            }
         } else if (gesture != TourGesture.TAP) {
             TourFingerTrace.pointAt(gesture, left, top, right, bottom, density, 0f, scratchTrail);
             TourGlowGeometry.clampPoint(scratchTrail, cueBounds);

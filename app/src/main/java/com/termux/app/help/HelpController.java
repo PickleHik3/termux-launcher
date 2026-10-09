@@ -36,7 +36,7 @@ public final class HelpController {
 
     /**
      * The explorer's way back into the reading side — the B–C seam of
-     * {@code project-docs/plans/help-guide.md}. Phase C's {@code HelpOverlayView} declares the
+     * the help guide. Phase C's {@code HelpOverlayView} declares the
      * same five calls.
      */
     public interface ExploreListener {

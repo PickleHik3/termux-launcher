@@ -331,12 +331,11 @@ public class DockLayoutPolicyTest {
         assertEquals(sliverPx, aloneNoTicks.appsTopPaddingPx);
         assertEquals(sliverPx, aloneNoTicks.appsRowTickSideAirPx);
         assertEquals(135 + (2 * sliverPx), aloneNoTicks.appsRowBandPx);
-        // Updated for Q9 with a reason: a lone row is asymmetric on purpose. It has no second band
-        // to read symmetric against and its plank should be as short as it can be, so it keeps its
-        // sliver on the side without ticks and the strip's own band — nothing added to it — on the
-        // side with them.
-        assertEquals(sliverPx, alone.appsTopPaddingPx);
-        assertEquals(sliverPx, alone.appsBottomPaddingPx);
+        // Updated with a reason: a lone row that carries ticks matches their band on the other
+        // side too. The 4dp sliver there set the icons against the rim across from the strip and
+        // the row read bottom-heavy; the sliver stays for a lone row without ticks (above).
+        assertEquals(stripPx, alone.appsTopPaddingPx);
+        assertEquals(stripPx, alone.appsBottomPaddingPx);
         assertEquals(stripPx, alone.appsRowTickSideAirPx);
         assertEquals("the strip fills that side, so the row keeps nothing of it",
             0, alone.appsRowPaddingBesideTicksPx());
@@ -345,8 +344,8 @@ public class DockLayoutPolicyTest {
         // P8's baseline, untouched: a lone row is still formed around the preset's own baseline
         // rather than around the icon, so the box its icons stand in is the one it drew.
         assertEquals(135, alone.appsRowBandHintPx);
-        assertEquals("band = icon box + 4dp + the ticks' 9dp band",
-            135 + sliverPx + stripPx, alone.appsRowBandPx);
+        assertEquals("band = icon box + the ticks' 9dp band on both sides",
+            135 + (2 * stripPx), alone.appsRowBandPx);
         // Updated for Q7 with a reason: the shared row is the tighter of the two now. Its band is
         // the icon and its air, where the lone row's is a baseline that still carries the preset's
         // leftover around the same icon.
@@ -356,6 +355,35 @@ public class DockLayoutPolicyTest {
         assertEquals(25, shared.appsBottomPaddingPx);
         assertEquals(25, shared.appsRowTickSideAirPx);
         assertEquals(shared.appsRowIconPx + 50, shared.appsRowBandPx);
+    }
+
+    /**
+     * The row next to the canvas with a band beyond it — the shipped dock, the letters under the
+     * row: the ticks stand over the icons, and the side under them keeps the letters' crown rather
+     * than the ticks' band, which opened a hole between the icons and the letters. A row with a
+     * band over it keeps the ticks' band on both sides, so its icon stays in the middle.
+     */
+    @Test
+    public void aSharedRowNextToTheCanvasKeepsOnlyTheCrownOnItsFarSide() {
+        DockLayout between = DockLayoutPolicy.compute(inputs(2.18f, true, false).build());
+        DockLayout next = DockLayoutPolicy.compute(inputs(2.18f, true, false)
+            .appsRowNextToCanvas(true).build());
+        int crownPx = DockLayoutPolicy.sharedRowAirPx(DENSITY);
+        int stripPx = PageTickStrip.bandPx(DENSITY);
+        assertEquals("6dp at density 2.75", 17, crownPx);
+        assertEquals(crownPx, next.appsTopPaddingPx);
+        assertEquals(crownPx, next.appsBottomPaddingPx);
+        assertEquals("the ticks keep their own band", stripPx, next.appsRowTickSideAirPx);
+        assertEquals(next.appsRowIconPx + crownPx + stripPx, next.appsRowBandPx);
+        assertEquals("the icon is the same size either way",
+            between.appsRowIconPx, next.appsRowIconPx);
+        assertEquals("and the row is shorter by the difference",
+            between.appsRowBandPx - (stripPx - crownPx), next.appsRowBandPx);
+        assertEquals(stripPx, between.appsTopPaddingPx);
+        // Alone the row has no band beyond it, so next to the canvas changes nothing.
+        DockLayout alone = DockLayoutPolicy.compute(inputs(2.18f, true, false)
+            .appsRowAlone(true).appsRowNextToCanvas(true).build());
+        assertEquals(stripPx, alone.appsTopPaddingPx);
     }
 
     @Test

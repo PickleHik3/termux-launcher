@@ -71,6 +71,12 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         default boolean commandPaletteRectOnScreen(@NonNull android.graphics.Rect out) {
             return false;
         }
+
+        /** The edge the apps row stands on, or the bottom while the row is put away. */
+        @NonNull
+        default com.termux.app.place.PlaceLayout.Edge appsEdge() {
+            return com.termux.app.place.PlaceLayout.Edge.BOTTOM;
+        }
     }
 
     /**
@@ -92,6 +98,20 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         boolean isLauncherHomeApp();
 
         void openHomeAppChooser();
+    }
+
+    /**
+     * The usage mode: whether this build offers the display at all, whether the install is the
+     * terminal alone right now — which takes the home-screen question out of the run — and the
+     * one thing only the launcher can do with an answer, which is to apply it.
+     */
+    public interface UsageModeHost {
+        boolean isDisplayOffered();
+
+        boolean isTerminalOnly();
+
+        /** Apply a {@code LauncherUseCaseMode} value; the launcher rebuilds itself around it. */
+        void applyUsageMode(@NonNull String mode);
     }
 
     /**
@@ -132,14 +152,13 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     @Nullable private WallHost mWallHost;
     @Nullable private HomeHost mHomeHost;
     @Nullable private KeyRowHost mKeyRowHost;
-    /**
-     * Whether the row the user would keep has no keyboard key on it, read when the run is built.
-     * The keyboard lesson points at that key, so a "Keep mine" on such a row takes the lesson out
-     * of the rest of the run.
-     */
-    private boolean mOwnKeyRowLacksKeyboardKey;
+    @Nullable private UsageModeHost mUsageModeHost;
     /** A run that was asked for while help was up, held until help goes away. */
     @Nullable private Runnable mStartWaitingForHelp;
+    /** Told when the real run ends, closing card or End tour: the welcome card follows it. */
+    @Nullable private Runnable mAfterRunListener;
+    /** Whether the run that is going is a help practice, which writes and ends nothing real. */
+    private boolean mPracticeRun;
     /** Whether the pinned-apps sheet is in front of the user, which only it can say. */
     private boolean mPinEditorUp;
     /** What the in-app keyboard has latched, for the chord cards' walking glow. */
@@ -202,6 +221,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         preferences.setFirstBootTourLegacyOnboardingMigrated(true);
     }
 
+    /** Called once each time the real run ends; the launcher raises the welcome card from it. */
+    public void setAfterRunListener(@Nullable Runnable listener) {
+        mAfterRunListener = listener;
+    }
+
     /** What else is covering the home screen, for the card visibility policy. */
     public void setChromeProbe(@Nullable ChromeProbe probe) {
         mChromeProbe = probe;
@@ -221,6 +245,11 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     /** The user's own row of keys, which the key-row card reads and answers. */
     public void setKeyRowHost(@Nullable KeyRowHost host) {
         mKeyRowHost = host;
+    }
+
+    /** The usage mode, which the usage card offers and answers. */
+    public void setUsageModeHost(@Nullable UsageModeHost host) {
+        mUsageModeHost = host;
     }
 
     /**
@@ -273,7 +302,9 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         }
         if (waitForHelpToClose(() -> startPractice(lessonId))) return true;
         rebuildRunForThisPhone();
-        return mController.startPractice(lessonId);
+        boolean started = mController.startPractice(lessonId);
+        mPracticeRun = started;
+        return started;
     }
 
     /**
@@ -294,23 +325,29 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     }
 
     /**
-     * The run, built for the phone it is about to run on. Two of its sentences depend on what the
-     * phone is set to right now — the way back from an app, and which way round the keyboard
-     * lesson goes — and both were read from a launcher that had not been asked yet when the tour
-     * was first wired up.
+     * The run, built for the phone it is about to run on. Some of its sentences depend on what the
+     * phone is set to right now — the way back from an app, and which way round the keyboard and
+     * the status bar lessons go — and all were read from a launcher that had not been asked yet
+     * when the tour was first wired up.
      */
     private void rebuildRunForThisPhone() {
         String ownRow = mKeyRowHost == null ? null : mKeyRowHost.ownKeyRow();
         boolean hasOwnRow = ExtraKeysDefaultOffer.isCustomRow(ownRow);
         boolean answered = mKeyRowHost != null && mKeyRowHost.keyRowAnswered();
-        mOwnKeyRowLacksKeyboardKey =
-            hasOwnRow && !ExtraKeysDefaultOffer.hasKeyboardKey(ownRow);
         mController.setSteps(TourRun.steps(new TourRun.RunContext(
             mHomeHost != null && mHomeHost.isLauncherHomeApp(), mSignals.isKeyboardShown(),
-            hasOwnRow && !answered)));
-        // Someone who was asked in an earlier run and kept a row with no keyboard key on it still
-        // has nothing for the keyboard lesson to point at.
-        if (answered && mOwnKeyRowLacksKeyboardKey) mController.dropStep(TourRun.KEYBOARD);
+            hasOwnRow && !answered,
+            mUsageModeHost == null || mUsageModeHost.isDisplayOffered(),
+            mSignals.isStatusBarExpanded(),
+            mChromeProbe == null ? com.termux.app.place.PlaceLayout.Edge.BOTTOM
+                : mChromeProbe.appsEdge())));
+        // A terminal-only install has one place, so there is nothing to drag the border towards,
+        // and no home screen to be the phone's; both are back the moment the usage card is
+        // answered with a Home.
+        if (mUsageModeHost != null && mUsageModeHost.isTerminalOnly()) {
+            mController.dropStep(TourRun.BORDER_DRAG);
+            mController.dropStep(TourRun.HOME_CHOICE);
+        }
     }
 
     /**
@@ -582,6 +619,12 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
     public void onTourFinished(boolean skipped) {
         TourLog.d("run finished, skipped=" + skipped);
         removeOverlay();
+        boolean practice = mPracticeRun;
+        mPracticeRun = false;
+        // The step after the closing card (and after End tour): the device-tiers welcome card.
+        // Practice from help is not the run, so it never raises it.
+        Runnable after = mAfterRunListener;
+        if (!practice && after != null) after.run();
     }
 
     @Override
@@ -589,6 +632,31 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         TourLog.d("home-screen card answered " + choice);
         if (choice == TourController.Choice.USE_AS_HOME && mHomeHost != null)
             mHomeHost.openHomeAppChooser();
+    }
+
+    /**
+     * The usage card's answer: applied by the launcher, which rebuilds its chrome around it and
+     * picks the run back up on its stored card. The terminal alone takes the border drag and the
+     * home-screen question out of the rest of the run; either other answer puts them back.
+     */
+    @Override
+    public void onTourUsageModeChoice(TourController.Choice choice) {
+        TourLog.d("usage card answered " + choice);
+        String mode;
+        switch (choice) {
+            case USE_TERMINAL: mode = com.termux.app.launcher.LauncherUseCaseMode.MODE_TERMINAL; break;
+            case USE_HOME: mode = com.termux.app.launcher.LauncherUseCaseMode.MODE_HOME; break;
+            case USE_DISPLAY: mode = com.termux.app.launcher.LauncherUseCaseMode.MODE_DISPLAY; break;
+            default: return;
+        }
+        if (choice == TourController.Choice.USE_TERMINAL) {
+            mController.dropStep(TourRun.BORDER_DRAG);
+            mController.dropStep(TourRun.HOME_CHOICE);
+        } else {
+            mController.keepStep(TourRun.BORDER_DRAG);
+            mController.keepStep(TourRun.HOME_CHOICE);
+        }
+        if (mUsageModeHost != null) mUsageModeHost.applyUsageMode(mode);
     }
 
     /**
@@ -606,8 +674,6 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         }
         if (choice != TourController.Choice.KEEP_KEY_ROW) return;
         mKeyRowHost.keepOwnKeyRow();
-        // The keyboard lesson is the key they have just decided not to have.
-        if (mOwnKeyRowLacksKeyboardKey) mController.dropStep(TourRun.KEYBOARD);
     }
 
     @Override
@@ -633,6 +699,9 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
             // of the two the card that is up is.
             case DONE: mController.done(); break;
             case END_PRACTICE: mController.endPractice(); break;
+            case USE_TERMINAL: mController.choose(TourController.Choice.USE_TERMINAL); break;
+            case USE_HOME: mController.choose(TourController.Choice.USE_HOME); break;
+            case USE_DISPLAY: mController.choose(TourController.Choice.USE_DISPLAY); break;
             case USE_AS_HOME: mController.choose(TourController.Choice.USE_AS_HOME); break;
             case KEEP_TRYING: mController.choose(TourController.Choice.KEEP_TRYING); break;
             case CONTINUE: mController.choose(TourController.Choice.CONTINUE); break;

@@ -18,14 +18,28 @@ public class HelpGlossaryTest {
 
     private final HelpTopics.Text text = new HelpTestText();
 
-    @Test public void theFifteenTermsAreAllThereAndUnique() {
-        assertEquals(15, HelpGlossary.all().size());
+    @Test public void theTwentyTwoTermsAreAllThereAndUnique() {
+        assertEquals(22, HelpGlossary.all().size());
         List<String> ids = new ArrayList<>();
         for (HelpGlossary.Term term : HelpGlossary.all()) ids.add(term.id);
         assertEquals(ids.size(), new HashSet<>(ids).size());
         for (String id : ids) assertNotNull(id, HelpGlossary.term(id));
         assertNull(HelpGlossary.term("nothing_by_this_name"));
         assertNull(HelpGlossary.term(null));
+    }
+
+    /** Surfaces, Base and independent values are gone from the editors, and from the glossary. */
+    @Test public void theRetiredAppearanceWordsAreNotDefined() {
+        for (String gone : new String[] {"surface", "base", "independent_value", "docked_floating"}) {
+            assertNull(gone, HelpGlossary.term(gone));
+        }
+        for (String now : new String[] {"look", "style", "hidden_elements", "corner_tab",
+            "border_drag", "keyboard_swipe", "status_swipe", "minimal_mode", "keyboard_form",
+            "pinned_notification", "dictation"}) {
+            assertNotNull(now, HelpGlossary.term(now));
+        }
+        assertEquals("Docked or Floating",
+            text.get(HelpGlossary.term("style").titleRes));
     }
 
     @Test public void everyTermHasATitleADefinitionAndOneRealTopic() {
@@ -58,6 +72,30 @@ public class HelpGlossaryTest {
             for (String jargon : new String[] {"Hyprland", "protocol", "keybind", "X11 socket"}) {
                 assertFalse(term.id + " mentions " + jargon, definition.contains(jargon));
             }
+        }
+    }
+
+    /**
+     * Layout editor v2 (DECISIONS item 11): the trash, the hide zone and the restore tray are gone,
+     * and nothing in the editor's help still sends anyone to them.
+     */
+    @Test public void theLayoutEditorsHelpNamesNoTrayTrashOrHideZone() {
+        List<Integer> words = new ArrayList<>();
+        HelpTopics.Entry layout = HelpTopics.entry("layout_editor");
+        assertNotNull(layout);
+        words.addAll(layout.stepsRes);
+        words.add(layout.summaryRes);
+        words.add(layout.actionRes);
+        words.add(layout.aliasesRes);
+        HelpGlossary.Term hidden = HelpGlossary.term("hidden_elements");
+        assertNotNull(hidden);
+        words.add(hidden.titleRes);
+        words.add(hidden.definitionRes);
+        for (int res : words) {
+            String line = text.get(res).toLowerCase(java.util.Locale.ROOT);
+            assertFalse(line, line.contains("tray"));
+            assertFalse(line, line.contains("trash"));
+            assertFalse(line, line.contains("drag here to hide"));
         }
     }
 }

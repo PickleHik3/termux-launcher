@@ -6,6 +6,11 @@ import androidx.annotation.NonNull;
 
 /** Exact integer cell geometry for the measured middle body. */
 public final class WidgetGridMetrics {
+    /** The air between the wall's edge and the first cell, in dp. */
+    public static final float EDGE_DP = 6f;
+    /** The air between two cells, in dp. */
+    public static final float GAP_DP = 8f;
+
     @NonNull private final Rect body;
     @NonNull private final WidgetGridDefinition grid;
     private final int actionStripHeight;
@@ -50,6 +55,39 @@ public final class WidgetGridMetrics {
         int columns = smallestColumnSpan(Math.max(1, desiredWidth));
         int rows = smallestRowSpan(Math.max(1, desiredHeight));
         return new Span(columns, rows, columns > 0 && rows > 0);
+    }
+
+    /**
+     * The largest span whose exact first-position rectangle is no bigger than the requested outer
+     * pixels; 0 on an axis where the pixels are not positive (no limit) or not even one cell fits
+     * under them. A provider's {@code maxResizeWidth} reads through here, the way its minimum
+     * reads through {@link #spanForPixels}.
+     */
+    @NonNull public Span largestSpanWithin(int maxWidth, int maxHeight) {
+        int columns = 0, rows = 0;
+        if (maxWidth > 0) {
+            for (int span = 1; span <= grid.columns; span++) {
+                if (boundsFor(new WidgetCellRect(0, 0, span, 1)).width() > maxWidth) break;
+                columns = span;
+            }
+        }
+        if (maxHeight > 0) {
+            for (int span = 1; span <= grid.rows; span++) {
+                if (boundsFor(new WidgetCellRect(0, 0, 1, span)).height() > maxHeight) break;
+                rows = span;
+            }
+        }
+        return new Span(columns, rows, true);
+    }
+
+    /**
+     * The span an axis may grow to: {@code maxSpan} when the provider set one that leaves room for
+     * its own minimum, otherwise the whole grid ({@code gridSpan}). A maximum under the minimum is
+     * a provider contradicting itself, and the minimum wins.
+     */
+    public static int effectiveMaxSpan(int maxSpan, int minSpan, int gridSpan) {
+        if (maxSpan <= 0 || maxSpan < minSpan) return gridSpan;
+        return Math.min(maxSpan, gridSpan);
     }
 
     private int smallestColumnSpan(int pixels) {

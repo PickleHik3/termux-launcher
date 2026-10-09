@@ -14,8 +14,10 @@ import java.util.List;
  *
  * <p>Touch has no hover, so the addresses a tap would open are marked all the time — which means
  * the question is asked every frame. The answer only changes when the text does, so the rows the
- * detector would read are hashed and the last answer is kept while the hash holds; scrolling or a
- * keystroke costs one regex pass over the screen, an unchanged frame costs a walk over its chars.
+ * detector would read are hashed and the last answer is kept while the hash holds; an unchanged
+ * frame costs a walk over its chars. When the text did change, the detector's cache keeps the
+ * answer for every group of joined lines whose text is the same, wherever it has scrolled to, so
+ * a command streaming output pays the regex for its new lines only.
  */
 final class UrlUnderlines {
 
@@ -36,6 +38,10 @@ final class UrlUnderlines {
     /** Per visible row: a summary of its segments, folded into the row cache's change detection. */
     private int[] mKeys = new int[0];
 
+    /** The detector's per-group answers, dropped while underlines are off. */
+    @Nullable
+    private UrlDetector.Cache mDetectorCache;
+
     /**
      * Compute — or confirm — the underlines for rows {@code [topRow, endRow)}. Must run once per
      * frame before any row is drawn or its cache consulted.
@@ -54,6 +60,7 @@ final class UrlUnderlines {
                 Arrays.fill(mKeys, 0);
             }
             mValid = false;
+            mDetectorCache = null;
             return;
         }
         final long hash = hashRows(screen, screenRows, topRow - CONTEXT_ROWS, endRow + CONTEXT_ROWS);
@@ -61,7 +68,8 @@ final class UrlUnderlines {
             return;
         Arrays.fill(mSegments, null);
         Arrays.fill(mKeys, 0);
-        List<UrlDetector.UrlSpan> spans = UrlDetector.find(screen, topRow, endRow - 1);
+        if (mDetectorCache == null) mDetectorCache = new UrlDetector.Cache();
+        List<UrlDetector.UrlSpan> spans = UrlDetector.find(screen, topRow, endRow - 1, mDetectorCache);
         for (UrlDetector.UrlSpan span : spans) {
             for (int s = 0; s < span.segmentCount(); s++) {
                 int index = span.segmentRow(s) - topRow;

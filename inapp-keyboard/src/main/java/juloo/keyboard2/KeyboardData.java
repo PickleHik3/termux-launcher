@@ -449,12 +449,29 @@ public final class KeyboardData
     public final String indication;
     /** Keys are rendered differently according to their role. */
     public final Role role;
+    /**
+     * Where the split keyboard type parts this key's row, as an offset from the key's left edge
+     * in key-width units: zero parts the row just before the key, an offset inside the key cuts
+     * it in two there. {@link #NO_SPLIT} when the layout does not say, and the row parts at its
+     * midpoint. Set by the {@code split_before} and {@code split_at} attributes; read by
+     * {@link SplitLayout} alone, the docked keyboard ignores it. Local addition, see UPSTREAM.md.
+     */
+    public final float splitAt;
+
+    /** {@link #splitAt} when the layout marks no parting on the key. */
+    public static final float NO_SPLIT = -1f;
 
     /** Whether a key was declared with the 'loc' prefix. */
     public static final int F_LOC = 1;
     public static final int ALL_FLAGS = F_LOC;
 
     protected Key(KeyValue[] ks, KeyValue antic, int f, float w, float s, String i, Role role_)
+    {
+      this(ks, antic, f, w, s, i, role_, NO_SPLIT);
+    }
+
+    protected Key(KeyValue[] ks, KeyValue antic, int f, float w, float s, String i, Role role_,
+        float splitAt_)
     {
       keys = ks;
       anticircle = antic;
@@ -463,6 +480,7 @@ public final class KeyboardData
       shift = Math.max(s, 0f);
       indication = i;
       role = role_;
+      splitAt = Float.isNaN(splitAt_) || splitAt_ < 0f ? NO_SPLIT : splitAt_;
     }
 
     static final Key EMPTY =
@@ -536,9 +554,30 @@ public final class KeyboardData
       String indication = parser.getAttributeValue(null, "indication");
       String role_str = parser.getAttributeValue(null, "role");
       Role role = (role_str == null) ? Role.Normal : Role.parse(role_str);
+      float splitAt = parse_split_at(parser);
       while (parser.next() != XmlPullParser.END_TAG)
         continue;
-      return new Key(ks, anticircle, keysflags, width, shift, indication, role);
+      return new Key(ks, anticircle, keysflags, width, shift, indication, role, splitAt);
+    }
+
+    /**
+     * The split marker of the key being parsed: {@code split_before="true"} is an offset of
+     * zero, {@code split_at} an offset into the key. Naming both is the same mistake as naming
+     * two synonyms, and is refused the same way.
+     */
+    static float parse_split_at(XmlPullParser parser) throws Exception
+    {
+      boolean before = attribute_bool(parser, "split_before", false);
+      boolean hasAt = parser.getAttributeValue(null, "split_at") != null;
+      if (before && hasAt)
+        throw error(parser,
+            "'split_before' and 'split_at' cannot be passed at the same time.");
+      if (before)
+        return 0f;
+      float at = attribute_float(parser, "split_at", NO_SPLIT);
+      if (hasAt && (Float.isNaN(at) || Float.isInfinite(at) || at < 0f))
+        throw error(parser, "Invalid offset for 'split_at': " + at);
+      return at;
     }
 
     /** Whether key at [index] as [flag]. */
@@ -550,7 +589,8 @@ public final class KeyboardData
     /** New key with the width multiplied by 's'. */
     public Key scaleWidth(float s)
     {
-      return new Key(keys, anticircle, keysflags, width * s, shift, indication, role);
+      return new Key(keys, anticircle, keysflags, width * s, shift, indication, role,
+          splitAt == NO_SPLIT ? NO_SPLIT : splitAt * s);
     }
 
     public void getKeys(Map<KeyValue, KeyPos> dst, int row, int col)
@@ -571,7 +611,7 @@ public final class KeyboardData
       for (int j = 0; j < keys.length; j++) ks[j] = keys[j];
       ks[i] = kv;
       int flags = (keysflags & ~(ALL_FLAGS << i));
-      return new Key(ks, anticircle, flags, width, shift, indication, role);
+      return new Key(ks, anticircle, flags, width, shift, indication, role, splitAt);
     }
 
     public Key withWidth(float w)
@@ -586,7 +626,32 @@ public final class KeyboardData
 
     public Key withWidthAndShift(float w, float s)
     {
-      return new Key(keys, anticircle, keysflags, w, s, indication, role);
+      return new Key(keys, anticircle, keysflags, w, s, indication, role, splitAt);
+    }
+
+    /** The same key with its split marker replaced; {@link #NO_SPLIT} clears it. */
+    public Key withSplitAt(float at)
+    {
+      return new Key(keys, anticircle, keysflags, width, shift, indication, role, at);
+    }
+
+    /**
+     * The same key carrying only the values whose index has its bit set in [mask] — bit 0 is
+     * the centre value, bits 1-8 the swipes — and the anti-clockwise circle only when
+     * [keepAnticircle]. Used to share one key's values between the two pieces of a cut bar.
+     */
+    public Key withValuesOnly(int mask, boolean keepAnticircle)
+    {
+      KeyValue[] ks = new KeyValue[keys.length];
+      int flags = 0;
+      for (int j = 0; j < keys.length; j++)
+        if ((mask & (1 << j)) != 0)
+        {
+          ks[j] = keys[j];
+          flags |= keysflags & (ALL_FLAGS << j);
+        }
+      return new Key(ks, keepAnticircle ? anticircle : null, flags, width, shift, indication,
+          role, splitAt);
     }
 
     public boolean hasValue(KeyValue kv)
@@ -631,7 +696,8 @@ public final class KeyboardData
       for (int i = 0; i < ks.length; i++)
         if (k.keys[i] != null)
           ks[i] = apply(k.keys[i], k.keyHasFlag(i, Key.F_LOC));
-      return new Key(ks, k.anticircle, k.keysflags, k.width, k.shift, k.indication, k.role);
+      return new Key(ks, k.anticircle, k.keysflags, k.width, k.shift, k.indication, k.role,
+          k.splitAt);
     }
   }
 

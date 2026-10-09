@@ -1,6 +1,8 @@
 package com.termux.app.fragments.settings.termux;
 
 import android.graphics.Color;
+import android.graphics.Typeface;
+import android.net.Uri;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.text.InputType;
@@ -10,11 +12,11 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.FrameLayout;
-import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.Space;
 import android.widget.TextView;
 
+import androidx.activity.result.ActivityResultLauncher;
 import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -23,24 +25,28 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import androidx.fragment.app.Fragment;
 
 import com.google.android.material.button.MaterialButton;
-import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.chip.Chip;
+import com.google.android.material.chip.ChipDrawable;
 import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.shape.MaterialShapeDrawable;
+import com.google.android.material.shape.ShapeAppearanceModel;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.color.MaterialColors;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.R;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 import juloo.keyboard2.Config;
 import juloo.keyboard2.Keyboard2View;
@@ -58,11 +64,14 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private InAppKeyboardColorScheme mScheme;
     private Keyboard2View mKeyboard;
     private LinearLayout mSwatchGrid;
-    private TextView mStatus;
     private final List<View> mSwatchViews = new ArrayList<>();
     private final List<View> mSwatchBadges = new ArrayList<>();
     private final List<View> mSwatchItems = new ArrayList<>();
-    private final Map<Integer, InAppKeyboardColorScheme.Role> mRoleByChipId = new HashMap<>();
+    /** The six role chips by {@link #ROLE_ORDER} index; the one at {@link #mSelectedRoleIndex} is on. */
+    private Chip[] mRoleChips = new Chip[0];
+    private static final int KEY_FILL_INDEX = 0;
+    private int mSelectedRoleIndex;
+    private TextView mEditingTitle;
     private int mSelectedSwatch;
     private InAppKeyboardColorScheme.Role mSelectedRole =
         InAppKeyboardColorScheme.Role.KEY_BACKGROUND;
@@ -70,6 +79,13 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private boolean mPaintingBackground;
     private boolean mEditingSwatches;
     private static final int SWATCH_GRID_COLUMNS = 8;
+    private static final int SWATCH_DP = 32;
+    /** The page's one gap between blocks, in dp. */
+    private static final int GAP_DP = 8;
+    /** The smallest share of its natural size the preview shrinks to before the page scrolls. */
+    private static final float PREVIEW_MIN_SCALE = 0.4f;
+    static final String TAG_SWATCH_GRID = "keyboard_theme_swatch_grid";
+    static final String TAG_PALETTE_CARD = "keyboard_theme_palette_card";
     /**
      * Material role behind every slot, mirroring
      * {@link InAppKeyboardPaletteFactory#defaultEditorSwatches}. These stay untranslated on
@@ -85,6 +101,20 @@ public class KeyboardColorSchemeFragment extends Fragment {
         "error + onSurface 20%", "tertiary + onSurface 20%", "primary + onSurface 20%",
         "secondary + onSurface 20%", "tertiary + primary 50%", "primary + secondary 50%"
     };
+    private static final String FONT_DIR_NAME = "inapp-keyboard";
+    private static final String FONT_FILE_NAME = "label-font.ttf";
+
+    private ActivityResultLauncher<String[]> mFontPickerLauncher;
+    private FrameLayout mPreviewHolder;
+    private TextView mFontSummary;
+
+    @Override
+    public void onCreate(@Nullable Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        mFontPickerLauncher = registerForActivityResult(
+            new OpenFontDocument(), this::onFontPicked);
+    }
+
     @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
@@ -96,43 +126,136 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mScheme = InAppKeyboardColorScheme.fromJson(context,
             mPreferences.getInAppKeyboardColorScheme());
 
-        LinearLayout root = new LinearLayout(context);
+        FitRoot root = new FitRoot(context);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(12), dp(16), dp(12));
+        root.setPadding(dp(16), dp(8), dp(16), dp(8));
 
-        // Whether the keyboard still moves with the wallpaper is the first thing to say.
-        mStatus = new TextView(context);
-        mStatus.setTextAppearance(
-            com.google.android.material.R.style.TextAppearance_Material3_TitleSmall);
-        mStatus.setText(statusText(context, mScheme));
-        root.addView(mStatus, new LinearLayout.LayoutParams(
+        syncThemePreference();
+
+        // 1. The live preview, which every control below repaints.
+        mPreviewHolder = new FrameLayout(context);
+        root.addView(mPreviewHolder, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        rebuildPreview();
 
+        // 2. One supporting line; the pencil and reset glyphs sit in the sentences, the same marks
+        // as the card's buttons.
         TextView instructions = new TextView(context);
-        instructions.setText(R.string.termux_keyboard_color_scheme_instructions);
         instructions.setTextAppearance(
-            com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
-        instructions.setTextColor(MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY));
+            com.google.android.material.R.style.TextAppearance_Material3_BodySmall);
+        int instructionColor = MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY);
+        instructions.setTextColor(instructionColor);
+        instructions.setText(android.text.TextUtils.expandTemplate(
+            getText(R.string.termux_keyboard_color_scheme_instructions),
+            inlineGlyph(context, R.drawable.ic_symbol_edit, instructionColor, instructions),
+            inlineGlyph(context, R.drawable.ic_symbol_restart, instructionColor, instructions)));
         LinearLayout.LayoutParams instructionParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        instructionParams.topMargin = dp(6);
+        instructionParams.topMargin = dp(GAP_DP);
         root.addView(instructions, instructionParams);
 
-        // Push the preview and its palette to the bottom, within thumb reach, instead of
-        // leaving dead space below a top-anchored palette.
-        Space spacer = new Space(context);
-        root.addView(spacer, new LinearLayout.LayoutParams(1, 0, 1f));
+        // 3. The role chips, one wrapping group; each picks the part the swatches below paint.
+        // Hints, keyboard and labels need no row titles of their own: the chip names say it.
+        mRoleChips = new Chip[ROLE_ORDER.length];
+        addRoleChips(context, root);
 
-        // All 24 swatches sit right above the preview so a chosen color lands next to the keys
-        // it paints; the card below keeps the actions and role filters.
+        // 4. The 24 swatches: the colour choices for the selected role.
         mSwatchGrid = new LinearLayout(context);
         mSwatchGrid.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams gridParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        gridParams.bottomMargin = dp(8);
+        gridParams.topMargin = dp(GAP_DP);
+        mSwatchGrid.setTag(TAG_SWATCH_GRID);
         root.addView(mSwatchGrid, gridParams);
 
+        // 5. The card: the editing capsule, then the Font chooser.
+        // The card carries its own params, so the gap above it is not thrown away.
+        View card = buildPaletteCard(context);
+        root.addView(card, card.getLayoutParams());
+        selectRole(KEY_FILL_INDEX);
+        createSwatches();
+
+        android.widget.ScrollView scroll = new android.widget.ScrollView(context) {
+            @Override
+            protected void onMeasure(int widthSpec, int heightSpec) {
+                // The viewport is the preview's budget: what the controls leave of it.
+                root.mViewportPx = MeasureSpec.getMode(heightSpec) == MeasureSpec.UNSPECIFIED
+                    ? 0 : MeasureSpec.getSize(heightSpec);
+                super.onMeasure(widthSpec, heightSpec);
+            }
+        };
+        scroll.setFillViewport(true);
+        scroll.addView(root, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return scroll;
+    }
+
+    /**
+     * The page column. It sizes the preview last: every other block is measured first, and the
+     * keyboard takes the height that is left, scaled down as a whole (width and height by the same
+     * factor, so the keys keep their shape) rather than squeezed, floored at
+     * {@link #PREVIEW_MIN_SCALE} so a huge font scale scrolls instead of erasing it.
+     */
+    private final class FitRoot extends LinearLayout {
+        /** Height the page may fill, 0 while unknown (the preview then keeps its own size). */
+        int mViewportPx;
+
+        FitRoot(@NonNull android.content.Context context) { super(context); }
+
+        @Override
+        protected void onMeasure(int widthSpec, int heightSpec) {
+            if (mPreviewHolder != null && mKeyboard != null
+                    && mKeyboard.getParent() == mPreviewHolder
+                    && MeasureSpec.getMode(widthSpec) != MeasureSpec.UNSPECIFIED)
+                sizePreview(MeasureSpec.getSize(widthSpec));
+            super.onMeasure(widthSpec, heightSpec);
+        }
+
+        private void sizePreview(int rootWidth) {
+            int contentWidth = rootWidth - getPaddingLeft() - getPaddingRight();
+            if (contentWidth <= 0) return;
+            int others = 0;
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child == mPreviewHolder || child.getVisibility() == GONE) continue;
+                LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) child.getLayoutParams();
+                child.measure(
+                    MeasureSpec.makeMeasureSpec(
+                        Math.max(0, contentWidth - lp.leftMargin - lp.rightMargin),
+                        MeasureSpec.EXACTLY),
+                    MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+                others += child.getMeasuredHeight() + lp.topMargin + lp.bottomMargin;
+            }
+            // The keyboard's own height at full width, with nothing capping it.
+            mKeyboard.measure(MeasureSpec.makeMeasureSpec(contentWidth, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(dp(2000), MeasureSpec.AT_MOST));
+            int natural = mKeyboard.getMeasuredHeight();
+            if (natural <= 0) return;
+            float scale = 1f;
+            if (mViewportPx > 0) {
+                int budget = mViewportPx - getPaddingTop() - getPaddingBottom() - others;
+                scale = Math.max(PREVIEW_MIN_SCALE, Math.min(1f, budget / (float) natural));
+            }
+            int width = Math.round(contentWidth * scale);
+            int height = Math.round(natural * scale);
+            ViewGroup.LayoutParams holderParams = mPreviewHolder.getLayoutParams();
+            if (holderParams.height != height) {
+                holderParams.height = height;
+                mPreviewHolder.setLayoutParams(holderParams);
+            }
+            ViewGroup.LayoutParams keyboardParams = mKeyboard.getLayoutParams();
+            if (keyboardParams.width != width || keyboardParams.height != height) {
+                keyboardParams.width = width;
+                keyboardParams.height = height;
+                mKeyboard.setLayoutParams(keyboardParams);
+            }
+        }
+    }
+
+    /** (Re)creates the preview keyboard; Config is immutable, so a new typeface needs a new view. */
+    private void rebuildPreview() {
+        android.content.Context context = requireContext();
         Config.Builder config = new Config.Builder(getResources(), new Config.IKeyEventHandler() {
             @Override public void key_down(KeyValue value, boolean isSwipe) {}
             @Override public void key_up(KeyValue value, Pointers.Modifiers modifiers) {}
@@ -141,6 +264,8 @@ public class KeyboardColorSchemeFragment extends Fragment {
         });
         config.hapticEnabled = false;
         config.keySoundEnabled = false;
+        config.labelFont = previewLabelFont(context, mPreferences.getInAppKeyboardFontPath());
+        config.symbolFont = com.termux.shared.termux.font.NerdFontSpans.typeface(context);
         mKeyboard = new Keyboard2View(context, config.build(), buildPreviewPalette(context));
         KeyboardData previewLayout = KeyboardData.load(getResources(),
             juloo.keyboard2.R.xml.termux_launcher_qwerty);
@@ -151,10 +276,9 @@ public class KeyboardColorSchemeFragment extends Fragment {
                     mPreferences.getInAppKeyboardExtraKeys()));
             mKeyboard.setKeyboard(LayoutModifier.modify(previewLayout, options, getResources()));
         }
-        // The height is the terminal's, in the orientation the phone is being held in: it belongs
-        // to a place now, and the terminal is the one this preview stands for.
+        // The height is the layout's, in the orientation the phone is being held in.
         mKeyboard.setHeightScale(new PlaceLayoutStore(mPreferences).keyboardHeightScale(
-            PaneWallPage.TERMINAL, PlaceOrientation.of(getResources().getConfiguration())));
+            PlaceOrientation.of(getResources().getConfiguration())));
         mKeyboard.setKeyMarginScale(mPreferences.getInAppKeyboardKeyMarginScale());
         float radiusDp = mPreferences.getInAppKeyboardKeyCornerRadiusDp();
         mKeyboard.setKeyCornerRadiusOverride(radiusDp < 0f ? -1f : dpFloat(radiusDp));
@@ -166,20 +290,158 @@ public class KeyboardColorSchemeFragment extends Fragment {
             mScheme.paint(keyId, mSelectedRole, mSelectedSwatch);
             persistAndRender();
         });
-        root.addView(mKeyboard, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        mPreviewHolder.removeAllViews();
+        // FitRoot gives the keyboard its real size at measure time; until then it is natural.
+        mPreviewHolder.addView(mKeyboard, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.CENTER_HORIZONTAL));
+    }
 
-        root.addView(buildPaletteCard(context), new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        createSwatches();
-        return root;
+    /** The face the keyboard itself would use: the picked file, else the bundled symbols font. */
+    @Nullable
+    private static Typeface previewLabelFont(@NonNull android.content.Context context,
+                                             @Nullable String fontPath) {
+        if (fontPath != null && !fontPath.isEmpty()) {
+            File file = new File(fontPath);
+            if (file.isFile()) {
+                try {
+                    Typeface typeface = com.termux.shared.termux.font.FileTypefaces.load(file);
+                    if (typeface != null && !Typeface.DEFAULT.equals(typeface)) return typeface;
+                } catch (RuntimeException ignored) {
+                    // Falls through to the bundled face, like the keyboard does.
+                }
+            }
+        }
+        return com.termux.shared.termux.font.NerdFontSpans.typeface(context);
+    }
+
+    /**
+     * The keyboard theme is no longer chosen by hand: "custom" while an imported palette exists,
+     * otherwise "system" (which follows day/night).
+     */
+    private void syncThemePreference() {
+        String wanted = mScheme.hasImportedPalette() ? "custom" : "system";
+        if (!wanted.equals(mPreferences.getInAppKeyboardTheme()))
+            mPreferences.setInAppKeyboardTheme(wanted);
+    }
+
+    /** A two-line row, title over summary, that opens the pick/reset flow. */
+    @NonNull
+    private View buildTypefaceRow(@NonNull android.content.Context context) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.VERTICAL);
+        android.util.TypedValue ripple = new android.util.TypedValue();
+        context.getTheme().resolveAttribute(
+            android.R.attr.selectableItemBackground, ripple, true);
+        row.setBackgroundResource(ripple.resourceId);
+        row.setClickable(true);
+        row.setFocusable(true);
+        row.setMinimumHeight(dp(48));
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPaddingRelative(dp(8), dp(8), dp(8), dp(8));
+        TextView title = new TextView(context);
+        title.setTextAppearance(
+            com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
+        title.setText(R.string.termux_in_app_keyboard_font_title);
+        row.addView(title);
+        mFontSummary = new TextView(context);
+        mFontSummary.setTextAppearance(
+            com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
+        mFontSummary.setTextColor(MaterialColors.getColor(context,
+            com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY));
+        row.addView(mFontSummary);
+        row.setOnClickListener(view -> onFontRowClicked());
+        updateFontSummary();
+        return row;
+    }
+
+    private void onFontRowClicked() {
+        if (mPreferences.getInAppKeyboardFontPath().isEmpty()) {
+            launchFontPicker();
+            return;
+        }
+        new MaterialAlertDialogBuilder(requireActivity())
+            .setTitle(R.string.termux_in_app_keyboard_font_title)
+            .setItems(new CharSequence[]{
+                getString(R.string.termux_in_app_keyboard_font_pick),
+                getString(R.string.termux_in_app_keyboard_font_reset)
+            }, (dialog, which) -> {
+                if (which == 0) {
+                    launchFontPicker();
+                } else {
+                    clearCustomFont();
+                }
+            })
+            .show();
+    }
+
+    private void launchFontPicker() {
+        mFontPickerLauncher.launch(OpenFontDocument.mimeTypes());
+    }
+
+    private void onFontPicked(@Nullable Uri uri) {
+        android.content.Context context = getContext();
+        if (uri == null || context == null || mPreferences == null || mPreviewHolder == null)
+            return;
+        File fontDir = new File(context.getFilesDir(), FONT_DIR_NAME);
+        File fontFile = new File(fontDir, FONT_FILE_NAME);
+        File stagedFile = new File(fontDir, FONT_FILE_NAME + ".tmp");
+        try {
+            if (!fontDir.isDirectory() && !fontDir.mkdirs())
+                throw new java.io.IOException("Cannot create " + fontDir);
+            try (InputStream in = context.getContentResolver().openInputStream(uri);
+                 OutputStream out = new FileOutputStream(stagedFile)) {
+                if (in == null)
+                    throw new java.io.IOException("Cannot open " + uri);
+                byte[] buffer = new byte[8192];
+                int read;
+                while ((read = in.read(buffer)) != -1)
+                    out.write(buffer, 0, read);
+            }
+            // createFromFile returns DEFAULT (or throws) when the bytes are not a usable font.
+            Typeface typeface = Typeface.createFromFile(stagedFile);
+            if (typeface == null || Typeface.DEFAULT.equals(typeface))
+                throw new java.io.IOException("Unreadable font " + uri);
+            if (!stagedFile.renameTo(fontFile))
+                throw new java.io.IOException("Cannot replace " + fontFile);
+            mPreferences.setInAppKeyboardFontPath(fontFile.getAbsolutePath());
+        } catch (Exception e) {
+            //noinspection ResultOfMethodCallIgnored
+            stagedFile.delete();
+            AppNotice.show(context, R.string.termux_in_app_keyboard_font_error, false);
+        }
+        updateFontSummary();
+        rebuildPreview();
+    }
+
+    private void clearCustomFont() {
+        String path = mPreferences.getInAppKeyboardFontPath();
+        mPreferences.setInAppKeyboardFontPath("");
+        if (!path.isEmpty()) {
+            //noinspection ResultOfMethodCallIgnored
+            new File(path).delete();
+        }
+        updateFontSummary();
+        rebuildPreview();
+    }
+
+    private void updateFontSummary() {
+        if (mFontSummary == null) return;
+        String path = mPreferences.getInAppKeyboardFontPath();
+        if (path.isEmpty() || !new File(path).isFile()) {
+            mFontSummary.setText(R.string.termux_in_app_keyboard_font_summary_default);
+        } else {
+            mFontSummary.setText(getString(
+                R.string.termux_in_app_keyboard_font_summary_custom, new File(path).getName()));
+        }
     }
 
     /** Glass preview palette: the imported palette when active, then the background override. */
     @NonNull
     private Theme.Palette buildPreviewPalette(@NonNull android.content.Context context) {
         String theme = mPreferences.getInAppKeyboardTheme();
-        Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(context, theme);
+        Theme.Palette palette = InAppKeyboardPaletteFactory.createGlass(context, theme,
+            com.termux.app.chrome.GlassLook.of(mPreferences));
         if (mScheme.shouldApplyImportedPalette(theme))
             palette = mScheme.applyToPalette(palette);
         // Production paints this color into the activity's glass backdrop behind a transparent
@@ -201,11 +463,12 @@ public class KeyboardColorSchemeFragment extends Fragment {
             base.functionKeyBackground, base.functionLabelColor);
     }
 
-    /** Bottom sheet-style card holding the swatches, edit/reset actions, and role filters. */
+    /** Card holding the editing capsule (reset, edit) and the Font chooser. */
     @NonNull
     private View buildPaletteCard(@NonNull android.content.Context context) {
         MaterialCardView card = new MaterialCardView(context);
-        card.setRadius(dpFloat(24));
+        card.setRadius(com.termux.app.chrome.ShapeTokens.cornerPx(context,
+            com.google.android.material.R.attr.shapeAppearanceCornerExtraLarge, 28));
         card.setCardElevation(0f);
         card.setStrokeWidth(dp(1));
         card.setStrokeColor(MaterialColors.getColor(context,
@@ -216,84 +479,56 @@ public class KeyboardColorSchemeFragment extends Fragment {
                 com.google.android.material.R.attr.colorSurface, Color.DKGRAY)));
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        cardParams.topMargin = dp(12);
+        cardParams.topMargin = dp(GAP_DP);
         card.setLayoutParams(cardParams);
+        card.setTag(TAG_PALETTE_CARD);
 
         LinearLayout content = new LinearLayout(context);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(12), dp(16), dp(12));
+        content.setPadding(dp(8), dp(8), dp(8), dp(8));
 
         LinearLayout heading = new LinearLayout(context);
         heading.setGravity(Gravity.CENTER_VERTICAL);
-        TextView colorsTitle = new TextView(context);
-        colorsTitle.setText(R.string.termux_keyboard_color_scheme_colors);
-        colorsTitle.setTextAppearance(
+        // The capsule: full shape, highest surface container.
+        MaterialShapeDrawable capsule = new MaterialShapeDrawable(ShapeAppearanceModel.builder()
+            .setAllCornerSizes(ShapeAppearanceModel.PILL).build());
+        capsule.setFillColor(android.content.res.ColorStateList.valueOf(MaterialColors.getColor(
+            context, com.google.android.material.R.attr.colorSurfaceContainerHighest,
+            Color.DKGRAY)));
+        heading.setBackground(capsule);
+        heading.setPaddingRelative(dp(16), 0, dp(4), 0);
+        // Names the role being painted, so the glyphs below need no text of their own.
+        mEditingTitle = new TextView(context);
+        mEditingTitle.setTextAppearance(
             com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
-        heading.addView(colorsTitle, new LinearLayout.LayoutParams(0,
+        mEditingTitle.setSingleLine(true);
+        mEditingTitle.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        heading.addView(mEditingTitle, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        MaterialButton edit = new MaterialButton(context, null,
-            com.google.android.material.R.attr.materialButtonOutlinedStyle);
-        edit.setText(R.string.termux_keyboard_color_scheme_edit_colors);
+        // Reset and edit sit on the heading's own line as icons, so the card's height goes to the
+        // role filters instead.
+        MaterialButton reset = headingIconButton(context, R.drawable.ic_symbol_restart,
+            R.string.termux_keyboard_color_scheme_follow_theme);
+        reset.setOnClickListener(view -> showFollowThemeDialog());
+        heading.addView(reset);
+        MaterialButton edit = headingIconButton(context, R.drawable.ic_symbol_edit,
+            R.string.termux_keyboard_color_scheme_edit_colors);
+        edit.setCheckable(true);
         edit.setOnClickListener(view -> {
             mEditingSwatches = !mEditingSwatches;
-            edit.setText(mEditingSwatches ? R.string.termux_keyboard_color_scheme_save_colors
-                : R.string.termux_keyboard_color_scheme_edit_colors);
+            edit.setIconResource(mEditingSwatches ? R.drawable.ic_symbol_check
+                : R.drawable.ic_symbol_edit);
+            edit.setContentDescription(getString(mEditingSwatches
+                ? R.string.termux_keyboard_color_scheme_save_colors
+                : R.string.termux_keyboard_color_scheme_edit_colors));
+            edit.setChecked(mEditingSwatches);
             updateSwatches();
         });
         heading.addView(edit);
         content.addView(heading);
 
-        LinearLayout actions = new LinearLayout(context);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        actions.setGravity(Gravity.CENTER_VERTICAL);
-        MaterialButton followTheme = new MaterialButton(context, null,
-            com.google.android.material.R.attr.materialButtonOutlinedStyle);
-        followTheme.setText(R.string.termux_keyboard_color_scheme_follow_theme);
-        followTheme.setOnClickListener(view -> showFollowThemeDialog());
-        actions.addView(followTheme, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams actionParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        actionParams.topMargin = dp(4);
-        content.addView(actions, actionParams);
-
-        HorizontalScrollView roleScroller = new HorizontalScrollView(context);
-        roleScroller.setHorizontalScrollBarEnabled(false);
-        roleScroller.setClipToPadding(false);
-        ChipGroup roles = new ChipGroup(context);
-        roles.setSingleLine(true);
-        roles.setSingleSelection(true);
-        roles.setSelectionRequired(true);
-        mRoleByChipId.clear();
-        addRole(context, roles, R.string.termux_keyboard_color_scheme_key_bg,
-            InAppKeyboardColorScheme.Role.KEY_BACKGROUND, true);
-        addRole(context, roles, R.string.termux_keyboard_color_scheme_key_border,
-            InAppKeyboardColorScheme.Role.KEY_BORDER, false);
-        addRole(context, roles, R.string.termux_keyboard_color_scheme_primary,
-            InAppKeyboardColorScheme.Role.PRIMARY, false);
-        addRole(context, roles, R.string.termux_keyboard_color_scheme_secondary,
-            InAppKeyboardColorScheme.Role.SECONDARY, false);
-        addRole(context, roles, R.string.termux_keyboard_color_scheme_secondary_bottom,
-            InAppKeyboardColorScheme.Role.SECONDARY_BOTTOM, false);
-        // Not a per-key role: while checked, a swatch tap immediately becomes the whole
-        // keyboard's background, and re-tapping the assigned swatch clears it again.
-        Chip backgroundChip = addRole(context, roles,
-            R.string.termux_keyboard_color_scheme_background, null, false);
-        roles.setOnCheckedStateChangeListener((group, checkedIds) -> {
-            if (checkedIds.isEmpty())
-                return;
-            int checkedId = checkedIds.get(0);
-            mPaintingBackground = checkedId == backgroundChip.getId();
-            InAppKeyboardColorScheme.Role role = mRoleByChipId.get(checkedId);
-            if (role != null)
-                mSelectedRole = role;
-        });
-        roleScroller.addView(roles, new ViewGroup.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams roleParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        roleParams.topMargin = dp(4);
-        content.addView(roleScroller, roleParams);
+        content.addView(buildTypefaceRow(context), new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         card.addView(content);
         return card;
@@ -302,7 +537,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
     @Override
     public void onResume() {
         super.onResume();
-        requireActivity().setTitle(R.string.termux_keyboard_color_scheme_title);
+        requireActivity().setTitle(R.string.keyboard_theme_title);
         // The wallpaper may have changed while this screen sat in the background; dynamic slots
         // have to show what the keyboard will actually use.
         if (mScheme != null && mKeyboard != null
@@ -332,10 +567,6 @@ public class KeyboardColorSchemeFragment extends Fragment {
         } else {
             resetSchemeToTheme(mScheme);
         }
-        // An imported palette is applied only while the theme preference names a custom theme, so
-        // a deliberate light/dark choice is left alone.
-        if ("custom".equals(mPreferences.getInAppKeyboardTheme()))
-            mPreferences.setInAppKeyboardTheme("system");
         mSelectedSwatch = 0;
         persistAndRender();
         createSwatches();
@@ -409,22 +640,104 @@ public class KeyboardColorSchemeFragment extends Fragment {
             pinnedSwatchCount(scheme), scheme.swatchCount());
     }
 
+    /** A borderless icon button for the Colors heading, named for talkback by {@code label}. */
     @NonNull
-    private Chip addRole(@NonNull android.content.Context context, @NonNull ChipGroup group,
-                         int label, @Nullable InAppKeyboardColorScheme.Role role,
-                         boolean checked) {
+    private MaterialButton headingIconButton(@NonNull android.content.Context context, int icon,
+                                             int label) {
+        MaterialButton button = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialIconButtonStyle);
+        button.setIconResource(icon);
+        button.setContentDescription(getString(label));
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(button, getString(label));
+        return button;
+    }
+
+    /** One icon as a run of text, sized to the line it sits in. */
+    @NonNull
+    private static CharSequence inlineGlyph(@NonNull android.content.Context context, int icon,
+                                            int color, @NonNull TextView line) {
+        android.graphics.drawable.Drawable drawable =
+            androidx.core.content.ContextCompat.getDrawable(context, icon);
+        if (drawable == null) return "";
+        drawable = drawable.mutate();
+        drawable.setTint(color);
+        int size = Math.round(line.getTextSize() * 1.2f);
+        drawable.setBounds(0, 0, size, size);
+        android.text.SpannableString glyph = new android.text.SpannableString("\uFFFC");
+        glyph.setSpan(new android.text.style.ImageSpan(drawable,
+                android.os.Build.VERSION.SDK_INT >= 29
+                    ? android.text.style.DynamicDrawableSpan.ALIGN_CENTER
+                    : android.text.style.DynamicDrawableSpan.ALIGN_BOTTOM),
+            0, 1, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        return glyph;
+    }
+
+    /** What each chip paints, by index; null is the Background. */
+    private static final InAppKeyboardColorScheme.Role[] ROLE_ORDER = {
+        InAppKeyboardColorScheme.Role.KEY_BACKGROUND, InAppKeyboardColorScheme.Role.KEY_BORDER,
+        InAppKeyboardColorScheme.Role.PRIMARY, InAppKeyboardColorScheme.Role.SECONDARY,
+        InAppKeyboardColorScheme.Role.SECONDARY_BOTTOM, null
+    };
+    private static final int[] ROLE_LABELS = {
+        R.string.termux_keyboard_color_scheme_key_bg,
+        R.string.termux_keyboard_color_scheme_key_border,
+        R.string.termux_keyboard_color_scheme_primary,
+        R.string.termux_keyboard_color_scheme_secondary,
+        R.string.termux_keyboard_color_scheme_secondary_bottom,
+        R.string.termux_keyboard_color_scheme_background
+    };
+    private static final int[] ROLE_ICONS = {
+        R.drawable.ic_keyboard_color_role_key_bg, R.drawable.ic_keyboard_color_role_key_border,
+        R.drawable.ic_keyboard_color_role_primary, R.drawable.ic_keyboard_color_role_secondary,
+        R.drawable.ic_keyboard_color_role_secondary_bottom,
+        R.drawable.ic_keyboard_color_role_background
+    };
+
+    /** All six role chips in one group, wrapping to as many lines as the width needs. */
+    private void addRoleChips(@NonNull android.content.Context context,
+                              @NonNull LinearLayout root) {
+        ChipGroup chips = new ChipGroup(context);
+        chips.setChipSpacingHorizontal(dp(GAP_DP));
+        chips.setChipSpacingVertical(dp(4));
+        for (int index = 0; index < ROLE_ORDER.length; index++)
+            chips.addView(createRoleChip(context, index));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(GAP_DP);
+        root.addView(chips, params);
+    }
+
+    /** One role chip: the role glyph and name; checked = secondaryContainer (stock filter chip). */
+    @NonNull
+    private Chip createRoleChip(@NonNull android.content.Context context, int index) {
         Chip chip = new Chip(context);
-        chip.setId(View.generateViewId());
-        chip.setText(label);
+        chip.setChipDrawable(ChipDrawable.createFromAttributes(context, null, 0,
+            com.google.android.material.R.style.Widget_Material3_Chip_Filter));
+        chip.setText(ROLE_LABELS[index]);
+        chip.setChipIconResource(ROLE_ICONS[index]);
+        chip.setChipIconTint(null);
+        chip.setChipIconVisible(true);
+        chip.setCheckedIconVisible(false);
         chip.setCheckable(true);
-        chip.setChecked(checked);
-        if (role != null)
-            mRoleByChipId.put(chip.getId(), role);
-        ChipGroup.LayoutParams params = new ChipGroup.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.setMarginEnd(dp(8));
-        group.addView(chip, params);
+        chip.setContentDescription(getString(ROLE_LABELS[index]));
+        chip.setOnClickListener(view -> selectRole(index));
+        mRoleChips[index] = chip;
         return chip;
+    }
+
+    /** Check one chip, uncheck the rest, and name the choice in the capsule. */
+    private void selectRole(int index) {
+        mSelectedRoleIndex = index;
+        InAppKeyboardColorScheme.Role role = ROLE_ORDER[index];
+        mPaintingBackground = role == null;
+        if (role != null) mSelectedRole = role;
+        for (int i = 0; i < mRoleChips.length; i++) {
+            if (mRoleChips[i] != null) mRoleChips[i].setChecked(i == index);
+        }
+        if (mEditingTitle != null) {
+            mEditingTitle.setText(getString(R.string.termux_keyboard_color_scheme_editing,
+                getString(ROLE_LABELS[index])));
+        }
     }
 
     /**
@@ -448,7 +761,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
                 row.setOrientation(LinearLayout.HORIZONTAL);
                 LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-                if (i > 0) rowParams.topMargin = dp(6);
+                if (i > 0) rowParams.topMargin = dp(4);
                 mSwatchGrid.addView(row, rowParams);
             }
 
@@ -458,13 +771,13 @@ public class KeyboardColorSchemeFragment extends Fragment {
             cell.setOnClickListener(view -> onSwatchTapped(index));
             FrameLayout well = new FrameLayout(context);
             View swatch = new View(context);
-            well.addView(swatch, new FrameLayout.LayoutParams(dp(36), dp(36)));
+            well.addView(swatch, new FrameLayout.LayoutParams(dp(SWATCH_DP), dp(SWATCH_DP)));
             View badge = new View(context);
             badge.setBackground(pinnedBadge(context));
             FrameLayout.LayoutParams badgeParams = new FrameLayout.LayoutParams(dp(11), dp(11));
             badgeParams.gravity = Gravity.TOP | Gravity.END;
             well.addView(badge, badgeParams);
-            FrameLayout.LayoutParams wellParams = new FrameLayout.LayoutParams(dp(36), dp(36));
+            FrameLayout.LayoutParams wellParams = new FrameLayout.LayoutParams(dp(SWATCH_DP), dp(SWATCH_DP));
             wellParams.gravity = Gravity.CENTER;
             cell.addView(well, wellParams);
 
@@ -527,8 +840,6 @@ public class KeyboardColorSchemeFragment extends Fragment {
             mSwatchBadges.get(i).setVisibility(pinned ? View.VISIBLE : View.INVISIBLE);
             mSwatchItems.get(i).setContentDescription(slotDescription(context, mScheme, i));
         }
-        if (mStatus != null)
-            mStatus.setText(statusText(context, mScheme));
     }
 
     private void showHexEditor(int index) {
@@ -591,6 +902,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mPreferences.setInAppKeyboardColorScheme(mScheme.toJson());
         mKeyboard.setPalette(buildPreviewPalette(requireContext()));
         mKeyboard.setKeyColorOverrides(mScheme.resolvedOverrides());
+        syncThemePreference();
     }
 
     private int dp(float value) { return Math.round(dpFloat(value)); }

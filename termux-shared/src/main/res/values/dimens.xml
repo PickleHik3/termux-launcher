@@ -8,4 +8,11 @@
     <dimen name="content_padding">8dip</dimen>
     <dimen name="content_padding_double">16dip</dimen>
     <dimen name="content_padding_triple">32dip</dimen>
+
+    <!-- Shape tokens (Material 3 corner scale). ExtraSmall 4, Small 8, Medium 12, Large 16, ExtraLarge 28; Full is 50% and has no dimen. -->
+    <dimen name="termux_corner_extra_small">4dp</dimen>
+    <dimen name="termux_corner_small">8dp</dimen>
+    <dimen name="termux_corner_medium">12dp</dimen>
+    <dimen name="termux_corner_large">16dp</dimen>
+    <dimen name="termux_corner_extra_large">28dp</dimen>
 </resources>

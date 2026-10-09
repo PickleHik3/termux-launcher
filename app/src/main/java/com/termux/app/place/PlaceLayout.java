@@ -18,7 +18,7 @@ import java.util.Map;
  */
 public final class PlaceLayout {
 
-    /** A screen edge. The status bar always stands on one of them — it is never hidden. */
+    /** A screen edge. Every element stands on one of them, or is put away. */
     public enum Edge {
         TOP, BOTTOM, LEFT, RIGHT;
 
@@ -138,11 +138,22 @@ public final class PlaceLayout {
         }
     }
 
+
     /** Every element's slot: the whole truth about what stands where on this place. */
     @NonNull private final Map<Element, Slot> mSlots;
 
     @NonNull public final KeyboardMode keyboardMode;
     @NonNull public final KeyboardForm keyboardForm;
+    /**
+     * Whether the keyboard is part of the arrangement at all: the Layout editor's Keyboard
+     * element shown or hidden, which is the same switch as the palette's Keyboard on/off
+     * ({@code keyboard_turned_off}). Hidden, nothing raises it — not a tap, not a text field —
+     * until it is shown again. One switch for both orientations and every place: it is a stance
+     * rather than an arrangement, taken because a hardware keyboard is plugged in, not because
+     * the phone was turned. It has no edge and no order: the keyboard stands where its form puts
+     * it.
+     */
+    public final boolean keyboardShown;
     public final int widgetColumns;
     public final int widgetRows;
 
@@ -160,21 +171,31 @@ public final class PlaceLayout {
             keyboardForm, widgetColumns, widgetRows);
     }
 
-    /** The arrangement as slots: an edge and a position for each of the four elements. */
+    /** The arrangement as slots, with the keyboard shown. */
     public PlaceLayout(@NonNull Map<Element, Slot> slots, @NonNull KeyboardMode keyboardMode,
                        @NonNull KeyboardForm keyboardForm, int widgetColumns, int widgetRows) {
+        this(slots, keyboardMode, keyboardForm, true, widgetColumns, widgetRows);
+    }
+
+    /**
+     * The arrangement as slots: an edge and a position for each of the four elements. The
+     * alphabets index, when shown, always stands as a band of its own on its edge: the minimised
+     * pull tab it could once fold into is gone (2026-09-30), and on or off is where it is dropped.
+     */
+    public PlaceLayout(@NonNull Map<Element, Slot> slots, @NonNull KeyboardMode keyboardMode,
+                       @NonNull KeyboardForm keyboardForm, boolean keyboardShown,
+                       int widgetColumns, int widgetRows) {
         EnumMap<Element, Slot> copy = new EnumMap<>(Element.class);
         for (Element element : Element.values()) {
             Slot slot = slots.get(element);
             if (slot == null) slot = Slot.on(Edge.BOTTOM, element);
-            // The status bar is never hidden; the wall's pager needs something to ride.
-            if (element == Element.STATUS && slot.hidden) slot = slot.withHidden(false);
             copy.put(element, slot);
         }
         mSlots = Collections.unmodifiableMap(copy);
 
         this.keyboardMode = keyboardMode;
         this.keyboardForm = keyboardForm;
+        this.keyboardShown = keyboardShown;
         this.widgetColumns = widgetColumns;
         this.widgetRows = widgetRows;
     }
@@ -197,7 +218,16 @@ public final class PlaceLayout {
     public PlaceLayout withSlot(@NonNull Element element, @NonNull Slot slot) {
         EnumMap<Element, Slot> next = new EnumMap<>(mSlots);
         next.put(element, slot);
-        return new PlaceLayout(next, keyboardMode, keyboardForm, widgetColumns, widgetRows);
+        return new PlaceLayout(next, keyboardMode, keyboardForm, keyboardShown, widgetColumns,
+            widgetRows);
+    }
+
+    /** The same arrangement with the keyboard shown or hidden. */
+    @NonNull
+    public PlaceLayout withKeyboardShown(boolean shown) {
+        if (shown == keyboardShown) return this;
+        return new PlaceLayout(mSlots, keyboardMode, keyboardForm, shown, widgetColumns,
+            widgetRows);
     }
 
     @NonNull
@@ -234,6 +264,7 @@ public final class PlaceLayout {
             && widgetRows == that.widgetRows
             && keyboardMode == that.keyboardMode
             && keyboardForm == that.keyboardForm
+            && keyboardShown == that.keyboardShown
             && mSlots.equals(that.mSlots);
     }
 
@@ -242,6 +273,8 @@ public final class PlaceLayout {
         int result = mSlots.hashCode();
         result = 31 * result + keyboardMode.hashCode();
         result = 31 * result + keyboardForm.hashCode();
+        result = 31 * result + (keyboardShown ? 1 : 0);
+
         result = 31 * result + widgetColumns;
         result = 31 * result + widgetRows;
         return result;
@@ -256,6 +289,7 @@ public final class PlaceLayout {
             + ", keys=" + slot(Element.EXTRA_KEYS)
             + ", keyboard=" + keyboardMode
             + ", form=" + keyboardForm
+            + ", keyboardShown=" + keyboardShown
             + ", grid=" + widgetColumns + "x" + widgetRows
             + "}";
     }

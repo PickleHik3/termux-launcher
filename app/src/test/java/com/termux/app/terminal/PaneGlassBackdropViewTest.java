@@ -2,6 +2,8 @@ package com.termux.app.terminal;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Activity;
@@ -25,14 +27,16 @@ import org.robolectric.annotation.Config;
  * The frost's anchor. A pane is transformed constantly — the plank tilts it under a finger and the
  * FLIP movement animates its translation — and anchoring the wallpaper frost to a transformed
  * position baked those offsets in: the frost jumped when the pane was touched and stayed shifted
- * after the spring settled, while a strip of the pane showed sharp wallpaper.
+ * after the spring settled, while a strip of the pane showed sharp wallpaper. The one transform
+ * the frost does follow is the wall page's slide, reported apart from the anchor, so a page
+ * travelling over the wallpaper shows the wallpaper it is over.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {Build.VERSION_CODES.P})
 public class PaneGlassBackdropViewTest {
 
     @Test
-    public void theFrostAnchorIgnoresTransformsOnTheWayUp() {
+    public void theFrostAnchorIgnoresThePlanksTransformsOnTheWayUp() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         FrameLayout root = new FrameLayout(activity);
         FrameLayout paneFrame = new FrameLayout(activity);
@@ -58,6 +62,40 @@ public class PaneGlassBackdropViewTest {
 
         assertEquals("frost anchor moved with the tilt", settled[0], pressed[0]);
         assertEquals("frost anchor moved with the tilt", settled[1], pressed[1]);
+    }
+
+    /**
+     * A place sliding across the wall is the page's translation, and the frost has to stay glued
+     * to the wallpaper while the page travels over it: the slide is handed back beside the anchor,
+     * which itself stays where the layout put it. A tilt inside the page is still not a slide.
+     */
+    @Test
+    public void theFrostAnchorReportsTheWallPagesSlideApartFromItself() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        com.termux.app.wall.PaneWallLayout wall = new com.termux.app.wall.PaneWallLayout(activity);
+        FrameLayout page = new FrameLayout(activity);
+        FrameLayout paneFrame = new FrameLayout(activity);
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        paneFrame.addView(backdrop);
+        page.addView(paneFrame);
+        wall.addView(page);
+        activity.setContentView(wall);
+        wall.layout(0, 0, 1080, 2000);
+        page.layout(0, 0, 1080, 2000);
+        paneFrame.layout(40, 100, 1040, 1900);
+        backdrop.layout(0, 0, 1000, 1800);
+
+        int[] rest = new int[2];
+        assertEquals("nothing sliding at rest", 0f, backdrop.layoutOriginOnScreen(rest), 0f);
+
+        page.setTranslationX(-324f);          // the wall mid-slide
+        paneFrame.setTranslationX(24f);        // and the plank tipping the pane inside it
+        int[] sliding = new int[2];
+        float slide = backdrop.layoutOriginOnScreen(sliding);
+
+        assertEquals("the anchor stays where the layout put it", rest[0], sliding[0]);
+        assertEquals(rest[1], sliding[1]);
+        assertEquals("only the page's slide is reported, never the tilt", -324f, slide, 0f);
     }
 
     /**
@@ -133,5 +171,153 @@ public class PaneGlassBackdropViewTest {
 
         assertEquals(540, after[0] - before[0]);
         assertEquals(0, after[1] - before[1]);
+    }
+
+    // ------------------------------------------------------------- retained + crossfaded frame
+
+    /**
+     * A miss while a fresh blur is in flight — a radius the editor just settled on, a source the
+     * cache is still re-capturing — is not a reason for the pane to go tint-only.
+     */
+    @Test
+    public void aNullFrameKeepsWhateverThePaneWasAlreadyDrawing() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        Bitmap frame = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        Rect frameRect = new Rect(0, 0, 40, 60);
+        backdrop.setGlass(frame, frameRect, 0x40FF0000, null, 0, 12f, null);
+
+        backdrop.setGlass(null, frameRect, 0x40FF0000, null, 0, 12f, null);
+
+        assertSame("the pane keeps drawing the frame it already had", frame, backdrop.heldFrame());
+    }
+
+    @Test
+    public void aCrossfadedSwapKeepsTheOldFrameAliveWhileItFades() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        Bitmap frame = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        Bitmap replacement = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        Rect frameRect = new Rect(0, 0, 40, 60);
+        backdrop.setGlass(frame, frameRect, 0x40FF0000, null, 0, 12f, null, false);
+
+        backdrop.setGlass(replacement, frameRect, 0x40FF0000, null, 0, 12f, null, true);
+
+        assertSame("the target frame is up right away", replacement, backdrop.heldFrame());
+        assertSame("the previous frame is held so the cache cannot recycle it mid-fade",
+            frame, backdrop.fadingFrame());
+    }
+
+    @Test
+    public void aSwapWithoutCrossfadeNeverKeepsAPreviousFrame() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        Bitmap frame = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        Bitmap replacement = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        Rect frameRect = new Rect(0, 0, 40, 60);
+        backdrop.setGlass(frame, frameRect, 0x40FF0000, null, 0, 12f, null, false);
+
+        backdrop.setGlass(replacement, frameRect, 0x40FF0000, null, 0, 12f, null, false);
+
+        assertNull("a rotation or a radius change lands outright, nothing to fade from",
+            backdrop.fadingFrame());
+    }
+
+    @Test
+    public void aCrossfadeIsNeverOfferedAcrossAMovedFrameRect() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        Bitmap frame = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        Bitmap replacement = Bitmap.createBitmap(40, 60, Bitmap.Config.ARGB_8888);
+        backdrop.setGlass(frame, new Rect(0, 0, 40, 60), 0x40FF0000, null, 0, 12f, null, false);
+
+        backdrop.setGlass(replacement, new Rect(0, 8, 40, 68), 0x40FF0000, null, 0, 12f, null, true);
+
+        assertNull("the pixels would land in the wrong place, so this still swaps outright",
+            backdrop.fadingFrame());
+    }
+
+    private static FrameLayout movingPane(Activity activity, PaneGlassBackdropView backdrop) {
+        FrameLayout root = new FrameLayout(activity);
+        FrameLayout paneFrame = new FrameLayout(activity);
+        backdrop.setId(com.termux.R.id.terminal_pane_glass);
+        paneFrame.addView(backdrop);
+        root.addView(paneFrame);
+        activity.setContentView(root);
+        root.measure(0, 0);
+        root.layout(0, 0, 1080, 2000);
+        paneFrame.layout(40, 100, 1040, 1900);
+        backdrop.layout(0, 0, 1000, 1800);
+        return paneFrame;
+    }
+
+    /** A FLIP move in flight: the glass aims at the pane's on-screen position, then at layout. */
+    @Test
+    public void aMovingPaneAimsAtItsOnScreenPositionAndSettlesAtLayout() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        FrameLayout paneFrame = movingPane(activity, backdrop);
+        int[] layout = new int[2];
+        backdrop.layoutOriginOnScreen(layout);
+
+        paneFrame.setTranslationX(-300f);
+        paneFrame.setTranslationY(120f);
+        PaneGlassMotion.publish(paneFrame);
+        int[] moving = new int[2];
+        backdrop.layoutOriginOnScreen(moving);
+        assertEquals(layout[0] - 300, moving[0]);
+        assertEquals(layout[1] + 120, moving[1]);
+
+        paneFrame.setTranslationX(0f);
+        paneFrame.setTranslationY(0f);
+        PaneGlassMotion.publish(paneFrame);
+        int[] landed = new int[2];
+        backdrop.layoutOriginOnScreen(landed);
+        assertEquals(layout[0], landed[0]);
+        assertEquals(layout[1], landed[1]);
+    }
+
+    /** The plank's press moves and tips the same frame but never publishes, so it stays out. */
+    @Test
+    public void aPressWithoutAPublishedMotionStillIgnoresRotationAndScale() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        FrameLayout paneFrame = movingPane(activity, backdrop);
+        int[] layout = new int[2];
+        backdrop.layoutOriginOnScreen(layout);
+        paneFrame.setTranslationX(24f);
+        paneFrame.setRotationY(1.1f);
+        paneFrame.setScaleX(0.98f);
+        int[] pressed = new int[2];
+        backdrop.layoutOriginOnScreen(pressed);
+        assertEquals(layout[0], pressed[0]);
+        assertEquals(layout[1], pressed[1]);
+    }
+
+    /** A cancelled animation withdraws its motion, so the aim falls back to the layout. */
+    @Test
+    public void cancellingTheAnimationWithdrawsTheMotion() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        FrameLayout paneFrame = movingPane(activity, backdrop);
+        int[] layout = new int[2];
+        backdrop.layoutOriginOnScreen(layout);
+
+        paneFrame.setTranslationX(-300f);
+        android.view.ViewPropertyAnimator animator =
+            paneFrame.animate().translationX(0f).setDuration(340L);
+        PaneGlassMotion.follow(paneFrame, animator);
+        animator.start();
+        PaneGlassMotion.publish(paneFrame);
+        int[] moving = new int[2];
+        backdrop.layoutOriginOnScreen(moving);
+        assertEquals(layout[0] - 300, moving[0]);
+
+        animator.cancel();
+        paneFrame.setTranslationX(-150f);   // a later owner (the plank) moves it; not ours
+        int[] after = new int[2];
+        backdrop.layoutOriginOnScreen(after);
+        assertEquals(layout[0], after[0]);
+        assertEquals(layout[1], after[1]);
     }
 }

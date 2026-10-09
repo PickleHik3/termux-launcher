@@ -10,6 +10,11 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.security.SecureRandom;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -26,6 +31,8 @@ public final class TaiSettings {
 
     public static final String KEY_ROLE_DEFAULT_ASSISTANT = "tai_role_default_assistant";
     public static final String KEY_SYSTEM_PROMPT_GENERAL = "tai_system_prompt_general";
+    static final String LEGACY_DEFAULT_SYSTEM_PROMPT =
+        "You are TAI, Termux AI, a local assistant integrated with Termux Launcher. Prefer safe, reviewable actions.";
     public static final String KEY_MAX_TOKENS = "tai_max_tokens";
     public static final String KEY_TOP_K = "tai_top_k";
     public static final String KEY_TOP_P = "tai_top_p";
@@ -42,6 +49,25 @@ public final class TaiSettings {
     public static final String KEY_API_AUTH_REQUIRED = "tai_api_auth_required";
     public static final String KEY_API_LAN_SESSION_STARTED_AT = "tai_api_lan_session_started_at";
     public static final String KEY_OPENAI_AUTO_LOAD = "tai_openai_auto_load";
+    // Speech-to-text: the model voice input uses, the preferred window for new downloads, how long
+    // an idle speech model stays loaded, and the download that becomes the model in use once it
+    // succeeds (see TaiSpeechModels).
+    public static final String KEY_STT_MODEL_ID = "tai_stt_model_id";
+    public static final String KEY_STT_WINDOW_SECONDS = "tai_stt_window_seconds";
+    public static final String KEY_STT_IDLE_UNLOAD_MINUTES = "tai_stt_idle_unload_minutes";
+    public static final String KEY_STT_PENDING_DOWNLOAD = "tai_stt_pending_download";
+    /** Speech output: the voice (one of {@link TaiTtsVoices#VOICES}) and the speed (a float, 1.0 = the voice's own pace). */
+    public static final String KEY_TTS_VOICE = "tai_tts_voice";
+    public static final String KEY_TTS_SPEED = "tai_tts_speed";
+    /** How many model downloads run side by side (D3): 1 to 3, default 2. */
+    public static final String KEY_DOWNLOAD_PARALLEL = "tai_download_parallel";
+    /**
+     * Developer override of the RAM tier ({@link TaiDeviceTier}): {@code ""} is automatic, else
+     * {@code 1}, {@code 2} or {@code 3}. Set by {@code tai runtime --tier}; users get no picker.
+     */
+    public static final String KEY_TIER_OVERRIDE = "tai_tier_override";
+    public static final int DEFAULT_STT_WINDOW_SECONDS = 10;
+    public static final int DEFAULT_STT_IDLE_UNLOAD_MINUTES = 2;
 
     public static final String BIND_MODE_LOCALHOST = "localhost";
     public static final String BIND_MODE_LAN = "lan";
@@ -91,11 +117,135 @@ public final class TaiSettings {
             preferences.edit().putString(KEY_ROLE_DEFAULT_ASSISTANT, migratedModelId).apply();
             modelId = migratedModelId;
         }
-        if (new TaiModelRegistry().getModel(modelId) != null || new TaiModelStore(appContext).getInstalledUserModels().containsKey(modelId)) {
+        if (new TaiModelRegistry().getModel(modelId) != null) return modelId;
+        TaiModelStore store = new TaiModelStore(appContext);
+        if (store.getInstalledUserModels().containsKey(modelId)
+            || store.getDownloadedReadableModels().containsKey(modelId)
+            || store.onDiskModelSpec(modelId) != null) {
             return modelId;
         }
-        preferences.edit().putString(KEY_ROLE_DEFAULT_ASSISTANT, TaiModelRegistry.MODEL_GEMMA_4_E2B_IT).apply();
+        // Fall back without persisting: a model that is briefly unreadable (mid re-download, or
+        // failing a stricter package check after an update) must not lose the user's choice.
         return TaiModelRegistry.MODEL_GEMMA_4_E2B_IT;
+    }
+
+    /** The stored tier override: {@code ""} (automatic), {@code "1"}, {@code "2"} or {@code "3"}. */
+    @NonNull
+    public String getTierOverrideValue() {
+        TaiDeviceTier tier = TaiDeviceTier.parseOverride(preferences.getString(KEY_TIER_OVERRIDE, ""));
+        return tier == null ? "" : Integer.toString(tier.number());
+    }
+
+    /** Stores the tier override; {@code "auto"}, empty or anything unrecognised clears it. */
+    public void setTierOverride(@Nullable String value) {
+        TaiDeviceTier tier = TaiDeviceTier.parseOverride(value);
+        SharedPreferences.Editor edit = preferences.edit();
+        if (tier == null) edit.remove(KEY_TIER_OVERRIDE);
+        else edit.putString(KEY_TIER_OVERRIDE, Integer.toString(tier.number()));
+        edit.apply();
+        TaiDeviceTier.rememberOverride(tier);
+    }
+
+    /** The memory limits file, beside the runtime history under {@code files/tai}; absent means relaxed. */
+    static final String MEMORY_MODE_FILE = "memory-mode";
+    private static final Object MEMORY_MODE_LOCK = new Object();
+    /** The file's modification time and length when {@link #memoryModeCached} was read; a change in either rereads it. */
+    private static long memoryModeStampMs = Long.MIN_VALUE;
+    private static long memoryModeLength = -1L;
+    @NonNull private static TaiLoadBudget.MemoryMode memoryModeCached = TaiLoadBudget.MemoryMode.RELAXED;
+
+    @NonNull
+    public TaiLoadBudget.MemoryMode getMemoryMode() {
+        return memoryMode(appContext);
+    }
+
+    /**
+     * Stores the memory limits for the load budget and the runtime's memory watch. Relaxed removes
+     * the file rather than writing it, so absent and relaxed are one state.
+     */
+    public void setMemoryMode(@NonNull TaiLoadBudget.MemoryMode mode) {
+        File file = memoryModeFile(appContext);
+        synchronized (MEMORY_MODE_LOCK) {
+            try {
+                if (mode == TaiLoadBudget.MemoryMode.RELAXED) {
+                    Files.deleteIfExists(file.toPath());
+                } else {
+                    File dir = file.getParentFile();
+                    if (dir != null && !dir.isDirectory() && !dir.mkdirs() && !dir.isDirectory()) return;
+                    File temp = new File(dir, MEMORY_MODE_FILE + ".tmp");
+                    Files.write(temp.toPath(), mode.id.getBytes(StandardCharsets.UTF_8));
+                    Files.move(temp.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
+            } catch (IOException | RuntimeException ignored) {
+                // A failed write keeps the previous limits; the row reads the file back and shows them.
+            }
+            memoryModeStampMs = Long.MIN_VALUE;
+        }
+    }
+
+    /**
+     * The memory limits, for any process. A file, not these preferences: the runtime runs in
+     * {@code :tai_runtime}, and SharedPreferences are cached per process, so a change made in
+     * Settings would not reach its memory watch until it restarted, and the watch would unload what
+     * the gate had just admitted. The watch asks every 250 ms to 2 s, so the read is a stat until the
+     * file changes. Missing or unreadable: {@link TaiLoadBudget.MemoryMode#RELAXED}.
+     */
+    @NonNull
+    public static TaiLoadBudget.MemoryMode memoryMode(@Nullable Context context) {
+        if (context == null) return TaiLoadBudget.MemoryMode.RELAXED;
+        File file = memoryModeFile(context.getApplicationContext() != null ? context.getApplicationContext() : context);
+        synchronized (MEMORY_MODE_LOCK) {
+            try {
+                long stamp = file.lastModified();
+                long length = file.length();
+                if (stamp == memoryModeStampMs && length == memoryModeLength) return memoryModeCached;
+                TaiLoadBudget.MemoryMode mode = stamp == 0L ? TaiLoadBudget.MemoryMode.RELAXED
+                    : TaiLoadBudget.MemoryMode.fromId(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+                memoryModeStampMs = stamp;
+                memoryModeLength = length;
+                memoryModeCached = mode;
+                return mode;
+            } catch (IOException | RuntimeException e) {
+                return TaiLoadBudget.MemoryMode.RELAXED;
+            }
+        }
+    }
+
+    @NonNull
+    private static File memoryModeFile(@NonNull Context context) {
+        return new File(new File(context.getFilesDir(), "tai"), MEMORY_MODE_FILE);
+    }
+
+    /** One function's stored pick or accelerator ({@link TaiFunctionModels}); {@code ""} when unset. */
+    @NonNull
+    public String getFunctionValue(@NonNull String key) {
+        String value = preferences.getString(key, "");
+        return value == null ? "" : value.trim();
+    }
+
+    /** Stores one function's pick or accelerator; {@code null} or empty goes back to Automatic. */
+    public void setFunctionValue(@NonNull String key, @Nullable String value) {
+        SharedPreferences.Editor edit = preferences.edit();
+        if (value == null || value.trim().isEmpty()) edit.remove(key);
+        else edit.putString(key, value.trim());
+        edit.apply();
+    }
+
+    /** The {@code feature|model} pairs the Model Centre has already offered a feature check for. */
+    private static final String KEY_FEATURE_CHECK_OFFERED = "tai_feature_check_offered";
+
+    /** Whether "Check how it runs on this phone" was already taken up for this feature on this model (decision 5). */
+    public boolean isFeatureCheckOffered(@NonNull TaiFunction feature, @NonNull String modelId) {
+        java.util.Set<String> offered = preferences.getStringSet(KEY_FEATURE_CHECK_OFFERED, null);
+        return offered != null && offered.contains(feature.id() + "|" + TaiModelVariants.baseModelId(modelId));
+    }
+
+    /** Remembers that the offer for this feature and model was taken up, so it is made only once. */
+    public void markFeatureCheckOffered(@NonNull TaiFunction feature, @NonNull String modelId) {
+        java.util.Set<String> stored = preferences.getStringSet(KEY_FEATURE_CHECK_OFFERED, null);
+        java.util.Set<String> offered = stored == null ? new java.util.HashSet<>() : new java.util.HashSet<>(stored);
+        offered.add(feature.id() + "|" + TaiModelVariants.baseModelId(modelId));
+        preferences.edit().putStringSet(KEY_FEATURE_CHECK_OFFERED, offered).apply();
     }
 
     @NonNull
@@ -219,6 +369,94 @@ public final class TaiSettings {
 
     public boolean isOpenAiAutoLoadEnabled() {
         return preferences.getBoolean(KEY_OPENAI_AUTO_LOAD, true);
+    }
+
+    /** Downloads that may run at once, clamped to 1..3. The scheduler reads this before every
+     *  start, so a change applies to the next scheduling decision without a restart. */
+    public int getDownloadParallel() {
+        try {
+            return TaiDownloadQueue.clampParallel(preferences.getInt(KEY_DOWNLOAD_PARALLEL, TaiDownloadQueue.DEFAULT_PARALLEL));
+        } catch (ClassCastException e) {
+            // A list preference stores strings; read that shape too rather than crash the scheduler.
+            try {
+                return TaiDownloadQueue.clampParallel(Integer.parseInt(preferences.getString(KEY_DOWNLOAD_PARALLEL, "")));
+            } catch (RuntimeException ignored) {
+                return TaiDownloadQueue.DEFAULT_PARALLEL;
+            }
+        }
+    }
+
+    public void setDownloadParallel(int parallel) {
+        preferences.edit().putInt(KEY_DOWNLOAD_PARALLEL, TaiDownloadQueue.clampParallel(parallel)).apply();
+    }
+
+    /** The speech-to-text model voice input uses (e.g. {@code whisper-acft-base-en}), or empty when
+     *  none has been chosen. Read it through {@link TaiSpeechModels#resolveActive}, which treats an
+     *  id whose files are gone as unset and falls back to another installed speech model. */
+    @NonNull
+    public String getSttModelId() {
+        return preferences.getString(KEY_STT_MODEL_ID, "");
+    }
+
+    public void setSttModelId(@Nullable String modelId) {
+        preferences.edit().putString(KEY_STT_MODEL_ID, modelId == null ? "" : modelId.trim()).apply();
+    }
+
+    /** The speech download that becomes the model in use when it succeeds, as
+     *  {@link TaiSpeechModels.PendingDownload} JSON; empty when none is pending. */
+    @NonNull
+    public String getSttPendingDownloadJson() {
+        return preferences.getString(KEY_STT_PENDING_DOWNLOAD, "");
+    }
+
+    public void setSttPendingDownloadJson(@Nullable String json) {
+        if (json == null || json.trim().isEmpty()) preferences.edit().remove(KEY_STT_PENDING_DOWNLOAD).apply();
+        else preferences.edit().putString(KEY_STT_PENDING_DOWNLOAD, json).apply();
+    }
+
+    /** The preferred window (in seconds) for the next speech model download: 10 (default) or 5.
+     *  The window of an installed model is read off its file name ({@link TaiSpeechModels#windowSeconds}).
+     *  Falls back to the default for any stored value the plan doesn't offer (only 5s/10s are ever
+     *  downloaded; 30s hallucinates on short speech and isn't offered). */
+    public int getSttWindowSeconds() {
+        int value = preferences.getInt(KEY_STT_WINDOW_SECONDS, DEFAULT_STT_WINDOW_SECONDS);
+        return value == 5 ? 5 : DEFAULT_STT_WINDOW_SECONDS;
+    }
+
+    public void setSttWindowSeconds(int windowSeconds) {
+        preferences.edit().putInt(KEY_STT_WINDOW_SECONDS, windowSeconds == 5 ? 5 : DEFAULT_STT_WINDOW_SECONDS).apply();
+    }
+
+    /** Minutes of idle time before the speech model unloads (default 2 — much shorter than a chat
+     *  model's idle-unload, since STT is meant to be opened and closed within one voice-input turn). */
+    public int getSttIdleUnloadMinutes() {
+        int value = preferences.getInt(KEY_STT_IDLE_UNLOAD_MINUTES, DEFAULT_STT_IDLE_UNLOAD_MINUTES);
+        return Math.max(0, value);
+    }
+
+    public void setSttIdleUnloadMinutes(int minutes) {
+        preferences.edit().putInt(KEY_STT_IDLE_UNLOAD_MINUTES, Math.max(0, minutes)).apply();
+    }
+
+    /** The voice speech output uses when a request names none; Jasper until the user picks. */
+    @NonNull
+    public String getTtsVoice() {
+        String stored = TaiTtsVoices.canonical(preferences.getString(KEY_TTS_VOICE, TaiTtsVoices.DEFAULT_VOICE));
+        return stored == null ? TaiTtsVoices.DEFAULT_VOICE : stored;
+    }
+
+    public void setTtsVoice(@NonNull String voice) {
+        String canonical = TaiTtsVoices.canonical(voice);
+        preferences.edit().putString(KEY_TTS_VOICE, canonical == null ? TaiTtsVoices.DEFAULT_VOICE : canonical).apply();
+    }
+
+    /** The speed speech output uses when a request names none, clamped to what the model says clearly. */
+    public float getTtsSpeed() {
+        return TaiTtsVoices.clampSpeed(preferences.getFloat(KEY_TTS_SPEED, TaiTtsVoices.DEFAULT_SPEED));
+    }
+
+    public void setTtsSpeed(float speed) {
+        preferences.edit().putFloat(KEY_TTS_SPEED, TaiTtsVoices.clampSpeed(speed)).apply();
     }
 
     @NonNull
@@ -381,6 +619,16 @@ public final class TaiSettings {
         return BIND_MODE_LOCALHOST;
     }
 
+    /**
+     * The value the user stored in Parameters for {@code field}: the model's own, else the backend's
+     * global, else the legacy global; {@code null} when none was stored. A schema default is never
+     * returned, so a non-null answer is the user's choice (the feature load plan counts it as a pick).
+     */
+    @Nullable
+    public Object storedParameter(@Nullable String backend, @Nullable String modelId, @NonNull String field) {
+        return resolveParameter(getParameterSchema(backend), field, modelId);
+    }
+
     @Nullable
     private Object resolveParameter(@NonNull ParameterSchema schema, @NonNull String field, @Nullable String modelId) {
         ParameterSpec spec = schema.get(field);
@@ -470,6 +718,9 @@ public final class TaiSettings {
         put(specs, ParameterSpec.decimal(FIELD_TEMPERATURE, "0.80", 0.80d, 0.0d, 2.0d));
         put(specs, ParameterSpec.decimal(FIELD_TOP_P, "0.90", 0.90d, 0.0d, 1.0d));
         put(specs, ParameterSpec.integer(FIELD_TOP_K, "40", 40, 1, 100));
+        // Auto (unset) keeps the EAGLE-3 package's own speculative_type; explicit false makes
+        // mergedConfigJson drop it so the model falls back to plain decoding (MnnTaiRuntime).
+        put(specs, ParameterSpec.bool(FIELD_ENABLE_SPECULATIVE_DECODING, "false", false));
         return new ParameterSchema(TaiModelSpec.BACKEND_MNN_LLM, specs);
     }
 
@@ -602,10 +853,16 @@ public final class TaiSettings {
         }
     }
 
+    /**
+     * The system prompt TAI adds when a client sends none: empty by default, like any other
+     * OpenAI-compatible server, so API clients get the model's own behaviour and no extra prefill.
+     * The old built-in identity prompt, if it was ever persisted, reads as empty too.
+     */
     @NonNull
     public String getGeneralSystemPrompt() {
-        return preferences.getString(KEY_SYSTEM_PROMPT_GENERAL,
-            "You are TAI, Termux AI, a local assistant integrated with Termux Launcher. Prefer safe, reviewable actions.");
+        String prompt = preferences.getString(KEY_SYSTEM_PROMPT_GENERAL, "");
+        if (prompt == null || LEGACY_DEFAULT_SYSTEM_PROMPT.equals(prompt.trim())) return "";
+        return prompt;
     }
 
     @NonNull
@@ -622,6 +879,7 @@ public final class TaiSettings {
         json.put("runtimeOptions", getRuntimeOptions().toJson());
         json.put("idleUnloadMinutes", getIdleUnloadMinutes());
         json.put("openAiAutoLoadEnabled", isOpenAiAutoLoadEnabled());
+        json.put("downloadParallel", getDownloadParallel());
         json.put("huggingFaceTokenConfigured", !getHuggingFaceToken().trim().isEmpty());
         json.put("apiPort", getApiPort());
         String bindMode = getApiBindMode();
@@ -646,7 +904,7 @@ public final class TaiSettings {
         supportedEndpoints.put("/v1/embeddings");
         supportedEndpoints.put("/v1/audio/speech");
         json.put("supportedEndpoints", supportedEndpoints);
-        json.put("audioOutputNote", "Audio output returns an explicit unsupported_audio_output error until a local runner exposes generated audio.");
+        json.put("audioOutputNote", "/v1/audio/speech speaks with the installed voice model (KittenTTS): input, voice (Bruno, Hugo, Jasper, Rosie), speed, response_format wav|pcm.");
         json.put("embeddingsNote", "Embeddings support is model-capability dependent.");
         json.put("autoGenerationDefaultState", "nullable generation overrides use model profile or MNN config defaults in the selected runtime");
         return json;

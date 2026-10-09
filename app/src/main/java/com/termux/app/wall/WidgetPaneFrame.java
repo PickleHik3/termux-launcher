@@ -21,9 +21,11 @@ import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerHoldArbiter;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.PaneContentFrame;
 import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
+import com.termux.app.terminal.PaneBorderStyle;
 import com.termux.app.terminal.PaneRim;
 import com.termux.app.terminal.PaneSurfaceStyle;
 import com.termux.view.HoldTiming;
@@ -39,7 +41,8 @@ import com.termux.view.HoldTiming;
  *
  * <p>A <em>hold</em> on one of the page's four corners drops the same tab the Display page's
  * corners drop, with the page's own buttons: the pencil that starts editing the widgets, the plus
- * that adds a page, and the two doors every place carries — Appearance and Layout.
+ * that adds a page, and the four doors every place carries — Appearance, Layout, Wallpaper and
+ * minimal mode.
  * It comes out of the corner that was touched, so the tab lands under the thumb that asked for it.
  * While a widget is being edited those buttons are replaced by the grid's size, which opens the
  * wheels that change it. Everything between the corners is the widgets': a grid that reaches the
@@ -56,10 +59,20 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         default void openSurfaceEditor() {}
         /** The grid: open the Layout editor on this place, as every corner tab does. */
         default void openLayoutEditor() {}
+        /** The wallpaper glyph: open the in-app wallpaper picker, as every corner tab does. */
+        default void openWallpaperPicker() {}
+        /** Whether the launcher is in minimal mode, which the tab's glyph shows. */
+        default boolean isMinimalMode() { return false; }
+        /** The minimal-mode glyph: turn minimal mode on or off, as every corner tab does. */
+        default void toggleMinimalMode() {}
         /** The columns the grid is showing now. */
         int widgetGridColumns();
         /** The rows the grid is showing now. */
         int widgetGridRows();
+        /** What this wall can hold; the wheels offer no more than that. */
+        @NonNull default com.termux.app.launcher.widget.WidgetGridCaps widgetGridCaps() {
+            return com.termux.app.launcher.widget.WidgetGridCaps.unbounded();
+        }
         /** A wheel moved: keep the grid this size, and reflow the page onto it. */
         void setWidgetGrid(int columns, int rows);
     }
@@ -68,14 +81,15 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private static final int ACTION_EDIT = 1;
     private static final int ACTION_GRID_SIZE = 2;
     private static final int ACTION_HELP = 3;
-    private static final int ACTION_EDITOR = 4;
-    private static final int ACTION_LAYOUT = 5;
     /** The tick: keep what editing did. */
     private static final int ACTION_COMMIT = 6;
     /** The cross: put it back the way it was. */
     private static final int ACTION_DISCARD = 7;
     /** The plus: another widgets page, which the pane turns to. */
     private static final int ACTION_ADD_PAGE = 8;
+    private static final int ACTION_WALLPAPER = 9;
+    /** Minimal mode on or off; the glyph shows which. The same button every place's tab has. */
+    private static final int ACTION_MINIMAL = 10;
 
     private final PaneRim mRim = new PaneRim();
     @Nullable private PaneGlassBackdropView mGlass;
@@ -207,11 +221,28 @@ public final class WidgetPaneFrame extends PaneContentFrame {
 
     private void applyRestingActions() {
         if (mControls == null) return;
-        mControls.setActions(PaneControlsView.Action.glyph(ACTION_EDIT, CornerTabGlyphs.EDIT),
-            PaneControlsView.Action.drawn(ACTION_ADD_PAGE, WidgetPaneFrame::drawPlusMark),
-            PaneControlsView.Action.glyph(ACTION_EDITOR, CornerTabGlyphs.APPEARANCE),
-            PaneControlsView.Action.glyph(ACTION_LAYOUT, CornerTabGlyphs.LAYOUT),
-            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
+        mControls.setActions(PaneControlsView.Action.glyph(ACTION_EDIT, CornerTabGlyphs.EDIT,
+                getContext().getString(R.string.pane_controls_edit_widgets)),
+            PaneControlsView.Action.drawn(ACTION_ADD_PAGE, WidgetPaneFrame::drawPlusMark,
+                PaneControlsView.TINT_PRIMARY,
+                getContext().getString(R.string.pane_controls_add_page)),
+            PaneControlsView.Action.glyph(ACTION_WALLPAPER, CornerTabGlyphs.APPEARANCE,
+                getContext().getString(R.string.pane_controls_wallpaper_style)),
+            // Minimal mode is one mode for every place, so Home carries the same door in and
+            // out as the terminal and the display; the mark reads the state as it draws.
+            PaneControlsView.Action.drawn(ACTION_MINIMAL, com.termux.app.chrome.MinimalModeGlyph
+                .mark(getContext(), () -> mHost != null && mHost.isMinimalMode()),
+                PaneControlsView.TINT_PRIMARY, () -> getContext().getString(
+                    mHost != null && mHost.isMinimalMode()
+                        ? R.string.pane_controls_leave_minimal_mode
+                        : R.string.pane_controls_enter_minimal_mode)),
+            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
+                getContext().getString(R.string.pane_controls_help)));
+    }
+
+    /** Redraws the tab, whose minimal-mode glyph follows the launcher's state. */
+    public void invalidateControls() {
+        if (mControls != null) mControls.invalidate();
     }
 
     /**
@@ -223,10 +254,14 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         mControls.setActions(PaneControlsView.Action.label(ACTION_GRID_SIZE,
             getContext().getString(R.string.widget_grid_size_tab,
                 mHost.widgetGridColumns(), mHost.widgetGridRows())),
-            PaneControlsView.Action.drawn(ACTION_COMMIT, WidgetPaneFrame::drawTickMark),
+            PaneControlsView.Action.drawn(ACTION_COMMIT, WidgetPaneFrame::drawTickMark,
+                PaneControlsView.TINT_PRIMARY,
+                getContext().getString(R.string.pane_controls_keep_changes)),
             PaneControlsView.Action.drawn(ACTION_DISCARD, WidgetPaneFrame::drawCrossMark,
-                PaneControlsView.TINT_ERROR),
-            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext())));
+                PaneControlsView.TINT_ERROR,
+                getContext().getString(R.string.pane_controls_discard_changes)),
+            PaneControlsView.Action.label(ACTION_HELP, CornerTabGlyphs.help(getContext()),
+                getContext().getString(R.string.pane_controls_help)));
     }
 
     /** The tick, in the same hand-drawn family the panes' own close and maximise marks use. */
@@ -290,8 +325,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         }
         if (mHost == null) return;
         if (id == ACTION_HELP) { mHost.showHelpOverlay(); dismissControls(); }
-        else if (id == ACTION_EDITOR) { dismissControls(); mHost.openSurfaceEditor(); }
-        else if (id == ACTION_LAYOUT) { dismissControls(); mHost.openLayoutEditor(); }
+        else if (id == ACTION_WALLPAPER) { dismissControls(); mHost.openWallpaperPicker(); }
+        else if (id == ACTION_MINIMAL) { dismissControls(); mHost.toggleMinimalMode(); }
         else if (id == ACTION_EDIT) mHost.editWidgets();
     }
 
@@ -302,7 +337,8 @@ public final class WidgetPaneFrame extends PaneContentFrame {
         android.graphics.RectF tab = new android.graphics.RectF();
         mControls.tabBounds(tab);
         mGridSizePopup = com.termux.app.launcher.widget.WidgetGridSizePopup.show(this, tab,
-            mHost.widgetGridColumns(), mHost.widgetGridRows(), (columns, rows) -> {
+            mHost.widgetGridColumns(), mHost.widgetGridRows(), mHost.widgetGridCaps(),
+            (columns, rows) -> {
                 if (mHost != null) mHost.setWidgetGrid(columns, rows);
                 refreshGridSizeAction();
             });
@@ -415,7 +451,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
     private void onHoldElapsed() {
         if (!mHold.holdElapsed()) return;
         cancelGridGesture();
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
     }
 
@@ -518,7 +554,7 @@ public final class WidgetPaneFrame extends PaneContentFrame {
             case MotionEvent.ACTION_UP:
                 if (mControls != null && !mTouchMoved
                     && mControls.actionAt(event.getX(), event.getY()) == mPressedAction) {
-                    performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
+                    Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
                     // The wheels hang off the tab, so that one leaves it out; help reads the ? off
                     // it, so it runs while the tab is still out and puts the tab away itself.
                     if (mPressedAction != ACTION_GRID_SIZE && mPressedAction != ACTION_HELP)
@@ -541,27 +577,47 @@ public final class WidgetPaneFrame extends PaneContentFrame {
      */
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         mStyle = style;
-        float requestedRadiusPx = PaneGlass.radiusPx(style,
-            getResources().getDisplayMetrics().density);
+        float density = getResources().getDisplayMetrics().density;
+        float requestedRadiusPx = PaneGlass.radiusPx(style, density);
         boolean glass = PaneGlass.apply(style, this, mGlass, requestedRadiusPx);
+        // The page's frame line: the slab's lit rim on glass, the terminal's plain stroke while
+        // the border preference is on without it. Drawn on the page itself, so it moves with the
+        // page and fades with the other pages' rims, and so the border drag that pages the wall
+        // (BorderDrag) has the same line to find here as on the terminal. Off both, no line.
+        boolean border = glass || PaneRim.plainBorderWanted(style);
+        float radiusPx = border ? requestedRadiusPx : 0f;
+        float strokePx = glass ? com.termux.app.GlassRimRenderer.strokePx(density)
+            : border ? PaneRim.stockStrokePx(density) : 0f;
         // The tab is part of the page's own outline: it sits flush in the corner it came out of,
         // inside the rim's line, and that line is its outer edge. Its material is its own fixed
-        // recipe, the app's wallpaper blur under a panel scrim, the same on every screen; with the
-        // glass off there is no line for it to sit inside.
+        // recipe, the app's wallpaper blur under a panel scrim, the same on every screen; with no
+        // line there is nothing for it to sit inside.
         if (mControls != null) {
-            mControls.setPaneBorder(glass ? requestedRadiusPx : 0f, glass
-                ? com.termux.app.GlassRimRenderer.strokePx(
-                    getResources().getDisplayMetrics().density) : 0f);
+            mControls.setPaneBorder(radiusPx, strokePx);
             PaneGlass.dressTab(style, mControls);
         }
-        // A page is never a divided pane, so its radius is the surface's own; only the glass
-        // shape clips, exactly as on a full-height terminal pane.
-        setPaneShape(glass ? requestedRadiusPx : 0f, glass);
-        // The rim is the slab's lit edge, so it comes and goes with the glass — a lone terminal
-        // pane with glass off carries no stroke either. The page is the only thing on screen
-        // while it shows, so it always wears the focused treatment.
-        if (glass) mRim.apply(this, true, requestedRadiusPx, true);
+        // A page is never a divided pane, so its radius is the surface's own. The frame clips to
+        // it under any line, as the lone terminal pane's host does under the plain border: a
+        // widget's square corner poking past the arc reads as the frame being broken.
+        setPaneShape(radiusPx, border);
+        // The page is alone on screen while it shows, so it wears the shared rim, the same
+        // border as the status bar, dock and keyboard, never the focus colour.
+        if (border) mRim.apply(this, glass, radiusPx, PaneBorderStyle.lone(), style);
         else mRim.clear(this);
+    }
+
+    /**
+     * The wall moved this page, or the wallpaper panned under it: the slab re-aims at whatever
+     * is behind it now. Per frame of a slide, so nothing here but an invalidate.
+     */
+    public void onWallMoved() {
+        if (mGlass != null) mGlass.invalidateGlassPosition();
+        if (mControls != null && mControls.hasPaneGlass()) mControls.invalidate();
+    }
+
+    /** How much of the page's rim the wall's slide leaves showing; see PaneWallPolicy#outlineAlpha. */
+    public void setOutlineTravelAlpha(float alpha) {
+        mRim.setTravelAlpha(alpha);
     }
 
     @Override

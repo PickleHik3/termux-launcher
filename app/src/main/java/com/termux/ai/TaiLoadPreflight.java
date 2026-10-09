@@ -58,18 +58,18 @@ public final class TaiLoadPreflight {
     ) {
         String requested = requestedAccelerator(options);
         if (requested != null) return requested;
-        if (TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend)) return "cpu";
-        List<String> ordered = autoAccelerators(context, model, device, profile);
+        String planned = normalizeAccelerator(options.preferredAccelerator);
+        if (TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend)) {
+            // MNN's automatic is the CPU, unless a feature's plan prefers the GPU (OpenCL) and it has not failed here.
+            return "gpu".equals(planned) && TaiRuntimeHistory.failedEntry(context, model, device, "gpu") == null
+                ? "gpu" : "cpu";
+        }
+        List<String> ordered = autoAccelerators(context, model, device, profile, planned);
         if (!ordered.isEmpty()) return ordered.get(0);
         return "none";
     }
 
-    /**
-     * Returns the model-declared accelerator order, demoting only accelerators with a recorded
-     * failure on this exact model/device. A new GPU is therefore tried on its first automatic load,
-     * matching Gallery's ordered accelerator configuration instead of requiring a circular
-     * "successful GPU history" prerequisite.
-     */
+    /** {@link #autoAccelerators(Context, TaiModelSpec, TaiDeviceCapabilities, TaiModelProfile, String)} in the model's own order. */
     @NonNull
     static List<String> autoAccelerators(
         @NonNull Context context,
@@ -77,18 +77,37 @@ public final class TaiLoadPreflight {
         @NonNull TaiDeviceCapabilities device,
         @NonNull TaiModelProfile profile
     ) {
-        ArrayList<String> preferred = new ArrayList<>();
+        return autoAccelerators(context, model, device, profile, null);
+    }
+
+    /**
+     * Returns the model-declared accelerator order, demoting only accelerators with a recorded
+     * failure on this exact model/device. A new GPU is therefore tried on its first automatic load,
+     * matching Gallery's ordered accelerator configuration instead of requiring a circular
+     * "successful GPU history" prerequisite. {@code preferred}, the feature load plan's choice, goes
+     * first among those that have not failed; a failure record still demotes it.
+     */
+    @NonNull
+    static List<String> autoAccelerators(
+        @NonNull Context context,
+        @NonNull TaiModelSpec model,
+        @NonNull TaiDeviceCapabilities device,
+        @NonNull TaiModelProfile profile,
+        @Nullable String preferred
+    ) {
+        ArrayList<String> working = new ArrayList<>();
         ArrayList<String> failed = new ArrayList<>();
         for (String accelerator : profile.compatibleAccelerators) {
             if (!device.supportsAccelerator(accelerator)) continue;
             if (TaiRuntimeHistory.failedEntry(context, model, device, accelerator) == null) {
-                preferred.add(accelerator);
+                working.add(accelerator);
             } else {
                 failed.add(accelerator);
             }
         }
-        preferred.addAll(failed);
-        return preferred;
+        if (preferred != null && working.remove(preferred)) working.add(0, preferred);
+        working.addAll(failed);
+        return working;
     }
 
     @Nullable
@@ -164,7 +183,7 @@ public final class TaiLoadPreflight {
             JSONObject json = new JSONObject();
             json.put("ok", false);
             json.put("error", errorCode.isEmpty() ? "preflight_failed" : errorCode);
-            json.put("message", message.isEmpty() ? "TAI model preflight failed." : message);
+            json.put("message", message.isEmpty() ? "On-device AI model preflight failed." : message);
             json.put("_statusCode", statusCode);
             json.put("preflight", toJson());
             return json;
@@ -296,7 +315,8 @@ public final class TaiLoadPreflight {
 
         void checkAcceleratorPolicy() throws JSONException {
             if (TaiModelSpec.BACKEND_MNN_LLM.equals(model.backend)) {
-                check("accelerator_policy", true, "MNN auto defaults to CPU unless OpenCL is explicitly requested.", "");
+                check("accelerator_policy", true,
+                    "MNN auto defaults to CPU unless OpenCL is requested or the feature's plan prefers the GPU.", "");
                 return;
             }
             if ("none".equals(effectiveAccelerator)) {
@@ -329,6 +349,13 @@ public final class TaiLoadPreflight {
             if (failed == null) return;
             if ("cpu".equals(effectiveAccelerator)) {
                 warning("previous_cpu_failure", "This model/backend failed previously on CPU: " + failed.optString("reason", "unknown"));
+                return;
+            }
+            // An explicit accelerator request is a deliberate retry: warn, but let it run, otherwise a
+            // single failure locks the accelerator out for good (only a success overwrites the record).
+            if (!autoLoad && !"auto".equals(requestedAccelerator)) {
+                warning("previous_accelerator_failure", "This model/backend previously failed on "
+                    + effectiveAccelerator + ": " + failed.optString("reason", "unknown"));
                 return;
             }
             block("known_failed_accelerator",

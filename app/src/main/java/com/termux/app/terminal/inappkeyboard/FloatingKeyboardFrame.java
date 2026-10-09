@@ -23,6 +23,7 @@ import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.chrome.CornerBracket;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.chrome.GrabHandle;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import java.util.Collections;
@@ -33,7 +34,7 @@ import java.util.List;
  * it, parked wherever the user last left it.
  *
  * <p>The frame is deliberately thin. It carries no idea of what a keyboard is — the keyboard's own
- * container is moved into {@link #contentHost()} unchanged, keeps its glass, its suggestion strip
+ * container is moved into {@link #contentHost()} unchanged, keeps its suggestion strip
  * and its height controls, and is measured by the normal layout pass against the width this frame
  * was given. What the frame owns is the handle and the drag: it clamps the offset it is dragged to
  * against the travel it was handed and reports where it ended up, so the arithmetic stays in
@@ -56,8 +57,8 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     /** Narrower than this and there is no keyboard left to type on, whatever the share says. */
     private static final float MIN_WIDTH_DP = 240f;
 
-    /** The strip above the keys the card is dragged by. */
-    static final float HANDLE_ROW_DP = 18f;
+    /** The strip above the keys the card is dragged by: the {@link GrabHandle} pill in a 12dp row, slimmer than the shared 18dp so the card carries less rim. */
+    static final float HANDLE_ROW_DP = 12f;
 
     /**
      * The corner the card is resized from, mirrored across from the floating terminal pane's,
@@ -71,16 +72,6 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     private static final float GRIP_INSET_DP = 4f;
     private static final float GRIP_LONG_DP = 16f;
     private static final float GRIP_SHORT_DP = 9f;
-
-    /** The pill drawn in the middle of that strip. */
-    static final float PILL_WIDTH_DP = 52f;
-    static final float PILL_HEIGHT_DP = 3.2f;
-
-    /**
-     * A 3.2dp pill rounds away to a hairline on the lowest densities, so it never draws thinner
-     * than this. {@link R.drawable#floating_keyboard_grab_handle} carries the matching radius.
-     */
-    static final int PILL_MIN_HEIGHT_PX = 2;
 
     /** The user's floating width, read at measure time so the frame is never a pass behind it. */
     public interface WidthScaleSource {
@@ -124,11 +115,12 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     private int mPositionXPx;
     private int mPositionYPx;
 
+    /** The move by the handle, the same drag the dictation pill's handle makes. */
+    private final GrabHandle.Drag mMove = new GrabHandle.Drag();
+    /** Where a grip drag started: the finger, and the card's leading edge. */
     private float mDragStartRawX;
     private float mDragStartRawY;
     private int mDragStartXPx;
-    private int mDragStartYPx;
-    private boolean mDragging;
 
     private final Paint mGripPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final CornerBracket mBracket = new CornerBracket();
@@ -188,11 +180,7 @@ public final class FloatingKeyboardFrame extends LinearLayout {
             context.getString(R.string.termux_in_app_keyboard_floating_handle));
         mHandle.setClickable(true);
         mHandle.setFocusable(true);
-        View pill = new View(context);
-        pill.setBackgroundResource(R.drawable.floating_keyboard_grab_handle);
-        mHandle.addView(pill, new FrameLayout.LayoutParams(
-            Math.round(dp(PILL_WIDTH_DP)), pillHeightPx(getResources().getDisplayMetrics().density),
-            Gravity.CENTER));
+        mHandle.addView(GrabHandle.newPill(context), GrabHandle.pillParams(context));
         addView(mHandle,
             new LayoutParams(LayoutParams.MATCH_PARENT, Math.round(dp(HANDLE_ROW_DP))));
 
@@ -221,11 +209,6 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     @NonNull
     View grabPill() {
         return mHandle.getChildAt(0);
-    }
-
-    /** The pill's drawn thickness, never below {@link #PILL_MIN_HEIGHT_PX}. */
-    static int pillHeightPx(float density) {
-        return Math.max(PILL_MIN_HEIGHT_PX, Math.round(PILL_HEIGHT_DP * density));
     }
 
     /**
@@ -325,7 +308,7 @@ public final class FloatingKeyboardFrame extends LinearLayout {
         float corner = CornerZones.sizePx(density);
         if (x >= 0f && x <= corner) return true;
         if (x >= width - corner && x <= width) return true;
-        float pill = dp(PILL_WIDTH_DP) / 2f + dp(8f);
+        float pill = dp(GrabHandle.PILL_WIDTH_DP) / 2f + dp(8f);
         return Math.abs(x - width / 2f) <= pill;
     }
 
@@ -552,22 +535,18 @@ public final class FloatingKeyboardFrame extends LinearLayout {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 if (!isInMoveZone(event.getX(), event.getY())) return false;
-                mDragging = true;
+                mMove.begin(event.getRawX(), event.getRawY(), mPositionXPx, mPositionYPx);
                 mHeldCorner = moveCornerAt(event.getX());
-                mDragStartRawX = event.getRawX();
-                mDragStartRawY = event.getRawY();
-                mDragStartXPx = mPositionXPx;
-                mDragStartYPx = mPositionYPx;
                 invalidate();
                 return true;
             case MotionEvent.ACTION_MOVE:
-                if (!mDragging) return false;
+                if (!mMove.isActive()) return false;
                 moveTo(event, false);
                 return true;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
-                if (!mDragging) return false;
-                mDragging = false;
+                if (!mMove.isActive()) return false;
+                mMove.end();
                 mHeldCorner = CornerZones.NONE;
                 moveTo(event, true);
                 invalidate();
@@ -578,9 +557,7 @@ public final class FloatingKeyboardFrame extends LinearLayout {
     }
 
     private void moveTo(@NonNull MotionEvent event, boolean committed) {
-        applyPositionPx(
-            mDragStartXPx + Math.round(event.getRawX() - mDragStartRawX),
-            mDragStartYPx + Math.round(event.getRawY() - mDragStartRawY));
+        applyPositionPx(mMove.x(event.getRawX()), mMove.y(event.getRawY()));
         if (mListener != null)
             mListener.onFrameMoved(mPositionXPx, mPositionYPx, committed);
     }

@@ -14,17 +14,16 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
-import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
 
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
-import com.termux.ai.TaiModelSpec;
+import com.termux.ai.TaiFunction;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.launcher.data.LauncherCategoryPasteNotification;
+import com.termux.app.launcher.data.LauncherCategorySortPlan;
 import com.termux.app.launcher.data.LauncherCategorySortProgress;
-import com.termux.app.launcher.data.LauncherCategorySortPrompt;
 import com.termux.app.launcher.data.LauncherCategorySortService;
 import com.termux.app.launcher.data.LauncherCategorySortState;
 
@@ -110,7 +109,7 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
     }
 
     private void configureCategoryPreferences(@NonNull Context context) {
-        ListPreference viewType = findPreference(KEY_VIEW_TYPE);
+        com.termux.app.fragments.settings.SegmentedPillPreference viewType = findPreference(KEY_VIEW_TYPE);
         if (viewType != null) {
             applyCategoryVisibility(storedViewType());
             viewType.setOnPreferenceChangeListener((preference, newValue) -> {
@@ -143,7 +142,7 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
         androidx.preference.PreferenceDataStore store =
             getPreferenceManager().getPreferenceDataStore();
         if (store == null) {
-            ListPreference viewType = findPreference(KEY_VIEW_TYPE);
+            com.termux.app.fragments.settings.SegmentedPillPreference viewType = findPreference(KEY_VIEW_TYPE);
             return viewType == null ? null : viewType.getValue();
         }
         return store.getString(KEY_VIEW_TYPE, null);
@@ -161,17 +160,22 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
         if (refresh != null) refresh.setVisible(categories);
     }
 
-    /** Loads the catalogue off the main thread — it is a blocking package-manager walk. */
+    /**
+     * Reads the chooser's apps and app sorting's plan off the main thread — a blocking package-manager
+     * walk, the model store and the evidence files — then shows it.
+     */
     private void openChooser(@NonNull Context context) {
         requestNotificationPermissionIfNeeded(context);
         appListExecutor.execute(() -> {
-            List<LauncherCategorySortPrompt.AppEntry> apps = CategorySortDialogs.loadApps(context);
+            CategorySortDialogs.Preview preview = CategorySortDialogs.preview(context);
             handler.post(() -> {
                 if (!isAdded()) return;
                 Context current = getContext();
                 if (current == null) return;
-                CategorySortDialogs.showChooser(current, apps,
-                    () -> startSort(current, CategorySortDialogs.resolveModel(current)),
+                CategorySortDialogs.showChooser(current, preview,
+                    () -> startSort(current, preview.plan),
+                    // The old model choice is an entry to the function's picker sheet.
+                    () -> TaiFunctionPickerSheet.show(this, TaiFunction.APP_CATEGORIES),
                     () -> updateRefreshSummary(current));
             });
         });
@@ -179,25 +183,31 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
 
     /**
      * Re-running is the common case, so it skips the chooser — unless no usable model is installed,
-     * in which case the chooser is the screen that explains why and offers the paste route.
+     * in which case the chooser is the screen that explains why and offers the paste route. The plan
+     * is read off the main thread.
      */
     private void startRefresh(@NonNull Context context) {
-        TaiModelSpec model = CategorySortDialogs.resolveModel(context);
-        if (model == null || CategorySortDialogs.unavailableReason(context, model) != null) {
-            openChooser(context);
-            return;
-        }
-        startSort(context, model);
+        appListExecutor.execute(() -> {
+            LauncherCategorySortPlan plan = CategorySortDialogs.resolvePlan(context);
+            boolean runnable = plan.hasModel() && CategorySortDialogs.unavailableReason(context, plan) == null;
+            handler.post(() -> {
+                if (!isAdded()) return;
+                Context current = getContext();
+                if (current == null) return;
+                if (runnable) startSort(current, plan);
+                else openChooser(current);
+            });
+        });
     }
 
-    private void startSort(@NonNull Context context, @Nullable TaiModelSpec model) {
-        if (model == null) {
+    private void startSort(@NonNull Context context, @NonNull LauncherCategorySortPlan plan) {
+        if (!plan.hasModel()) {
             openChooser(context);
             return;
         }
         Intent intent = new Intent(context, LauncherCategorySortService.class);
         intent.setAction(LauncherCategorySortService.ACTION_SORT);
-        intent.putExtra(LauncherCategorySortService.EXTRA_MODEL_ID, model.id);
+        intent.putExtra(LauncherCategorySortService.EXTRA_MODEL_ID, plan.model);
         ContextCompat.startForegroundService(context, intent);
         updateRefreshSummary(context);
         handler.removeCallbacks(refreshRunnable);

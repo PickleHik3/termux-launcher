@@ -25,6 +25,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.util.Collections;
 
 /**
  * The freedesktop icon lookup {@link LinuxAppIcons} runs for a Linux app: hicolor's PNG sizes,
@@ -104,6 +105,97 @@ public class LinuxAppIconsTest {
     @Test public void aBareNameWithoutAnyIconFileFindsNothing() throws IOException {
         File prefix = temp.newFolder("prefix");
         assertNull(LinuxAppIcons.find("missing", prefix));
+    }
+
+    // --- find() for a whole desktop -----------------------------------------------------------
+
+    private ProotDistro.Container prefixContainer(File dir) {
+        return new ProotDistro.Container("", dir, "", "");
+    }
+
+    private ProotDistro.Container distroContainer(String name, File rootfs) {
+        return new ProotDistro.Container(name, rootfs, "", "");
+    }
+
+    private LinuxAppCatalog.LinuxApp session(ProotDistro.Container container, String desktopFile,
+                                            String icon, String desktopNames) {
+        return new LinuxAppCatalog.LinuxApp(container, desktopFile, desktopFile, desktopFile, icon,
+            "", "", false, true, desktopNames);
+    }
+
+    private LinuxAppCatalog.LinuxApp application(ProotDistro.Container container,
+                                                String desktopFile, String icon) {
+        return new LinuxAppCatalog.LinuxApp(container, desktopFile, desktopFile, desktopFile, icon,
+            "", "", false, false, "");
+    }
+
+    @Test public void aDesktopWithNoIconOfItsOwnBorrowsItsOwnApplicationIcon() throws IOException {
+        // Termux's xfce.desktop ships `Icon=` with nothing after it; libxfce4ui ships the picture.
+        File prefix = temp.newFolder("prefix");
+        File dir = new File(prefix, "share/icons/hicolor/128x128/apps");
+        assertTrue(dir.mkdirs());
+        File logo = writePng(dir, "xfce4-logo.png", 128, 128);
+
+        assertEquals(logo,
+            LinuxAppIcons.find(session(prefixContainer(prefix), "xfce", "", "XFCE")));
+    }
+
+    @Test public void aDesktopThatNamesAnIconThatResolvesKeepsIt() throws IOException {
+        File prefix = temp.newFolder("prefix");
+        File dir = new File(prefix, "share/icons/hicolor/128x128/apps");
+        assertTrue(dir.mkdirs());
+        File own = writePng(dir, "xfce.png", 128, 128);
+        writePng(dir, "xfce4-logo.png", 128, 128);
+
+        assertEquals(own,
+            LinuxAppIcons.find(session(prefixContainer(prefix), "xfce", "xfce", "XFCE")));
+    }
+
+    @Test public void aDesktopIsMatchedByItsFileNameWhenItNamesNoDesktopNames() throws IOException {
+        File prefix = temp.newFolder("prefix");
+        File dir = new File(prefix, "share/pixmaps");
+        assertTrue(dir.mkdirs());
+        File png = writePng(dir, "openbox.png", 48, 48);
+
+        assertEquals(png, LinuxAppIcons.find(session(prefixContainer(prefix), "openbox", "", "")));
+    }
+
+    @Test public void aDesktopNoPackageShipsAnIconForFindsNothing() throws IOException {
+        // i3, IceWM, Plasma and the small window managers ship no icon at a path this searches,
+        // so the drawer's own stand-in takes over rather than a name that resolves nowhere.
+        File prefix = temp.newFolder("prefix");
+        assertNull(LinuxAppIcons.find(session(prefixContainer(prefix), "i3", "", "i3")));
+    }
+
+    @Test public void anApplicationNeverBorrowsADesktopsIcon() throws IOException {
+        File prefix = temp.newFolder("prefix");
+        File dir = new File(prefix, "share/icons/hicolor/128x128/apps");
+        assertTrue(dir.mkdirs());
+        writePng(dir, "xfce4-logo.png", 128, 128);
+
+        assertNull(LinuxAppIcons.find(application(prefixContainer(prefix), "xfce", "")));
+    }
+
+    @Test public void aDesktopInsideAContainerBorrowsTheIconInItsRootfs() throws IOException {
+        File rootfs = temp.newFolder("debian");
+        File dir = new File(rootfs, "usr/share/icons/hicolor/scalable/apps");
+        assertTrue(dir.mkdirs());
+        File svg = writeText(dir, "lxqt.svg", VALID_SVG);
+
+        assertEquals(svg,
+            LinuxAppIcons.find(session(distroContainer("debian", rootfs), "lxqt", "", "LXQt")));
+    }
+
+    @Test public void desktopIconNamesReadDesktopNamesFirstThenTheFileName() {
+        ProotDistro.Container prefix = prefixContainer(new File("/unused"));
+        assertEquals(Collections.singletonList("mate-desktop"),
+            LinuxAppIcons.desktopIconNames(session(prefix, "mate", "", "MATE")));
+        // A DesktopNames list is semicolon-separated and its case is the desktop's own.
+        assertEquals(Collections.singletonList("cinnamon"),
+            LinuxAppIcons.desktopIconNames(session(prefix, "cinnamon2d", "", "X-Cinnamon;")));
+        assertTrue(LinuxAppIcons.desktopIconNames(
+            session(prefix, "herbstluftwm", "", "")).isEmpty());
+        assertTrue(LinuxAppIcons.desktopIconNames(application(prefix, "xfce", "")).isEmpty());
     }
 
     // --- load() -------------------------------------------------------------------------------

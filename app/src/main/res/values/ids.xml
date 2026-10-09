@@ -1,7 +1,36 @@
 <resources>
     <item name="help_split_divider" type="id" />
 
-    <!-- The corner the preset tile's outline is clipped at, which is the preset's own radius and
-         so changes per tile and per render. -->
-    <item name="editor_shell_preset_corner" type="id" />
+    <!-- The Model centre's list, built in code; an id so its scroll position survives recreation. -->
+    <item name="tai_centre_list" type="id" />
+
+    <!-- The benchmark screens (Home, Choose, Run, Result), built in code: their lists and the
+         views a row binds by id. -->
+    <item name="tai_bench_list" type="id" />
+    <!-- Home's "Your features" card: its rows and "Check my features". -->
+    <item name="tai_check_rows" type="id" />
+    <item name="tai_check_action" type="id" />
+    <item name="tai_bench_text" type="id" />
+    <item name="tai_bench_title" type="id" />
+    <item name="tai_bench_subtitle" type="id" />
+    <item name="tai_bench_tabs" type="id" />
+    <item name="tai_bench_rank" type="id" />
+    <item name="tai_bench_marks" type="id" />
+    <item name="tai_bench_figure" type="id" />
+    <item name="tai_bench_verdict" type="id" />
+    <item name="tai_bench_action" type="id" />
+    <item name="tai_bench_select_all" type="id" />
+    <item name="tai_bench_select_none" type="id" />
+    <item name="tai_bench_check" type="id" />
+    <item name="tai_bench_scroll" type="id" />
+    <item name="tai_bench_numbers" type="id" />
+    <item name="tai_bench_compare" type="id" />
+    <item name="tai_bench_compare_row" type="id" />
+    <!-- Pinned notification cards: TalkBack custom actions on each card. -->
+    <item name="pinned_notification_action_dismiss" type="id" />
+    <item name="pinned_notification_action_mute" type="id" />
+    <!-- The Appearance surface's host view in the activity's content. -->
+    <item name="appearance_surface_host" type="id" />
+    <!-- An app icon view's pending background render: which request it is waiting on, and its fade. -->
+    <item name="launcher_icon_request" type="id" />
 </resources>

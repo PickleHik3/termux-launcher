@@ -1,17 +1,15 @@
 package com.termux.app.fragments.settings.termux;
 
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.util.AttributeSet;
 import android.view.View;
-import android.widget.ProgressBar;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceViewHolder;
 
-import com.google.android.material.color.MaterialColors;
+import com.google.android.material.progressindicator.LinearProgressIndicator;
 import com.termux.R;
 
 /**
@@ -53,14 +51,10 @@ public final class CategorySortProgressPreference extends Preference {
     public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
         View view = holder.findViewById(R.id.category_sort_progress);
-        if (!(view instanceof ProgressBar)) return;
-        ProgressBar bar = (ProgressBar) view;
+        if (!(view instanceof LinearProgressIndicator)) return;
+        LinearProgressIndicator bar = (LinearProgressIndicator) view;
         bar.setVisibility(mShowProgress ? View.VISIBLE : View.GONE);
         if (!mShowProgress) return;
-        int accent = MaterialColors.getColor(getContext(),
-            com.google.android.material.R.attr.colorPrimary, 0xFF8AB4F8);
-        bar.setProgressTintList(ColorStateList.valueOf(accent));
-        bar.setIndeterminateTintList(ColorStateList.valueOf(accent));
         bar.setIndeterminate(mIndeterminate);
         if (mIndeterminate) return;
         // Never animated: the ticks arrive from a poll, and an animation between two poll values

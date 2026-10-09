@@ -45,7 +45,7 @@ public final class SurfaceMaterials {
 
     private static int[] clampTriple(int blur, int opacity, int grain) {
         return new int[] {
-            Math.max(0, Math.min(30, blur)),
+            Math.max(0, Math.min(48, blur)),
             Math.max(0, Math.min(100, opacity)),
             Math.max(0, Math.min(100, grain)),
         };

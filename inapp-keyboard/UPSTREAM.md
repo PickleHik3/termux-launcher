@@ -36,7 +36,15 @@ emoji, clipboard history, voice switching, direct-boot state, fold/window
 tracking, layout editor UI, numeric-editor inference,
 split/landscape modifiers, panes, and their resources. It also excludes
 `res/layout/keyboard.xml`, `res/xml/split_middle_column.xml`, and
-settings/method resources.
+settings/method resources. Upstream's clipboard pane stays excluded, but its
+key is live: `switch_clipboard` / `switch_back_clipboard` (`Event.SWITCH_CLIPBOARD`,
+`SWITCH_BACK_CLIPBOARD`) are dispatched by the launcher's
+`TerminalKeyEventHandler` to its own clipboard panel
+(`app/.../terminal/inappkeyboard/ClipboardPanelView`), which stands over the
+keys in the host the way the mouse-mode touchpad does. The module itself is
+unchanged for this; the bundled `termux_launcher_qwerty.xml` already carried
+the key as a `loc` slot on Ctrl, and the launcher's extra-keys catalogue now
+enables it by default.
 
 ## Generated layout catalogue
 
@@ -122,32 +130,38 @@ fails when the catalogue has gone stale.
   tool keys are freshly built on every `getKeyByName`, so without them a tool
   key could not be looked up in the key maps `addExtraKeys` uses.
 - Split keyboard type (local addition): the new file `SplitLayout.java`, the
-  `LayoutModifier.gapUnits`/`LayoutModifier.split` delegates in front of it, and
-  `Keyboard2View.setSplitGapUnits`/`getSplitGapUnits`/`getSplitGapBounds`.
+  `LayoutModifier.gapUnits`/`LayoutModifier.split` delegates in front of it,
+  `Keyboard2View.setSplitGapUnits`/`getSplitGapUnits`/`getSplitGapBounds`, and
+  the `split_before`/`split_at` key attributes (`KeyboardData.Key.splitAt`,
+  carried through every key copy and scaled by `scaleWidth`).
   Upstream's own split — `split_middle_column.xml` plus its layout modifier —
   was not ported (see "Deliberate removals"); this one is a step of its own
-  after `modify`, parting every composed row at its midpoint by a gap given in
-  key-width units. A key straddling the midpoint is cut into two keys of the
-  same values only when it is at least 1.5 units wide — the space bar; a letter
-  key keeps its shape and the parting takes its nearer edge, so the halves may
-  differ by one key. The view is told the same gap: it then keeps no view
-  background and paints one slab under each run of keys instead, and refuses
-  (`onTouch` returns false) a press that starts in the parting, so the press
-  reaches whatever the keyboard is over. Both are inert at gap zero, which is
-  the docked keyboard.
+  after `modify` that lays the composed layout out as two rectangular halves
+  against the edges with one straight gap between them, given in key-width
+  units. Each row is cut once: before a key marked `split_before="true"`, inside
+  a key at its `split_at` offset, or else at the key edge nearest the row's
+  midpoint (a key of 1.5 units or more — the space bar — is cut there instead).
+  Both halves are C wide, the widest run on either side of any row; left runs
+  keep their place, right runs are pushed to end on the right edge, so the band
+  [C, C+G] is clear on every row and letter keys keep one width throughout. A
+  cut key's two pieces both type its centre value; the west swipes stay left,
+  the east ones go right, north/south and the circle go to the wider piece. The
+  view is told the same gap: it then keeps no view background and paints one
+  slab per half, and refuses (`onTouch` returns false) a press that starts in
+  the band, so the press reaches whatever the keyboard is over. Both are inert
+  at gap zero, which is the docked keyboard.
 - Parting asked for in pixels (local addition):
-  `SplitLayout.gapUnitsForPx`/`commonGapUnitsForPx` with `MAX_GAP_FRACTION`, the
-  `LayoutModifier.commonGapUnitsForPx` delegate, and
+  `SplitLayout.gapUnitsForPx` with `MAX_GAP_FRACTION`, the
+  `LayoutModifier.gapUnitsForPx` delegate, and
   `Keyboard2View.getKeyContentWidthPx`/`splitSlabRadiusPx`. The launcher stands
   its mouse-mode touchpad in the parting and needs a floor on it in dp, but the
   parting is stored in key-width units and parting widens the keyboard, so the
-  units that buy a pixel shrink as the gap grows; `gapUnitsForPx` inverts that,
-  and `commonGapUnitsForPx` adds back what the common band loses to rows parting
-  at different key boundaries (a fixed offset, so one correction is exact). The
+  units that buy a pixel shrink as the gap grows; `gapUnitsForPx` inverts that.
+  The band is the whole parting on every row, so no correction is needed. The
   ask is capped at half the width so both halves keep their keys.
   `getKeyContentWidthPx` is the width the keys are laid out across, which is what
   the conversion is measured against; `splitSlabRadiusPx` is the corner radius
-  `drawSplitBackground` gives the run slabs, so a host panel standing in the
+  `drawSplitBackground` gives the slabs, so a host panel standing in the
   parting takes the same shape.
 - Split slab colour (local addition): `Keyboard2View.setSplitBackgroundColor`
   and `getSplitBackgroundColor`. The slabs are the panel a parted keyboard lies
@@ -218,7 +232,26 @@ fails when the catalogue has gone stale.
   launcher (`app/.../terminal/inappkeyboard/KeyPopupOverlayView`,
   `KeyPopupGeometry`, `KeyPopupPalette`, `KeyPopupController`); the module draws
   none of it.
+- Label faces (local addition): upstream draws every label in the system font
+  except `FLAG_KEY_FONT` values, which use `special_font.ttf`. Here `Config`
+  carries `labelFont` (the face the user picks for labels) and `symbolFont`
+  (the launcher's bundled Nerd Font symbols), and `LabelFace` (no upstream
+  counterpart) picks one of three faces per label: the key font for
+  `FLAG_KEY_FONT`, `symbolFont` for any label holding a private-use code point
+  (the space bar's `tool:<id>:<glyph>` swipe icons are Nerd Font glyphs a picked
+  font lacks), `labelFont` for the rest. So `Theme.Computed.Key` holds a third
+  pair of label paints and `label_paint` / `sublabel_paint` take the label text
+  beside the key-font flag; `Keyboard2View.symbolFont()` hands the face to the
+  launcher's popup.
 - Logging, utilities, and haptics are reduced to the retained embedded needs.
+- Per-key color overrides (local addition: `KeyColorOverride`, the host's color-scheme
+  overrides and the keybind hint lighting with its breath and fade-out) reach the draw path as
+  primitives. `onDraw` resolves a key's overrides into one reused `OverrideSlots` (a set flag
+  and an `int` per slot) instead of passing boxed `Integer`s, and the hint fade-out blends into
+  that same instance instead of allocating a `KeyColorOverride` per lit key per frame. So
+  `drawKeyFrame`, `drawLabel` and `drawSubLabel` take `(boolean has…, int color)` pairs where
+  upstream's `drawKeyFrame` takes no override and the labels take none. Upstream draws no
+  overrides, so a refresh keeps upstream's drawing and re-applies these parameters.
 
 ## Refresh procedure
 

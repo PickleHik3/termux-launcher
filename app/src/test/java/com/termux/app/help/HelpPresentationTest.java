@@ -58,7 +58,7 @@ public class HelpPresentationTest {
 
     @Before public void setUp() {
         activity = Robolectric.buildActivity(Activity.class).setup().get();
-        activity.setTheme(com.google.android.material.R.style.Theme_MaterialComponents_DayNight_NoActionBar);
+        activity.setTheme(com.termux.R.style.Theme_TermuxActivity_DayNight_NoActionBar);
         root = new FrameLayout(activity);
         activity.setContentView(root);
         wall = new View(activity); wall.setId(R.id.terminal_pane_wall);

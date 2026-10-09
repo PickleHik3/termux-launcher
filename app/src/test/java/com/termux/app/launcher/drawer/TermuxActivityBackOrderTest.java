@@ -39,12 +39,12 @@ public class TermuxActivityBackOrderTest {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         AppDrawerController controller = openDrawer(activity);
         Object editor = ReflectionHelpers.getField(activity, "mSurfaceEditor");
-        ReflectionHelpers.setField(editor, "mSurfaceEditorOpen", true);
+        ReflectionHelpers.setField(editor, "mOpen", true);
 
         activity.onBackPressed();
 
         assertFalse(controller.isOpen());
-        boolean editorOpen = ReflectionHelpers.getField(editor, "mSurfaceEditorOpen");
+        boolean editorOpen = ReflectionHelpers.getField(editor, "mOpen");
         assertTrue("the surface editor must not consume a back press aimed at the drawer", editorOpen);
     }
 

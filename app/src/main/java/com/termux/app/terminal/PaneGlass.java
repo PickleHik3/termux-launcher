@@ -1,6 +1,9 @@
 package com.termux.app.terminal;
 
+import android.graphics.Path;
 import android.view.View;
+
+import com.termux.R;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -39,9 +42,57 @@ public final class PaneGlass {
         return PaneCornerRadius.radiusPx(style.paneCornerRadiusDp(), style.paneGlassCornerRadiusPx(), density);
     }
 
+    /** Marks "no rim" in {@link #rimRadiusPx}. */
+    static final float NO_RIM = -1f;
+
+    /**
+     * The radius a pane's preset rim is cut at, or {@link #NO_RIM}: the hairline look draws none
+     * on a pane (as before), the gradient look draws the slab's own corner.
+     */
+    static float rimRadiusPx(boolean rimWanted, float slabRadiusPx) {
+        return rimWanted ? Math.max(0f, slabRadiusPx) : NO_RIM;
+    }
+
     /** The gap between tiled panes in dp, or {@code fallbackDp} while no style is attached. */
     public static int gapDp(@Nullable PaneSurfaceStyle style, int fallbackDp) {
         return style != null ? Math.max(0, style.paneGapDp()) : fallbackDp;
+    }
+
+    /** Whether {@code frame} is laid out, attached and wearing a visible glass slab. */
+    public static boolean wearsSlab(@NonNull View frame) {
+        View backdrop = frame.findViewById(R.id.terminal_pane_glass);
+        return backdrop instanceof PaneGlassBackdropView
+            && backdrop.getVisibility() == View.VISIBLE
+            && frame.getParent() != null && frame.getWidth() > 0 && frame.getHeight() > 0;
+    }
+
+    /**
+     * The shapes the glass is actually drawn in: one rounded rect per frame that wears a visible
+     * slab, cut at the radius {@link #apply} gives it, in {@code origin}'s coordinates. Whatever
+     * copies the glass somewhere else (the window-switch card) clips to this, never to the
+     * window's rectangle, so the gaps and corners around the slabs keep showing the live
+     * wallpaper.
+     *
+     * @return {@code out}, emptied first
+     */
+    @NonNull
+    public static Path slabOutline(@NonNull Iterable<? extends View> frames, @NonNull View origin,
+                                   float requestedRadiusPx, @NonNull Path out) {
+        out.rewind();
+        int[] at = new int[2];
+        int[] base = new int[2];
+        origin.getLocationOnScreen(base);
+        for (View frame : frames) {
+            if (!wearsSlab(frame)) continue;
+            frame.getLocationOnScreen(at);
+            float radius = PaneShape.radiusForBounds(requestedRadiusPx,
+                frame.getWidth(), frame.getHeight());
+            float left = at[0] - base[0];
+            float top = at[1] - base[1];
+            out.addRoundRect(left, top, left + frame.getWidth(), top + frame.getHeight(),
+                radius, radius, Path.Direction.CW);
+        }
+        return out;
     }
 
     /**
@@ -55,8 +106,24 @@ public final class PaneGlass {
     public static boolean apply(@Nullable PaneSurfaceStyle style, @NonNull View frame,
                                 @Nullable PaneGlassBackdropView backdrop,
                                 float requestedRadiusPx) {
+        return apply(style, frame, backdrop, requestedRadiusPx, false);
+    }
+
+    /**
+     * {@link #apply(PaneSurfaceStyle, View, PaneGlassBackdropView, float)}, and for a terminal
+     * pane the veil that keeps its text legible on this glass.
+     *
+     * @param terminalPane true for a terminal pane: the slab is a
+     *     {@link com.termux.app.chrome.GlassBackdropCache.Band#TERMINAL_PANE} band and asks
+     *     {@link PaneSurfaceStyle#paneGlassVeil} for its veil, drawn over the tint. A wall page's
+     *     content is not the terminal's and wears no veil.
+     */
+    public static boolean apply(@Nullable PaneSurfaceStyle style, @NonNull View frame,
+                                @Nullable PaneGlassBackdropView backdrop,
+                                float requestedRadiusPx, boolean terminalPane) {
         if (backdrop == null) return false;
         if (!isActive(style)) {
+            backdrop.setVeilSource(null);
             backdrop.setVisibility(View.GONE);
             return false;
         }
@@ -66,36 +133,66 @@ public final class PaneGlass {
             frame.getWidth(), frame.getHeight());
         backdrop.setGlass(style.paneGlassBlurFrame(), style.paneGlassBlurFrameRect(),
             style.paneGlassTintColor(), style.paneGlassGrainLayer(),
-            style.paneGlassGrainStrength(), radiusPx, style.paneGlassFrostFilter());
+            style.paneGlassGrainStrength(), radiusPx, style.paneGlassFrostFilter(),
+            style.paneGlassCrossfade());
+        // The border is one drawable on the frame (PaneRim), so the slab draws none of its own: a
+        // gradient rim here as well would put two borders on a lone pane.
+        backdrop.setRim(NO_RIM, style);
+        backdrop.setParallax(style.wallpaperParallax());
+        backdrop.setRefraction(style.paneGlassRefraction());
         backdrop.setVisibility(View.VISIBLE);
+        backdrop.setVeilSource(terminalPane ? style : null);
         return true;
+    }
+
+    /**
+     * {@code foreground} as the terminal renderer draws faint (SGR 2) text: each channel at two
+     * thirds, opaque. The second ink a pane's veil is measured with, since on a dark background it
+     * is the worse of the two.
+     */
+    public static int dimTerminalInk(int foreground) {
+        int red = ((foreground >> 16) & 0xFF) * 2 / 3;
+        int green = ((foreground >> 8) & 0xFF) * 2 / 3;
+        int blue = (foreground & 0xFF) * 2 / 3;
+        return 0xFF000000 | (red << 16) | (green << 8) | blue;
     }
 
     /**
      * Hand a frame's corner tab the app's wallpaper blur, so the tab is glass wherever it comes
      * out. The tab's material is its own fixed recipe — the blur under a panel scrim — and
-     * follows none of the frame's tint, grain or radius; this passes only the shared frame and
-     * its filter, or nothing while the app has no frame. Runs wherever {@link #apply} runs, so a
-     * frost refresh reaches the tab in the same pass as the slab.
+     * follows none of the frame's tint or radius (its grain is the dock's, set here); this passes the shared frame, its
+     * filter and Fancier Glass's look — the slab's own refraction, which the tab rims along its
+     * own shape — or nothing while the app has no frame. Runs wherever {@link #apply} runs, so a
+     * frost refresh or a new look reaches the tab in the same pass as the slab.
      */
     public static void dressTab(@Nullable PaneSurfaceStyle style,
                                 @Nullable com.termux.app.wall.PaneControlsView tab) {
         if (tab == null) return;
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(
+                tab.getContext(), false);
+        tab.setGrainPercent(preferences == null ? 0 : preferences.getDockGlassGrain());
         if (style == null) {
             tab.setPaneGlass(null, EMPTY_RECT, null);
             return;
         }
         tab.setPaneGlass(style.paneGlassBlurFrame(), style.paneGlassBlurFrameRect(),
-            style.paneGlassFrostFilter());
+            style.paneGlassFrostFilter(), style.wallpaperParallax(), style.paneGlassRefraction());
     }
 
     private static final android.graphics.Rect EMPTY_RECT = new android.graphics.Rect();
 
     /**
-     * Keep a slab aimed at the wallpaper as its frame moves. A frame moves for reasons that never
-     * redraw it (a sibling's divider drag, a float being dragged, the host resizing under the
-     * keyboard, a wall page sliding), and the frost is positioned in screen space, so every move
-     * has to re-aim the matrix.
+     * Keep a slab aimed at the wallpaper as its frame is laid out somewhere else. A frame moves in
+     * layout for reasons that never redraw it (a sibling's divider drag, a float being dragged,
+     * the host resizing under the keyboard), and the frost is positioned in screen space, so every
+     * such move has to re-aim the matrix.
+     *
+     * <p>A wall page sliding is not a layout move — the wall translates its pages — and this
+     * listener never sees it. The wall's owner re-aims every slab per frame of a slide instead
+     * ({@code onWallMoved} on the pages, {@code invalidatePaneGlassPositions} on the terminal),
+     * and the slab reads the page's translation off the wall itself, so the frost stays glued to
+     * the wallpaper while the page travels over it.</p>
      */
     public static void followLayout(@Nullable PaneGlassBackdropView backdrop) {
         if (backdrop == null) return;

@@ -3,6 +3,16 @@ plugins {
 }
 
 android {
+
+    lint {
+        // Untranslated strings are a standing condition, not a defect: the app ships more strings
+        // than any translation carries and Android falls back to the default resource. Baselining
+        // this one would put the build back in the red on the next string anybody adds.
+        disable 'MissingTranslation'
+        // Everything else that was already here is recorded in the baseline rather than silenced,
+        // so a new finding of any kind still fails the build.
+        baseline = file('lint-baseline.xml')
+    }
     namespace 'juloo.keyboard2'
     compileSdk project.properties.compileSdkVersion.toInteger()
 

@@ -77,11 +77,11 @@ public class MessageDialogUtils {
             Logger.logError("dialog");
             Button button = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
             if (button != null)
-                button.setTextColor(MaterialColors.getColor(button, com.google.android.material.R.attr.colorPrimary,
+                button.setTextColor(MaterialColors.getColor(button, androidx.appcompat.R.attr.colorPrimary,
                     ContextCompat.getColor(context, R.color.termux_primary)));
             button = dialog.getButton(AlertDialog.BUTTON_NEGATIVE);
             if (button != null)
-                button.setTextColor(MaterialColors.getColor(button, com.google.android.material.R.attr.colorPrimary,
+                button.setTextColor(MaterialColors.getColor(button, androidx.appcompat.R.attr.colorPrimary,
                     ContextCompat.getColor(context, R.color.termux_primary)));
         });
         dialog.show();

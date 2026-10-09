@@ -364,4 +364,322 @@ public class LinuxAppCatalogTest {
         assertEquals(1, apps.size());
         assertEquals("distro:debian:mine", apps.get(0).id);
     }
+
+    // --- whole desktop sessions ---------------------------------------------------------------
+    //
+    // The bodies below are the literal files out of Termux's x11 repository (RESEARCH.md §3), not
+    // plausible reconstructions: they are what decides whether this works on a phone.
+
+    /** Fixture directories read as the prefix's own {@code xsessions} directories. */
+    private static List<LinuxAppCatalog.Root> sessionRoots(File... dirs) {
+        List<LinuxAppCatalog.Root> roots = new ArrayList<>(dirs.length);
+        for (File dir : dirs) {
+            roots.add(new LinuxAppCatalog.Root(dir, ProotDistro.Container.PREFIX, true));
+        }
+        return roots;
+    }
+
+    /** An executable of that name beside the desktop files, which is where the prefix looks. */
+    private File bin(File dir, String name) throws IOException {
+        File bin = write(dir, name, "#!/bin/sh\n");
+        assertTrue(bin.setExecutable(true));
+        return bin;
+    }
+
+    private static final String XFCE =
+        "[Desktop Entry]\n"
+        + "Name=Xfce Session\n"
+        + "Comment=Use this session to run Xfce as your desktop environment\n"
+        + "Exec=startxfce4\n"
+        + "Icon=\n"
+        + "Type=Application\n"
+        + "DesktopNames=XFCE\n";
+
+    private static final String LXQT =
+        "[Desktop Entry]\n"
+        + "Type=Application\n"
+        + "Exec=startlxqt\n"
+        + "TryExec=lxqt-session\n"
+        + "DesktopNames=LXQt\n"
+        + "Name=LXQt Desktop\n"
+        + "Comment=Lightweight Qt Desktop\n";
+
+    private static final String MATE =
+        "[Desktop Entry]\n"
+        + "Name=MATE\n"
+        + "Comment=This session logs you into MATE\n"
+        + "Exec=mate-session\n"
+        + "TryExec=mate-session\n"
+        + "Icon=\n"
+        + "Type=Application\n"
+        + "DesktopNames=MATE\n";
+
+    /** The one entry with no {@code Type} key at all. */
+    private static final String WMAKER =
+        "[Desktop Entry]\n"
+        + "Name=Window Maker\n"
+        + "Comment=This session logs you into Window Maker\n"
+        + "Exec=wmaker\n"
+        + "TryExec=wmaker\n";
+
+    /** The one that uses the type the Desktop Entry Specification does not define. */
+    private static final String I3 =
+        "[Desktop Entry]\n"
+        + "Name=i3\n"
+        + "Comment=improved dynamic tiling window manager\n"
+        + "Exec=i3\n"
+        + "TryExec=i3\n"
+        + "Type=XSession\n"
+        + "X-LightDM-DesktopName=i3\n"
+        + "DesktopNames=i3\n";
+
+    /**
+     * A session directory takes all three shapes a desktop ships: {@code Type=Application} (xfce,
+     * lxqt, mate — eleven of the nineteen), {@code Type=XSession} (i3 and six others) and no
+     * {@code Type} key at all (wmaker). The directory is what says these are desktops; the file
+     * never does.
+     */
+    @Test public void everyShapeOfSessionFileIsAcceptedInASessionRoot() throws IOException {
+        File dir = temp.newFolder("share", "xsessions");
+        bin(dir, "startxfce4");
+        bin(dir, "startlxqt");
+        bin(dir, "lxqt-session");
+        bin(dir, "mate-session");
+        bin(dir, "wmaker");
+        bin(dir, "i3");
+        write(dir, "xfce.desktop", XFCE);
+        write(dir, "lxqt.desktop", LXQT);
+        write(dir, "mate.desktop", MATE);
+        write(dir, "wmaker.desktop", WMAKER);
+        write(dir, "i3.desktop", I3);
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(sessionRoots(dir));
+
+        assertEquals(5, apps.size());
+        for (LinuxAppCatalog.LinuxApp app : apps) {
+            assertTrue(app.name + " came out of a session root", app.session);
+            assertTrue(app.name + "'s id carries the marker", X11Apps.isSessionId(app.id));
+        }
+        assertEquals("session:xfce", LinuxAppCatalog.find(apps, "session:xfce").id);
+        assertEquals("Xfce Session", LinuxAppCatalog.find(apps, "session:xfce").name);
+        assertEquals("startxfce4", LinuxAppCatalog.find(apps, "session:xfce").exec);
+        assertNotNull(LinuxAppCatalog.find(apps, "session:i3"));
+        assertNotNull(LinuxAppCatalog.find(apps, "session:wmaker"));
+    }
+
+    /**
+     * The same three shapes in an ordinary applications directory: only {@code Type=Application}
+     * is launchable there, exactly as before. Both binaries are present, so what drops i3 and
+     * wmaker is the type and nothing else.
+     */
+    @Test public void anXSessionOrATypelessEntryIsStillNotAnApplication() throws IOException {
+        File dir = temp.newFolder("share", "applications");
+        bin(dir, "startxfce4");
+        bin(dir, "wmaker");
+        bin(dir, "i3");
+        write(dir, "xfce.desktop", XFCE);
+        write(dir, "wmaker.desktop", WMAKER);
+        write(dir, "i3.desktop", I3);
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(host(dir));
+
+        assertEquals(1, apps.size());
+        LinuxAppCatalog.LinuxApp xfce = apps.get(0);
+        assertEquals("xfce", xfce.id);
+        assertFalse("an applications directory holds applications", xfce.session);
+        assertFalse(X11Apps.isSessionId(xfce.id));
+        // DesktopNames is a session's business; an application carries none even when it says one.
+        assertEquals("", xfce.desktopNames);
+    }
+
+    /** {@code DesktopNames} is what the session tells the programs it starts it is called. */
+    @Test public void desktopNamesIsCarriedWhenTheSessionNamesOneAndIsEmptyOtherwise()
+            throws IOException {
+        File dir = temp.newFolder("share", "xsessions");
+        bin(dir, "startxfce4");
+        bin(dir, "wmaker");
+        bin(dir, "i3");
+        write(dir, "xfce.desktop", XFCE);
+        write(dir, "i3.desktop", I3);
+        write(dir, "wmaker.desktop", WMAKER);
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(sessionRoots(dir));
+
+        assertEquals("XFCE", LinuxAppCatalog.find(apps, "session:xfce").desktopNames);
+        assertEquals("i3", LinuxAppCatalog.find(apps, "session:i3").desktopNames);
+        assertEquals("", LinuxAppCatalog.find(apps, "session:wmaker").desktopNames);
+    }
+
+    /**
+     * D7. cinnamon's {@code TryExec} names a binary that is installed and its {@code Exec} names
+     * one that is not, so the {@code TryExec} test alone would let a desktop into the drawer that
+     * cannot start. mate, whose two agree, is there to show the rule screens nothing else.
+     */
+    @Test public void aSessionWhoseExecBinaryIsMissingIsHiddenEvenWhenItsTryExecResolves()
+            throws IOException {
+        File dir = temp.newFolder("share", "xsessions");
+        bin(dir, "cinnamon");
+        bin(dir, "mate-session");
+        write(dir, "cinnamon.desktop", "[Desktop Entry]\nName=Cinnamon\n"
+            + "Exec=cinnamon-session-cinnamon\nTryExec=cinnamon\nIcon=\nType=Application\n");
+        write(dir, "mate.desktop", MATE);
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(sessionRoots(dir));
+
+        assertEquals(1, apps.size());
+        assertEquals("session:mate", apps.get(0).id);
+        assertNull(LinuxAppCatalog.find(apps, "session:cinnamon"));
+    }
+
+    /**
+     * openbox states its command absolutely, as the Termux prefix path it was built with. That
+     * path does not exist on the machine the tests run on, so D7 hides it — which is the same
+     * reading a phone without openbox installed would give, and the opposite of one with it.
+     */
+    @Test public void aSessionWithAnAbsoluteExecIsResolvedAsAnAbsolutePath() throws IOException {
+        File dir = temp.newFolder("share", "xsessions");
+        write(dir, "openbox.desktop", "[Desktop Entry]\nName=Openbox\n"
+            + "Comment=Log in using the Openbox window manager (without a session manager)\n"
+            + "Exec=/data/data/com.termux/files/usr/bin/openbox-session\n"
+            + "TryExec=/data/data/com.termux/files/usr/bin/openbox-session\n"
+            + "Icon=openbox\nType=Application\n");
+
+        assertTrue(LinuxAppCatalog.scan(sessionRoots(dir)).isEmpty());
+
+        // The same entry with a command that is really there comes through, icon and all.
+        File other = temp.newFolder("other", "xsessions");
+        File session = bin(other, "openbox-session");
+        write(other, "openbox.desktop", "[Desktop Entry]\nName=Openbox\n"
+            + "Exec=" + session.getPath() + "\nTryExec=" + session.getPath() + "\n"
+            + "Icon=openbox\nType=Application\n");
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(sessionRoots(other));
+
+        assertEquals(1, apps.size());
+        assertEquals("session:openbox", apps.get(0).id);
+        assertEquals("openbox", apps.get(0).icon);
+    }
+
+    /**
+     * The other half of D7: an application root screens on {@code TryExec} and on nothing else.
+     * An entry with no {@code TryExec} whose command is not installed is shown today and has to go
+     * on being shown — nothing that is in the drawer now may disappear.
+     */
+    @Test public void anApplicationWithNoTryExecIsStillShownWhenItsCommandIsMissing()
+            throws IOException {
+        File dir = temp.newFolder("share", "applications");
+        write(dir, "ghost.desktop",
+            "[Desktop Entry]\nType=Application\nName=Ghost\nExec=not-installed-anywhere\n");
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(host(dir));
+
+        assertEquals(1, apps.size());
+        assertEquals("ghost", apps.get(0).id);
+    }
+
+    /**
+     * The collision the id marker exists for: {@code xfce.desktop} in {@code applications} and
+     * {@code xfce.desktop} in {@code xsessions}, in one container. Before the marker the second
+     * one was silently dropped by {@code scan}'s de-duplication.
+     */
+    @Test public void aSessionAndAnApplicationOfTheSameNameAreTwoEntries() throws IOException {
+        File apps = temp.newFolder("share", "applications");
+        File xsessions = temp.newFolder("share", "xsessions");
+        write(apps, "xfce.desktop", "[Desktop Entry]\nType=Application\nName=Xfce Settings\n"
+            + "Exec=xfce4-settings-manager\nIcon=preferences-desktop\n");
+        bin(xsessions, "startxfce4");
+        write(xsessions, "xfce.desktop", XFCE);
+
+        List<LinuxAppCatalog.Root> roots = new ArrayList<>(host(apps));
+        roots.addAll(sessionRoots(xsessions));
+        List<LinuxAppCatalog.LinuxApp> found = LinuxAppCatalog.scan(roots);
+
+        assertEquals(2, found.size());
+        LinuxAppCatalog.LinuxApp application = LinuxAppCatalog.find(found, "xfce");
+        LinuxAppCatalog.LinuxApp session = LinuxAppCatalog.find(found, "session:xfce");
+        assertNotNull(application);
+        assertNotNull(session);
+        assertEquals("Xfce Settings", application.name);
+        assertEquals("Xfce Session", session.name);
+        assertFalse(application.session);
+        assertTrue(session.session);
+        // Both name the same file; only the id tells them apart, and it takes apart the old way.
+        assertEquals("xfce", application.desktopFile);
+        assertEquals("xfce", session.desktopFile);
+        assertEquals("xfce", X11Apps.desktopFileNameOf(session.id));
+        assertEquals("", X11Apps.containerOf(session.id));
+    }
+
+    /**
+     * A desktop installed inside a container: found by {@link LinuxAppCatalog#rootsOf} with no
+     * hand-built roots, and its id carries both the container and the session marker without
+     * either disturbing the other.
+     */
+    @Test public void aContainerSessionIsFoundAndItsIdCarriesBothMarkers() throws IOException {
+        File containers = temp.newFolder("containers");
+        ProotDistro.Container debian = container(containers, "debian", PASSWD_WITH_USER);
+        File binary = write(debian.root, "usr/bin/startxfce4", "#!/bin/sh\n");
+        assertTrue(binary.setExecutable(true));
+        write(debian.root, "usr/share/xsessions/xfce.desktop", XFCE);
+
+        List<LinuxAppCatalog.LinuxApp> apps = LinuxAppCatalog.scan(LinuxAppCatalog.rootsOf(debian));
+
+        assertEquals(1, apps.size());
+        LinuxAppCatalog.LinuxApp session = apps.get(0);
+        assertTrue(session.session);
+        assertEquals("XFCE", session.desktopNames);
+        assertEquals("distro:debian:session:xfce", session.id);
+        assertEquals("debian", X11Apps.containerOf(session.id));
+        assertEquals("session:xfce", X11Apps.desktopFileOf(session.id));
+        assertEquals("xfce", X11Apps.desktopFileNameOf(session.id));
+        assertTrue(X11Apps.isSessionId(session.id));
+        // The session runs through the container's login like any other entry there.
+        assertTrue(session.command().startsWith("proot-distro login debian -u amal --shared-x11"));
+        assertTrue(session.command().endsWith("-- /bin/sh -c 'startxfce4'"));
+    }
+
+    /** A container's roots are its applications and then its sessions, and the fingerprint sees both. */
+    @Test public void rootsOfAContainerCoverItsSessionDirectoriesToo() throws IOException {
+        File containers = temp.newFolder("containers");
+        ProotDistro.Container debian = container(containers, "debian", PASSWD_WITH_USER);
+        List<LinuxAppCatalog.Root> roots = LinuxAppCatalog.rootsOf(debian);
+
+        assertEquals(debian.applicationDirs().size() + debian.sessionDirs().size(), roots.size());
+        assertFalse(roots.get(0).sessions);
+        assertTrue(roots.get(roots.size() - 1).sessions);
+        assertEquals(new File(debian.root, "usr/local/share/xsessions"),
+            roots.get(roots.size() - 1).dir);
+
+        long before = LinuxAppCatalog.signature(roots);
+        write(debian.root, "usr/share/xsessions/xfce.desktop", XFCE);
+        org.junit.Assert.assertNotEquals(before, LinuxAppCatalog.signature(roots));
+    }
+
+    /** The id helpers, on their own: the marker goes inside the container part, never in front. */
+    @Test public void sessionIdsAreOrdinaryIdsWithAMarkerInTheDesktopFilePart() {
+        assertEquals("session:xfce", X11Apps.qualifySession("", "xfce"));
+        assertEquals("distro:debian:session:xfce", X11Apps.qualifySession("debian", "xfce"));
+        assertTrue(X11Apps.isSessionId("session:xfce"));
+        assertTrue(X11Apps.isSessionId("distro:debian:session:xfce"));
+        assertFalse(X11Apps.isSessionId("xfce"));
+        assertFalse(X11Apps.isSessionId("distro:debian:xfce"));
+        assertEquals("xfce", X11Apps.desktopFileNameOf("session:xfce"));
+        assertEquals("xfce", X11Apps.desktopFileNameOf("distro:debian:session:xfce"));
+        // An application's id is unchanged by any of this, which is what keeps the pins working.
+        assertEquals("xfce", X11Apps.desktopFileNameOf("xfce"));
+        assertEquals("debian", X11Apps.containerOf("distro:debian:session:xfce"));
+    }
+
+    /** D4: Wayland sessions are not scanned, so no tile appears for one that cannot run. */
+    @Test public void waylandSessionsAreNotAmongTheDirectoriesScanned() throws IOException {
+        File containers = temp.newFolder("containers");
+        ProotDistro.Container debian = container(containers, "debian", PASSWD_WITH_USER);
+
+        for (LinuxAppCatalog.Root root : LinuxAppCatalog.rootsOf(debian)) {
+            assertFalse(root.dir.getPath(), root.dir.getPath().contains("wayland-sessions"));
+        }
+        for (File dir : ProotDistro.Container.PREFIX.sessionDirs()) {
+            assertFalse(dir.getPath(), dir.getPath().contains("wayland-sessions"));
+        }
+    }
 }

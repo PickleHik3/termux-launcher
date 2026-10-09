@@ -1,16 +1,13 @@
 package com.termux.app.terminal.io;
 
 import android.content.Context;
-import android.graphics.Typeface;
 import android.os.Build;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowInsets;
-import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -20,8 +17,13 @@ import androidx.annotation.Nullable;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import com.google.android.material.bottomsheet.BottomSheetDialog;
-import com.google.android.material.color.MaterialColors;
+import com.google.android.material.bottomsheet.BottomSheetDragHandleView;
+import com.google.android.material.button.MaterialButton;
+import com.google.android.material.card.MaterialCardView;
+import com.google.android.material.textfield.TextInputEditText;
+import com.google.android.material.textfield.TextInputLayout;
 import com.termux.R;
+import com.termux.app.material.M3;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 
@@ -59,8 +61,6 @@ public final class ExtraKeyActionPicker {
     private final float density;
     private final int colorText;
     private final int colorSubtle;
-    private final int colorOutline;
-    private final int colorPanel;
 
     @Nullable private Runnable onClosed;
     /** True while an argument prompt owns the close callback instead of the picker sheet. */
@@ -69,14 +69,8 @@ public final class ExtraKeyActionPicker {
     public ExtraKeyActionPicker(@NonNull Context context) {
         this.context = context;
         this.density = context.getResources().getDisplayMetrics().density;
-        this.colorText = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorOnSurface, 0xFFFFFFFF);
-        this.colorSubtle = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFFB0B0B0);
-        this.colorOutline = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorOutlineVariant, 0x33FFFFFF);
-        this.colorPanel = MaterialColors.getColor(context,
-            com.termux.shared.R.attr.termuxColorSurfacePanelHigh, 0xFF202837);
+        this.colorText = M3.onSurface(context);
+        this.colorSubtle = M3.onSurfaceVariant(context);
     }
 
     public static void show(@NonNull Context context, @NonNull OnPicked onPicked) {
@@ -93,24 +87,16 @@ public final class ExtraKeyActionPicker {
     public void open(@NonNull OnPicked onPicked) {
         BottomSheetDialog dialog = new BottomSheetDialog(context);
         LinearLayout root = column();
-        root.setPadding(pad(20), pad(12), pad(20), 0);
-        android.graphics.drawable.GradientDrawable sheetBackground =
-            new android.graphics.drawable.GradientDrawable();
-        sheetBackground.setCornerRadii(new float[] {
-            pad(20), pad(20), pad(20), pad(20), 0, 0, 0, 0});
-        sheetBackground.setColor(withAlpha(colorPanel, 0xF7));
-        root.setBackground(sheetBackground);
+        root.setPadding(pad(20), 0, pad(20), 0);
+        root.addView(new BottomSheetDragHandleView(context), new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         // Fixed header: back arrow + title, then the sticky search field. Only results scroll.
         LinearLayout headerRow = row();
-        TextView back = new TextView(context);
-        back.setText("←");
+        MaterialButton back = new MaterialButton(context, null,
+            com.google.android.material.R.attr.materialIconButtonStyle);
+        back.setIconResource(androidx.appcompat.R.drawable.abc_ic_ab_back_material);
         back.setContentDescription(context.getString(R.string.settings_extra_keys_action_back));
-        back.setTextColor(colorText);
-        back.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
-        back.setGravity(Gravity.CENTER);
-        back.setMinimumWidth(pad(48));
-        back.setMinimumHeight(pad(48));
         back.setOnClickListener(v -> dialog.dismiss());
         headerRow.addView(back);
         TextView titleView = title(context.getString(
@@ -119,26 +105,16 @@ public final class ExtraKeyActionPicker {
         root.addView(headerRow);
 
         LinearLayout searchRow = row();
-        EditText search = new EditText(context);
-        search.setHint(R.string.settings_extra_keys_action_search_hint);
+        TextInputLayout searchLayout = new TextInputLayout(context);
+        searchLayout.setEndIconMode(TextInputLayout.END_ICON_CLEAR_TEXT);
+        searchLayout.setHint(context.getString(R.string.settings_extra_keys_action_search_hint));
+        TextInputEditText search = new TextInputEditText(searchLayout.getContext());
         search.setSingleLine(true);
-        search.setTextColor(colorText);
-        search.setHintTextColor(colorSubtle);
-        search.setLayoutParams(new LinearLayout.LayoutParams(0,
+        searchLayout.addView(search, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        searchLayout.setLayoutParams(new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        searchRow.addView(search);
-        TextView clear = new TextView(context);
-        clear.setText("×");
-        clear.setContentDescription(context.getString(
-            R.string.settings_extra_keys_action_clear_search));
-        clear.setTextColor(colorSubtle);
-        clear.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f);
-        clear.setGravity(Gravity.CENTER);
-        clear.setMinimumWidth(pad(48));
-        clear.setMinimumHeight(pad(48));
-        clear.setVisibility(View.GONE);
-        clear.setOnClickListener(v -> search.setText(""));
-        searchRow.addView(clear);
+        searchRow.addView(searchLayout);
         root.addView(searchRow);
 
         LinearLayout results = column();
@@ -168,7 +144,6 @@ public final class ExtraKeyActionPicker {
             @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
             @Override public void afterTextChanged(Editable s) {
-                clear.setVisibility(s.length() == 0 ? View.GONE : View.VISIBLE);
                 renderResults(results, s.toString(), pick, dialog, onPicked);
                 scroller.scrollTo(0, 0);
             }
@@ -177,7 +152,6 @@ public final class ExtraKeyActionPicker {
         dialog.setContentView(root);
         View sheet = dialog.findViewById(com.google.android.material.R.id.design_bottom_sheet);
         if (sheet != null) {
-            sheet.setBackgroundColor(0x00000000);
             ViewGroup.LayoutParams params = sheet.getLayoutParams();
             if (params != null) {
                 params.height = ViewGroup.LayoutParams.MATCH_PARENT;
@@ -312,15 +286,18 @@ public final class ExtraKeyActionPicker {
                                    @NonNull OnPicked onPicked) {
         BottomSheetDialog dialog = new BottomSheetDialog(context);
         LinearLayout root = column();
-        root.setPadding(pad(20), pad(16), pad(20), pad(20));
+        root.setPadding(pad(20), 0, pad(20), pad(20));
+        root.addView(new BottomSheetDragHandleView(context), new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         root.addView(title(label));
         root.addView(header(argument));
-        EditText input = new EditText(context);
+        TextInputLayout inputLayout = new TextInputLayout(context);
+        inputLayout.setHint(tool.name + ":" + argument + "=…");
+        TextInputEditText input = new TextInputEditText(inputLayout.getContext());
         input.setSingleLine(true);
-        input.setTextColor(colorText);
-        input.setHintTextColor(colorSubtle);
-        input.setHint(tool.name + ":" + argument + "=…");
-        root.addView(input);
+        inputLayout.addView(input, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(inputLayout);
         View confirm = entry(context.getString(android.R.string.ok), null, () -> {
             String value = input.getText().toString().trim();
             dialog.dismiss();
@@ -433,10 +410,9 @@ public final class ExtraKeyActionPicker {
     private TextView title(@NonNull String text) {
         TextView view = new TextView(context);
         view.setText(text);
+        M3.textAppearance(view, com.google.android.material.R.attr.textAppearanceTitleLarge);
         view.setTextColor(colorText);
-        view.setTypeface(Typeface.DEFAULT_BOLD);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f);
-        view.setPadding(pad(4), 0, 0, 0);
+        view.setPaddingRelative(pad(4), 0, 0, 0);
         return view;
     }
 
@@ -444,8 +420,8 @@ public final class ExtraKeyActionPicker {
         TextView view = new TextView(context);
         view.setText(text);
         view.setAllCaps(true);
+        M3.textAppearance(view, com.google.android.material.R.attr.textAppearanceLabelMedium);
         view.setTextColor(colorSubtle);
-        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
         view.setPadding(0, pad(12), 0, pad(4));
         return view;
     }
@@ -453,40 +429,33 @@ public final class ExtraKeyActionPicker {
     /** One result: human label primary, internal identifier secondary and quieter (F-11). */
     private View entry(@NonNull String label, @Nullable String summary,
                        @NonNull Runnable onClick) {
+        MaterialCardView card = M3.clickableCard(context, true);
+        card.setOnClickListener(v -> onClick.run());
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        cardParams.setMargins(0, pad(2), 0, pad(2));
+        card.setLayoutParams(cardParams);
+
         LinearLayout entry = column();
         entry.setMinimumHeight(pad(48));
         entry.setGravity(Gravity.CENTER_VERTICAL);
-        entry.setPadding(pad(8), pad(8), pad(8), pad(8));
-        entry.setOnClickListener(v -> onClick.run());
-        entry.setBackground(rowDivider());
+        entry.setPadding(pad(12), pad(8), pad(12), pad(8));
+        card.addView(entry);
 
         TextView primary = new TextView(context);
         primary.setText(label);
+        M3.textAppearance(primary, com.google.android.material.R.attr.textAppearanceBodyLarge);
         primary.setTextColor(colorText);
-        primary.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f);
         entry.addView(primary);
 
         if (summary != null && !summary.isEmpty()) {
             TextView secondary = new TextView(context);
             secondary.setText(summary);
+            M3.textAppearance(secondary, com.google.android.material.R.attr.textAppearanceBodySmall);
             secondary.setTextColor(colorSubtle);
-            secondary.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
             entry.addView(secondary);
         }
-        return entry;
-    }
-
-    private android.graphics.drawable.Drawable rowDivider() {
-        android.graphics.drawable.GradientDrawable drawable =
-            new android.graphics.drawable.GradientDrawable();
-        drawable.setColor(0x00000000);
-        drawable.setStroke(Math.max(1, pad(0.5f)), colorOutline);
-        drawable.setCornerRadius(pad(10));
-        return drawable;
-    }
-
-    private static int withAlpha(int color, int alpha) {
-        return (color & 0x00FFFFFF) | (alpha << 24);
+        return card;
     }
 
     private int pad(float dp) {

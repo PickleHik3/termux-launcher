@@ -258,7 +258,7 @@ public class EdgeStackPolicyTest {
     // ------------------------------------------------------------------ the stack itself
 
     /**
-     * The order {@code PlaceMiniatureView.computeBlocks} claimed its strips in before it read the
+     * The order {@code LayoutCanvasView.computeBlocks} claimed its strips in before it read the
      * stack: outermost first, the status bar before anything else, a top A&#8211;Z band right
      * under it, then the side columns rail-first, then the bottom stack. The miniature loops over
      * {@link EdgeStackPolicy#stack} now, so this is the shipped picture rather than a second
@@ -411,16 +411,33 @@ public class EdgeStackPolicyTest {
     }
 
     @Test
-    public void onlyTheStatusBarRefusesTheTray() {
+    public void everyElementMayBePutAway() {
+        // The status bar was the one that could not, while the wall's pager rode its swipe.
         PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
             RowPlacement.BOTTOM);
-        for (EdgeStackPolicy.Drop drop
-            : EdgeStackPolicy.targets(layout, Element.STATUS, PlaceOrientation.PORTRAIT))
-            assertFalse(drop.toString(), drop.hideAllowed);
-        for (Element element : new Element[] {Element.APPS, Element.EXTRA_KEYS, Element.AZ})
+        for (Element element : Element.values())
             for (EdgeStackPolicy.Drop drop
                 : EdgeStackPolicy.targets(layout, element, PlaceOrientation.PORTRAIT))
                 assertTrue(element + " " + drop, drop.hideAllowed);
+    }
+
+    @Test
+    public void aHiddenStatusBarIsOffItsEdgeAndCostsNothing() {
+        PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        PlaceLayout away = EdgeStackPolicy.withAway(layout, Element.STATUS);
+        assertTrue(away.slot(Element.STATUS).hidden);
+        assertFalse(EdgeStackPolicy.isShown(away, Element.STATUS));
+        assertTrue("the top is bare", EdgeStackPolicy.stack(away, Edge.TOP).isEmpty());
+        assertEquals("the bottom is untouched", EdgeStackPolicy.stack(layout, Edge.BOTTOM),
+            EdgeStackPolicy.stack(away, Edge.BOTTOM));
+        EdgeStackPolicy.Metrics metrics = EdgeStackPolicy.Metrics.builder()
+            .status(40, 32).apps(60, 50).az(20, 18).extraKeys(44, 40).build();
+        assertEquals("nothing is given up along the top", 0,
+            EdgeStackPolicy.contentInsets(away, metrics).top);
+        // It keeps the edge and the position it comes back to.
+        assertEquals(Edge.TOP, away.slot(Element.STATUS).edge);
+        assertEquals(layout.slot(Element.STATUS).order, away.slot(Element.STATUS).order);
     }
 
     @Test
@@ -564,12 +581,12 @@ public class EdgeStackPolicyTest {
     }
 
     @Test
-    public void onlyABarThatMayHideIsPutAway() {
+    public void putAwayKeepsTheEdgeABarComesBackTo() {
         PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
             RowPlacement.BOTTOM);
         assertTrue(EdgeStackPolicy.withAway(layout, Element.APPS).slot(Element.APPS).hidden);
-        assertEquals("the wall's pager rides the status bar, so it never goes away",
-            layout, EdgeStackPolicy.withAway(layout, Element.STATUS));
+        assertTrue("the status bar goes away like any other bar now",
+            EdgeStackPolicy.withAway(layout, Element.STATUS).slot(Element.STATUS).hidden);
         // It keeps the edge it would come back to.
         assertEquals(Edge.BOTTOM,
             EdgeStackPolicy.withAway(layout, Element.APPS).slot(Element.APPS).edge);
@@ -614,6 +631,127 @@ public class EdgeStackPolicyTest {
         // The plank: the row and the index riding it, one seam between them.
         assertEquals(1, EdgeStackPolicy.separatorsFor(
             Arrays.asList(Element.APPS, Element.AZ)).size());
+    }
+
+    // ------------------------------------------------------------------ under the keyboard
+
+    /** The shipped layout with the extra keys standing under the keyboard. */
+    private static PlaceLayout keysUnderKeyboard() {
+        PlaceLayout shipped = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        return shipped.withSlot(Element.EXTRA_KEYS, new Slot(false, Edge.BOTTOM, 0, true));
+    }
+
+    @Test
+    public void theShippedLayoutHasNothingUnderTheKeyboard() {
+        PlaceLayout shipped = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM);
+        assertTrue(EdgeStackPolicy.underKeyboard(shipped).isEmpty());
+        assertEquals(EdgeStackPolicy.stack(shipped, Edge.BOTTOM),
+            EdgeStackPolicy.overKeyboard(shipped));
+    }
+
+    @Test
+    public void bandsUnderTheKeyboardAreTheBottomStacksOutermost() {
+        // Even numbered after the others, the band under the keyboard is nearer the screen's edge.
+        PlaceLayout layout = layout(Edge.TOP, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM)
+            .withSlot(Element.APPS, new Slot(false, Edge.BOTTOM, 5, true));
+        assertEquals(Arrays.asList(Element.APPS, Element.EXTRA_KEYS, Element.AZ),
+            EdgeStackPolicy.stack(layout, Edge.BOTTOM));
+        assertEquals(Arrays.asList(Element.APPS), EdgeStackPolicy.underKeyboard(layout));
+        assertEquals(Arrays.asList(Element.EXTRA_KEYS, Element.AZ),
+            EdgeStackPolicy.overKeyboard(layout));
+        // The edge still costs the content every band on it: the keyboard's own room is apart.
+        EdgeStackPolicy.Metrics metrics = metrics();
+        assertEquals(APPS_ROW_HEIGHT + AZ_ROW_HEIGHT + KEYS_ROW_HEIGHT,
+            EdgeStackPolicy.contentInsets(layout, metrics).bottom);
+    }
+
+    @Test
+    public void theStatusBarNeverStandsUnderTheKeyboard() {
+        PlaceLayout layout = layout(Edge.BOTTOM, RowPlacement.BOTTOM, true, Edge.BOTTOM,
+            RowPlacement.BOTTOM)
+            .withSlot(Element.STATUS, new Slot(false, Edge.BOTTOM, 3, true));
+        assertFalse(EdgeStackPolicy.standsUnderKeyboard(layout, Element.STATUS));
+        assertFalse(EdgeStackPolicy.underKeyboard(layout).contains(Element.STATUS));
+        assertTrue(EdgeStackPolicy.underKeyboardTargets(layout, Element.STATUS).isEmpty());
+    }
+
+    @Test
+    public void onlyTheBottomHasAnUnderSide() {
+        Slot top = new Slot(false, Edge.TOP, 0, true);
+        assertFalse("off the bottom the flag cannot stand", top.underKeyboard);
+        Slot moved = new Slot(false, Edge.BOTTOM, 0, true).withEdge(Edge.LEFT);
+        assertFalse(moved.underKeyboard);
+        Slot away = new Slot(false, Edge.BOTTOM, 1, true).withHidden(true);
+        assertTrue("put away it keeps the side it comes back to", away.underKeyboard);
+        assertNotEquals(new Slot(false, Edge.BOTTOM, 0, true), new Slot(false, Edge.BOTTOM, 0));
+    }
+
+    @Test
+    public void theGapsOverAndUnderTheKeyboardAreCountedApart() {
+        PlaceLayout layout = keysUnderKeyboard();
+        // Lifting the status bar: two bands over the keyboard and one under it.
+        assertEquals(3, indicesFor(
+            EdgeStackPolicy.targets(layout, Element.STATUS, PlaceOrientation.PORTRAIT),
+            Edge.BOTTOM));
+        // Lifting the apps row: one band over, the keys under.
+        assertEquals(2, indicesFor(
+            EdgeStackPolicy.targets(layout, Element.APPS, PlaceOrientation.PORTRAIT),
+            Edge.BOTTOM));
+        List<EdgeStackPolicy.Drop> under = EdgeStackPolicy.underKeyboardTargets(layout,
+            Element.APPS);
+        assertEquals("outside the keys and between them and the keyboard", 2, under.size());
+        for (EdgeStackPolicy.Drop drop : under) {
+            assertTrue(drop.underKeyboard);
+            assertEquals(Edge.BOTTOM, drop.edge);
+        }
+        // The keys lifted off their own side leave it bare: one gap.
+        assertEquals(1, EdgeStackPolicy.underKeyboardTargets(layout, Element.EXTRA_KEYS).size());
+    }
+
+    @Test
+    public void theIndexIsOfferedTheGapsUnderTheKeyboard() {
+        assertFalse(EdgeStackPolicy.underKeyboardTargets(keysUnderKeyboard(), Element.AZ)
+            .isEmpty());
+    }
+
+    @Test
+    public void aDropUnderTheKeyboardNumbersOnlyThatSide() {
+        PlaceLayout layout = keysUnderKeyboard();
+        PlaceLayout dropped = EdgeStackPolicy.withDrop(layout, Element.APPS, Edge.BOTTOM, 0, true);
+        assertEquals(Arrays.asList(Element.APPS, Element.EXTRA_KEYS),
+            EdgeStackPolicy.underKeyboard(dropped));
+        assertEquals(Arrays.asList(Element.AZ), EdgeStackPolicy.overKeyboard(dropped));
+        assertEquals(new Slot(false, Edge.BOTTOM, 0, true), dropped.slot(Element.APPS));
+        assertEquals(new Slot(false, Edge.BOTTOM, 1, true), dropped.slot(Element.EXTRA_KEYS));
+        assertEquals("the side over it is left as it was", layout.slot(Element.AZ),
+            dropped.slot(Element.AZ));
+    }
+
+    @Test
+    public void aDropOverTheKeyboardTakesABandBackFromUnderIt() {
+        PlaceLayout back = EdgeStackPolicy.withDrop(keysUnderKeyboard(), Element.EXTRA_KEYS,
+            Edge.BOTTOM, 0);
+        assertTrue(EdgeStackPolicy.underKeyboard(back).isEmpty());
+        assertEquals(Arrays.asList(Element.EXTRA_KEYS, Element.AZ, Element.APPS),
+            EdgeStackPolicy.stack(back, Edge.BOTTOM));
+        assertFalse(back.slot(Element.EXTRA_KEYS).underKeyboard);
+
+        // The status bar asked to stand under it lands over it.
+        PlaceLayout status = EdgeStackPolicy.withDrop(keysUnderKeyboard(), Element.STATUS,
+            Edge.BOTTOM, 0, true);
+        assertFalse(status.slot(Element.STATUS).underKeyboard);
+        assertTrue(EdgeStackPolicy.overKeyboard(status).contains(Element.STATUS));
+    }
+
+    @Test
+    public void aBandTakenToAnotherEdgeLeavesTheUnderSide() {
+        PlaceLayout moved = EdgeStackPolicy.withDrop(keysUnderKeyboard(), Element.EXTRA_KEYS,
+            Edge.LEFT, 0);
+        assertTrue(EdgeStackPolicy.underKeyboard(moved).isEmpty());
+        assertFalse(moved.slot(Element.EXTRA_KEYS).underKeyboard);
     }
 
     /**

@@ -32,6 +32,12 @@ public interface HostActions {
 
     void hideKeyboard();
 
+    /** The clipboard key: the history of what was copied in the launcher, over the keys. */
+    default void showClipboardPanel() {}
+
+    /** Back from the clipboard panel to the keys; a no-op while it is not up. */
+    default void hideClipboardPanel() {}
+
     /** Launch platform speech recognition; chooser selects a recognizer explicitly when requested. */
     default void requestVoiceTyping(boolean chooser) {}
 

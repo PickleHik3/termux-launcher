@@ -4,22 +4,34 @@ import java.util.ArrayList;
 import java.util.Objects;
 
 /**
- * The split keyboard type: every row parted at its midpoint so each thumb keeps its own half.
+ * The split keyboard type: two rectangular halves, one against each edge, with a straight gap
+ * of the same width on every row between them, the way a phone's own split keyboards look.
  *
  * <p>Pure geometry — a {@link KeyboardData} in, a {@link KeyboardData} out, plus the band the
- * parting leaves empty for the renderer and for whatever the host wants to put in the gap. The
- * gap is expressed in key-width units and is the same on every row, so the two halves line up.
- * Local addition, see UPSTREAM.md: upstream's own split modifier was not ported.
+ * parting leaves empty for the renderer and for whatever the host wants to put in the gap.
+ *
+ * <p>Every row is cut once into a left run and a right run. Where is the layout's to say: a key
+ * marked {@code split_before="true"} starts the right run, and {@code split_at} cuts a key in two
+ * at that offset (the space bar, usually). A row with no marker is cut at its midpoint, so a
+ * user's own layout still parts. The halves are then equally wide: <i>C</i>, the widest run on
+ * either side of any row. The keyboard is <i>2C+G</i> wide; every left run starts at the left
+ * edge exactly as parsed, every right run is pushed right until it ends at <i>2C+G</i>, and the
+ * band <i>[C, C+G]</i> is clear on every row. Keys keep their widths, so a letter is the same
+ * size on every row of both halves; a run shorter than <i>C</i> leaves its slack on the gap side
+ * of its half, which is still slab, not gap.
+ *
+ * <p>The gap is expressed in key-width units. Local addition, see UPSTREAM.md: upstream's own
+ * split modifier was not ported.
  */
 public final class SplitLayout
 {
   /** A parting thinner than this is not worth having; the layout stays as it was parsed. */
   public static final float MIN_GAP_UNITS = 0.1f;
 
-  /** Only a key at least this wide is a bar the parting can be cut through. */
+  /** Only a key at least this wide is a bar the midpoint rule can cut through. */
   public static final float MIN_CUT_WIDTH_UNITS = 1.5f;
 
-  /** A half thinner than this is not cut off even a bar; the parting takes its edge. */
+  /** A piece thinner than this is not cut off a bar by the midpoint rule; it takes an edge. */
   private static final float MIN_HALF_UNITS = 0.25f;
 
   /**
@@ -28,17 +40,48 @@ public final class SplitLayout
    */
   public static final float MAX_GAP_FRACTION = 0.5f;
 
+  /**
+   * Values of a cut bar's left piece, as a {@link KeyboardData.Key#withValuesOnly} mask: the
+   * centre value and the west-side swipes (nw 1, sw 3, w 5). The right piece takes the centre
+   * value and the east-side ones (ne 2, se 4, e 6). North and south (7, 8) and the circle
+   * gesture go to the wider piece, the left one when they are equal. So no swipe is drawn or
+   * reachable twice; only the centre value is, because a space bar has to type on both thumbs.
+   */
+  private static final int WEST_VALUES = (1 << 0) | (1 << 1) | (1 << 3) | (1 << 5);
+  private static final int EAST_VALUES = (1 << 0) | (1 << 2) | (1 << 4) | (1 << 6);
+  private static final int VERTICAL_VALUES = (1 << 7) | (1 << 8);
+
   private static final float EPS = 1e-3f;
 
   private SplitLayout() {}
 
-  /** The parting [fraction] of the keyboard's width asks for, in key-width units. */
+  /**
+   * The width of one half, in key-width units, of [keyboard] once parted: the widest left or
+   * right run of any row. [keyboard] is the layout as parsed, never one already parted. Zero
+   * when no row has keys.
+   */
+  public static float halfUnits(KeyboardData keyboard)
+  {
+    Objects.requireNonNull(keyboard, "keyboard");
+    float half = 0f;
+    for (KeyboardData.Row row : keyboard.rows)
+    {
+      Cut cut = cutOf(row);
+      half = Math.max(half, Math.max(cut.leftUnits, cut.rightUnits));
+    }
+    return half;
+  }
+
+  /**
+   * The parting [fraction] asks for, in key-width units: a fraction of the two halves' width
+   * together, <i>fraction·2C</i>. [keyboard] is the layout as parsed.
+   */
   public static float gapUnits(KeyboardData keyboard, float fraction)
   {
     Objects.requireNonNull(keyboard, "keyboard");
     if (Float.isNaN(fraction) || Float.isInfinite(fraction) || fraction <= 0f)
       return 0f;
-    return keyboard.keysWidth * fraction;
+    return 2f * halfUnits(keyboard) * fraction;
   }
 
   /**
@@ -46,13 +89,14 @@ public final class SplitLayout
    * parted by it and laid out over [contentWidthPx] — what a host standing something in the
    * gap has to ask for.
    *
-   * <p>Parting widens the keyboard by the gap, so the key width the gap is counted in shrinks
-   * as the gap grows: over a content width <i>W</i> a parting of <i>g</i> units on a keyboard
-   * of <i>K</i> units measures <i>W·g/(K+g)</i>, which inverts to <i>g = K·gapPx/(W−gapPx)</i>.
+   * <p>Parting makes the keyboard <i>2C+G</i> units wide, so the key width the gap is counted in
+   * shrinks as the gap grows: over a content width <i>W</i> a parting of <i>G</i> units measures
+   * <i>W·G/(2C+G)</i>, which inverts to <i>G = 2C·gapPx/(W−gapPx)</i>. The band is the same on
+   * every row, so that is the whole of it: nothing is lost to rows parting at different places.
    * The ask is capped at {@link #MAX_GAP_FRACTION} of the width, so a keyboard too narrow to
    * give that many pixels returns the widest parting it can rather than swallowing its halves.
-   * Zero when nothing can be parted. [keyboard] is the layout as parsed, never one already
-   * parted, as with {@link #gapUnits}.
+   * Zero when nothing can be parted. [keyboard] is the layout as parsed, as with
+   * {@link #gapUnits}.
    */
   public static float gapUnitsForPx(KeyboardData keyboard, float contentWidthPx, float gapPx)
   {
@@ -62,179 +106,191 @@ public final class SplitLayout
         || gapPx <= 0f || contentWidthPx <= 0f)
       return 0f;
     float wanted = Math.min(gapPx, contentWidthPx * MAX_GAP_FRACTION);
-    return keyboard.keysWidth * wanted / (contentWidthPx - wanted);
+    return 2f * halfUnits(keyboard) * wanted / (contentWidthPx - wanted);
   }
 
   /**
-   * The parting, in key-width units, whose <em>common band</em> — the strip
-   * {@link #commonGap} reports, which is all of the parting every row leaves clear — measures
-   * [gapPx] across. Rows part at a key boundary, so their partings are offset from one another
-   * and the band is that much narrower than the parting; the offsets do not move with the gap,
-   * so measuring them once and adding them back is exact. Falls back to {@link #gapUnitsForPx}
-   * when the rows share no band at all, which the caller finds out for itself.
-   */
-  public static float commonGapUnitsForPx(KeyboardData keyboard, float contentWidthPx,
-      float gapPx)
-  {
-    float base = gapUnitsForPx(keyboard, contentWidthPx, gapPx);
-    if (base <= 0f)
-      return 0f;
-    float[] band = commonGap(split(keyboard, base), base);
-    if (band == null)
-      return base;
-    float lost = base - (band[1] - band[0]);
-    if (lost <= 0f)
-      return base;
-    // contentWidth * (g - lost) / (K + g) = gapPx, with K the unparted width, inverts to
-    // g = (f·K + lost) / (1 − f). Capped as gapUnitsForPx is, so the halves keep their keys.
-    float f = Math.min(gapPx, contentWidthPx * MAX_GAP_FRACTION) / contentWidthPx;
-    float wanted = (f * keyboard.keysWidth + lost) / (1f - f);
-    return Math.min(wanted, keyboard.keysWidth * MAX_GAP_FRACTION / (1f - MAX_GAP_FRACTION));
-  }
-
-  /**
-   * Every row parted by [gapUnits] at its midpoint: the gap is added to the shift of the key
-   * whose span crosses half the row. A key straddling the midpoint is cut into two keys of the
-   * same value only when it is a bar — {@link #MIN_CUT_WIDTH_UNITS} wide or more, which is the
-   * space bar and nothing else. A letter key keeps its shape and the parting snaps to whichever
-   * of its edges is nearer, so the two halves may differ by a key. Returns [keyboard] itself
-   * when there is nothing to part.
+   * [keyboard] parted by [gapUnits]: every row cut once (see the class comment), its left run
+   * where it was and its right run moved to end at <i>2C+G</i>. A cut bar becomes two keys that
+   * both type its centre value and share its swipes between them. Returns [keyboard] itself
+   * when there is nothing to part: the gap is too thin, or no row has a right run.
    */
   public static KeyboardData split(KeyboardData keyboard, float gapUnits)
   {
     Objects.requireNonNull(keyboard, "keyboard");
-    if (Float.isNaN(gapUnits) || gapUnits < MIN_GAP_UNITS)
+    if (Float.isNaN(gapUnits) || Float.isInfinite(gapUnits) || gapUnits < MIN_GAP_UNITS)
       return keyboard;
-    ArrayList<KeyboardData.Row> rows = new ArrayList<KeyboardData.Row>(keyboard.rows.size());
-    boolean parted = false;
-    for (KeyboardData.Row row : keyboard.rows)
+    Cut[] cuts = new Cut[keyboard.rows.size()];
+    float half = 0f;
+    boolean anyRight = false;
+    for (int i = 0; i < cuts.length; i++)
     {
-      KeyboardData.Row split = splitRow(row, gapUnits);
-      parted |= split != row;
-      rows.add(split);
+      Cut cut = cutOf(keyboard.rows.get(i));
+      cuts[i] = cut;
+      half = Math.max(half, Math.max(cut.leftUnits, cut.rightUnits));
+      anyRight |= cut.rightUnits > 0f;
     }
-    return parted ? keyboard.with_rows(rows) : keyboard;
+    if (!anyRight)
+      return keyboard;
+    float total = 2f * half + gapUnits;
+    ArrayList<KeyboardData.Row> rows = new ArrayList<KeyboardData.Row>(cuts.length);
+    for (int i = 0; i < cuts.length; i++)
+      rows.add(partRow(keyboard.rows.get(i), cuts[i], total));
+    return keyboard.with_rows(rows);
   }
 
-  /** One row parted by [gapUnits]; the row itself when its midpoint is one of its ends. */
-  public static KeyboardData.Row splitRow(KeyboardData.Row row, float gapUnits)
+  /**
+   * The band a keyboard {@link #split} by [gapUnits] leaves clear on every row, as {left, right}
+   * in key-width units: <i>[C, C+G]</i>, read back from the parted width <i>2C+G</i>. Null when
+   * [parted] carries no parting — the gap is too thin, or {@link #split} handed the layout back
+   * whole, so a key stands in the band or none stands past it.
+   */
+  public static float[] gapBand(KeyboardData parted, float gapUnits)
   {
-    Objects.requireNonNull(row, "row");
-    if (Float.isNaN(gapUnits) || gapUnits < MIN_GAP_UNITS || row.keys.size() < 2)
-      return row;
+    Objects.requireNonNull(parted, "parted");
+    if (Float.isNaN(gapUnits) || Float.isInfinite(gapUnits) || gapUnits < MIN_GAP_UNITS)
+      return null;
+    float half = (parted.keysWidth - gapUnits) / 2f;
+    if (half <= 0f)
+      return null;
+    float right = half + gapUnits;
+    boolean anyRight = false;
+    for (KeyboardData.Row row : parted.rows)
+    {
+      float x = 0f;
+      for (KeyboardData.Key key : row.keys)
+      {
+        float left = x + key.shift;
+        x = left + key.width;
+        if (left < right - EPS && x > half + EPS)
+          return null;
+        anyRight |= left >= right - EPS;
+      }
+    }
+    return anyRight ? new float[]{ half, right } : null;
+  }
+
+  /**
+   * Where a row is cut: [at] is the index of the key that starts the right run, and when
+   * [leftPiece] is positive the key at [at] is cut in two, keeping that much of its width on
+   * the left. [leftUnits] is the left run's width from the row's start, shifts included;
+   * [rightUnits] the right run's from the left edge of its first key, whose own shift the gap
+   * replaces. [at] equal to the key count is a row that stays whole in the left half.
+   */
+  private static final class Cut
+  {
+    final int at;
+    final float leftPiece;
+    final float leftUnits;
+    final float rightUnits;
+
+    Cut(KeyboardData.Row row, int at_, float leftPiece_)
+    {
+      at = at_;
+      leftPiece = leftPiece_;
+      float left = 0f;
+      float right = 0f;
+      for (int i = 0; i < row.keys.size(); i++)
+      {
+        KeyboardData.Key key = row.keys.get(i);
+        if (i < at)
+          left += key.shift + key.width;
+        else if (i == at && leftPiece > 0f)
+        {
+          left += key.shift + leftPiece;
+          right += key.width - leftPiece;
+        }
+        else if (i == at)
+          right += key.width;
+        else
+          right += key.shift + key.width;
+      }
+      leftUnits = left;
+      rightUnits = right;
+    }
+  }
+
+  /** The row's cut: the first key carrying a split marker, else the midpoint rule. */
+  private static Cut cutOf(KeyboardData.Row row)
+  {
+    int n = row.keys.size();
+    for (int i = 0; i < n; i++)
+    {
+      KeyboardData.Key key = row.keys.get(i);
+      if (key.splitAt == KeyboardData.Key.NO_SPLIT)
+        continue;
+      // A marker is the layout's word and is taken as given, even on a letter key; an offset at
+      // or past the key's right edge parts the row just after it.
+      if (key.splitAt <= EPS)
+        return new Cut(row, i, 0f);
+      if (key.splitAt >= key.width - EPS)
+        return new Cut(row, i + 1, 0f);
+      return new Cut(row, i, key.splitAt);
+    }
+    return midpointCut(row);
+  }
+
+  /**
+   * The cut of a row whose layout marks none: at the key edge nearest half the row. A key
+   * straddling the midpoint is cut in two only when it is a bar, {@link #MIN_CUT_WIDTH_UNITS}
+   * wide or more; a letter key keeps its shape and the cut takes whichever of its edges is
+   * nearer, the left one when the midpoint is dead centre. A row that cannot be cut with
+   * something on its left — a single narrow key, or a midpoint inside the first key's shift —
+   * stays whole in the left half.
+   */
+  private static Cut midpointCut(KeyboardData.Row row)
+  {
+    int n = row.keys.size();
     float half = row.keysWidth / 2f;
-    // Index of the key that starts the right half, and the width the key at that index keeps
-    // when the midpoint falls inside it and it is cut in two.
-    int partAt = -1;
-    float cutWidth = -1f;
     float x = 0f;
-    for (int i = 0; i < row.keys.size(); i++)
+    for (int i = 0; i < n; i++)
     {
       KeyboardData.Key key = row.keys.get(i);
       float left = x + key.shift;
       float right = left + key.width;
       if (half <= left + EPS)
-      {
-        partAt = i;
-        break;
-      }
+        return new Cut(row, i == 0 ? n : i, 0f);
       if (half < right - EPS)
       {
         if (key.width >= MIN_CUT_WIDTH_UNITS && half - left >= MIN_HALF_UNITS
             && right - half >= MIN_HALF_UNITS)
-        {
-          partAt = i;
-          cutWidth = half - left;
-        }
-        else
-          // Not a bar: the key stays whole and the parting takes its nearer edge, the left one
-          // when the midpoint sits dead centre.
-          partAt = half - left <= right - half ? i : i + 1;
-        break;
+          return new Cut(row, i, half - left);
+        int at = half - left <= right - half ? i : i + 1;
+        return new Cut(row, at == 0 ? n : at, 0f);
       }
       x = right;
     }
-    // A parting with nothing on its left is no parting: it would only pad the row.
-    if (partAt < 0 || partAt >= row.keys.size() || (partAt == 0 && cutWidth <= 0f))
+    return new Cut(row, n, 0f);
+  }
+
+  /** [row] laid out by [cut] across a parted keyboard [total] units wide. */
+  private static KeyboardData.Row partRow(KeyboardData.Row row, Cut cut, float total)
+  {
+    int n = row.keys.size();
+    if (n == 0)
       return row;
-    ArrayList<KeyboardData.Key> keys =
-        new ArrayList<KeyboardData.Key>(row.keys.size() + 1);
-    for (int i = 0; i < row.keys.size(); i++)
+    // The right run starts wherever it has to for its last key to end on the right edge; the
+    // shift of its first key is whatever lies between there and the end of the left run.
+    float rightShift = total - cut.rightUnits - cut.leftUnits;
+    ArrayList<KeyboardData.Key> keys = new ArrayList<KeyboardData.Key>(n + 1);
+    for (int i = 0; i < n; i++)
     {
-      KeyboardData.Key key = row.keys.get(i);
-      if (i != partAt)
+      // The marker has done its work; a parted layout carries none, so it cannot part twice.
+      KeyboardData.Key key = row.keys.get(i).withSplitAt(KeyboardData.Key.NO_SPLIT);
+      if (i != cut.at)
         keys.add(key);
-      else if (cutWidth > 0f)
+      else if (cut.leftPiece > 0f)
       {
-        // Both halves carry every one of the key's nine values, so a swipe still works on
-        // either of them.
-        keys.add(key.withWidth(cutWidth));
-        keys.add(key.withWidthAndShift(key.width - cutWidth, gapUnits));
+        float rightPiece = key.width - cut.leftPiece;
+        boolean verticalLeft = cut.leftPiece >= rightPiece - EPS;
+        keys.add(key.withValuesOnly(WEST_VALUES | (verticalLeft ? VERTICAL_VALUES : 0),
+            verticalLeft).withWidth(cut.leftPiece));
+        keys.add(key.withValuesOnly(EAST_VALUES | (verticalLeft ? 0 : VERTICAL_VALUES),
+            !verticalLeft).withWidthAndShift(rightPiece, rightShift));
       }
       else
-        keys.add(key.withShift(key.shift + gapUnits));
+        keys.add(key.withShift(rightShift));
     }
     return row.with_keys(keys);
-  }
-
-  /** Whether the parting sits on the left of [key], which therefore starts a run of keys. */
-  public static boolean startsRun(KeyboardData.Key key, float gapUnits)
-  {
-    return gapUnits >= MIN_GAP_UNITS && key.shift >= gapUnits - EPS;
-  }
-
-  /**
-   * The empty band nearest the centre of a parted [row], as {left, right} in key-width units, or
-   * null when the row carries no parting.
-   */
-  public static float[] rowGap(KeyboardData.Row row, float gapUnits)
-  {
-    Objects.requireNonNull(row, "row");
-    if (Float.isNaN(gapUnits) || gapUnits < MIN_GAP_UNITS)
-      return null;
-    float centre = row.keysWidth / 2f;
-    float[] best = null;
-    float bestDistance = Float.MAX_VALUE;
-    float x = 0f;
-    for (int i = 0; i < row.keys.size(); i++)
-    {
-      KeyboardData.Key key = row.keys.get(i);
-      float left = x + key.shift;
-      if (i > 0 && startsRun(key, gapUnits))
-      {
-        float distance = Math.abs((left - gapUnits / 2f) - centre);
-        if (distance < bestDistance)
-        {
-          bestDistance = distance;
-          best = new float[]{ left - gapUnits, left };
-        }
-      }
-      x = left + key.width;
-    }
-    return best;
-  }
-
-  /**
-   * The band every row of a parted [keyboard] leaves empty, as {left, right} in key-width units.
-   * Rows part at a key boundary, so their gaps are offset from one another by up to a key width;
-   * what they share is what the host can safely stand something in. Null when they share nothing
-   * or when any row is unparted.
-   */
-  public static float[] commonGap(KeyboardData keyboard, float gapUnits)
-  {
-    Objects.requireNonNull(keyboard, "keyboard");
-    if (Float.isNaN(gapUnits) || gapUnits < MIN_GAP_UNITS || keyboard.rows.isEmpty())
-      return null;
-    float left = Float.NEGATIVE_INFINITY;
-    float right = Float.POSITIVE_INFINITY;
-    for (KeyboardData.Row row : keyboard.rows)
-    {
-      float[] gap = rowGap(row, gapUnits);
-      if (gap == null)
-        return null;
-      left = Math.max(left, gap[0]);
-      right = Math.min(right, gap[1]);
-    }
-    return right - left < MIN_GAP_UNITS ? null : new float[]{ left, right };
   }
 }

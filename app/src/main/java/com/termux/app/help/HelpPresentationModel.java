@@ -26,10 +26,12 @@ public final class HelpPresentationModel {
      * can explain is read in the guide rather than pointed at, so that the screen the reader is
      * looking at stays legible; add an id here to give that control a card of its own.
      *
-     * <p>The extra keys row is not one of them: its keys carry their own labels, one per cap.
+     * <p>The extra keys row is not one of them: its keys carry their own labels, one per cap. Nor
+     * is the keyboard swipe's pill: it sits on the bottom border between the pane and the dock,
+     * where a sixth card has no room on a phone, and the tour teaches the swipe as a lesson.
      */
     public static final List<String> OVERVIEW_TARGET_IDS = Collections.unmodifiableList(
-        Arrays.asList("dock", "status", "prefix", "settings"));
+        Arrays.asList("dock", "status", "border", "prefix", "settings"));
 
     private PaneWallPage place = PaneWallPage.TERMINAL;
     private String selectedTargetId;

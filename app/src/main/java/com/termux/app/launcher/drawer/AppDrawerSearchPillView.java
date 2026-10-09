@@ -151,7 +151,7 @@ public final class AppDrawerSearchPillView extends View {
             com.google.android.material.R.attr.colorOnSurface,
             ContextCompat.getColor(getContext(), R.color.termux_on_surface));
         int accent = MaterialColors.getColor(this,
-            com.google.android.material.R.attr.colorPrimary,
+            androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(getContext(), R.color.termux_primary));
 
         float radius = resolveRadiusPx();

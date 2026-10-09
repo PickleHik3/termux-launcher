@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The in-app keyboard theme pill's 4th segment when a custom theme has been imported. Kept
+         short: it shares the pill's width with three other segments (System / Light / Dark). -->
+    <string name="termux_in_app_keyboard_theme_imported_short">Imported: %1$s</string>
+</resources>

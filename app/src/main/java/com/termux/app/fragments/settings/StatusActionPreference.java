@@ -22,6 +22,7 @@ public final class StatusActionPreference extends Preference {
     private CharSequence status = "";
     private CharSequence action = "";
     private Tone tone = Tone.NEUTRAL;
+    private boolean optional;
 
     public StatusActionPreference(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -36,30 +37,73 @@ public final class StatusActionPreference extends Preference {
         notifyChanged();
     }
 
+    /**
+     * Marks the service as optional: while it is off, an ERROR or WARNING tone is shown as a
+     * neutral "not enabled" state instead of an alarm. Required access (not optional) keeps its
+     * warning/error colour and icon. POSITIVE is unaffected.
+     */
+    public void setOptional(boolean optional) {
+        if (this.optional == optional) return;
+        this.optional = optional;
+        notifyChanged();
+    }
+
+    public boolean isOptional() {
+        return optional;
+    }
+
+    /** The tone actually shown: optional services never present as error or warning. */
+    @androidx.annotation.VisibleForTesting
+    @NonNull
+    Tone effectiveTone() {
+        return optional && (tone == Tone.ERROR || tone == Tone.WARNING) ? Tone.NEUTRAL : tone;
+    }
+
+    private boolean optionalOff() {
+        return optional && (tone == Tone.ERROR || tone == Tone.WARNING);
+    }
+
+    /** "Not enabled" for an optional service that is off, else the real status text. */
+    @androidx.annotation.VisibleForTesting
+    @NonNull
+    CharSequence displayedStatus() {
+        return optionalOff() ? getContext().getString(R.string.settings_optional_status_not_enabled) : status;
+    }
+
+    /** "Enable" for an optional service that is off, else the real action label. */
+    @androidx.annotation.VisibleForTesting
+    @NonNull
+    CharSequence displayedAction() {
+        return optionalOff() ? getContext().getString(R.string.settings_optional_action_enable) : action;
+    }
+
     @Override public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
         TextView statusView = (TextView) holder.findViewById(R.id.settings_status_text);
         MaterialButton actionView = (MaterialButton) holder.findViewById(R.id.settings_status_action);
         ImageView icon = (ImageView) holder.findViewById(R.id.settings_status_icon);
         if (statusView != null) {
-            statusView.setText(status);
+            statusView.setText(displayedStatus());
             statusView.setTextColor(toneColor());
         }
         if (actionView != null) {
-            actionView.setText(action);
+            actionView.setText(displayedAction());
             actionView.setOnClickListener(view -> performClick());
         }
         if (icon != null) {
-            icon.setImageResource(tone == Tone.POSITIVE ? R.drawable.ic_symbol_check_circle
-                : tone == Tone.ERROR ? R.drawable.ic_symbol_error : R.drawable.ic_symbol_warning);
+            Tone shown = effectiveTone();
+            icon.setImageResource(shown == Tone.POSITIVE ? R.drawable.ic_symbol_check_circle
+                : shown == Tone.ERROR ? R.drawable.ic_symbol_error
+                : shown == Tone.WARNING ? R.drawable.ic_symbol_warning : R.drawable.ic_symbol_info);
             icon.setImageTintList(ColorStateList.valueOf(toneColor()));
         }
     }
 
     private int toneColor() {
-        int attr = tone == Tone.ERROR ? com.google.android.material.R.attr.colorError
-            : tone == Tone.WARNING ? com.google.android.material.R.attr.colorTertiary
-            : tone == Tone.POSITIVE ? com.google.android.material.R.attr.colorPrimary
+        Tone shown = effectiveTone();
+        int attr = shown == Tone.ERROR ? androidx.appcompat.R.attr.colorError
+            : shown == Tone.WARNING ? com.google.android.material.R.attr.colorTertiary
+            : shown == Tone.POSITIVE ? androidx.appcompat.R.attr.colorPrimary
             : com.google.android.material.R.attr.colorOnSurfaceVariant;
         return MaterialColors.getColor(getContext(), attr,
             ContextCompat.getColor(getContext(), R.color.termux_on_surface_variant));

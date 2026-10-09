@@ -10,12 +10,12 @@ import android.content.Intent;
 import android.os.Build;
 import android.os.Looper;
 
-import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import androidx.preference.PreferenceManager;
 import androidx.preference.PreferenceScreen;
 
 import com.termux.R;
+import com.termux.app.fragments.settings.SegmentedPillPreference;
 import com.termux.shared.termux.TermuxConstants;
 
 import org.junit.Test;
@@ -51,21 +51,18 @@ public class LauncherDrawerViewTypePreferenceTest {
         assertEquals(AppDrawerPreferencesFragment.class.getName(), drawer.getFragment());
     }
 
-    @Test public void xmlExposesExactlyAllThreeModesWithSimpleSummary() {
+    @Test public void xmlExposesExactlyAllThreeModesAsAnInlinePill() {
         PreferenceManager manager = new PreferenceManager(RuntimeEnvironment.getApplication());
         manager.setPreferenceDataStore(TermuxStylePreferencesDataStore.getInstance(
             RuntimeEnvironment.getApplication()));
         PreferenceScreen screen = manager.inflateFromResource(
             RuntimeEnvironment.getApplication(), R.xml.app_drawer_preferences, null);
         Preference found = screen.findPreference("app_launcher_drawer_view_type");
-        assertTrue(found instanceof ListPreference);
-        ListPreference list = (ListPreference) found;
-        assertArrayEquals(new CharSequence[] {"Vertical", "Horizontal pages", "Categories"},
-            list.getEntries());
-        assertArrayEquals(new CharSequence[] {"vertical", "horizontal", "categories"},
-            list.getEntryValues());
-        list.setValue("categories");
-        assertEquals("Categories", list.getSummary().toString());
+        assertTrue(found instanceof SegmentedPillPreference);
+        SegmentedPillPreference pill = (SegmentedPillPreference) found;
+        assertEquals(3, pill.segmentCount());
+        pill.setValue("categories");
+        assertEquals("categories", pill.getValue());
     }
 
     @Test public void dataStorePersistsAndSchedulesANonRecreatingReload() {

@@ -1,5 +1,6 @@
 package com.termux.app.statusbar;
 
+import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -10,6 +11,7 @@ import androidx.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
@@ -34,6 +36,9 @@ public final class TopPaneFeed {
 
         /** Open what {@code key} points at, the way tapping it in the shade would. */
         boolean openPinned(@NonNull String key);
+
+        /** Re-read the rules and rebuild the pins, e.g. after a rule was switched off. */
+        void refreshPinned();
     }
 
     public interface Observer {
@@ -97,10 +102,14 @@ public final class TopPaneFeed {
         notifyChanged();
     }
 
+    /**
+     * A state equal to the one already held is dropped, so the listener can republish freely (it
+     * does on every notification) without the widgets rebinding for nothing.
+     */
     public static void setMedia(@Nullable TopPaneMediaState value) {
         TopPaneMediaState previous = media;
+        if (Objects.equals(previous, value)) return;
         media = value;
-        if (previous == value) return;
         notifyChanged();
     }
 
@@ -122,6 +131,27 @@ public final class TopPaneFeed {
     public static boolean dismissPinned(@NonNull String key, boolean clear) {
         Controls current = controls;
         return current != null && current.dismissPinned(key, clear);
+    }
+
+    /** Every notification folded into one card goes; true when any of them did. */
+    public static boolean dismissPinnedAll(@NonNull List<String> keys, boolean clear) {
+        boolean any = false;
+        for (String key : keys) any |= dismissPinned(key, clear);
+        return any;
+    }
+
+    /**
+     * Switches rule {@code ruleId} off ("Mute this rule" on a card's long-press menu) and has the
+     * listener rebuild, which takes away every card only that rule was pinning.
+     */
+    public static boolean muteRule(@NonNull Context context, @Nullable String ruleId) {
+        if (ruleId == null || ruleId.isEmpty()) return false;
+        boolean muted = EssentialNotificationRules.setEnabled(
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context),
+            ruleId, false) != null;
+        Controls current = controls;
+        if (muted && current != null) current.refreshPinned();
+        return muted;
     }
 
     public static boolean openPinned(@NonNull String key) {

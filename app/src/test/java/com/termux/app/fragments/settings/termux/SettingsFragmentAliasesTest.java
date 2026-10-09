@@ -1,6 +1,8 @@
 package com.termux.app.fragments.settings.termux;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -59,18 +61,27 @@ public class SettingsFragmentAliasesTest {
         assertTrue(fragment instanceof TerminalPreferencesFragment);
         PreferenceScreen screen = ((TerminalPreferencesFragment) fragment).getPreferenceScreen();
         assertNotNull(screen.findPreference("split_pane_controls"));
-        assertNotNull(screen.findPreference("lazy_mode"));
+        assertNull("moved to the Appearance page", screen.findPreference("lazy_mode"));
     }
 
     @Test
     public void theStyleFragmentNameStillResolvesAndCarriesTheMovedKeyboardLookRows() {
         Fragment fragment = launch(TermuxStylePreferencesFragment.class);
         PreferenceScreen screen = ((TermuxStylePreferencesFragment) fragment).getPreferenceScreen();
-        assertNotNull(screen.findPreference("live_surface_editor"));
-        assertNotNull("keyboard look moved in from the old Keyboard page",
+        assertNull("the Appearance editor is reached from the corner tab, not Settings",
+            screen.findPreference("live_surface_editor"));
+        assertNotNull("keyboard look moved in from the old Keyboard page: one Keyboard theme row",
+            screen.findPreference("in_app_keyboard_color_scheme_editor"));
+        assertNull("the theme choice lives on the Keyboard theme page",
             screen.findPreference("in_app_keyboard_theme"));
+        assertNull("the typeface lives on the Keyboard theme page",
+            screen.findPreference("in_app_keyboard_font"));
         assertNotNull(screen.findPreference("customize_keyboard_surface"));
-        assertNotNull(screen.findPreference("in_app_keyboard_bottom_padding"));
+        assertNull("bottom padding is the Layout editor's keyboard handle now",
+            screen.findPreference("in_app_keyboard_bottom_padding"));
+        assertNull("Lazy mode moved to App behavior", screen.findPreference("lazy_mode"));
+        assertNull("Fancier Glass is owned by each Look now, with no switch",
+            screen.findPreference("fancier_glass"));
     }
 
     @Test
@@ -78,7 +89,12 @@ public class SettingsFragmentAliasesTest {
         Fragment fragment = launch(KeyboardPreferencesFragment.class);
         PreferenceScreen screen = ((KeyboardPreferencesFragment) fragment).getPreferenceScreen();
         assertNotNull(screen.findPreference("keyboard_input_method"));
-        assertNotNull(screen.findPreference("in_app_keyboard_extra_keys"));
+        assertNotNull(screen.findPreference("keyboard_sub_layout"));
+        assertEquals(KeyboardLayoutPreferencesFragment.class.getName(),
+            screen.findPreference("keyboard_sub_layout").getFragment());
+        Fragment layout = launch(KeyboardLayoutPreferencesFragment.class);
+        assertNotNull(((KeyboardLayoutPreferencesFragment) layout).getPreferenceScreen()
+            .findPreference("in_app_keyboard_extra_keys"));
         assertTrue("moved to the Look page", screen.findPreference("in_app_keyboard_theme") == null);
         assertTrue("moved to the Look page", screen.findPreference("customize_keyboard_surface") == null);
     }

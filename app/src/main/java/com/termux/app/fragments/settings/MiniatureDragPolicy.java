@@ -15,23 +15,24 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * Where a bar lifted off the Layout editor's miniature may be dropped, which of those targets the
+ * Where a bar lifted off the layout canvas may be dropped, which of those targets the
  * finger is over, and how much of the picture the canvas keeps once the side columns have taken
  * theirs. Pure and view-free — the same relationship {@code DockLayoutPolicy} has with the dock —
- * so the rules can be read and tested in one place while the miniature stays dumb enough to just
- * draw the answer.
+ * so the rules can be read and tested in one place while the layout canvas stays dumb enough to
+ * just draw the answer.
  *
  * <p>The legal set is {@link EdgeStackPolicy#targets}: every edge in both orientations, one drop
- * per gap in that edge's stack, the status bar never hidden, and the A&#8211;Z index only picking
- * an edge of its own while it is not riding the pinned apps row. This class adds nothing to that
- * but the tray — which is the view's word for hidden — and the rectangles a finger is hit-tested
- * against.
+ * per gap in that edge's stack, and the tray for every bar, the status bar included since the
+ * wall's paging left its swipe for the border drag. The dock's rows are also offered the gaps under
+ * the keyboard ({@link EdgeStackPolicy#underKeyboardTargets}). This class adds nothing to that but
+ * the tray — which is the view's word for hidden, and which the trash icon under the phone now stands for — — and the rectangles a finger is hit-tested
+ * against. How a bar is lifted — pressed anywhere and moved past the touch slop — is the view's.
  */
 public final class MiniatureDragPolicy {
 
     private MiniatureDragPolicy() {}
 
-    /** A bar the user may lift. Everything else the miniature draws has no placement to change. */
+    /** A bar the user may lift. Everything else the layout canvas draws has no placement to change. */
     public enum Bar {
         STATUS_BAR(Element.STATUS),
         APPS_ROW(Element.APPS),
@@ -78,9 +79,19 @@ public final class MiniatureDragPolicy {
         public final float top;
         public final float right;
         public final float bottom;
+        /**
+         * A gap under the keyboard, among the bottom bands on its far side from the canvas;
+         * {@link #index} then counts within that group.
+         */
+        public final boolean underKeyboard;
 
         public Slot(@Nullable Edge edge, int index, float line, float left, float top, float right,
                     float bottom) {
+            this(edge, index, line, left, top, right, bottom, false);
+        }
+
+        public Slot(@Nullable Edge edge, int index, float line, float left, float top, float right,
+                    float bottom, boolean underKeyboard) {
             this.edge = edge;
             this.index = Math.max(0, index);
             this.line = line;
@@ -88,6 +99,12 @@ public final class MiniatureDragPolicy {
             this.top = top;
             this.right = right;
             this.bottom = bottom;
+            this.underKeyboard = underKeyboard && edge == Edge.BOTTOM;
+        }
+
+        /** Whether two gaps are on the same side of the same edge: one outlined region. */
+        public boolean sameGroup(@NonNull Slot other) {
+            return edge == other.edge && underKeyboard == other.underKeyboard;
         }
 
         /** An edge's outermost gap, for a caller that has a rectangle and no stack to place in. */
@@ -116,23 +133,38 @@ public final class MiniatureDragPolicy {
         @NonNull
         @Override
         public String toString() {
-            return "Slot{" + (edge == null ? "tray" : edge + "#" + index) + "}";
+            return "Slot{" + (edge == null ? "tray"
+                : edge + (underKeyboard ? "(under keyboard)" : "") + "#" + index) + "}";
         }
     }
 
     /** Everywhere one lifted bar may land: the gaps it may stand in, and whether it may hide. */
     public static final class Targets {
+        /** Every gap over the keyboard, and on the other three edges. */
         @NonNull public final List<EdgeStackPolicy.Drop> drops;
+        /** The gaps under the keyboard; empty for a bar that may not stand there. */
+        @NonNull public final List<EdgeStackPolicy.Drop> underKeyboardDrops;
         public final boolean tray;
 
         Targets(@NonNull List<EdgeStackPolicy.Drop> drops, boolean tray) {
+            this(drops, Collections.<EdgeStackPolicy.Drop>emptyList(), tray);
+        }
+
+        Targets(@NonNull List<EdgeStackPolicy.Drop> drops,
+                @NonNull List<EdgeStackPolicy.Drop> underKeyboardDrops, boolean tray) {
             this.drops = Collections.unmodifiableList(drops);
+            this.underKeyboardDrops = Collections.unmodifiableList(underKeyboardDrops);
             this.tray = tray;
         }
 
         /** A bar with nowhere to go is not liftable at all. */
         public boolean isEmpty() {
-            return drops.isEmpty() && !tray;
+            return drops.isEmpty() && underKeyboardDrops.isEmpty() && !tray;
+        }
+
+        /** How many gaps there are under the keyboard for this bar. */
+        public int gapsUnderKeyboard() {
+            return underKeyboardDrops.size();
         }
 
         public boolean offers(@NonNull Edge edge) {
@@ -173,6 +205,7 @@ public final class MiniatureDragPolicy {
         // The tray is the bar's own rule, not a gap's: the A-Z index riding the pinned apps row is
         // offered no gap at all, and putting it away is still the one thing a drag can do with it.
         return new Targets(new ArrayList<>(EdgeStackPolicy.targets(layout, element, orientation)),
+            new ArrayList<>(EdgeStackPolicy.underKeyboardTargets(layout, element)),
             element.hideAllowed());
     }
 
@@ -198,6 +231,23 @@ public final class MiniatureDragPolicy {
         return best;
     }
 
+    // ------------------------------------------------------------------- the trash and its popup
+
+    /** What the trash icon says: nothing is hidden (outline, muted), or something is (filled, counted). */
+    public enum TrashState { EMPTY, FILLED }
+
+    /** The icon's state for this many hidden elements. */
+    @NonNull
+    public static TrashState trashState(int hiddenCount) {
+        return hiddenCount > 0 ? TrashState.FILLED : TrashState.EMPTY;
+    }
+
+    /** The badge's text: the count, capped so it fits a small disc. */
+    @NonNull
+    public static String badgeText(int hiddenCount) {
+        return hiddenCount > 9 ? "9+" : String.valueOf(Math.max(0, hiddenCount));
+    }
+
     // ---------------------------------------------------------------- how wide the canvas stays
 
     /** The share of the frame one band claims of whatever the bands outside it have left. */
@@ -213,7 +263,7 @@ public final class MiniatureDragPolicy {
      */
     public static final float NARROW_CANVAS_FRACTION = 0.60f;
 
-    /** The share of its edge one band claims, which is what the miniature draws it at. */
+    /** The share of its edge one band claims, which is what the layout canvas draws it at. */
     public static float bandFraction(@NonNull Element element) {
         switch (element) {
             case STATUS: return STATUS_FRACTION;
@@ -226,8 +276,9 @@ public final class MiniatureDragPolicy {
 
     /**
      * What is left of the picture's width for the canvas once both side stacks have claimed their
-     * columns. Each band takes its share of what the bands outside it left, which is how the
-     * miniature claims them, so this is the width the user is looking at rather than an estimate.
+     * columns. Each band takes its share of what the bands outside it left, a rough stand-in for
+     * the thicknesses the layout canvas draws them at, so this is an estimate of the width the
+     * user is looking at.
      */
     public static float canvasWidthFraction(@NonNull PlaceLayout layout) {
         float remaining = 1f;

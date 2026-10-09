@@ -112,13 +112,56 @@ public final class StatusBarInk {
                                  double target) {
         int base = OnGlass.opaque(surface);
         int ink = OnGlass.resolveBare(base, seed, target).ink;
-        int from = Math.max(0, Math.min(255, alpha));
+        return carried(ink, base, Math.max(0, Math.min(255, alpha)), target);
+    }
+
+    /** {@link #inkAtAlpha}'s second half: the toned ink carried at the first alpha that clears. */
+    @ColorInt
+    private static int carried(@ColorInt int ink, @ColorInt int base, int from, double target) {
         for (int step = from; step <= 255; step++) {
             if (shownRatio(OnGlass.withAlpha(ink, step), base) >= target) {
                 return OnGlass.withAlpha(ink, step);
             }
         }
         return OnGlass.withAlpha(ink, 255);
+    }
+
+    /**
+     * {@link #inkAtAlpha} remembered for one surface, seed and target, for a view that asks it
+     * from {@code onDraw}: the tone search runs once per surface and seed, and each alpha's walk
+     * once, so a mark whose alpha moves with every frame of a drag pays for the search only the
+     * first time it meets an alpha. The answers are {@link #inkAtAlpha}'s own, bit for bit.
+     */
+    public static final class AlphaInkMemo {
+        private final int[] mInks = new int[256];
+        private final boolean[] mKnown = new boolean[256];
+        private boolean mValid;
+        private int mSurface;
+        private int mSeed;
+        private double mTarget;
+        private int mBase;
+        private int mToned;
+
+        /** Same arguments and answer as {@link StatusBarInk#inkAtAlpha}. */
+        @ColorInt
+        public int inkAtAlpha(@ColorInt int surface, @ColorInt int seed, int alpha,
+                              double target) {
+            if (!mValid || mSurface != surface || mSeed != seed || mTarget != target) {
+                mSurface = surface;
+                mSeed = seed;
+                mTarget = target;
+                mBase = OnGlass.opaque(surface);
+                mToned = OnGlass.resolveBare(mBase, seed, target).ink;
+                java.util.Arrays.fill(mKnown, false);
+                mValid = true;
+            }
+            int from = Math.max(0, Math.min(255, alpha));
+            if (!mKnown[from]) {
+                mInks[from] = carried(mToned, mBase, from, target);
+                mKnown[from] = true;
+            }
+            return mInks[from];
+        }
     }
 
     /**
@@ -240,6 +283,25 @@ public final class StatusBarInk {
         int surface = OnGlass.opaque(OnGlass.composite(container, OnGlass.opaque(bandSurface)));
         int label = OnGlass.resolveBare(surface, labelSeed, OnGlass.TARGET_BODY_TEXT).ink;
         int stroke = OnGlass.resolveBare(surface, strokeSeed, OnGlass.TARGET_LARGE_TEXT).ink;
+        return new Chip(container, surface, label, stroke,
+            OnGlass.ratio(label, surface), OnGlass.ratio(stroke, surface));
+    }
+
+    /**
+     * The session chip through the chrome's own ink: the same container as {@link #chip}, but the
+     * label and the rim are asked of {@link com.termux.app.chrome.ChromeInk#inkOn} on the chip's
+     * real ground (the container over the measured band), so they follow the bar's polarity and
+     * level like every other ink on the glass.
+     */
+    @NonNull
+    public static Chip chipOn(@NonNull com.termux.app.chrome.ChromeInk ink,
+                              @NonNull OnGlass.Resolution band, @ColorInt int containerSeed,
+                              int containerAlpha, @ColorInt int labelSeed,
+                              @ColorInt int strokeSeed) {
+        int container = OnGlass.withAlpha(containerSeed, containerAlpha);
+        int surface = OnGlass.opaque(OnGlass.composite(container, OnGlass.opaque(band.surface)));
+        int label = ink.inkOn(band, surface, labelSeed, labelSeed, OnGlass.TARGET_BODY_TEXT);
+        int stroke = ink.inkOn(band, surface, strokeSeed, strokeSeed, OnGlass.TARGET_LARGE_TEXT);
         return new Chip(container, surface, label, stroke,
             OnGlass.ratio(label, surface), OnGlass.ratio(stroke, surface));
     }

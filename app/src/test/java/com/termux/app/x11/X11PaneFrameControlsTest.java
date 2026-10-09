@@ -27,7 +27,6 @@ import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -163,29 +162,18 @@ public class X11PaneFrameControlsTest {
         assertFalse(page.isScaleRailShown());
     }
 
-    /**
-     * The page's two editor doors: the sliders open Appearance, the grid beside them opens
-     * Layout, and each puts the tab and the rail away behind it.
-     */
+    /** The "Wallpaper & style" glyph opens the in-app wallpaper picker. */
     @Test
-    public void theTabCarriesTheAppearanceAndLayoutDoors() {
+    public void theTabCarriesTheWallpaperButton() {
         X11PaneFrame page = pageWithControlsOut();
         List<String> log = new ArrayList<>();
         page.setHost(new X11PaneFrame.Host() {
             @Override public void startDisplay() {}
-            @Override public void openSurfaceEditor() { log.add("appearance"); }
-            @Override public void openLayoutEditor() { log.add("layout"); }
+            @Override public void openWallpaperPicker() { log.add("wallpaper"); }
         });
 
-        tapAction(page, X11PaneFrame.ACTION_EDITOR);
-        assertEquals(Collections.singletonList("appearance"), log);
-        assertFalse(page.isControlsTabShown());
-        assertFalse(page.isScaleRailShown());
-
-        holdCorner(page);
-        settle();
-        tapAction(page, X11PaneFrame.ACTION_LAYOUT);
-        assertEquals(Arrays.asList("appearance", "layout"), log);
+        tapAction(page, X11PaneFrame.ACTION_WALLPAPER);
+        assertEquals(Collections.singletonList("wallpaper"), log);
         assertFalse(page.isControlsTabShown());
         assertFalse(page.isScaleRailShown());
     }

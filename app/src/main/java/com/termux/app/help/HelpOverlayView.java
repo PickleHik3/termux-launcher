@@ -200,11 +200,14 @@ public final class HelpOverlayView extends FrameLayout {
         density = getResources().getDisplayMetrics().density;
         dash = new DashPathEffect(new float[]{dp(4), dp(3)}, 0);
         targets = new HelpTargets(finder, this);
+        // Every child is placed at an absolute rect in onLayout, so this mirrors only the text and
+        // button rows inside them; the content root it hangs off is pinned left to right.
+        setLayoutDirection(LAYOUT_DIRECTION_LOCALE);
         // Above every control it marks. The dock, the A-Z row, the extra keys and the keyboard are
         // lifted between 6 and 40dp, and exploration has to wash over all of them; the outline is
         // dropped so the height casts no shadow of its own.
-        setElevation(dp(56));
-        setTranslationZ(dp(56));
+        setElevation(com.termux.app.chrome.ShapeTokens.elevationPx(context, 5));
+        setTranslationZ(dp(100)); // 12dp level-5 elevation + 100dp = the original 112dp stack height
         setOutlineProvider(null);
         setWillNotDraw(false);
         setClickable(true);

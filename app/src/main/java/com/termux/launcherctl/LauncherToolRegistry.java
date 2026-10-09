@@ -267,7 +267,9 @@ public final class LauncherToolRegistry {
                 TOOL_PANE_FOCUS_DIRECTION,
                 TOOL_WINDOW_NEW, TOOL_WINDOW_CLOSE, TOOL_WINDOW_NEXT, TOOL_WINDOW_PREVIOUS,
                 TOOL_SESSION_NEW, TOOL_SESSION_NEXT, TOOL_SESSION_PREVIOUS,
-                TOOL_SESSION_CLOSE_CURRENT));
+                TOOL_SESSION_CLOSE_CURRENT,
+                // The pill says it: listening, then what became of the text.
+                TOOL_VOICE_DICTATE));
 
         /** Agent-only tool: no UI metadata. */
         public ToolMetadata(
@@ -422,6 +424,12 @@ public final class LauncherToolRegistry {
     public static final String TOOL_KEYBOARD_SET_FORM = "keyboard.set_form";
     public static final String TOOL_KEYBOARD_SHOW = "keyboard.show";
     public static final String TOOL_KEYBOARD_HIDE = "keyboard.hide";
+    /** The keyboard's clipboard panel: the history of what was copied inside the launcher. */
+    public static final String TOOL_KEYBOARD_CLIPBOARD = "keyboard.clipboard";
+    /** Switches the keyboard off, so a tap no longer raises it, or back on. */
+    public static final String TOOL_KEYBOARD_TOGGLE_ENABLED = "keyboard.toggle_enabled";
+    /** Starts or stops a dictation on any place; the text waits in the panel for ✓ or Copy. */
+    public static final String TOOL_VOICE_DICTATE = "voice.dictate";
     public static final String TOOL_TERMINAL_TOGGLE_TOOLBAR = "terminal.toggle_toolbar";
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
@@ -452,6 +460,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_APP_LAUNCH = "app.launch";
     public static final String TOOL_APP_KEY_INSPECTOR = "app.key_inspector";
     public static final String TOOL_APP_OPEN_DRAWER = "app.open_drawer";
+    public static final String TOOL_APP_OPEN_APP_DRAWER = "app.open_app_drawer";
     public static final String TOOL_APP_CLOSE_DRAWER = "app.close_drawer";
     public static final String TOOL_TERMINAL_ACTION_SHEET = "terminal.action_sheet";
     public static final String TOOL_SESSION_ACTIVATE_BY_INDEX = "session.activate_by_index";
@@ -859,6 +868,28 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_KEYBOARD, R.string.tool_keyboard_hide, R.string.tool_desc_keyboard_hide,
             null, REQUIRES_IN_APP_KEYBOARD);
+        addUi(map, TOOL_KEYBOARD_CLIPBOARD,
+            "Open or close the keyboard's clipboard history: the text copied inside the launcher.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_clipboard,
+            R.string.tool_desc_keyboard_clipboard, null, REQUIRES_IN_APP_KEYBOARD);
+        // Off and on, as opposed to hide and show: hidden, the next tap on the terminal brings the
+        // keyboard back; off, only this action or the keyboard key does. Either input method.
+        addUi(map, TOOL_KEYBOARD_TOGGLE_ENABLED,
+            "Turn the keyboard off, so tapping the terminal no longer opens it, or back on.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_keyboard_toggle_enabled,
+            R.string.tool_desc_keyboard_toggle_enabled, null);
+        // The voice key's dictation for places and setups without it: Home and Display, where the
+        // keyboard is usually down, or Android's keyboard. No keyboard needed, launcher's or not.
+        addUi(map, TOOL_VOICE_DICTATE,
+            "Start dictating, or stop. The text waits in the dictation panel until the user inserts or copies it.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_KEYBOARD, R.string.tool_voice_dictate,
+            R.string.tool_desc_voice_dictate, null);
         addUi(map, TOOL_TERMINAL_TOGGLE_TOOLBAR,
             "Show or hide the dock.",
             schemaEmpty(),
@@ -1020,6 +1051,12 @@ public final class LauncherToolRegistry {
             Binding.all("ctrl+alt+m"), REQUIRES_SESSION);
         // Ctrl+Alt+left/right reach the sessions browser only with split panes off; with them
         // on the multiplexer claims the arrows for pane focus.
+        addUi(map, TOOL_APP_OPEN_APP_DRAWER,
+            "Open the app drawer.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_APP, R.string.tool_app_open_app_drawer, R.string.tool_desc_app_open_app_drawer,
+            Collections.emptyList());
         addUi(map, TOOL_APP_OPEN_DRAWER,
             "Open the sessions browser.",
             schemaEmpty(),

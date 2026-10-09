@@ -80,14 +80,28 @@ public final class HelpGlossary {
             R.string.help_term_keys_definition, "keys"));
         terms.add(new Term("command_palette", R.string.help_term_palette_title,
             R.string.help_term_palette_definition, "palette"));
-        terms.add(new Term("surface", R.string.help_term_surface_title,
-            R.string.help_term_surface_definition, "appearance_editor"));
-        terms.add(new Term("base", R.string.help_term_base_title,
-            R.string.help_term_base_definition, "base_values"));
-        terms.add(new Term("independent_value", R.string.help_term_independent_title,
-            R.string.help_term_independent_definition, "base_values"));
-        terms.add(new Term("docked_floating", R.string.help_term_docked_title,
-            R.string.help_term_docked_definition, "keyboard_layouts"));
+        terms.add(new Term("border_drag", R.string.help_term_border_drag_title,
+            R.string.help_term_border_drag_definition, "places"));
+        terms.add(new Term("keyboard_swipe", R.string.help_term_keyboard_swipe_title,
+            R.string.help_term_keyboard_swipe_definition, "keyboard_swipe"));
+        terms.add(new Term("status_swipe", R.string.help_term_status_swipe_title,
+            R.string.help_term_status_swipe_definition, "status"));
+        terms.add(new Term("corner_tab", R.string.help_term_corner_tab_title,
+            R.string.help_term_corner_tab_definition, "corners"));
+        terms.add(new Term("minimal_mode", R.string.help_term_minimal_title,
+            R.string.help_term_minimal_definition, "minimal"));
+        terms.add(new Term("look", R.string.help_term_look_title,
+            R.string.help_term_look_definition, "appearance_editor"));
+        terms.add(new Term("style", R.string.help_term_style_title,
+            R.string.help_term_style_definition, "layout_editor"));
+        terms.add(new Term("hidden_elements", R.string.help_term_tray_title,
+            R.string.help_term_tray_definition, "layout_editor"));
+        terms.add(new Term("keyboard_form", R.string.help_term_form_title,
+            R.string.help_term_form_definition, "keyboard_layouts"));
+        terms.add(new Term("pinned_notification", R.string.help_term_pinned_title,
+            R.string.help_term_pinned_definition, "pinned_notifications"));
+        terms.add(new Term("dictation", R.string.help_term_dictation_title,
+            R.string.help_term_dictation_definition, "voice"));
         terms.add(new Term("mouse_mode", R.string.help_term_mouse_title,
             R.string.help_term_mouse_definition, "mouse_mode"));
         terms.add(new Term("editors", R.string.help_term_editors_title,

@@ -6,20 +6,8 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <color name="red_400">#FF0000</color>
-    <color name="red_800">#C4001D</color>
-
-    <color name="grey_200">#EEEEEE</color>
-    <color name="grey_400">#BDBDBD</color>
-    <color name="grey_500">#9E9E9E</color>
-    <color name="grey_800">#424242</color>
-    <color name="grey_900">#212121</color>
-
     <color name="red_error">#BA1A1A</color>
     <color name="red_error_link">#B3261E</color>
-
-    <color name="blue_link_light">#0B57D0</color>
-    <color name="blue_link_dark">#AFC7FF</color>
 
     <color name="termux_primary">#345CA8</color>
     <color name="termux_on_primary">#FFFFFF</color>
@@ -57,4 +45,40 @@
 
     <color name="icon_neutral_accent">@color/termux_on_surface_variant</color>
     <color name="icon_neutral_accent_bg">@color/termux_surface_panel</color>
+
+    <!-- Material 3 colour roles, static light values. The Roles theme maps each onto its colour* attribute; on Android 12+ the dynamic parent theme supplies the roles instead and these are unused. Every termuxColor* alias is derived from the attribute, never from here. -->
+    <color name="role_primary">#345CA8</color>
+    <color name="role_on_primary">#FFFFFF</color>
+    <color name="role_primary_container">#D8E3FF</color>
+    <color name="role_on_primary_container">#0B1F44</color>
+    <color name="role_secondary">#556070</color>
+    <color name="role_on_secondary">#FFFFFF</color>
+    <color name="role_secondary_container">#D9E3F5</color>
+    <color name="role_on_secondary_container">#121C2B</color>
+    <color name="role_tertiary">#6B4E9E</color>
+    <color name="role_on_tertiary">#FFFFFF</color>
+    <color name="role_tertiary_container">#E8DEF8</color>
+    <color name="role_on_tertiary_container">#4F378B</color>
+    <color name="role_error">#BA1A1A</color>
+    <color name="role_on_error">#FFFFFF</color>
+    <color name="role_error_container">#F9DEDC</color>
+    <color name="role_on_error_container">#410E0B</color>
+    <color name="role_background">#F4F6FB</color>
+    <color name="role_on_background">#171C24</color>
+    <color name="role_surface">#F4F6FB</color>
+    <color name="role_on_surface">#171C24</color>
+    <color name="role_surface_variant">#DEE3EE</color>
+    <color name="role_on_surface_variant">#586171</color>
+    <color name="role_outline">#717A8A</color>
+    <color name="role_outline_variant">#C1C9D6</color>
+    <color name="role_surface_dim">#D8DCE6</color>
+    <color name="role_surface_bright">#F4F6FB</color>
+    <color name="role_surface_container_lowest">#FFFFFF</color>
+    <color name="role_surface_container_low">#EFF2F9</color>
+    <color name="role_surface_container">#EAEFF7</color>
+    <color name="role_surface_container_high">#E1E7F2</color>
+    <color name="role_surface_container_highest">#D7DFEC</color>
+    <color name="role_inverse_surface">#2B3139</color>
+    <color name="role_inverse_on_surface">#EDF0F7</color>
+    <color name="role_inverse_primary">#B8C7FF</color>
 </resources>

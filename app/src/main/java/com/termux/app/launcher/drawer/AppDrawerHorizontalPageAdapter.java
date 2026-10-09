@@ -198,6 +198,28 @@ public final class AppDrawerHorizontalPageAdapter
                 cell.setVisibility(View.INVISIBLE);
             }
         }
+        prefetchPage(pagePosition + 1, capacity, metrics);
+    }
+
+    /**
+     * Renders the next page's icons on the worker while this one is on screen, so a swipe lands on
+     * a page that binds from the cache rather than one that fades in.
+     */
+    private void prefetchPage(int page, int capacity,
+                              @Nullable AppDrawerHorizontalGridMetrics metrics) {
+        SuggestionBarView dock = mDock;
+        if (dock == null || metrics == null || metrics.iconPx <= 0f) return;
+        // Past the last page the model clamps back onto it, which is the page just bound.
+        if (page >= AppDrawerPageModel.pageCount(mItems.size(), capacity)) return;
+        int start = AppDrawerPageModel.startForPage(page, mItems.size(), capacity);
+        int end = AppDrawerPageModel.endForPage(page, mItems.size(), capacity);
+        if (start >= end) return;
+        List<LauncherAppEntry> upcoming = new ArrayList<>(end - start);
+        for (int i = start; i < end; i++) {
+            LauncherAppEntry app = mItems.get(i).app;
+            if (app != null) upcoming.add(app);
+        }
+        dock.prefetchRenderedIcons(upcoming, Math.round(metrics.iconPx));
     }
 
     @Override

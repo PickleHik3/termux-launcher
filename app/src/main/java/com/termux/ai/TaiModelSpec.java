@@ -3,7 +3,8 @@ package com.termux.ai;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.google.ai.edge.litertlm.Capabilities;
+import com.google.ai.edge.litertlm.LlmCapability;
+import com.google.ai.edge.litertlm.ModelInfo;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -13,17 +14,36 @@ import java.io.File;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 public final class TaiModelSpec {
     public static final String BACKEND_LITERT_LM = "litert-lm";
     public static final String BACKEND_MITERT_LM = BACKEND_LITERT_LM;
     public static final String BACKEND_MNN_LLM = "mnn-llm";
+    // MNN Diffusion engine packages (Stable Diffusion 1.5, Taiyi, Sana): a directory of .mnn graphs,
+    // never a chat model. Served on demand by MnnDiffusionRuntime behind /v1/ai/images/generations.
+    public static final String BACKEND_MNN_DIFFUSION = "mnn-diffusion";
     public static final String FORMAT_LITERTLM = "litertlm";
     public static final String FORMAT_MNN = "mnn";
     public static final String FORMAT_GGUF = "gguf";
     public static final String CAPABILITY_TEXT_CHAT = "text_chat";
     public static final String CAPABILITY_TEXT_EMBEDDINGS = "text_embeddings";
+    // Whisper ACFT .tflite graphs (speech-to-text, phase 1: catalog + downloader only, no runtime
+    // routing yet). Kept out of chat catalogs, installed-model lists and /v1/models chat listings.
+    public static final String CAPABILITY_SPEECH_TO_TEXT = "speech_to_text";
+    // KittenTTS .tflite graphs (speech output, KittenTtsRuntime). Speech-only like speech_to_text:
+    // kept out of chat catalogues, the installed chat list, the STT picker and /v1/models.
+    public static final String CAPABILITY_TEXT_TO_SPEECH = "text_to_speech";
+    // Text-to-image generation (mnn-diffusion packages). Image-only like speech_to_text: kept out of
+    // chat catalogues, the installed chat list, /v1/models and `tai load`.
+    public static final String CAPABILITY_IMAGE_GENERATION = "image_generation";
+    // Retired vision graphs (depth, scene and subject segmentation); kept as a filter. Tool
+    // models like speech: never loaded, never chat or /v1/models.
+    public static final String CAPABILITY_DEPTH_ESTIMATION = "depth_estimation";
+    public static final String CAPABILITY_SCENE_SEGMENTATION = "scene_segmentation";
+    public static final String CAPABILITY_SUBJECT_SEGMENTATION = "subject_segmentation";
     public static final String CAPABILITY_IMAGE_INPUT = "image_input";
     public static final String CAPABILITY_AUDIO_INPUT = "audio_input";
     // Declared-only intent: no runtime processes video yet, so this rides on sourceCapabilities
@@ -171,7 +191,9 @@ public final class TaiModelSpec {
         this.architecture = architecture;
         this.quantization = quantization;
         LinkedHashSet<String> sourceCaps = normalizedCapabilities(sourceCapabilities);
-        if (sourceCaps.isEmpty()) sourceCaps.add(CAPABILITY_TEXT_CHAT);
+        if (sourceCaps.isEmpty()) {
+            sourceCaps.add(BACKEND_MNN_DIFFUSION.equals(this.backend) ? CAPABILITY_IMAGE_GENERATION : CAPABILITY_TEXT_CHAT);
+        }
         LinkedHashSet<String> supportedEndpointCaps = endpointCapabilitiesFor(
             id, this.backend, this.format, sourceCaps, localPath);
         LinkedHashSet<String> endpointCaps = endpointCapabilities == null
@@ -293,12 +315,32 @@ public final class TaiModelSpec {
 
     public static boolean isSupportedBackendFormat(@Nullable String backend, @Nullable String format) {
         return (BACKEND_LITERT_LM.equals(backend) && FORMAT_LITERTLM.equals(format))
-            || (BACKEND_MNN_LLM.equals(backend) && FORMAT_MNN.equals(format));
+            || (BACKEND_MNN_LLM.equals(backend) && FORMAT_MNN.equals(format))
+            || (BACKEND_MNN_DIFFUSION.equals(backend) && FORMAT_MNN.equals(format));
+    }
+
+    /** True for a text-to-image model: it never loads into the chat runtime or shows in chat lists. */
+    public boolean isImageGeneration() {
+        return BACKEND_MNN_DIFFUSION.equals(backend)
+            || endpointCapabilities.contains(CAPABILITY_IMAGE_GENERATION);
+    }
+
+    /** True for a retired vision tool graph (depth, scene or subject), left over on some phones:
+     *  never loaded into the chat runtime or listed in chat lists, pickers and /v1/models. */
+    public boolean isVisionTool() {
+        return isVisionTool(capabilities) || isVisionTool(endpointCapabilities);
+    }
+
+    public static boolean isVisionTool(@NonNull Set<String> capabilities) {
+        return capabilities.contains(CAPABILITY_DEPTH_ESTIMATION)
+            || capabilities.contains(CAPABILITY_SCENE_SEGMENTATION)
+            || capabilities.contains(CAPABILITY_SUBJECT_SEGMENTATION);
     }
 
     @NonNull
     private static String requireSupportedBackend(@Nullable String backend) {
-        if (BACKEND_LITERT_LM.equals(backend) || BACKEND_MNN_LLM.equals(backend)) return backend;
+        if (BACKEND_LITERT_LM.equals(backend) || BACKEND_MNN_LLM.equals(backend)
+            || BACKEND_MNN_DIFFUSION.equals(backend)) return backend;
         throw new IllegalArgumentException("unsupported_backend");
     }
 
@@ -321,6 +363,12 @@ public final class TaiModelSpec {
         if (!isSupportedBackendFormat(backend, format)) return endpoint;
         String normalizedId = normalizedIdentity(id);
 
+        if (BACKEND_MNN_DIFFUSION.equals(backend)) {
+            // A diffusion package does one thing; whatever else the source metadata claims is dropped.
+            endpoint.add(CAPABILITY_IMAGE_GENERATION);
+            return endpoint;
+        }
+
         if (BACKEND_MNN_LLM.equals(backend)) {
             // MNN embedding packages (config.json declaring text_embeddings) route to MnnEmbeddingRuntime,
             // not the chat engine, so they expose embeddings exclusively.
@@ -341,8 +389,26 @@ public final class TaiModelSpec {
             return endpoint;
         }
 
-        // The only raw .tflite path in this app is the LiteRT embedding runtime. Chat packages
-        // must be .litertlm/.task containers even if user metadata incorrectly declares chat.
+        // A raw .tflite path in this app is either the LiteRT embedding runtime or a Whisper ACFT
+        // speech-to-text graph — branch on declared capability, not the extension, so a Whisper
+        // package never falls into the embedding/sentencepiece path. Chat packages must be
+        // .litertlm/.task containers even if user metadata incorrectly declares chat.
+        // A speech model is speech-only wherever it lives: catalog entries have no local path yet.
+        if (source.contains(CAPABILITY_SPEECH_TO_TEXT)) {
+            endpoint.add(CAPABILITY_SPEECH_TO_TEXT);
+            return endpoint;
+        }
+        if (source.contains(CAPABILITY_TEXT_TO_SPEECH)) {
+            endpoint.add(CAPABILITY_TEXT_TO_SPEECH);
+            return endpoint;
+        }
+        // A vision graph is tool-only too: its one capability, nothing chat-like.
+        if (isVisionTool(source)) {
+            addIfPresent(endpoint, source, CAPABILITY_DEPTH_ESTIMATION, false);
+            addIfPresent(endpoint, source, CAPABILITY_SCENE_SEGMENTATION, false);
+            addIfPresent(endpoint, source, CAPABILITY_SUBJECT_SEGMENTATION, false);
+            return endpoint;
+        }
         if (localPath != null && localPath.toLowerCase(Locale.ROOT).endsWith(".tflite")) {
             addIfPresent(endpoint, source, CAPABILITY_TEXT_EMBEDDINGS, false);
             return endpoint;
@@ -450,20 +516,39 @@ public final class TaiModelSpec {
         return toolModeFor(backend, endpointCapabilities);
     }
 
+    /**
+     * The probe's answer per model file, keyed by path, length and modification time. Opening a
+     * multi-GB bundle natively takes seconds, and one /v1/models request reaches this 6-10 times
+     * per speculative-decoding model (spec copies, context-window policy, variants), so uncached
+     * the listing took 12-16 s on a phone. A replaced or re-downloaded file gets a new key.
+     */
+    private static final Map<String, Boolean> SPECULATIVE_PROBES = new ConcurrentHashMap<>();
+
     private static boolean liteRtPackageHasSpeculativeDecoding(@Nullable String localPath) {
         if (localPath == null || localPath.trim().isEmpty()) return false;
         File file = new File(localPath);
         if (!file.isFile() || !file.canRead()) return false;
-        try (Capabilities capabilities = new Capabilities(file.getAbsolutePath())) {
-            return capabilities.hasSpeculativeDecodingSupport();
+        String key = file.getAbsolutePath() + '|' + file.length() + '|' + file.lastModified();
+        Boolean known = SPECULATIVE_PROBES.get(key);
+        if (known != null) return known;
+        boolean has;
+        // LiteRT-LM 0.18.0: ModelInfo.from() replaced Capabilities; only an LLM bundle answers.
+        try (ModelInfo info = ModelInfo.from(file.getAbsolutePath())) {
+            has = info instanceof LlmCapability && ((LlmCapability) info).hasSpeculativeDecodingSupport();
         } catch (Throwable ignored) {
-            return false;
+            has = false;
         }
+        SPECULATIVE_PROBES.put(key, has);
+        return has;
     }
 
     private static boolean hasMnnHint(@Nullable String path) {
         String value = path == null ? "" : path.toLowerCase(Locale.ROOT);
-        return value.contains("mnn") || value.endsWith("config.json") || value.endsWith("llm.mnn");
+        // A LiteRT file is LiteRT wherever it lives, and only the last segment names the package:
+        // a ".../qwen-mnn-test/model.litertlm" path is not an MNN package.
+        if (value.endsWith(".litertlm") || value.endsWith(".task") || value.endsWith(".tflite")) return false;
+        String name = value.substring(value.lastIndexOf('/') + 1);
+        return name.contains("mnn") || name.equals("config.json");
     }
 
     private static boolean hasKnownUnsupportedWeightHint(@Nullable String path) {
@@ -478,5 +563,85 @@ public final class TaiModelSpec {
     @NonNull
     private static String normalizedIdentity(@Nullable String value) {
         return value == null ? "" : value.replaceAll("[^A-Za-z0-9]", "").toLowerCase(Locale.ROOT);
+    }
+
+    /** EmbeddingGemma's native output width and its Matryoshka truncation points (768/512/256/128). */
+    private static final int EMBEDDINGGEMMA_DIMENSIONS = 768;
+    private static final int[] EMBEDDINGGEMMA_MATRYOSHKA_DIMS = {768, 512, 256, 128};
+
+    private static boolean isEmbeddingGemma(@NonNull String id, @Nullable String localPath) {
+        String probe = (id + " " + (localPath == null ? "" : localPath)).toLowerCase(Locale.ROOT);
+        return probe.contains("embeddinggemma");
+    }
+
+    /**
+     * The model's native embedding output width for {@code /v1/models}, or 0 when this family is
+     * not recognised (an MNN embedding package reports its own dimensions only once loaded).
+     */
+    public static int embeddingDimensionsFor(@NonNull String id, @Nullable String localPath) {
+        return isEmbeddingGemma(id, localPath) ? EMBEDDINGGEMMA_DIMENSIONS : 0;
+    }
+
+    /** The Matryoshka truncation sizes this embedding model supports via {@code dimensions}, largest first. */
+    @NonNull
+    public static int[] embeddingMatryoshkaDimsFor(@NonNull String id, @Nullable String localPath) {
+        return isEmbeddingGemma(id, localPath) ? EMBEDDINGGEMMA_MATRYOSHKA_DIMS.clone() : new int[0];
+    }
+
+    /**
+     * The installed window graphs beside {@code localPath}, sorted ascending, for a LiteRT
+     * EmbeddingGemma-style install ({@code ..._seqNNNN_...}): {@code [256, 512, 1024]} once the
+     * downloader has fetched the smaller siblings next to a seq1024 primary. Empty when the file
+     * is missing, unreadable, or its name carries no window at all (a non-EmbeddingGemma embedder,
+     * or one imported under a renamed file). Not cached like {@link #revisionFor}: it is a single
+     * directory listing, and the directory changing (a sibling finishing a background download) is
+     * exactly the case {@code /v1/models} needs to see on its very next call.
+     */
+    @NonNull
+    public static int[] windowsFor(@Nullable String localPath) {
+        if (localPath == null || localPath.trim().isEmpty()) return new int[0];
+        java.util.Map<Integer, File> siblings = TaiImportProfiles.siblingWindowGraphs(new File(localPath));
+        int[] windows = new int[siblings.size()];
+        int i = 0;
+        for (Integer window : siblings.keySet()) windows[i++] = window; // TreeMap: already ascending
+        return windows;
+    }
+
+    /**
+     * A stable, cheap revision for {@code /v1/models}: a hash of the model file's name, size and
+     * mtime, never its bytes, so a 300 MB file is never re-read. Cached per (path, size, mtime)
+     * triple so repeat {@code /v1/models} calls for the same unchanged file skip the digest too.
+     * {@code null} when the file cannot be stat'd.
+     */
+    @Nullable
+    public static String revisionFor(@Nullable String localPath) {
+        if (localPath == null || localPath.trim().isEmpty()) return null;
+        File file = new File(localPath);
+        if (!file.exists()) return null;
+        long size = file.isDirectory() ? 0L : file.length();
+        long mtime = file.lastModified();
+        String cacheKey = localPath + '|' + size + '|' + mtime;
+        String cached = revisionCache.get(cacheKey);
+        if (cached != null) return cached;
+        String revision = hashRevision(file.getName(), size, mtime);
+        revisionCache.put(cacheKey, revision);
+        return revision;
+    }
+
+    private static final java.util.concurrent.ConcurrentHashMap<String, String> revisionCache =
+        new java.util.concurrent.ConcurrentHashMap<>();
+
+    @NonNull
+    private static String hashRevision(@NonNull String name, long size, long mtime) {
+        try {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            digest.update((name + '|' + size + '|' + mtime).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            byte[] hash = digest.digest();
+            StringBuilder hex = new StringBuilder(16);
+            for (int i = 0; i < 8; i++) hex.append(String.format(Locale.ROOT, "%02x", hash[i]));
+            return hex.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            return Integer.toHexString((name + size + mtime).hashCode());
+        }
     }
 }

@@ -1,5 +1,8 @@
 package com.termux.ai;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import java.net.URI;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -58,6 +61,55 @@ public final class TaiHuggingFace {
         return "https://huggingface.co/" + repository + "/resolve/" + encode(commit) + "/" + path;
     }
 
+    /**
+     * The model card at the resolved commit, so what the importer quotes from it is the card of
+     * the exact files it offers, not of whatever the branch holds later.
+     */
+    public String readmeUrl(String commit) {
+        return fileUrl(commit, "README.md");
+    }
+
+    /** Whether the repository lists a top-level README.md, so a missing card costs no request. */
+    public static boolean hasReadme(JSONObject metadata) {
+        JSONArray siblings = metadata == null ? null : metadata.optJSONArray("siblings");
+        for (int i = 0; siblings != null && i < siblings.length(); i++) {
+            JSONObject item = siblings.optJSONObject(i);
+            if (item != null && "README.md".equals(item.optString("rfilename"))) return true;
+        }
+        return false;
+    }
+
+    /**
+     * What the repository itself declares about the model, for the importer to show as facts:
+     * the card's {@code pipeline_tag}, its tags, the license in the card's front matter and the
+     * base model. Only fields Hugging Face returns are copied; nothing is inferred here.
+     */
+    public static JSONObject modelFacts(JSONObject metadata) throws Exception {
+        JSONObject facts = new JSONObject();
+        if (metadata == null) return facts;
+        JSONObject card = metadata.optJSONObject("cardData");
+        String pipeline = metadata.optString("pipeline_tag", "");
+        if (pipeline.isEmpty() && card != null) pipeline = card.optString("pipeline_tag", "");
+        if (!pipeline.isEmpty()) facts.put("pipelineTag", pipeline);
+        JSONArray tags = new JSONArray();
+        LinkedHashSet<String> seen = new LinkedHashSet<>();
+        JSONArray repoTags = metadata.optJSONArray("tags");
+        for (int i = 0; repoTags != null && i < repoTags.length(); i++) {
+            String tag = repoTags.optString(i, "");
+            if (!tag.isEmpty() && seen.add(tag)) tags.put(tag);
+        }
+        facts.put("tags", tags);
+        if (card != null) {
+            String license = card.optString("license", "");
+            if (!license.isEmpty()) facts.put("license", license);
+            Object base = card.opt("base_model");
+            String baseModel = base instanceof JSONArray ? ((JSONArray) base).optString(0, "")
+                : base instanceof String ? (String) base : "";
+            if (!baseModel.isEmpty()) facts.put("baseModel", baseModel);
+        }
+        return facts;
+    }
+
     public JSONArray candidates(JSONObject metadata) throws Exception {
         JSONArray siblings = metadata.optJSONArray("siblings");
         LinkedHashSet<String> files = new LinkedHashSet<>();
@@ -66,15 +118,41 @@ public final class TaiHuggingFace {
             if (item != null && safePath(item.optString("rfilename"))) files.add(item.optString("rfilename"));
         }
         List<String> entries = new ArrayList<>();
+        // A directory whose config.json sits next to eagle.mnn: an EAGLE-3 draft head shipped
+        // alongside the plain model (taobao-mnn/…-Eagle3-MNN), decoded faster for the same answers.
+        LinkedHashSet<String> eagleDirectories = new LinkedHashSet<>();
+        // A text-to-image package (Stable Diffusion, Sana) is one candidate named by its main graph. Its
+        // own config.json (Sana's diffusion config, and the llm/ one beside its prompt model) must not
+        // be mistaken for a chat model.
+        List<String> diffusionDirectories = TaiDiffusionImport.packageDirectories(files);
+        java.util.Map<String, Integer> diffusionEntries = new java.util.LinkedHashMap<>();
+        java.util.Map<String, String> diffusionRoots = new java.util.HashMap<>();
+        for (String directory : diffusionDirectories) {
+            List<String> inside = new ArrayList<>();
+            for (String name : files) {
+                if (name.startsWith(directory) && name.indexOf('/', directory.length()) < 0) inside.add(name.substring(directory.length()));
+            }
+            int type = TaiDiffusionImport.typeFor(TaiDiffusionImport.detectLayout(inside), repository);
+            String entry = TaiDiffusionImport.entryFile(files, directory);
+            if (entry.isEmpty()) continue;
+            String primary = directory + entry;
+            if (file ? !primary.equals(path) : !path.isEmpty() && !primary.startsWith(path.replaceAll("/$", "") + "/")) continue;
+            diffusionEntries.put(primary, type);
+            diffusionRoots.put(primary, directory);
+            entries.add(primary);
+        }
         for (String name : files) {
             if (file ? !name.equals(path) : !path.isEmpty() && !name.startsWith(path.replaceAll("/$", "") + "/")) continue;
             String lower = name.toLowerCase(Locale.ROOT);
+            if (diffusionEntries.containsKey(name)) continue;
             if (lower.endsWith(".litertlm") || lower.endsWith(".task") || lower.endsWith(".tflite")) entries.add(name);
             else if (name.equals("config.json") || name.endsWith("/config.json")) {
                 String directory = name.substring(0, name.length() - "config.json".length());
+                if (TaiDiffusionImport.insidePackage(diffusionDirectories, directory)) continue;
                 for (String other : files) {
                     if (other.startsWith(directory) && other.endsWith(".mnn")) { entries.add(name); break; }
                 }
+                if (files.contains(directory + "eagle.mnn")) eagleDirectories.add(directory);
             }
         }
         Collections.sort(entries);
@@ -92,12 +170,71 @@ public final class TaiHuggingFace {
                 candidate.put("sizeBytes", sibling.optLong("size", lfs == null ? -1 : lfs.optLong("size", -1)));
                 if (lfs != null) candidate.put("sha256", lfs.optString("sha256", ""));
             }
-            // Publisher-specific contract, not a family-name capability guess. See the research report.
-            if (repository.equals("litert-community/Qwen3.5-2B") && name.endsWith(".litertlm"))
-                candidate.put("minimumRuntimeVersion", "0.15.0");
+            Integer diffusionType = diffusionEntries.get(name);
+            if (diffusionType != null) {
+                // The package the user downloads is every runnable file under its directory, nested
+                // folders included (Sana's llm/), not the main graph alone.
+                String directory = diffusionRoots.get(name);
+                candidate.put("diffusion", TaiDiffusionPackage.typeName(diffusionType));
+                long packageSize = diffusionSizeBytes(siblings, directory);
+                if (packageSize > 0L) candidate.put("sizeBytes", packageSize);
+            } else if (name.equals("config.json") || name.endsWith("/config.json")) {
+                // The listing's own size for a config.json is a few bytes; the package the user
+                // actually downloads is every file beside it (model, weight, tokenizer, and, for
+                // an Eagle repo, the draft head), already in hand from the same metadata call.
+                String directory = name.substring(0, name.length() - "config.json".length());
+                long packageSize = packageSizeBytes(siblings, directory);
+                if (packageSize > 0L) candidate.put("sizeBytes", packageSize);
+                if (eagleDirectories.contains(directory)) candidate.put("speculative", "eagle");
+            }
+            // Publisher-specific contract, not a family-name capability guess: the runtime floor a
+            // litert-community card states for its files (Qwen3.5 0.15, MiniCPM5-2B 0.16).
+            TaiImportProfiles.Match family = repository.startsWith("litert-community/") && name.endsWith(".litertlm")
+                ? TaiImportProfiles.match(repository, name) : null;
+            if (family != null && family.minimumRuntimeVersion != null)
+                candidate.put("minimumRuntimeVersion", family.minimumRuntimeVersion);
             result.put(candidate);
         }
         return result;
+    }
+
+    /**
+     * The combined size of {@code directory}'s direct files (never a nested subdirectory, so an
+     * empty {@code directory} sums the repository root, not every file in the repository), or
+     * {@code -1} when none is known.
+     */
+    private static long packageSizeBytes(@Nullable JSONArray siblings, @NonNull String directory) {
+        if (siblings == null) return -1L;
+        long total = 0L;
+        boolean any = false;
+        for (int i = 0; i < siblings.length(); i++) {
+            JSONObject sibling = siblings.optJSONObject(i);
+            String rfile = sibling == null ? "" : sibling.optString("rfilename", "");
+            if (rfile.isEmpty() || !rfile.startsWith(directory)) continue;
+            if (rfile.substring(directory.length()).contains("/")) continue;
+            JSONObject lfs = sibling.optJSONObject("lfs");
+            long size = sibling.optLong("size", lfs == null ? -1L : lfs.optLong("size", -1L));
+            if (size > 0L) {
+                total += size;
+                any = true;
+            }
+        }
+        return any ? total : -1L;
+    }
+
+    /** The combined size of the runnable files under {@code directory}, nested folders included, or -1. */
+    private static long diffusionSizeBytes(@Nullable JSONArray siblings, @NonNull String directory) {
+        if (siblings == null) return -1L;
+        long total = 0L;
+        for (int i = 0; i < siblings.length(); i++) {
+            JSONObject sibling = siblings.optJSONObject(i);
+            String rfile = sibling == null ? "" : sibling.optString("rfilename", "");
+            if (!rfile.startsWith(directory) || !TaiDiffusionImport.isPackageFile(rfile.substring(directory.length()))) continue;
+            JSONObject lfs = sibling.optJSONObject("lfs");
+            long size = sibling.optLong("size", lfs == null ? -1L : lfs.optLong("size", -1L));
+            if (size > 0L) total += size;
+        }
+        return total > 0L ? total : -1L;
     }
 
     static boolean safePath(String path) {

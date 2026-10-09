@@ -28,11 +28,12 @@ import java.util.List;
  * what the Layout-freedom work replaced with an order the user can set; every other arrangement
  * the old model could express comes out byte-for-byte the same.
  *
- * <p>One rule is kept from the old model and is not ours to change: the status bar is never hidden,
- * because the wall's pager rides it. The other — the alphabets index following the pinned apps row
- * about — is gone: the index rides that row only while the two of them hold the same edge
- * ({@link PlaceChromePolicy#azRidesAppsRow}), so every element here draws on the edge its own slot
- * names and a row moved on its own leaves the index where it stood.
+ * <p>Two rules of the old model are gone. The status bar was never hidden, because the wall's
+ * pager rode its swipe; paging is the border drag now, so the bar hides like every other element
+ * and a place with no status bar simply starts where the next band does. And the alphabets index
+ * no longer follows the pinned apps row about: the index rides that row only while the two of them
+ * hold the same edge ({@link PlaceChromePolicy#azRidesAppsRow}), so every element here draws on
+ * the edge its own slot names and a row moved on its own leaves the index where it stood.
  *
  * <p>One rule is a renderer fact rather than a policy one, recorded here so the next reader does
  * not look for it: only a status bar standing on {@link Edge#TOP} gets the system-bar glass strip
@@ -207,26 +208,39 @@ public final class EdgeStackPolicy {
         @NonNull public final Edge edge;
         public final int index;
         public final boolean hideAllowed;
+        /**
+         * A gap among the bands under the keyboard rather than over it; {@link #index} then counts
+         * within that group, 0 outermost. Only ever on the bottom edge.
+         */
+        public final boolean underKeyboard;
 
         public Drop(@NonNull Edge edge, int index, boolean hideAllowed) {
+            this(edge, index, hideAllowed, false);
+        }
+
+        public Drop(@NonNull Edge edge, int index, boolean hideAllowed, boolean underKeyboard) {
             this.edge = edge;
             this.index = Math.max(0, index);
             this.hideAllowed = hideAllowed;
+            this.underKeyboard = underKeyboard && edge == Edge.BOTTOM;
         }
 
         @Override public boolean equals(@Nullable Object other) {
             if (this == other) return true;
             if (!(other instanceof Drop)) return false;
             Drop that = (Drop) other;
-            return index == that.index && hideAllowed == that.hideAllowed && edge == that.edge;
+            return index == that.index && hideAllowed == that.hideAllowed && edge == that.edge
+                && underKeyboard == that.underKeyboard;
         }
 
         @Override public int hashCode() {
-            return (edge.hashCode() * 31 + index) * 31 + (hideAllowed ? 1 : 0);
+            return ((edge.hashCode() * 31 + index) * 31 + (hideAllowed ? 1 : 0)) * 31
+                + (underKeyboard ? 1 : 0);
         }
 
         @NonNull @Override public String toString() {
-            return "Drop{" + edge + "#" + index + (hideAllowed ? ",hideable" : "") + "}";
+            return "Drop{" + edge + (underKeyboard ? "(under keyboard)" : "") + "#" + index
+                + (hideAllowed ? ",hideable" : "") + "}";
         }
     }
 
@@ -244,29 +258,76 @@ public final class EdgeStackPolicy {
 
     /** Whether an element is on screen at all: hidden puts it away, and nothing else does. */
     public static boolean isShown(@NonNull PlaceLayout layout, @NonNull Element element) {
-        return element == Element.STATUS || !layout.slot(element).hidden;
+        return !layout.slot(element).hidden;
+    }
+
+    /**
+     * Whether an element takes a band on its edge, which is whether it is shown: every element on
+     * screen stands in its edge's stack. The alphabets index's minimised pull tab, the one form
+     * that was on screen without claiming a band, is gone, so the two questions have one answer;
+     * the name stays because callers ask about the band, not about visibility.
+     */
+    public static boolean claimsBand(@NonNull PlaceLayout layout, @NonNull Element element) {
+        return isShown(layout, element);
+    }
+
+    /**
+     * Whether an element stands under the keyboard: on the bottom edge, on the keyboard's far side
+     * from the canvas. Only the dock's own rows may ({@link Element#underKeyboardAllowed}).
+     */
+    public static boolean standsUnderKeyboard(@NonNull PlaceLayout layout,
+                                              @NonNull Element element) {
+        Slot slot = layout.slot(element);
+        return slot.underKeyboard && slot.edge == Edge.BOTTOM && element.underKeyboardAllowed();
     }
 
     /**
      * What stands on one edge, outermost first. Ties in {@code order} — two elements can hold the
      * same number, since each keeps its own — are broken by {@link Element#defaultOrder}, so the
      * answer never depends on which element was asked about first.
+     *
+     * <p>Along the bottom the bands under the keyboard come first, being nearer the screen's edge,
+     * each side in its own order. With the keyboard down that is simply the edge's one stack; with
+     * it up, {@link #underKeyboard} and {@link #overKeyboard} are the two sides of it.
      */
     @NonNull
     public static List<Element> stack(@NonNull PlaceLayout layout, @NonNull Edge edge) {
         List<Element> on = new ArrayList<>(4);
         for (Element element : Element.values()) {
-            if (!isShown(layout, element)) continue;
+            if (!claimsBand(layout, element)) continue;
             if (edgeOf(layout, element) != edge) continue;
             on.add(element);
         }
         Collections.sort(on, (a, b) -> {
+            int bySide = Boolean.compare(standsUnderKeyboard(layout, b),
+                standsUnderKeyboard(layout, a));
+            if (bySide != 0) return bySide;
             int byOrder = Integer.compare(orderOf(layout, a, edge), orderOf(layout, b, edge));
             if (byOrder != 0) return byOrder;
             int byDefault = Integer.compare(a.defaultOrder(edge), b.defaultOrder(edge));
             return byDefault != 0 ? byDefault : Integer.compare(a.ordinal(), b.ordinal());
         });
         return Collections.unmodifiableList(on);
+    }
+
+    /** The bottom edge's bands under the keyboard, outermost first; none in the shipped layout. */
+    @NonNull
+    public static List<Element> underKeyboard(@NonNull PlaceLayout layout) {
+        return keyboardSide(layout, true);
+    }
+
+    /** The bottom edge's bands over the keyboard, outermost first: all of them, as shipped. */
+    @NonNull
+    public static List<Element> overKeyboard(@NonNull PlaceLayout layout) {
+        return keyboardSide(layout, false);
+    }
+
+    @NonNull
+    private static List<Element> keyboardSide(@NonNull PlaceLayout layout, boolean under) {
+        List<Element> side = new ArrayList<>(4);
+        for (Element element : stack(layout, Edge.BOTTOM))
+            if (standsUnderKeyboard(layout, element) == under) side.add(element);
+        return Collections.unmodifiableList(side);
     }
 
     /**
@@ -393,12 +454,32 @@ public final class EdgeStackPolicy {
         List<Drop> drops = new ArrayList<>(16);
         boolean hideAllowed = element.hideAllowed();
         for (Edge edge : Edge.values()) {
-            List<Element> on = stack(layout, edge);
+            // Along the bottom these are the gaps over the keyboard. The ones under it are asked
+            // for on their own (underKeyboardTargets), since the keyboard stands between them.
+            List<Element> on = edge == Edge.BOTTOM ? overKeyboard(layout) : stack(layout, edge);
             int slots = on.contains(element) ? on.size() - 1 : on.size();
             for (int index = 0; index <= slots; index++) {
                 drops.add(new Drop(edge, index, hideAllowed));
             }
         }
+        return Collections.unmodifiableList(drops);
+    }
+
+    /**
+     * The gaps under the keyboard one element may be dropped in: one outside the outermost band
+     * standing there, one between each pair and one against the keyboard, or the one gap a bare
+     * side has. None for an element that may not stand there.
+     */
+    @NonNull
+    public static List<Drop> underKeyboardTargets(@NonNull PlaceLayout layout,
+                                                  @NonNull Element element) {
+        if (!element.underKeyboardAllowed())
+            return Collections.emptyList();
+        List<Element> on = underKeyboard(layout);
+        int slots = on.contains(element) ? on.size() - 1 : on.size();
+        List<Drop> drops = new ArrayList<>(slots + 1);
+        for (int index = 0; index <= slots; index++)
+            drops.add(new Drop(Edge.BOTTOM, index, element.hideAllowed(), true));
         return Collections.unmodifiableList(drops);
     }
 
@@ -423,18 +504,33 @@ public final class EdgeStackPolicy {
     @NonNull
     public static PlaceLayout withDrop(@NonNull PlaceLayout layout, @NonNull Element element,
                                        @NonNull Edge edge, int index) {
-        List<Element> stack = new ArrayList<>(stack(layout, edge));
+        return withDrop(layout, element, edge, index, false);
+    }
+
+    /**
+     * As {@link #withDrop(PlaceLayout, Element, Edge, int)}, on either side of the keyboard. Along
+     * the bottom the two sides are numbered apart, each from the screen edge inwards, so a drop
+     * re-numbers only the side it landed on and the other keeps what it had. An element that may
+     * not stand under the keyboard lands over it.
+     */
+    @NonNull
+    public static PlaceLayout withDrop(@NonNull PlaceLayout layout, @NonNull Element element,
+                                       @NonNull Edge edge, int index, boolean underKeyboard) {
+        boolean under = underKeyboard && edge == Edge.BOTTOM && element.underKeyboardAllowed();
+        List<Element> stack = new ArrayList<>(edge != Edge.BOTTOM ? stack(layout, edge)
+            : under ? underKeyboard(layout) : overKeyboard(layout));
         stack.remove(element);
         stack.add(Math.max(0, Math.min(index, stack.size())), element);
         PlaceLayout next = layout;
         for (int order = 0; order < stack.size(); order++)
-            next = next.withSlot(stack.get(order), new Slot(false, edge, order));
+            next = next.withSlot(stack.get(order), new Slot(false, edge, order, under));
         return next;
     }
 
     /**
      * The arrangement putting one element away leaves. It keeps the edge and the position it would
-     * come back to, and the status bar — which the wall's pager rides — is never put away at all.
+     * come back to. An element that may not hide ({@link Element#hideAllowed}) is left as it is;
+     * none refuses today.
      */
     @NonNull
     public static PlaceLayout withAway(@NonNull PlaceLayout layout, @NonNull Element element) {

@@ -289,7 +289,7 @@ public class TermuxPluginUtils {
         // Send a notification to show the error which when clicked will open the ReportActivity
         // to show the details of the error
         if (title == null || title.toString().isEmpty())
-            title = TermuxConstants.TERMUX_APP_NAME + " Plugin Execution Command Error";
+            title = TermuxConstants.TERMUX_LAUNCHER_APP_DISPLAY_NAME + " Plugin Execution Command Error";
         Logger.logDebug(logTag, "Sending \"" + title + "\" notification.");
         StringBuilder reportString = new StringBuilder(message);
         if (appInfoMode != null)
