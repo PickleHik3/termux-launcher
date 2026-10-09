@@ -2551,7 +2551,7 @@
 
     <!-- The setup sheet the first-boot tour is offered on -->
     <string name="welcome_sheet_title">Welcome</string>
-    <string name="welcome_sheet_intro">Pick what you want while the packages install. All of it can be changed later in Settings.</string>
+    <string name="welcome_sheet_intro">Pick what you want. All of it can be changed later in Settings.</string>
     <string name="welcome_row_wallpaper_title">Wallpaper colours</string>
     <string name="welcome_row_wallpaper_copy">Tint the launcher to match your wallpaper.</string>
     <string name="welcome_row_weather_title">Weather</string>
