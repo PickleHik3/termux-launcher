@@ -2543,6 +2543,7 @@
     <string name="tour_card_return_to_terminal">Hold the page\'s border and drag back to the terminal to continue.</string>
     <string name="tour_closing_title">You\'re set</string>
     <string name="tour_tip_help">Hold any corner and tap ? to learn what something does.</string>
+    <string name="tour_tip_wallpaper">Set your wallpaper: hold any corner and tap Appearance.</string>
     <string name="tour_tip_shortcuts">Tap Ctrl, then Alt, to see every shortcut.</string>
     <string name="tour_tip_replay">Replay this tour from Settings \u203A About &amp; help.</string>
     <!-- How far the offline models have downloaded: "Offline models · 1.2 GB of 3.1 GB". -->

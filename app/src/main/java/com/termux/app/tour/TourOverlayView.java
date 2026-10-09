@@ -243,6 +243,8 @@ public final class TourOverlayView extends FrameLayout {
         tips.setOrientation(LinearLayout.VERTICAL);
         tips.addView(tipRow(context, R.drawable.ic_symbol_help, R.string.tour_tip_help),
             matchWrap(0));
+        tips.addView(tipRow(context, R.drawable.ic_symbol_wallpaper, R.string.tour_tip_wallpaper),
+            matchWrap(dp(12)));
         tips.addView(tipRow(context, R.drawable.ic_symbol_keyboard, R.string.tour_tip_shortcuts),
             matchWrap(dp(12)));
         tips.addView(tipRow(context, R.drawable.ic_symbol_restart, R.string.tour_tip_replay),
