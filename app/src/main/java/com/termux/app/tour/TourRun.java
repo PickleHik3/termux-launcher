@@ -92,7 +92,9 @@ public final class TourRun {
         return TourStep.lesson(STATUS_SWIPE, 1, R.string.tour_chapter_status_and_apps,
             TourStep.Placement.AUTO,
             new TourStep.Stage(R.string.tour_title_status, R.string.tour_body_status,
-                TourTargets.STATUS_GRABBER, TourSignals.STATUS_BAR_EXPANDED, TourGesture.DRAG_DOWN));
+                TourTargets.STATUS_GRABBER, TourSignals.STATUS_BAR_EXPANDED, TourGesture.DRAG_DOWN),
+            new TourStep.Stage(R.string.tour_title_status_compact, R.string.tour_body_status_compact,
+                TourTargets.STATUS_GRABBER, TourSignals.STATUS_BAR_COLLAPSED, TourGesture.SWIPE_UP));
     }
 
     /**

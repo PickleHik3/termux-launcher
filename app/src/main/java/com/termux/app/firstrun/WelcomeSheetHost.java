@@ -184,9 +184,9 @@ public final class WelcomeSheetHost implements FirstBootTour.SetupHost {
         mEnv.setWeatherEnabled(sheet.isOn(WelcomeSheet.Row.WEATHER));
         List<String> models = sheet.downloadsOnLeave(TaiWelcomeDownloads.catalogSizes(),
             mActivity.getFilesDir().getUsableSpace());
-        TaiWelcomeDownloads.Start started = TaiWelcomeDownloads.start(mActivity, models,
-            TaiWelcomeDownloads.wifiOnly(mActivity));
-        TaiWelcomeDownloads.rememberQueued(mActivity, models, started);
+        // Nothing starts here: the closing card offers the download, and asks first on mobile data.
+        TaiWelcomeDownloads.rememberQueued(mActivity, models, models.isEmpty()
+            ? TaiWelcomeDownloads.Start.NOTHING : TaiWelcomeDownloads.Start.CHOSEN);
         dismissSetup();
         // The run's first card is stored before anything below can restyle the launcher.
         if (callbacks != null) {

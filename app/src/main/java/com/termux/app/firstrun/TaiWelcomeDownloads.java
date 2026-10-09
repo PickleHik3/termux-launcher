@@ -44,7 +44,9 @@ public final class TaiWelcomeDownloads {
         /** Wi-Fi only is on and the phone is on a metered network: nothing was queued. */
         NEEDS_WIFI,
         /** There was nothing to queue. */
-        NOTHING
+        NOTHING,
+        /** Picked on the setup sheet and not started yet: the closing card offers them. */
+        CHOSEN
     }
 
     /** Where one queued model stands, as the download layer reports it. */
@@ -209,6 +211,23 @@ public final class TaiWelcomeDownloads {
             else done += Math.max(0L, Math.min(size, state.bytesRead));
         }
         return new Progress(done, total);
+    }
+
+    /**
+     * Whether the phone is on Wi-Fi (or a cable) rather than mobile data. The transport, not the
+     * metered flag: some carriers report an unlimited plan as unmetered, and a download of
+     * gigabytes on mobile data is still worth a question.
+     */
+    public static boolean onWifi(@NonNull Context context) {
+        ConnectivityManager manager = (ConnectivityManager)
+            context.getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (manager == null) return false;
+        android.net.NetworkCapabilities caps =
+            manager.getNetworkCapabilities(manager.getActiveNetwork());
+        return caps != null
+            && !caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_CELLULAR)
+            && (caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_WIFI)
+                || caps.hasTransport(android.net.NetworkCapabilities.TRANSPORT_ETHERNET));
     }
 
     private static boolean isMetered(@NonNull Context context) {

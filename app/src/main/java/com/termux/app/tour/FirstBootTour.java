@@ -603,6 +603,24 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         mController.finish();
     }
 
+    /** On Wi-Fi the download just starts; on mobile data it asks first. */
+    @Override
+    public void onTourDownloadModelsTapped() {
+        if (TaiWelcomeDownloads.onWifi(mActivity)) {
+            downloadChosenModels();
+            return;
+        }
+        TaiWelcomeDownloads.Queued models = TaiWelcomeDownloads.queued(mActivity);
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(mActivity)
+            .setTitle(R.string.tour_models_mobile_title)
+            .setMessage(mActivity.getString(R.string.tour_models_mobile_message,
+                TaiWelcomeCard.formatSize(chosenBytes(models))))
+            .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.tour_models_mobile_download,
+                (dialog, which) -> downloadChosenModels())
+            .show();
+    }
+
     @Override
     public void onTourGuideTapped() {
         String url = mActivity.getString(R.string.tour_docs_url);
@@ -639,14 +657,19 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         if (overlay == null) return;
         TaiWelcomeDownloads.Queued models = TaiWelcomeDownloads.queued(mActivity);
         mQueuedModels = models;
-        if (models.start == TaiWelcomeDownloads.Start.NEEDS_WIFI) {
-            overlay.setModelsLine(mActivity.getString(R.string.tour_models_need_wifi), -1f);
-            return;
-        }
-        if (models.start != TaiWelcomeDownloads.Start.STARTED || models.modelIds.isEmpty()) {
+        if (models.modelIds.isEmpty() || (models.start != TaiWelcomeDownloads.Start.STARTED
+                && models.start != TaiWelcomeDownloads.Start.CHOSEN)) {
+            overlay.setModelsOffer(false);
             overlay.setModelsLine(null, -1f);
             return;
         }
+        if (models.start == TaiWelcomeDownloads.Start.CHOSEN) {
+            overlay.setModelsLine(mActivity.getString(R.string.tour_models_offer,
+                TaiWelcomeCard.formatSize(chosenBytes(models))), -1f);
+            overlay.setModelsOffer(true);
+            return;
+        }
+        overlay.setModelsOffer(false);
         if (mModelsListener != null) return;
         TaiDownloadHub.Listener listener = downloads -> {
             mModelsLatest = downloads;
@@ -656,6 +679,24 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         TaiDownloadHub.get(mActivity).addListener(listener);
         // Until the hub's first snapshot lands, the line reads what is known: nothing done yet.
         applyModelsLine();
+    }
+
+    private static long chosenBytes(@NonNull TaiWelcomeDownloads.Queued models) {
+        TaiWelcomeCard.Sizes sizes = TaiWelcomeDownloads.catalogSizes();
+        long total = 0L;
+        for (String id : models.modelIds) total += Math.max(0L, sizes.bytesOf(id));
+        return total;
+    }
+
+    /** Starts the chosen models in the background and turns the offer into their progress. */
+    private void downloadChosenModels() {
+        TaiWelcomeDownloads.Queued models = TaiWelcomeDownloads.queued(mActivity);
+        if (models.start != TaiWelcomeDownloads.Start.CHOSEN || models.modelIds.isEmpty()) return;
+        TaiWelcomeDownloads.Start started =
+            TaiWelcomeDownloads.start(mActivity, models.modelIds, false);
+        TourLog.d("models download: " + started + " " + models.modelIds);
+        TaiWelcomeDownloads.rememberQueued(mActivity, models.modelIds, started);
+        startModelsLine();
     }
 
     private void scheduleModelsRefresh() {
@@ -698,7 +739,10 @@ public final class FirstBootTour implements TourController.Listener, TourOverlay
         Runnable refresh = mModelsRefresh;
         mModelsRefresh = null;
         if (refresh != null && mOverlay != null) mOverlay.removeCallbacks(refresh);
-        if (mOverlay != null) mOverlay.setModelsLine(null, -1f);
+        if (mOverlay != null) {
+            mOverlay.setModelsOffer(false);
+            mOverlay.setModelsLine(null, -1f);
+        }
     }
 
     // ---- TourSignals.Listener ------------------------------------------------------------------

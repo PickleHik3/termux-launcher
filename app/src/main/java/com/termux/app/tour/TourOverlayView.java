@@ -72,6 +72,9 @@ public final class TourOverlayView extends FrameLayout {
 
         /** The closing card's Read the guide. */
         void onTourGuideTapped();
+
+        /** The closing card's Download models. */
+        void onTourDownloadModelsTapped();
     }
 
     private static final long CARD_IN_MS = 200L;
@@ -80,6 +83,8 @@ public final class TourOverlayView extends FrameLayout {
     private static final long CARD_MOVE_MS = 350L;
     /** The gap the card keeps from the sides of the screen. */
     private static final float CARD_SIDE_MARGIN_DP = 20f;
+    /** The tick that answers a landed gesture. */
+    private static final float TICK_DP = 56f;
     /** On a tablet or in landscape the card stops growing here, where a sentence still reads well. */
     private static final float CARD_MAX_WIDTH_DP = 400f;
     private static final float CARD_RADIUS_DP = 20f;
@@ -132,9 +137,8 @@ public final class TourOverlayView extends FrameLayout {
     private final ImageView mClose;
     private final TextView mTitle;
     private final TextView mBody;
-    private final LinearLayout mGotIt;
-    private final ImageView mGotItGlyph;
-    private final TextView mGotItLabel;
+    /** The tick that stands in for the card for a moment after its gesture lands. */
+    private final ImageView mTick;
     private final ProgressSegments mProgress;
     private final TextView mSkip;
 
@@ -144,6 +148,7 @@ public final class TourOverlayView extends FrameLayout {
     private final LinearLayout mModelsRow;
     private final TextView mModelsText;
     private final ProgressBarView mModelsBar;
+    private final TextView mModelsButton;
     private final TextView mGuide;
     private final TextView mStart;
 
@@ -219,22 +224,6 @@ public final class TourOverlayView extends FrameLayout {
         mBody.setLineSpacing(0f, 1.25f);
         mCard.addView(mBody, matchWrap(dp(4)));
 
-        mGotIt = new LinearLayout(context);
-        mGotIt.setOrientation(LinearLayout.HORIZONTAL);
-        mGotIt.setGravity(Gravity.CENTER_VERTICAL);
-        mGotIt.setPadding(0, dp(6), 0, dp(10));
-        mGotItGlyph = glyph(context, R.drawable.ic_symbol_check_circle, mAccent, 20f);
-        mGotIt.addView(mGotItGlyph);
-        mGotItLabel = text(context, 15f, true, mAccent);
-        mGotItLabel.setText(R.string.tour_got_it);
-        singleLine(mGotItLabel);
-        LinearLayout.LayoutParams gotItLabelParams = new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        gotItLabelParams.setMarginStart(dp(8));
-        mGotIt.addView(mGotItLabel, gotItLabelParams);
-        mGotIt.setVisibility(GONE);
-        mCard.addView(mGotIt, matchWrap(0));
-
         // The progress leads the footer and Skip keeps its trailing edge; at a large font scale
         // the row stacks rather than clipping either.
         ActionButtonRow footer = new ActionButtonRow(context);
@@ -271,6 +260,13 @@ public final class TourOverlayView extends FrameLayout {
             ViewGroup.LayoutParams.MATCH_PARENT, dp(SEGMENT_HEIGHT_DP));
         barParams.topMargin = dp(6);
         modelsWords.addView(mModelsBar, barParams);
+        mModelsButton = secondaryButton(context, R.string.tour_download_models,
+            view -> { if (mCallbacks != null) mCallbacks.onTourDownloadModelsTapped(); });
+        mModelsButton.setVisibility(GONE);
+        LinearLayout.LayoutParams modelsButtonParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        modelsButtonParams.topMargin = dp(8);
+        modelsWords.addView(mModelsButton, modelsButtonParams);
         LinearLayout.LayoutParams modelsWordsParams = new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
         modelsWordsParams.setMarginStart(dp(12));
@@ -305,6 +301,10 @@ public final class TourOverlayView extends FrameLayout {
             ViewGroup.LayoutParams.WRAP_CONTENT));
         addView(mClosingCard, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
+        mTick = glyph(context, R.drawable.ic_symbol_check_circle, mAccent, TICK_DP);
+        mTick.setContentDescription(context.getString(R.string.tour_got_it));
+        mTick.setVisibility(GONE);
+        addView(mTick, new FrameLayout.LayoutParams(dp(TICK_DP), dp(TICK_DP)));
     }
 
     // ---- building ------------------------------------------------------------------------------
@@ -471,6 +471,11 @@ public final class TourOverlayView extends FrameLayout {
      *
      * @param fraction how far along they are, 0..1, or less than 0 for a line with no bar
      */
+    /** Whether the models line carries its Download button. */
+    public void setModelsOffer(boolean offered) {
+        setShown(mModelsButton, offered);
+    }
+
     public void setModelsLine(@Nullable CharSequence text, float fraction) {
         boolean shown = text != null && text.length() > 0;
         if (shown && !TextUtils.equals(mModelsText.getText(), text)) mModelsText.setText(text);
@@ -521,7 +526,6 @@ public final class TourOverlayView extends FrameLayout {
         boolean completed = mPresentation == TourCardVisibility.COMPLETED;
         setShown(mTitle, !completed && !away);
         setShown(mBody, !completed);
-        setShown(mGotIt, completed);
         if (!completed && !away) setTextIfChanged(mTitle, step.titleResAt(mStage));
         if (!completed) setTextIfChanged(mBody, away
             ? R.string.tour_card_return_to_terminal : step.bodyResAt(mStage));
@@ -546,9 +550,11 @@ public final class TourOverlayView extends FrameLayout {
     private void applyPresentation() {
         boolean hidden = mStep == null || mPresentation == TourCardVisibility.HIDDEN;
         boolean closing = mStep != null && mStep.isClosingCard();
-        View wanted = hidden ? null : closing ? mClosingCard : mCard;
+        boolean completed = !hidden && mPresentation == TourCardVisibility.COMPLETED;
+        View wanted = hidden || completed ? null : closing ? mClosingCard : mCard;
         setShown(mCard, wanted == mCard);
         setShown(mClosingCard, wanted == mClosingCard);
+        showTick(completed);
         if (hidden || closing || mPresentation != TourCardVisibility.NORMAL) stopDemo();
         if (hidden) stopTargetRetry();
         int visibility = hidden ? GONE : VISIBLE;
@@ -716,6 +722,8 @@ public final class TourOverlayView extends FrameLayout {
         int budget = Math.max(dp(120f), MeasureSpec.getSize(heightMeasureSpec)
             - mSystemInsetTop - mSystemInsetBottom - (2 * margin));
         measureCard(mCard, width, budget);
+        int tick = MeasureSpec.makeMeasureSpec(dp(TICK_DP), MeasureSpec.EXACTLY);
+        mTick.measure(tick, tick);
         // Measured twice, and only ever to any effect on a short screen: once unbounded, for what
         // the closing card would like to be, and again with its middle held to what is left.
         mScrollMaxHeight = UNBOUNDED_PX;
@@ -737,6 +745,42 @@ public final class TourOverlayView extends FrameLayout {
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         // The cards are placed by geometry, never by the frame's gravity.
         layoutCard();
+        layoutTick();
+    }
+
+    /** The tick pops in where the card stood, and the card is taken down under it. */
+    private void showTick(boolean shown) {
+        boolean was = mTick.getVisibility() == VISIBLE;
+        if (shown == was) return;
+        mTick.animate().cancel();
+        setShown(mTick, shown);
+        if (!shown) return;
+        if (!FocusOutlineRenderer.animationsEnabled(getContext())) {
+            mTick.setAlpha(1f);
+            mTick.setScaleX(1f);
+            mTick.setScaleY(1f);
+            return;
+        }
+        mTick.setAlpha(0f);
+        mTick.setScaleX(0.6f);
+        mTick.setScaleY(0.6f);
+        mTick.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(220L)
+            .setInterpolator(new android.view.animation.OvershootInterpolator(1.6f)).start();
+    }
+
+    /** Centred on the card it stands in for; a card never laid out leaves it mid-screen. */
+    private void layoutTick() {
+        if (mTick.getVisibility() == GONE) return;
+        int size = mTick.getMeasuredWidth();
+        float cx = getWidth() / 2f;
+        float cy = getHeight() / 2f;
+        if (mCard.getWidth() > 0) {
+            cx = mCard.getLeft() + mCard.getTranslationX() + (mCard.getWidth() / 2f);
+            cy = mCard.getTop() + mCard.getTranslationY() + (mCard.getHeight() / 2f);
+        }
+        int left = Math.round(cx - (size / 2f));
+        int top = Math.round(cy - (size / 2f));
+        mTick.layout(left, top, left + size, top + size);
     }
 
     /**

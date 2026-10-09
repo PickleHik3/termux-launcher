@@ -566,8 +566,8 @@ public final class WelcomeSheetView extends FrameLayout {
         if (sub != null) {
             CharSequence sentence = sheet.aiSize() == WelcomeSheet.AiSize.INSTALLED
                 ? getContext().getString(R.string.welcome_row_ai_copy_installed)
-                : getContext().getString(facts.wifiOnly ? R.string.welcome_row_ai_copy_wifi
-                    : R.string.welcome_row_ai_copy, TaiWelcomeCard.formatSize(sheet.selectedBytes()));
+                : getContext().getString(R.string.welcome_row_ai_copy,
+                    TaiWelcomeCard.formatSize(sheet.selectedBytes()));
             setTextIfChanged(sub, sentence);
         }
         if (mAiExtras == null || mModelsLink == null || mModelsList == null) return;

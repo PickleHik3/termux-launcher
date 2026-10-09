@@ -2528,6 +2528,8 @@
     <string name="tour_body_keyboard_back">Swipe up from the same edge.</string>
     <string name="tour_title_status">Pull down the status bar</string>
     <string name="tour_body_status">Swipe down from the top edge for the clock, weather and notifications.</string>
+    <string name="tour_title_status_compact">Make it compact again</string>
+    <string name="tour_body_status_compact">Swipe up from the same edge.</string>
     <string name="tour_title_apps">Open your apps</string>
     <string name="tour_body_apps">Swipe down on the apps row to open the drawer.</string>
     <string name="tour_body_apps_left_rail">Swipe right on the apps rail to open the drawer.</string>
@@ -2545,7 +2547,13 @@
     <string name="tour_tip_replay">Replay this tour from Settings \u203A About &amp; help.</string>
     <!-- How far the offline models have downloaded: "Offline models · 1.2 GB of 3.1 GB". -->
     <string name="tour_models_progress">Offline models · %1$s of %2$s</string>
-    <string name="tour_models_need_wifi">Offline models need Wi-Fi. Get them any time in Settings.</string>
+    <!-- The closing card's offer: "Offline voice & AI · 3.1 GB". -->
+    <string name="tour_models_offer">Offline voice &amp; AI · %1$s</string>
+    <string name="tour_download_models">Download models</string>
+    <string name="tour_models_mobile_title">Download on mobile data?</string>
+    <!-- %1$s is the size of the models, such as "3.1 GB". -->
+    <string name="tour_models_mobile_message">The offline models are %1$s. You can wait for Wi-Fi and get them from Settings instead.</string>
+    <string name="tour_models_mobile_download">Download</string>
     <string name="tour_read_the_guide">Read the guide</string>
     <string name="tour_start">Start</string>
 
@@ -2560,8 +2568,7 @@
     <string name="welcome_row_display_copy">Run desktop Linux apps in a window.</string>
     <string name="welcome_row_ai_title">Offline voice and AI</string>
     <!-- %1$s is the size of the ticked models, such as "3.1 GB". -->
-    <string name="welcome_row_ai_copy_wifi">Voice typing, read aloud and more. %1$s, downloads on Wi-Fi during the tour.</string>
-    <string name="welcome_row_ai_copy">Voice typing, read aloud and more. %1$s, downloads during the tour.</string>
+    <string name="welcome_row_ai_copy">Voice typing, read aloud and more. %1$s, ready to download when the tour ends.</string>
     <string name="welcome_row_ai_copy_installed">Voice typing, read aloud and more. Already on this phone.</string>
     <string name="welcome_choose_models">Choose models</string>
     <string name="welcome_hide_models">Hide models</string>

@@ -46,8 +46,8 @@ public class TourRunTest {
         assertEquals(Arrays.asList(TourSignals.PLACE_CHANGED), signals(step(TourRun.BORDER_DRAG)));
         assertEquals(Arrays.asList(TourSignals.KEYBOARD_HIDDEN, TourSignals.KEYBOARD_SHOWN),
             signals(step(TourRun.KEYBOARD)));
-        assertEquals(Arrays.asList(TourSignals.STATUS_BAR_EXPANDED),
-            signals(step(TourRun.STATUS_SWIPE)));
+        assertEquals(Arrays.asList(TourSignals.STATUS_BAR_EXPANDED,
+            TourSignals.STATUS_BAR_COLLAPSED), signals(step(TourRun.STATUS_SWIPE)));
         assertEquals(Arrays.asList(TourSignals.DRAWER_OPENED), signals(step(TourRun.FIND_APPS)));
         assertEquals(Arrays.asList(TourSignals.PALETTE_OPENED),
             signals(step(TourRun.FIND_ACTION)));
