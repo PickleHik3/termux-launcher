@@ -518,11 +518,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         else go.run();
     }
 
-    /** The phone's home-app setting, from the run's last question. */
-    private void openHomeLauncherChooser() {
-        HomeAppChooser.open(this);
-    }
-
     private boolean dismissHelpOverlay() {
         return mHelpController != null && mHelpController.dismiss();
     }
@@ -1105,20 +1100,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final Handler mBackgroundProcessHandler = new Handler(Looper.getMainLooper());
     /** Height the in-app notice chip is occupying above the background stack; 0 when not showing. */
     private int mAppNoticeOccupancyPx;
-    /** The first-run permissions card while it is up, or null. */
-    @Nullable private com.termux.app.firstrun.FirstRunPermissionsCardView mFirstRunPermissionsCard;
-    /** The view group the card was added to, so it is taken off the same one. */
-    @Nullable private ViewGroup mFirstRunPermissionsCardHost;
-    /**
-     * Whether the card has already asked for the weather's location this showing. There is no
-     * stored flag for it the way there is for the wallpaper read: the card is answered in one
-     * sitting, and an install that gets as far as Continue is never asked again.
-     */
-    private boolean mFirstRunWeatherAsked;
-    /** Guards {@link #mFirstRunChainFinishedListener} firing more than once per chain. */
-    private boolean mFirstRunChainFinishedNotified;
-    /** Told about exactly once, when the first-run permission chain has fully closed. */
-    @Nullable private Runnable mFirstRunChainFinishedListener;
+    /** The setup sheet the first-boot run is offered on, built the first time it is asked for. */
+    @Nullable private com.termux.app.firstrun.WelcomeSheetHost mWelcomeSheet;
     /**
      * Nesting depth of {@link #runWithoutNotices}. Creating a window or a pane touches the focused
      * shell, which several unrelated listeners read as a session change worth announcing; the user
@@ -1756,7 +1739,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyDockImeOffset(0);
             applyDisplayImeRoom(displayImeRoomPx(insetsCompat));
             applyTerminalOverlayInsets(insetsCompat);
-            applyFirstRunCardInsets(insetsCompat);
+            if (mWelcomeSheet != null) mWelcomeSheet.applyInsets(insetsCompat);
             // The drawer plane pins itself above a system keyboard; guarded on the field so a
             // keyboard rising over the terminal never builds a drawer that was never opened.
             if (mAppDrawerController != null) {
@@ -1840,155 +1823,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             boolean forceOnboarding = getIntent().getBooleanExtra(EXTRA_SHOW_ONBOARDING, false);
             View contentView = findViewById(android.R.id.content);
             contentView.post(() -> {
-                // A run a process death interrupted picks back up on its own card, no setup
-                // involved — that already ran the first time this run started. Skipped for a
-                // forced replay, which always restarts from card one instead.
                 FirstBootTour tour = firstBootTour();
-                if (!forceOnboarding && tour != null && tour.resumeIfInProgress()) return;
-                // Otherwise this is either the first launch ever or Settings asking for the tour
-                // again from a cold start. Running the setup unconditionally is safe both ways —
-                // it has nothing to show anyone who has already answered it, and a replay is the
-                // tour and nothing else; the tour starts (or restarts) only once the setup
-                // closes — registered first, because a setup with nothing to ask closes inside
-                // the call below.
-                setFirstRunChainFinishedListener(() -> {
-                    FirstBootTour t = firstBootTour();
-                    if (t == null) return;
-                    if (forceOnboarding) t.restart();
-                    else t.startIfNeeded();
-                    // After the run's own decision, so the two are never up together: the card
-                    // holds while the run is going or still to be offered.
-                    maybeOfferExtraKeysDefaultRow();
-                });
-                startFirstRunPermissionChain(forceOnboarding);
+                if (tour == null) return;
+                // Settings asking for the tour from a cold start: the whole run, sheet first.
+                if (forceOnboarding) {
+                    tour.restart();
+                    return;
+                }
+                // A run a process death interrupted picks back up on its own card; otherwise
+                // someone who has never been through a run is offered one on the setup sheet.
+                if (tour.resumeIfInProgress()) return;
+                tour.startIfNeeded();
             });
         } else {
-            resumeFirstRunSetupAfterRestart();
+            resumeFirstRunAfterRestart();
         }
     }
 
     /**
-     * The setup, picked back up by an activity rebuilt from a saved state.
+     * The run, picked back up by an activity rebuilt from a saved state.
      *
-     * <p>Everything above is a cold-start matter, so it is gated on there being no saved state at
-     * all — but the process can die while the setup card is up, and the card is the very first
-     * thing a fresh install shows. Without this the activity that comes back has no card, nobody
-     * listening for the setup to close and therefore no tour, with both stored flags still false:
-     * the user is stranded short of a true cold relaunch. A rotation does not come through here —
-     * this activity keeps itself across one — so this really is a restart after a death.
+     * <p>The process can die while the setup sheet is up — the sheet is the very first thing a
+     * fresh install shows — and the activity that comes back would otherwise have no sheet and no
+     * run. The sheet is not stored, so the run is simply offered again; a run already past it picks
+     * back up on its own card. A rotation does not come through here: this activity keeps itself
+     * across one.
      */
-    private void resumeFirstRunSetupAfterRestart() {
+    private void resumeFirstRunAfterRestart() {
         View contentView = findViewById(android.R.id.content);
         if (contentView == null) return;
         contentView.post(() -> {
             if (isFinishing() || isDestroyed() || mPreferences == null) return;
-            // A run that was already going picks back up on its own card, exactly as on a cold
-            // start; the setup behind it has closed long before.
             FirstBootTour tour = firstBootTour();
-            if (tour != null && tour.resumeIfInProgress()) return;
-            if (!com.termux.app.firstrun.FirstRunPermissionsCard.shouldResume(
-                    mPreferences.isFirstRunChainDone(),
-                    mPreferences.isFirstRunPermissionsCardSeen(),
-                    firstRunWallpaperState(), firstRunWeatherToAsk(),
-                    mFirstRunPermissionsCard != null)) {
-                return;
-            }
-            setFirstRunChainFinishedListener(() -> {
-                FirstBootTour t = firstBootTour();
-                if (t != null) t.startIfNeeded();
-                maybeOfferExtraKeysDefaultRow();
-            });
-            startFirstRunPermissionChain(false);
+            if (tour == null || tour.resumeIfInProgress()) return;
+            tour.startIfNeeded();
         });
-    }
-
-    /**
-     * The three things the launcher would like on the way in — the wallpaper read, the weather's
-     * rough location, the Linux display — asked for on one card, before the tour's welcome card.
-     *
-     * <p>They used to be three dialogs in a row, each raised from the last one's result, so a
-     * fresh install opened on a stack of system prompts before the user had seen the launcher at
-     * all. Decision (user, 2026-09-20): one card instead, the way an established app asks, and it
-     * is the first thing on a fresh install. An install that has already been through the old
-     * chain sees it only while something on it is still ungranted, and only once.
-     *
-     * <p>{@link #setFirstRunChainFinishedListener(Runnable)} is told once Continue closes the
-     * card, or straight away when there is nothing to show, so the tour follows exactly as before.
-     *
-     * @param replay whether Settings asked for the tour again. A replay is the tour and nothing
-     *               else: the user asked to be walked through the launcher, not to be asked for
-     *               permissions a second time, so the card stays down however they stand.
-     */
-    private void startFirstRunPermissionChain(boolean replay) {
-        if (isFinishing() || isDestroyed()) return;
-        // Never a second card over the one already up, whichever path asked for it.
-        if (mFirstRunPermissionsCard != null) return;
-        mFirstRunChainFinishedNotified = false;
-        if (mPreferences == null) {
-            finishFirstRunChain();
-            return;
-        }
-        if (!com.termux.app.firstrun.FirstRunPermissionsCard.shouldShow(
-                mPreferences.isFirstRunChainDone(), mPreferences.isFirstRunPermissionsCardSeen(),
-                firstRunWallpaperState(), firstRunWeatherToAsk(), replay)) {
-            finishFirstRunChain();
-            return;
-        }
-        showFirstRunPermissionsCard();
-    }
-
-    /**
-     * Lets the first-boot tour know when the first-run permissions card has closed, so the overlay
-     * run can wait for it instead of racing it. Does not start the tour itself.
-     */
-    public void setFirstRunChainFinishedListener(@Nullable Runnable listener) {
-        mFirstRunChainFinishedListener = listener;
-    }
-
-    /** Fires {@link #mFirstRunChainFinishedListener} at most once per launch. */
-    private void finishFirstRunChain() {
-        if (mFirstRunChainFinishedNotified) return;
-        mFirstRunChainFinishedNotified = true;
-        if (mPreferences != null) mPreferences.setFirstRunChainDone(true);
-        if (mFirstRunChainFinishedListener != null) mFirstRunChainFinishedListener.run();
-    }
-
-    /**
-     * Where the wallpaper read stands. "Asked already" is the stored flag the reactive prompt
-     * reads too, so a card and a failed read never both count as the first ask.
-     */
-    @NonNull
-    private com.termux.app.firstrun.FirstRunPermissionsCard.State firstRunWallpaperState() {
-        return firstRunPermissionState(android.Manifest.permission.READ_EXTERNAL_STORAGE,
-            mPreferences != null && mPreferences.isWallpaperReadPermissionPrompted());
-    }
-
-    /**
-     * Where the weather's location stands, or null when the weather widget is switched off — a
-     * row for a feature the user is not running is exactly the row that gets refused out of hand,
-     * so it is left off the card entirely.
-     */
-    @Nullable
-    private com.termux.app.firstrun.FirstRunPermissionsCard.State firstRunWeatherState() {
-        if (mPreferences == null || !mPreferences.isStatusWidgetWeatherEnabled()) return null;
-        return firstRunPermissionState(android.Manifest.permission.ACCESS_COARSE_LOCATION,
-            mFirstRunWeatherAsked);
-    }
-
-    /** The place the weather follows, or empty while it follows the device. */
-    @NonNull
-    private String firstRunWeatherPlace() {
-        return mPreferences == null ? "" : mPreferences.getStatusWidgetWeatherLocation();
-    }
-
-    /**
-     * What the weather still asks of the user when deciding whether the card comes up at all:
-     * nothing once a place is picked, since the weather then never reads the device's location.
-     */
-    @Nullable
-    private com.termux.app.firstrun.FirstRunPermissionsCard.State firstRunWeatherToAsk() {
-        return com.termux.app.firstrun.FirstRunPermissionsCard.weatherToAsk(
-            firstRunWeatherState(), firstRunWeatherPlace());
     }
 
     /** A place is picked in Settings, so the weather needs no location permission. */
@@ -1996,104 +1865,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mPreferences != null && !mPreferences.getStatusWidgetWeatherLocation().isEmpty();
     }
 
-    @NonNull
-    private com.termux.app.firstrun.FirstRunPermissionsCard.State firstRunPermissionState(
-            @NonNull String permission, boolean asked) {
-        boolean granted = androidx.core.content.ContextCompat.checkSelfPermission(this, permission)
-            == android.content.pm.PackageManager.PERMISSION_GRANTED;
-        if (granted) return com.termux.app.firstrun.FirstRunPermissionsCard.State.GRANTED;
-        return asked ? com.termux.app.firstrun.FirstRunPermissionsCard.State.DENIED
-            : com.termux.app.firstrun.FirstRunPermissionsCard.State.NOT_ASKED;
-    }
-
-    /** Raises the card over the live chrome, which it takes every touch away from while it is up. */
-    private void showFirstRunPermissionsCard() {
-        if (mFirstRunPermissionsCard != null) return;
-        ViewGroup content = findViewById(android.R.id.content);
-        if (content == null) {
-            finishFirstRunChain();
-            return;
-        }
-        mFirstRunCardOffersDisplay = com.termux.BuildConfig.X11_SERVER && mPreferences != null
-            && com.termux.app.launcher.LauncherUseCaseMode.MODE_DISPLAY.equals(
-                com.termux.app.launcher.LauncherUseCaseMode.currentMode(mPreferences));
-        com.termux.app.firstrun.FirstRunPermissionsCardView card =
-            new com.termux.app.firstrun.FirstRunPermissionsCardView(this);
-        card.setCallbacks(new com.termux.app.firstrun.FirstRunPermissionsCardView.Callbacks() {
-            @Override
-            public void onFirstRunPermissionTapped(
-                    @NonNull com.termux.app.firstrun.FirstRunPermissionsCard.Item item) {
-                onFirstRunPermissionRowTapped(item);
-            }
-
-            @Override
-            public void onFirstRunWeatherPlacePicked(@NonNull String label, double latitude,
-                                                     double longitude) {
-                if (mPreferences == null) return;
-                mPreferences.setStatusWidgetWeatherPlace(label, latitude, longitude);
-                ensureWeatherController().forceRefresh();
-                refreshFirstRunPermissionsCard();
-            }
-
-            @Override
-            public void onFirstRunPlaceSearchFocusChanged(@NonNull EditText field,
-                                                          boolean focused) {
-                if (focused) beginFirstRunPlaceSearch(field);
-                // Posted, and on the window rather than on the field: focus is given up while
-                // the card is being taken off the content view, and moving it to the terminal in
-                // the middle of that removal would leave the content view's focus chain pointing
-                // at a view it no longer holds.
-                else if (getWindow() != null)
-                    getWindow().getDecorView().post(() -> endFirstRunPlaceSearch(field));
-            }
-
-            @Override
-            public void onFirstRunDisplayToggled(boolean enabled) {
-                setEmbeddedDisplayEnabled(enabled);
-            }
-
-            @Override
-            public void onFirstRunContinueTapped() {
-                dismissFirstRunPermissionsCard();
-                finishFirstRunChain();
-            }
-        });
-        content.addView(card, com.termux.app.firstrun.FirstRunPermissionsCardView.buildLayoutParams());
-        mFirstRunPermissionsCard = card;
-        mFirstRunPermissionsCardHost = content;
-        // Fed from the content view's own insets listener rather than a listener of its own: the
-        // activity's root view, a sibling before it, consumes the insets, so a dispatch never
-        // reaches the card and it would only ever hear the bars it was born with.
-        android.view.WindowInsets current = content.getRootWindowInsets();
-        if (current != null) {
-            applyFirstRunCardInsets(
-                androidx.core.view.WindowInsetsCompat.toWindowInsetsCompat(current, content));
-        }
-        refreshFirstRunPermissionsCard();
-        card.animateIn();
-    }
-
     /**
-     * The card keeps clear of the system bars and of the system keyboard: the weather row's search
-     * brings the keyboard up, and the card has to sit above it rather than under it.
-     */
-    private void applyFirstRunCardInsets(@NonNull WindowInsetsCompat insets) {
-        if (mFirstRunPermissionsCard == null) return;
-        androidx.core.graphics.Insets bars = insets.getInsets(Type.systemBars());
-        int imeBottom = insets.isVisible(Type.ime()) ? insets.getInsets(Type.ime()).bottom : 0;
-        mFirstRunPermissionsCard.setSystemBarInsets(bars.top, Math.max(bars.bottom, imeBottom));
-    }
-
-    /** Rebuilds the card's rows from where the permissions and the display setting stand now. */
-    private void refreshFirstRunPermissionsCard() {
-        if (mFirstRunPermissionsCard == null) return;
-        mFirstRunPermissionsCard.bind(com.termux.app.firstrun.FirstRunPermissionsCard.rows(
-            firstRunWallpaperState(), firstRunWeatherState(), firstRunWeatherPlace(),
-            mFirstRunCardOffersDisplay, isX11DisplayEnabled()));
-    }
-
-    /**
-     * The weather row's search took focus: the embedded keyboard steps aside, the system
+     * The setup sheet's city search took focus: the embedded keyboard steps aside, the system
      * keyboard's insets are owned by this activity, and the system keyboard comes up for it —
      * the drawer search's order.
      */
@@ -2103,7 +1876,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         onSystemImeRequested();
         field.post(() -> {
-            if (mFirstRunPermissionsCard == null || !field.hasFocus()) return;
+            if (mWelcomeSheet == null || !mWelcomeSheet.isShowing() || !field.hasFocus()) return;
             KeyboardUtils.showSoftKeyboard(TermuxActivity.this, field);
         });
     }
@@ -2134,77 +1907,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /**
-     * Whether the card carries the Linux display row: only under the display usage mode, and
-     * decided once as the card goes up, so switching the row off does not take the row itself
-     * away from under the finger. A fresh install is asked about the display by the tour's
-     * usage card instead, which comes after this one.
-     */
-    private boolean mFirstRunCardOffersDisplay;
-
-    /** Takes the card off the screen; the answers it collected are already stored. */
-    private void dismissFirstRunPermissionsCard() {
-        if (mFirstRunPermissionsCard == null) return;
-        if (mPreferences != null) {
-            mPreferences.setFirstRunPermissionsCardSeen(true);
-            // Asked once, on the card, whatever the user answered: the later prompt raised by a
-            // failed wallpaper read reads the same flag and must not treat this as unasked.
-            mPreferences.setWallpaperReadPermissionPrompted(true);
-        }
-        if (mFirstRunPermissionsCardHost != null)
-            mFirstRunPermissionsCardHost.removeView(mFirstRunPermissionsCard);
-        mFirstRunPermissionsCard = null;
-        mFirstRunPermissionsCardHost = null;
-    }
-
-    /**
-     * A row's Allow button, or the weather row's Use my location. The system stops raising its own
-     * dialog after the second refusal, so past that point the button opens this app's settings
-     * page rather than doing nothing at all.
-     *
-     * <p>Use my location is also the way back from a picked place: the place is cleared first, so
-     * the weather follows the device whatever the permission dialog is answered.
-     */
-    private void onFirstRunPermissionRowTapped(
-            @NonNull com.termux.app.firstrun.FirstRunPermissionsCard.Item item) {
-        if (item == com.termux.app.firstrun.FirstRunPermissionsCard.Item.WEATHER
-                && weatherFollowsPickedPlace()) {
-            mPreferences.clearStatusWidgetWeatherPlace();
-            ensureWeatherController().forceRefresh();
-            refreshFirstRunPermissionsCard();
-        }
-        String permission = item == com.termux.app.firstrun.FirstRunPermissionsCard.Item.WEATHER
-            ? android.Manifest.permission.ACCESS_COARSE_LOCATION
-            : android.Manifest.permission.READ_EXTERNAL_STORAGE;
-        com.termux.app.firstrun.FirstRunPermissionsCard.State state =
-            item == com.termux.app.firstrun.FirstRunPermissionsCard.Item.WEATHER
-                ? firstRunWeatherState() : firstRunWallpaperState();
-        if (state == null) return;
-        boolean canAskAgain =
-            state != com.termux.app.firstrun.FirstRunPermissionsCard.State.DENIED
-                || androidx.core.app.ActivityCompat.shouldShowRequestPermissionRationale(
-                    this, permission);
-        switch (com.termux.app.firstrun.FirstRunPermissionsCard.tapFor(state, canAskAgain)) {
-            case REQUEST:
-                if (item == com.termux.app.firstrun.FirstRunPermissionsCard.Item.WEATHER) {
-                    mFirstRunWeatherAsked = true;
-                    androidx.core.app.ActivityCompat.requestPermissions(this,
-                        new String[] {permission}, REQUEST_CODE_WEATHER_LOCATION);
-                } else {
-                    if (mPreferences != null)
-                        mPreferences.setWallpaperReadPermissionPrompted(true);
-                    androidx.core.app.ActivityCompat.requestPermissions(this,
-                        new String[] {permission}, REQUEST_CODE_WALLPAPER_READ_PERMISSION);
-                }
-                break;
-            case OPEN_SETTINGS:
-                openAppSettingsPage();
-                break;
-            default:
-                break;
-        }
-    }
-
     /** This app's page in the system settings, where a permission refused twice is turned back on. */
     private void openAppSettingsPage() {
         try {
@@ -2230,29 +1932,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         turnOffEmbeddedDisplay();
-    }
-
-    /**
-     * The usage mode picked on the tour's card. The preset is applied exactly as the settings row
-     * applies it — the surface switches, the display's follow-ups, the catalogue let go of under
-     * terminal mode — and the chrome is rebuilt by a recreate, which the tour survives on its
-     * stored card. A display switched off by the preset is torn down first, so a server running
-     * on it is asked about rather than left behind by the rebuild.
-     */
-    void applyUsageMode(@NonNull String mode) {
-        if (mPreferences == null) return;
-        boolean displayBefore = isX11DisplayEnabled();
-        if (!com.termux.app.launcher.LauncherUseCaseMode.applyMode(mPreferences, mode)) return;
-        boolean displayAfter = isX11DisplayEnabled();
-        if (displayBefore != displayAfter) {
-            com.termux.app.x11.X11DisplaySwitch.onWritten(this, mPreferences, displayAfter);
-        }
-        if (com.termux.app.launcher.LauncherUseCaseMode.MODE_TERMINAL.equals(mode)) {
-            com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(this)
-                .invalidateIconArtwork();
-        }
-        Runnable rebuild = () -> requestTermuxActivityStylingOnNextResume(this, true);
-        if (!reconcileEmbeddedDisplay(rebuild)) rebuild.run();
     }
 
     /**
@@ -2603,9 +2282,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshWallpaperPictureOnArrival();
         com.termux.app.chrome.wallpaper.WallpaperSlots.dropRetiredLiveWallpapers(this);
         redressChromeAfterFirstLayout();
-        // A row whose button opened the system settings page comes back here, so the card reads
+        // A permission answered in the system settings page comes back here, so the sheet reads
         // what was granted there rather than what it said before we left.
-        refreshFirstRunPermissionsCard();
+        if (mWelcomeSheet != null) mWelcomeSheet.refresh();
         // The DISPLAY opt-in can have been flipped in Settings while we were away.
         syncDisplayEnvironment();
         // `pkg install xkeyboard-config` in a shell leaves no broadcast behind either, so the
@@ -2845,7 +2524,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         TourChromeProbe chrome = new TourChromeProbe();
         boolean chromeUp = chrome.isAppDrawerUp() || chrome.isCommandPaletteUp()
             || chrome.isTerminalSheetUp() || chrome.isSurfaceEditorUp() || chrome.isHelpUp();
-        boolean otherCardUp = mFirstRunPermissionsCard != null || mExtraKeysDefaultOfferShowing
+        boolean otherCardUp = (mWelcomeSheet != null && mWelcomeSheet.isShowing())
+            || mExtraKeysDefaultOfferShowing
             || com.termux.app.firstrun.TaiWelcomeCardHost.isShowing();
         if (!com.termux.app.firstrun.TaiWelcomeCard.shouldShowOnHome(false,
                 tour != null && tour.isRunPending(), chromeUp, otherCardUp,
@@ -2867,56 +2547,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 View decor = getWindow().getDecorView();
                 decor.post(this::maybeOfferTaiWelcomeCard);
             });
-            // A run begins on the terminal, where its cards are taught; Replay and a resume after
-            // a process death can both find the wall resting on another place.
-            mFirstBootTour.setWallHost(() -> {
-                if (mPaneWallController != null) mPaneWallController.returnToTerminal(false);
-            });
+            // Between lessons the home screen is put back the way every lesson starts, and a
+            // terminal-only install has no other place to drag the border to.
             mFirstBootTour.setHomeHost(new FirstBootTour.HomeHost() {
-                @Override public boolean isLauncherHomeApp() { return isDefaultHomeApp(); }
-                @Override public void openHomeAppChooser() { openHomeLauncherChooser(); }
-            });
-            // The usage card asks the same question the settings row asks, and its answer takes
-            // the same path: the preset, then a recreate the run survives on its stored card.
-            mFirstBootTour.setUsageModeHost(new FirstBootTour.UsageModeHost() {
-                @Override public boolean isDisplayOffered() {
-                    return com.termux.BuildConfig.X11_SERVER;
+                @Override public void resetHome() {
+                    resetHomeForTour();
                 }
-                @Override public boolean isTerminalOnly() {
+
+                @Override public boolean hasOnePlace() {
                     return mPreferences != null
                         && com.termux.app.launcher.LauncherUseCaseMode.isTerminalOnly(mPreferences);
                 }
-                @Override public void applyUsageMode(@NonNull String mode) {
-                    TermuxActivity.this.applyUsageMode(mode);
-                }
             });
-            // The key-row card asks the one person it is a question for, inside the run, so the
-            // dialog below only ever reaches someone who turned the run down.
-            mFirstBootTour.setKeyRowHost(new FirstBootTour.KeyRowHost() {
-                @Override @Nullable public String ownKeyRow() {
-                    return com.termux.app.settings.TermuxPropertiesFile.load(TermuxActivity.this)
-                        .getProperty(com.termux.shared.termux.settings.properties
-                            .TermuxPropertyConstants.KEY_EXTRA_KEYS);
-                }
-
-                @Override public boolean keyRowAnswered() {
-                    return mPreferences != null && mPreferences.isExtraKeysDefaultOffered();
-                }
-
-                @Override public void switchToDefaultKeyRow() {
-                    java.util.Properties properties =
-                        com.termux.app.settings.TermuxPropertiesFile.load(TermuxActivity.this);
-                    takeDefaultExtraKeysRow(
-                        properties.getProperty(com.termux.shared.termux.settings.properties
-                            .TermuxPropertyConstants.KEY_EXTRA_KEYS),
-                        properties.getProperty(com.termux.shared.termux.settings.properties
-                            .TermuxPropertyConstants.KEY_EXTRA_KEYS2));
-                }
-
-                @Override public void keepOwnKeyRow() {
-                    if (mPreferences != null) mPreferences.setExtraKeysDefaultOffered(true);
-                }
-            });
+            mFirstBootTour.setSetupHost(welcomeSheet());
             // Every state signal is edge-triggered, so the run starts knowing where the chrome
             // rests and a card is never cleared by a state the user did not put it in — nor, as
             // the drawer card was on the first device pass, by having its first real open eaten
@@ -2931,6 +2574,152 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mFirstBootTour.onHelpShownSettled(mHelpController != null && mHelpController.isShowing());
         }
         return mFirstBootTour;
+    }
+
+    /**
+     * The home screen as every lesson of the run starts it: help, the palette, the drawer, the
+     * corner menu and the status shade closed, the wall on the terminal and the keyboard up. Each
+     * through the call the launcher already makes for it, so nothing here replays a gesture. A
+     * keyboard the user switched off stays off; the keyboard lesson can be skipped.
+     */
+    private void resetHomeForTour() {
+        if (isFinishing() || isDestroyed()) return;
+        dismissHelpOverlay();
+        if (mCommandPalette != null && mCommandPalette.isOpen()) mCommandPalette.collapse();
+        if (mAppDrawerController != null && isAppDrawerEngaged()) mAppDrawerController.close(true);
+        if (mPaneController != null) mPaneController.dismissControlsForHelp();
+        if (!isStatusBarCompact()) setTopStatusBarCollapsed(true, true);
+        if (mPaneWallController != null) mPaneWallController.returnToTerminal(true);
+        if (mInAppKeyboard != null && mInAppKeyboard.isEnabled() && !mInAppKeyboard.isTurnedOff()
+                && !mInAppKeyboard.isVisible()) {
+            mInAppKeyboard.show(
+                com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
+        }
+    }
+
+    /** The setup sheet the run is offered on, built the first time the run asks for it. */
+    @NonNull
+    private com.termux.app.firstrun.WelcomeSheetHost welcomeSheet() {
+        if (mWelcomeSheet == null) {
+            mWelcomeSheet = new com.termux.app.firstrun.WelcomeSheetHost(this,
+                new WelcomeSheetEnv());
+        }
+        return mWelcomeSheet;
+    }
+
+    /** What only the launcher can do for the setup sheet. */
+    private final class WelcomeSheetEnv implements com.termux.app.firstrun.WelcomeSheetHost.Env {
+        /** Whether the sheet has asked for the location once already this showing. */
+        private boolean mLocationAsked;
+
+        @NonNull @Override public ViewGroup host() {
+            return findViewById(android.R.id.content);
+        }
+
+        @Override public boolean wallpaperColoursOn() {
+            return mPreferences != null && mPreferences.isTerminalDynamicColorsEnabled();
+        }
+
+        /**
+         * The same switch as Settings' wallpaper colours, applied the same way: the palette is
+         * loaded at theme time, so a change restyles the launcher, which the run survives on its
+         * stored card.
+         */
+        @Override public void applyWallpaperColours(boolean on) {
+            if (mPreferences == null || mPreferences.isTerminalDynamicColorsEnabled() == on) return;
+            mPreferences.setTerminalDynamicColorsEnabled(on);
+            LauncherSchemeTheme.invalidate();
+            requestTermuxActivityStylingOnNextResume(TermuxActivity.this, true);
+        }
+
+        /** Asked once, as the sheet is left; the system stops asking after a second refusal. */
+        @Override public void askForWallpaperRead() {
+            String permission = android.Manifest.permission.READ_EXTERNAL_STORAGE;
+            if (androidx.core.content.ContextCompat.checkSelfPermission(TermuxActivity.this,
+                permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+            boolean prompted = mPreferences != null
+                && mPreferences.isWallpaperReadPermissionPrompted();
+            if (prompted && !androidx.core.app.ActivityCompat
+                .shouldShowRequestPermissionRationale(TermuxActivity.this, permission)) return;
+            if (mPreferences != null) mPreferences.setWallpaperReadPermissionPrompted(true);
+            androidx.core.app.ActivityCompat.requestPermissions(TermuxActivity.this,
+                new String[] {permission}, REQUEST_CODE_WALLPAPER_READ_PERMISSION);
+        }
+
+        @Override public boolean weatherEnabled() {
+            return mPreferences != null && mPreferences.isStatusWidgetWeatherEnabled();
+        }
+
+        @Override public void setWeatherEnabled(boolean on) {
+            if (mPreferences == null || mPreferences.isStatusWidgetWeatherEnabled() == on) return;
+            mPreferences.setStatusWidgetWeatherEnabled(on);
+            updateStatusWidgets();
+            if (on) ensureWeatherController().forceRefresh();
+        }
+
+        @NonNull @Override public String weatherPlace() {
+            return mPreferences == null ? "" : mPreferences.getStatusWidgetWeatherLocation();
+        }
+
+        @Override public void setWeatherPlace(@NonNull String label, double latitude,
+                                              double longitude) {
+            if (mPreferences == null) return;
+            mPreferences.setStatusWidgetWeatherPlace(label, latitude, longitude);
+            ensureWeatherController().forceRefresh();
+        }
+
+        @Override public boolean locationGranted() {
+            return androidx.core.content.ContextCompat.checkSelfPermission(TermuxActivity.this,
+                android.Manifest.permission.ACCESS_COARSE_LOCATION)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        }
+
+        /**
+         * The device instead of a place: the place is dropped first, so the weather follows the
+         * device whatever the permission question is answered. Past a second refusal the system
+         * no longer asks, so this app's settings page is where the location is turned on.
+         */
+        @Override public void useMyLocation() {
+            if (mPreferences != null && weatherFollowsPickedPlace()) {
+                mPreferences.clearStatusWidgetWeatherPlace();
+                ensureWeatherController().forceRefresh();
+            }
+            if (locationGranted()) return;
+            String permission = android.Manifest.permission.ACCESS_COARSE_LOCATION;
+            if (mLocationAsked && !androidx.core.app.ActivityCompat
+                    .shouldShowRequestPermissionRationale(TermuxActivity.this, permission)) {
+                openAppSettingsPage();
+                return;
+            }
+            mLocationAsked = true;
+            androidx.core.app.ActivityCompat.requestPermissions(TermuxActivity.this,
+                new String[] {permission}, REQUEST_CODE_WEATHER_LOCATION);
+        }
+
+        @Override public boolean displayOffered() {
+            return com.termux.BuildConfig.X11_SERVER;
+        }
+
+        @Override public boolean displayOn() {
+            return isX11DisplayEnabled();
+        }
+
+        @Override public void setDisplayOn(boolean on) {
+            setEmbeddedDisplayEnabled(on);
+        }
+
+        @Override public void onPlaceSearchFocusChanged(@NonNull EditText field, boolean focused) {
+            if (focused) {
+                beginFirstRunPlaceSearch(field);
+                return;
+            }
+            // Posted, and on the window rather than on the field: focus is given up while the
+            // sheet is being taken off the content view, and moving it to the terminal in the
+            // middle of that removal would leave the content view's focus chain pointing at a view
+            // it no longer holds.
+            if (getWindow() != null)
+                getWindow().getDecorView().post(() -> endFirstRunPlaceSearch(field));
+        }
     }
 
     /**
@@ -7313,7 +7102,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // this same question before the tour starts, so a failed read while either is up means the
         // user has not answered it yet — a later failed read re-arms this path once they are gone.
         FirstBootTour tour = firstBootTour();
-        if (mFirstRunPermissionsCard != null || (tour != null && tour.isShowing())) {
+        if ((mWelcomeSheet != null && mWelcomeSheet.isShowing())
+            || (tour != null && tour.isShowing())) {
             return;
         }
         boolean permissionGranted = androidx.core.content.ContextCompat.checkSelfPermission(this,
@@ -12130,11 +11920,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override
         public void onKeyboardModifiersChanged(com.termux.app.terminal.inappkeyboard.TerminalModifiers modifiers) {
-            // Ahead of the display guard: the tour's chord cards glow the key they are still
-            // waiting for, and a latch is a latch wherever the wall happens to be standing.
-            if (mFirstBootTour != null)
-                mFirstBootTour.onKeyboardModifiersChanged(modifiers.isCtrl(), modifiers.isAlt(),
-                    modifiers.isShift());
             // Over the display the modifiers are X's; the terminal's hint strip stays down.
             if (isDisplayPageShowing()) return;
             mKeybindHintPresenter.onInAppModifiersChanged(modifiers);
@@ -12695,6 +12480,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** As {@link #syncPinnedAppsHost()}, for a layout the caller already has. */
     boolean syncPinnedAppsHost(@NonNull PlaceLayout layout) {
+        // A relaunch hands this activity's DecorView to its successor, so once destroyed the
+        // lookups below resolve the successor's hosts; a late catalogue callback would stack this
+        // dead dock over the live one and steal its touches.
+        if (isDestroyed()) return false;
         LinearLayout host = findViewById(R.id.place_apps_bar_host);
         DockRailScrollView scroll = findViewById(R.id.place_apps_bar_scroll);
         PageTickStripView indicator = findViewById(R.id.place_apps_bar_indicator);
@@ -16699,8 +16488,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 ensureWeatherController().forceRefresh();
             }
-            // Granted or refused, the row says where it now stands; the card stays up either way.
-            refreshFirstRunPermissionsCard();
+            // Granted or refused, the sheet says where it now stands; it stays up either way.
+            if (mWelcomeSheet != null) mWelcomeSheet.refresh();
         } else if (requestCode == REQUEST_CODE_WALLPAPER_READ_PERMISSION) {
             if (grantResults.length > 0
                 && grantResults[0] == android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -16708,7 +16497,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 refreshWallpaperPicture();
                 mChrome.onWallpaperChanged();
             }
-            refreshFirstRunPermissionsCard();
+            if (mWelcomeSheet != null) mWelcomeSheet.refresh();
         } else if (requestCode == REQUEST_CODE_WIDGET_CALENDAR) {
             if (mWidgetPaneController != null) mWidgetPaneController.onCalendarPermissionChanged();
         } else if (requestCode == REQUEST_CODE_VOICE_INPUT_MICROPHONE) {
@@ -18596,6 +18385,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mX11Display.onUserKeyboardIntent(true);
             }
             syncPlaceState(page, leavingKeyboardUp);
+            // The pre-roll came and went quietly; the tour still hears where the keyboard ended
+            // up, or it keeps the visibility from before the slide and misses the next change.
+            if (keyboardPreRolled && mFirstBootTour != null && mInAppKeyboard != null)
+                mFirstBootTour.onKeyboardShownSettled(mInAppKeyboard.isVisible());
             // The hold is over: one geometry pass gives the content the room the place it landed
             // on leaves it, which is the terminal's one resize for the whole slide. A slide that
             // gave the room back in its first frame finds it already right, and only the grid's
@@ -19690,8 +19483,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void toggleMinimalMode() {
                 setMinimalMode(!TermuxActivity.this.isMinimalMode());
             }
-            @Override public void editWidgets() {
-                if (mWidgetPaneController != null) mWidgetPaneController.editWidgets();
+            @Override public boolean editWidgets() {
+                return mWidgetPaneController != null && mWidgetPaneController.editWidgets();
             }
             @Override public int widgetGridColumns() {
                 return widgetGridCaps().clampColumns(
@@ -23556,6 +23349,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (getPreferences() == null) return;
             getPreferences().setDwindleDefaultLayoutEnabled(enabled);
             getPreferences().setFocusedPaneGrowsEnabled(enabled);
+            // The corner button only flips its icon; the notice says what the switch means.
+            AppNotice.show(TermuxActivity.this, AppNoticeItem.Kind.INFO, "\uDB81\uDD70",
+                getString(enabled ? R.string.pane_controls_auto_tiling_on_title
+                    : R.string.pane_controls_auto_tiling_off_title),
+                getString(enabled ? R.string.pane_controls_auto_tiling_on_sub
+                    : R.string.pane_controls_auto_tiling_off_sub), false);
         }
 
         @Override @Nullable public TerminalSession createNamedShell(@NonNull String name,

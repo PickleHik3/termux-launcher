@@ -308,6 +308,31 @@ public class TourCardPlacementTest {
     }
 
     @Test
+    public void aCoachCardStandsClearOfTheFingerOnTheSideItTravels() {
+        // The status bar, pulled down: the demonstration reaches 220px below it.
+        Rect status = new Rect(0, 100, W, 200);
+        TourCardPlacement below = TourCardPlacement.placeClear(W, H, CARD_W, CARD_H, status,
+            MARGIN, MARGIN, MARGIN, GAP, GAP + 220, TourCardPlacement.SIDE_AUTO);
+        assertEquals(200 + GAP + 220, below.top);
+        assertFalse("a coach card carries no pointer", below.hasPointer());
+        // The space bar, swiped up: the demonstration reaches above it, so the card stands higher.
+        Rect space = new Rect(300, 2100, 780, 2200);
+        TourCardPlacement above = TourCardPlacement.placeClear(W, H, CARD_W, CARD_H, space,
+            MARGIN, MARGIN, MARGIN, GAP + 220, GAP, TourCardPlacement.SIDE_ABOVE);
+        assertEquals(2100 - GAP - 220 - CARD_H, above.top);
+    }
+
+    @Test
+    public void aCoachCardWithNoRoomOnItsSideStillFlips() {
+        Rect status = new Rect(0, 100, W, 200);
+        TourCardPlacement flipped = TourCardPlacement.placeClear(W, H, CARD_W, CARD_H, status,
+            MARGIN, MARGIN, MARGIN, GAP, H, TourCardPlacement.SIDE_AUTO);
+        // Neither side holds it: clamped on screen, still with no pointer.
+        assertTrue(flipped.top >= MARGIN);
+        assertFalse(flipped.hasPointer());
+    }
+
+    @Test
     public void aCardKeptOnAStaleControlIsPlacedExactlyWhereItWas() {
         Rect chip = new Rect(400, 60, 560, 120);
         TourCardPlacement onTheChip = place(chip);

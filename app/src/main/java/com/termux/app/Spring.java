@@ -22,7 +22,7 @@ public final class Spring {
     public static final float MAX_DT = 1f / 30f;
     /** Largest step the integrator is stable over for the stiffnesses this app uses. */
     public static final float MAX_STEP = 1f / 120f;
-    public static final float SETTLE_EPSILON = 4e-4f;
+    public static final float SETTLE_EPSILON = 2e-3f;
 
     public float value;
     public float target;

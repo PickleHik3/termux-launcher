@@ -2847,13 +2847,24 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             return;
 
         if (isFreshInstall()) {
-            // The shipped look sits the dock a few points denser than the surfaces behind it, and
-            // "denser than Base" is a detached row by definition — so this is the one thing about
-            // it that has to be written rather than defaulted. A fresh install opens with exactly
-            // one override badge lit, which is the truth about the look it is wearing.
-            setSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY, false);
-            setSurfaceRawValue(SurfaceSlot.DOCK, SurfaceProperty.OPACITY,
-                TERMUX_APP.DEFAULT_VALUE_APP_BAR_OPACITY);
+            // A fresh install opens on the Clear look with an 8dp margin. Written here rather than
+            // by moving the DEFAULT_* constants: an install that went through this branch under an
+            // earlier build never stored these keys, and a changed constant would restyle it.
+            // Every surface stays linked to Base, so the editor shows Clear selected; the material,
+            // tint, rim, motion, edge light, specular and dispersion are already Clear's defaults.
+            setSurfaceBaseValue(SurfaceProperty.BLUR, FRESH_INSTALL_BASE_BLUR);
+            setSurfaceBaseValue(SurfaceProperty.OPACITY, FRESH_INSTALL_BASE_OPACITY);
+            setSurfaceBaseValue(SurfaceProperty.GRAIN, FRESH_INSTALL_BASE_GRAIN);
+            setFancierGlassBendDp(FRESH_INSTALL_GLASS_BEND);
+            setFancierGlassEdgeWidthDp(FRESH_INSTALL_GLASS_EDGE_WIDTH);
+            // The Layout margin writes both of these; the pane gap matches it at this size.
+            setSurfaceBaseValue(SurfaceProperty.SIDE_GAP, FRESH_INSTALL_MARGIN);
+            setTerminalPaneGap(FRESH_INSTALL_MARGIN);
+            // Applying a wallpaper restores the glass it remembers for wallpaper mode; it has to
+            // remember Clear's, or the first wallpaper would put the old look back.
+            setWallpaperEnabledAppBarOpacity(FRESH_INSTALL_BASE_OPACITY);
+            setWallpaperEnabledTerminalBackgroundOpacity(FRESH_INSTALL_BASE_OPACITY);
+            setWallpaperEnabledExtraKeysBlurRadius(FRESH_INSTALL_BASE_BLUR);
             // Nothing to fold either, and folding would do harm: the fold seeds Base from the
             // dock's numbers, which here means the dock's own denser opacity rather than the
             // shared one the other surfaces are meant to open at.
@@ -2870,6 +2881,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_SHIPPED_SURFACE_DEFAULTS_ADOPTED, true, true);
     }
+
+    /** The Clear look's numbers and the margin a fresh install opens with. */
+    private static final int FRESH_INSTALL_BASE_BLUR = 4;
+    private static final int FRESH_INSTALL_BASE_OPACITY = 10;
+    private static final int FRESH_INSTALL_BASE_GRAIN = 4;
+    private static final int FRESH_INSTALL_GLASS_BEND = 4;
+    private static final int FRESH_INSTALL_GLASS_EDGE_WIDTH = 10;
+    private static final int FRESH_INSTALL_MARGIN = 8;
 
     /**
      * Whether this install has never run. The logger writes the log level before anything else on

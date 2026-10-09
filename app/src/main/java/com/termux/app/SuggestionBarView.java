@@ -4,7 +4,6 @@ import android.annotation.SuppressLint;
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
-import android.animation.ArgbEvaluator;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.app.Activity;
@@ -3151,7 +3150,7 @@ public final class SuggestionBarView extends GridLayout
             hint.setGravity(Gravity.CENTER);
             hint.setSingleLine(true);
             hint.setPadding(dp(6), 0, dp(6), 0);
-            hint.setAlpha(0.92f);
+            hint.setAlpha(PINNED_HINT_ALPHA);
             GridLayout.LayoutParams hintParams = createSlotParams(0);
             hintParams.columnSpec = GridLayout.spec(0, Math.max(1, buttonCount), 1f);
             hintParams.width = 0;
@@ -3440,13 +3439,20 @@ public final class SuggestionBarView extends GridLayout
             mPinnedHintShimmer = null;
         }
         if (!shouldAnimatePinnedHint()) return;
-        final int baseColor = resolvePinnedHintBaseColor();
-        final int shimmerColor = blendColors(baseColor, resolveLauncherTextColor(), 0.24f);
-        ValueAnimator shimmer = ValueAnimator.ofObject(new ArgbEvaluator(), baseColor, shimmerColor, baseColor);
+        // The pulse is the view's alpha on a hardware layer, never the text colour. A text colour
+        // that changes every frame gives the renderer's glyph cache a new blob key per frame for
+        // the same text, and after a few minutes of an empty dock every text draw in the window
+        // walks that pile: the frame rate collapses and a drawer pull or a keyboard swipe freezes
+        // mid-transition. A plain TextView applies alpha to its paint, which is the same new key;
+        // the layer composites the alpha and leaves the cached glyphs alone.
+        hintView.setTextColor(resolvePinnedHintBaseColor());
+        hintView.setLayerType(LAYER_TYPE_HARDWARE, null);
+        ValueAnimator shimmer = ValueAnimator.ofFloat(PINNED_HINT_ALPHA, PINNED_HINT_PULSE_ALPHA,
+            PINNED_HINT_ALPHA);
         shimmer.setDuration(3200L);
         shimmer.setRepeatCount(ValueAnimator.INFINITE);
         shimmer.setRepeatMode(ValueAnimator.RESTART);
-        shimmer.addUpdateListener(animation -> hintView.setTextColor((Integer) animation.getAnimatedValue()));
+        shimmer.addUpdateListener(animation -> hintView.setAlpha((Float) animation.getAnimatedValue()));
         hintView.addOnAttachStateChangeListener(new OnAttachStateChangeListener() {
             @Override
             public void onViewAttachedToWindow(View v) {
@@ -3456,6 +3462,7 @@ public final class SuggestionBarView extends GridLayout
             @Override
             public void onViewDetachedFromWindow(View v) {
                 shimmer.cancel();
+                v.setLayerType(LAYER_TYPE_NONE, null);
                 if (mPinnedHintShimmer == shimmer) mPinnedHintShimmer = null;
             }
         });
@@ -3485,6 +3492,9 @@ public final class SuggestionBarView extends GridLayout
 
     /** The one live empty-dock hint animator; a rebuilt dock replaces it. */
     @Nullable private ValueAnimator mPinnedHintShimmer;
+    /** The empty-dock hint's resting alpha, and the brighter one its pulse passes through. */
+    private static final float PINNED_HINT_ALPHA = 0.6f;
+    private static final float PINNED_HINT_PULSE_ALPHA = 1f;
 
     private int resolvePinnedHintBaseColor() {
         return blendColors(inheritedTintColor, resolveLauncherTextColor(), 0.58f);
@@ -8357,6 +8367,9 @@ public final class SuggestionBarView extends GridLayout
     }
 
     public void releaseResources() {
+        // A catalogue refresh still in flight finishes on the main thread after the activity is
+        // gone; it must not call back into it.
+        appCatalogChangedListener = null;
         removeCallbacks(azResetRunnable);
         removeCallbacks(azPostLaunchClearRunnable);
         clearAzFocusedEntry();

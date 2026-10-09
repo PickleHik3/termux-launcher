@@ -242,15 +242,14 @@ public final class TourSignalRelay implements TourSignals {
      * The pinned-apps editor went away, reported from its one dismiss path so that the Done
      * button, the Close beside it and a swipe off the sheet all arrive here.
      *
-     * <p>Only a close that left something pinned is a signal. An editor opened and closed again
-     * changed nothing, and an editor that saved an empty dock has not taught the user what a
-     * pinned app is — the card stays where it is and asks again.
+     * <p>Any close is the signal. The lesson is the hold that raises the editor and the editor
+     * itself; a user who looked and closed it again has had both, and a card that kept asking
+     * for a pinned app read as a tour that would not move on.
      *
      * @param saved whether the editor wrote the pinned list while it was open
      * @param pinnedCount how many pins it left in the dock
      */
     public void onPinEditorClosed(boolean saved, int pinnedCount) {
-        if (!saved || pinnedCount < 1) return;
         emit(PINNED_APPS_SAVED);
     }
 
