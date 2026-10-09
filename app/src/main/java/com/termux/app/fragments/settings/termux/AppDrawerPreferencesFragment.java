@@ -53,6 +53,8 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
     private static final int REQUEST_POST_NOTIFICATIONS = 4711;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    /** The last waiting count read for the refresh row; shown while a fresh one is counted. */
+    private int lastWaiting;
     private final ExecutorService appListExecutor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "app-drawer-category-apps");
         thread.setDaemon(true);
@@ -246,17 +248,30 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
                 DateUtils.FORMAT_SHOW_DATE | DateUtils.FORMAT_SHOW_TIME | DateUtils.FORMAT_ABBREV_ALL),
             state.getAppCount());
         // Apps installed since that run sit in "Other" until the next one; say how many are waiting.
-        int pending = pendingCategoryApps(context);
-        refresh.setSummary(pending <= 0 ? lastRun : lastRun + "\n"
-            + getResources().getQuantityString(
-                R.plurals.settings_app_drawer_category_refresh_pending, pending, pending));
+        // The count is read off the main thread, so the row shows the last one meanwhile rather than
+        // dropping a line and growing it back.
+        refresh.setSummary(lastRunSummary(lastRun, lastWaiting));
+        countWaitingApps(context, waiting -> {
+            lastWaiting = waiting;
+            if (!isAdded() || LauncherCategorySortService.isRunning()) return;
+            String outcomeNow = LauncherCategorySortService.getOutcome();
+            if (outcomeNow != null && !outcomeNow.trim().isEmpty()) return;
+            CategorySortProgressPreference row = findPreference(KEY_CATEGORY_REFRESH);
+            if (row != null) row.setSummary(lastRunSummary(lastRun, waiting));
+        });
+    }
+
+    @NonNull
+    private String lastRunSummary(@NonNull String lastRun, int waiting) {
+        return waiting <= 0 ? lastRun : lastRun + "\n" + getResources().getQuantityString(
+            R.plurals.settings_app_drawer_category_refresh_pending, waiting, waiting);
     }
 
     /**
-     * The count off the provider's in-memory catalogue. A cold provider answers zero and is warmed
-     * with a callback that redraws the row, so the number appears a moment later rather than never.
+     * The count off the provider's in-memory catalogue. A cold provider is warmed with a callback
+     * that redraws the row, so the number appears a moment later rather than never.
      */
-    private int pendingCategoryApps(@NonNull Context context) {
+    private void countWaitingApps(@NonNull Context context, @NonNull java.util.function.IntConsumer onCount) {
         com.termux.app.launcher.data.LauncherAppDataProvider provider =
             com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(context);
         List<com.termux.app.launcher.model.LauncherAppEntry> apps = provider.getAllApps();
@@ -266,9 +281,9 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
                 Context current = getContext();
                 if (current != null) updateRefreshSummary(current);
             });
-            return 0;
+            return;
         }
-        return com.termux.app.launcher.data.LauncherCategoryPendingApps.count(context, apps);
+        com.termux.app.launcher.data.LauncherCategoryPendingApps.countWaitingAsync(context, apps, onCount);
     }
 
     /**

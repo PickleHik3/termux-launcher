@@ -14,14 +14,15 @@
 
     <PreferenceCategory app:key="root_personalization" app:title="@string/settings_root_personalization_header">
 
-        <!-- One door to wallpaper, Look, Layout and the icon pack: opens the wallpaper picker
-             over the live launcher, in code. The Look page rows stay searchable under it. -->
+        <!-- The Appearance page: fonts, theme, icons and keyboard look, with a row on top that
+             opens the live Appearance surface (wallpaper, Look, Layout) over the launcher. -->
         <Preference
             app:key="wallpaper_style"
             app:icon="@drawable/ic_symbol_palette"
             app:persistent="false"
             app:title="@string/settings_destination_wallpaper_style"
-            app:summary="@string/settings_destination_wallpaper_style_summary" />
+            app:summary="@string/settings_destination_wallpaper_style_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TermuxStylePreferencesFragment" />
 
         <Preference
             app:key="launcher_apps"

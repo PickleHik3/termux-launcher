@@ -39,8 +39,10 @@ import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherCategoryCatalogue;
 import com.termux.app.launcher.data.LauncherCategoryPasteImporter;
 import com.termux.app.launcher.data.LauncherCategoryPasteNotification;
+import com.termux.app.launcher.data.LauncherCategoryPendingApps;
 import com.termux.app.launcher.data.LauncherCategorySortPlan;
 import com.termux.app.launcher.data.LauncherCategorySortPrompt;
+import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.shared.interact.ShareUtils;
 
 import java.util.ArrayList;
@@ -87,26 +89,34 @@ final class CategorySortDialogs {
     /** Everything the chooser shows, read together off the main thread by {@link #preview}. */
     static final class Preview {
         @NonNull final List<LauncherCategorySortPrompt.AppEntry> apps;
+        /** How many of {@link #apps} a sort would ask the model about: what its time estimate counts. */
+        final int pending;
         @NonNull final LauncherCategorySortPlan plan;
         /** The installed spec of a local plan's model; null for a remote plan or a missing model. */
         @Nullable final TaiModelSpec model;
         /** Why the on-device row is disabled, or null when it can run. */
         @Nullable final String unavailable;
 
-        Preview(@NonNull List<LauncherCategorySortPrompt.AppEntry> apps, @NonNull LauncherCategorySortPlan plan,
-                @Nullable TaiModelSpec model, @Nullable String unavailable) {
+        Preview(@NonNull List<LauncherCategorySortPrompt.AppEntry> apps, int pending,
+                @NonNull LauncherCategorySortPlan plan, @Nullable TaiModelSpec model, @Nullable String unavailable) {
             this.apps = apps;
+            this.pending = pending;
             this.plan = plan;
             this.model = model;
             this.unavailable = unavailable;
         }
     }
 
-    /** The apps, the plan and whether it can run here. Blocking: the package manager, the model store, the device. */
+    /**
+     * The apps, how many need the model, the plan and whether it can run here. Blocking: the package
+     * manager, the config file, the model store, the device.
+     */
     @NonNull
     static Preview preview(@NonNull Context context) {
         LauncherCategorySortPlan plan = resolvePlan(context);
-        return new Preview(loadApps(context), plan, specFor(context, plan), unavailableReason(context, plan));
+        List<LauncherAppEntry> catalogue = LauncherAppDataProvider.getInstance(context).getAllAppsBlocking();
+        int pending = LauncherCategoryPendingApps.pending(catalogue, LauncherCategoryPendingApps.placement(context)).size();
+        return new Preview(appEntries(catalogue), pending, plan, specFor(context, plan), unavailableReason(context, plan));
     }
 
     /** The installed spec for a local plan's model, or null (and always null for a remote plan). */
@@ -141,14 +151,12 @@ final class CategorySortDialogs {
 
     /**
      * Collapses the launcher catalogue to one entry per package — a package appears once per
-     * work/private profile, and the config file is package-keyed. Blocking: call it off the main
-     * thread.
+     * work/private profile, and the config file is package-keyed.
      */
     @NonNull
-    static List<LauncherCategorySortPrompt.AppEntry> loadApps(@NonNull Context context) {
+    private static List<LauncherCategorySortPrompt.AppEntry> appEntries(@NonNull List<LauncherAppEntry> catalogue) {
         // Excludes x11:linux too; see LauncherCategoryCatalogue for why.
-        LinkedHashMap<String, String> labelByPackage = LauncherCategoryCatalogue.labelByPackage(
-            LauncherAppDataProvider.getInstance(context).getAllAppsBlocking());
+        LinkedHashMap<String, String> labelByPackage = LauncherCategoryCatalogue.labelByPackage(catalogue);
         List<LauncherCategorySortPrompt.AppEntry> apps = new ArrayList<>();
         for (Map.Entry<String, String> app : labelByPackage.entrySet())
             apps.add(new LauncherCategorySortPrompt.AppEntry(app.getKey(),
@@ -200,10 +208,11 @@ final class CategorySortDialogs {
                 ? R.string.tai_callers_category_remote_summary
                 : R.string.settings_app_drawer_category_sort_on_device_summary, modelName)
             : unavailable;
-        // What the sort will really load with: the plan's accelerator, the one the load is told.
+        // What the sort will really load with: the plan's accelerator, the one the load is told; and
+        // only the apps it will really ask about.
         String onDeviceNote = onDeviceEnabled
             ? context.getString(R.string.settings_app_drawer_category_sort_on_device_warning,
-                plan.estimatedMinutes(apps.size()))
+                plan.estimatedMinutes(preview.pending))
             : null;
         // A large model may make Android close cached background apps (tai-device-tiers spec section 4.4).
         if (onDeviceNote != null && plan.warnBackground) {
