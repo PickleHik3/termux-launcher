@@ -214,6 +214,10 @@ before you hand work over. CI owns the rest.
   default swiftshader segfaults on this app's blur), stop the Gradle daemon first on a small host,
   install the **x86_64** split, and always pass `-s emulator-5554` — if qemu dies, adb silently
   falls back to the phone.
+- **Tear the test setup down when you are done.** Waydroid and the emulator hold this host's RAM
+  and GPU for as long as they run. When the testing is finished, force-stop the app, then shut the
+  whole setup down: `ad waydroid stop` for Waydroid, kill the emulator, and stop any background
+  monitor or logcat loop you left behind. Leave nothing running for the next task.
 - **What the emulator cannot tell you.** Jank: `gfxinfo` on ANGLE/lavapipe reports everything as
   100% janky — judge motion on a real phone. Dialogs: a UI-bounds dump does not see dialog windows, so
   screenshot and tap fresh coordinates. Simulate other phones with `wm size` / `wm density` /
