@@ -27,6 +27,7 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
@@ -219,7 +220,7 @@ public final class LauncherCategorySortService extends Service {
             pending.add(entry.appRef.packageName);
         }
         update(s -> s.withTotal(pending.size()));
-        Assignments assignments = new Assignments(existing);
+        Assignments assignments = new Assignments(existing, file);
         if (pending.isEmpty()) {
             // Nothing new to classify. Loading a model to sort zero apps would burn 10-20 seconds
             // and then flash a progress bar that was never measuring anything.
@@ -248,7 +249,7 @@ public final class LauncherCategorySortService extends Service {
             return;
         }
         try {
-            sortPending(manager, modelId, pending, labelByPackage, assignments, file, provider);
+            sortPending(manager, modelId, pending, labelByPackage, assignments, provider);
         } finally {
             restoreRuntime(manager, modelId, residentBefore);
         }
@@ -256,7 +257,7 @@ public final class LauncherCategorySortService extends Service {
 
     private void sortPending(@NonNull TaiManager manager, @Nullable String modelId,
                              @NonNull List<String> pending, @NonNull Map<String, String> labelByPackage,
-                             @NonNull Assignments assignments, @NonNull File file,
+                             @NonNull Assignments assignments,
                              @NonNull LauncherAppDataProvider provider) throws Exception {
         update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_SORTING));
         String stopError = null;
@@ -278,7 +279,9 @@ public final class LauncherCategorySortService extends Service {
 
         update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_SAVING));
         updateProgressNotification(true);
-        if (assigned > 0) LauncherCategoryFile.of(assignments.merged).write(file);
+        // Most of it is on disk already, batch by batch; this writes the rest, and a failure here
+        // is the run's failure.
+        assignments.save();
         recordRun(modelId, pending, labelByPackage.size(), assignments);
 
         String done = state.cancelRequested
@@ -321,16 +324,38 @@ public final class LauncherCategorySortService extends Service {
      * The file's sections with this run's answers merged in. An answer of {@code other} is not
      * written: the drawer's classifier falls to Other by itself, and leaving the app out keeps a
      * later curated row, platform category or a better model free to place it.
+     *
+     * <p>Saved after every batch ({@link #checkpoint}), not only at the end, so a run killed midway
+     * (the process, the phone, a stop) keeps every batch it finished; the next sort only asks what
+     * is still pending. Each save is {@link LauncherCategoryFile#write}'s atomic replace.
      */
     static final class Assignments {
         final LinkedHashMap<String, List<String>> merged = new LinkedHashMap<>();
         final Set<String> assignedPackages = new HashSet<>();
         final Set<String> answeredOther = new HashSet<>();
         int assigned;
+        @NonNull private final File file;
+        private boolean unsaved;
 
-        Assignments(@NonNull LauncherCategoryFile existing) {
+        Assignments(@NonNull LauncherCategoryFile existing, @NonNull File file) {
+            this.file = file;
             for (Map.Entry<String, List<String>> section : existing.sections().entrySet())
                 merged.put(section.getKey(), new ArrayList<>(section.getValue()));
+        }
+
+        /** Writes what changed since the last save; nothing when nothing did. */
+        void save() throws IOException {
+            if (!unsaved) return;
+            LauncherCategoryFile.of(merged).write(file);
+            unsaved = false;
+        }
+
+        /** {@link #save} between batches: a failure is left for the next save to retry. */
+        void checkpoint() {
+            try {
+                save();
+            } catch (IOException ignored) {
+            }
         }
 
         void accept(@NonNull String packageName, @NonNull String slug) {
@@ -346,6 +371,7 @@ public final class LauncherCategorySortService extends Service {
             packages.add(packageName);
             assignedPackages.add(packageName);
             assigned++;
+            unsaved = true;
         }
     }
 
@@ -437,6 +463,7 @@ public final class LauncherCategorySortService extends Service {
         public void settled(@NonNull Map<String, String> answered, int settled) {
             for (Map.Entry<String, String> entry : answered.entrySet())
                 assignments.accept(entry.getKey(), entry.getValue());
+            assignments.checkpoint();
             update(s -> s.withProcessed(s.processed + settled));
             updateProgressNotification(false);
         }
@@ -529,6 +556,7 @@ public final class LauncherCategorySortService extends Service {
         public void settled(@NonNull Map<String, String> assigned, int settled) {
             for (Map.Entry<String, String> entry : assigned.entrySet())
                 assignments.accept(entry.getKey(), entry.getValue());
+            assignments.checkpoint();
             update(s -> s.withProcessed(s.processed + settled));
             updateProgressNotification(false);
         }
