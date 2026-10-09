@@ -9,8 +9,8 @@
 # What it does, in order (the same numbering you see while it runs):
 #   1. Looks at which graphics chip the phone has.
 #   2. Lists the ways that chip can be used, from the most promising to "no acceleration".
-#   3. Installs the small test program and the driver packages for each way (remembering
-#      which were already there).
+#   3. Brings the installed packages up to date, then installs the small test program and the
+#      driver packages for each way (remembering which were already there).
 #   4. Starts a private display for the tests, so nothing you have open is disturbed.
 #   5. Tries each way with a short 3D test, hardest scenes first. A way passes only if it
 #      really uses the graphics chip, finishes without crashing, and is clearly faster than
@@ -77,6 +77,9 @@ installed_before() {
   if [ $PM = pacman ]; then pacman -Qq "$1" >/dev/null 2>&1
   else dpkg -s "$1" 2>/dev/null | grep -q '^Status: install ok installed'; fi
 }
+# A full upgrade before anything is added: installing onto stale libraries (or pacman's -Sy
+# without -u) leaves packages built against versions the phone does not have.
+pm_upgrade() { if [ $PM = pacman ]; then pacman -Syu --noconfirm; else pkg update -y && pkg upgrade -y; fi; }
 pm_refresh() { if [ $PM = pacman ]; then pacman -Sy --noconfirm; else apt-get update; fi; }
 pm_install() { if [ $PM = pacman ]; then pacman -S --needed --noconfirm "$@"; else pkg install -y "$@"; fi; }
 pm_remove()  { if [ $PM = pacman ]; then pacman -R --noconfirm "$@"; else pkg uninstall -y "$@" && apt-get autoremove -y; fi; }
@@ -91,12 +94,13 @@ install_pkgs() {
   for p in "$@"; do installed_before "$p" || missing+=("$p"); done
   [ ${#missing[@]} -eq 0 ] && return 0
   detail "Installing: ${missing[*]}"
-  if pm_install "${missing[@]}" >>"$LOG" 2>&1; then
+  # On the terminal, not in the log: an install can take minutes and must not look stuck.
+  if pm_install "${missing[@]}"; then
     WE_INSTALLED+=("${missing[@]}")
     return 0
   fi
   NOT_AVAILABLE+=("${missing[@]}")
-  detail "Could not install ${missing[*]} (details in $LOG)."
+  detail "Could not install ${missing[*]} (see the output above)."
   return 1
 }
 
@@ -184,6 +188,7 @@ if [ $KEEP = 0 ]; then
   detail "The test program and the drivers that lose will be removed again at the end."
   detail "(xkeyboard-config${REPO_PKG:+ and $REPO_PKG} stay: the display itself needs them.)"
 fi
+detail "Your installed packages are brought up to date first; that can take a few minutes."
 if [ $YES = 0 ]; then
   printf '\nContinue? [Y/n] '; read -r answer
   case "$answer" in n|N|no|NO) echo "Stopped. Nothing was changed."; exit 0 ;; esac
@@ -191,13 +196,19 @@ fi
 
 # ---------------------------------------------------------------------------------------------
 step 3 "Installing the test program and drivers"
+detail "Bringing the installed packages up to date."
+pm_upgrade || { say "The packages could not be brought up to date (see the output above), so nothing new was installed."; exit 1; }
 if [ $PM = apt ]; then
   install_pkgs x11-repo || { say "The X11 package repository could not be added, so the drivers cannot be installed."; exit 1; }
 elif ! grep -q '^\[x11\]' "$PREFIX/etc/pacman.conf"; then
   say "pacman.conf has no [x11] repository, so the display's packages cannot be installed. Add it and run again."; exit 1
 fi
-detail "Refreshing the package lists."
-pm_refresh >>"$LOG" 2>&1 || detail "Refreshing the package lists failed; trying with what is cached (details in $LOG)."
+# The X11 repository is a package on apt, so its list arrives only with another refresh; pacman's
+# came with the upgrade.
+if [ $PM = apt ]; then
+  detail "Refreshing the package lists."
+  pm_refresh || detail "Refreshing the package lists failed; trying with what is cached."
+fi
 # shellcheck disable=SC2086
 install_pkgs xkeyboard-config glmark2 ${PKGS[software]} || { say "The display's own packages could not be installed, so the tests cannot run."; exit 1; }
 AVAILABLE=()
@@ -325,10 +336,10 @@ else
     :
   else
     detail "Installing the test program inside Debian."
-    if pd sh -c 'apt-get update -qq && apt-get install -y -qq glmark2-es2 libgl1-mesa-dri' >>"$LOG" 2>&1; then
+    if pd sh -c 'apt-get update && apt-get install -y glmark2-es2 libgl1-mesa-dri'; then
       PROOT_INSTALLED_TEST=1
     else
-      detail "Could not install it (details in $LOG); skipping the container."
+      detail "Could not install it (see the output above); skipping the container."
     fi
   fi
   if pd sh -c 'command -v glmark2-es2' >/dev/null 2>&1; then
@@ -363,7 +374,7 @@ else
       fi
     fi
     if [ $PROOT_INSTALLED_TEST = 1 ] && [ $KEEP = 0 ]; then
-      pd sh -c 'apt-get purge -y -qq glmark2-es2 && apt-get autoremove -y -qq' >>"$LOG" 2>&1 && detail "Removed the test program from Debian again."
+      pd sh -c 'apt-get purge -y glmark2-es2 && apt-get autoremove -y' && detail "Removed the test program from Debian again."
     fi
   fi
   if [ -n "$PROOT_WINNER" ]; then
@@ -395,7 +406,7 @@ else
   done
   if [ ${#REMOVE[@]} -gt 0 ]; then
     detail "Removing what was only needed for the tests: ${REMOVE[*]}"
-    pm_remove "${REMOVE[@]}" >>"$LOG" 2>&1 || detail "Some packages could not be removed; see $LOG."
+    pm_remove "${REMOVE[@]}" || detail "Some packages could not be removed (see the output above)."
   else
     detail "Nothing to remove."
   fi
