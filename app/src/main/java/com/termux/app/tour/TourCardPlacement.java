@@ -115,6 +115,42 @@ public final class TourCardPlacement {
                                           int sideMargin, int topMargin, int bottomMargin,
                                           int gap, int pointerHeight, int pointerHalfWidth,
                                           int preferredSide) {
+        return placeAgainst(overlayWidth, overlayHeight, cardWidth, cardHeight, target,
+            sideMargin, topMargin, bottomMargin, gap + pointerHeight, gap + pointerHeight,
+            pointerHalfWidth, preferredSide, true);
+    }
+
+    /**
+     * A card with no pointer, kept clear of the demonstration as well as of the control.
+     *
+     * <p>A coach card that stands a fixed gap off its control sits on the finger the moment the
+     * gesture travels toward it: the status bar is pulled down, onto a card that stands below it.
+     * So each side has its own stand-off — the gap plus however far the demonstration reaches past
+     * the control on that side — and the side is still chosen and flipped exactly as above.
+     *
+     * @param standOffAbove how far above the control the card's bottom must stay
+     * @param standOffBelow how far below the control the card's top must stay
+     */
+    @NonNull
+    public static TourCardPlacement placeClear(int overlayWidth, int overlayHeight,
+                                               int cardWidth, int cardHeight,
+                                               @Nullable Rect target, int sideMargin,
+                                               int topMargin, int bottomMargin,
+                                               int standOffAbove, int standOffBelow,
+                                               int preferredSide) {
+        return placeAgainst(overlayWidth, overlayHeight, cardWidth, cardHeight, target,
+            sideMargin, topMargin, bottomMargin, Math.max(0, standOffAbove),
+            Math.max(0, standOffBelow), 0, preferredSide, false);
+    }
+
+    @NonNull
+    private static TourCardPlacement placeAgainst(int overlayWidth, int overlayHeight,
+                                                  int cardWidth, int cardHeight,
+                                                  @Nullable Rect target, int sideMargin,
+                                                  int topMargin, int bottomMargin,
+                                                  int standOffAbove, int standOffBelow,
+                                                  int pointerHalfWidth, int preferredSide,
+                                                  boolean pointer) {
         if (overlayWidth <= 0 || overlayHeight <= 0 || cardWidth <= 0 || cardHeight <= 0)
             return new TourCardPlacement(sideMargin, topMargin, POINTER_NONE, 0);
 
@@ -128,9 +164,8 @@ public final class TourCardPlacement {
                 POINTER_NONE, 0);
         }
 
-        int standOff = gap + pointerHeight;
-        int topBelow = target.bottom + standOff;
-        int topAbove = target.top - standOff - cardHeight;
+        int topBelow = target.bottom + standOffBelow;
+        int topAbove = target.top - standOffAbove - cardHeight;
         // The target's own half of the overlay decides which side is tried first; the other side
         // is taken whenever the first one has no room, which is the same test as "the card would
         // have to be clamped back over the control it is pointing at".
@@ -153,6 +188,7 @@ public final class TourCardPlacement {
             top = clamp(preferredTop, topMargin, maxTop);
             pointerEdge = POINTER_NONE;
         }
+        if (!pointer) pointerEdge = POINTER_NONE;
 
         int left = clamp(target.centerX() - (cardWidth / 2), sideMargin, maxLeft);
         int pointerCenterX = 0;

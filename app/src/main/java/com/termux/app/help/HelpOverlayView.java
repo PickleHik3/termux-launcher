@@ -195,6 +195,17 @@ public final class HelpOverlayView extends FrameLayout {
     /** Read once when the gesture starts: a setting is not something onDraw asks about. */
     private boolean gestureReducedMotion;
 
+    /**
+     * How high the explorer stands above the window's other views, elevation included: 100dp over
+     * a level-5 elevation. Above every control it marks — the dock, the A-Z row, the extra keys and
+     * the keyboard are lifted between 6 and 40dp — and the height anything that must be read over
+     * help for a moment (the run's "Got it") has to reach.
+     */
+    public static float stackHeightPx(Context context) {
+        return com.termux.app.chrome.ShapeTokens.elevationPx(context, 5)
+            + (100f * context.getResources().getDisplayMetrics().density);
+    }
+
     public HelpOverlayView(Context context, HelpTargets.ViewFinder finder) {
         super(context);
         density = getResources().getDisplayMetrics().density;
@@ -207,7 +218,7 @@ public final class HelpOverlayView extends FrameLayout {
         // lifted between 6 and 40dp, and exploration has to wash over all of them; the outline is
         // dropped so the height casts no shadow of its own.
         setElevation(com.termux.app.chrome.ShapeTokens.elevationPx(context, 5));
-        setTranslationZ(dp(100)); // 12dp level-5 elevation + 100dp = the original 112dp stack height
+        setTranslationZ(stackHeightPx(context) - getElevation());
         setOutlineProvider(null);
         setWillNotDraw(false);
         setClickable(true);

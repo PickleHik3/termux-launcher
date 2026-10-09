@@ -2,21 +2,20 @@ package com.termux.app.tour;
 
 import android.animation.ValueAnimator;
 import android.content.Context;
+import android.content.res.ColorStateList;
 import android.graphics.Canvas;
-import android.graphics.Color;
-import android.graphics.drawable.GradientDrawable;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.Outline;
 import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
+import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewOutlineProvider;
 import android.view.animation.PathInterpolator;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
@@ -24,149 +23,161 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.StringRes;
 import androidx.core.graphics.ColorUtils;
 
+import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.FocusOutlineRenderer;
 import com.termux.app.chrome.ActionButtonRow;
+import com.termux.app.chrome.ShapeTokens;
 import com.termux.app.notice.TerminalDress;
 
-import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The run's only view: a glow around the control the card is about, a finger tracing the gesture
- * once, and the card itself.
+ * The run's only view: the zone around the control the card is about, the finger demonstrating
+ * the gesture on it, and the coach card itself — or, at the end, the closing card.
  *
- * <p>It never takes a touch. The launcher is the home screen and the tour is teaching gestures on
+ * <p>It never takes a touch. The launcher is the home screen and the run is teaching gestures on
  * live chrome, so the user has to be able to actually perform the gesture while the card is up —
  * the overlay is not clickable, not focusable, and {@link #onTouchEvent} refuses every event so
- * the sibling below it gets the stream. The only thing that does take a touch is the card's own
- * text button, which is a child view and so is reached before this view is consulted.
+ * the sibling below it gets the stream. The card's own buttons are child views and so are reached
+ * before this view is consulted.
  *
- * <p>The glow is {@link FocusOutlineRenderer}'s rounded-rect focus treatment, the same one the
- * dock and terminal search wear, and the card is the notice chip's dress — fill, hairline and the
- * terminal's own radius, flat, from {@link TerminalDress}.
+ * <p>The card wears the terminal's dress — its fill and hairline from {@link TerminalDress} — with
+ * the coach card's own radius, and every accent is the theme's ({@link
+ * FocusOutlineRenderer#resolveAccent}), so it follows the wallpaper's colours and the launcher's
+ * scheme like the rest of the chrome. It moves between controls with a glide rather than leaving
+ * and coming back, and its demonstration plays {@link TourDemoLoop#PASSES} times and then rests.
  *
- * <p>A target that cannot be measured is normal: the card shows without a glow rather than
+ * <p>A target that cannot be measured is normal: the card shows without a zone rather than
  * pointing somewhere wrong.
  */
 public final class TourOverlayView extends FrameLayout {
 
-    /** The card's buttons: whichever ones the controller says this card offers. */
+    /** The card's buttons; what they mean is the run's business. */
     public interface Callbacks {
-        /** One of the card's buttons was tapped; what it means is the controller's business. */
-        void onTourActionTapped(@NonNull TourAction action);
+        /** ✕: on to the closing card, or out of practice. */
+        void onTourCloseTapped();
 
-        /**
-         * The Copy button beside a command on the closing card.
-         *
-         * @param commandRes the command that button stands beside
-         */
-        void onTourCopyCommandTapped(int commandRes);
+        /** Skip: past this lesson. */
+        void onTourSkipTapped();
 
-        /** The closing card's Read the docs link. */
-        void onTourDocsTapped();
+        /** The closing card's Start. */
+        void onTourStartTapped();
+
+        /** The closing card's Read the guide. */
+        void onTourGuideTapped();
     }
 
     private static final long CARD_IN_MS = 200L;
     private static final float CARD_RISE_DP = 8f;
-    private static final float CARD_MAX_WIDTH_DP = 300f;
-    private static final float CARD_SIDE_MARGIN_DP = 16f;
-    /** The gap between the control and the card's pointer. */
+    /** How long the card takes to glide from one control to the next. */
+    private static final long CARD_MOVE_MS = 350L;
+    /** The gap the card keeps from the sides of the screen. */
+    private static final float CARD_SIDE_MARGIN_DP = 20f;
+    /** On a tablet or in landscape the card stops growing here, where a sentence still reads well. */
+    private static final float CARD_MAX_WIDTH_DP = 400f;
+    private static final float CARD_RADIUS_DP = 20f;
+    private static final float CLOSING_RADIUS_DP = 22f;
+    /** The gap between the control (and its demonstration) and the card. */
     private static final float CARD_GAP_DP = 8f;
-    private static final float POINTER_HEIGHT_DP = 7f;
-    private static final float POINTER_HALF_WIDTH_DP = 9f;
+    /** The progress: segments this big, this far apart, groups further apart. */
+    private static final float SEGMENT_WIDTH_DP = 14f;
+    private static final float SEGMENT_HEIGHT_DP = 4f;
+    private static final float SEGMENT_GAP_DP = 3f;
+    private static final float GROUP_GAP_DP = 10f;
+    /** How strongly a segment still to come and a bar's empty track are drawn, of the ink. */
+    private static final int TODO_ALPHA = 56;
+    /** The body's share of the title's ink. */
+    private static final int BODY_ALPHA = 200;
     /**
-     * How long a stage keeps asking for a control that could not be measured when it arrived.
-     *
-     * <p>The overlay re-measures on every global layout, which is enough for everything the
-     * chrome lays out — but not for a control revealed by an animation that deliberately walks no
-     * layout at all. The × on the window chip is exactly that: it opens as a 180 ms width
-     * animation that offsets pixels by hand, so between the tap that reveals it and its full width
-     * there is no layout pass for the overlay to hear. This window covers that open with room to
-     * spare, and ends whether or not the control ever turned up.
+     * How long a stage keeps asking for a control that could not be measured when it arrived: a
+     * control revealed by an animation that walks no layout has no layout pass for the overlay to
+     * hear, so the overlay asks again for a little while and then stops whether or not it turned up.
      */
     private static final long TARGET_RETRY_MS = 1500L;
-    /** How often the retry above asks again: often enough to follow a reveal, rarely enough. */
     private static final long TARGET_RETRY_INTERVAL_MS = 32L;
     /**
-     * The gap the glow keeps outside the control. Tight on purpose: the ring also carries a
-     * blurred halo outside this rect, and on a control flush with the edge of the screen every dp
-     * of it is a dp of the halo hanging off the display.
+     * The gap the zone keeps outside the control. Tight on purpose: the ring also carries a blurred
+     * halo outside this rect, and on a control flush with the edge of the screen every dp of it is
+     * a dp of the halo hanging off the display.
      */
     private static final float GLOW_PADDING_DP = 2f;
     private static final float GLOW_RADIUS_DP = 12f;
-    private static final float FINGER_RADIUS_DP = 9f;
-    private static final float FINGER_TRAIL_WIDTH_DP = 3f;
     /** Stands in for "as tall as it likes": a measure spec carries no unbounded size of its own. */
     private static final int UNBOUNDED_PX = 1 << 24;
+    /** The ✕: an 18dp glyph in a 36dp target. */
+    private static final float CLOSE_GLYPH_DP = 18f;
+    private static final float CLOSE_TARGET_DP = 36f;
 
     private final float mDensity;
     private final TerminalDress mDress;
     private final Paint mFingerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mPointerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Path mPointerFill = new Path();
-    private final Path mPointerEdges = new Path();
+    private final Path mCuePath = new Path();
     private final RectF mGlowRect = new RectF();
-    /** Where the finger cue's centre may be, so its own circle stays on the screen. */
+    /** Where the finger's centre may be, so its own circle stays on the screen. */
     private final RectF mCueBounds = new RectF();
-    private final float[] mFingerPoint = new float[2];
-    private final float[] mTrailPoint = new float[2];
+    private final float[] mPointA = new float[2];
+    private final float[] mPointB = new float[2];
+    private final TourDemoLoop.Frame mFrame = new TourDemoLoop.Frame();
 
+    /** The coach card. */
     private final LinearLayout mCard;
-    /** The small line above the title, on the two cards that carry one. */
-    private final TextView mKicker;
-    /** The title, on the two cards that carry one. */
+    private final TextView mChapterLabel;
+    private final ImageView mClose;
     private final TextView mTitle;
-    private final TextView mCopy;
-    /** The picture under the sentence, on the one card that shows what it is asking about. */
-    private final ImageView mImage;
-    private final ScrollView mBodyScroll;
-    private final LinearLayout mSections;
-    private final TextView mDocsLink;
-    private final ActionButtonRow mButtonRow;
-    /** The card's action buttons, rebuilt whenever the card offers a different set. */
-    private final List<TextView> mActionButtons = new ArrayList<>();
-    /** What the buttons currently on the card stand for, in the order they are read. */
-    private final List<TourAction> mActions = new ArrayList<>();
-    /** Every Copy button on the card, so a rebuild takes their "Copied" acknowledgement back. */
-    private final List<TextView> mCopyButtons = new ArrayList<>();
+    private final TextView mBody;
+    private final LinearLayout mGotIt;
+    private final ImageView mGotItGlyph;
+    private final TextView mGotItLabel;
+    private final ProgressSegments mProgress;
+    private final TextView mSkip;
+
+    /** The closing card. */
+    private final LinearLayout mClosingCard;
+    private final ScrollView mClosingScroll;
+    private final LinearLayout mModelsRow;
+    private final TextView mModelsText;
+    private final ProgressBarView mModelsBar;
+    private final TextView mGuide;
+    private final TextView mStart;
 
     @Nullable private Callbacks mCallbacks;
     @Nullable private TourTargets mTargets;
     @Nullable private TourStep mStep;
+    private int mStage;
+    private boolean mPracticing;
     @Nullable private Rect mTargetRect;
     /**
      * The last control this card was actually placed against, kept so a stage whose own control
-     * cannot be measured yet stays where the stage before it stood instead of jumping to the
-     * middle of the overlay. Cleared when a different card comes up.
+     * cannot be measured yet stays where the stage before it stood. Cleared when a different card
+     * comes up.
      */
     @Nullable private Rect mLastAnchorRect;
-    /** The launcher's own top bar, measured only while the card rests at the top of the screen. */
+    /** The launcher's own top bar, which a card with nothing to stand against rests under. */
     @Nullable private Rect mTopBarRect;
-    @Nullable private ValueAnimator mTrace;
-    @Nullable private TourCardPlacement mPlacement;
     private int mSystemInsetTop;
     private int mSystemInsetBottom;
-    /** Why the last measurement found no target, kept for the log rather than for the drawing. */
     @NonNull private String mMissReason = "none";
-
-    private int mStage;
-    private int mAccent;
-    private float mTraceProgress = 1f;
-    /** How far through its chord a chord card's glow has walked; ignored by every other card. */
-    private int mChordGlowIndex;
-    /** How tall the closing card's sections may grow before they start scrolling inside it. */
-    private int mScrollMaxHeight = UNBOUNDED_PX;
     private int mPresentation = TourCardVisibility.NORMAL;
-    /** When the current stage stops asking again for a control it could not measure. */
+    private int mAccent;
+    private int mOnAccent;
+
+    /** The card that is placed, and whether it has been placed since it last came up. */
+    @Nullable private View mPlacedCard;
+    @Nullable private ValueAnimator mGlide;
+    @Nullable private ValueAnimator mDemo;
+    /** How far into the demonstration loop the zone is; -1 once the loop has rested. */
+    private long mDemoElapsedMs = -1L;
     private long mRetryUntil;
     @Nullable private Runnable mRetry;
-    /** The edition the sections on the card were built for, or null while it carries none. */
-    @Nullable private TourEdition mSectionsEdition;
+    /** How tall the closing card's middle may grow before it scrolls inside the card. */
+    private int mScrollMaxHeight = UNBOUNDED_PX;
 
     public TourOverlayView(@NonNull Context context) {
         super(context);
@@ -181,133 +192,228 @@ public final class TourOverlayView extends FrameLayout {
         setClipChildren(false);
         setClipToPadding(false);
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        mAccent = FocusOutlineRenderer.resolveAccent(this);
-
         mDress = TerminalDress.stored(context);
-        mCard = new LinearLayout(context);
-        mCard.setOrientation(LinearLayout.VERTICAL);
-        mCard.setBackground(mDress.background(0));
-        mCard.setElevation(0f);
-        mCard.setPadding(dp(14), dp(10), dp(14), dp(14));
-        mCard.setClickable(false);
-        mCard.setFocusable(false);
+        resolveAccents();
 
-        // The shell the run opens and closes on: a small line, a title, then the sentence. Every
-        // other card is one sentence and carries neither, so both are gone rather than empty.
-        mKicker = new TextView(context);
-        mKicker.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f);
-        mKicker.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        mKicker.setTextColor(ColorUtils.setAlphaComponent(mDress.textColor, 150));
-        mKicker.setLetterSpacing(0.08f);
-        mKicker.setAllCaps(true);
-        mKicker.setVisibility(GONE);
-        mCard.addView(mKicker, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        mCard = cardShell(context, CARD_RADIUS_DP);
+        mCard.setPaddingRelative(dp(16), dp(14), dp(14), dp(12));
 
-        mTitle = new TextView(context);
-        mTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f);
-        mTitle.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
-        mTitle.setTextColor(mDress.textColor);
-        mTitle.setVisibility(GONE);
-        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        titleParams.topMargin = dp(2);
-        titleParams.bottomMargin = dp(4);
-        mCard.addView(mTitle, titleParams);
+        LinearLayout header = new LinearLayout(context);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        mChapterLabel = text(context, 10.5f, true, mDress.subTextColor);
+        mChapterLabel.setAllCaps(true);
+        mChapterLabel.setLetterSpacing(0.1f);
+        singleLine(mChapterLabel);
+        header.addView(mChapterLabel, new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        mClose = glyphButton(context, R.drawable.ic_symbol_close, mDress.subTextColor,
+            view -> { if (mCallbacks != null) mCallbacks.onTourCloseTapped(); });
+        header.addView(mClose);
+        mCard.addView(header, matchWrap(0));
 
-        mCopy = new TextView(context);
-        mCopy.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
-        mCopy.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        mCopy.setTextColor(mDress.textColor);
-        mCopy.setLineSpacing(dp(2), 1f);
-        mCard.addView(mCopy, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        mTitle = text(context, 15f, true, mDress.textColor);
+        mCard.addView(mTitle, matchWrap(dp(2)));
+        mBody = text(context, 13f, false, ColorUtils.setAlphaComponent(mDress.textColor,
+            BODY_ALPHA));
+        mBody.setLineSpacing(0f, 1.25f);
+        mCard.addView(mBody, matchWrap(dp(4)));
 
-        // The picture under the sentence, on the one card that shows the thing it is asking
-        // about: the row of keys this release ships. It takes the card's full width, keeps the
-        // strip's own proportions and is drawn as it was photographed — a tinted photograph of a
-        // key row is a photograph of a different key row.
-        mImage = new ImageView(context);
-        mImage.setAdjustViewBounds(true);
-        mImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        mImage.setVisibility(GONE);
-        mImage.setOutlineProvider(new ViewOutlineProvider() {
-            @Override
-            public void getOutline(View view, Outline outline) {
-                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
-                    mDress.cornerRadiusPx(view.getHeight()));
-            }
-        });
-        mImage.setClipToOutline(true);
-        LinearLayout.LayoutParams imageParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        imageParams.topMargin = dp(10);
-        imageParams.bottomMargin = dp(2);
-        mCard.addView(mImage, imageParams);
+        mGotIt = new LinearLayout(context);
+        mGotIt.setOrientation(LinearLayout.HORIZONTAL);
+        mGotIt.setGravity(Gravity.CENTER_VERTICAL);
+        mGotIt.setPadding(0, dp(6), 0, dp(10));
+        mGotItGlyph = glyph(context, R.drawable.ic_symbol_check_circle, mAccent, 20f);
+        mGotIt.addView(mGotItGlyph);
+        mGotItLabel = text(context, 15f, true, mAccent);
+        mGotItLabel.setText(R.string.tour_got_it);
+        singleLine(mGotItLabel);
+        LinearLayout.LayoutParams gotItLabelParams = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        gotItLabelParams.setMarginStart(dp(8));
+        mGotIt.addView(mGotItLabel, gotItLabelParams);
+        mGotIt.setVisibility(GONE);
+        mCard.addView(mGotIt, matchWrap(0));
 
-        // The closing card's sections. Only that card has any, so the whole column is gone for
-        // the other eight rather than empty, and it scrolls rather than growing off the screen:
-        // three headings, three sentences and two commands do not fit a short phone at 1.3x text
-        // with the keyboard up.
-        mSections = new LinearLayout(context);
-        mSections.setOrientation(LinearLayout.VERTICAL);
-        mBodyScroll = new ScrollView(context) {
+        // The progress leads the footer and Skip keeps its trailing edge; at a large font scale
+        // the row stacks rather than clipping either.
+        ActionButtonRow footer = new ActionButtonRow(context);
+        mProgress = new ProgressSegments(context);
+        footer.setLeading(mProgress);
+        mSkip = secondaryButton(context, R.string.tour_skip,
+            view -> { if (mCallbacks != null) mCallbacks.onTourSkipTapped(); });
+        footer.addView(mSkip);
+        mCard.addView(footer, matchWrap(dp(2)));
+
+        mClosingCard = cardShell(context, CLOSING_RADIUS_DP);
+        mClosingCard.setPaddingRelative(dp(16), dp(18), dp(16), dp(14));
+        TextView closingTitle = text(context, 20f, true, mDress.textColor);
+        closingTitle.setText(R.string.tour_closing_title);
+        mClosingCard.addView(closingTitle, matchWrap(0));
+        LinearLayout tips = new LinearLayout(context);
+        tips.setOrientation(LinearLayout.VERTICAL);
+        tips.addView(tipRow(context, R.drawable.ic_symbol_help, R.string.tour_tip_help),
+            matchWrap(0));
+        tips.addView(tipRow(context, R.drawable.ic_symbol_keyboard, R.string.tour_tip_shortcuts),
+            matchWrap(dp(12)));
+        tips.addView(tipRow(context, R.drawable.ic_symbol_restart, R.string.tour_tip_replay),
+            matchWrap(dp(12)));
+        mModelsRow = new LinearLayout(context);
+        mModelsRow.setOrientation(LinearLayout.HORIZONTAL);
+        mModelsRow.addView(glyph(context, R.drawable.ic_symbol_download, mAccent, 20f));
+        LinearLayout modelsWords = new LinearLayout(context);
+        modelsWords.setOrientation(LinearLayout.VERTICAL);
+        mModelsText = text(context, 13f, false, ColorUtils.setAlphaComponent(mDress.textColor,
+            BODY_ALPHA));
+        modelsWords.addView(mModelsText, matchWrap(0));
+        mModelsBar = new ProgressBarView(context);
+        LinearLayout.LayoutParams barParams = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(SEGMENT_HEIGHT_DP));
+        barParams.topMargin = dp(6);
+        modelsWords.addView(mModelsBar, barParams);
+        LinearLayout.LayoutParams modelsWordsParams = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        modelsWordsParams.setMarginStart(dp(12));
+        mModelsRow.addView(modelsWords, modelsWordsParams);
+        mModelsRow.setVisibility(GONE);
+        tips.addView(mModelsRow, matchWrap(dp(12)));
+        // The middle scrolls rather than pushing Start off a short screen at a large font scale.
+        mClosingScroll = new ScrollView(context) {
             @Override
             protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
                 super.onMeasure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(
                     Math.max(0, mScrollMaxHeight), MeasureSpec.AT_MOST));
             }
         };
-        mBodyScroll.setVerticalScrollBarEnabled(false);
-        mBodyScroll.setOverScrollMode(OVER_SCROLL_NEVER);
-        mBodyScroll.setClipToPadding(false);
-        mBodyScroll.setVisibility(GONE);
-        mBodyScroll.addView(mSections, new FrameLayout.LayoutParams(
+        mClosingScroll.setVerticalScrollBarEnabled(false);
+        mClosingScroll.setOverScrollMode(OVER_SCROLL_NEVER);
+        mClosingScroll.addView(tips, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        LinearLayout.LayoutParams bodyParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        bodyParams.topMargin = dp(8);
-        mCard.addView(mBodyScroll, bodyParams);
+        mClosingCard.addView(mClosingScroll, matchWrap(dp(14)));
+        ActionButtonRow closingButtons = new ActionButtonRow(context);
+        mGuide = secondaryButton(context, R.string.tour_read_the_guide,
+            view -> { if (mCallbacks != null) mCallbacks.onTourGuideTapped(); });
+        closingButtons.addView(mGuide);
+        mStart = primaryButton(context, R.string.tour_start,
+            view -> { if (mCallbacks != null) mCallbacks.onTourStartTapped(); });
+        closingButtons.addView(mStart);
+        mClosingCard.addView(closingButtons, matchWrap(dp(14)));
 
-        // The card's actions share one row while they fit across the card and stack when they do
-        // not; the row measures that itself, at whatever width and font scale the card has.
-        mButtonRow = new ActionButtonRow(context);
-
-        // The docs link shares the closing card's row: it leads, and Start using keeps the
-        // trailing edge. When the two do not fit side by side the link goes under the action.
-        mDocsLink = textButton(context, view -> {
-            if (mCallbacks != null) mCallbacks.onTourDocsTapped();
-        });
-        mDocsLink.setVisibility(GONE);
-        mButtonRow.setLeading(mDocsLink);
-
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        buttonParams.topMargin = dp(8);
-        mCard.addView(mButtonRow, buttonParams);
-
-        addView(mCard, new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        mCard.setVisibility(GONE);
+        mClosingCard.setVisibility(GONE);
+        addView(mCard, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        addView(mClosingCard, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
-    /** One of the card's text buttons: the only children of this view that take a touch. */
+    // ---- building ------------------------------------------------------------------------------
+
     @NonNull
-    private TextView textButton(@NonNull Context context, @NonNull OnClickListener onClick) {
-        TextView button = new TextView(context);
-        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f);
-        button.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        button.setTextColor(mAccent);
-        button.setAllCaps(false);
-        // A TextView sits its text at the top; the action buttons are 48dp tall, so without this
-        // the label rides the top edge and the rest of the box hangs empty beneath it.
-        button.setGravity(Gravity.CENTER);
-        button.setPadding(dp(12), dp(6), dp(12), dp(6));
-        button.setMinHeight(dp(44f));
-        button.setMinWidth(dp(48f));
-        button.setBackground(buttonBackground());
-        button.setOnClickListener(onClick);
-        return button;
+    private LinearLayout cardShell(@NonNull Context context, float radiusDp) {
+        LinearLayout card = new LinearLayout(context);
+        card.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(mDress.fillColor);
+        background.setStroke(Math.round(mDress.strokeWidthPx), mDress.strokeColor);
+        background.setCornerRadius(dp(radiusDp));
+        card.setBackground(background);
+        // The one surface in the run that floats over moving chrome: a little lift separates it.
+        card.setElevation(ShapeTokens.elevationPx(context, 3));
+        card.setClickable(false);
+        card.setFocusable(false);
+        return card;
     }
+
+    @NonNull
+    private TextView text(@NonNull Context context, float sizeSp, boolean strong, int color) {
+        TextView view = new TextView(context);
+        view.setTextSize(TypedValue.COMPLEX_UNIT_SP, sizeSp);
+        view.setTypeface(Typeface.create(strong ? "sans-serif-medium" : "sans-serif",
+            Typeface.NORMAL));
+        view.setTextColor(color);
+        view.setTextAlignment(TEXT_ALIGNMENT_VIEW_START);
+        return view;
+    }
+
+    private static void singleLine(@NonNull TextView view) {
+        view.setSingleLine(true);
+        view.setEllipsize(TextUtils.TruncateAt.END);
+        view.setMinWidth(0);
+        view.setMinimumWidth(0);
+    }
+
+    @NonNull
+    private ImageView glyph(@NonNull Context context, @DrawableRes int glyphRes, int tint,
+                            float sizeDp) {
+        ImageView view = new ImageView(context);
+        view.setImageResource(glyphRes);
+        view.setImageTintList(ColorStateList.valueOf(tint));
+        view.setLayoutParams(new LinearLayout.LayoutParams(dp(sizeDp), dp(sizeDp)));
+        return view;
+    }
+
+    @NonNull
+    private ImageView glyphButton(@NonNull Context context, @DrawableRes int glyphRes, int tint,
+                                  @NonNull OnClickListener onClick) {
+        ImageView view = new ImageView(context);
+        view.setImageResource(glyphRes);
+        view.setImageTintList(ColorStateList.valueOf(tint));
+        // The glyph, padded out to a target a thumb can find.
+        int pad = dp((CLOSE_TARGET_DP - CLOSE_GLYPH_DP) / 2f);
+        view.setPadding(pad, pad, pad, pad);
+        TypedValue ripple = new TypedValue();
+        if (context.getTheme().resolveAttribute(android.R.attr.selectableItemBackgroundBorderless,
+            ripple, true) && ripple.resourceId != 0) view.setBackgroundResource(ripple.resourceId);
+        view.setOnClickListener(onClick);
+        view.setLayoutParams(new LinearLayout.LayoutParams(dp(CLOSE_TARGET_DP),
+            dp(CLOSE_TARGET_DP)));
+        return view;
+    }
+
+    @NonNull
+    private View tipRow(@NonNull Context context, @DrawableRes int glyphRes, @StringRes int textRes) {
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.addView(glyph(context, glyphRes, mAccent, 20f));
+        TextView words = text(context, 13f, false, ColorUtils.setAlphaComponent(mDress.textColor,
+            BODY_ALPHA));
+        words.setLineSpacing(0f, 1.25f);
+        words.setText(textRes);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        params.setMarginStart(dp(12));
+        row.addView(words, params);
+        return row;
+    }
+
+    @NonNull
+    private TextView secondaryButton(@NonNull Context context, @StringRes int labelRes,
+                                     @NonNull OnClickListener onClick) {
+        return CoachButtons.secondary(context, labelRes, mAccent, onClick);
+    }
+
+    @NonNull
+    private TextView primaryButton(@NonNull Context context, @StringRes int labelRes,
+                                   @NonNull OnClickListener onClick) {
+        return CoachButtons.primary(context, labelRes, mAccent, mOnAccent, onClick);
+    }
+
+    @NonNull
+    private LinearLayout.LayoutParams matchWrap(int topMargin) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = topMargin;
+        return params;
+    }
+
+    private void resolveAccents() {
+        mAccent = FocusOutlineRenderer.resolveAccent(this);
+        mOnAccent = MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorOnPrimary,
+            androidx.core.content.ContextCompat.getColor(getContext(), R.color.termux_on_primary));
+    }
+
+    // ---- what the run tells it -----------------------------------------------------------------
 
     public void setCallbacks(@Nullable Callbacks callbacks) {
         mCallbacks = callbacks;
@@ -319,65 +425,74 @@ public final class TourOverlayView extends FrameLayout {
 
     /**
      * The system bars' keep-out, so a card that has nothing to anchor to, or that is clamped to an
-     * end of the overlay, does not come to rest under the status bar or the gesture bar. The
-     * overlay fills the whole window, so without this the two ends of it are the wrong place.
+     * end of the overlay, does not come to rest under the status bar or the gesture bar.
      */
     public void setSystemBarInsets(int top, int bottom) {
-        if (mSystemInsetTop == top && mSystemInsetBottom == bottom) return;
-        mSystemInsetTop = Math.max(0, top);
-        mSystemInsetBottom = Math.max(0, bottom);
+        int clampedTop = Math.max(0, top);
+        int clampedBottom = Math.max(0, bottom);
+        if (mSystemInsetTop == clampedTop && mSystemInsetBottom == clampedBottom) return;
+        mSystemInsetTop = clampedTop;
+        mSystemInsetBottom = clampedBottom;
         requestLayout();
         invalidate();
     }
 
-    /** Shows a card with the buttons its own kind offers. */
-    public void showStep(@NonNull TourStep step, int stage) {
-        showStep(step, stage, step.actions());
-    }
-
     /**
-     * Shows a card, with the buttons the controller says it offers, and traces its gesture once.
-     * The buttons are not read off the card: the same lesson practised from help offers the two
-     * that leave practice rather than the three that move the run.
+     * Shows a card at a stage. A new stage of the same lesson, or the next lesson, glides the card
+     * there; the demonstration plays again for whatever it asks now.
+     *
+     * @param practicing whether this is one lesson practised from help, which has no run to
+     *     count and nothing to skip to
      */
-    public void showStep(@NonNull TourStep step, int stage, @NonNull List<TourAction> actions) {
-        boolean sameCard = mStep != null && mStep.id.equals(step.id) && mStage == stage;
-        // Only within one card: the position a card whose control is missing falls back to is the
-        // one the stage before it stood at, never wherever the card before it happened to be.
-        if (mStep == null || !mStep.id.equals(step.id)) mLastAnchorRect = null;
+    public void showStep(@NonNull TourStep step, int stage, @NonNull TourProgress progress,
+                         boolean practicing) {
+        boolean sameCard = mStep != null && mStep.id.equals(step.id);
+        if (!sameCard) mLastAnchorRect = null;
         mStep = step;
         mStage = stage;
-        if (!sameCard) mChordGlowIndex = 0;
-        applyCopy();
-        applyActions(actions);
-        boolean closing = step.isClosingCard();
-        if (closing) showClosingSections();
-        else {
-            mBodyScroll.setVisibility(GONE);
-            mDocsLink.setVisibility(GONE);
-        }
+        mPracticing = practicing;
+        mProgress.bind(progress.groups);
+        bindChapterLabel(step, progress);
+        applyContent();
         applyPresentation();
-        if (!sameCard && getVisibility() == VISIBLE) animateCardIn();
-        // Every stage starts a fresh window of asking for its control: the one the window card
-        // ends on is revealed by an animation that lands after the stage does.
         armTargetRetry();
         refreshTarget();
-        startTrace();
+        startDemo();
+    }
+
+    /** The lesson that is up has been cleared: the card says so, with its segment done. */
+    public void showCompleted(@NonNull TourProgress progress) {
+        mProgress.bind(progress.groups);
+        setPresentation(TourCardVisibility.COMPLETED);
     }
 
     /**
-     * Whether the card draws against its control, at the top of the screen, or not at all.
-     * {@link TourCardVisibility} decides; this applies the answer.
+     * The closing card's downloads line, or null for none: only shown when the run queued models.
+     *
+     * @param fraction how far along they are, 0..1, or less than 0 for a line with no bar
+     */
+    public void setModelsLine(@Nullable CharSequence text, float fraction) {
+        boolean shown = text != null && text.length() > 0;
+        if (shown && !TextUtils.equals(mModelsText.getText(), text)) mModelsText.setText(text);
+        int visibility = shown ? VISIBLE : GONE;
+        if (mModelsRow.getVisibility() != visibility) mModelsRow.setVisibility(visibility);
+        int barVisibility = shown && fraction >= 0f ? VISIBLE : GONE;
+        if (mModelsBar.getVisibility() != barVisibility) mModelsBar.setVisibility(barVisibility);
+        mModelsBar.setFraction(fraction);
+    }
+
+    /**
+     * Whether the card draws against its control, away from the place it is taught on, saying
+     * "Got it", or not at all. {@link TourCardVisibility} decides; this applies the answer.
      */
     public void setPresentation(int presentation) {
         if (mPresentation == presentation) return;
-        boolean wasHidden = mPresentation == TourCardVisibility.HIDDEN;
         mPresentation = presentation;
+        applyContent();
         applyPresentation();
-        if (wasHidden && getVisibility() == VISIBLE) {
-            animateCardIn();
-            startTrace();
-        }
+        // Back against its control — from behind chrome, from away, or from a "Got it" that the
+        // next card replaced — the demonstration plays from the top.
+        if (presentation == TourCardVisibility.NORMAL) startDemo();
         // A card coming back from behind chrome is a card whose control may still be arriving.
         armTargetRetry();
         refreshTarget();
@@ -385,46 +500,73 @@ public final class TourOverlayView extends FrameLayout {
         invalidate();
     }
 
-    /**
-     * The card's sentence: the stage's own, or the way back to the terminal when the card is
-     * being shown away from the place it is taught on.
-     */
-    private void applyCopy() {
-        if (mStep == null) return;
-        boolean away = mPresentation == TourCardVisibility.AWAY;
-        mCopy.setText(away ? R.string.tour_card_return_to_terminal : mStep.copyResAt(mStage));
-        // The card asking the way back to the terminal is one sentence, whatever card it stands
-        // for: a title over it would be a title over something the user is not being told.
-        boolean picture = !away && mStep.hasImage();
-        mImage.setVisibility(picture ? VISIBLE : GONE);
-        if (picture) mImage.setImageResource(mStep.imageRes);
-        else mImage.setImageDrawable(null);
-        boolean shell = !away && mStep.hasTitle();
-        mKicker.setVisibility(shell && mStep.kickerRes != 0 ? VISIBLE : GONE);
-        if (shell && mStep.kickerRes != 0) mKicker.setText(mStep.kickerRes);
-        mTitle.setVisibility(shell ? VISIBLE : GONE);
-        if (shell) mTitle.setText(mStep.titleRes);
+    private void bindChapterLabel(@NonNull TourStep step, @NonNull TourProgress progress) {
+        if (step.isClosingCard()) return;
+        CharSequence name = getContext().getString(step.chapterRes);
+        CharSequence label = practicing() || progress.chapterNumber <= 0 ? name
+            : getContext().getString(R.string.tour_chapter_label, progress.chapterNumber,
+                progress.chapterCount, name);
+        if (!TextUtils.equals(mChapterLabel.getText(), label)) mChapterLabel.setText(label);
     }
 
-    /**
-     * The control this card glows right now. Nothing while the card is away from the terminal:
-     * the control it names is on another place, and a stale rect for it is exactly the glow over
-     * nothing this presentation exists to avoid.
-     */
-    @NonNull
-    private String glowTargetId() {
-        if (mStep == null || mPresentation == TourCardVisibility.AWAY) return TourTargets.NONE;
-        return mStep.targetIdAt(glowIndex());
+    private boolean practicing() {
+        return mPracticing;
+    }
+
+    /** What the card says: the stage's title and sentence, "Got it", or the way back. */
+    private void applyContent() {
+        TourStep step = mStep;
+        if (step == null || step.isClosingCard()) return;
+        boolean away = mPresentation == TourCardVisibility.AWAY;
+        boolean completed = mPresentation == TourCardVisibility.COMPLETED;
+        setShown(mTitle, !completed && !away);
+        setShown(mBody, !completed);
+        setShown(mGotIt, completed);
+        if (!completed && !away) setTextIfChanged(mTitle, step.titleResAt(mStage));
+        if (!completed) setTextIfChanged(mBody, away
+            ? R.string.tour_card_return_to_terminal : step.bodyResAt(mStage));
+        // Practice has no run to count and no next lesson to skip to; ✕ is its way out.
+        setShown(mProgress, !mPracticing);
+        setShown(mSkip, !mPracticing);
+        mClose.setContentDescription(getContext().getString(mPracticing
+            ? R.string.tour_end_practice : R.string.tour_close_description));
+    }
+
+    private void setTextIfChanged(@NonNull TextView view, @StringRes int res) {
+        if (res == 0) return;
+        CharSequence text = getContext().getString(res);
+        if (!TextUtils.equals(view.getText(), text)) view.setText(text);
+    }
+
+    private static void setShown(@NonNull View view, boolean shown) {
+        int visibility = shown ? VISIBLE : GONE;
+        if (view.getVisibility() != visibility) view.setVisibility(visibility);
     }
 
     private void applyPresentation() {
-        applyCopy();
         boolean hidden = mStep == null || mPresentation == TourCardVisibility.HIDDEN;
-        if (hidden) {
-            stopTrace();
-            stopTargetRetry();
+        boolean closing = mStep != null && mStep.isClosingCard();
+        View wanted = hidden ? null : closing ? mClosingCard : mCard;
+        setShown(mCard, wanted == mCard);
+        setShown(mClosingCard, wanted == mClosingCard);
+        if (hidden || closing || mPresentation != TourCardVisibility.NORMAL) stopDemo();
+        if (hidden) stopTargetRetry();
+        int visibility = hidden ? GONE : VISIBLE;
+        if (getVisibility() != visibility) setVisibility(visibility);
+        if (wanted != mPlacedCard) {
+            // A card that was not on screen comes in; one that was glides from where it stood.
+            cancelGlide();
+            mPlacedCard = null;
+            if (wanted != null) animateCardIn(wanted);
         }
-        setVisibility(hidden ? GONE : VISIBLE);
+        if (closing && wanted != null) mClosingScroll.scrollTo(0, 0);
+    }
+
+    /** The control this card glows right now; nothing away from the terminal or on the last card. */
+    @NonNull
+    private String glowTargetId() {
+        if (mStep == null || mPresentation == TourCardVisibility.AWAY) return TourTargets.NONE;
+        return mStep.targetIdAt(mStage);
     }
 
     /** Re-measures the control the card points at; cheap enough for every layout pass. */
@@ -435,14 +577,7 @@ public final class TourOverlayView extends FrameLayout {
         Rect topBar = null;
         String reason = "no targets host";
         if (mTargets != null) {
-            // The ceiling a card that rests at the top sits under, asked for on the same pass as
-            // everything else so a keyboard, a rotation or a place change moves the card with it.
-            // Measured whatever the presentation: a card whose own control cannot be found rests
-            // there too, and it finds that out after this. The card's own control is still
-            // measured below — resting at the top does not mean glowing nothing.
             topBar = mTargets.rectFor(TourTargets.STATUS_BAR);
-        }
-        if (mTargets != null) {
             updated = mTargets.rectFor(targetId);
             reason = updated == null ? mTargets.lastMissReason() : "none";
         }
@@ -453,30 +588,21 @@ public final class TourOverlayView extends FrameLayout {
         if (updated != null && !updated.isEmpty()) mLastAnchorRect = new Rect(updated);
         mTopBarRect = topBar;
         mMissReason = reason;
-        // Logged on the edge, not per layout pass: this runs on every global layout, and the
-        // keyboard alone produces dozens of them.
+        // Logged on the edge, not per layout pass: the keyboard alone produces dozens of them.
         if (updated == null && (moved || reasonChanged) && TourLog.enabled()) {
-            TourLog.d("card " + mStep.id + ":" + mStage + " has no glow — target \"" + targetId
+            TourLog.d("card " + mStep.id + ":" + mStage + " has no zone — target \"" + targetId
                 + "\": " + reason);
         }
         if (moved) {
-            // The card's own size does not depend on the target, only its position does, so the
-            // card is laid out again here rather than through a window traversal: this is called
-            // on every frame of a reveal, and a requestLayout a frame is the per-frame work the
-            // chrome under the overlay goes out of its way not to do.
+            // The card's size does not depend on the target, only its position does, so the card
+            // is placed again here rather than through a window traversal: this runs on every
+            // frame of a reveal, and a requestLayout a frame is the per-frame work the chrome
+            // under the overlay goes out of its way not to do.
             layoutCard();
             invalidate();
         }
     }
 
-    /**
-     * Starts this stage asking again for a control the chrome could not measure yet.
-     *
-     * <p>Global layout is the overlay's usual "something moved" hook and is enough for everything
-     * the chrome lays out. It is not enough for a control revealed by an animation that walks no
-     * layout — the × on the window chip — so a stage that names a control keeps asking for a
-     * little while after it arrives, and stops as soon as the window is up.
-     */
     private void armTargetRetry() {
         mRetryUntil = android.os.SystemClock.uptimeMillis() + TARGET_RETRY_MS;
         scheduleTargetRetry();
@@ -503,9 +629,9 @@ public final class TourOverlayView extends FrameLayout {
 
     /**
      * What the card stands against: the control this stage names when it can be measured, and
-     * otherwise the one the stage before it stood against, so a control that is still arriving
-     * does not send the card to the middle of the overlay. The glow is not moved with it —
-     * {@link #onDraw} draws only around a control that really was measured.
+     * otherwise the one the stage before it stood against. The space bar is not there at all while
+     * the keyboard is down, which is not a control still arriving: the card stands against the key
+     * that brings the keyboard back instead, and against nothing when even that is gone.
      */
     @Nullable
     private Rect anchorRect() {
@@ -513,10 +639,6 @@ public final class TourOverlayView extends FrameLayout {
         String targetId = glowTargetId();
         boolean namesAControl = !TourTargets.NONE.equals(targetId);
         boolean measured = mTargetRect != null && !mTargetRect.isEmpty();
-        // The swipe that opens the palette is performed on the space bar, and the space bar is
-        // not there at all while the keyboard is down. That is not a control still arriving, so
-        // the card does not keep the last one's place: it stands against the key that brings the
-        // keyboard back, and against nothing when even that is gone.
         if (namesAControl && !measured && TourTargets.SPACE_BAR.equals(targetId)) {
             Rect instead = mTargets == null
                 ? null : mTargets.rectFor(TourTargets.KEYBOARD_TOGGLE_KEY);
@@ -525,7 +647,6 @@ public final class TourOverlayView extends FrameLayout {
         return TourCardPlacement.anchorRect(namesAControl, mTargetRect, mLastAnchorRect);
     }
 
-    /** The side of its control this card asks to stand on; almost every card asks for none. */
     private int preferredCardSide() {
         if (mStep == null) return TourCardPlacement.SIDE_AUTO;
         switch (mStep.placement) {
@@ -541,15 +662,10 @@ public final class TourOverlayView extends FrameLayout {
         return mTargetRect;
     }
 
-    /**
-     * The control the card is glowing, for the log. Not the step's first target: a chord card's
-     * glow is chosen by the keyboard, and the log is the only way to tell which key it landed on.
-     */
+    /** The control the card is glowing, for the log. */
     @NonNull
     String currentTargetId() {
-        if (mStep == null) return TourTargets.NONE;
-        return mPresentation == TourCardVisibility.NORMAL
-            ? mStep.targetIdAt(glowIndex()) : TourTargets.NONE;
+        return mPresentation == TourCardVisibility.NORMAL ? glowTargetId() : TourTargets.NONE;
     }
 
     /** Why {@link #currentTargetRect()} is null, for the log. */
@@ -558,35 +674,21 @@ public final class TourOverlayView extends FrameLayout {
         return mMissReason;
     }
 
-    /**
-     * Which key of a chord card to glow. The chord cards walk Ctrl, then Alt, then the key itself
-     * as the user latches each modifier, so their glow is driven by the keyboard rather than by
-     * the stage — they have one signal and three or four keys to point at.
-     */
-    public void setChordGlowIndex(int index) {
-        int bounded = Math.max(0, index);
-        if (mChordGlowIndex == bounded) return;
-        mChordGlowIndex = bounded;
-        refreshTarget();
-    }
-
-    /** The target slot the card is glowing: the chord's key for a chord card, the stage otherwise. */
-    private int glowIndex() {
-        return mStep != null && mStep.chordGlow ? mChordGlowIndex : mStage;
-    }
-
-    /** Takes the card down and stops the trace. */
+    /** Takes the card down and stops the demonstration. */
     public void dismiss() {
-        stopTrace();
+        stopDemo();
         stopTargetRetry();
+        cancelGlide();
         mStep = null;
         mTargetRect = null;
         mLastAnchorRect = null;
         mTopBarRect = null;
-        mChordGlowIndex = 0;
-        mPlacement = null;
+        mPlacedCard = null;
         mMissReason = "none";
         mPresentation = TourCardVisibility.NORMAL;
+        setModelsLine(null, -1f);
+        setShown(mCard, false);
+        setShown(mClosingCard, false);
         setVisibility(GONE);
     }
 
@@ -601,32 +703,138 @@ public final class TourOverlayView extends FrameLayout {
         return false;
     }
 
+    // ---- geometry ------------------------------------------------------------------------------
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        // The whole window; the cards are measured here and placed by geometry, never by gravity.
+        setMeasuredDimension(MeasureSpec.getSize(widthMeasureSpec),
+            MeasureSpec.getSize(heightMeasureSpec));
+        int margin = dp(CARD_SIDE_MARGIN_DP);
+        int width = Math.max(dp(120f), Math.min(dp(CARD_MAX_WIDTH_DP),
+            MeasureSpec.getSize(widthMeasureSpec) - (2 * margin)));
+        int budget = Math.max(dp(120f), MeasureSpec.getSize(heightMeasureSpec)
+            - mSystemInsetTop - mSystemInsetBottom - (2 * margin));
+        measureCard(mCard, width, budget);
+        // Measured twice, and only ever to any effect on a short screen: once unbounded, for what
+        // the closing card would like to be, and again with its middle held to what is left.
+        mScrollMaxHeight = UNBOUNDED_PX;
+        measureCard(mClosingCard, width, UNBOUNDED_PX);
+        int natural = mClosingCard.getMeasuredHeight();
+        if (natural > budget) {
+            mScrollMaxHeight = Math.max(dp(64f),
+                mClosingScroll.getMeasuredHeight() - (natural - budget));
+            measureCard(mClosingCard, width, budget);
+        }
+    }
+
+    private void measureCard(@NonNull View card, int width, int maxHeight) {
+        card.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(maxHeight, MeasureSpec.AT_MOST));
+    }
+
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
-        super.onLayout(changed, left, top, right, bottom);
+        // The cards are placed by geometry, never by the frame's gravity.
         layoutCard();
     }
 
-    @Override
-    protected void onDraw(@NonNull Canvas canvas) {
-        super.onDraw(canvas);
+    /**
+     * Against the control and clear of its demonstration, below it when it is in the top half of
+     * the overlay and above it otherwise, flipped when that side has no room. The arithmetic is
+     * {@link TourCardPlacement}'s; this only applies the answer.
+     */
+    private void layoutCard() {
         if (mStep == null) return;
-        drawCardPointer(canvas);
-        // Only a card standing against its control wears the marks. A compact card is at the top
-        // of the screen because a surface is covering that control, and a glow on what is behind
-        // that surface is a glow on something the user cannot see.
-        if (mPresentation != TourCardVisibility.NORMAL) return;
-        if (mTargetRect == null || mTargetRect.isEmpty()) return;
-        drawGlow(canvas);
-        drawFinger(canvas);
+        View card = mStep.isClosingCard() ? mClosingCard : mCard;
+        if (card.getVisibility() == GONE) return;
+        int width = card.getMeasuredWidth();
+        int height = card.getMeasuredHeight();
+        if (width <= 0 || height <= 0 || getWidth() <= 0) return;
+        int margin = dp(CARD_SIDE_MARGIN_DP);
+        int topMargin = margin + mSystemInsetTop;
+        int bottomMargin = margin + mSystemInsetBottom;
+        TourCardPlacement placement;
+        if (mStep.isClosingCard()) {
+            placement = TourCardPlacement.placeClear(getWidth(), getHeight(), width, height, null,
+                margin, topMargin, bottomMargin, 0, 0, TourCardPlacement.SIDE_AUTO);
+        } else {
+            Rect anchor = mPresentation == TourCardVisibility.AWAY ? null : anchorRect();
+            if (anchor == null) {
+                // Nothing to stand against: under the launcher's own top bar, where the missing
+                // control would not have been.
+                placement = TourCardPlacement.placeUnderStatusBar(getWidth(), getHeight(), width,
+                    height, margin, topMargin, bottomMargin, mTopBarRect, dp(CARD_GAP_DP));
+            } else {
+                TourGesture gesture = gestureAsLaidOut(mStep.gestureAt(mStage));
+                int gap = dp(CARD_GAP_DP);
+                placement = TourCardPlacement.placeClear(getWidth(), getHeight(), width, height,
+                    anchor, margin, topMargin, bottomMargin,
+                    gap + dp(TourDemoLoop.reachDp(gesture, false)),
+                    gap + dp(TourDemoLoop.reachDp(gesture, true)), preferredCardSide());
+            }
+        }
+        place(card, placement.left, placement.top, width, height);
     }
 
-    private void drawGlow(@NonNull Canvas canvas) {
-        TourGlowGeometry.glowRect(mTargetRect, GLOW_PADDING_DP * mDensity,
-            FocusOutlineRenderer.fallbackOuterReachPx(mDensity), getWidth(), getHeight(),
-            TourGlowGeometry.EDGE_MARGIN_DP * mDensity, mGlowRect);
-        FocusOutlineRenderer.drawRoundRectFallback(canvas, mGlowRect, GLOW_RADIUS_DP * mDensity,
-            mAccent, 1f, 1f, mDensity);
+    /**
+     * Lays the card out where it belongs, gliding it there from wherever it stood when it was
+     * already on screen. Only translation moves: the card's own layout is final at once.
+     */
+    private void place(@NonNull View card, int left, int top, int width, int height) {
+        boolean placed = mPlacedCard == card;
+        float fromX = card.getLeft() + card.getTranslationX();
+        float fromY = card.getTop() + card.getTranslationY();
+        boolean moves = card.getLeft() != left || card.getTop() != top;
+        card.layout(left, top, left + width, top + height);
+        mPlacedCard = card;
+        if (!placed || !moves) return;
+        if (!FocusOutlineRenderer.animationsEnabled(getContext())) {
+            cancelGlide();
+            card.setTranslationX(0f);
+            card.setTranslationY(0f);
+            return;
+        }
+        cancelGlide();
+        card.animate().cancel();
+        card.setAlpha(1f);
+        float startX = fromX - left;
+        float startY = fromY - top;
+        card.setTranslationX(startX);
+        card.setTranslationY(startY);
+        ValueAnimator glide = ValueAnimator.ofFloat(1f, 0f);
+        glide.setDuration(CARD_MOVE_MS);
+        glide.setInterpolator(new PathInterpolator(0.3f, 0.7f, 0.2f, 1f));
+        glide.addUpdateListener(animation -> {
+            float k = (float) animation.getAnimatedValue();
+            card.setTranslationX(startX * k);
+            card.setTranslationY(startY * k);
+        });
+        mGlide = glide;
+        glide.start();
+    }
+
+    private void cancelGlide() {
+        if (mGlide != null) {
+            mGlide.cancel();
+            mGlide = null;
+        }
+        mCard.setTranslationX(0f);
+        mClosingCard.setTranslationX(0f);
+    }
+
+    private void animateCardIn(@NonNull View card) {
+        card.animate().cancel();
+        card.setTranslationX(0f);
+        if (!FocusOutlineRenderer.animationsEnabled(getContext())) {
+            card.setAlpha(1f);
+            card.setTranslationY(0f);
+            return;
+        }
+        card.setAlpha(0f);
+        card.setTranslationY(-CARD_RISE_DP * mDensity);
+        card.animate().alpha(1f).translationY(0f).setDuration(CARD_IN_MS)
+            .setInterpolator(new PathInterpolator(0.05f, 0.7f, 0.1f, 1f)).withLayer().start();
     }
 
     /**
@@ -634,6 +842,7 @@ public final class TourOverlayView extends FrameLayout {
      * pulled away from the apps row's edge, so a row that is a rail down a side is swiped inward
      * rather than pulled down.
      */
+    @NonNull
     private TourGesture gestureAsLaidOut(@NonNull TourGesture gesture) {
         if (gesture != TourGesture.DRAG_DOWN || mTargetRect == null
             || !TourTargets.DOCK.equals(glowTargetId())) return gesture;
@@ -642,302 +851,87 @@ public final class TourOverlayView extends FrameLayout {
             : TourGesture.SWIPE_LEFT;
     }
 
-    private void drawFinger(@NonNull Canvas canvas) {
-        TourGesture gesture = gestureAsLaidOut(mStep.gestureAt(mStage));
-        if (gesture == TourGesture.NONE || mTraceProgress >= 1f) return;
-        // The widest ring the cue ever draws is the hold's halo, at 1.9 times the finger's own
-        // radius; the centre is kept in far enough that even that stays on the screen.
-        TourGlowGeometry.cueBounds(getWidth(), getHeight(), FINGER_RADIUS_DP * 1.9f * mDensity,
-            TourGlowGeometry.EDGE_MARGIN_DP * mDensity, mCueBounds);
-        TourFingerPainter.draw(canvas, mFingerPaint, gesture, mTargetRect.left, mTargetRect.top,
-            mTargetRect.right, mTargetRect.bottom, mDensity, mTraceProgress, mAccent,
-            mFingerPoint, mTrailPoint, mCueBounds);
-    }
-
-    /**
-     * Against the control: centred on it, below it when it is in the top half of the overlay and
-     * above it otherwise, flipped when that side has no room, and clamped inside the margins. The
-     * arithmetic is {@link TourCardPlacement}'s; this only applies the answer.
-     */
-    private void layoutCard() {
-        if (mStep == null || mCard.getVisibility() == GONE) return;
-        int width = mCard.getMeasuredWidth();
-        int height = mCard.getMeasuredHeight();
-        if (width <= 0 || height <= 0) return;
-        int margin = dp(CARD_SIDE_MARGIN_DP);
-        // Away from the place it is taught on, the card stands against nothing by definition: the
-        // control it names is on another page of the wall.
-        Rect anchor = mPresentation == TourCardVisibility.AWAY ? null : anchorRect();
-        // A card that names a control and has nothing to stand against rests under the launcher's
-        // own top bar. The middle of the screen is where the missing control would have been, and
-        // a card sitting there reads as pointing at it.
-        boolean atTheTop = anchor == null
-            && (mPresentation != TourCardVisibility.NORMAL
-                || !TourTargets.NONE.equals(glowTargetId()));
-        TourCardPlacement placement = atTheTop
-            ? TourCardPlacement.placeUnderStatusBar(getWidth(), getHeight(), width, height,
-                margin, margin + mSystemInsetTop, margin + mSystemInsetBottom, mTopBarRect,
-                dp(CARD_GAP_DP))
-            : TourCardPlacement.place(getWidth(), getHeight(),
-                width, height, anchor, margin, margin + mSystemInsetTop,
-                margin + mSystemInsetBottom, dp(CARD_GAP_DP), dp(POINTER_HEIGHT_DP),
-                dp(POINTER_HALF_WIDTH_DP), preferredCardSide());
-        mPlacement = placement;
-        mCard.layout(placement.left, placement.top, placement.left + width,
-            placement.top + height);
-        GradientDrawable background = mCard.getBackground() instanceof GradientDrawable
-            ? (GradientDrawable) mCard.getBackground() : null;
-        if (background != null)
-            background.setCornerRadius(mDress.cornerRadiusPx(height));
-    }
-
-    /**
-     * The card's pointer: the same fill and the same hairline the card itself wears, its base
-     * tucked a pixel under the card so the two share no visible seam.
-     */
-    private void drawCardPointer(@NonNull Canvas canvas) {
-        TourCardPlacement placement = mPlacement;
-        if (placement == null || !placement.hasPointer() || mCard.getVisibility() == GONE) return;
-        float height = POINTER_HEIGHT_DP * mDensity;
-        float halfWidth = POINTER_HALF_WIDTH_DP * mDensity;
-        boolean up = placement.pointerEdge == TourCardPlacement.POINTER_TOP;
-        // The card rises into place; the pointer travels and fades with it rather than sitting
-        // detached under a card that has not arrived yet.
-        float offset = mCard.getTranslationY();
-        float alpha = mCard.getAlpha();
-        if (alpha <= 0.01f) return;
-        float base = (up ? mCard.getTop() + 1f : mCard.getBottom() - 1f) + offset;
-        float tip = up ? base - height : base + height;
-        float centerX = placement.pointerCenterX;
-
-        mPointerFill.reset();
-        mPointerFill.moveTo(centerX - halfWidth, base);
-        mPointerFill.lineTo(centerX, tip);
-        mPointerFill.lineTo(centerX + halfWidth, base);
-        mPointerFill.close();
-        mPointerPaint.setStyle(Paint.Style.FILL);
-        mPointerPaint.setColor(mDress.fillColor);
-        mPointerPaint.setAlpha(Math.round(Color.alpha(mDress.fillColor) * alpha));
-        canvas.drawPath(mPointerFill, mPointerPaint);
-
-        // Only the two slanted sides: the base is inside the card, where there is no edge to draw.
-        mPointerEdges.reset();
-        mPointerEdges.moveTo(centerX - halfWidth, base);
-        mPointerEdges.lineTo(centerX, tip);
-        mPointerEdges.lineTo(centerX + halfWidth, base);
-        mPointerPaint.setStyle(Paint.Style.STROKE);
-        mPointerPaint.setStrokeJoin(Paint.Join.ROUND);
-        mPointerPaint.setStrokeWidth(mDress.strokeWidthPx);
-        mPointerPaint.setColor(mDress.strokeColor);
-        mPointerPaint.setAlpha(Math.round(Color.alpha(mDress.strokeColor) * alpha));
-        canvas.drawPath(mPointerEdges, mPointerPaint);
-    }
+    // ---- the demonstration ---------------------------------------------------------------------
 
     @Override
-    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        int margin = dp(CARD_SIDE_MARGIN_DP);
-        int available = MeasureSpec.getSize(widthMeasureSpec) - (2 * margin);
-        int max = Math.min(dp(CARD_MAX_WIDTH_DP), Math.max(dp(120f), available));
-        // What is left of the window once the system bars and the card's own margins are out of
-        // it. Only the closing card ever wants more than this.
-        int budget = Math.max(dp(120f), MeasureSpec.getSize(heightMeasureSpec)
-            - mSystemInsetTop - mSystemInsetBottom - (2 * margin));
-        // Measured twice, and only ever to any effect on the closing card: once unbounded, for
-        // what the card would like to be, and again against the budget with the sections given
-        // exactly the height that is left over. A card that simply grew past the budget would be
-        // cut off by the layout below rather than scrolled.
-        mScrollMaxHeight = UNBOUNDED_PX;
-        measureCard(max, UNBOUNDED_PX, MeasureSpec.UNSPECIFIED);
-        int natural = mCard.getMeasuredHeight();
-        if (natural > budget && mBodyScroll.getVisibility() != GONE) {
-            mScrollMaxHeight = Math.max(dp(64f),
-                mBodyScroll.getMeasuredHeight() - (natural - budget));
-        }
-        measureCard(max, budget, MeasureSpec.AT_MOST);
-    }
-
-    private void measureCard(int maxWidth, int maxHeight, int heightMode) {
-        measureChild(mCard, MeasureSpec.makeMeasureSpec(maxWidth, MeasureSpec.AT_MOST),
-            MeasureSpec.makeMeasureSpec(maxHeight, heightMode));
-    }
-
-    private void animateCardIn() {
-        mCard.animate().cancel();
+    protected void onDraw(@NonNull Canvas canvas) {
+        super.onDraw(canvas);
+        // Only a card standing against its control wears the zone. A card saying "Got it" or the
+        // way back points at nothing.
+        if (mStep == null || mStep.isClosingCard()) return;
+        if (mPresentation != TourCardVisibility.NORMAL) return;
+        if (mTargetRect == null || mTargetRect.isEmpty()) return;
+        boolean playing = mDemoElapsedMs >= 0L;
+        TourGlowGeometry.glowRect(mTargetRect, GLOW_PADDING_DP * mDensity,
+            FocusOutlineRenderer.fallbackOuterReachPx(mDensity), getWidth(), getHeight(),
+            TourGlowGeometry.EDGE_MARGIN_DP * mDensity, mGlowRect);
+        FocusOutlineRenderer.drawRoundRectFallback(canvas, mGlowRect, GLOW_RADIUS_DP * mDensity,
+            mAccent, playing ? TourDemoLoop.glowAlpha(mDemoElapsedMs) : 1f, 1f, mDensity);
+        TourGesture gesture = gestureAsLaidOut(mStep.gestureAt(mStage));
+        if (gesture == TourGesture.NONE) return;
+        float reach = (TourDemoLoop.FINGER_DIAMETER_DP / 2f + TourDemoLoop.FINGER_HALO_DP)
+            * mDensity;
+        TourGlowGeometry.cueBounds(getWidth(), getHeight(), reach,
+            TourGlowGeometry.EDGE_MARGIN_DP * mDensity, mCueBounds);
         if (!FocusOutlineRenderer.animationsEnabled(getContext())) {
-            mCard.setAlpha(1f);
-            mCard.setTranslationY(0f);
+            // A phone that plays no animations still gets the direction, as a still picture.
+            TourFingerPainter.drawStaticCue(canvas, mFingerPaint, mCuePath, gesture,
+                mTargetRect.left, mTargetRect.top, mTargetRect.right, mTargetRect.bottom,
+                mDensity, mAccent, mPointA, mPointB);
             return;
         }
-        mCard.setAlpha(0f);
-        mCard.setTranslationY(-CARD_RISE_DP * mDensity);
-        // The pointer is drawn by this view, not by the card, so every frame of the card's rise
-        // has to be a frame of this view too or the two would arrive separately.
-        mCard.animate().alpha(1f).translationY(0f).setDuration(CARD_IN_MS)
-            .setInterpolator(new PathInterpolator(0.05f, 0.7f, 0.1f, 1f)).withLayer()
-            .setUpdateListener(animation -> invalidate()).start();
+        if (!playing) return;
+        long pass = TourDemoLoop.passMs(gesture);
+        TourDemoLoop.frame(gesture, (mDemoElapsedMs % pass) / (float) pass, mFrame);
+        TourFingerPainter.drawDemo(canvas, mFingerPaint, gesture, mTargetRect.left,
+            mTargetRect.top, mTargetRect.right, mTargetRect.bottom, mDensity, mFrame, mAccent,
+            mPointA, mPointB, mCueBounds);
     }
 
-    /** One pass of the gesture per card. Nothing here loops. */
-    private void startTrace() {
-        stopTrace();
-        if (mStep == null || mStep.gestureAt(mStage) == TourGesture.NONE
+    /** Plays the demonstration from the top, {@link TourDemoLoop#PASSES} times, then rests. */
+    private void startDemo() {
+        stopDemo();
+        if (mStep == null || mStep.isClosingCard()
+            || mPresentation != TourCardVisibility.NORMAL
+            || mStep.gestureAt(mStage) == TourGesture.NONE
             || !FocusOutlineRenderer.animationsEnabled(getContext())) {
-            mTraceProgress = 1f;
             invalidate();
             return;
         }
-        mTraceProgress = 0f;
-        mTrace = ValueAnimator.ofFloat(0f, 1f);
-        mTrace.setDuration(TourFingerTrace.TRACE_MS);
-        mTrace.addUpdateListener(animator -> {
-            mTraceProgress = (float) animator.getAnimatedValue();
+        long total = TourDemoLoop.PASSES * TourDemoLoop.passMs(mStep.gestureAt(mStage));
+        mDemoElapsedMs = 0L;
+        ValueAnimator demo = ValueAnimator.ofFloat(0f, total);
+        demo.setDuration(total);
+        demo.setInterpolator(null);
+        demo.addUpdateListener(animation -> {
+            mDemoElapsedMs = (long) (float) animation.getAnimatedValue();
             invalidate();
         });
-        mTrace.start();
-    }
-
-    private void stopTrace() {
-        if (mTrace != null) {
-            mTrace.cancel();
-            mTrace = null;
-        }
-        mTraceProgress = 1f;
-    }
-
-    /** The card's three sections, built once and kept while the card is up. */
-    private void showClosingSections() {
-        TourEdition edition = TourEdition.of(getContext().getPackageName());
-        if (edition != mSectionsEdition) buildClosingSections(edition);
-        // Every Copy button back to offering rather than acknowledging: the card can be shown
-        // again after a resume, and a row of buttons all saying "Copied" says nothing.
-        for (TextView copyButton : mCopyButtons) copyButton.setText(R.string.tour_copy);
-        mBodyScroll.setVisibility(VISIBLE);
-        mBodyScroll.scrollTo(0, 0);
-        mDocsLink.setVisibility(VISIBLE);
-    }
-
-    private void buildClosingSections(@NonNull TourEdition edition) {
-        mSections.removeAllViews();
-        mCopyButtons.clear();
-        boolean first = true;
-        for (TourClosingCard.Section section : TourClosingCard.sections(edition)) {
-            mSections.addView(sectionView(section, first));
-            first = false;
-        }
-        mDocsLink.setText(R.string.tour_read_the_docs);
-        mSectionsEdition = edition;
-    }
-
-    /** One section: a heading, a sentence, and where there is one, the command and its Copy. */
-    @NonNull
-    private View sectionView(@NonNull TourClosingCard.Section section, boolean first) {
-        Context context = getContext();
-        LinearLayout block = new LinearLayout(context);
-        block.setOrientation(LinearLayout.VERTICAL);
-        LinearLayout.LayoutParams blockParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        if (!first) blockParams.topMargin = dp(12);
-        block.setLayoutParams(blockParams);
-
-        TextView heading = new TextView(context);
-        heading.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-        heading.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
-        heading.setTextColor(mDress.textColor);
-        heading.setText(section.headingRes);
-        block.addView(heading, new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-
-        TextView copy = new TextView(context);
-        copy.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-        copy.setTextColor(ColorUtils.setAlphaComponent(mDress.textColor, 204));
-        copy.setLineSpacing(dp(2), 1f);
-        copy.setText(section.copyRes);
-        LinearLayout.LayoutParams copyParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        copyParams.topMargin = dp(2);
-        block.addView(copy, copyParams);
-
-        if (!section.hasCommand()) return block;
-
-        LinearLayout commandRow = new LinearLayout(context);
-        commandRow.setOrientation(LinearLayout.HORIZONTAL);
-        commandRow.setGravity(Gravity.CENTER_VERTICAL);
-
-        TextView command = new TextView(context);
-        command.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-        command.setTypeface(Typeface.MONOSPACE);
-        // A shell command reads left to right whatever the card around it does.
-        command.setTextDirection(TEXT_DIRECTION_LTR);
-        command.setTextColor(mDress.textColor);
-        command.setText(section.commandRes);
-        command.setLineSpacing(dp(1), 1f);
-        LinearLayout.LayoutParams commandParams = new LinearLayout.LayoutParams(0,
-            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-        commandRow.addView(command, commandParams);
-
-        TextView copyButton = textButton(context,
-            view -> onCopyTapped((TextView) view, section.commandRes));
-        copyButton.setText(R.string.tour_copy);
-        mCopyButtons.add(copyButton);
-        LinearLayout.LayoutParams buttonParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        buttonParams.setMarginStart(dp(6));
-        commandRow.addView(copyButton, buttonParams);
-
-        LinearLayout.LayoutParams rowParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        rowParams.topMargin = dp(4);
-        block.addView(commandRow, rowParams);
-        return block;
-    }
-
-    /** @param commandRes the command this button stands beside */
-    private void onCopyTapped(@NonNull TextView button, int commandRes) {
-        if (mCallbacks == null) return;
-        mCallbacks.onTourCopyCommandTapped(commandRes);
-        // The run draws no toasts, so the button itself is the acknowledgement.
-        button.setText(R.string.tour_copied_commands);
-    }
-
-    /**
-     * The card's buttons, rebuilt only when the set actually changed. Whether they share a row or
-     * stand one under another — the usage card's three answers, each a phrase, do not fit across
-     * a phone — is the row's own measurement, not this.
-     */
-    private void applyActions(@NonNull List<TourAction> actions) {
-        if (!mActions.equals(actions)) {
-            mActions.clear();
-            mActions.addAll(actions);
-            for (TextView button : mActionButtons) mButtonRow.removeView(button);
-            mActionButtons.clear();
-            for (TourAction action : mActions) {
-                TextView button = textButton(getContext(), view -> onActionTapped(action));
-                button.setText(action.labelRes);
-                button.setContentDescription(getContext().getString(action.labelRes));
-                mButtonRow.addView(button);
-                mActionButtons.add(button);
+        demo.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override
+            public void onAnimationEnd(android.animation.Animator animation) {
+                if (mDemo != animation) return;
+                mDemo = null;
+                mDemoElapsedMs = -1L;
+                invalidate();
             }
-        }
-        mButtonRow.setVisibility(mActions.isEmpty() ? GONE : VISIBLE);
+        });
+        mDemo = demo;
+        demo.start();
     }
 
-    private void onActionTapped(@NonNull TourAction action) {
-        if (mCallbacks != null) mCallbacks.onTourActionTapped(action);
-    }
-
-    @NonNull
-    private GradientDrawable buttonBackground() {
-        GradientDrawable shape = new GradientDrawable();
-        shape.setColor(ColorUtils.setAlphaComponent(mAccent, 20));
-        shape.setCornerRadius(dp(8f));
-        return shape;
+    private void stopDemo() {
+        ValueAnimator demo = mDemo;
+        mDemo = null;
+        if (demo != null) demo.cancel();
+        mDemoElapsedMs = -1L;
     }
 
     @Override
     protected void onDetachedFromWindow() {
-        stopTrace();
+        stopDemo();
         stopTargetRetry();
+        cancelGlide();
         super.onDetachedFromWindow();
     }
 
@@ -952,19 +946,103 @@ public final class TourOverlayView extends FrameLayout {
             ViewGroup.LayoutParams.MATCH_PARENT, Gravity.TOP | Gravity.START);
     }
 
-    /** Kept for the host, which re-resolves the accent when the theme changes under the run. */
-    public void refreshAccent() {
-        mAccent = FocusOutlineRenderer.resolveAccent(this);
-        for (TextView button : mActionButtons) {
-            button.setTextColor(mAccent);
-            button.setBackground(buttonBackground());
+    // ---- the two small drawings ----------------------------------------------------------------
+
+    /** The run's progress: a short bar per lesson, grouped by chapter. */
+    private final class ProgressSegments extends View {
+        private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF mRect = new RectF();
+        @NonNull private List<List<TourProgress.Segment>> mGroups =
+            java.util.Collections.emptyList();
+
+        ProgressSegments(@NonNull Context context) {
+            super(context);
+            setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         }
-        mDocsLink.setTextColor(mAccent);
-        mDocsLink.setBackground(buttonBackground());
-        for (TextView copyButton : mCopyButtons) {
-            copyButton.setTextColor(mAccent);
-            copyButton.setBackground(buttonBackground());
+
+        void bind(@NonNull List<List<TourProgress.Segment>> groups) {
+            if (groups.equals(mGroups)) return;
+            boolean resized = width(groups) != width(mGroups);
+            mGroups = groups;
+            if (resized) requestLayout();
+            invalidate();
         }
-        invalidate();
+
+        private int width(@NonNull List<List<TourProgress.Segment>> groups) {
+            float total = 0f;
+            for (int g = 0; g < groups.size(); g++) {
+                int count = groups.get(g).size();
+                total += (count * SEGMENT_WIDTH_DP) + (Math.max(0, count - 1) * SEGMENT_GAP_DP);
+                if (g > 0) total += GROUP_GAP_DP;
+            }
+            return dp(total);
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            setMeasuredDimension(resolveSize(width(mGroups), widthMeasureSpec),
+                resolveSize(dp(SEGMENT_HEIGHT_DP), heightMeasureSpec));
+        }
+
+        @Override
+        protected void onDraw(@NonNull Canvas canvas) {
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            float segment = SEGMENT_WIDTH_DP * mDensity;
+            float height = SEGMENT_HEIGHT_DP * mDensity;
+            float top = (getHeight() - height) / 2f;
+            float x = 0f;
+            for (int g = 0; g < mGroups.size(); g++) {
+                if (g > 0) x += GROUP_GAP_DP * mDensity;
+                List<TourProgress.Segment> group = mGroups.get(g);
+                for (int i = 0; i < group.size(); i++) {
+                    if (i > 0) x += SEGMENT_GAP_DP * mDensity;
+                    float left = rtl ? getWidth() - x - segment : x;
+                    mRect.set(left, top, left + segment, top + height);
+                    mPaint.setColor(colorOf(group.get(i)));
+                    canvas.drawRoundRect(mRect, height / 2f, height / 2f, mPaint);
+                    x += segment;
+                }
+            }
+        }
+
+        private int colorOf(@NonNull TourProgress.Segment segment) {
+            switch (segment) {
+                case DONE: return mAccent;
+                case CURRENT: return mDress.textColor;
+                default: return ColorUtils.setAlphaComponent(mDress.textColor, TODO_ALPHA);
+            }
+        }
+    }
+
+    /** The closing card's downloads bar. */
+    private final class ProgressBarView extends View {
+        private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF mRect = new RectF();
+        private float mFraction;
+
+        ProgressBarView(@NonNull Context context) {
+            super(context);
+        }
+
+        void setFraction(float fraction) {
+            float bounded = Math.max(0f, Math.min(1f, fraction));
+            if (bounded == mFraction) return;
+            mFraction = bounded;
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(@NonNull Canvas canvas) {
+            float radius = getHeight() / 2f;
+            mRect.set(0f, 0f, getWidth(), getHeight());
+            mPaint.setColor(ColorUtils.setAlphaComponent(mDress.textColor, TODO_ALPHA));
+            canvas.drawRoundRect(mRect, radius, radius, mPaint);
+            if (mFraction <= 0f) return;
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            float filled = getWidth() * mFraction;
+            mRect.set(rtl ? getWidth() - filled : 0f, 0f, rtl ? getWidth() : filled, getHeight());
+            mPaint.setColor(mAccent);
+            canvas.drawRoundRect(mRect, radius, radius, mPaint);
+        }
     }
 }
