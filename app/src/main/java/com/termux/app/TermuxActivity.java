@@ -18385,6 +18385,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mX11Display.onUserKeyboardIntent(true);
             }
             syncPlaceState(page, leavingKeyboardUp);
+            // The pre-roll came and went quietly; the tour still hears where the keyboard ended
+            // up, or it keeps the visibility from before the slide and misses the next change.
+            if (keyboardPreRolled && mFirstBootTour != null && mInAppKeyboard != null)
+                mFirstBootTour.onKeyboardShownSettled(mInAppKeyboard.isVisible());
             // The hold is over: one geometry pass gives the content the room the place it landed
             // on leaves it, which is the terminal's one resize for the whole slide. A slide that
             // gave the room back in its first frame finds it already right, and only the grid's
