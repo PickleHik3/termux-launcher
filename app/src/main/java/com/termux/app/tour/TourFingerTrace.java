@@ -13,7 +13,7 @@ public final class TourFingerTrace {
     public static final long TRACE_MS = 1100L;
 
     /** How far a swipe or drag travels beyond the control, in dp. */
-    private static final float TRAVEL_DP = 56f;
+    static final float TRAVEL_DP = 56f;
 
     /** The gap the finger keeps from the exact edge it is dragging from, in dp. */
     private static final float INSET_DP = 10f;

@@ -24,7 +24,7 @@ Three rules keep this directory from rotting:
 | [`reference/`](reference/) | Research, comparisons, delivered records and decision evidence. Grouped by topic: `terminal/`, `voice-ai/`, `launcher/`. |
 | [`verification/`](verification/) | Runnable probes, not prose. |
 | [`backlog.md`](backlog.md) | The one authoritative list of unfinished terminal work, with a stated reason each deferred item waits. |
-| [`release-notes.md`](release-notes.md), [`release-notes-v1.0.0.md`](release-notes-v1.0.0.md) | The changelog. See below. |
+| [`release-notes.md`](release-notes.md) | The changelog. See below. |
 
 ## Active
 

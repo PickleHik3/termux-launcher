@@ -252,6 +252,9 @@ fails when the catalogue has gone stale.
   `drawKeyFrame`, `drawLabel` and `drawSubLabel` take `(boolean has…, int color)` pairs where
   upstream's `drawKeyFrame` takes no override and the labels take none. Upstream draws no
   overrides, so a refresh keeps upstream's drawing and re-applies these parameters.
+- Enter's north swipe in the bundled `termux_launcher_qwerty.xml` (2026-10-09) is
+  `tool:voice.dictate` — the launcher's own dictation — not upstream's `voice_typing`, which hands
+  off to the voice engine the settings name (possibly the system's).
 
 ## Refresh procedure
 

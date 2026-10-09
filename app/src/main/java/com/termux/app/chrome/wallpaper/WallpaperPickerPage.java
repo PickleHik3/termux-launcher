@@ -404,14 +404,7 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
 
         // The bar (back, the Wallpaper | Look | Layout pill, Done) is the surface's shared frame:
         // Done applies what the cards hold; the page has nothing above or under them but the strip.
-        mPhoto.setOnClickListener(v -> {
-            if (mBusy || mReleased) return;
-            WallpaperSlots.Slot slot = mCentred;
-            ReturnState back = returnState();
-            // The host closes the surface and brings it back with the cropped photo.
-            mHandedOff = true;
-            mListener.onPickPhoto(slot, back);
-        });
+        mPhoto.setOnClickListener(v -> pickPhoto());
 
         mPagerLayout = new LinearLayoutManager(context, RecyclerView.HORIZONTAL, false);
         mPager.setLayoutManager(mPagerLayout);
@@ -558,6 +551,16 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
     @Override
     public String centredSlotName() {
         return mCentred.name();
+    }
+
+    /** The photo picker for the centred card: the Photo button, or a tap on an empty card. */
+    private void pickPhoto() {
+        if (mBusy || mReleased) return;
+        WallpaperSlots.Slot slot = mCentred;
+        ReturnState back = returnState();
+        // The host closes the surface and brings it back with the cropped photo.
+        mHandedOff = true;
+        mListener.onPickPhoto(slot, back);
     }
 
     /** Where the page is now, for {@link Listener#onOpenLook} and {@link Listener#onOpenLayout}. */
@@ -890,6 +893,8 @@ public final class WallpaperPickerPage implements AppearanceSurfaceController.Ov
                 ? R.string.wallpaper_picker_slot_lock : R.string.wallpaper_picker_slot_home));
             holder.card.setOnClickListener(v -> {
                 if (mCentred != slot) centre(slot);
+                // A card with no photo of the app's on it has nothing to show but the way to one.
+                if (!shown(slot).photo) pickPhoto();
             });
             bindCard(position);
         }

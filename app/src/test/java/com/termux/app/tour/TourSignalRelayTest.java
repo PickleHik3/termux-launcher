@@ -510,7 +510,7 @@ public class TourSignalRelayTest {
     }
 
     @Test
-    public void onlyAnEditorThatSavedAPinSaysSo() {
+    public void anEditorClosedWithPinsSaysSo() {
         relay.onPinEditorOpened();
         signals.clear();
         relay.onPinEditorClosed(true, 3);
@@ -519,15 +519,16 @@ public class TourSignalRelayTest {
     }
 
     @Test
-    public void anEditorClosedWithAnEmptyDockOrWithoutSavingSaysNothing() {
+    public void anEditorClosedWithoutSavingOrWithAnEmptyDockStillCompletesTheLesson() {
         relay.onPinEditorOpened();
         signals.clear();
-        // Saved, and left nothing pinned: the lesson is a pinned app.
+        // The hold raised the editor and the user closed it again: the lesson has been had,
+        // pinned apps or not. A card that kept asking read as a tour that would not move on.
         relay.onPinEditorClosed(true, 0);
-        // Opened and closed again, changing nothing.
         relay.onPinEditorClosed(false, 4);
         relay.onPinEditorClosed(false, 0);
-        assertTrue(signals.isEmpty());
+        assertEquals(3, signals.size());
+        for (String signal : signals) assertEquals(TourSignals.PINNED_APPS_SAVED, signal);
     }
 
     // The three border lessons: the border drag, the keyboard swipe and the status swipe.
