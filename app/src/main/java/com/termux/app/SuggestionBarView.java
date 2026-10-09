@@ -8364,6 +8364,9 @@ public final class SuggestionBarView extends GridLayout
     }
 
     public void releaseResources() {
+        // A catalogue refresh still in flight finishes on the main thread after the activity is
+        // gone; it must not call back into it.
+        appCatalogChangedListener = null;
         removeCallbacks(azResetRunnable);
         removeCallbacks(azPostLaunchClearRunnable);
         clearAzFocusedEntry();

@@ -12695,6 +12695,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** As {@link #syncPinnedAppsHost()}, for a layout the caller already has. */
     boolean syncPinnedAppsHost(@NonNull PlaceLayout layout) {
+        // A relaunch hands this activity's DecorView to its successor, so once destroyed the
+        // lookups below resolve the successor's hosts; a late catalogue callback would stack this
+        // dead dock over the live one and steal its touches.
+        if (isDestroyed()) return false;
         LinearLayout host = findViewById(R.id.place_apps_bar_host);
         DockRailScrollView scroll = findViewById(R.id.place_apps_bar_scroll);
         PageTickStripView indicator = findViewById(R.id.place_apps_bar_indicator);
