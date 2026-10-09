@@ -3,6 +3,8 @@ package com.termux.app.launcher.data;
 import android.content.Context;
 import android.content.res.Resources;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -25,6 +27,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.function.IntConsumer;
 
 /**
  * The one rule for which apps still need a model to sort them, used by the sort itself, its time
@@ -50,6 +55,16 @@ public final class LauncherCategoryPendingApps {
         /** The drawer classifier's answer for the entry with the user stage left out. */
         @NonNull AppDrawerCategoryAssignment builtIn(@NonNull LauncherAppEntry entry);
     }
+
+    /** {@link #countWaitingAsync}'s answer when no sort has ever run. */
+    public static final int NEVER_SORTED = -1;
+
+    /** One idle daemon thread: counts are rare (a drawer open, a settings resume) and short. */
+    private static final ExecutorService COUNTER = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "launcher-category-pending");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     @Nullable private static AppDrawerCuratedCategoryMap sCurated;
 
@@ -130,17 +145,29 @@ public final class LauncherCategoryPendingApps {
         };
     }
 
-    /** The drawer's old count: packages no drag and no file line names. Replaced by {@link #waiting}. */
-    public static int count(@NonNull Context context, @NonNull List<LauncherAppEntry> catalogue) {
-        LauncherCategoryAssignmentSource source = new LauncherCategoryAssignmentSource(
-            new LauncherCategoryOverrideStore(context));
-        Set<String> seen = new HashSet<>();
-        int pending = 0;
-        for (LauncherAppEntry entry : catalogue) {
-            if (entry == null || !seen.add(entry.packageLower)) continue;
-            if (source.categoryForPackage(entry.packageLower) == null) pending++;
-        }
-        return pending;
+    /**
+     * Counts the {@link #waiting} apps of {@code catalogue} off the main thread and hands the count
+     * to {@code onMain} on the main thread; {@link #NEVER_SORTED} when no sort has ever run, which
+     * the drawer's notice stays quiet for. The drawer asks on every open, so none of the reading
+     * (preferences, the config file, the package manager) may happen on the frame that opens it.
+     */
+    public static void countWaitingAsync(@NonNull Context context, @NonNull List<LauncherAppEntry> catalogue,
+                                         @NonNull IntConsumer onMain) {
+        Context app = context.getApplicationContext();
+        Handler main = new Handler(Looper.getMainLooper());
+        List<LauncherAppEntry> snapshot = new ArrayList<>(catalogue);
+        COUNTER.execute(() -> {
+            int count;
+            try {
+                LauncherCategorySortState state = new LauncherCategorySortState(app);
+                count = state.hasRun() ? waiting(snapshot, placement(app), state.getAnsweredOther()) : NEVER_SORTED;
+            } catch (RuntimeException ignored) {
+                // A count is a nicety; a failed one says nothing rather than taking the home screen down.
+                count = 0;
+            }
+            int result = count;
+            main.post(() -> onMain.accept(result));
+        });
     }
 
     @NonNull
