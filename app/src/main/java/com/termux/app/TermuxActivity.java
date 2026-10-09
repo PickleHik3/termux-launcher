@@ -17584,8 +17584,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void onClosedByUser() {
             if (!mAppearanceFromSettings) return;
             mAppearanceFromSettings = false;
-            // Opened from Settings' Appearance row: Back returns to Settings' first screen, not the
-            // launcher (the row's CLEAR_TOP launch closed Settings underneath the surface).
+            // Opened from Settings' Appearance page: Back returns to Settings, not the launcher (the
+            // row's CLEAR_TOP launch closed Settings underneath the surface; its saved stack brings
+            // the page back).
             startActivity(new Intent(TermuxActivity.this, com.termux.app.activities.SettingsActivity.class));
         }
     }

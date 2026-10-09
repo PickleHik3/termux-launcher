@@ -73,6 +73,16 @@ public class TermuxStylePreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(R.xml.termux_style_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         LauncherIconPackPreferenceController.configure(this, context);
+        Preference appearanceSurface = findPreference("appearance_surface");
+        if (appearanceSurface != null) appearanceSurface.setOnPreferenceClickListener(preference -> {
+            // The launcher comes forward with the Appearance surface open; Back returns here.
+            Intent intent = new Intent(context, TermuxActivity.class);
+            intent.putExtra(TermuxActivity.EXTRA_WALLPAPER_STYLE, true);
+            intent.putExtra(TermuxActivity.EXTRA_APPEARANCE_FROM_SETTINGS, true);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(intent);
+            return true;
+        });
         Preference customizeKeyboardSurface = findPreference("customize_keyboard_surface");
         if (customizeKeyboardSurface != null) customizeKeyboardSurface.setOnPreferenceClickListener(preference -> {
             Intent intent = new Intent(context, TermuxActivity.class);

@@ -62,7 +62,7 @@ public final class TaiFeaturePlan {
 
     /** Cleanup's window: the Light and Polished prompts over a long dictation and its answer fit in it. */
     public static final int CLEANUP_WINDOW = 2048;
-    /** App sorting's window, the smallest the runtime accepts: one app's prompt and a one-word answer. */
+    /** App sorting's window, the smallest the runtime accepts: one batch of apps and their answers. */
     public static final int SORTING_WINDOW = 1024;
     /** A group member used this recently stays loaded for its group (decision 8). */
     public static final long GROUP_RECENT_MS = TimeUnit.MINUTES.toMillis(2);
@@ -294,8 +294,8 @@ public final class TaiFeaturePlan {
                 speculative = Boolean.TRUE;
                 speculativeReason = Reason.MEASURED;
             } else {
-                // Not measured, or within noise: on, as the default would have it.
-                speculative = Boolean.TRUE;
+                // Not measured, or within noise: the feature's default.
+                speculative = speculativeByDefault(feature);
                 speculativeReason = Reason.DEFAULT;
             }
         }
@@ -323,6 +323,15 @@ public final class TaiFeaturePlan {
         return new TaiFeaturePlan(feature, Where.REMOTE, reason, remoteModel, reason, null, null, Reason.REMOTE,
             null, Reason.REMOTE, 0, Reason.REMOTE, Residency.UNTIL_IDLE, Reason.REMOTE,
             TaiTierPolicy.WithoutModel.NONE, null, false, 0.0, null);
+    }
+
+    /**
+     * Speculative decoding where nothing measured decides it: on, except for app sorting. A sort's
+     * replies are a few category ids, too short for drafted tokens to pay for the draft model's
+     * load and memory; a feature check that measures it faster still turns it on.
+     */
+    static boolean speculativeByDefault(@NonNull TaiFunction feature) {
+        return feature != TaiFunction.APP_CATEGORIES;
     }
 
     /** The feature's window (decision 5): cleanup 2048, app sorting 1024, everything else automatic ({@code 0}). */

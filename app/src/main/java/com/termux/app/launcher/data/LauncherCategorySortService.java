@@ -20,18 +20,22 @@ import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiRuntimePresence;
 import com.termux.app.activities.SettingsActivity;
+import com.termux.app.launcher.drawer.AppDrawerCategory;
+import com.termux.app.launcher.model.LauncherAppEntry;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.function.Function;
@@ -40,7 +44,8 @@ import java.util.function.UnaryOperator;
 /**
  * Categorizes installed apps with the on-device model and writes the assignments into
  * {@code app-categories.conf}. Runs in the foreground because a full catalogue is many inferences
- * and the user leaves Settings while it works. The on-device model is asked one app at a time; the
+ * and the user leaves Settings while it works. The on-device model is asked a few apps at a time
+ * ({@link LauncherCategoryLocalSort}), so the category list is not re-read for every app; the
  * remote model is asked in blocks ({@link LauncherCategoryRemoteSort}), because free plans count
  * requests.
  *
@@ -192,10 +197,10 @@ public final class LauncherCategorySortService extends Service {
 
     private void runSort(@Nullable String modelId) throws Exception {
         LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(this);
+        List<LauncherAppEntry> catalogue = provider.getAllAppsBlocking();
         // Excludes x11:linux (every Linux app's shared package) as well as work/private twins; see
         // LauncherCategoryCatalogue for why the categoriser must never see that one as an "app".
-        LinkedHashMap<String, String> labelByPackage =
-            LauncherCategoryCatalogue.labelByPackage(provider.getAllAppsBlocking());
+        LinkedHashMap<String, String> labelByPackage = LauncherCategoryCatalogue.labelByPackage(catalogue);
 
         File file = LauncherCategoryFile.defaultFile();
         LauncherCategoryFile existing;
@@ -205,27 +210,26 @@ public final class LauncherCategorySortService extends Service {
             existing = LauncherCategoryFile.empty();
         }
 
-        // Only packages the file does not mention yet get classified: a re-run must stay cheap and
-        // must never overwrite hand edits or an earlier run's assignments.
+        // Only what LauncherCategoryPendingApps calls pending is asked: nothing a drag or the file
+        // already places (a re-run must stay cheap and never overwrite hand edits or an earlier
+        // run's assignments), and nothing the drawer's own classifier places surely, which costs no
+        // inference at all and is left out of the file.
         List<String> pending = new ArrayList<>();
-        for (String packageName : labelByPackage.keySet()) {
-            if (existing.categoryForPackage(packageName) == null) pending.add(packageName);
+        for (LauncherAppEntry entry : LauncherCategoryPendingApps.pending(catalogue,
+                LauncherCategoryPendingApps.placement(this))) {
+            pending.add(entry.appRef.packageName);
         }
         update(s -> s.withTotal(pending.size()));
+        Assignments assignments = new Assignments(existing, file);
         if (pending.isEmpty()) {
             // Nothing new to classify. Loading a model to sort zero apps would burn 10-20 seconds
             // and then flash a progress bar that was never measuring anything.
             String nothingPending = getString(
                 R.string.settings_app_drawer_category_sort_nothing_pending, labelByPackage.size());
             update(s -> s.withOutcome(nothingPending));
-            new LauncherCategorySortState(this).recordRun(System.currentTimeMillis(),
-                labelByPackage.size(), LauncherCategorySortState.SOURCE_ON_DEVICE_MODEL, modelId);
+            recordRun(modelId, pending, labelByPackage.size(), assignments);
             return;
         }
-
-        LinkedHashMap<String, List<String>> merged = new LinkedHashMap<>();
-        for (Map.Entry<String, List<String>> section : existing.sections().entrySet())
-            merged.put(section.getKey(), new ArrayList<>(section.getValue()));
 
         TaiManager manager = TaiManager.getInstance(this);
         // The sort unloads what it loads when it is done, and leaves a model it found resident.
@@ -245,7 +249,7 @@ public final class LauncherCategorySortService extends Service {
             return;
         }
         try {
-            sortPending(manager, modelId, pending, labelByPackage, merged, file, provider);
+            sortPending(manager, modelId, pending, labelByPackage, assignments, provider);
         } finally {
             restoreRuntime(manager, modelId, residentBefore);
         }
@@ -253,65 +257,122 @@ public final class LauncherCategorySortService extends Service {
 
     private void sortPending(@NonNull TaiManager manager, @Nullable String modelId,
                              @NonNull List<String> pending, @NonNull Map<String, String> labelByPackage,
-                             @NonNull LinkedHashMap<String, List<String>> merged, @NonNull File file,
+                             @NonNull Assignments assignments,
                              @NonNull LauncherAppDataProvider provider) throws Exception {
         update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_SORTING));
-        int assigned = 0;
         String stopError = null;
+        boolean stalled = false;
         if (TaiCallerRequests.isRemoteModel(modelId)) {
+            // Stops on the first failed request already: see LauncherCategoryRemoteSort.
             LauncherCategoryRemoteSort.Result result = LauncherCategoryRemoteSort.run(pending,
-                new RemoteRequests(manager, modelId, labelByPackage, merged));
-            assigned = result.assigned;
+                new RemoteRequests(manager, modelId, labelByPackage, assignments));
             stopError = result.error;
         } else {
-            assigned = sortOnDevice(manager, modelId, pending, labelByPackage, merged);
+            List<LauncherCategorySortPrompt.AppEntry> apps = new ArrayList<>();
+            for (String packageName : pending) {
+                String label = labelByPackage.get(packageName);
+                apps.add(new LauncherCategorySortPrompt.AppEntry(packageName, label == null ? packageName : label));
+            }
+            stalled = LauncherCategoryLocalSort.run(apps, new LocalRequests(manager, modelId, assignments)).stalled;
         }
+        int assigned = assignments.assigned;
 
         update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_SAVING));
         updateProgressNotification(true);
-        if (assigned > 0) LauncherCategoryFile.of(merged).write(file);
+        // Most of it is on disk already, batch by batch; this writes the rest, and a failure here
+        // is the run's failure.
+        assignments.save();
+        recordRun(modelId, pending, labelByPackage.size(), assignments);
 
-        LinkedHashSet<String> written = new LinkedHashSet<>();
-        for (List<String> packages : merged.values()) written.addAll(packages);
-        new LauncherCategorySortState(this).recordRun(
-            System.currentTimeMillis(),
-            written.size(),
-            LauncherCategorySortState.SOURCE_ON_DEVICE_MODEL,
-            modelId
-        );
         String done = state.cancelRequested
             ? getString(R.string.settings_app_drawer_category_sort_cancelled, assigned)
+            : stalled
+            ? getString(R.string.settings_app_drawer_category_sort_stalled, assigned)
             : stopError != null
             ? getString(R.string.settings_app_drawer_category_sort_stopped, assigned, stopError)
-            : getString(R.string.settings_app_drawer_category_sort_done, assigned, merged.size());
+            : getString(R.string.settings_app_drawer_category_sort_done, assigned, assignments.merged.size());
         update(s -> s.withOutcome(done));
 
         provider.invalidate();
     }
 
-    /** The on-device sort: one app per request. Returns how many apps got a category. */
-    private int sortOnDevice(@NonNull TaiManager manager, @Nullable String modelId, @NonNull List<String> pending,
-                             @NonNull Map<String, String> labelByPackage,
-                             @NonNull LinkedHashMap<String, List<String>> merged) {
-        int assigned = 0;
+    /**
+     * Records the run, and the apps it answered {@code other} for that are still unplaced (now or by
+     * an earlier run): those stay pending, so the next sort asks again, but the drawer's notice and
+     * the settings row do not count them as waiting. Anything placed since drops out of that set.
+     */
+    private void recordRun(@Nullable String modelId, @NonNull List<String> pending, int appCount,
+                           @NonNull Assignments assignments) {
+        LauncherCategorySortState sortState = new LauncherCategorySortState(this);
+        Set<String> before = sortState.getAnsweredOther();
+        Set<String> answeredOther = new HashSet<>();
         for (String packageName : pending) {
-            if (state.cancelRequested) break;
-            String label = labelByPackage.get(packageName);
-            String slug = classify(manager, modelId, label == null ? packageName : label, packageName);
-            update(s -> s.withProcessed(s.processed + 1));
-            updateProgressNotification(false);
-            // An unparseable reply leaves the app out of the file entirely so the drawer's built-in
-            // classifier keeps handling it; it is a skip, never a fallback category.
-            if (slug == null) continue;
+            String lower = packageName.toLowerCase(Locale.US);
+            if (assignments.answeredOther.contains(packageName)
+                || before.contains(lower) && !assignments.assignedPackages.contains(packageName)) {
+                answeredOther.add(lower);
+            }
+        }
+        sortState.setAnsweredOther(answeredOther);
+        // Covered: every app but those this run asked about and got no answer for.
+        int unanswered = pending.size() - assignments.assigned - assignments.answeredOther.size();
+        sortState.recordRun(System.currentTimeMillis(), appCount - Math.max(0, unanswered),
+            LauncherCategorySortState.modelSource(modelId), modelId);
+    }
+
+    /**
+     * The file's sections with this run's answers merged in. An answer of {@code other} is not
+     * written: the drawer's classifier falls to Other by itself, and leaving the app out keeps a
+     * later curated row, platform category or a better model free to place it.
+     *
+     * <p>Saved after every batch ({@link #checkpoint}), not only at the end, so a run killed midway
+     * (the process, the phone, a stop) keeps every batch it finished; the next sort only asks what
+     * is still pending. Each save is {@link LauncherCategoryFile#write}'s atomic replace.
+     */
+    static final class Assignments {
+        final LinkedHashMap<String, List<String>> merged = new LinkedHashMap<>();
+        final Set<String> assignedPackages = new HashSet<>();
+        final Set<String> answeredOther = new HashSet<>();
+        int assigned;
+        @NonNull private final File file;
+        private boolean unsaved;
+
+        Assignments(@NonNull LauncherCategoryFile existing, @NonNull File file) {
+            this.file = file;
+            for (Map.Entry<String, List<String>> section : existing.sections().entrySet())
+                merged.put(section.getKey(), new ArrayList<>(section.getValue()));
+        }
+
+        /** Writes what changed since the last save; nothing when nothing did. */
+        void save() throws IOException {
+            if (!unsaved) return;
+            LauncherCategoryFile.of(merged).write(file);
+            unsaved = false;
+        }
+
+        /** {@link #save} between batches: a failure is left for the next save to retry. */
+        void checkpoint() {
+            try {
+                save();
+            } catch (IOException ignored) {
+            }
+        }
+
+        void accept(@NonNull String packageName, @NonNull String slug) {
+            if (AppDrawerCategory.OTHER.slug.equals(slug)) {
+                answeredOther.add(packageName);
+                return;
+            }
             List<String> packages = merged.get(slug);
             if (packages == null) {
                 packages = new ArrayList<>();
                 merged.put(slug, packages);
             }
             packages.add(packageName);
+            assignedPackages.add(packageName);
             assigned++;
+            unsaved = true;
         }
-        return assigned;
     }
 
     /**
@@ -357,25 +418,94 @@ public final class LauncherCategorySortService extends Service {
         }
     }
 
-    @Nullable
-    private String classify(@NonNull TaiManager manager, @Nullable String modelId,
-                            @NonNull String label, @NonNull String packageName) {
-        try {
-            // Thinking off, no user system prompt, and the feature named: see categoryBody.
-            JSONObject request = TaiCallerRequests.categoryBody(modelId,
-                LauncherCategorySortPrompt.singleAppPrompt(label, packageName), LauncherCategorySortPrompt.MAX_TOKENS);
+    /**
+     * The on-device sort's requests: a batch, or one app the batch's reply missed. The bodies are
+     * {@link TaiCallerRequests#categoryBody}'s: thinking off, temperature 0, no user system prompt,
+     * and the feature named so TAI loads by app sorting's plan. An unparseable reply leaves the app
+     * out of the file so the drawer's built-in classifier keeps it; a request that brought back no
+     * reply at all, or an empty one, is a failed request.
+     */
+    private final class LocalRequests implements LauncherCategoryLocalSort.Requests {
+        private final TaiManager manager;
+        @Nullable private final String modelId;
+        private final Assignments assignments;
 
-            JSONObject response = manager.openAiChatCompletions(request.toString());
-            JSONArray choices = response.optJSONArray("choices");
-            if (choices == null || choices.length() == 0) return null;
-            JSONObject choice = choices.optJSONObject(0);
-            if (choice == null) return null;
-            JSONObject reply = choice.optJSONObject("message");
-            if (reply == null) return null;
-            return LauncherCategorySortPrompt.parseCategory(reply.optString("content", ""));
-        } catch (Exception ignored) {
-            return null;
+        LocalRequests(@NonNull TaiManager manager, @Nullable String modelId, @NonNull Assignments assignments) {
+            this.manager = manager;
+            this.modelId = modelId;
+            this.assignments = assignments;
         }
+
+        @Override
+        public boolean cancelled() {
+            return state.cancelRequested;
+        }
+
+        @NonNull
+        @Override
+        public LauncherCategoryRemoteSort.Answer batch(@NonNull List<LauncherCategorySortPrompt.AppEntry> apps) {
+            return ask(manager, modelId, LauncherCategorySortPrompt.batchPrompt(apps),
+                LauncherCategorySortPrompt.batchMaxTokens(apps), 0L, true,
+                content -> LauncherCategorySortPrompt.parseBatchReply(content, apps));
+        }
+
+        @NonNull
+        @Override
+        public LauncherCategoryRemoteSort.Answer single(@NonNull LauncherCategorySortPrompt.AppEntry app) {
+            return ask(manager, modelId, LauncherCategorySortPrompt.singleAppPrompt(app.label, app.packageName),
+                LauncherCategorySortPrompt.MAX_TOKENS, 0L, true, content -> {
+                    String slug = LauncherCategorySortPrompt.parseCategory(content);
+                    return slug == null ? Collections.emptyMap() : Collections.singletonMap(app.packageName, slug);
+                });
+        }
+
+        @Override
+        public void settled(@NonNull Map<String, String> answered, int settled) {
+            for (Map.Entry<String, String> entry : answered.entrySet())
+                assignments.accept(entry.getKey(), entry.getValue());
+            assignments.checkpoint();
+            update(s -> s.withProcessed(s.processed + settled));
+            updateProgressNotification(false);
+        }
+    }
+
+    /**
+     * One category request: the reply's content goes to {@code parse}; no reply at all is a failed
+     * request, and so is an empty one when {@code emptyFails}. A {@code timeoutMs} of 0 is TAI's own
+     * default.
+     */
+    @NonNull
+    private LauncherCategoryRemoteSort.Answer ask(@NonNull TaiManager manager, @Nullable String modelId,
+                                                  @NonNull String prompt, int maxTokens, long timeoutMs,
+                                                  boolean emptyFails,
+                                                  @NonNull Function<String, Map<String, String>> parse) {
+        try {
+            String body = TaiCallerRequests.categoryBody(modelId, prompt, maxTokens).toString();
+            JSONObject response = timeoutMs > 0 ? manager.openAiChatCompletions(body, timeoutMs)
+                : manager.openAiChatCompletions(body);
+            JSONArray choices = response.optJSONArray("choices");
+            JSONObject choice = choices == null ? null : choices.optJSONObject(0);
+            if (choice == null) return LauncherCategoryRemoteSort.Answer.failed(errorText(response));
+            JSONObject reply = choice.optJSONObject("message");
+            String content = reply == null ? "" : reply.optString("content", "");
+            if (emptyFails && content.trim().isEmpty())
+                return LauncherCategoryRemoteSort.Answer.failed(getString(R.string.settings_app_drawer_category_sort_remote_failed));
+            return LauncherCategoryRemoteSort.Answer.of(parse.apply(content));
+        } catch (Exception e) {
+            String message = e.getMessage();
+            return LauncherCategoryRemoteSort.Answer.failed(message == null || message.trim().isEmpty()
+                ? getString(R.string.settings_app_drawer_category_sort_remote_failed) : message);
+        }
+    }
+
+    @NonNull
+    private String errorText(@NonNull JSONObject response) {
+        String message = response.optString("message", "").trim();
+        if (message.isEmpty()) {
+            JSONObject error = response.optJSONObject("error");
+            if (error != null) message = error.optString("message", "").trim();
+        }
+        return message.isEmpty() ? getString(R.string.settings_app_drawer_category_sort_remote_failed) : message;
     }
 
     /**
@@ -387,15 +517,14 @@ public final class LauncherCategorySortService extends Service {
         private final TaiManager manager;
         private final String modelId;
         private final Map<String, String> labelByPackage;
-        private final LinkedHashMap<String, List<String>> merged;
+        private final Assignments assignments;
 
         RemoteRequests(@NonNull TaiManager manager, @NonNull String modelId,
-                       @NonNull Map<String, String> labelByPackage,
-                       @NonNull LinkedHashMap<String, List<String>> merged) {
+                       @NonNull Map<String, String> labelByPackage, @NonNull Assignments assignments) {
             this.manager = manager;
             this.modelId = modelId;
             this.labelByPackage = labelByPackage;
-            this.merged = merged;
+            this.assignments = assignments;
         }
 
         @Override
@@ -408,16 +537,16 @@ public final class LauncherCategorySortService extends Service {
         public LauncherCategoryRemoteSort.Answer batch(@NonNull List<String> packages) {
             List<LauncherCategorySortPrompt.AppEntry> apps = new ArrayList<>();
             for (String packageName : packages) apps.add(new LauncherCategorySortPrompt.AppEntry(packageName, label(packageName)));
-            return ask(LauncherCategorySortPrompt.pasteablePrompt(apps),
-                LauncherCategoryRemoteSort.maxTokens(packages.size()), REMOTE_BLOCK_TIMEOUT_MS,
+            return ask(manager, modelId, LauncherCategorySortPrompt.pasteablePrompt(apps),
+                LauncherCategoryRemoteSort.maxTokens(packages.size()), REMOTE_BLOCK_TIMEOUT_MS, false,
                 content -> LauncherCategorySortPrompt.parsePastedReply(content, new HashSet<>(packages)));
         }
 
         @NonNull
         @Override
         public LauncherCategoryRemoteSort.Answer single(@NonNull String packageName) {
-            return ask(LauncherCategorySortPrompt.singleAppPrompt(label(packageName), packageName),
-                LauncherCategorySortPrompt.MAX_TOKENS, 0L, content -> {
+            return ask(manager, modelId, LauncherCategorySortPrompt.singleAppPrompt(label(packageName), packageName),
+                LauncherCategorySortPrompt.MAX_TOKENS, 0L, false, content -> {
                     String slug = LauncherCategorySortPrompt.parseCategory(content);
                     return slug == null ? Collections.emptyMap() : Collections.singletonMap(packageName, slug);
                 });
@@ -425,14 +554,9 @@ public final class LauncherCategorySortService extends Service {
 
         @Override
         public void settled(@NonNull Map<String, String> assigned, int settled) {
-            for (Map.Entry<String, String> entry : assigned.entrySet()) {
-                List<String> packages = merged.get(entry.getValue());
-                if (packages == null) {
-                    packages = new ArrayList<>();
-                    merged.put(entry.getValue(), packages);
-                }
-                packages.add(entry.getKey());
-            }
+            for (Map.Entry<String, String> entry : assigned.entrySet())
+                assignments.accept(entry.getKey(), entry.getValue());
+            assignments.checkpoint();
             update(s -> s.withProcessed(s.processed + settled));
             updateProgressNotification(false);
         }
@@ -441,39 +565,6 @@ public final class LauncherCategorySortService extends Service {
         private String label(@NonNull String packageName) {
             String label = labelByPackage.get(packageName);
             return label == null ? packageName : label;
-        }
-
-        /**
-         * A reply's content goes to {@code parse}; no reply at all is a failed request. A
-         * {@code timeoutMs} of 0 is TAI's own default.
-         */
-        @NonNull
-        private LauncherCategoryRemoteSort.Answer ask(@NonNull String prompt, int maxTokens, long timeoutMs,
-                                                      @NonNull Function<String, Map<String, String>> parse) {
-            try {
-                String body = TaiCallerRequests.categoryBody(modelId, prompt, maxTokens).toString();
-                JSONObject response = timeoutMs > 0 ? manager.openAiChatCompletions(body, timeoutMs)
-                    : manager.openAiChatCompletions(body);
-                JSONArray choices = response.optJSONArray("choices");
-                JSONObject choice = choices == null ? null : choices.optJSONObject(0);
-                if (choice == null) return LauncherCategoryRemoteSort.Answer.failed(errorText(response));
-                JSONObject reply = choice.optJSONObject("message");
-                return LauncherCategoryRemoteSort.Answer.of(parse.apply(reply == null ? "" : reply.optString("content", "")));
-            } catch (Exception e) {
-                String message = e.getMessage();
-                return LauncherCategoryRemoteSort.Answer.failed(message == null || message.trim().isEmpty()
-                    ? getString(R.string.settings_app_drawer_category_sort_remote_failed) : message);
-            }
-        }
-
-        @NonNull
-        private String errorText(@NonNull JSONObject response) {
-            String message = response.optString("message", "").trim();
-            if (message.isEmpty()) {
-                JSONObject error = response.optJSONObject("error");
-                if (error != null) message = error.optString("message", "").trim();
-            }
-            return message.isEmpty() ? getString(R.string.settings_app_drawer_category_sort_remote_failed) : message;
         }
     }
 

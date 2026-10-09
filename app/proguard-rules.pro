@@ -41,6 +41,14 @@
 -keep class com.termux.** { *; }
 -keep class juloo.keyboard2.** { *; }
 
+# The on-device model runtimes' native code looks up Java methods and fields by name (LiteRT-LM
+# reads its config objects' getters from nativeCreateConversation), and LiteRT-LM ships no
+# consumer rules: a getter only native code calls is dropped, and every local chat aborts the
+# tai_runtime process with "JNI DETECTED ERROR: mid == null". The MNN bridge lives in the app
+# but outside com.termux.
+-keep class com.google.ai.edge.litertlm.** { *; }
+-keep class com.alibaba.mnnllm.** { *; }
+
 # Hidden platform classes the X11 server's CmdEntryPoint links against; present at runtime.
 -dontwarn android.app.ActivityThread
 -dontwarn android.app.ContextImpl
