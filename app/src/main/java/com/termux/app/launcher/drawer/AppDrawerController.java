@@ -28,7 +28,6 @@ import com.termux.app.SuggestionBarView;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherCategoryPendingApps;
-import com.termux.app.launcher.data.LauncherCategorySortState;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
 import com.termux.app.terminal.ClipboardText;
@@ -804,23 +803,26 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * The categories layout's nudge: apps installed since the last categorization run land in
      * "Other" until it is run again, and past a handful of them the drawer says so once, on the
      * open. Silent for every other layout, for a user who has never run it, and until the count
-     * changes again.
+     * changes again. Counted off the main thread; an answer that arrives after the drawer closed
+     * or left the categories layout is dropped and asked again on the next open.
      */
     private void nudgeCategorizationIfPending() {
         if (mLayoutConfig.viewType != AppDrawerViewType.CATEGORIES) return;
         Context context = mHost.context();
-        if (!new LauncherCategorySortState(context).hasRun()) {
-            mCategoryNudge.reset();
-            return;
-        }
-        int pending = LauncherCategoryPendingApps.count(context,
-            LauncherAppDataProvider.getInstance(context).getAllApps());
-        if (!mCategoryNudge.onDrawerOpened(pending)) return;
-        AppNotice.shell(context,
-            context.getResources().getQuantityString(R.plurals.app_drawer_category_pending_notice,
-                pending, pending),
-            context.getString(R.string.app_drawer_category_pending_notice_hint), null, false,
-            mHost::openAppDrawerSettings);
+        LauncherCategoryPendingApps.countWaitingAsync(context,
+            LauncherAppDataProvider.getInstance(context).getAllApps(), waiting -> {
+                if (waiting == LauncherCategoryPendingApps.NEVER_SORTED) {
+                    mCategoryNudge.reset();
+                    return;
+                }
+                if (!mOpen || mLayoutConfig.viewType != AppDrawerViewType.CATEGORIES) return;
+                if (!mCategoryNudge.onDrawerOpened(waiting)) return;
+                AppNotice.shell(context,
+                    context.getResources().getQuantityString(R.plurals.app_drawer_category_pending_notice,
+                        waiting, waiting),
+                    context.getString(R.string.app_drawer_category_pending_notice_hint), null, false,
+                    mHost::openAppDrawerSettings);
+            });
     }
 
     /**

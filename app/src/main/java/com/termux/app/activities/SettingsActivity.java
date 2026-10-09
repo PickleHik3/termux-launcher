@@ -689,9 +689,6 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
         /** The usage mode row, which is the one root row that writes a preference. */
         private static final String KEY_USE_AS = "app_launcher_use_case_mode";
 
-        /** The one door to wallpaper, Look and Layout; the Look page rows are indexed under it. */
-        private static final String KEY_WALLPAPER_STYLE = "wallpaper_style";
-
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
             Context context = getContext();
@@ -706,30 +703,9 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             // A build made without the X server has no display to set up.
             Preference display = findPreference("display");
             if (display != null && !com.termux.BuildConfig.X11_SERVER) display.setVisible(false);
-            configureWallpaperStyleRow(context);
             SettingsLayoutUtils.applyRootLayout(this);
             configureUseAsRow(context);
             configureSearch();
-        }
-
-        /**
-         * The "Appearance" row opens no page of its own: it brings the launcher forward with
-         * the wallpaper picker over it, the same door the corner tab's button is. While a search hit
-         * comes from a Look page row it carries that page's fragment instead (see
-         * {@link #filterDestinationRow}), and the default handling opens the page.
-         */
-        private void configureWallpaperStyleRow(@NonNull Context context) {
-            Preference row = findPreference(KEY_WALLPAPER_STYLE);
-            if (row == null) return;
-            row.setOnPreferenceClickListener(preference -> {
-                if (preference.getFragment() != null) return false;
-                Intent intent = new Intent(context, com.termux.app.TermuxActivity.class);
-                intent.putExtra(com.termux.app.TermuxActivity.EXTRA_WALLPAPER_STYLE, true);
-                intent.putExtra(com.termux.app.TermuxActivity.EXTRA_APPEARANCE_FROM_SETTINGS, true);
-                intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-                startActivity(intent);
-                return true;
-            });
         }
 
         @Override
@@ -894,8 +870,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
             String key = row.getKey();
             CharSequence originalSummary = key == null ? row.getSummary() : mOriginalSummaries.get(key);
 
-            if (KEY_WALLPAPER_STYLE.equals(key)) row.setFragment(null);
-            else if (key != null && mOriginalFragments.containsKey(key)) {
+            if (key != null && mOriginalFragments.containsKey(key)) {
                 row.setFragment(mOriginalFragments.get(key));
             }
 
@@ -931,12 +906,7 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                     }
                 }
                 if (anyChildMatch) {
-                    // A hit on a Look page row opens that page rather than the picker.
-                    if (KEY_WALLPAPER_STYLE.equals(key)) {
-                        row.setFragment(com.termux.app.fragments.settings.termux
-                            .TermuxStylePreferencesFragment.class.getName());
-                    }
-                    if (matchedPages.size() == 1 && !KEY_WALLPAPER_STYLE.equals(key)) {
+                    if (matchedPages.size() == 1) {
                         String page = matchedPages.iterator().next();
                         if (!page.isEmpty()) row.setFragment(page);
                     }

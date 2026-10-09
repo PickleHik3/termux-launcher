@@ -263,6 +263,21 @@ tasks.register("verifyReleaseHardening") {
     }
 }
 
+// Native code reaches the model runtimes' Java members by name, so anything R8 strips from them
+// is a JNI abort at the first local chat, not a build error. R8's usage.txt lists what it removed:
+// a class line (members follow indented) for these packages means the keep rules have a hole.
+tasks.matching { it.name ==~ /minify\w*ReleaseWithR8/ }.configureEach { minify ->
+    minify.doLast {
+        def usage = fileTree(layout.buildDirectory.dir("outputs/mapping")).matching { include "**/usage.txt" }
+        def stripped = usage.files.collectMany { it.readLines() }.findAll {
+            it ==~ /^(com\.google\.ai\.edge\.litertlm|com\.alibaba\.mnnllm)\..*/ && !it.contains('$$InternalSynthetic')
+        }
+        if (!stripped.isEmpty()) {
+            throw new GradleException("R8 stripped model-runtime code that native code calls; extend proguard-rules.pro:\n  " + stripped.join("\n  "))
+        }
+    }
+}
+
 // The launcher ships a pinned tlstore release rather than building the store in-tree (the store's
 // own sources live in PickleHik3/tlstore). app/tlstore.lock names the release and the sha256 of
 // each file its dist/ folder must contain; this task fetches them into a generated assets

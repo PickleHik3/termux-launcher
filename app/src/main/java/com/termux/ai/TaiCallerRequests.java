@@ -98,8 +98,9 @@ public final class TaiCallerRequests {
     }
 
     /**
-     * The app-category request for one app. Thinking is always off (the 24-token cap would cut a
-     * thinking answer short, whatever the global switch says) and the user's system prompt is kept out
+     * The app-category request for one app or a batch of them. Thinking is always off (a cap sized
+     * to the answer lines would cut a thinking answer short, whatever the global switch says) and the
+     * user's system prompt is kept out
      * of the classification. A local request names the feature, so TAI loads by app sorting's plan
      * (accelerator, speculative decoding, the 1024 window); none of that is sent here.
      *

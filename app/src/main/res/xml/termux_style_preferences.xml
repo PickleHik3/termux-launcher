@@ -2,6 +2,13 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <Preference
+        app:key="appearance_surface"
+        app:icon="@drawable/ic_symbol_wallpaper"
+        app:persistent="false"
+        app:title="@string/settings_appearance_surface_title"
+        app:summary="@string/settings_appearance_surface_summary" />
+
     <PreferenceCategory app:title="@string/settings_fonts_header">
         <Preference
             app:key="terminal_fonts"

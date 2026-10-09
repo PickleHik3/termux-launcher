@@ -107,7 +107,8 @@ public class TaiFeaturePlanTest {
             assertEquals(feature.name(), E2B, plan.modelId);
             assertEquals(feature.name(), GPU, plan.accelerator);
             assertEquals(feature.name(), Reason.DEFAULT, plan.acceleratorReason);
-            assertEquals(feature.name(), Boolean.TRUE, plan.speculative);
+            // App sorting's replies are too short for speculative decoding to pay: off by default.
+            assertEquals(feature.name(), feature != TaiFunction.APP_CATEGORIES, plan.speculative);
             assertEquals(feature.name(), Reason.DEFAULT, plan.speculativeReason);
         }
         // A GPU the self-test failed, or one the phone does not have: the CPU.
@@ -377,6 +378,18 @@ public class TaiFeaturePlanTest {
             assertEquals(name, row[2], plan.speculative);
             assertEquals(name, row[3], plan.speculativeReason);
         }
+    }
+
+    @Test
+    public void appSortingLeavesSpeculativeDecodingOffUnlessMeasuredFaster() {
+        installE2b();
+        assertEquals(Boolean.FALSE, pong(TaiFunction.APP_CATEGORIES).speculative);
+        assertEquals(Reason.DEFAULT, pong(TaiFunction.APP_CATEGORIES).speculativeReason);
+        // A sorting check that clearly favours it still turns it on.
+        evidence.check(new TaiEvidence.FeatureResult(TaiFunction.APP_CATEGORIES, E2B, LITERT, GPU, true, 30.0, true, null))
+            .check(new TaiEvidence.FeatureResult(TaiFunction.APP_CATEGORIES, E2B, LITERT, GPU, false, 20.0, true, null));
+        assertEquals(Boolean.TRUE, pong(TaiFunction.APP_CATEGORIES).speculative);
+        assertEquals(Reason.MEASURED, pong(TaiFunction.APP_CATEGORIES).speculativeReason);
     }
 
     @Test
