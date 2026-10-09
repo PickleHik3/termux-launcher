@@ -314,8 +314,10 @@ own cadence and not part of a launcher cut: PickleHik3/termux-api, termux-stylin
 branches `master` / `nix-pkg` / `io-vaj-package`, tags `vX.Y.Z` / `nix-vX.Y.Z` / `vX.Y.Z-vaj`. They
 exist because a plugin is only granted the launcher's permissions when it joins that edition's
 `sharedUserId` and carries the same signature, so each edition needs its own build. Every one of
-them is **debug-signed with the shared `testkey_untrusted.jks`**, the same key the launcher's own
-published APKs use — that is what makes them pair, and why an F-Droid plugin never will. In
+them is **signed with the shared `testkey_untrusted.jks`**, the same key the launcher's own
+published APKs use — that is what makes them pair, and why an F-Droid plugin never will. Since
+1.0.0 the launcher and the companions publish the **release build type** (not debuggable, so no
+`run-as` into the shared uid's files) under that key; the per-commit CI builds stay debug. In
 termux-boot the edition is three values at the top of `app/build.gradle`; nothing else in that tree
 names a package. Their `targetSdk` must stay at the launcher's 28, per the shared-user rule above.
 
